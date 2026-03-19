@@ -1,0 +1,21 @@
+<!DOCTYPE html><html lang="zh"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Agent Ops Admin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>[v-cloak]{display:none}</style>
+</head><body class="bg-gray-50 min-h-screen">
+<div id="app"></div>
+<script>
+if ('caches' in window) {
+  caches.keys().then(ns => ns.forEach(n => {
+    caches.open(n).then(c => c.keys().then(rs => rs.forEach(r => {
+      try { if (new URL(r.url).pathname.startsWith('/agents-admin/')) c.delete(r); } catch(e) {}
+    })));
+  }));
+}
+</script>
+<script src="admin-app.js?v=20260318b"></script>
+</body></html>
