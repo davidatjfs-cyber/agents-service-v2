@@ -845,7 +845,9 @@ export async function fetchMergedTableVisitEntries(store, start, end) {
     const syn = syntheticFieldsFromStructuredRow(row);
     const rawG = fid ? genByFid.get(fid) : null;
     const mergedFields = rawG && typeof rawG === 'object' ? { ...rawG, ...syn } : syn;
-    byKey.set(key, { dish: flat.dish, fb: flat.fb, sat: flat.sat, fields: mergedFields });
+    const dishForEntry =
+      isPositiveTableVisitSatisfaction(flat.sat) ? '' : flat.dish;
+    byKey.set(key, { dish: dishForEntry, fb: flat.fb, sat: flat.sat, fields: mergedFields });
   }
   for (const row of matched) {
     if (!visitRowInDateRange(row, start, end)) continue;
