@@ -157,7 +157,7 @@ export function dissatisfactionMainReasonFromEntry(e) {
   return String(e?.fb || '').trim();
 }
 
-function isPositiveTableVisitSatisfaction(s) {
+export function isPositiveTableVisitSatisfaction(s) {
   const t = String(s || '').trim();
   if (!t) return false;
   if (/不满意|很差|糟糕|差劲/.test(t) && !/满意|挺好/.test(t)) return false;

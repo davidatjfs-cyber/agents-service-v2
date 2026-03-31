@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.hrms.daily-github-push</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>REPLACE_WITH_ABSOLUTE_PATH_TO_HRMS/scripts/daily-push-github.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>2</integer>
+    <key>Minute</key>
+    <integer>15</integer>
+  </dict>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HRMS_DIR</key>
+    <string>REPLACE_WITH_ABSOLUTE_PATH_TO_HRMS</string>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>GIT_AUTO_PUSH_LOG</key>
+    <string>/tmp/hrms_daily_git_push.log</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/tmp/hrms_daily_github_push.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/hrms_daily_github_push.stderr.log</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
