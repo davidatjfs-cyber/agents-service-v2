@@ -1,0 +1,26 @@
+{
+  "name": "hrms-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js",
+    "migrate": "node migrate.js"
+  },
+  "dependencies": {
+    "ali-oss": "^6.22.0",
+    "axios": "^1.13.5",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "cos-nodejs-sdk-v5": "^2.14.7",
+    "dotenv": "^17.2.3",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "pg": "^8.11.3",
+    "archiver": "^7.0.1",
+    "xlsx": "^0.18.5"
+  }
+}

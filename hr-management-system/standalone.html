@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>企业人力资源管理系统 v2.0.5 - 独立版</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <link rel="stylesheet" href="styles.css?v=2.0.5">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .debug-info {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: #ff6b6b;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 10000;
+            font-size: 12px;
+        }
+        .nav-test {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 9999;
+        }
+        .nav-test button {
+            background: #2E5BBA;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            margin: 2px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .nav-test button:hover {
+            background: #1e3d8a;
+        }
+    </style>
+</head>
+<body>
+    <div class="debug-info" id="debug-info">
+        调试信息: 页面加载中...
+    </div>
+    
+    <div class="nav-test">
+        <button onclick="testNavigation('dashboard')">工作台</button>
+        <button onclick="testNavigation('knowledge')">知识库</button>
+        <button onclick="testNavigation('training')">培训</button>
+        <button onclick="testNavigation('employees')">员工</button>
+        <button onclick="testNavigation('promotion')">晋升</button>
+    </div>
+
+    <div class="app-container">
+        <!-- 登录界面 -->
+        <div id="login-screen" class="login-screen">
+            <div class="login-container">
+                <div class="login-header">
+                    <div class="logo">
+                        <i class="fas fa-users-cog"></i>
+                        <h1>企业人力资源管理系统</h1>
+                        <span>v2.0.5 独立版</span>
+                    </div>
+                </div>
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="username">用户名</label>
+                        <input type="text" id="username" name="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">密码</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">
+                        <i class="fas fa-sign-in-alt"></i>
+                        登录
+                    </button>
+                </form>
+                <div class="login-footer">
+                    <p>测试账号: admin / admin123</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主应用界面 -->
+        <div id="main-app" class="main-app hidden">
+            <header class="header">
+                <div class="header-left">
+                    <div class="logo">
+                        <i class="fas fa-users-cog"></i>
+                        <span>HR管理系统</span>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div class="user-info">
+                        <span class="user-name" id="current-user-name">管理员</span>
+                        <span class="user-role" id="current-user-role">管理员</span>
+                        <div class="user-avatar">
+                            <i class="fas fa-user"></i>
+                        </div>
+                    </div>
+                    <button class="logout-btn" onclick="logout()">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </header>
+
+            <div class="app-body">
+                <!-- 左侧导航栏 -->
+                <nav class="sidebar" id="sidebar">
+                    <div class="nav-section">
+                        <h3 class="nav-title">主要功能</h3>
+                        <ul class="nav-list">
+                            <li class="nav-item" data-page="dashboard">
+                                <a href="#" class="nav-link" onclick="navigateTo('dashboard')">
+                                    <i class="fas fa-tachometer-alt"></i>
+                                    <span>工作台</span>
+                                </a>
+                            </li>
+                            <li class="nav-item" data-page="knowledge">
+                                <a href="#" class="nav-link" onclick="navigateTo('knowledge')">
+                                    <i class="fas fa-book"></i>
+                                    <span>知识库</span>
+                                </a>
+                            </li>
+                            <li class="nav-item" data-page="training">
+                                <a href="#" class="nav-link" onclick="navigateTo('training')">
+                                    <i class="fas fa-graduation-cap"></i>
+                                    <span>培训学习</span>
+                                </a>
+                            </li>
+                            <li class="nav-item" data-page="employees">
+                                <a href="#" class="nav-link" onclick="navigateTo('employees')">
+                                    <i class="fas fa-users"></i>
+                                    <span>员工档案</span>
+                                </a>
+                            </li>
+                            <li class="nav-item" data-page="promotion">
+                                <a href="#" class="nav-link" onclick="navigateTo('promotion')">
+                                    <i class="fas fa-chart-line"></i>
+                                    <span>晋升管理</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                </nav>
+
+                <!-- 主内容区域 -->
+                <main class="main-content" id="main-content">
+                    <!-- 工作台页面 -->
+                    <div id="dashboard-page" class="page-content active">
+                        <div class="page-header">
+                            <h2>工作台</h2>
+                            <div class="page-actions">
+                                <button class="btn btn-primary" onclick="showNotification('功能开发中', 'info')">
+                                    <i class="fas fa-plus"></i>
+                                    新增员工
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="dashboard-stats">
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-users"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <h3>员工总数</h3>
+                                    <p class="stat-number">156</p>
+                                </div>
+                            </div>
+                            
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-store"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <h3>门店数量</h3>
+                                    <p class="stat-number">12</p>
+                                </div>
+                            </div>
+                            
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-clock"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <h3>本月学习时长(小时)</h3>
+                                    <p class="stat-number">1,234</p>
+                                </div>
+                            </div>
+                            
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-file-alt"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <h3>待考试</h3>
+                                    <p class="stat-number">8</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="dashboard-content">
+                            <div class="content-section">
+                                <h3>最近活动</h3>
+                                <div class="activity-list">
+                                    <div class="activity-item">
+                                        <div class="activity-icon">
+                                            <i class="fas fa-user-plus"></i>
+                                        </div>
+                                        <div class="activity-content">
+                                            <p class="activity-text">新员工入职</p>
+                                            <p class="activity-time">2小时前</p>
+                                        </div>
+                                    </div>
+                                    <div class="activity-item">
+                                        <div class="activity-icon">
+                                            <i class="fas fa-graduation-cap"></i>
+                                        </div>
+                                        <div class="activity-content">
+                                            <p class="activity-text">培训完成</p>
+                                            <p class="activity-time">5小时前</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="content-section">
+                                <h3>快捷操作</h3>
+                                <div class="quick-actions">
+                                    <button class="action-btn" onclick="showNotification('新增员工功能开发中', 'info')">
+                                        <i class="fas fa-user-plus"></i>
+                                        <span>新增员工</span>
+                                    </button>
+                                    <button class="action-btn" onclick="showNotification('创建考试功能开发中', 'info')">
+                                        <i class="fas fa-file-alt"></i>
+                                        <span>创建考试</span>
+                                    </button>
+                                    <button class="action-btn" onclick="showNotification('添加知识功能开发中', 'info')">
+                                        <i class="fas fa-book"></i>
+                                        <span>添加知识</span>
+                                    </button>
+                                    <button class="action-btn" onclick="showNotification('发布公告功能开发中', 'info')">
+                                        <i class="fas fa-bullhorn"></i>
+                                        <span>发布公告</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 其他页面占位符 -->
+                    <div id="knowledge-page" class="page-content">
+                        <div class="page-header">
+                            <h2>知识库管理</h2>
+                        </div>
+                        <div class="placeholder-content">
+                            <i class="fas fa-book fa-3x"></i>
+                            <h3>知识库功能</h3>
+                            <p>此功能正在开发中...</p>
+                        </div>
+                    </div>
+                    
+                    <div id="training-page" class="page-content">
+                        <div class="page-header">
+                            <h2>培训学习</h2>
+                        </div>
+                        <div class="placeholder-content">
+                            <i class="fas fa-graduation-cap fa-3x"></i>
+                            <h3>培训功能</h3>
+                            <p>此功能正在开发中...</p>
+                        </div>
+                    </div>
+                    
+                    <div id="employees-page" class="page-content">
+                        <div class="page-header">
+                            <h2>员工档案</h2>
+                        </div>
+                        <div class="placeholder-content">
+                            <i class="fas fa-users fa-3x"></i>
+                            <h3>员工档案功能</h3>
+                            <p>此功能正在开发中...</p>
+                        </div>
+                    </div>
+                    
+                    <div id="promotion-page" class="page-content">
+                        <div class="page-header">
+                            <h2>晋升管理</h2>
+                        </div>
+                        <div class="placeholder-content">
+                            <i class="fas fa-chart-line fa-3x"></i>
+                            <h3>晋升管理功能</h3>
+                            <p>此功能正在开发中...</p>
+                        </div>
+                    </div>
+                </main>
+            </div>
+        </div>
+    </div>
+
+    <!-- 通知提示 -->
+    <div id="notification" class="notification">
+        <div class="notification-content">
+            <i class="notification-icon"></i>
+            <span class="notification-message"></span>
+        </div>
+    </div>
+
+    <script>
+        console.log('=== HR系统独立版启动 ===');
+        
+        // 全局变量
+        let currentUser = null;
+        let currentPage = 'dashboard';
+        
+        // 更新调试信息
+        function updateDebugInfo(message) {
+            document.getElementById('debug-info').textContent = '调试: ' + message;
+        }
+        
+        // 显示通知
+        function showNotification(message, type = 'info') {
+            console.log('通知:', message, type);
+            const notification = document.getElementById('notification');
+            const icon = notification.querySelector('.notification-icon');
+            const messageEl = notification.querySelector('.notification-message');
+            
+            const icons = {
+                success: 'fa-check-circle',
+                error: 'fa-exclamation-circle',
+                warning: 'fa-exclamation-triangle',
+                info: 'fa-info-circle'
+            };
+            
+            icon.className = `notification-icon fas ${icons[type]}`;
+            messageEl.textContent = message;
+            notification.className = `notification ${type} show`;
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+        
+        // 登录处理
+        function handleLogin(e) {
+            e.preventDefault();
+            console.log('登录表单提交');
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            console.log('用户名:', username, '密码:', password);
+            
+            // 简单的验证逻辑
+            if (username === 'admin' && password === 'admin123') {
+                currentUser = { username: 'admin', realName: '系统管理员', role: 'admin' };
+                console.log('登录成功:', currentUser);
+                showMainApp();
+                showNotification('登录成功！欢迎回来，' + currentUser.realName, 'success');
+            } else {
+                console.log('登录失败');
+                showNotification('用户名或密码错误', 'error');
+            }
+        }
+        
+        // 显示主应用
+        function showMainApp() {
+            console.log('显示主应用');
+            updateDebugInfo('已登录，显示主应用');
+            
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('main-app').classList.remove('hidden');
+            
+            // 更新用户信息
+            document.getElementById('current-user-name').textContent = currentUser.realName;
+            document.getElementById('current-user-role').textContent = '管理员';
+            
+            // 显示工作台
+            navigateTo('dashboard');
+        }
+        
+        // 导航功能
+        function navigateTo(page) {
+            console.log('导航到页面:', page);
+            updateDebugInfo('导航到: ' + page);
+            
+            // 隐藏所有页面
+            document.querySelectorAll('.page-content').forEach(p => {
+                p.classList.remove('active');
+            });
+            
+            // 显示目标页面
+            const targetPage = document.getElementById(page + '-page');
+            if (targetPage) {
+                targetPage.classList.add('active');
+                currentPage = page;
+                
+                // 更新导航活动状态
+                document.querySelectorAll('.nav-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+                
+                const activeNavItem = document.querySelector(`[data-page="${page}"]`);
+                if (activeNavItem) {
+                    activeNavItem.classList.add('active');
+                }
+                
+                showNotification('已切换到' + getPageName(page), 'success');
+            } else {
+                console.error('页面不存在:', page);
+                showNotification('页面不存在: ' + page, 'error');
+            }
+        }
+        
+        // 测试导航
+        function testNavigation(page) {
+            console.log('测试导航到:', page);
+            if (currentUser) {
+                navigateTo(page);
+            } else {
+                showNotification('请先登录', 'warning');
+            }
+        }
+        
+        // 获取页面名称
+        function getPageName(page) {
+            const names = {
+                dashboard: '工作台',
+                knowledge: '知识库',
+                training: '培训学习',
+                employees: '员工档案',
+                promotion: '晋升管理'
+            };
+            return names[page] || page;
+        }
+        
+        // 登出
+        function logout() {
+            console.log('用户登出');
+            currentUser = null;
+            document.getElementById('main-app').classList.add('hidden');
+            document.getElementById('login-screen').classList.remove('hidden');
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+            showNotification('已安全登出', 'info');
+            updateDebugInfo('已登出');
+        }
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM加载完成，初始化系统');
+            updateDebugInfo('系统初始化完成');
+            
+            // 绑定登录表单
+            const loginForm = document.getElementById('login-form');
+            if (loginForm) {
+                loginForm.addEventListener('submit', handleLogin);
+                console.log('登录表单已绑定');
+            }
+            
+            showNotification('系统已就绪，请登录', 'info');
+        });
+    </script>
+</body>
+</html>

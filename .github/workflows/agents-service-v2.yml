@@ -1,0 +1,71 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# agents-service-v2 · 部署到底怎么「自动」？
+#
+# ① 本 Workflow 跑在 GitHub 云端，不是你 ECS。AI/ Cursor 也不能替你 SSH。
+# ② 服务器 /opt/agents-service-v2 多为 rsync 同步，通常没有 .git → 在 ECS 上 git pull 无效。
+# ③ 真正更新代码的方式只有：
+#    · 在你电脑上运行：agents-service-v2/scripts/deploy-agents-ecs.sh（rsync + 远程 pm2）
+#    · 或：把本仓库 push 到 GitHub + 配好 Secrets，用下面 job 部署
+#
+# Secrets：ECS_SSH_PRIVATE_KEY（部署必填）；可选 ECS_HOST（默认 root@47.100.96.30）
+# Variables：AGENTS_V2_AUTO_DEPLOY=true → push 到 main 且 verify 通过后自动 deploy-ecs
+# 手动：Actions → 本 workflow → Run workflow → 勾选 deploy_ecs
+#
+# 中文步骤汇总：agents-service-v2/部署到ECS-看这里.md
+# ═══════════════════════════════════════════════════════════════════════════
+name: agents-service-v2
+
+on:
+  push:
+    paths:
+      - 'agents-service-v2/**'
+      - '.github/workflows/agents-service-v2.yml'
+  workflow_dispatch:
+    inputs:
+      deploy_ecs:
+        description: '部署到 ECS（需 ECS_SSH_PRIVATE_KEY）'
+        type: boolean
+        default: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Local verify (node --check)
+        run: bash agents-service-v2/scripts/verify-agents-local.sh
+
+  deploy-ecs:
+    needs: verify
+    if: >-
+      needs.verify.result == 'success' &&
+      (
+        (github.event_name == 'workflow_dispatch' && inputs.deploy_ecs == true) ||
+        (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AGENTS_V2_AUTO_DEPLOY == 'true')
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Deploy to ECS
+        env:
+          ECS_SSH_PRIVATE_KEY: ${{ secrets.ECS_SSH_PRIVATE_KEY }}
+          ECS_HOST: ${{ secrets.ECS_HOST }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ECS_SSH_PRIVATE_KEY:-}" ]; then
+            echo "::error::缺少 Secret ECS_SSH_PRIVATE_KEY"; exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$ECS_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          HOSTPORT="${ECS_HOST:-root@47.100.96.30}"
+          H="${HOSTPORT##*@}"
+          ssh-keyscan -H "$H" 2>/dev/null >> ~/.ssh/known_hosts || true
+          export ECS_HOST="$HOSTPORT"
+          bash agents-service-v2/scripts/deploy-agents-ecs.sh

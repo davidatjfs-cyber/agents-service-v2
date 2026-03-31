@@ -1,0 +1,12 @@
+{
+  "name": "hr-management-system",
+  "private": true,
+  "packageManager": "npm@10.2.0",
+  "workspaces": [
+    "server"
+  ],
+  "scripts": {
+    "start": "npm --workspace server run start",
+    "migrate": "npm --workspace server run migrate"
+  }
+}

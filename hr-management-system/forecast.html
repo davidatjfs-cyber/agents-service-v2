@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0a0a0b">
+    <link rel="icon" href="/pwa-icon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <title>智能助手 · 年年有喜</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        html{scroll-behavior:smooth}
+        ::selection{background:rgba(14,165,233,0.3);color:#fff}
+        ::-webkit-scrollbar{width:6px;height:6px}
+        ::-webkit-scrollbar-track{background:transparent}
+        ::-webkit-scrollbar-thumb{background:rgba(200,215,230,0.18);border-radius:3px}
+        body{
+            font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+            background:#0a0a0b;color:#e2e8f0;min-height:100vh;
+            padding-bottom:env(safe-area-inset-bottom,0);
+        }
+        .container{max-width:640px;margin:0 auto;padding:16px 16px 32px}
+        .header{display:flex;align-items:center;justify-content:space-between;padding:12px 0;margin-bottom:8px}
+        .header h1{font-size:18px;font-weight:900;letter-spacing:-0.3px}
+        .header .back{font-size:13px;color:rgba(226,232,240,0.6);text-decoration:none;display:flex;align-items:center;gap:4px}
+        .header .back:hover{color:#fff}
+        .card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;margin-bottom:12px}
+        .card-title{font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+        .card-title .icon{font-size:16px}
+        .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+        .form-grid.cols-1{grid-template-columns:1fr}
+        .form-group{display:flex;flex-direction:column;gap:4px}
+        .form-group.full{grid-column:1/-1}
+        .form-label{font-size:11px;font-weight:600;color:rgba(226,232,240,0.55);text-transform:uppercase;letter-spacing:0.5px}
+        .form-input{
+            width:100%;padding:10px 12px;border-radius:10px;
+            border:1px solid rgba(255,255,255,0.12);
+            background:rgba(255,255,255,0.06);color:#fff;font-size:14px;
+            transition:border-color 0.2s;outline:none;
+        }
+        .form-input:focus{border-color:rgba(14,165,233,0.5)}
+        .form-input::placeholder{color:rgba(226,232,240,0.3)}
+        select.form-input{color-scheme:dark;appearance:none;
+            background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(226,232,240,0.5)' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat:no-repeat;background-position:right 12px center;padding-right:32px;
+        }
+        input[type="date"].form-input{color-scheme:dark}
+        .toggle-row{display:flex;align-items:center;gap:10px;font-size:13px;color:rgba(226,232,240,0.8)}
+        .toggle{width:40px;height:22px;border-radius:11px;background:rgba(255,255,255,0.12);position:relative;cursor:pointer;transition:background 0.2s;flex-shrink:0}
+        .toggle.on{background:#0ea5e9}
+        .toggle::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform 0.2s}
+        .toggle.on::after{transform:translateX(18px)}
+        .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:700;border:none;cursor:pointer;transition:all 0.2s}
+        .btn-primary{background:linear-gradient(135deg,#0ea5e9,#0284c7);color:#fff;width:100%}
+        .btn-primary:hover{filter:brightness(1.1)}
+        .btn-primary:disabled{opacity:0.4;cursor:not-allowed}
+        .btn-secondary{background:rgba(255,255,255,0.08);color:rgba(226,232,240,0.8);border:1px solid rgba(255,255,255,0.1)}
+        .btn-secondary:hover{background:rgba(255,255,255,0.12)}
+        .btn-sm{padding:5px 10px;font-size:11px}
+        .btn-danger{background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.2)}
+        .btn-group{display:flex;gap:8px;margin-top:14px}
+        .upload-area{border:2px dashed rgba(255,255,255,0.12);border-radius:12px;padding:24px;text-align:center;cursor:pointer;transition:all 0.2s}
+        .upload-area:hover,.upload-area.dragover{border-color:rgba(14,165,233,0.4);background:rgba(14,165,233,0.04)}
+        .upload-area .icon{font-size:28px;margin-bottom:8px}
+        .upload-area .text{font-size:13px;color:rgba(226,232,240,0.6)}
+        .upload-area .hint{font-size:11px;color:rgba(226,232,240,0.35);margin-top:6px}
+        .upload-area input{display:none}
+        .file-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(14,165,233,0.12);color:#38bdf8;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;margin-top:8px}
+        .file-badge .remove{cursor:pointer;opacity:0.6}
+        .file-badge .remove:hover{opacity:1}
+        .status-bar{padding:10px 14px;border-radius:10px;font-size:12px;font-weight:600;margin-bottom:12px;display:none}
+        .status-bar.success{display:block;background:rgba(34,197,94,0.1);color:#22c55e;border:1px solid rgba(34,197,94,0.2)}
+        .status-bar.error{display:block;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.2)}
+        .status-bar.loading{display:flex;align-items:center;gap:8px;background:rgba(14,165,233,0.08);color:#38bdf8;border:1px solid rgba(14,165,233,0.15)}
+        .spinner{width:16px;height:16px;border:2px solid rgba(56,189,248,0.3);border-top-color:#38bdf8;border-radius:50%;animation:spin 0.8s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .feature-tabs{display:flex;gap:0;margin-bottom:16px;background:rgba(255,255,255,0.04);border-radius:14px;padding:4px;border:1px solid rgba(255,255,255,0.06)}
+        .feature-tab{flex:1;padding:10px 6px;text-align:center;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.2s;color:rgba(226,232,240,0.5);line-height:1.3}
+        .feature-tab.active{background:rgba(14,165,233,0.18);color:#38bdf8;box-shadow:0 2px 8px rgba(14,165,233,0.15)}
+        .feature-tab .tab-icon{font-size:18px;display:block;margin-bottom:2px}
+        .feature-tab .tab-sub{font-size:10px;color:rgba(226,232,240,0.35);font-weight:500}
+        .feature-tab.active .tab-sub{color:rgba(56,189,248,0.6)}
+        .feature-panel{display:none}
+        .feature-panel.active{display:block}
+        .result-hero{background:linear-gradient(135deg,#0f766e,#0ea5e9);border-radius:16px;padding:20px;margin-bottom:12px}
+        .result-hero h2{font-size:15px;font-weight:900}
+        .result-hero .meta{font-size:12px;color:rgba(255,255,255,0.7);margin-top:4px}
+        .result-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+        .stat-box{text-align:center}
+        .stat-box .val{font-size:18px;font-weight:900;color:#fff}
+        .stat-box .label{font-size:10px;color:rgba(255,255,255,0.6);margin-top:2px}
+        .stat-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px;text-align:center}
+        .stat-card .val{font-size:22px;font-weight:900;color:#fff}
+        .stat-card .label{font-size:11px;color:rgba(226,232,240,0.5);margin-top:4px}
+        .stat-card.highlight{background:linear-gradient(135deg,rgba(14,165,233,0.12),rgba(34,197,94,0.08));border-color:rgba(14,165,233,0.2)}
+        .module-tabs{display:flex;gap:4px;margin-bottom:12px}
+        .module-tab{flex:1;padding:8px;text-align:center;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);transition:all 0.2s}
+        .module-tab.active{background:rgba(14,165,233,0.15);border-color:rgba(14,165,233,0.3);color:#38bdf8}
+        .pred-table{width:100%;border-collapse:collapse;font-size:12px}
+        .pred-table th{text-align:left;padding:8px 10px;font-weight:700;font-size:11px;color:rgba(226,232,240,0.5);border-bottom:1px solid rgba(255,255,255,0.08);text-transform:uppercase;letter-spacing:0.3px}
+        .pred-table th.right,.pred-table td.right{text-align:right}
+        .pred-table td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.04)}
+        .pred-table tr:last-child td{border-bottom:none}
+        .pred-table .rank{width:24px;height:24px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800}
+        .pred-table .rank.top3{background:rgba(245,158,11,0.15);color:#f59e0b}
+        .pred-table .rank.normal{background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.5)}
+        .pred-table .qty{font-weight:800;color:#22c55e}
+        .pred-table .product-name{font-weight:600;color:rgba(226,232,240,0.9)}
+        .pred-table .reason{font-size:11px;color:rgba(226,232,240,0.4);margin-top:2px}
+        .empty{text-align:center;padding:32px 16px;color:rgba(226,232,240,0.35);font-size:13px}
+        .slot-badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700}
+        .slot-badge.lunch{background:rgba(245,158,11,0.12);color:#f59e0b}
+        .slot-badge.afternoon{background:rgba(168,85,247,0.12);color:#a855f7}
+        .slot-badge.dinner{background:rgba(14,165,233,0.12);color:#38bdf8}
+        .collapse-header{display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:4px 0}
+        .collapse-header .arrow{transition:transform 0.2s;font-size:12px;color:rgba(226,232,240,0.4)}
+        .collapse-header.open .arrow{transform:rotate(180deg)}
+        .info-tip{padding:10px;background:rgba(59,130,246,0.08);border-left:3px solid rgba(59,130,246,0.4);border-radius:6px;font-size:12px;color:rgba(226,232,240,0.75);margin-bottom:12px}
+        .shared-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.2);padding:4px 10px;border-radius:8px;font-size:11px;color:#22c55e;font-weight:600;margin-left:auto}
+        @media(max-width:400px){
+            .form-grid{grid-template-columns:1fr}
+            .result-stats{grid-template-columns:repeat(2,1fr)}
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🧠 智能助手</h1>
+        <a href="/" class="back">← 返回主页</a>
+    </div>
+    <div id="statusBar" class="status-bar"></div>
+
+    <div class="card" style="padding:16px">
+        <div class="card-title" style="margin-bottom:10px"><span class="icon">🏷️</span> 品牌与门店</div>
+        <div class="form-grid">
+            <div class="form-group full">
+                <span class="form-label">品牌</span>
+                <select id="brandSelect" class="form-input" onchange="onBrandChange()"><option value="">请选择品牌</option></select>
+            </div>
+            <div class="form-group full">
+                <div style="font-size:11px; color:rgba(226,232,240,0.45)">说明：产品毛利配置与自定义归类规则按品牌隔离；备货/营业额/毛利率计算仍需选择门店</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Tabs -->
+    <div class="feature-tabs">
+        <div class="feature-tab active" data-panel="inventory" onclick="switchFeature('inventory')">
+            <span class="tab-icon">📦</span>备货预测<br><span class="tab-sub">预测未来</span>
+        </div>
+        <div class="feature-tab" data-panel="revenue" onclick="switchFeature('revenue')">
+            <span class="tab-icon">💰</span>营业额预测<br><span class="tab-sub">预测未来</span>
+        </div>
+        <div class="feature-tab" data-panel="margin" onclick="switchFeature('margin')">
+            <span class="tab-icon">📊</span>毛利率预估<br><span class="tab-sub">回顾已发生</span>
+        </div>
+    </div>
+
+    <!-- 数据源概览 (all authorized roles) -->
+    <div class="card" id="dataSourceCard" style="display:none">
+        <div class="collapse-header" onclick="toggleDataSource()">
+            <div class="card-title" style="margin-bottom:0"><span class="icon">📦</span> 数据源概览</div>
+            <span class="arrow">▼</span>
+        </div>
+        <div id="dataSourceBody" style="display:none;margin-top:14px">
+            <div id="dataSourceGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px"></div>
+        </div>
+    </div>
+
+    <!-- Shared: Upload (collapsible, admin/hq_manager only) -->
+    <div class="card" id="uploadCard" style="display:none">
+        <div class="collapse-header open" onclick="toggleUpload()">
+            <div class="card-title" style="margin-bottom:0"><span class="icon">📎</span> 上传销售数据</div>
+            <div style="display:flex;align-items:center;gap:8px">
+                <span class="shared-badge">通用数据源</span>
+                <span class="arrow">▼</span>
+            </div>
+        </div>
+        <div id="uploadBody" style="margin-top:14px">
+            <div class="info-tip">📌 上传的销售数据是所有功能（备货预测、营业额预测、毛利率预估）的<b>共享数据源</b>。只需上传一次，三个功能共同使用。持续上传可提升 AI 预测准确度。</div>
+            <div class="upload-area" id="uploadArea">
+                <div class="icon">📎</div>
+                <div class="text">点击或拖拽上传销售数据</div>
+                <div class="hint">支持 Excel (.xlsx/.xls) 与 PDF，可一次选多个同类型文件</div>
+                <input type="file" id="fileInput" accept=".xlsx,.xls,.pdf,application/pdf" multiple>
+            </div>
+            <div id="fileBadge" style="display:none"></div>
+            <div class="form-grid" style="margin-top:12px">
+                <div class="form-group">
+                    <span class="form-label">门店</span>
+                    <select id="uploadStore" class="form-input" onchange="STORE=this.value;syncStoreSelectors()"><option value="">请选择</option></select>
+                </div>
+                <div class="form-group">
+                    <span class="form-label">业务类型</span>
+                    <select id="bizType" class="form-input">
+                        <option value="takeaway">外卖</option>
+                        <option value="dinein">堂食</option>
+                    </select>
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" id="uploadBtn" onclick="doUpload()" disabled>
+                    <span id="uploadBtnText">上传历史数据</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel 1: 备货预测 -->
+    <div class="feature-panel active" id="panel-inventory">
+        <div class="card">
+            <div class="card-title"><span class="icon">🔮</span> 备货预测条件</div>
+            <div class="form-grid">
+                <div class="form-group full">
+                    <span class="form-label">门店</span>
+                    <select id="invStore" class="form-input" onchange="STORE=this.value;syncStoreSelectors()"><option value="">请选择</option></select>
+                </div>
+                <div class="form-group">
+                    <span class="form-label">预测日期</span>
+                    <input type="date" id="invDate" class="form-input">
+                </div>
+                <div class="form-group">
+                    <span class="form-label">天气</span>
+                    <select id="invWeather" class="form-input">
+                        <option value="晴">☀️ 晴天</option>
+                        <option value="阴">☁️ 阴天</option>
+                        <option value="雨">🌧️ 雨天</option>
+                        <option value="大雨">⛈️ 大雨</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <span class="form-label">外卖预计营收 (¥)</span>
+                    <input type="number" id="invRevTakeaway" class="form-input" placeholder="如 8000" min="0" step="100">
+                </div>
+                <div class="form-group">
+                    <span class="form-label">堂食预计营收 (¥)</span>
+                    <input type="number" id="invRevDinein" class="form-input" placeholder="如 12000" min="0" step="100">
+                </div>
+            </div>
+            <div class="toggle-row" style="margin-top:12px">
+                <div class="toggle" id="invHoliday" onclick="this.classList.toggle('on')"></div>
+                <span>节假日</span>
+            </div>
+            <div class="btn-group" style="flex-wrap:wrap">
+                <button class="btn btn-primary" onclick="doInventoryPredict()">开始备货预测</button>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+                <button class="btn btn-secondary" style="flex:1" id="coreProductsBtn" onclick="toggleCoreProducts()">⭐ 核心产品</button>
+                <button class="btn btn-secondary" style="flex:1" onclick="toggleCpSales()">📊 核心产品销量</button>
+                <button class="btn btn-secondary" style="flex:1" onclick="toggleAnalytics()">📊 查看统计</button>
+            </div>
+        </div>
+        <!-- 核心产品销量查询 - 所有智能助手权限角色可用 -->
+        <div class="card" id="cpSalesCard" style="display:none">
+            <div class="card-title"><span class="icon">📊</span> 核心产品销量查询</div>
+            <div class="form-grid" style="margin-bottom:12px">
+                <div class="form-group"><span class="form-label">开始日期</span><input type="date" id="cpSalesStart" class="form-input"></div>
+                <div class="form-group"><span class="form-label">结束日期</span><input type="date" id="cpSalesEnd" class="form-input"></div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="queryCoreProductSales()">查询销量达成</button>
+                <button class="btn btn-secondary" onclick="toggleCpSales()">收起</button>
+            </div>
+            <div id="cpSalesResult" style="margin-top:16px;display:none"></div>
+        </div>
+        <!-- 核心产品管理 - 仅管理员 -->
+        <div class="card" id="coreProductsCard" style="display:none">
+            <div class="card-title"><span class="icon">⭐</span> 核心产品管理</div>
+            <div class="form-grid" style="margin-bottom:12px">
+                <div class="form-group"><span class="form-label">产品名称</span><input type="text" id="coreProductName" class="form-input" placeholder="如：招牌烤鸭"></div>
+                <div class="form-group"><span class="form-label">每日目标销量</span><input type="number" id="coreTargetQty" class="form-input" placeholder="如：50" min="1" step="1"></div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="addCoreProduct()">添加</button>
+                <button class="btn btn-secondary" onclick="toggleCoreProducts()">收起</button>
+            </div>
+            <div id="coreProductsList" style="margin-top:16px;display:none"></div>
+            <!-- 自定义模糊名称归类 - 仅管理员 -->
+            <div id="aliasRulesCard" style="display:none;margin-top:16px;border-top:1px solid rgba(255,255,255,0.08);padding-top:16px">
+                <div class="card-title" style="margin-bottom:10px"><span class="icon">🧩</span> 自定义模糊名称归类</div>
+                <div class="info-tip" style="margin-bottom:10px">示例：<b>九秒生炒鱼片</b> = <b>9秒生炒魚片【地道鲜嫩廣府味】</b> = <b>生成炒鱼</b>。设置后系统自动识别为同一菜品。</div>
+                <div class="form-grid" style="margin-bottom:12px">
+                    <div class="form-group"><span class="form-label">标准菜名（归类名）</span><input type="text" id="aliasCanonical" class="form-input" placeholder="如：九秒生炒鱼片"></div>
+                    <div class="form-group"><span class="form-label">别名（多个用逗号分隔）</span><input type="text" id="aliasNames" class="form-input" placeholder="如：9秒生炒魚片【地道鲜嫩廣府味】,生成炒鱼"></div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" id="aliasAddBtn" onclick="addOrUpdateAliasRule()">保存归类规则</button>
+                    <button class="btn btn-secondary" id="aliasCancelBtn" style="display:none" onclick="cancelAliasEdit()">取消编辑</button>
+                </div>
+                <div id="aliasRulesList" style="margin-top:16px"></div>
+            </div>
+        </div>
+        <div class="card" id="analyticsCard" style="display:none">
+            <div class="card-title"><span class="icon">📊</span> 销售统计分析</div>
+            <div class="form-grid" style="margin-bottom:12px">
+                <div class="form-group"><span class="form-label">业务类型</span>
+                    <select id="analyticsBizType" class="form-input"><option value="">全部</option><option value="takeaway">外卖</option><option value="dinein">堂食</option></select>
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="loadAnalytics()">查看统计</button>
+                <button class="btn btn-secondary" onclick="toggleAnalytics()">收起</button>
+            </div>
+            <div id="analyticsContent" style="margin-top:16px;display:none"></div>
+        </div>
+        <div id="invResultSection" style="display:none">
+            <div class="result-hero" id="invResultHero"></div>
+            <div class="module-tabs" id="moduleTabs">
+                <div class="module-tab active" data-biz="takeaway" onclick="switchBizTab('takeaway')">🛵 外卖</div>
+                <div class="module-tab" data-biz="dinein" onclick="switchBizTab('dinein')">🍽 堂食</div>
+            </div>
+            <div class="card" style="padding:12px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                    <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.9)">预测结果</div>
+                    <button class="btn btn-secondary" onclick="downloadForecast()" style="padding:6px 12px;font-size:12px">📥 下载PDF</button>
+                </div>
+                <div id="invTableContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel 2: 营业额预测 -->
+    <div class="feature-panel" id="panel-revenue">
+        <div class="card">
+            <div class="card-title"><span class="icon">💰</span> 营业额预测条件</div>
+            <div class="info-tip">根据历史销售数据、天气、节假日等因素，AI 预测未来某天的营业额（分外卖和堂食）。算法会分析每个星期几的特征，周一和周五区别对待。</div>
+            <div class="form-grid">
+                <div class="form-group full">
+                    <span class="form-label">门店</span>
+                    <select id="revStore" class="form-input" onchange="STORE=this.value;syncStoreSelectors()"><option value="">请选择</option></select>
+                </div>
+                <div class="form-group">
+                    <span class="form-label">预测日期</span>
+                    <input type="date" id="revDate" class="form-input">
+                </div>
+                <div class="form-group">
+                    <span class="form-label">天气</span>
+                    <select id="revWeather" class="form-input">
+                        <option value="晴">☀️ 晴天</option>
+                        <option value="阴">☁️ 阴天</option>
+                        <option value="雨">🌧️ 雨天</option>
+                        <option value="大雨">⛈️ 大雨</option>
+                    </select>
+                </div>
+            </div>
+            <div class="toggle-row" style="margin-top:12px">
+                <div class="toggle" id="revHoliday" onclick="this.classList.toggle('on')"></div>
+                <span>节假日</span>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="doRevenuePredict()">预测营业额</button>
+            </div>
+        </div>
+        <div id="revResultSection" style="display:none"></div>
+    </div>
+
+    <!-- Panel 3: 毛利率预估 -->
+    <div class="feature-panel" id="panel-margin">
+        <div class="card">
+            <div class="card-title"><span class="icon">📊</span> 毛利率预估条件</div>
+            <div class="info-tip">根据已上传的实际销售数据和产品毛利配置，计算过去某段时间的毛利率。</div>
+            <div class="form-grid">
+                <div class="form-group full">
+                    <span class="form-label">门店</span>
+                    <select id="gmStore" class="form-input" onchange="STORE=this.value;syncStoreSelectors()"><option value="">请选择</option></select>
+                </div>
+                <div class="form-group">
+                    <span class="form-label">开始日期</span>
+                    <input type="date" id="gmStartDate" class="form-input">
+                </div>
+                <div class="form-group">
+                    <span class="form-label">结束日期</span>
+                    <input type="date" id="gmEndDate" class="form-input">
+                </div>
+                <div class="form-group full">
+                    <span class="form-label">业务类型</span>
+                    <select id="gmBizType" class="form-input">
+                        <option value="">全部（堂食+外卖）</option>
+                        <option value="takeaway">仅外卖</option>
+                        <option value="dinein">仅堂食</option>
+                    </select>
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="doMarginEstimate()">计算毛利率</button>
+            </div>
+        </div>
+        <div id="gmResultSection" style="display:none"></div>
+
+        <!-- Gross Profit Profiles (admin only) -->
+        <div class="card" id="grossProfileCard" style="display:none">
+            <div class="card-title"><span class="icon">⚙️</span> 产品毛利配置 <span style="font-size:10px;color:rgba(226,232,240,0.4);font-weight:500;margin-left:auto">仅管理员可见</span></div>
+            <div class="info-tip">配置每个产品的成本价，系统自动根据历史平均售价计算毛利率。产品名称不能重复。</div>
+            <div class="form-grid" style="margin-bottom:12px">
+                <div class="form-group"><span class="form-label">产品名称</span><input type="text" id="gpProductName" class="form-input" placeholder="如：招牌烤鸭"></div>
+                <div class="form-group"><span class="form-label">产品成本 (¥)</span><input type="number" id="gpCostPerUnit" class="form-input" placeholder="如 8.5" min="0" step="0.1"></div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" id="gpAddBtn" onclick="addGrossProfile()">添加产品毛利</button>
+            </div>
+            <div id="grossProfileList" style="margin-top:16px"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+const API_BASE = '';
+let TOKEN = '';
+let STORE = '';
+let BRAND_ID = '';
+let USER_ROLE = '';
+let PREDICTIONS = {};
+let ACTIVE_BIZ_TAB = 'takeaway';
+let ACTIVE_FEATURE = 'inventory';
+let GP_EDIT_ID = null;
+let ALIAS_EDIT_ID = null;
+
+let __ALL_STORES = [];
+let __ALL_BRANDS = [];
+
+// ─── Init ───
+(async function init() {
+    try {
+        TOKEN = String(localStorage.getItem('HRMS_API_TOKEN') || localStorage.getItem('hrms_token') || '').trim();
+        if (!TOKEN) { showStatus('请先登录主系统后再使用智能助手', 'error'); return; }
+
+        let userStore = '', userRole = '';
+        try { if (window.parent && window.parent.currentUser) { userStore = String(window.parent.currentUser?.store || ''); userRole = String(window.parent.currentUser?.role || ''); } } catch(e) {}
+        if (!userStore || !userRole) {
+            try { const me = await apiFetch('/api/me'); userStore = String(me?.user?.store || me?.store || ''); userRole = String(me?.user?.role || me?.role || ''); } catch(e) {}
+        }
+        USER_ROLE = userRole;
+
+        try {
+            const [storesResp, brandsResp] = await Promise.all([
+                apiFetch('/api/stores').catch(() => ({})),
+                apiFetch('/api/brands').catch(() => ({}))
+            ]);
+            __ALL_STORES = Array.isArray(storesResp?.items) ? storesResp.items : [];
+            __ALL_BRANDS = Array.isArray(brandsResp?.items) ? brandsResp.items : [];
+
+            const isStoreScopedRole = userRole === 'store_manager' || userRole === 'store_production_manager';
+            if (isStoreScopedRole && userStore) {
+                STORE = userStore.trim();
+            }
+
+            hydrateBrandSelect();
+            if (STORE && !BRAND_ID) {
+                const storeRow = __ALL_STORES.find((s) => String(s?.name || '').trim() === STORE || String(s?.id || '').trim() === STORE) || null;
+                const inferred = normalizeBrandIdInput(storeRow?.brandId || storeRow?.brand || storeRow?.brandName || '');
+                if (inferred) {
+                    BRAND_ID = inferred;
+                    const bs = document.getElementById('brandSelect');
+                    if (bs) bs.value = BRAND_ID;
+                }
+            }
+
+            hydrateStoreSelectors();
+
+            const bs = document.getElementById('brandSelect');
+            if (bs && isStoreScopedRole) bs.disabled = true;
+        } catch(e) {
+            showStatus('加载品牌/门店列表失败', 'error');
+        }
+    } catch(e) { showStatus('初始化失败：' + String(e?.message || e), 'error'); return; }
+
+    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+    const tmStr = tomorrow.toISOString().split('T')[0];
+    document.getElementById('invDate').value = tmStr;
+    document.getElementById('revDate').value = tmStr;
+    const today = new Date().toISOString().split('T')[0];
+    const weekAgo = new Date(Date.now() - 7*86400000).toISOString().split('T')[0];
+    document.getElementById('gmStartDate').value = weekAgo;
+    document.getElementById('gmEndDate').value = today;
+
+    // Role-based visibility
+    const ALLOWED_ROLES = ['admin', 'hq_manager', 'store_manager', 'store_production_manager'];
+    if (!ALLOWED_ROLES.includes(USER_ROLE)) {
+        document.querySelector('.container').innerHTML = '<div style="text-align:center;padding:60px 20px;"><div style="font-size:48px;margin-bottom:16px">🔒</div><h2 style="font-size:18px;font-weight:800;margin-bottom:8px">无访问权限</h2><p style="font-size:13px;color:rgba(226,232,240,0.5)">智能助手仅对出品经理、店长、总部营运、管理员开放</p><a href="/" style="display:inline-block;margin-top:20px;color:#38bdf8;font-size:13px">← 返回主页</a></div>';
+        return;
+    }
+    // Data source overview: all authorized roles
+    document.getElementById('dataSourceCard').style.display = 'block';
+    loadDataSourceOverview();
+    // Upload + gross profit config: admin/hq_manager only
+    if (USER_ROLE === 'admin' || USER_ROLE === 'hq_manager') {
+        document.getElementById('uploadCard').style.display = 'block';
+        document.getElementById('grossProfileCard').style.display = 'block';
+    }
+    // Core products management + alias rules: admin only
+    if (USER_ROLE === 'admin') {
+        document.getElementById('coreProductsBtn').style.display = 'block';
+        document.getElementById('aliasRulesCard').style.display = 'block';
+        if (BRAND_ID) loadAliasRules();
+    } else {
+        document.getElementById('coreProductsBtn').style.display = 'none';
+    }
+    // Set default dates for core product sales query
+    const cpWeekAgo = new Date(Date.now() - 7*86400000).toISOString().split('T')[0];
+    document.getElementById('cpSalesStart').value = cpWeekAgo;
+    document.getElementById('cpSalesEnd').value = today;
+})();
+
+function normalizeBrandIdInput(input) {
+    const raw = String(input || '').trim().toLowerCase();
+    if (!raw) return '';
+    return raw.replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80);
+}
+
+function hydrateBrandSelect() {
+    const sel = document.getElementById('brandSelect');
+    if (!sel) return;
+    const list = Array.isArray(__ALL_BRANDS) ? __ALL_BRANDS.slice() : [];
+    list.sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'zh-Hans-CN'));
+    const opts = list.map((b) => {
+        const id = normalizeBrandIdInput(b?.id || b?.name);
+        const name = String(b?.name || b?.id || '').trim();
+        if (!id || !name) return '';
+        return `<option value="${esc(id)}">${esc(name)}</option>`;
+    }).filter(Boolean).join('');
+    sel.innerHTML = '<option value="">请选择品牌</option>' + opts;
+}
+
+function hydrateStoreSelectors() {
+    const allSelectors = ['uploadStore','invStore','revStore','gmStore'];
+    const isStoreScopedRole = USER_ROLE === 'store_manager' || USER_ROLE === 'store_production_manager';
+    const storesFiltered = BRAND_ID
+        ? __ALL_STORES.filter((s) => normalizeBrandIdInput(s?.brandId || s?.brand || s?.brandName) === BRAND_ID)
+        : __ALL_STORES;
+    const storeNames = storesFiltered.map((s) => String(s?.name || '').trim()).filter(Boolean);
+
+    if (isStoreScopedRole && STORE) {
+        allSelectors.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.innerHTML = `<option value="${esc(STORE)}">${esc(STORE)}</option>`;
+            el.disabled = true;
+        });
+        return;
+    }
+
+    const opts = storeNames.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    allSelectors.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.innerHTML = '<option value="">请选择门店</option>' + opts;
+        el.disabled = false;
+    });
+    if (STORE) {
+        allSelectors.forEach(id => { const el = document.getElementById(id); if (el) el.value = STORE; });
+    }
+    if (!STORE && storeNames.length === 1) {
+        STORE = storeNames[0];
+        allSelectors.forEach(id => { const el = document.getElementById(id); if (el) el.value = STORE; });
+    }
+}
+
+function onBrandChange() {
+    const sel = document.getElementById('brandSelect');
+    BRAND_ID = normalizeBrandIdInput(sel?.value || '');
+    if (!BRAND_ID) {
+        STORE = '';
+    } else {
+        const okStores = __ALL_STORES.filter((s) => normalizeBrandIdInput(s?.brandId || s?.brand || s?.brandName) === BRAND_ID);
+        const currentOk = okStores.find((s) => String(s?.name || '').trim() === STORE);
+        if (!currentOk) STORE = '';
+    }
+    hydrateStoreSelectors();
+    syncStoreSelectors();
+}
+
+// ─── Helpers ───
+function showStatus(msg, type) { const el = document.getElementById('statusBar'); el.className = 'status-bar ' + type; el.innerHTML = type === 'loading' ? `<div class="spinner"></div>${esc(msg)}` : esc(msg); }
+function hideStatus() { document.getElementById('statusBar').className = 'status-bar'; }
+function esc(s) { const d = document.createElement('div'); d.textContent = String(s || ''); return d.innerHTML; }
+function fmt(n) { return Number(n || 0).toLocaleString('zh-CN', {minimumFractionDigits:0, maximumFractionDigits:1}); }
+
+async function apiFetch(url, opts = {}) {
+    const headers = { ...(opts.headers || {}) };
+    if (TOKEN) headers['Authorization'] = `Bearer ${TOKEN}`;
+    if (!(opts.body instanceof FormData) && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+    const resp = await fetch(API_BASE + url, { ...opts, headers });
+    if (!resp.ok) { const body = await resp.json().catch(() => ({})); throw new Error(body?.message || body?.error || `HTTP ${resp.status}`); }
+    return resp.json();
+}
+
+function syncStoreSelectors() {
+    const ids = ['uploadStore','invStore','revStore','gmStore'];
+    ids.forEach(id => { const el = document.getElementById(id); if (el && STORE) el.value = STORE; });
+    if ((USER_ROLE === 'admin' || USER_ROLE === 'hq_manager') && BRAND_ID) loadGrossProfiles();
+    if (USER_ROLE === 'admin' && BRAND_ID) loadAliasRules();
+}
+
+// ─── Feature Tabs ───
+function switchFeature(panel) {
+    ACTIVE_FEATURE = panel;
+    document.querySelectorAll('.feature-tab').forEach(t => t.classList.toggle('active', t.dataset.panel === panel));
+    document.querySelectorAll('.feature-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + panel));
+}
+
+function toggleDataSource() {
+    const body = document.getElementById('dataSourceBody');
+    const header = document.querySelector('#dataSourceCard .collapse-header');
+    const isOpen = header.classList.contains('open');
+    header.classList.toggle('open');
+    body.style.display = isOpen ? 'none' : 'block';
+}
+async function loadDataSourceOverview() {
+    try {
+        const r = await fetch('/api/uploads/status', { headers: { 'Authorization': 'Bearer ' + TOKEN } });
+        if (!r.ok) return;
+        const d = await r.json();
+        const grid = document.getElementById('dataSourceGrid');
+        if (!grid || !d.sources) return;
+        const icons = { kb:'📚', fh:'📦', sr:'💰', dl:'🧾', dr:'📒', gp:'📊' };
+        grid.innerHTML = d.sources.map(s => `<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;margin-bottom:4px">${icons[s.key]||'📄'}</div><div style="font-size:12px;font-weight:600;color:rgba(226,232,240,0.9)">${esc(s.label)}</div><div style="font-size:18px;font-weight:800;color:#38bdf8;margin:4px 0">${s.count}</div>${s.latest?'<div style="font-size:10px;color:rgba(226,232,240,0.4)">'+new Date(s.latest).toLocaleDateString()+'</div>':''}</div>`).join('');
+    } catch(e) {}
+}
+
+function toggleUpload() {
+    const body = document.getElementById('uploadBody');
+    const header = document.querySelector('#uploadCard .collapse-header');
+    const isOpen = header.classList.contains('open');
+    header.classList.toggle('open');
+    body.style.display = isOpen ? 'none' : 'block';
+}
+
+// ─── Upload ───
+const fileInput = document.getElementById('fileInput');
+const uploadArea = document.getElementById('uploadArea');
+uploadArea.addEventListener('click', () => fileInput.click());
+uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+uploadArea.addEventListener('drop', (e) => { e.preventDefault(); uploadArea.classList.remove('dragover'); if (e.dataTransfer.files.length) { fileInput.files = e.dataTransfer.files; onFileSelected(); } });
+fileInput.addEventListener('change', onFileSelected);
+
+function onFileSelected() {
+    const files = Array.from(fileInput.files || []);
+    const badge = document.getElementById('fileBadge');
+    const btn = document.getElementById('uploadBtn');
+    if (!files.length) { badge.style.display = 'none'; btn.disabled = true; return; }
+    const preview = files.slice(0, 3).map(f => `${esc(f.name)} (${(f.size/1024).toFixed(0)}KB)`).join('；');
+    const remain = files.length > 3 ? ` 等${files.length}个文件` : '';
+    badge.style.display = 'block';
+    badge.innerHTML = `<div class="file-badge">${preview}${remain} <span class="remove" onclick="clearFile()">✕</span></div>`;
+    btn.disabled = false;
+}
+function clearFile() { fileInput.value = ''; document.getElementById('fileBadge').style.display = 'none'; document.getElementById('uploadBtn').disabled = true; }
+
+async function doUpload() {
+    const files = Array.from(fileInput.files || []);
+    if (!files.length) return;
+    const store = document.getElementById('uploadStore').value;
+    if (!store) { showStatus('请先选择门店', 'error'); return; }
+    const bizType = document.getElementById('bizType').value;
+    const btn = document.getElementById('uploadBtn');
+    const btnText = document.getElementById('uploadBtnText');
+    btn.disabled = true; btnText.textContent = '上传中...';
+    showStatus('正在上传并解析数据...', 'loading');
+    try {
+        const detectKind = (name) => { const ext = String(name||'').toLowerCase(); if (/\.(xlsx|xls)$/i.test(ext)) return 'excel'; if (/\.pdf$/i.test(ext)) return 'pdf'; return ''; };
+        const firstKind = detectKind(files[0]?.name||'');
+        if (!firstKind) { showStatus('仅支持 Excel(.xlsx/.xls) 或 PDF(.pdf)', 'error'); return; }
+        if (files.find(f => detectKind(f?.name||'') !== firstKind)) { showStatus('一次上传请只选择同类型文件', 'error'); return; }
+        let totalParsed=0, totalAccepted=0, successCount=0; const failed=[];
+        for (let i=0; i<files.length; i++) {
+            btnText.textContent = `上传中 ${i+1}/${files.length}...`;
+            showStatus(`正在上传第 ${i+1}/${files.length} 个文件`, 'loading');
+            try {
+                const fd = new FormData(); fd.append('store', store); fd.append('bizType', bizType); fd.append('file', files[i]);
+                const resp = await apiFetch('/api/reports/inventory-forecast/history/upload-file', { method:'POST', body:fd });
+                totalParsed += Number(resp?.parsedRows||0); totalAccepted += Number(resp?.accepted||0); successCount++;
+            } catch(e) { failed.push(`${files[i].name}: ${String(e?.message||e)}`); }
+        }
+        if (!successCount) { showStatus('上传失败：' + failed[0], 'error'); return; }
+        const failMsg = failed.length ? `；失败 ${failed.length} 个` : '';
+        showStatus(`上传完成：成功 ${successCount}/${files.length}，解析 ${totalParsed} 条，入库 ${totalAccepted} 条${failMsg}`, failed.length ? 'loading' : 'success');
+        clearFile();
+    } catch(e) { showStatus('上传失败：' + String(e?.message||e), 'error'); } finally { btn.disabled = false; btnText.textContent = '上传历史数据'; }
+}
+
+// ─── 备货预测 ───
+async function doInventoryPredict() {
+    const store = document.getElementById('invStore').value;
+    if (!store) { showStatus('请先选择门店', 'error'); return; }
+    const date = document.getElementById('invDate').value;
+    if (!date) { showStatus('请选择预测日期', 'error'); return; }
+    const weather = document.getElementById('invWeather').value;
+    const revTakeaway = Number(document.getElementById('invRevTakeaway').value) || 0;
+    const revDinein = Number(document.getElementById('invRevDinein').value) || 0;
+    const isHoliday = document.getElementById('invHoliday').classList.contains('on');
+    if (revTakeaway <= 0 && revDinein <= 0) { showStatus('请填写至少一个预计营收（外卖或堂食）', 'error'); return; }
+
+    showStatus('AI 正在分析历史数据并生成备货预测...', 'loading');
+    PREDICTIONS = {};
+    const slots = ['lunch','afternoon','dinner'];
+    const tasks = [];
+    for (const biz of ['takeaway','dinein']) {
+        const rev = biz === 'takeaway' ? revTakeaway : revDinein;
+        if (rev <= 0) continue;
+        for (const slot of slots) {
+            tasks.push(apiFetch('/api/reports/inventory-forecast/predict', { method:'POST', body:JSON.stringify({store,bizType:biz,slot,date,weather,isHoliday,expectedRevenue:rev,topN:20}) }).then(r=>({ok:true,biz,slot,data:r})).catch(e=>({ok:false,biz,slot,error:e})));
+        }
+    }
+    const results = await Promise.all(tasks);
+    let totalProducts=0, aiCount=0;
+    results.forEach(r => { if (!r.ok) return; PREDICTIONS[`${r.biz}||${r.slot}`] = r.data; totalProducts += (r.data?.predictions?.length||0); if (r.data?.source==='ai') aiCount++; });
+
+    hideStatus();
+    if (!totalProducts) { showStatus('暂无备货预测结果，请确认已上传历史数据', 'error'); return; }
+    renderInventoryResults(date, weather, isHoliday, revTakeaway, revDinein, aiCount, totalProducts);
+}
+
+function renderInventoryResults(date, weather, isHoliday, revTakeaway, revDinein, aiCount, totalProducts) {
+    const section = document.getElementById('invResultSection');
+    section.style.display = 'block';
+    const store = document.getElementById('invStore').value;
+    const dayNames = ['周日','周一','周二','周三','周四','周五','周六'];
+    const d = new Date(date + 'T00:00:00');
+    const dayName = dayNames[d.getDay()] || '';
+    document.getElementById('invResultHero').innerHTML = `
+        <h2>📦 ${esc(date)} ${dayName} 备货预测</h2>
+        <div class="meta">${esc(store)} · ${isHoliday ? '🎉 假日' : '工作日'} · ${weather}</div>
+        <div class="result-stats">
+            <div class="stat-box"><div class="val">${totalProducts}</div><div class="label">预测菜品数</div></div>
+            <div class="stat-box"><div class="val">${aiCount}/${Object.keys(PREDICTIONS).length}</div><div class="label">AI预测模块</div></div>
+            <div class="stat-box"><div class="val">¥${fmt(revTakeaway+revDinein)}</div><div class="label">预计总营收</div></div>
+        </div>`;
+    switchBizTab(ACTIVE_BIZ_TAB);
+    section.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function switchBizTab(biz) {
+    ACTIVE_BIZ_TAB = biz;
+    document.querySelectorAll('.module-tab').forEach(t => t.classList.toggle('active', t.dataset.biz === biz));
+    renderInvTable(biz);
+}
+
+function renderInvTable(biz) {
+    const container = document.getElementById('invTableContent');
+    const slotOrder = ['lunch','afternoon','dinner'];
+    const slotNames = { lunch:'午市', afternoon:'下午茶', dinner:'晚市' };
+    const slotClasses = { lunch:'lunch', afternoon:'afternoon', dinner:'dinner' };
+    let html = '', hasAny = false;
+    slotOrder.forEach(slot => {
+        const data = PREDICTIONS[`${biz}||${slot}`];
+        if (!data) return;
+        const preds = Array.isArray(data.predictions) ? data.predictions.slice(0,20) : [];
+        if (!preds.length) return;
+        hasAny = true;
+        const sourceLabel = data.source === 'ai' ? '🤖 AI' : '📊 历史加权';
+        const conf = fmt(Number(data.confidence||0)*100);
+        html += `<div style="margin-bottom:16px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span class="slot-badge ${slotClasses[slot]}">${slotNames[slot]}</span><span style="font-size:11px;color:rgba(226,232,240,0.5)">${sourceLabel} · ${conf}%</span></div>
+        <table class="pred-table"><thead><tr><th style="width:36px">#</th><th>菜品</th><th class="right" style="width:70px">预测量</th></tr></thead><tbody>
+        ${preds.map((p,i) => `<tr><td><span class="rank ${i<3?'top3':'normal'}">${i+1}</span></td><td><div class="product-name">${esc(p.product)}</div>${p.reason?`<div class="reason">${esc(p.reason)}</div>`:''}</td><td class="right qty">${fmt(p.qty)}</td></tr>`).join('')}
+        </tbody></table></div>`;
+    });
+    if (!hasAny) html = '<div class="empty">该模块暂无预测数据<br>请先上传对应业务类型的历史销售数据</div>';
+    container.innerHTML = html;
+}
+
+// ─── 营业额预测 ───
+async function doRevenuePredict() {
+    const store = document.getElementById('revStore').value;
+    if (!store) { showStatus('请先选择门店', 'error'); return; }
+    const date = document.getElementById('revDate').value;
+    if (!date) { showStatus('请选择预测日期', 'error'); return; }
+    const weather = document.getElementById('revWeather').value;
+    const isHoliday = document.getElementById('revHoliday').classList.contains('on');
+
+    showStatus('AI 正在根据历史数据预测营业额...', 'loading');
+    try {
+        const resp = await apiFetch('/api/reports/inventory-forecast/revenue-estimate', { method:'POST', body:JSON.stringify({store,date,weather,isHoliday}) });
+        hideStatus();
+        const est = resp?.estimate || {};
+        const revTakeaway = Number(est?.byBizType?.takeaway?.estimatedRevenue || 0);
+        const revDinein = Number(est?.byBizType?.dinein?.estimatedRevenue || 0);
+        const takeawayEnabled = !!est?.byBizType?.takeaway?.enabled;
+        const dineinEnabled = !!est?.byBizType?.dinein?.enabled;
+        const total = Number(est?.totalEstimatedRevenue || 0);
+        const sampleCount = Number(est?.sampleCount || 0);
+        const dayNames = ['周日','周一','周二','周三','周四','周五','周六'];
+        const d = new Date(date + 'T00:00:00');
+        const dayName = dayNames[d.getDay()] || '';
+
+        document.getElementById('revResultSection').style.display = 'block';
+        document.getElementById('revResultSection').innerHTML = `
+            <div class="result-hero" style="background:linear-gradient(135deg,#7c3aed,#0ea5e9);">
+                <h2>💰 ${esc(date)} ${dayName} 营业额预测</h2>
+                <div class="meta">${esc(store)} · ${isHoliday?'🎉 假日':'工作日'} · ${weather} · 基于 ${sampleCount} 天历史数据</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+                <div class="stat-card ${takeawayEnabled?'highlight':''}">
+                    <div class="val" style="color:${takeawayEnabled?'#38bdf8':'rgba(226,232,240,0.3)'}">${takeawayEnabled?('¥'+fmt(revTakeaway)):'无样本'}</div>
+                    <div class="label">🛵 外卖预估营业额</div>
+                </div>
+                <div class="stat-card ${dineinEnabled?'highlight':''}">
+                    <div class="val" style="color:${dineinEnabled?'#22c55e':'rgba(226,232,240,0.3)'}">${dineinEnabled?('¥'+fmt(revDinein)):'无样本'}</div>
+                    <div class="label">🍽 堂食预估营业额</div>
+                </div>
+            </div>
+            <div class="stat-card highlight" style="margin-bottom:12px;">
+                <div class="val" style="font-size:28px;color:#f59e0b">¥${fmt(total)}</div>
+                <div class="label" style="font-size:13px">合计预估营业额</div>
+            </div>
+            <div class="info-tip" style="background:rgba(255,255,255,0.03);border-color:rgba(255,255,255,0.1)">
+                📌 预测基于同星期几+天气+节假日的历史数据加权。雨天自动调整外卖↑堂食↓。持续上传数据可提升准确度。
+            </div>`;
+        document.getElementById('revResultSection').scrollIntoView({ behavior:'smooth', block:'start' });
+    } catch(e) { showStatus('营业额预测失败：' + String(e?.message||e), 'error'); }
+}
+
+// ─── 毛利率预估 ───
+async function doMarginEstimate() {
+    const store = document.getElementById('gmStore').value;
+    if (!store) { showStatus('请先选择门店', 'error'); return; }
+    const startDate = document.getElementById('gmStartDate').value;
+    const endDate = document.getElementById('gmEndDate').value;
+    if (!startDate || !endDate) { showStatus('请选择日期范围', 'error'); return; }
+    const bizType = document.getElementById('gmBizType').value;
+
+    showStatus('正在计算毛利率...', 'loading');
+    try {
+        const resp = await apiFetch('/api/reports/inventory-forecast/gross-margin-estimate', { method:'POST', body:JSON.stringify({store,startDate,endDate,bizType}) });
+        hideStatus();
+        const gm = resp?.estimate || {};
+        const marginRate = Number(gm?.marginRate || 0);
+        const actualMarginRate = Number(gm?.actualMarginRate || 0);
+        const revenue = Number(gm?.revenue || 0);
+        const actualRevenue = Number(gm?.actualRevenue || 0);
+        const grossProfit = Number(gm?.grossProfit || 0);
+        const sampleCount = Number(gm?.sampleCount || 0);
+        const uncovered = Array.isArray(gm?.uncoveredProducts) ? gm.uncoveredProducts : [];
+        const bizLabel = bizType === 'takeaway' ? '仅外卖' : bizType === 'dinein' ? '仅堂食' : '全业务';
+        const rateColor = marginRate >= 0.5 ? '#22c55e' : marginRate >= 0.3 ? '#f59e0b' : '#ef4444';
+        const actualRateColor = actualMarginRate >= 0.5 ? '#22c55e' : actualMarginRate >= 0.3 ? '#f59e0b' : '#ef4444';
+        const hasActual = actualRevenue > 0;
+
+        document.getElementById('gmResultSection').style.display = 'block';
+        document.getElementById('gmResultSection').innerHTML = `
+            <div class="result-hero" style="background:linear-gradient(135deg,#059669,#0d9488);margin-bottom:12px;">
+                <h2>📊 ${esc(startDate)} ~ ${esc(endDate)} 毛利率预估</h2>
+                <div class="meta">${esc(store)} · ${esc(bizLabel)} · ${sampleCount} 天数据</div>
+            </div>
+            <div style="display:grid;grid-template-columns:${hasActual ? '1fr 1fr' : '1fr'};gap:10px;margin-bottom:12px;">
+                <div class="stat-card highlight" style="padding:24px;">
+                    <div class="val" style="font-size:36px;color:${rateColor}">${fmt(marginRate*100)}%</div>
+                    <div class="label" style="font-size:14px">折前毛利率</div>
+                </div>
+                ${hasActual ? `<div class="stat-card highlight" style="padding:24px;">
+                    <div class="val" style="font-size:36px;color:${actualRateColor}">${fmt(actualMarginRate*100)}%</div>
+                    <div class="label" style="font-size:14px">实收毛利率</div>
+                </div>` : ''}
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(${hasActual ? 4 : 3},1fr);gap:10px;margin-bottom:12px;">
+                <div class="stat-card"><div class="val" style="font-size:16px">¥${fmt(revenue)}</div><div class="label">折前营收</div></div>
+                ${hasActual ? `<div class="stat-card"><div class="val" style="font-size:16px;color:#f59e0b">¥${fmt(actualRevenue)}</div><div class="label">实收营收</div></div>` : ''}
+                <div class="stat-card"><div class="val" style="font-size:16px">¥${fmt(grossProfit)}</div><div class="label">毛利额</div></div>
+                <div class="stat-card"><div class="val" style="font-size:16px">${sampleCount}</div><div class="label">样本天数</div></div>
+            </div>
+            ${uncovered.length ? `<div class="info-tip" style="background:rgba(239,68,68,0.06);border-color:rgba(239,68,68,0.3);color:rgba(239,68,68,0.8)">⚠️ 以下产品尚未配置毛利，可能影响准确度：${esc(uncovered.slice(0,10).map(x=>x.product).join('、'))}${uncovered.length>10?'...':''}</div>` : '<div class="info-tip" style="background:rgba(34,197,94,0.06);border-color:rgba(34,197,94,0.3);color:rgba(34,197,94,0.8)">✅ 所有产品均已配置毛利</div>'}
+        `;
+        document.getElementById('gmResultSection').scrollIntoView({ behavior:'smooth', block:'start' });
+    } catch(e) { showStatus('毛利率计算失败：' + String(e?.message||e), 'error'); }
+}
+
+// ─── Gross Profit Profiles CRUD (admin only) ───
+async function loadGrossProfiles() {
+    const brandId = BRAND_ID; if (!brandId) return;
+    try {
+        const resp = await apiFetch('/api/reports/inventory-forecast/gross-profit-profiles?brandId=' + encodeURIComponent(brandId));
+        const items = Array.isArray(resp?.items) ? resp.items : [];
+        renderGrossProfileList(items);
+    } catch(e) {}
+}
+
+function renderGrossProfileList(items) {
+    const list = document.getElementById('grossProfileList');
+    if (!items.length) { list.innerHTML = '<div class="empty">暂无产品毛利配置</div>'; return; }
+    list.innerHTML = `<table class="pred-table"><thead><tr><th>产品</th><th class="right">成本</th><th class="right">均价</th><th class="right">毛利率</th><th style="width:70px"></th></tr></thead><tbody>${items.map(p => {
+        const cost = Number(p.costPerUnit || 0);
+        const avgP = Number(p.avgPrice || 0);
+        const mr = Number(p.marginRate || 0);
+        const mrColor = mr >= 0.5 ? '#22c55e' : mr >= 0.3 ? '#f59e0b' : mr > 0 ? '#ef4444' : 'rgba(226,232,240,0.3)';
+        return `<tr><td class="product-name">${esc(p.product)}</td><td class="right">¥${cost > 0 ? fmt(cost) : '-'}</td><td class="right" style="color:rgba(226,232,240,0.5)">${avgP > 0 ? '¥'+fmt(avgP) : '-'}</td><td class="right" style="color:${mrColor};font-weight:800">${mr > 0 ? fmt(mr*100)+'%' : '-'}</td><td style="display:flex;gap:4px"><button class="btn btn-secondary btn-sm" onclick="editGrossProfile('${esc(p.id)}','${esc(p.product)}',${cost})">改</button><button class="btn btn-danger btn-sm" onclick="deleteGrossProfile('${esc(p.id)}')">删</button></td></tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+async function addGrossProfile() {
+    const brandId = BRAND_ID;
+    if (!brandId) { showStatus('请先选择品牌', 'error'); return; }
+    const product = document.getElementById('gpProductName').value.trim();
+    const costPerUnit = Number(document.getElementById('gpCostPerUnit').value);
+    if (!product) { showStatus('请输入产品名称', 'error'); return; }
+    if (!Number.isFinite(costPerUnit) || costPerUnit < 0) { showStatus('请输入有效的产品成本', 'error'); return; }
+
+    const btn = document.getElementById('gpAddBtn');
+    btn.disabled = true;
+    try {
+        if (GP_EDIT_ID) {
+            await apiFetch('/api/reports/inventory-forecast/gross-profit-profiles/' + encodeURIComponent(GP_EDIT_ID), { method:'PUT', body:JSON.stringify({product, costPerUnit}) });
+            showStatus('产品毛利已更新 ✓', 'success');
+            GP_EDIT_ID = null;
+            btn.textContent = '添加产品毛利';
+        } else {
+            await apiFetch('/api/reports/inventory-forecast/gross-profit-profiles', { method:'POST', body:JSON.stringify({brandId, product, costPerUnit}) });
+            showStatus('产品毛利已添加 ✓', 'success');
+        }
+        document.getElementById('gpProductName').value = '';
+        document.getElementById('gpCostPerUnit').value = '';
+        loadGrossProfiles();
+    } catch(e) { showStatus(String(e?.message||e), 'error'); } finally { btn.disabled = false; }
+}
+
+function editGrossProfile(id, product, cost) {
+    GP_EDIT_ID = id;
+    document.getElementById('gpProductName').value = product;
+    document.getElementById('gpCostPerUnit').value = cost > 0 ? cost : '';
+    document.getElementById('gpAddBtn').textContent = '保存修改';
+    document.getElementById('gpProductName').focus();
+}
+
+async function deleteGrossProfile(id) {
+    if (!confirm('确定删除此产品毛利配置？')) return;
+    try {
+        await apiFetch('/api/reports/inventory-forecast/gross-profit-profiles/' + encodeURIComponent(id), { method:'DELETE' });
+        showStatus('已删除', 'success');
+        loadGrossProfiles();
+    } catch(e) { showStatus('删除失败：' + String(e?.message||e), 'error'); }
+}
+
+// ─── Core Products ───
+function toggleCoreProducts() {
+    if (USER_ROLE !== 'admin') { showStatus('仅管理员可访问核心产品管理', 'error'); return; }
+    const card = document.getElementById('coreProductsCard');
+    const isVisible = card.style.display !== 'none';
+    card.style.display = isVisible ? 'none' : 'block';
+    if (!isVisible && STORE) {
+        loadCoreProducts();
+        if (USER_ROLE === 'admin') loadAliasRules();
+    }
+}
+
+// ─── Core Product Sales Query (all ALLOWED_ROLES) ───
+function toggleCpSales() {
+    const card = document.getElementById('cpSalesCard');
+    const isVisible = card.style.display !== 'none';
+    card.style.display = isVisible ? 'none' : 'block';
+}
+async function loadCoreProducts() {
+    const store = STORE; if (!store) return;
+    try {
+        const resp = await apiFetch('/api/reports/inventory-forecast/core-products?store='+encodeURIComponent(store));
+        const items = Array.isArray(resp?.items)?resp.items:[];
+        const list = document.getElementById('coreProductsList');
+        list.style.display = 'block';
+        if (!items.length) { list.innerHTML = '<div class="empty">暂无核心产品</div>'; return; }
+        list.innerHTML = `<table class="pred-table"><thead><tr><th>产品</th><th class="right">每日目标</th><th style="width:50px"></th></tr></thead><tbody>${items.map(p=>`<tr><td class="product-name">${esc(p.product)}</td><td class="right qty">${fmt(p.targetQty)}</td><td><button class="btn btn-secondary btn-sm" onclick="deleteCoreProduct('${esc(p.id)}')">删</button></td></tr>`).join('')}</tbody></table>`;
+    } catch(e) { showStatus('加载核心产品失败', 'error'); }
+}
+async function addCoreProduct() {
+    const store = STORE, product = document.getElementById('coreProductName').value.trim(), targetQty = Number(document.getElementById('coreTargetQty').value)||0;
+    if (!store) { showStatus('请先选择门店', 'error'); return; }
+    if (!product) { showStatus('请输入产品名称', 'error'); return; }
+    if (targetQty<=0) { showStatus('请输入有效目标销量', 'error'); return; }
+    try {
+        await apiFetch('/api/reports/inventory-forecast/core-products', { method:'POST', body:JSON.stringify({store,product,targetQty}) });
+        showStatus('核心产品已添加', 'success');
+        document.getElementById('coreProductName').value = '';
+        document.getElementById('coreTargetQty').value = '';
+        loadCoreProducts();
+    } catch(e) { showStatus('添加失败：'+String(e?.message||e), 'error'); }
+}
+async function deleteCoreProduct(id) {
+    if (!confirm('确定删除？')) return;
+    try { await apiFetch('/api/reports/inventory-forecast/core-products/'+encodeURIComponent(id),{method:'DELETE'}); showStatus('已删除','success'); loadCoreProducts(); } catch(e) { showStatus('删除失败','error'); }
+}
+
+// ─── Product Alias Rules (admin/hq only) ───
+async function loadAliasRules() {
+    const brandId = BRAND_ID;
+    if (!brandId) return;
+    try {
+        const resp = await apiFetch('/api/reports/inventory-forecast/product-aliases?brandId=' + encodeURIComponent(brandId));
+        const items = Array.isArray(resp?.items) ? resp.items : [];
+        renderAliasRules(items);
+    } catch (e) {
+        const list = document.getElementById('aliasRulesList');
+        if (list) list.innerHTML = '<div class="empty">加载归类规则失败</div>';
+    }
+}
+
+function renderAliasRules(items) {
+    const list = document.getElementById('aliasRulesList');
+    if (!list) return;
+    if (!items.length) {
+        list.innerHTML = '<div class="empty">暂无归类规则</div>';
+        return;
+    }
+    list.innerHTML = `<table class="pred-table"><thead><tr><th>标准菜名</th><th>别名</th><th style="width:90px"></th></tr></thead><tbody>${items.map((it) => {
+        const aliases = Array.isArray(it.aliases) ? it.aliases : [];
+        return `<tr><td class="product-name">${esc(it.canonical || '')}</td><td style="font-size:11px;color:rgba(226,232,240,0.6)">${esc(aliases.join('、') || '-')}</td><td style="display:flex;gap:4px"><button class="btn btn-secondary btn-sm" onclick="editAliasRule('${esc(it.id)}','${esc(it.canonical || '')}','${esc(aliases.join(','))}')">改</button><button class="btn btn-danger btn-sm" onclick="deleteAliasRule('${esc(it.id)}')">删</button></td></tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+function editAliasRule(id, canonical, aliasesCsv) {
+    ALIAS_EDIT_ID = String(id || '').trim();
+    document.getElementById('aliasCanonical').value = canonical || '';
+    document.getElementById('aliasNames').value = aliasesCsv || '';
+    document.getElementById('aliasAddBtn').textContent = '保存修改';
+    document.getElementById('aliasCancelBtn').style.display = '';
+}
+
+function cancelAliasEdit() {
+    ALIAS_EDIT_ID = null;
+    document.getElementById('aliasCanonical').value = '';
+    document.getElementById('aliasNames').value = '';
+    document.getElementById('aliasAddBtn').textContent = '保存归类规则';
+    document.getElementById('aliasCancelBtn').style.display = 'none';
+}
+
+async function addOrUpdateAliasRule() {
+    const brandId = BRAND_ID;
+    if (!brandId) { showStatus('请先选择品牌', 'error'); return; }
+    const canonical = document.getElementById('aliasCanonical').value.trim();
+    const aliasesCsv = document.getElementById('aliasNames').value.trim();
+    const aliases = aliasesCsv ? aliasesCsv.split(/[,，]/).map(x => x.trim()).filter(Boolean) : [];
+    if (!canonical) { showStatus('请输入标准菜名', 'error'); return; }
+    const payload = { brandId, canonical, aliases };
+    const btn = document.getElementById('aliasAddBtn');
+    btn.disabled = true;
+    try {
+        if (ALIAS_EDIT_ID) {
+            await apiFetch('/api/reports/inventory-forecast/product-aliases/' + encodeURIComponent(ALIAS_EDIT_ID), {
+                method: 'PUT',
+                body: JSON.stringify(payload)
+            });
+            showStatus('归类规则已更新 ✓', 'success');
+        } else {
+            await apiFetch('/api/reports/inventory-forecast/product-aliases', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            showStatus('归类规则已添加 ✓', 'success');
+        }
+        cancelAliasEdit();
+        loadAliasRules();
+    } catch (e) {
+        showStatus(String(e?.message || e), 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function deleteAliasRule(id) {
+    if (!confirm('确定删除该归类规则？')) return;
+    try {
+        await apiFetch('/api/reports/inventory-forecast/product-aliases/' + encodeURIComponent(id), { method: 'DELETE' });
+        showStatus('归类规则已删除', 'success');
+        if (ALIAS_EDIT_ID === id) cancelAliasEdit();
+        loadAliasRules();
+    } catch (e) {
+        showStatus('删除失败：' + String(e?.message || e), 'error');
+    }
+}
+
+// ─── Core Product Sales Query ───
+async function queryCoreProductSales() {
+    const store = STORE; if (!store) { showStatus('请先选择门店', 'error'); return; }
+    const startDate = document.getElementById('cpSalesStart').value;
+    const endDate = document.getElementById('cpSalesEnd').value;
+    if (!startDate || !endDate) { showStatus('请选择查询日期范围', 'error'); return; }
+    showStatus('正在查询核心产品销量...', 'loading');
+    try {
+        const params = new URLSearchParams({store, startDate, endDate});
+        const resp = await apiFetch('/api/reports/inventory-forecast/core-products/sales?' + params.toString());
+        hideStatus();
+        const items = Array.isArray(resp?.items) ? resp.items : [];
+        const dayCount = Number(resp?.dayCount || 1);
+        const container = document.getElementById('cpSalesResult');
+        container.style.display = 'block';
+        if (!items.length) { container.innerHTML = '<div class="empty">暂无核心产品或该时段无销售数据</div>'; return; }
+        container.innerHTML = `<div style="font-size:11px;color:rgba(226,232,240,0.4);margin-bottom:8px">查询范围：${esc(startDate)} ~ ${esc(endDate)}（${dayCount} 天数据）</div>
+        <table class="pred-table"><thead><tr><th>产品</th><th class="right">实际销量</th><th class="right">目标销量</th><th class="right">达成率</th></tr></thead><tbody>${items.map(p => {
+            const pct = p.achievementPct || 0;
+            const pctColor = pct >= 100 ? '#22c55e' : pct >= 70 ? '#f59e0b' : '#ef4444';
+            return `<tr><td class="product-name">${esc(p.product)}</td><td class="right">${fmt(p.actualQty)}</td><td class="right" style="color:rgba(226,232,240,0.5)">${fmt(p.totalTarget)}<br><span style="font-size:10px">(${fmt(p.dailyTarget)}/天×${p.dayCount}天)</span></td><td class="right" style="color:${pctColor};font-weight:800">${fmt(pct)}%</td></tr>`;
+        }).join('')}</tbody></table>`;
+    } catch(e) { showStatus('查询失败：' + String(e?.message||e), 'error'); }
+}
+
+// ─── Analytics ───
+function toggleAnalytics() {
+    const card = document.getElementById('analyticsCard');
+    card.style.display = card.style.display !== 'none' ? 'none' : 'block';
+}
+async function loadAnalytics() {
+    const store = STORE; if (!store) { showStatus('请先选择门店', 'error'); return; }
+    const bizType = document.getElementById('analyticsBizType').value;
+    showStatus('正在加载统计...', 'loading');
+    try {
+        const params = new URLSearchParams({store}); if (bizType) params.append('bizType', bizType);
+        const resp = await apiFetch('/api/reports/inventory-forecast/analytics?'+params.toString());
+        hideStatus();
+        const content = document.getElementById('analyticsContent');
+        content.style.display = 'block';
+        const top20Qty = Array.isArray(resp?.top20ByQty)?resp.top20ByQty:[];
+        const top20Rev = Array.isArray(resp?.top20ByRevenue)?resp.top20ByRevenue:[];
+        const bottom10 = Array.isArray(resp?.bottom10ByRevenue)?resp.bottom10ByRevenue:[];
+        const renderTable = (title, icon, items, cols) => `<div style="margin-bottom:20px"><h3 style="font-size:14px;font-weight:800;margin-bottom:8px;color:rgba(226,232,240,0.9)">${icon} ${title}</h3><table class="pred-table"><thead><tr><th style="width:36px">#</th>${cols.map(c=>`<th class="${c.right?'right':''}">${c.label}</th>`).join('')}</tr></thead><tbody>${items.map((p,i)=>`<tr><td><span class="rank ${i<3?'top3':'normal'}">${i+1}</span></td>${cols.map(c=>`<td class="${c.right?'right':''} ${c.cls||''}">${c.fmt?c.fmt(p):esc(String(p[c.key]||''))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+        content.innerHTML =
+            renderTable('销量 TOP 20','📈',top20Qty,[{label:'菜品',key:'product',cls:'product-name'},{label:'总销量',key:'totalQty',right:true,cls:'qty',fmt:p=>fmt(p.totalQty)},{label:'均销量',key:'avgQty',right:true,fmt:p=>fmt(p.avgQty)}]) +
+            renderTable('销售额 TOP 20','💰',top20Rev,[{label:'菜品',key:'product',cls:'product-name'},{label:'总额',key:'totalRevenue',right:true,cls:'qty',fmt:p=>'¥'+fmt(p.totalRevenue)},{label:'总量',key:'totalQty',right:true,fmt:p=>fmt(p.totalQty)}]) +
+            renderTable('销售额最低 10','⚠️',bottom10,[{label:'菜品',key:'product',cls:'product-name'},{label:'总额',key:'totalRevenue',right:true,fmt:p=>'¥'+fmt(p.totalRevenue)},{label:'总量',key:'totalQty',right:true,fmt:p=>fmt(p.totalQty)}]) +
+            `<div style="margin-top:12px;padding:10px;background:rgba(255,255,255,0.04);border-radius:8px;font-size:12px;color:rgba(226,232,240,0.5)">统计范围：${esc(store)} · ${bizType==='takeaway'?'外卖':bizType==='dinein'?'堂食':'全部'} · 样本 ${resp?.sampleCount||0}</div>`;
+    } catch(e) { showStatus('加载统计失败：'+String(e?.message||e), 'error'); }
+}
+
+// ─── Download PDF ───
+function downloadForecast() {
+    if (!Object.keys(PREDICTIONS).length) { showStatus('暂无预测数据可下载', 'error'); return; }
+    const canUseJsPdf = !!(window.jspdf && typeof window.jspdf.jsPDF === 'function');
+    const store = document.getElementById('invStore').value || '未知门店';
+    const date = document.getElementById('invDate').value || '';
+    const weather = document.getElementById('invWeather').value || '';
+    const isHoliday = document.getElementById('invHoliday').classList.contains('on');
+    const revTakeaway = document.getElementById('invRevTakeaway').value || '-';
+    const revDinein = document.getElementById('invRevDinein').value || '-';
+
+    if (!canUseJsPdf) {
+        const html = buildForecastPrintableHtml({store,date,weather,isHoliday,revTakeaway,revDinein,predictions:PREDICTIONS});
+        const w = window.open('','_blank');
+        if (!w) { showStatus('浏览器拦截了弹窗', 'error'); return; }
+        w.document.write(html); w.document.close();
+        showStatus('已打开打印预览', 'success'); return;
+    }
+    try {
+        const {jsPDF}=window.jspdf; const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'}); doc.setFont('helvetica');
+        doc.setFontSize(18); doc.text('Inventory Forecast Report',105,18,{align:'center'});
+        doc.setFontSize(10); doc.text(`Store: ${store} | Date: ${date} | Weather: ${weather} | Holiday: ${isHoliday?'Yes':'No'}`,105,26,{align:'center'});
+        doc.text(`Takeaway Rev: ${revTakeaway} | Dine-in Rev: ${revDinein}`,105,32,{align:'center'});
+        let startY=40;
+        const bizLabels={takeaway:'Takeaway',dinein:'Dine-in'}, slotLabels={lunch:'Lunch',afternoon:'Afternoon',dinner:'Dinner'};
+        ['takeaway','dinein'].forEach(biz => { ['lunch','afternoon','dinner'].forEach(slot => {
+            const data=PREDICTIONS[`${biz}||${slot}`]; if (!data) return;
+            const preds=Array.isArray(data.predictions)?data.predictions:[]; if (!preds.length) return;
+            doc.setFontSize(12); doc.text(`${bizLabels[biz]} - ${slotLabels[slot]} (${data.source==='ai'?'AI':'Heuristic'})`,14,startY); startY+=2;
+            const tableData=preds.map((p,i)=>[String(i+1),String(p.product||''),String(p.qty||0),String(p.reason||'')]);
+            if (typeof doc.autoTable==='function') { doc.autoTable({startY,head:[['#','Product','Qty','Reason']],body:tableData,theme:'grid',styles:{fontSize:9,cellPadding:2},headStyles:{fillColor:[37,99,235],textColor:255},columnStyles:{0:{cellWidth:10},1:{cellWidth:55},2:{cellWidth:18,halign:'right'},3:{cellWidth:'auto'}},margin:{left:14,right:14}}); startY=doc.lastAutoTable.finalY+8; }
+            else { tableData.slice(0,12).forEach(row=>{if(startY>280){doc.addPage();startY=20;} doc.setFontSize(9);doc.text(`${row[0]}. ${row[1]} Qty:${row[2]}`,14,startY);startY+=5;}); startY+=4; }
+            if (startY>260) { doc.addPage(); startY=20; }
+        });});
+        doc.setFontSize(8);doc.setTextColor(150);const pages=doc.internal.getNumberOfPages();for(let i=1;i<=pages;i++){doc.setPage(i);doc.text(`Generated: ${new Date().toLocaleString('zh-CN')} | Page ${i}/${pages}`,105,290,{align:'center'});}
+        doc.save(`Forecast_${store}_${date}.pdf`); showStatus('PDF已下载','success');
+    } catch(e) { showStatus('PDF生成失败：'+String(e?.message||e), 'error'); }
+}
+function buildForecastPrintableHtml(ctx) {
+    const bizLabels={takeaway:'外卖',dinein:'堂食'}, slotLabels={lunch:'午市',afternoon:'下午茶',dinner:'晚市'};
+    let sections='';
+    ['takeaway','dinein'].forEach(biz=>{ ['lunch','afternoon','dinner'].forEach(slot=>{ const data=ctx.predictions[`${biz}||${slot}`]; if(!data||!Array.isArray(data.predictions)||!data.predictions.length) return; const rows=data.predictions.map((p,i)=>`<tr><td>${i+1}</td><td>${esc(p.product||'')}</td><td>${esc(String(p.qty??0))}</td><td>${esc(p.reason||'')}</td></tr>`).join(''); sections+=`<h3>${bizLabels[biz]} · ${slotLabels[slot]}</h3><table><thead><tr><th>#</th><th>产品</th><th>预测量</th><th>说明</th></tr></thead><tbody>${rows}</tbody></table>`; });});
+    return `<!doctype html><html><head><meta charset="utf-8"><title>备货预测报告</title><style>body{font-family:-apple-system,sans-serif;padding:16px;color:#111}h1{font-size:20px;margin:0 0 8px}h3{font-size:15px;margin:18px 0 8px}.meta{color:#555;font-size:13px;margin-bottom:8px}table{border-collapse:collapse;width:100%;margin-bottom:14px}th,td{border:1px solid #ddd;padding:6px;font-size:12px;text-align:left}th{background:#f6f8fa}</style></head><body><h1>备货预测报告</h1><div class="meta">门店：${esc(ctx.store)}｜日期：${esc(ctx.date)}｜天气：${esc(ctx.weather)}｜节假日：${ctx.isHoliday?'是':'否'}</div>${sections||'<p>暂无</p>'}<script>setTimeout(function(){window.print()},300)<\/script></body></html>`;
+}
+</script>
+</body>
+</html>

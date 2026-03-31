@@ -1,0 +1,20 @@
+metric_id,name,description,data_source,time_granularity,include_discount,dependencies,version,owner,enabled,填写说明
+OP_001,实收营业额,每日/周/月实际收入（菜品收入，已扣优惠）,sales_raw,daily,FALSE,[],1,hq_manager,TRUE,"【必填】metric_id=唯一编号（字母+数字），不可重复"
+OP_002,折前营业额,含优惠前的营业金额（销售金额）,sales_raw,daily,TRUE,[],1,hq_manager,TRUE,"【必填】name=指标显示名称，简洁即可"
+OP_003,总折扣金额,折前-实收之差（优惠总额）,sales_raw,daily,TRUE,[],1,hq_manager,TRUE,"【必填】description=指标含义说明"
+OP_010,桌访客流,桌访表中就餐人数合计,feishu_generic_records,daily,TRUE,[],1,hq_manager,TRUE,"【必填】data_source=数据来自哪张表"
+OP_011,桌访桌数,桌访表中桌次合计,feishu_generic_records,daily,TRUE,[],1,hq_manager,TRUE,"time_granularity=统计频率：daily日/weekly周/monthly月"
+OP_012,客单价,实收营业额 / 桌访桌数（人均消费）,computed,daily,FALSE,"[""OP_001"",""OP_011""]",1,hq_manager,TRUE,"include_discount：FALSE=已扣优惠（用实收）；TRUE=未扣优惠（用折前）"
+OP_020,毛利额,实收营业额 - 原料成本,computed,monthly,FALSE,"[""OP_001"",""COST_001""]",1,hq_manager,TRUE,"dependencies=依赖其他指标时填写，用英文逗号分隔，如:[""OP_001"",""HR_001""]"
+OP_021,毛利率,毛利额 / 实收营业额 × 100%,computed,monthly,FALSE,"[""OP_020"",""OP_001""]",1,hq_manager,TRUE,"version=版本号，首次填1，每次修改口径+1"
+HR_001,在岗人数,当日实际排班出勤人数,schedules,daily,TRUE,[],1,hr_manager,TRUE,"owner=负责维护此指标的人员角色"
+HR_002,人效,实收营业额 / 在岗人数,computed,daily,FALSE,"[""OP_001"",""HR_001""]",1,hq_manager,TRUE,"enabled：TRUE=启用；FALSE=停用（数据异常时可暂时关闭）"
+QC_001,收档平均得分,收档报告中档口得分的平均值,feishu_generic_records,daily,TRUE,[],1,hq_manager,TRUE,
+QC_002,收档合格率,合格档口次数 / 总检查次数（百分比）,feishu_generic_records,daily,TRUE,[],1,hq_manager,TRUE,
+QC_010,差评数,差评报告中的差评条数,feishu_generic_records,daily,TRUE,[],1,hq_manager,TRUE,
+MAT_001,原料异常次数,收货日报中有异常原料的记录条数,feishu_generic_records,daily,TRUE,[],1,hq_manager,TRUE,
+,,,,,,,,,,,
+【新增指标请从下方开始填写】,,,,,,,,,,,
+,,,,,,,,,,,
+填写示例：,,,,,,,,,,,
+OP_030,充值金额,当日会员充值总金额,crm_records,daily,FALSE,[],1,hq_manager,TRUE,这是我自己新增的一个充值指标
