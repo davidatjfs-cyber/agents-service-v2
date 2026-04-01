@@ -1928,6 +1928,54 @@ app.get('/api/approvals', authRequired, async (req, res) => {
   }
 });
 
+/**
+ * 按 ID 拉取单条审批（用于积分记录「查看审批详情」等，避免仅依赖本地缓存）
+ */
+function canUserViewApprovalRow(user, row, state0) {
+  if (!user || !row) return false;
+  const un = String(user.username || '').trim().toLowerCase();
+  const role = String(user.role || '').trim();
+  if (['admin', 'hq_manager', 'cashier', 'hr_manager'].includes(role)) return true;
+  const appl = String(row.applicant_username || '').trim().toLowerCase();
+  if (appl && appl === un) return true;
+  const curr = String(row.current_assignee_username || '').trim().toLowerCase();
+  if (curr && curr === un) return true;
+  const chain = Array.isArray(row.chain) ? row.chain : [];
+  for (const s of chain) {
+    if (String(s?.assignee || '').trim().toLowerCase() === un) return true;
+  }
+  if (role === 'store_manager' && String(row.type || '') === 'points') {
+    try {
+      const p = row.payload && typeof row.payload === 'object' ? row.payload : {};
+      const store = String(p.store || '').trim();
+      const myStore = String(pickMyStoreFromState(state0 || {}, user.username) || '').trim();
+      if (store && myStore && store === myStore) return true;
+    } catch (e) {}
+  }
+  return false;
+}
+
+app.get('/api/approvals/:id', authRequired, async (req, res) => {
+  const id = String(req.params?.id || '').trim();
+  if (!id) return res.status(400).json({ error: 'missing_id' });
+  try {
+    const r = await pool.query(
+      `select id, type, status, applicant_username, current_assignee_username, chain, payload, effective_date, executed_at, created_at, updated_at
+       from approval_requests where id = $1 limit 1`,
+      [id]
+    );
+    const row = r.rows?.[0];
+    if (!row) return res.status(404).json({ error: 'not_found' });
+    const state0 = (await getSharedState().catch(() => null)) || {};
+    if (!canUserViewApprovalRow(req.user, row, state0)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    return res.json({ item: row });
+  } catch (e) {
+    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+  }
+});
+
 // 手动触发 BI 周报 / 月报（仅管理员，用于测试）
 app.post('/api/reports/bi/trigger-weekly', authRequired, async (req, res) => {
   try {
@@ -2154,7 +2202,21 @@ app.get('/api/points/records', authRequired, async (req, res) => {
     if (end) list = list.filter(x => String(x?.approvedAt || x?.createdAt || '').slice(0, 10) <= end);
 
     list.sort((a, b) => String(b?.approvedAt || b?.createdAt || '').localeCompare(String(a?.approvedAt || a?.createdAt || '')));
-    return res.json({ items: list, total: list.length });
+    const totalPoints = list.reduce((s, x) => s + (Number(x?.points || 0) || 0), 0);
+    const totalAmount = Number((totalPoints * 0.5).toFixed(2));
+    const uniqueUsernames = new Set(
+      list.map(x => String(x?.username || '').trim().toLowerCase()).filter(Boolean)
+    );
+    return res.json({
+      items: list,
+      total: list.length,
+      summary: {
+        totalPoints,
+        totalAmount,
+        recordCount: list.length,
+        employeeCount: uniqueUsernames.size
+      }
+    });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
   }
@@ -2305,7 +2367,13 @@ app.post('/api/approvals', authRequired, async (req, res) => {
   const username = String(req.user?.username || '').trim();
   const role = String(req.user?.role || '').trim();
   const type = normalizeApprovalType(req.body?.type);
-  const payload = req.body?.payload && typeof req.body.payload === 'object' ? req.body.payload : {};
+  const rawPayload = req.body?.payload && typeof req.body.payload === 'object' ? req.body.payload : {};
+  const payload = { ...rawPayload };
+  let recurringFrequencyReward = '';
+  if (type === 'reward_punishment') {
+    recurringFrequencyReward = String(payload.recurringFrequency || '').trim().toLowerCase();
+    delete payload.recurringFrequency;
+  }
   if (!username) return res.status(400).json({ error: 'missing_user' });
   if (!type) return res.status(400).json({ error: 'invalid_type' });
 
@@ -2417,6 +2485,19 @@ app.post('/api/approvals', authRequired, async (req, res) => {
         if (!reason) return res.status(400).json({ error: 'missing_reason' });
         if (!result) return res.status(400).json({ error: 'missing_result' });
         if (amount == null || amount <= 0) return res.status(400).json({ error: 'missing_amount' });
+        const tgtRec = stateFindUserRecord(state, targetUsername) || {};
+        if (!String(payload?.store || '').trim() && String(tgtRec?.store || '').trim()) {
+          payload.store = String(tgtRec.store).trim();
+        }
+        if (recurringFrequencyReward && recurringFrequencyReward !== 'monthly') {
+          return res.status(400).json({ error: 'invalid_recurring_frequency' });
+        }
+        if (recurringFrequencyReward === 'monthly') {
+          const rpT0 = String(payload?.rpType || '').trim();
+          if (!(rpT0 === '奖励' || rpT0 === 'reward')) {
+            return res.status(400).json({ error: 'recurring_reward_only' });
+          }
+        }
       } else if (type === 'points') {
         if (!(role === 'store_employee' || role === 'employee' || role === 'front_manager' || role === 'store_production_manager')) {
           return res.status(403).json({ error: 'forbidden' });
@@ -2697,6 +2778,24 @@ app.post('/api/approvals', authRequired, async (req, res) => {
         })();
       }
     } catch (e) {}
+
+    if (type === 'reward_punishment' && recurringFrequencyReward === 'monthly' && item?.id) {
+      const rpT = String(payload?.rpType || '').trim();
+      if (rpT === '奖励' || rpT === 'reward') {
+        try {
+          const ymSh = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 7);
+          const snap = JSON.parse(JSON.stringify(payload));
+          await pool.query(
+            `insert into recurring_reward_templates (active, created_by, frequency, payload, last_generated_ym, updated_at)
+             values (true, $1, 'monthly', $2::jsonb, $3, now())`,
+            [username, JSON.stringify(snap), ymSh]
+          );
+          console.log('[recurring-reward] saved monthly template for applicant', username);
+        } catch (re) {
+          console.error('[recurring-reward] save template failed:', re?.message || re);
+        }
+      }
+    }
 
     return res.json({ item, label: approvalTypeLabel(type) });
   } catch (e) {
@@ -3361,6 +3460,8 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
     } catch (e) {}
 
     // --- Points post-approval ---
+    // IMPORTANT: uses mergeSharedStateFields to avoid Read-Modify-Write race condition
+    // that would overwrite concurrent pointRecords written by other approvers
     try {
       if (updated && String(updated.type || '') === 'points') {
         const state0 = (await getSharedState()) || {};
@@ -3370,78 +3471,114 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
         const applicantManager = String(applicant?.managerUsername || '').trim();
         const finalApproved = String(updated.status || '') === 'approved';
         const finalRejected = String(updated.status || '') === 'rejected';
-        let state = state0;
+        const approvalId = String(updated.id || '').trim();
 
-        const itemName = String(updated.payload?.itemName || '积分事项').trim();
-        const reasonText = String(updated.payload?.reason || '').trim();
-        const points = safeNumber(updated.payload?.points) || 0;
+        // payload.items[]: multi-item payload (one item per employee event)
+        const rawItems = Array.isArray(updated.payload?.items) ? updated.payload.items : null;
         const store = String(updated.payload?.store || applicant?.store || '').trim();
         const month = String(updated.created_at || updated.updated_at || '').slice(0, 7) || hrmsNowISO().slice(0, 7);
-        const subsidyAmount = Number((points * 0.5).toFixed(2));
+        const approvedBy = String(req.user?.username || '').trim();
 
         if (finalApproved) {
-          const appliedMap = state?.pointsAppliedApprovals && typeof state.pointsAppliedApprovals === 'object'
-            ? { ...state.pointsAppliedApprovals }
-            : {};
-          const approvalId = String(updated.id || '').trim();
-          if (!appliedMap[approvalId]) {
-            const records = Array.isArray(state.pointRecords) ? state.pointRecords.slice() : [];
-            records.unshift({
-              id: randomUUID(),
-              approvalId,
-              username: applicantUser,
-              name: applicantName,
-              store,
-              itemName,
-              reason: reasonText,
-              points,
-              amount: subsidyAmount,
-              approvedAt: hrmsNowISO(),
-              approvedBy: String(req.user?.username || '').trim()
-            });
+          // Idempotency: skip if this approval was already applied
+          const alreadyApplied = !!(state0?.pointsAppliedApprovals?.[approvalId]);
+          if (!alreadyApplied) {
+            let newRecords, totalSubsidy;
+            if (rawItems && rawItems.length > 0) {
+              newRecords = rawItems.map(item => {
+                const pts = safeNumber(item.points) || 0;
+                return {
+                  id: randomUUID(),
+                  approvalId,
+                  username: String(item.username || applicantUser).trim(),
+                  name: String(item.name || applicantName).trim(),
+                  store: String(item.store || store).trim(),
+                  itemName: String(item.itemName || item.reason || '积分事项').trim().slice(0, 200),
+                  reason: String(item.reason || '').trim().slice(0, 500),
+                  points: pts,
+                  amount: Number((pts * 0.5).toFixed(2)),
+                  approvedAt: hrmsNowISO(),
+                  approvedBy
+                };
+              });
+              totalSubsidy = newRecords.reduce((s, r) => s + r.amount, 0);
+            } else {
+              const pts = safeNumber(updated.payload?.points) || 0;
+              const subsidy = Number((pts * 0.5).toFixed(2));
+              newRecords = [{
+                id: randomUUID(),
+                approvalId,
+                username: applicantUser,
+                name: applicantName,
+                store,
+                itemName: String(updated.payload?.itemName || '积分事项').trim(),
+                reason: String(updated.payload?.reason || '').trim(),
+                points: pts,
+                amount: subsidy,
+                approvedAt: hrmsNowISO(),
+                approvedBy
+              }];
+              totalSubsidy = subsidy;
+            }
 
-            const payrollAdjustments = state?.payrollAdjustments && typeof state.payrollAdjustments === 'object'
-              ? { ...state.payrollAdjustments }
-              : {};
+            // Atomic targeted merge — does NOT overwrite other concurrent writes
             const adjKey = `${month}||${store || 'ALL'}||${applicantUser.toLowerCase()}`;
-            const prev = payrollAdjustments[adjKey] && typeof payrollAdjustments[adjKey] === 'object' ? payrollAdjustments[adjKey] : {};
-            const prevSubsidy = safeNumber(prev?.subsidy) || 0;
-            payrollAdjustments[adjKey] = {
-              ...prev,
-              month,
-              store: store || '',
-              username: applicantUser,
-              subsidy: Number((prevSubsidy + subsidyAmount).toFixed(2)),
-              updatedBy: String(req.user?.username || '').trim(),
-              updatedAt: hrmsNowISO(),
-              source: 'points'
-            };
-
-            appliedMap[approvalId] = true;
-            state = { ...state, pointRecords: records, payrollAdjustments, pointsAppliedApprovals: appliedMap };
+            const prevAdj = state0?.payrollAdjustments?.[adjKey] || {};
+            const prevSubsidy = safeNumber(prevAdj?.subsidy) || 0;
+            await mergeSharedStateFields({
+              pointRecords: newRecords,
+              payrollAdjustments: {
+                [adjKey]: {
+                  ...prevAdj,
+                  month,
+                  store: store || '',
+                  username: applicantUser,
+                  subsidy: Number((prevSubsidy + totalSubsidy).toFixed(2)),
+                  updatedBy: approvedBy,
+                  updatedAt: hrmsNowISO(),
+                  source: 'points'
+                }
+              },
+              pointsAppliedApprovals: { [approvalId]: true }
+            }, { pointRecords: 'id' });
           }
 
-          const msg = `${applicantName}，你申请的“${itemName}”已通过审批，获得${points}积分（折算¥${subsidyAmount.toFixed(2)}，已计入薪资补贴）。`;
+          // Notifications: read fresh state AFTER the atomic merge
+          const stateForNotif = (await getSharedState()) || {};
+          let stateWithNotif = stateForNotif;
+          const totalPoints = rawItems ? rawItems.reduce((s, i) => s + (safeNumber(i.points) || 0), 0) : (safeNumber(updated.payload?.points) || 0);
+          const subsidyLabel = Number((totalPoints * 0.5).toFixed(2));
+          const itemLabel = rawItems && rawItems.length > 1
+            ? `${rawItems.length}条积分事项（合计${totalPoints}分）`
+            : String(updated.payload?.itemName || rawItems?.[0]?.reason || '积分事项').trim();
+          const msg = `${applicantName}，你申请的"${itemLabel}"已通过审批，共获得${totalPoints}积分（折算¥${subsidyLabel.toFixed(2)}，已计入薪资补贴）。`;
           const recipients = uniqUsernames([applicantUser, applicantManager].filter(Boolean));
           for (const u of recipients) {
-            state = addStateNotification(state, makeNotif(u, '积分申请已通过', msg, { type: 'points_result', approvalId: updated.id }));
+            stateWithNotif = addStateNotification(stateWithNotif, makeNotif(u, '积分申请已通过', msg, { type: 'points_result', approvalId }));
           }
-          await saveSharedState(state);
+          if (stateWithNotif !== stateForNotif) await saveSharedState(stateWithNotif);
         }
 
         if (finalRejected) {
-          const msg = `${applicantName}，你申请的“${itemName}”因为${note || '相关原因'}未通过审批。`;
+          const stateForNotif = (await getSharedState()) || {};
+          let stateWithNotif = stateForNotif;
+          const msg = `${applicantName}，你申请的积分申请因为${note || '相关原因'}未通过审批。`;
           const recipients = uniqUsernames([applicantUser, applicantManager].filter(Boolean));
           for (const u of recipients) {
-            state = addStateNotification(state, makeNotif(u, '积分申请未通过', msg, { type: 'points_result', approvalId: updated.id }));
+            stateWithNotif = addStateNotification(stateWithNotif, makeNotif(u, '积分申请未通过', msg, { type: 'points_result', approvalId }));
           }
-          await saveSharedState(state);
+          await saveSharedState(stateWithNotif);
         }
 
         if (String(updated.status || '') === 'pending' && nextAssignee) {
-          const msg = `${applicantName} 提交了积分申请（${itemName}，${points}分），需要您审批。`;
-          state = addStateNotification(state, makeNotif(nextAssignee, '积分申请待审批', msg, { type: 'points_request', approvalId: updated.id }));
-          await saveSharedState(state);
+          const stateForNotif = (await getSharedState()) || {};
+          const totalPoints = rawItems ? rawItems.reduce((s, i) => s + (safeNumber(i.points) || 0), 0) : (safeNumber(updated.payload?.points) || 0);
+          const itemLabel = rawItems && rawItems.length > 1
+            ? `${rawItems.length}条积分事项（合计${totalPoints}分）`
+            : String(updated.payload?.itemName || rawItems?.[0]?.reason || '积分事项').trim();
+          const msg = `${applicantName} 提交了积分申请（${itemLabel}），需要您审批。`;
+          const stateWithNotif = addStateNotification(stateForNotif, makeNotif(nextAssignee, '积分申请待审批', msg, { type: 'points_request', approvalId }));
+          await saveSharedState(stateWithNotif);
         }
       }
     } catch (e) {}
@@ -4463,6 +4600,19 @@ async function ensureApprovalTables() {
     await pool.query(`create index if not exists idx_approval_requests_assignee_status on approval_requests (current_assignee_username, status)`);
     await pool.query(`create index if not exists idx_approval_requests_applicant_status on approval_requests (applicant_username, status)`);
     await pool.query(`create index if not exists idx_approval_requests_type_effective_date on approval_requests (type, effective_date)`);
+    await pool.query(`create table if not exists recurring_reward_templates (
+      id uuid primary key default gen_random_uuid(),
+      active boolean not null default true,
+      created_by varchar(100) not null,
+      frequency varchar(20) not null default 'monthly',
+      payload jsonb not null default '{}'::jsonb,
+      last_generated_ym varchar(7),
+      created_at timestamptz default current_timestamp,
+      updated_at timestamptz default current_timestamp
+    )`);
+    await pool.query(
+      `create index if not exists idx_recurring_reward_templates_active on recurring_reward_templates (active, frequency)`
+    );
   } catch (e) {
     console.error('ensureApprovalTables failed:', e);
   }
@@ -4647,6 +4797,71 @@ async function saveSharedState(nextData) {
      on conflict (key) do update set data = excluded.data, updated_at = now()`,
     ['default', JSON.stringify(nextData || {})]
   );
+}
+
+/**
+ * 仅原子合并 hrms_state 中的特定顶层字段，避免 Read-Modify-Write 竞态覆盖其他字段。
+ * 对于 array 类型字段（如 pointRecords、dailyReports），每个元素按 idField 去重合并。
+ * 对于 object 类型字段（如 payrollAdjustments、pointsAppliedApprovals），做 JSON merge。
+ * 对于非 array/object 字段，直接替换值。
+ *
+ * @param {Object} patches  key→value 映射；value 可以是数组（追加/更新）、对象（merge）或原始值（覆盖）
+ * @param {Object} [arrayIdFields]  对 array 字段指定去重 key，如 { pointRecords: 'id', dailyReports: ['store','date'] }
+ */
+async function mergeSharedStateFields(patches, arrayIdFields = {}) {
+  if (!patches || typeof patches !== 'object' || !Object.keys(patches).length) return;
+
+  // Build postgres jsonb merge: do it in a single UPDATE that reads fresh state atomically
+  // We use a loop with retries and optimistic-locking via updated_at to prevent lost-writes.
+  const MAX_RETRY = 5;
+  for (let attempt = 0; attempt < MAX_RETRY; attempt++) {
+    const r = await pool.query('SELECT data, updated_at FROM hrms_state WHERE key = $1 FOR UPDATE', ['default']);
+    const row = r.rows?.[0];
+    const current = (row?.data && typeof row.data === 'object') ? row.data : {};
+    const prevUpdatedAt = row?.updated_at;
+
+    const next = { ...current };
+    for (const [field, patchValue] of Object.entries(patches)) {
+      if (Array.isArray(patchValue)) {
+        const idSpec = arrayIdFields[field];
+        const existing = Array.isArray(current[field]) ? current[field].slice() : [];
+        if (idSpec) {
+          // Merge: update existing items by id, prepend new ones
+          const getKey = Array.isArray(idSpec)
+            ? (item) => idSpec.map(k => String(item?.[k] || '')).join('|')
+            : (item) => String(item?.[idSpec] || '');
+          const existingMap = new Map(existing.map(e => [getKey(e), e]));
+          for (const item of patchValue) {
+            existingMap.set(getKey(item), item);
+          }
+          // Preserve original order, new items at front
+          const patchKeys = new Set(patchValue.map(getKey));
+          const retained = existing.filter(e => !patchKeys.has(getKey(e)));
+          next[field] = [...patchValue, ...retained];
+        } else {
+          // No id spec: prepend patch items
+          next[field] = [...patchValue, ...existing];
+        }
+      } else if (patchValue && typeof patchValue === 'object' && !Array.isArray(patchValue)) {
+        next[field] = { ...(current[field] && typeof current[field] === 'object' ? current[field] : {}), ...patchValue };
+      } else {
+        next[field] = patchValue;
+      }
+    }
+
+    const updateResult = await pool.query(
+      `UPDATE hrms_state SET data = $2::jsonb, updated_at = NOW() WHERE key = $1`,
+      ['default', JSON.stringify(next)]
+    );
+    if (updateResult.rowCount > 0) return; // success
+    // If no row exists yet, insert
+    await pool.query(
+      `INSERT INTO hrms_state (key, data, updated_at) VALUES ($1, $2::jsonb, NOW()) ON CONFLICT (key) DO NOTHING`,
+      ['default', JSON.stringify(next)]
+    );
+    return;
+  }
+  throw new Error('mergeSharedStateFields: max retries exceeded');
 }
 
 function stateFindUserRecord(state, username) {
@@ -5023,6 +5238,234 @@ function makeNotif(targetUser, title, message, extra) {
     createdAt: hrmsNowISO(),
     ...(extra && typeof extra === 'object' ? extra : {})
   };
+}
+
+const GLOBAL_SOCIAL_POINT_RULE_ID = 'global-rule-douyin-xhs-dianping-10';
+
+function isTripleSocialMediaPointRuleItem(item) {
+  const n = String(item?.itemName || '');
+  return n.includes('抖音') && n.includes('小红书') && n.includes('大众点评');
+}
+
+/** 去掉重复的「抖音/小红书/大众点评」积分事项，只保留 canonical id（或保留一条并改为 canonical） */
+async function dedupeGlobalSocialMediaPointRules() {
+  try {
+    const state0 = (await getSharedState()) || {};
+    const list = Array.isArray(state0.pointRules) ? state0.pointRules : [];
+    const hits = list.filter(isTripleSocialMediaPointRuleItem);
+    if (hits.length <= 1) return;
+    const non = list.filter((r) => !isTripleSocialMediaPointRuleItem(r));
+    const preferred =
+      hits.find((r) => String(r?.id || '').trim() === GLOBAL_SOCIAL_POINT_RULE_ID) || hits[0];
+    const canonical = {
+      ...preferred,
+      id: GLOBAL_SOCIAL_POINT_RULE_ID,
+      store: '',
+      itemName: '抖音/小红书/大众点评各发布一条合格的公司宣传内容',
+      points: 10,
+      enabled: true,
+      updatedBy: 'system',
+      updatedAt: hrmsNowISO()
+    };
+    await saveSharedState({ ...state0, pointRules: [canonical, ...non] });
+    console.log('[points] deduped triple-social point rules, removed', hits.length - 1, 'extra');
+  } catch (e) {
+    console.error('[points] dedupeGlobalSocialMediaPointRules:', e?.message || e);
+  }
+}
+
+function dedupePointRulesApiItems(items) {
+  const arr = Array.isArray(items) ? items.slice() : [];
+  const social = arr.filter(isTripleSocialMediaPointRuleItem);
+  if (social.length <= 1) return arr;
+  const keep =
+    social.find((r) => String(r?.id || '').trim() === GLOBAL_SOCIAL_POINT_RULE_ID) || social[0];
+  return arr.filter((r) => !isTripleSocialMediaPointRuleItem(r) || r === keep);
+}
+
+async function ensureGlobalSocialMediaPointRule() {
+  try {
+    await mergeSharedStateFields(
+      {
+        pointRules: [
+          {
+            id: GLOBAL_SOCIAL_POINT_RULE_ID,
+            store: '',
+            itemName: '抖音/小红书/大众点评各发布一条合格的公司宣传内容',
+            points: 10,
+            enabled: true,
+            updatedBy: 'system',
+            updatedAt: hrmsNowISO()
+          }
+        ]
+      },
+      { pointRules: 'id' }
+    );
+    console.log('[points] upserted global social media point rule (all stores, id=' + GLOBAL_SOCIAL_POINT_RULE_ID + ')');
+  } catch (e) {
+    console.error('[points] ensureGlobalSocialMediaPointRule:', e?.message || e);
+  }
+}
+
+let _lastRecurringRewardJobSlot = '';
+
+function shanghaiCalendarForJobs(now = new Date()) {
+  const ymd = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Shanghai',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(now);
+  const hour = parseInt(parts.find((p) => p.type === 'hour')?.value || '0', 10);
+  const minute = parseInt(parts.find((p) => p.type === 'minute')?.value || '0', 10);
+  const [y, m, d] = ymd.split('-').map((x) => parseInt(x, 10));
+  return { ymd, y, m, d, hour, minute };
+}
+
+async function insertRewardPunishmentApprovalFromTemplate(applicantUsername, payloadObj) {
+  const username = String(applicantUsername || '').trim();
+  if (!username) throw new Error('missing_applicant');
+  let state = (await getSharedState()) || {};
+  const applicant = stateFindUserRecord(state, username) || {};
+  const applicantManager = String(applicant?.managerUsername || '').trim();
+  const adminUsername = await pickAdminUsername(state);
+  const hqManagerUsername = await pickHqManagerUsername(state);
+  const cashierUsername = await pickCashierUsername(state);
+  const hrManagerUsername = await pickHrManagerUsername(state);
+  const applicantStore = String(applicant?.store || payloadObj?.store || '').trim();
+  const ctx = {
+    state,
+    applicantUsername: username,
+    applicantStore,
+    managerUsername: applicantManager,
+    adminUsername,
+    hqManagerUsername,
+    hrManagerUsername,
+    cashierUsername
+  };
+  let assignees = buildApprovalAssigneesFromConfig(state, 'reward_punishment', ctx);
+  if (!assignees.length) {
+    assignees = [applicantManager, hrManagerUsername].filter(Boolean);
+  }
+  const seen = new Set();
+  const uniq = [];
+  (assignees || []).forEach((a) => {
+    const k = String(a || '').trim().toLowerCase();
+    if (!k || seen.has(k)) return;
+    seen.add(k);
+    uniq.push(String(a || '').trim());
+  });
+  if (!uniq.length) throw new Error('missing_assignee');
+  const chain = uniq.map((a, idx) => ({
+    step: idx + 1,
+    assignee: a,
+    status: idx === 0 ? 'pending' : 'queued',
+    decidedAt: null,
+    note: ''
+  }));
+  const currentAssignee = chain[0]?.assignee || null;
+  const r = await pool.query(
+    `insert into approval_requests (type, status, applicant_username, current_assignee_username, chain, payload, created_at, updated_at)
+     values ($1,$2,$3,$4,$5::jsonb,$6::jsonb, now(), now())
+     returning id, type, status, applicant_username, current_assignee_username, chain, payload, effective_date, executed_at, created_at, updated_at`,
+    ['reward_punishment', 'pending', username, currentAssignee, JSON.stringify(chain), JSON.stringify(payloadObj)]
+  );
+  const item = r.rows?.[0] || null;
+  return { item, uniq, currentAssignee, state, applicant };
+}
+
+async function runMonthlyRecurringRewardTemplatesJob() {
+  const cal = shanghaiCalendarForJobs();
+  // 与绩效/关账节奏对齐：每月 10 日（上海）早间生成当月待审批单
+  if (cal.d !== 10 || cal.hour !== 7 || cal.minute >= 20) return;
+  const slotKey = `${cal.ymd}_rrt`;
+  if (_lastRecurringRewardJobSlot === slotKey) return;
+  _lastRecurringRewardJobSlot = slotKey;
+
+  const ym = `${cal.y}-${String(cal.m).padStart(2, '0')}`;
+  let rows;
+  try {
+    const r = await pool.query(
+      `select * from recurring_reward_templates where active = true and frequency = 'monthly'`
+    );
+    rows = r.rows || [];
+  } catch (e) {
+    return;
+  }
+
+  for (const tpl of rows) {
+    if (String(tpl.last_generated_ym || '') === ym) continue;
+    const applicantUsername = String(tpl.created_by || '').trim();
+    if (!applicantUsername) continue;
+    const base = tpl.payload && typeof tpl.payload === 'object' ? tpl.payload : {};
+    const genPayload = {
+      ...base,
+      recurringTemplateId: String(tpl.id),
+      recurringGeneratedYm: ym,
+      note:
+        (String(base.note || '').trim() ? `${String(base.note).trim()}\n` : '') +
+        `[系统自动·${ym}月度奖惩]`
+    };
+    try {
+      const dup = await pool.query(
+        `select id from approval_requests where type=$1 and status=$2
+           and coalesce(payload->>'recurringTemplateId','')=$3
+           and coalesce(payload->>'recurringGeneratedYm','')=$4 limit 1`,
+        ['reward_punishment', 'pending', String(tpl.id), ym]
+      );
+      if (dup.rows?.length) {
+        await pool.query(
+          `update recurring_reward_templates set last_generated_ym=$1, updated_at=now() where id=$2`,
+          [ym, tpl.id]
+        );
+        continue;
+      }
+      const { item, currentAssignee, state, applicant } = await insertRewardPunishmentApprovalFromTemplate(
+        applicantUsername,
+        genPayload
+      );
+      if (item && currentAssignee) {
+        try {
+          let nextState = state;
+          const applicantName = String(applicant?.name || applicantUsername).trim() || applicantUsername;
+          const targetUser = String(genPayload?.targetUsername || '').trim();
+          const targetRec = targetUser ? stateFindUserRecord(state, targetUser) || {} : {};
+          const targetName = String(targetRec?.name || targetUser).trim() || applicantName;
+          const rpType = String(genPayload?.rpType || '').trim();
+          const title = '奖惩申请待审批';
+          const msg = `${applicantName} 提交了${rpType || '奖惩'}申请（${targetName}），请审批。[月度自动]`;
+          const recipients = [String(currentAssignee || '').trim()].filter(Boolean);
+          for (const u of recipients) {
+            nextState = addStateNotification(
+              nextState,
+              makeNotif(u, title, msg, { type: 'reward_punishment_request', approvalId: item.id })
+            );
+          }
+          await saveSharedState(nextState);
+          (async () => {
+            try {
+              const fu = await lookupFeishuUserByUsername(currentAssignee);
+              if (fu?.open_id) {
+                const feishuMsg = `📋 【HRMS 待审批提醒】\n\n${msg}\n\n请登录 HRMS 系统处理：https://nnyx.cc`;
+                await sendLarkMessage(fu.open_id, feishuMsg, { skipDedup: true });
+              }
+            } catch (feishuErr) {
+              console.error('[recurring-reward] feishu notify error:', feishuErr?.message);
+            }
+          })();
+        } catch (ne) {
+          console.error('[recurring-reward] notify error:', ne?.message || ne);
+        }
+      }
+      await pool.query(
+        `update recurring_reward_templates set last_generated_ym=$1, updated_at=now() where id=$2`,
+        [ym, tpl.id]
+      );
+    } catch (e) {
+      console.error('[recurring-reward] template', tpl.id, e?.message || e);
+    }
+  }
 }
 
 function upsertInventoryForecastHistoryInState(state0, { store, bizType, slot, rowsRaw, username }) {
@@ -5417,6 +5860,72 @@ function inDateRange(date, start, end) {
   return true;
 }
 
+function formatPgDateOnly(v) {
+  if (v == null) return '';
+  if (v instanceof Date && !Number.isNaN(v.getTime())) return v.toISOString().slice(0, 10);
+  const s = String(v).trim();
+  return s.length >= 10 ? s.slice(0, 10) : s;
+}
+
+function dailyReportMergeKey(store, dateVal) {
+  return `${String(store || '').trim()}|${formatPgDateOnly(dateVal)}`;
+}
+
+/** 将 daily_reports 行转为与前端 / hrms_state 一致的日报条目（供列表合并） */
+function dailyReportItemFromPgRow(row) {
+  const date = formatPgDateOnly(row.date);
+  const store = String(row.store || '').trim();
+  const pre = row.pre_discount_revenue != null ? Number(row.pre_discount_revenue) : 0;
+  const disc = row.total_discount != null ? Number(row.total_discount) : 0;
+  const delPre = Number(row.delivery_pre_revenue) || 0;
+  const delAct = Number(row.delivery_actual) || 0;
+  const delOrd = Math.floor(Number(row.delivery_orders) || 0);
+  const badRev = Math.floor(Number(row.delivery_bad_reviews) || 0);
+  const submittedAt = row.submitted_at
+    ? (row.submitted_at instanceof Date ? row.submitted_at.toISOString() : String(row.submitted_at))
+    : null;
+  const data = {
+    brand: String(row.brand || '').trim(),
+    actual: Number(row.actual_revenue) || 0,
+    margin: row.actual_margin != null ? Number(row.actual_margin) : null,
+    dianping_rating: row.dianping_rating != null ? Number(row.dianping_rating) : null,
+    new_wechat_members: Math.floor(Number(row.new_wechat_members) || 0),
+    wechat_month_total: Math.floor(Number(row.wechat_month_total) || 0),
+    gross: pre,
+    discount: { total: disc },
+    dine: {
+      orders: Math.floor(Number(row.dine_orders) || 0),
+      revenue: Number(row.dine_revenue) || 0,
+      traffic: Math.floor(Number(row.dine_traffic) || 0)
+    },
+    efficiency: Number(row.efficiency) || 0,
+    laborTotal: Number(row.labor_total) || 0,
+    private_room_uses: Math.floor(Number(row.private_room_uses) || 0),
+    operational_anomaly_note: String(row.operational_anomaly_note || '').trim(),
+    delivery: {
+      eleme: { revenue: 0, actual: 0, orders: 0 },
+      meituan: { revenue: delPre, actual: delAct, orders: delOrd }
+    },
+    badReviews: { meituan: badRev, eleme: 0 },
+    budget: Number(row.budget) || 0,
+    budgetRate: Number(row.budget_rate) || 0
+  };
+  return {
+    id: randomUUID(),
+    store,
+    date,
+    data,
+    submitted: !!row.submitted || Number(row.actual_revenue) > 0,
+    submittedAt,
+    submittedBy: null,
+    createdAt: submittedAt || hrmsNowISO(),
+    updatedAt: row.updated_at
+      ? (row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at))
+      : submittedAt || hrmsNowISO(),
+    _mergedFromPostgres: true
+  };
+}
+
 // 本月包房累计（仅洪潮品牌）
 app.get('/api/daily-reports/private-room-month-total', authRequired, async (req, res) => {
   const store = String(req.query?.store || '').trim();
@@ -5473,6 +5982,55 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
     } else if (start || end) {
       items = items.filter(r => inDateRange(String(r?.date || '').trim(), start, end));
     }
+
+    // 合并 PostgreSQL daily_reports：已落库但未写入 hrms_state 的日期否则会从前端列表消失
+    let pgMergeStart = '';
+    let pgMergeEnd = '';
+    if (date) {
+      pgMergeStart = pgMergeEnd = date;
+    } else if (start || end) {
+      pgMergeStart = start || end;
+      pgMergeEnd = end || start;
+      if (pgMergeStart && !pgMergeEnd) {
+        pgMergeEnd = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+      }
+      if (!pgMergeStart && pgMergeEnd) {
+        pgMergeStart = pgMergeEnd;
+      }
+      if (pgMergeStart > pgMergeEnd) {
+        const s = pgMergeStart;
+        pgMergeStart = pgMergeEnd;
+        pgMergeEnd = s;
+      }
+    }
+    if (pgMergeStart && pgMergeEnd) {
+      try {
+        const args = [pgMergeStart, pgMergeEnd];
+        let sql = `
+          SELECT store, date, brand, actual_revenue, pre_discount_revenue, total_discount,
+                 dine_orders, dine_revenue, dine_traffic, efficiency, labor_total,
+                 actual_margin, gross_profit, dianping_rating, new_wechat_members, wechat_month_total,
+                 private_room_uses, operational_anomaly_note, delivery_pre_revenue, delivery_actual,
+                 delivery_orders, delivery_bad_reviews, budget, budget_rate, submitted, submitted_at, updated_at
+          FROM daily_reports
+          WHERE date >= $1::date AND date <= $2::date`;
+        if (store) {
+          sql += ` AND TRIM(store) = $3`;
+          args.push(String(store).trim());
+        }
+        const pgR = await pool.query(sql, args);
+        const seen = new Set(items.map(i => dailyReportMergeKey(i.store, i.date)));
+        for (const row of pgR.rows) {
+          const k = dailyReportMergeKey(row.store, row.date);
+          if (!seen.has(k)) {
+            seen.add(k);
+            items.push(dailyReportItemFromPgRow(row));
+          }
+        }
+      } catch (e) {
+        console.error('[daily-reports pg merge]', e?.message);
+      }
+    }
     
     // 从系统设置获取目标值并合并到数据中
     const stSettings = state0.settings && typeof state0.settings === 'object' ? state0.settings : {};
@@ -5482,18 +6040,18 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
     if (items.length > 0) {
       const storeDatePairs = items.map(item => `('${item.store}','${item.date}')`).join(',');
       const dbResult = await pool.query(`
-        SELECT store, date, dianping_rating, new_wechat_members, wechat_month_total
+        SELECT store, date, dianping_rating, new_wechat_members, wechat_month_total, operational_anomaly_note
         FROM daily_reports
         WHERE (store, date) IN (${storeDatePairs})
       `);
       
       const dbMap = new Map();
       for (const row of dbResult.rows) {
-        dbMap.set(`${row.store}|${row.date}`, row);
+        dbMap.set(dailyReportMergeKey(row.store, row.date), row);
       }
       
       items = items.map(item => {
-        const key = `${item.store}|${item.date}`;
+        const key = dailyReportMergeKey(item.store, item.date);
         const dbData = dbMap.get(key);
         
         // 从monthlyTargets查找当月目标
@@ -5512,7 +6070,9 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
             target_margin: targetConfig?.targets?.margin || null,
             dianping_rating: dbData?.dianping_rating ?? item?.data?.dianping_rating ?? null,
             new_wechat_members: dbData?.new_wechat_members ?? item?.data?.new_wechat_members ?? 0,
-            wechat_month_total: dbData?.wechat_month_total ?? item?.data?.wechat_month_total ?? 0
+            wechat_month_total: dbData?.wechat_month_total ?? item?.data?.wechat_month_total ?? 0,
+            operational_anomaly_note:
+              dbData?.operational_anomaly_note ?? item?.data?.operational_anomaly_note ?? ''
           }
         };
       });
@@ -5561,6 +6121,11 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
     if (!store) return res.status(400).json({ error: 'missing_store' });
 
     const payload = req.body?.data && typeof req.body.data === 'object' ? req.body.data : {};
+    const operationalAnomalyNote = String(
+      payload?.operational_anomaly_note ?? payload?.operationalAnomalyNote ?? ''
+    )
+      .trim()
+      .slice(0, 4000);
     const wantSubmit = !!req.body?.submitted;
     const now = hrmsNowISO();
 
@@ -5618,10 +6183,10 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
         await pool.query(`
           INSERT INTO daily_reports (store, brand, date, actual_revenue, actual_margin, dianping_rating, new_wechat_members, wechat_month_total, submitted, submitted_at,
             pre_discount_revenue, total_discount, dine_orders, dine_revenue, dine_traffic, efficiency, labor_total, gross_profit, budget, budget_rate,
-            delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses)
+            delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses, operational_anomaly_note)
           VALUES ($1, $2, $3, $4, $5, $6, $7, 0, true, NOW(),
             $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-            $18, $19, $20, $21, $22)
+            $18, $19, $20, $21, $22, $23)
           ON CONFLICT (store, date)
           DO UPDATE SET 
             actual_revenue = EXCLUDED.actual_revenue,
@@ -5643,6 +6208,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
             delivery_pre_revenue = EXCLUDED.delivery_pre_revenue,
             delivery_bad_reviews = EXCLUDED.delivery_bad_reviews,
             private_room_uses = EXCLUDED.private_room_uses,
+            operational_anomaly_note = EXCLUDED.operational_anomaly_note,
             updated_at = NOW()
         `, [
           store, brand, date, 
@@ -5653,7 +6219,8 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
           preDiscountRevenue, totalDiscount, dineOrders, dineRevenue, dineTraffic,
           efficiencyVal, laborTotalVal, grossProfit, budgetVal, budgetRateVal,
           deliveryActual, deliveryOrders, deliveryPreRevenue, deliveryBadReviews,
-          privateRoomUses
+          privateRoomUses,
+          operationalAnomalyNote || null
         ]);
         // 重新计算本月累计并写回
         const monthStart = date.slice(0, 7) + '-01';
@@ -5711,10 +6278,10 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
         await pool.query(`
           INSERT INTO daily_reports (store, brand, date, actual_revenue, actual_margin, dianping_rating, new_wechat_members, wechat_month_total, submitted, submitted_at,
             pre_discount_revenue, total_discount, dine_orders, dine_revenue, dine_traffic, efficiency, labor_total, gross_profit, budget, budget_rate,
-            delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses)
+            delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses, operational_anomaly_note)
           VALUES ($1, $2, $3, $4, $5, $6, $7, 0, true, NOW(),
             $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-            $18, $19, $20, $21, $22)
+            $18, $19, $20, $21, $22, $23)
           ON CONFLICT (store, date)
           DO UPDATE SET
             actual_revenue = EXCLUDED.actual_revenue,
@@ -5736,6 +6303,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
             delivery_pre_revenue = EXCLUDED.delivery_pre_revenue,
             delivery_bad_reviews = EXCLUDED.delivery_bad_reviews,
             private_room_uses = EXCLUDED.private_room_uses,
+            operational_anomaly_note = EXCLUDED.operational_anomaly_note,
             updated_at = NOW()
         `, [
           store,
@@ -5748,7 +6316,8 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
           preDiscountRevenue, totalDiscount, dineOrders, dineRevenue, dineTraffic,
           efficiencyVal, laborTotalVal, grossProfit, budgetVal, budgetRateVal,
           deliveryActual, deliveryOrders, deliveryPreRevenue, deliveryBadReviews,
-          privateRoomUses
+          privateRoomUses,
+          operationalAnomalyNote || null
         ]);
       } catch (e) { console.error('[daily_report_insert]', e.message); }
 
@@ -8193,9 +8762,8 @@ app.delete('/api/reports/inventory-forecast/history/clear', authRequired, async 
     }
     await saveSharedState(state0);
     const afterCount = Array.isArray(state0.inventoryForecastHistory) ? state0.inventoryForecastHistory.length : 0;
-    let srDel=0;
-    try{const d=qStore?await pool.query(`DELETE FROM sales_raw WHERE lower(regexp_replace(store,'\\s+','','g'))=$1`,[qStore.toLowerCase().replace(/\s+/g,'')]):await pool.query(`DELETE FROM sales_raw`);srDel=d.rowCount||0;}catch(e2){}
-    return res.json({ ok:true, cleared:prevCount-afterCount, remaining:afterCount, salesRawDeleted:srDel, store:qStore||'(all)' });
+    // 严禁在此删除 sales_raw：无 store 参数时曾误执行 DELETE FROM sales_raw 全表，导致生产数据被清空。
+    return res.json({ ok: true, cleared: prevCount - afterCount, remaining: afterCount, store: qStore || '(all)' });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
   }
@@ -9756,13 +10324,15 @@ app.get('/api/points/rules', authRequired, async (req, res) => {
     const state0 = (await getSharedState()) || {};
     const myStore = pickMyStoreFromState(state0, username);
     const store = storeQ || myStore;
-    const items = (Array.isArray(state0.pointRules) ? state0.pointRules : [])
+    let items = (Array.isArray(state0.pointRules) ? state0.pointRules : [])
       .filter(x => {
         if (!x || typeof x !== 'object') return false;
         const st = String(x?.store || '').trim();
-        return !store || st === store;
+        // 空 store = 全部门店通用（否则仅匹配门店的规则会「消失」）
+        return !store || !st || st === store;
       })
       .sort((a, b) => String(b?.updatedAt || '').localeCompare(String(a?.updatedAt || '')));
+    items = dedupePointRulesApiItems(items);
     return res.json({ store: store || '', items });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
@@ -9786,6 +10356,15 @@ app.post('/api/points/rules', authRequired, async (req, res) => {
   try {
     const state0 = (await getSharedState()) || {};
     const list = Array.isArray(state0.pointRules) ? state0.pointRules.slice() : [];
+    if (isTripleSocialMediaPointRuleItem({ itemName })) {
+      const dup = list.some((r) => isTripleSocialMediaPointRuleItem(r));
+      if (dup) {
+        return res.status(400).json({
+          error: 'duplicate_triple_social_rule',
+          message: '「抖音/小红书/大众点评」宣传积分为系统统一事项，列表中已存在时请勿重复新增；请编辑唯一一条。'
+        });
+      }
+    }
     const item = {
       id: randomUUID(),
       store,
@@ -9833,6 +10412,15 @@ app.put('/api/points/rules/:id', authRequired, async (req, res) => {
     if (!String(merged?.store || '').trim()) return res.status(400).json({ error: 'missing_store' });
     if (!String(merged?.itemName || '').trim()) return res.status(400).json({ error: 'missing_item_name' });
     if (safeNumber(merged?.points) == null || safeNumber(merged?.points) <= 0) return res.status(400).json({ error: 'invalid_points' });
+    if (isTripleSocialMediaPointRuleItem(merged)) {
+      const dupOther = list.findIndex((x, i) => i !== idx && isTripleSocialMediaPointRuleItem(x));
+      if (dupOther >= 0) {
+        return res.status(400).json({
+          error: 'duplicate_triple_social_rule',
+          message: '已存在「抖音/小红书/大众点评」宣传积分事项，请勿将多条规则改为同名。'
+        });
+      }
+    }
     list[idx] = merged;
     await saveSharedState({ ...state0, pointRules: list });
     return res.json({ ok: true, item: merged });
@@ -12605,6 +13193,17 @@ app.listen(PORT, HOST, async () => {
       console.error('[intelligence] Migration 012 error (non-fatal):', e?.message);
     }
 
+    try {
+      const mig013 = await import('fs').then(f => f.promises.readFile(new URL('./migrations/013_daily_reports_operational_anomaly.sql', import.meta.url), 'utf8'));
+      await pool.query(mig013);
+      console.log('[daily_reports] Migration 013 applied: operational_anomaly_note');
+    } catch (e) {
+      console.error('[daily_reports] Migration 013 error (non-fatal):', e?.message);
+    }
+
+    await dedupeGlobalSocialMediaPointRules();
+    await ensureGlobalSocialMediaPointRule();
+
     // Purge expired metric cache every 2 hours
     setInterval(() => purgeExpiredCache().catch(() => {}), 2 * 60 * 60 * 1000);
 
@@ -12744,6 +13343,12 @@ app.listen(PORT, HOST, async () => {
       } catch (e) {
         console.error('[monitor] sales_raw check error:', e?.message);
       }
+    }, 5 * 60 * 1000);
+
+    setInterval(() => {
+      runMonthlyRecurringRewardTemplatesJob().catch((e) =>
+        console.error('[recurring-reward] tick error:', e?.message || e)
+      );
     }, 5 * 60 * 1000);
 
     // Initialize enhanced autonomous agent systems

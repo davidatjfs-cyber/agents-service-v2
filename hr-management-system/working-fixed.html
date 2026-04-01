@@ -6565,6 +6565,13 @@
                 </div>
 
                 <div class="card" style="margin-bottom: 18px;">
+                    <div class="card-icon orange">⚠️</div>
+                    <h4>今日营运异常报备</h4>
+                    <p style="margin:8px 0 10px; font-size:12px; color:rgba(200,215,230,0.85); line-height:1.45;">请填写当日影响营运的重要事件（如设备故障、严重客诉、临时停售等）；无则留空。内容将出现在次日晨报「营运异常报备」中。</p>
+                    <textarea id="dr-operational-anomaly" rows="4" maxlength="4000" placeholder="例如：海鲜展示柜压缩机故障，午市暂停刺身售卖；或：晚市 2 号桌严重客诉已安抚并记录…" style="width:100%; padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,0.2); background:rgba(0,0,0,0.2); color:#fff; font-size:14px; resize:vertical; box-sizing:border-box;"></textarea>
+                </div>
+
+                <div class="card" style="margin-bottom: 18px;">
                     <div class="card-icon red">⭐</div>
                     <h4>差评统计</h4>
                     <div style="margin-top: 12px; display:grid; grid-template-columns: 1fr; gap: 12px;">
@@ -7077,6 +7084,15 @@
                         <input id="points-admin-end" class="form-input" type="date" style="padding:10px 12px; border-radius:10px; font-size:13px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:rgba(226,232,240,0.95);">
                     </div>
                     <button class="btn" type="button" onclick="queryPointsAdminRecords()" style="margin-top:10px; width:100%; padding:12px; border-radius:12px; background:linear-gradient(135deg, #2563eb, #6366f1); color:#fff; font-size:14px; font-weight:700; border:none;">查询</button>
+                    <div id="points-admin-query-summary" style="display:none; margin-top:12px; padding:12px 14px; border-radius:12px; border:1px solid rgba(250,204,21,0.25); background:rgba(250,204,21,0.06);">
+                        <div style="font-size:12px; font-weight:800; color:rgba(250,204,21,0.95); margin-bottom:8px;">查询结果汇总</div>
+                        <div style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px; font-size:13px; color:rgba(226,232,240,0.92);">
+                            <div>合计积分：<span id="points-admin-sum-points" style="font-weight:900; color:#facc15;">0</span></div>
+                            <div>折算金额：<span id="points-admin-sum-amount" style="font-weight:900; color:#f59e0b;">¥0.00</span></div>
+                            <div>记录条数：<span id="points-admin-sum-count" style="font-weight:800;">0</span></div>
+                            <div>涉及人数：<span id="points-admin-sum-people" style="font-weight:800;">0</span></div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 积分记录 -->
@@ -7513,7 +7529,7 @@
                             <div class="ui-form-group-row">
                                 <div class="ui-form-group">
                                     <label class="ui-label">类型 <span class="req">*</span></label>
-                                    <select id="reward-create-type">
+                                    <select id="reward-create-type" onchange="syncRewardCreateFrequencyVisibility()">
                                         <option value="reward" selected>🏆 奖励</option>
                                         <option value="punish">⚠️ 惩罚</option>
                                     </select>
@@ -7561,6 +7577,15 @@
                                 <label class="ui-label">薪资影响金额（元） <span class="req">*</span></label>
                                 <input id="reward-create-amount" type="number" min="0" step="0.01" placeholder="请输入金额，例如 200" />
                                 <div class="settings-hint" style="margin-top: 6px;">奖励填写正数，惩罚也填写正数，系统会自动按惩罚转为扣减。</div>
+                            </div>
+
+                            <div class="ui-form-group" id="reward-create-frequency-wrap">
+                                <label class="ui-label">生成频率</label>
+                                <select id="reward-create-frequency">
+                                    <option value="once" selected>单次（仅本单）</option>
+                                    <option value="monthly">每月（审批通过后按月自动生成待审批单）</option>
+                                </select>
+                                <div class="settings-hint" style="margin-top: 6px;">仅奖励可选「每月」；惩罚仅支持单次。</div>
                             </div>
 
                             <div class="ui-form-group">
@@ -8630,7 +8655,7 @@
                             <div class="exam-card-body">
                                 <div class="exam-kb-source">
                                     <select id="exam-kb-material" class="exam-select" multiple size="4" style="padding: 10px; min-height: 140px; width: 100%;" onfocus="try{populateExamMaterialSources();}catch(e){console.error(e);}">
-                                        <option value="" disabled selected>加载中...</option>
+                                        <option value="" disabled selected>请先点击「加载」拉取知识库列表</option>
                                     </select>
                                     <button class="btn" type="button" onclick="loadExamMaterialFromKnowledge()">加载</button>
                                 </div>
@@ -9454,16 +9479,18 @@
 
                 <!-- 个人信息卡片 - 紧凑头部 -->
                 <div class="card" style="margin-bottom: 14px; padding: 20px;">
-                    <div style="display:flex; align-items:center; gap: 14px;">
-                        <div style="width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(135deg, rgba(59,130,246,0.25), rgba(139,92,246,0.25)); display:flex; align-items:center; justify-content:center; font-size: 22px; border: 2px solid rgba(59,130,246,0.3);">👤</div>
+                    <div style="display:flex; align-items:flex-start; gap: 12px;">
+                        <div style="width: 52px; height: 52px; flex-shrink:0; border-radius: 50%; background: linear-gradient(135deg, rgba(59,130,246,0.25), rgba(139,92,246,0.25)); display:flex; align-items:center; justify-content:center; font-size: 22px; border: 2px solid rgba(59,130,246,0.3);">👤</div>
                         <div style="flex:1; min-width:0;">
                             <div style="font-weight: 800; font-size: 17px;" id="profile-name">--</div>
-                            <div style="font-size: 12px; color: rgba(200,215,230,0.75); margin-top: 2px;"><span id="profile-store">--</span> · <span id="profile-department">--</span> · <span id="profile-position">--</span></div>
+                            <div style="font-size: 12px; color: rgba(200,215,230,0.75); margin-top: 4px; line-height:1.45;"><span id="profile-store">--</span> · <span id="profile-department">--</span> · <span id="profile-position">--</span></div>
                         </div>
-                        <!-- 本月门店级别 -->
-                        <div id="profile-store-rating-badge" style="display:none; padding: 6px 12px; border-radius: 10px; font-weight: 800; font-size: 13px; background: linear-gradient(135deg, rgba(34,197,94,0.2), rgba(34,197,94,0.1)); border: 1px solid rgba(34,197,94,0.3);">
-                            <span style="font-size: 11px; color: rgba(200,215,230,0.7);">门店级别</span>
-                            <span id="profile-store-rating" style="margin-left: 6px; color: rgba(34,197,94,0.95);">-</span>
+                        <div id="profile-store-rating-badge" style="display:none; flex-shrink:0; align-self:center; padding: 8px 12px; border-radius: 14px; max-width: 34vw; text-align: right; background: rgba(255,255,255,0.07); backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4); border: 1px solid rgba(255,255,255,0.14); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 8px 28px rgba(0,0,0,0.22);">
+                            <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: rgba(200,215,230,0.5);">门店级别</div>
+                            <div style="margin-top: 2px; display: flex; align-items: baseline; justify-content: flex-end; gap: 4px; flex-wrap: wrap;">
+                                <span id="profile-store-rating" style="font-size: 17px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1;">-</span>
+                                <span style="font-size: 10px; font-weight: 600; color: rgba(200,215,230,0.45); white-space: nowrap;">上月·1日</span>
+                            </div>
                         </div>
                     </div>
                     <!-- hidden fields kept for JS compatibility -->
@@ -9504,56 +9531,58 @@
                         <div style="width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, rgba(249,115,22,0.2), rgba(249,115,22,0.1)); display:flex; align-items:center; justify-content:center; font-size: 16px;">📅</div>
                         <span style="font-weight: 700; font-size: 15px;">档案信息</span>
                     </div>
-                    <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px;">
-                        <div style="padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align:center;">
-                            <div style="font-size: 11px; color: rgba(200,215,230,0.65);">级别</div>
-                            <div style="font-weight: 700; font-size: 13px; margin-top: 4px;" id="profile-level">--</div>
+                    <div class="profile-metrics-grid" style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px;">
+                        <div style="padding: 12px 10px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align:center; min-height: 68px; display:flex; flex-direction:column; justify-content:center;">
+                            <div style="font-size: 11px; color: rgba(200,215,230,0.65); line-height:1.3;">级别</div>
+                            <div style="font-weight: 700; font-size: 14px; margin-top: 6px; line-height:1.2; word-break:break-all;" id="profile-level">--</div>
                         </div>
-                        <div style="padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align:center;">
-                            <div style="font-size: 11px; color: rgba(200,215,230,0.65);">直属上级</div>
-                            <div style="font-weight: 700; font-size: 13px; margin-top: 4px;" id="profile-manager">--</div>
+                        <div style="padding: 12px 10px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align:center; min-height: 68px; display:flex; flex-direction:column; justify-content:center;">
+                            <div style="font-size: 11px; color: rgba(200,215,230,0.65); line-height:1.3;">直属上级</div>
+                            <div style="font-weight: 700; font-size: 14px; margin-top: 6px; line-height:1.2; word-break:break-all;" id="profile-manager">--</div>
                         </div>
-                        <div style="padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align:center;">
-                            <div style="font-size: 11px; color: rgba(200,215,230,0.65);">绩效得分</div>
-                            <div style="font-weight: 700; font-size: 13px; margin-top: 4px;" id="profile-total-score">--</div>
+                        <div style="padding: 12px 10px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align:center; min-height: 68px; display:flex; flex-direction:column; justify-content:center;">
+                            <div style="font-size: 11px; color: rgba(200,215,230,0.65); line-height:1.3;">绩效得分</div>
+                            <div style="font-weight: 700; font-size: 14px; margin-top: 6px; line-height:1.2;" id="profile-total-score">--</div>
                         </div>
-                        <div style="padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align:center;">
-                            <div style="font-size: 11px; color: rgba(200,215,230,0.65);">执行力等级</div>
-                            <div style="font-weight: 700; font-size: 13px; margin-top: 4px;" id="profile-execution-rating">--</div>
+                        <div style="padding: 12px 10px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align:center; min-height: 68px; display:flex; flex-direction:column; justify-content:center;">
+                            <div style="font-size: 11px; color: rgba(200,215,230,0.65); line-height:1.3;">执行力等级</div>
+                            <div style="font-weight: 700; font-size: 14px; margin-top: 6px; line-height:1.2;" id="profile-execution-rating">--</div>
                         </div>
-                        <div style="padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align:center;">
-                            <div style="font-size: 11px; color: rgba(200,215,230,0.65);">工作态度等级</div>
-                            <div style="font-weight: 700; font-size: 13px; margin-top: 4px;" id="profile-attitude-rating">--</div>
+                        <div style="padding: 12px 10px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align:center; min-height: 68px; display:flex; flex-direction:column; justify-content:center;">
+                            <div style="font-size: 11px; color: rgba(200,215,230,0.65); line-height:1.3;">工作态度等级</div>
+                            <div style="font-weight: 700; font-size: 14px; margin-top: 6px; line-height:1.2;" id="profile-attitude-rating">--</div>
                         </div>
-                        <div style="padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align:center;">
-                            <div style="font-size: 11px; color: rgba(200,215,230,0.65);">工作能力等级</div>
-                            <div style="font-weight: 700; font-size: 13px; margin-top: 4px;" id="profile-ability-rating">--</div>
+                        <div style="padding: 12px 10px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align:center; min-height: 68px; display:flex; flex-direction:column; justify-content:center;">
+                            <div style="font-size: 11px; color: rgba(200,215,230,0.65); line-height:1.3;">工作能力等级</div>
+                            <div style="font-weight: 700; font-size: 14px; margin-top: 6px; line-height:1.2;" id="profile-ability-rating">--</div>
                         </div>
                     </div>
-                    <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom:10px;">
-                        <div style="padding: 10px; border-radius: 10px; background: rgba(34,197,94,0.06); border: 1px solid rgba(34,197,94,0.15); text-align:center;">
+                    <div id="profile-store-rating-hint" style="margin: 0 0 8px; padding: 10px 12px; border-radius: 10px; background: rgba(34,197,94,0.06); border: 1px solid rgba(34,197,94,0.12); font-size: 11px; color: rgba(200,215,230,0.78); line-height: 1.5;"></div>
+                    <div id="profile-personal-performance-hint" style="margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.12); font-size: 11px; color: rgba(200,215,230,0.78); line-height: 1.5;"></div>
+                    <div style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom:12px;">
+                        <div style="padding: 12px 10px; border-radius: 12px; background: rgba(34,197,94,0.06); border: 1px solid rgba(34,197,94,0.15); text-align:center; min-height: 64px; display:flex; flex-direction:column; justify-content:center;">
                             <div style="font-size: 11px; color: rgba(34,197,94,0.85);">本月奖励</div>
-                            <div style="font-weight: 800; font-size: 15px; margin-top: 4px; color: rgba(34,197,94,0.95);" id="profile-month-reward-amount">¥0.00</div>
+                            <div style="font-weight: 800; font-size: 15px; margin-top: 6px; color: rgba(34,197,94,0.95);" id="profile-month-reward-amount">¥0.00</div>
                         </div>
-                        <div style="padding: 10px; border-radius: 10px; background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.15); text-align:center;">
+                        <div style="padding: 12px 10px; border-radius: 12px; background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.15); text-align:center; min-height: 64px; display:flex; flex-direction:column; justify-content:center;">
                             <div style="font-size: 11px; color: rgba(239,68,68,0.85);">本月处罚</div>
-                            <div style="font-weight: 800; font-size: 15px; margin-top: 4px; color: rgba(239,68,68,0.95);" id="profile-month-punishment-amount">¥0.00</div>
+                            <div style="font-weight: 800; font-size: 15px; margin-top: 6px; color: rgba(239,68,68,0.95);" id="profile-month-punishment-amount">¥0.00</div>
                         </div>
                     </div>
-                    <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
-                        <div style="padding: 10px; border-radius: 10px; background: rgba(34,197,94,0.06); border: 1px solid rgba(34,197,94,0.15); text-align:center; cursor:pointer;" onclick="openMyRewards('reward')">
+                    <div style="display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;">
+                        <div style="padding: 10px 6px; border-radius: 10px; background: rgba(34,197,94,0.06); border: 1px solid rgba(34,197,94,0.15); text-align:center; cursor:pointer; min-height: 58px; display:flex; flex-direction:column; justify-content:center;" onclick="openMyRewards('reward')">
                             <div style="font-size: 11px; color: rgba(34,197,94,0.85);">累积奖励</div>
                             <div style="font-weight: 800; font-size: 15px; margin-top: 4px; color: rgba(34,197,94,0.95);" id="profile-reward-count">¥0.00</div>
                         </div>
-                        <div style="padding: 10px; border-radius: 10px; background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.15); text-align:center; cursor:pointer;" onclick="openMyRewards('punishment')">
+                        <div style="padding: 10px 6px; border-radius: 10px; background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.15); text-align:center; cursor:pointer; min-height: 58px; display:flex; flex-direction:column; justify-content:center;" onclick="openMyRewards('punishment')">
                             <div style="font-size: 11px; color: rgba(239,68,68,0.85);">累积处罚</div>
                             <div style="font-weight: 800; font-size: 15px; margin-top: 4px; color: rgba(239,68,68,0.95);" id="profile-punishment-count">¥0.00</div>
                         </div>
-                        <div style="padding: 10px; border-radius: 10px; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.15); text-align:center; cursor:pointer;" onclick="showPage('exam')">
+                        <div style="padding: 10px 6px; border-radius: 10px; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.15); text-align:center; cursor:pointer; min-height: 58px; display:flex; flex-direction:column; justify-content:center;" onclick="showPage('exam')">
                             <div style="font-size: 11px; color: rgba(59,130,246,0.85);">考试</div>
                             <div style="font-weight: 800; font-size: 15px; margin-top: 4px; color: rgba(59,130,246,0.95);" id="profile-exam-count">0</div>
                         </div>
-                        <div style="padding: 10px; border-radius: 10px; background: rgba(168,85,247,0.06); border: 1px solid rgba(168,85,247,0.15); text-align:center; cursor:pointer;" onclick="showPage('promotion')">
+                        <div style="padding: 10px 6px; border-radius: 10px; background: rgba(168,85,247,0.06); border: 1px solid rgba(168,85,247,0.15); text-align:center; cursor:pointer; min-height: 58px; display:flex; flex-direction:column; justify-content:center;" onclick="showPage('promotion')">
                             <div style="font-size: 11px; color: rgba(168,85,247,0.85);">升职</div>
                             <div style="font-weight: 800; font-size: 15px; margin-top: 4px; color: rgba(168,85,247,0.95);" id="profile-promotion-count">0</div>
                         </div>
@@ -10116,11 +10145,11 @@
                             <div id="employee-form-attachments-list" style="margin-bottom:10px; display:flex; flex-direction:column; gap:8px;"></div>
                             <div id="employee-form-attachments-empty" style="font-size:12px; color:rgba(200,215,230,0.5); margin-bottom:10px; display:none;">暂无附件</div>
                             <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                                <input id="employee-form-attachment-file" type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx" style="flex:1; min-width:180px;">
-                                <input id="employee-form-attachment-desc" type="text" placeholder="附件说明（如：劳动合同）" class="form-input" style="flex:1; min-width:140px; padding:8px 10px; font-size:13px;">
-                                <button type="button" class="btn btn-secondary" onclick="uploadEmployeeAttachment()" style="padding:8px 14px; font-size:13px; white-space:nowrap;">上传附件</button>
+                                <input id="employee-form-attachment-file" type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx" style="flex:1; min-width:180px;" onchange="syncEmployeeAttachmentEmptyHint()">
+                                <input id="employee-form-attachment-desc" type="text" placeholder="附件说明（如：劳动合同，多文件时共用）" class="form-input" style="flex:1; min-width:140px; padding:8px 10px; font-size:13px;">
+                                <button type="button" class="btn btn-secondary" id="employee-form-attachment-upload-btn" onclick="uploadEmployeeAttachment()" style="padding:8px 14px; font-size:13px; white-space:nowrap;">上传附件</button>
                             </div>
-                            <div id="employee-form-attachment-hint" style="margin-top:6px; font-size:11px; color:rgba(200,215,230,0.5);">支持 PDF、Word、Excel、图片，单文件不超过 20MB</div>
+                            <div id="employee-form-attachment-hint" style="margin-top:6px; font-size:11px; color:rgba(200,215,230,0.5);">支持 PDF、Word、Excel、图片；可多选文件一次上传；单文件不超过 20MB；说明文字会应用到本次所选全部文件。</div>
                         </div>
                     </div>
                 </div>
@@ -11719,6 +11748,9 @@
                 const qs = q.toString();
                 return this.request('/api/approvals' + (qs ? ('?' + qs) : ''), { method: 'GET' });
             },
+            async getApproval(id) {
+                return this.request('/api/approvals/' + encodeURIComponent(String(id || '')), { method: 'GET' });
+            },
             async createApproval(type, payload) {
                 return this.request('/api/approvals', {
                     method: 'POST',
@@ -12080,12 +12112,17 @@
             const idx = __POINTS_APPLY_COUNTER;
             const rules = __POINTS_RULES_CACHE || [];
             const rulesHtml = rules.length
-                ? rules.map(r => `<div class="pts-rule-opt" data-rid="${escapeHtml(String(r?.id||''))}" data-pts="${Number(r?.points||0)}" onclick="selectPointsRule(this,${idx})" style="display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background 0.15s ease;"><span style="flex:1;font-size:13px;color:rgba(226,232,240,0.88);line-height:1.45;padding-right:10px;">${escapeHtml(String(r?.itemName||'-'))}<span style="display:inline-block;margin-left:6px;font-size:11px;font-weight:700;color:rgba(250,204,21,0.75);">+${Number(r?.points||0)}分</span></span><div class="pts-radio-dot" style="width:22px;height:22px;border-radius:50%;border:2px solid rgba(255,255,255,0.18);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.15s ease;background:rgba(255,255,255,0.03);"></div></div>`).join('')
+                ? rules.map((r, ri) => `<div class="pts-rule-opt" data-rid="${escapeHtml(String(r?.id||''))}" data-pts="${Number(r?.points||0)}" onclick="selectPointsRule(this,${idx})" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;${ri < rules.length - 1 ? 'border-bottom:1px solid rgba(255,255,255,0.06);' : ''}cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background 0.18s ease;"><span style="flex:1;font-size:13px;color:rgba(226,232,240,0.9);line-height:1.5;padding-right:10px;">${escapeHtml(String(r?.itemName||'-'))}<span style="display:inline-block;margin-left:6px;font-size:11px;font-weight:700;color:rgba(250,204,21,0.82);">+${Number(r?.points||0)}分</span></span><div class="pts-radio-dot" style="width:22px;height:22px;border-radius:50%;border:2px solid rgba(255,255,255,0.2);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.15s ease;background:rgba(255,255,255,0.04);"></div></div>`).join('')
                 : '<div style="padding:18px;text-align:center;color:rgba(200,215,230,0.45);font-size:13px;">暂无可用事项</div>';
             const itemDiv = document.createElement('div');
             itemDiv.className = 'points-apply-item';
             itemDiv.setAttribute('data-idx', String(idx));
-            itemDiv.style.cssText = 'padding:14px;border-radius:16px;border:1px solid rgba(255,255,255,0.09);background:rgba(255,255,255,0.025);position:relative;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:inset 0 1px 0 rgba(255,255,255,0.06),0 4px 20px rgba(0,0,0,0.15);';
+            itemDiv.style.cssText = 'padding:14px;border-radius:18px;border:1px solid rgba(255,255,255,0.1);background:linear-gradient(165deg,rgba(255,255,255,0.07),rgba(255,255,255,0.02));position:relative;backdrop-filter:blur(16px) saturate(1.35);-webkit-backdrop-filter:blur(16px) saturate(1.35);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 8px 32px rgba(0,0,0,0.2);';
+            const ruleBlock = `<input type="hidden" class="points-item-rule" value="">
+                    <div id="pts-picker-${idx}" style="border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,0.12);background:linear-gradient(165deg,rgba(30,41,59,0.78),rgba(15,23,42,0.5));backdrop-filter:blur(22px) saturate(1.45);-webkit-backdrop-filter:blur(22px) saturate(1.45);box-shadow:inset 0 1px 0 rgba(255,255,255,0.1),0 12px 40px rgba(0,0,0,0.35);max-height:min(52vh,280px);overflow-y:auto;-webkit-overflow-scrolling:touch;">
+                        <div style="padding:10px 14px;font-size:10px;font-weight:700;letter-spacing:0.12em;color:rgba(186,230,253,0.5);border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(255,255,255,0.04);pointer-events:none;">选择积分事项</div>
+                        ${rulesHtml}
+                    </div>`;
             itemDiv.innerHTML = `
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
                     <span style="font-size:12px;font-weight:700;color:rgba(250,204,21,0.85);">第 ${count+1} 条</span>
@@ -12093,11 +12130,7 @@
                 </div>
                 <div style="margin-bottom:10px;">
                     <label style="display:block;font-size:12px;font-weight:600;color:rgba(200,215,230,0.7);margin-bottom:8px;">申请事项</label>
-                    <input type="hidden" class="points-item-rule" value="">
-                    <div id="pts-picker-${idx}" style="border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,0.1);background:rgba(10,18,36,0.55);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,0.07),0 2px 14px rgba(0,0,0,0.3);max-height:268px;overflow-y:auto;">
-                        <div style="padding:9px 14px;font-size:11px;color:rgba(200,215,230,0.4);border-bottom:1px solid rgba(255,255,255,0.06);font-weight:600;letter-spacing:0.6px;background:rgba(255,255,255,0.02);pointer-events:none;">请选择事项</div>
-                        ${rulesHtml}
-                    </div>
+                    ${ruleBlock}
                 </div>
                 <div>
                     <label style="display:block;font-size:12px;font-weight:600;color:rgba(200,215,230,0.7);margin-bottom:4px;">申请理由</label>
@@ -12356,6 +12389,21 @@
                 listEl.innerHTML = '<div style="color:rgba(200,215,230,0.75);">加载中...</div>';
                 const resp = await HRMS_API.getPointRecords({ store, name, start, end });
                 const items = Array.isArray(resp?.items) ? resp.items : [];
+                const sm = resp?.summary && typeof resp.summary === 'object' ? resp.summary : null;
+                const sumPts = sm && Number.isFinite(Number(sm.totalPoints)) ? Number(sm.totalPoints) : items.reduce((s, x) => s + (Number(x?.points || 0) || 0), 0);
+                const sumAmt = sm && Number.isFinite(Number(sm.totalAmount)) ? Number(sm.totalAmount) : Number((sumPts * 0.5).toFixed(2));
+                const sumCnt = sm && Number.isFinite(Number(sm.recordCount)) ? Number(sm.recordCount) : items.length;
+                const sumPeople = sm && Number.isFinite(Number(sm.employeeCount)) ? Number(sm.employeeCount) : new Set(items.map(x => String(x?.username || '').trim().toLowerCase()).filter(Boolean)).size;
+                const sumBox = document.getElementById('points-admin-query-summary');
+                const sp = document.getElementById('points-admin-sum-points');
+                const sa = document.getElementById('points-admin-sum-amount');
+                const sc = document.getElementById('points-admin-sum-count');
+                const spe = document.getElementById('points-admin-sum-people');
+                if (sumBox) sumBox.style.display = items.length ? '' : 'none';
+                if (sp) sp.textContent = String(sumPts);
+                if (sa) sa.textContent = '¥' + sumAmt.toFixed(2);
+                if (sc) sc.textContent = String(sumCnt);
+                if (spe) spe.textContent = String(sumPeople);
                 const nowMonth = new Date().toISOString().slice(0, 7);
                 const monthPoints = items
                     .filter(x => String(x?.approvedAt || x?.createdAt || '').slice(0, 7) === nowMonth)
@@ -12401,6 +12449,16 @@
             if (!item) {
                 item = (__REWARDS_APPROVALS_CACHE || []).find(x => String(x?.id || '') === key) || null;
             }
+            if (!item && key) {
+                try {
+                    const one = await HRMS_API.getApproval(key);
+                    if (one && one.item && String(one.item.id || '') === key) {
+                        item = one.item;
+                        const merged = [item, ...(__APPROVALS_CACHE || []).filter(x => String(x?.id || '') !== key)];
+                        __APPROVALS_CACHE = merged;
+                    }
+                } catch (e) {}
+            }
             if (!item) {
                 // Try fetching fresh from server to handle stale cache
                 try {
@@ -12413,14 +12471,27 @@
                         const createdResp = await HRMS_API.getApprovals({ view: 'created', type: 'reward_punishment', status: '', limit: 500 });
                         candidates.push(...(Array.isArray(createdResp?.items) ? createdResp.items : []));
                     } catch (e) {}
+                    try {
+                        const ptsAll = await HRMS_API.getApprovals({ view: 'all', type: 'points', status: '', limit: 200 });
+                        candidates.push(...(Array.isArray(ptsAll?.items) ? ptsAll.items : []));
+                    } catch (e) {}
+                    try {
+                        const ptsCreated = await HRMS_API.getApprovals({ view: 'created', type: 'points', status: '', limit: 200 });
+                        candidates.push(...(Array.isArray(ptsCreated?.items) ? ptsCreated.items : []));
+                    } catch (e) {}
                     if (!candidates.length) {
                         const fallbackResp = await HRMS_API.getApprovals({ status: '', limit: 500 });
                         candidates.push(...(Array.isArray(fallbackResp?.items) ? fallbackResp.items : []));
                     }
-                    item = candidates.find(x => String(x?.id || '') === key) || null;
+                    const byId = new Map();
+                    for (const c of candidates) {
+                        const cid = String(c?.id || '');
+                        if (cid) byId.set(cid, c);
+                    }
+                    item = byId.get(key) || null;
                     if (candidates.length) {
-                        __APPROVALS_CACHE = candidates;
-                        __REWARDS_APPROVALS_CACHE = candidates.filter(x => String(x?.type || '') === 'reward_punishment');
+                        __APPROVALS_CACHE = Array.from(byId.values());
+                        __REWARDS_APPROVALS_CACHE = __APPROVALS_CACHE.filter(x => String(x?.type || '') === 'reward_punishment');
                     }
                 } catch (e) {}
             }
@@ -26260,15 +26331,15 @@ ${knowledgeContent.slice(0, 30000)}`;
 
             const attSection = document.getElementById('employee-form-attachments-section');
             if (attSection) {
-                const uploadRow = attSection.querySelector('.btn-secondary');
+                const uploadBtn = document.getElementById('employee-form-attachment-upload-btn');
                 const fileInp = document.getElementById('employee-form-attachment-file');
                 const descInp = document.getElementById('employee-form-attachment-desc');
                 if (lock) {
-                    if (uploadRow) uploadRow.disabled = true;
+                    if (uploadBtn) uploadBtn.disabled = true;
                     if (fileInp) fileInp.disabled = true;
                     if (descInp) descInp.disabled = true;
                 } else {
-                    if (uploadRow) uploadRow.disabled = false;
+                    if (uploadBtn) uploadBtn.disabled = false;
                     if (fileInp) fileInp.disabled = false;
                     if (descInp) descInp.disabled = false;
                 }
@@ -26443,6 +26514,20 @@ ${knowledgeContent.slice(0, 30000)}`;
             showNotification('证件照片已删除，保存员工信息后生效', 'success');
         }
 
+        function syncEmployeeAttachmentEmptyHint() {
+            const emptyEl = document.getElementById('employee-form-attachments-empty');
+            const container = document.getElementById('employee-form-attachments-list');
+            const fileEl = document.getElementById('employee-form-attachment-file');
+            if (!emptyEl || !container) return;
+            const hasRows = container.querySelector('.emp-att-row');
+            if (hasRows) {
+                emptyEl.style.display = 'none';
+                return;
+            }
+            const picking = fileEl && fileEl.files && fileEl.files.length > 0;
+            emptyEl.style.display = picking ? 'none' : '';
+        }
+
         function renderEmployeeAttachments(list) {
             const container = document.getElementById('employee-form-attachments-list');
             const emptyEl = document.getElementById('employee-form-attachments-empty');
@@ -26450,7 +26535,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             container.innerHTML = '';
             const arr = Array.isArray(list) ? list : [];
             if (arr.length === 0) {
-                if (emptyEl) emptyEl.style.display = '';
+                syncEmployeeAttachmentEmptyHint();
                 return;
             }
             if (emptyEl) emptyEl.style.display = 'none';
@@ -26463,6 +26548,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 const id = a.id;
                 const uploadedAt = String(a.created_at || a.uploaded_at || '').slice(0, 10) || '';
                 const row = document.createElement('div');
+                row.className = 'emp-att-row';
                 row.style.cssText = 'display:flex; align-items:center; gap:10px; padding:8px 10px; background:rgba(255,255,255,0.05); border-radius:8px; border:1px solid rgba(255,255,255,0.08);';
                 row.innerHTML = `
                     <span style="font-size:18px;">${fileName.toLowerCase().endsWith('.pdf') ? '📄' : (fileName.match(/\.(jpg|jpeg|png|webp|gif)$/i) ? '🖼️' : (fileName.match(/\.(xls|xlsx)$/i) ? '📊' : '📎'))}</span>
@@ -26498,25 +26584,34 @@ ${knowledgeContent.slice(0, 30000)}`;
             if (!empId) { showNotification('请先保存员工信息后再上传附件', 'warning'); return; }
             const fileEl = document.getElementById('employee-form-attachment-file');
             const descEl = document.getElementById('employee-form-attachment-desc');
-            const file = fileEl?.files?.[0];
-            if (!file) { showNotification('请选择要上传的文件', 'warning'); return; }
-            if (file.size > 20 * 1024 * 1024) { showNotification('文件超过20MB限制', 'warning'); return; }
+            const files = fileEl && fileEl.files && fileEl.files.length ? Array.from(fileEl.files) : [];
+            if (!files.length) { showNotification('请选择要上传的文件（可多选）', 'warning'); return; }
+            for (const f of files) {
+                if (f.size > 20 * 1024 * 1024) {
+                    showNotification(`文件「${f.name}」超过 20MB 限制`, 'warning');
+                    return;
+                }
+            }
             const desc = String(descEl?.value || '').trim();
-            const fd = new FormData();
-            fd.append('file', file);
-            if (desc) fd.append('description', desc);
+            const btn = document.getElementById('employee-form-attachment-upload-btn');
             try {
-                const btn = document.querySelector('#employee-form-attachments-section button[onclick="uploadEmployeeAttachment()"]');
                 if (btn) btn.disabled = true;
-                const resp = await HRMS_API.uploadEmployeeAttachment(empId, fd);
+                let ok = 0;
+                for (let i = 0; i < files.length; i++) {
+                    const fd = new FormData();
+                    fd.append('file', files[i]);
+                    if (desc) fd.append('description', desc);
+                    await HRMS_API.uploadEmployeeAttachment(empId, fd);
+                    ok++;
+                }
                 if (fileEl) fileEl.value = '';
                 if (descEl) descEl.value = '';
-                showNotification('附件上传成功', 'success');
+                syncEmployeeAttachmentEmptyHint();
+                showNotification(ok > 1 ? `已成功上传 ${ok} 个附件` : '附件上传成功', 'success');
                 await loadEmployeeAttachments(empId);
             } catch (e) {
                 showNotification('附件上传失败：' + String(e?.message || e), 'error');
             } finally {
-                const btn = document.querySelector('#employee-form-attachments-section button[onclick="uploadEmployeeAttachment()"]');
                 if (btn) btn.disabled = false;
             }
         }
@@ -28595,34 +28690,48 @@ ${knowledgeContent.slice(0, 30000)}`;
                 if (attitudeEl) attitudeEl.textContent = attitude || '--';
                 if (abilityEl) abilityEl.textContent = ability || '--';
 
+                const storeHint = document.getElementById('profile-store-rating-hint');
+                const personalHint = document.getElementById('profile-personal-performance-hint');
+                if (storeHint) {
+                    storeHint.textContent = String(data?.storeRatingPeriodNote || '').trim() || '';
+                }
+                if (personalHint) {
+                    personalHint.textContent = String(data?.personalPerformanceNote || '').trim() || '';
+                }
+
                 if (badge && ratingEl) {
                     const ratingText = storeRating ? `${storeRating}级` : '待评估';
                     ratingEl.textContent = ratingText;
                     const colors = {
-                        A: 'rgba(34,197,94,0.95)',
-                        B: 'rgba(59,130,246,0.95)',
-                        C: 'rgba(245,158,11,0.95)',
-                        D: 'rgba(239,68,68,0.95)',
-                        null: 'rgba(156,163,175,0.95)'
+                        A: 'rgba(52,211,153,0.98)',
+                        B: 'rgba(96,165,250,0.98)',
+                        C: 'rgba(251,191,36,0.98)',
+                        D: 'rgba(248,113,113,0.98)',
+                        null: 'rgba(203,213,225,0.92)'
                     };
-                    const bgColors = {
-                        A: 'rgba(34,197,94,0.2)',
-                        B: 'rgba(59,130,246,0.2)',
-                        C: 'rgba(245,158,11,0.2)',
-                        D: 'rgba(239,68,68,0.2)',
-                        null: 'rgba(156,163,175,0.2)'
+                    const tint = {
+                        A: 'rgba(34,197,94,0.12)',
+                        B: 'rgba(59,130,246,0.12)',
+                        C: 'rgba(245,158,11,0.12)',
+                        D: 'rgba(239,68,68,0.12)',
+                        null: 'rgba(148,163,184,0.08)'
                     };
-                    const borderColors = {
-                        A: 'rgba(34,197,94,0.3)',
-                        B: 'rgba(59,130,246,0.3)',
-                        C: 'rgba(245,158,11,0.3)',
-                        D: 'rgba(239,68,68,0.3)',
-                        null: 'rgba(156,163,175,0.3)'
+                    const borderTint = {
+                        A: 'rgba(52,211,153,0.35)',
+                        B: 'rgba(96,165,250,0.35)',
+                        C: 'rgba(251,191,36,0.35)',
+                        D: 'rgba(248,113,113,0.35)',
+                        null: 'rgba(255,255,255,0.16)'
                     };
                     const ratingKey = storeRating || 'null';
                     ratingEl.style.color = colors[ratingKey] || colors.null;
-                    badge.style.background = `linear-gradient(135deg, ${bgColors[ratingKey] || bgColors.null}, ${(bgColors[ratingKey] || bgColors.null).replace('0.2', '0.1')})`;
-                    badge.style.borderColor = borderColors[ratingKey] || borderColors.null;
+                    const ti = tint[ratingKey] || tint.null;
+                    const bd = borderTint[ratingKey] || borderTint.null;
+                    badge.style.background = `linear-gradient(165deg, rgba(255,255,255,0.1), ${ti})`;
+                    badge.style.backdropFilter = 'blur(18px) saturate(1.45)';
+                    badge.style.webkitBackdropFilter = 'blur(18px) saturate(1.45)';
+                    badge.style.border = `1px solid ${bd}`;
+                    badge.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.14), 0 8px 28px rgba(0,0,0,0.22)';
                     badge.style.display = 'block';
                 }
             } catch (e) {
@@ -29418,6 +29527,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 drSetValue('dr-meituan-rev', '');
                 drSetValue('dr-meituan-actual', '');
                 drSetValue('dr-meituan-target', '');
+                drSetValue('dr-operational-anomaly', '');
                 drSetValue('dr-bad-dianping', '');
                 drSetValue('dr-bad-meituan', '');
                 drSetValue('dr-bad-eleme', '');
@@ -30454,6 +30564,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                     meituan: drGetNum('dr-bad-meituan'),
                     eleme: drGetNum('dr-bad-eleme')
                 },
+                operational_anomaly_note: String(document.getElementById('dr-operational-anomaly')?.value || '').trim().slice(0, 4000),
                 new_wechat_members: drGetNum('dr-new-wechat-members'),
                 wechat_month_total: __DR_WECHAT_MONTH_BASE + drGetNum('dr-new-wechat-members'),
                 recharge: {
@@ -30726,6 +30837,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 drSetValue('dr-meituan-rev', data?.delivery?.meituan?.revenue);
                 drSetValue('dr-meituan-actual', data?.delivery?.meituan?.actual);
                 drSetValue('dr-meituan-target', data?.delivery?.meituan?.targetRevenue);
+                drSetValue('dr-operational-anomaly', data?.operational_anomaly_note);
                 drSetValue('dr-bad-dianping', data?.badReviews?.dianping);
                 drSetValue('dr-bad-meituan', data?.badReviews?.meituan);
                 drSetValue('dr-bad-eleme', data?.badReviews?.eleme);
@@ -33788,6 +33900,8 @@ ${knowledgeContent.slice(0, 30000)}`;
                 const date = String(document.getElementById('dr-date')?.value || '').trim();
                 const gross = drGetNum('dr-gross');
                 const actual = drGetNum('dr-actual');
+                const opNote = String(document.getElementById('dr-operational-anomaly')?.value || '').trim();
+                const opEsc = opNote.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
                 const w = window.open('', '_blank');
                 if (!w) {
                     showNotification('请允许弹窗以导出 PDF', 'warning');
@@ -33802,6 +33916,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                     <div class="row"><span class="k">日期：</span><span class="v">${date}</span></div>
                     <div class="row"><span class="k">折前营业额：</span><span class="v">${gross}</span></div>
                     <div class="row"><span class="k">实收营业额：</span><span class="v">${actual}</span></div>
+                    <div class="row"><span class="k">今日营运异常报备：</span><span class="v">${opEsc || '（无）'}</span></div>
                     <div class="row" style="margin-top:18px;color:#777;">提示：浏览器打印时选择“另存为 PDF”。</div>
                     </body></html>
                 `;
@@ -34077,8 +34192,21 @@ ${knowledgeContent.slice(0, 30000)}`;
             if (amountEl) amountEl.value = '';
             if (noteEl) noteEl.value = '';
             if (metaEl) metaEl.textContent = '';
+            const freqEl = document.getElementById('reward-create-frequency');
+            if (freqEl) freqEl.value = 'once';
+            try { syncRewardCreateFrequencyVisibility(); } catch (e) {}
 
             modal.classList.add('show');
+        }
+
+        function syncRewardCreateFrequencyVisibility() {
+            const typeEl = document.getElementById('reward-create-type');
+            const wrap = document.getElementById('reward-create-frequency-wrap');
+            const freqEl = document.getElementById('reward-create-frequency');
+            if (!wrap) return;
+            const isReward = (typeEl?.value || 'reward') === 'reward';
+            wrap.style.display = isReward ? '' : 'none';
+            if (!isReward && freqEl) freqEl.value = 'once';
         }
 
         function closeRewardCreateModal() {
@@ -34147,6 +34275,10 @@ ${knowledgeContent.slice(0, 30000)}`;
                     note: note,
                     amount: amount
                 };
+                const freq = String(document.getElementById('reward-create-frequency')?.value || 'once');
+                if (rpType === '奖励' && freq === 'monthly') {
+                    payload.recurringFrequency = 'monthly';
+                }
                 const data = await HRMS_API.createApproval('reward_punishment', payload);
                 if (!data || data.error) {
                     if (data.error === 'duplicate_pending') {

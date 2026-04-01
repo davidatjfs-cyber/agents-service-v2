@@ -3,6 +3,7 @@
  */
 
 import { calculateStoreRating, calculateEmployeeScore } from './new-scoring-model.js';
+import { inferBrandFromStoreName } from './agents.js';
 import { pool } from './utils/database.js';
 import { safeExecute } from './utils/error-handler.js';
 
@@ -24,7 +25,8 @@ export function registerNewScoringRoutes(app) {
       }
       
       const result = await safeExecute('store_rating_api', async () => {
-        return await calculateStoreRating(store, period);
+        const brand = inferBrandFromStoreName(store);
+        return await calculateStoreRating(store, brand, period);
       });
       
       if (!result) {

@@ -39,6 +39,8 @@ function expandScenarioKeys(scenario) {
 }
 
 const MAX_STRATEGY_ACTIONS = 3;
+const STRATEGY_CACHE_TTL_MS = 60 * 1000;
+const strategyCache = new Map();
 const W = 10000;
 const MEMORY_WEIGHT = 1;
 /** RL 历史调整：action 权重大于 tag（与「三元组」闭环更强相关） */
@@ -229,6 +231,19 @@ export async function getStrategy(scenario, root_causes, context = {}) {
   try {
     const sc = String(scenario || '').trim();
     if (!sc || !Array.isArray(root_causes) || root_causes.length === 0) return null;
+    const cacheKey = JSON.stringify({
+      sc,
+      roots: root_causes.map((r) => String(r?.metric || '')),
+      context: {
+        store_type: ctx?.store_type || null,
+        channel: ctx?.channel || null,
+        time_period: ctx?.time_period || null
+      }
+    });
+    const cached = strategyCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < STRATEGY_CACHE_TTL_MS) {
+      return cached.value;
+    }
     const scenarioKeys = expandScenarioKeys(sc);
     if (!scenarioKeys.length) return null;
 
@@ -331,7 +346,9 @@ export async function getStrategy(scenario, root_causes, context = {}) {
       })
     );
 
-    return { actions: top };
+    const out = { actions: top };
+    strategyCache.set(cacheKey, { ts: Date.now(), value: out });
+    return out;
   } catch (e) {
     logger.warn({ err: e?.message, scenario }, 'getStrategy failed');
     return null;

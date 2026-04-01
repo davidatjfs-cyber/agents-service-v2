@@ -6,6 +6,18 @@
 import { pool } from './utils/database.js';
 import { inferBrandFromStoreName } from './agents.js';
 import { safeExecute, safeErrorLog } from './utils/error-handler.js';
+import {
+  dailyReportIlikePatterns,
+  feishuStoreSearchPatterns,
+  resolveAgentCanonicalStore
+} from './v2-store-alignment.js';
+
+/** 评分用门店匹配：合并日报口径 + 飞书/目标表常见简称（洪潮目标行常为「洪潮久光」等，仅 daily 模式会漏） */
+function scoringStoreMatchPatterns(storeLabel) {
+  const s = String(storeLabel || '').trim();
+  if (!s) return ['%'];
+  return [...new Set([...dailyReportIlikePatterns(s), ...feishuStoreSearchPatterns(s)])];
+}
 
 // ─────────────────────────────────────────────
 // 1. 门店评级模型配置
@@ -164,16 +176,25 @@ async function getRuntimeEmployeeRatingConfig() {
 // ─────────────────────────────────────────────
 export async function calculateStoreRating(store, brand, period) {
   try {
+    const canon = String(resolveAgentCanonicalStore(String(store || '').trim()) || String(store || '').trim()).trim();
+    if (!canon) {
+      return { rating: null, reason: '门店名为空' };
+    }
+    const brandUse = String(brand || '').trim() || inferBrandFromStoreName(canon);
+
     // 1. 新门店原规则：第一个月不评级
     // 为满足 4/1 起正式执行时「门店评级必须能显示」，这里不再早退。
     // （仍保留 checkIfNewStore 供后续扩展/审计使用）
-    await checkIfNewStore(store, period);
+    await checkIfNewStore(canon, period);
     
     // 2. 获取实际营业额（从daily_reports汇总）
-    const actualRevenue = await getMonthlyActualRevenue(store, period);
+    const actualRevenue = await getMonthlyActualRevenue(canon, period);
     
-    // 3. 获取目标营业额（从revenue_targets）
-    const targetRevenue = await getMonthlyTargetRevenue(store, period);
+    // 3. 获取目标营业额（从revenue_targets；门店名多种写法 + 按品牌回退）
+    let targetRevenue = await getMonthlyTargetRevenue(canon, period);
+    if (!targetRevenue || targetRevenue <= 0) {
+      targetRevenue = await getMonthlyTargetRevenueByBrand(brandUse, period, canon);
+    }
     
     if (!targetRevenue || targetRevenue <= 0) {
       return { rating: null, reason: '目标营业额未设置或为0' };
@@ -188,8 +209,8 @@ export async function calculateStoreRating(store, brand, period) {
     else if (achievementRate > 90) rating = 'B';
     else if (achievementRate >= 85) rating = 'C';
     
-    // 6. 保存结果
-    await saveStoreRating(store, brand, period, actualRevenue, targetRevenue, achievementRate, rating);
+    // 6. 保存结果（统一规范门店名，避免飞书简称与日报全称各写一行导致「我的档案」读不到）
+    await saveStoreRating(canon, brandUse, period, actualRevenue, targetRevenue, achievementRate, rating);
     
     return { rating, achievementRate, actualRevenue, targetRevenue };
     
@@ -402,12 +423,13 @@ async function checkIfNewStore(store, period) {
   const [year, month] = String(period || '').split('-');
   if (!year || !month) return true;
   const startDate = `${year}-${month}-01`;
+  const pats = scoringStoreMatchPatterns(store);
   const result = await pool().query(
     `SELECT COUNT(*)::int AS count
      FROM daily_reports
-     WHERE store = $1
-       AND date < $2::date`,
-    [store, startDate]
+     WHERE date < $1::date
+       AND store ILIKE ANY($2::text[])`,
+    [startDate, pats]
   );
 
   return Number(result.rows[0]?.count || 0) === 0;
@@ -418,24 +440,46 @@ async function getMonthlyActualRevenue(store, period) {
   const [year, month] = period.split('-');
   const startDate = `${year}-${month}-01`;
   const endDate = `${year}-${month}-31`;
-  
+  const pats = scoringStoreMatchPatterns(store);
+
   const result = await pool().query(`
     SELECT COALESCE(SUM(actual_revenue), 0) as total_revenue
     FROM daily_reports 
-    WHERE store = $1 AND date >= $2 AND date <= $3
-  `, [store, startDate, endDate]);
+    WHERE date >= $1 AND date <= $2
+      AND store ILIKE ANY($3::text[])
+  `, [startDate, endDate, pats]);
   
   return Number(result.rows[0]?.total_revenue || 0);
 }
 
 // 获取月度目标营业额
 async function getMonthlyTargetRevenue(store, period) {
+  const pats = scoringStoreMatchPatterns(store);
   const result = await pool().query(`
     SELECT target_revenue FROM revenue_targets 
-    WHERE store = $1 AND period = $2
-  `, [store, period]);
+    WHERE period = $1 AND store ILIKE ANY($2::text[])
+    ORDER BY LENGTH(store) DESC NULLS LAST
+    LIMIT 1
+  `, [period, pats]);
   
   return Number(result.rows[0]?.target_revenue || 0);
+}
+
+/** revenue_targets 仅按品牌维护一行或简称与规范店名不一致时的兜底 */
+async function getMonthlyTargetRevenueByBrand(brand, period, canonStore) {
+  const b = String(brand || '').trim();
+  if (!b) return 0;
+  const needle = String(canonStore || '').replace(/%/g, '').trim();
+  const r = await pool().query(
+    `SELECT target_revenue, store FROM revenue_targets
+     WHERE period = $1 AND brand = $2
+     ORDER BY
+       CASE WHEN $3 <> '' AND store ILIKE '%' || $3 || '%' THEN 0 ELSE 1 END,
+       LENGTH(store) DESC NULLS LAST
+     LIMIT 1`,
+    [period, b, needle]
+  );
+  return Number(r.rows[0]?.target_revenue || 0);
 }
 
 // 保存门店评级

@@ -1,10 +1,46 @@
 import axios from 'axios';
 import crypto from 'crypto';
+import dns from 'node:dns';
 import { query } from '../utils/db.js';
+import { anomalyRuleLabelZh } from '../utils/anomaly-labels.js';
 import { logger } from '../utils/logger.js';
 import { isMarketingPlanningIntent } from '../utils/marketing-intent.js';
 import { isExternalEnabled } from '../utils/safety.js';
-import { callLLM } from './llm-provider.js';
+import { callLLM, callVisionLLM } from './llm-provider.js';
+
+/** ECS 偶发 resolv 异常导致 ENOTFOUND：可用 FEISHU_DNS_SERVERS=223.5.5.5,114.114.114.114 */
+const _dnsList = String(process.env.FEISHU_DNS_SERVERS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+const _appEnv = String(process.env.APP_ENV || process.env.NODE_ENV || '').trim().toLowerCase();
+const _useProdDnsDefault =
+  _appEnv === 'production' ||
+  _appEnv === 'prod' ||
+  String(process.env.CONFIRM_PRODUCTION || '').trim().toLowerCase() === 'true';
+if (_dnsList.length) {
+  try {
+    dns.setServers(_dnsList);
+    logger.info({ servers: _dnsList }, 'Feishu: custom DNS resolvers');
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'Feishu: dns.setServers failed');
+  }
+} else if (_useProdDnsDefault) {
+  try {
+    dns.setServers(['223.5.5.5', '114.114.114.114', '8.8.8.8']);
+    logger.info('Feishu: production default public DNS (223.5.5.5 / 114.114.114.114 / 8.8.8.8)');
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'Feishu: default dns.setServers failed');
+  }
+}
+if (String(process.env.FEISHU_IPV4_FIRST || '').toLowerCase() === 'true') {
+  try {
+    dns.setDefaultResultOrder('ipv4first');
+    logger.info('Feishu: DNS result order ipv4first');
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'Feishu: setDefaultResultOrder failed');
+  }
+}
 
 // ── 飞书加密消息解密（从 V1 移植） ──
 const FEISHU_ENCRYPT_KEY = process.env.FEISHU_ENCRYPT_KEY || '';
@@ -28,20 +64,47 @@ function decryptFeishuEncryptPayload(encryptValue) {
   return decrypted;
 }
 
-const BASE = 'https://open.feishu.cn/open-apis';
+let BASE = process.env.FEISHU_OPEN_BASE || 'https://open.feishu.cn/open-apis';
+const BASE_CANDIDATES = [
+  BASE,
+  'https://open.larksuite.com/open-apis',
+  'https://open.feishu.cn/open-apis'
+].filter((v, i, arr) => v && arr.indexOf(v) === i);
 const APP_ID = process.env.FEISHU_APP_ID || process.env.LARK_APP_ID || '';
 const APP_SECRET = process.env.FEISHU_APP_SECRET || process.env.LARK_APP_SECRET || '';
 let _token = '', _tokenExp = 0;
 
+let _warnedExternalOff = false;
 export async function getTenantToken() {
-  if (!isExternalEnabled()) return '';
+  if (!isExternalEnabled()) {
+    if (!_warnedExternalOff) {
+      logger.error('getTenantToken: ENABLE_EXTERNAL!=true，飞书外呼已关闭，无法回复消息');
+      _warnedExternalOff = true;
+    }
+    return '';
+  }
   if (_token && Date.now() < _tokenExp) return _token;
   if (!APP_ID || !APP_SECRET) return '';
-  try {
-    const r = await axios.post(BASE + '/auth/v3/tenant_access_token/internal', { app_id: APP_ID, app_secret: APP_SECRET }, { timeout: 10000 });
-    _token = r.data?.tenant_access_token || ''; _tokenExp = Date.now() + (r.data?.expire || 7000) * 1000;
-    return _token;
-  } catch (e) { logger.error({ err: e?.message }, 'token fail'); return ''; }
+  for (const candidate of BASE_CANDIDATES) {
+    try {
+      const r = await axios.post(
+        candidate + '/auth/v3/tenant_access_token/internal',
+        { app_id: APP_ID, app_secret: APP_SECRET },
+        { timeout: 10000 }
+      );
+      _token = r.data?.tenant_access_token || '';
+      _tokenExp = Date.now() + (r.data?.expire || 7000) * 1000;
+      BASE = candidate;
+      if (_token) {
+        logger.info({ base: candidate }, 'tenant token acquired');
+      }
+      return _token;
+    } catch (e) {
+      logger.warn({ err: e?.message, base: candidate }, 'tenant token attempt failed');
+    }
+  }
+  logger.error('token fail');
+  return '';
 }
 
 export async function sendText(receiveId, text, idType = 'open_id') {
@@ -219,7 +282,13 @@ export async function pushAnomalyAlert(store, anomalyKey, severity, detail, task
   for (const u of (users.rows || [])) {
     const card = buildAnomalyCard(store, anomalyKey, severity, detail, taskId);
     let r = await sendCard(u.open_id, card);
-    if (!r.ok) r = await sendText(u.open_id, emoji + ' 【异常告警】' + store + '\n类型: ' + anomalyKey + '\n严重度: ' + severity + '\n详情: ' + detail);
+    if (!r.ok) {
+      const typeZh = anomalyRuleLabelZh(anomalyKey);
+      r = await sendText(
+        u.open_id,
+        emoji + ' 【异常告警】' + store + '\n类型: ' + typeZh + '\n严重度: ' + severity + '\n详情: ' + detail
+      );
+    }
     results.push(r);
   }
   return { ok: true, sent: results.length };
@@ -227,6 +296,7 @@ export async function pushAnomalyAlert(store, anomalyKey, severity, detail, task
 
 // ── Card Template Builders ──
 export function buildAnomalyCard(store, anomalyKey, severity, detail, taskId) {
+  const typeZh = anomalyRuleLabelZh(anomalyKey);
   const sevColor = severity === 'high' ? 'red' : severity === 'medium' ? 'orange' : 'yellow';
   const sevEmoji = severity === 'high' ? '🚨' : '⚠️';
   const taskHint = taskId
@@ -235,7 +305,7 @@ export function buildAnomalyCard(store, anomalyKey, severity, detail, taskId) {
   // 食安类需展示「来源表 + 日期 + 原文摘录」，字数显著多于其它异常
   const detailLimit = anomalyKey === 'food_safety' ? 3800 : 900;
   const elements = [
-    { tag: 'div', text: { tag: 'lark_md', content: `**门店**: ${store}\n**类型**: ${anomalyKey}\n**严重度**: ${sevEmoji} ${severity}` } },
+    { tag: 'div', text: { tag: 'lark_md', content: `**门店**: ${store}\n**类型**: ${typeZh}\n**严重度**: ${sevEmoji} ${severity}` } },
     { tag: 'div', text: { tag: 'lark_md', content: `**详情**: ${(detail || '').slice(0, detailLimit)}${taskHint}` } },
     { tag: 'hr' },
     { tag: 'note', elements: [{ tag: 'plain_text', content: '⏰ 催办规则：下发后每间隔1小时提醒，共3次；仍未有效闭环将提交HR记入绩效' }] }
@@ -695,8 +765,15 @@ export async function handleWebhookEvent(body) {
           );
 
           // 非阻塞：异步进行回复质量审核
+          const hasTaskImage = !!String(imageKey || '').trim();
           setImmediate(() => {
-            reviewTaskReply(taskId, responseText, msgType === 'image' && !!imageKey, msg?.message_id || null).catch(() => {});
+            reviewTaskReply(
+              taskId,
+              responseText,
+              hasTaskImage,
+              msg?.message_id || null,
+              hasTaskImage ? String(imageKey).trim() : null
+            ).catch(() => {});
           });
 
           return { ok: true, eventType, mode: 'task_reply_captured', taskId };
@@ -783,7 +860,15 @@ export async function handleWebhookEvent(body) {
     }
 
     const { processMessage } = await import('./message-pipeline.js');
-    const result = await processMessage({ text, messageId: msg?.message_id, chatId: msg?.chat_id, userId: openId, chatType, hasImage: msgType === 'image' });
+    const result = await processMessage({
+      text,
+      messageId: msg?.message_id,
+      chatId: msg?.chat_id,
+      userId: openId,
+      chatType,
+      hasImage: msgType === 'image',
+      eventId: eventId || undefined
+    });
     return { ok: true, eventType, ...result };
   }
   return { toast: { type: 'info', content: 'ok' } };
@@ -899,8 +984,9 @@ async function ensureReviewColumns() {
  * @param {string|null} responseText  - 回复文字
  * @param {boolean} hasImages         - 是否附带图片
  * @param {string|null} replyMessageId - 用于 replyMsg 线程回复
+ * @param {string|null} imageKey - 飞书图片 resource key（有图时必传，用于下载并做现场相关性校验）
  */
-export async function reviewTaskReply(taskId, responseText, hasImages, replyMessageId) {
+export async function reviewTaskReply(taskId, responseText, hasImages, replyMessageId, imageKey = null) {
   await ensureReviewColumns();
   try {
     // 获取任务详情
@@ -922,37 +1008,101 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
     let reason = '';
     let feedback = '';
 
-    if (isTooShort || isPlaceholder) {
+    /** 附图须与餐饮门店任务场景相关，禁止用无关图「凑数」通过 */
+    let imageRelevant = true;
+    let imageVisionReason = '';
+    if (hasImages) {
+      const ik = String(imageKey || '').trim();
+      if (!replyMessageId || !ik) {
+        imageRelevant = false;
+        imageVisionReason = '无法校验图片，请使用飞书直接发送图片消息重新提交';
+      } else {
+        const dataUrl = await downloadImage(replyMessageId, ik);
+        if (!dataUrl) {
+          imageRelevant = false;
+          imageVisionReason = '图片下载失败，请重新上传';
+        } else {
+          const vPrompt =
+            `你是餐饮连锁总部质检。判断下面图片是否可作为本条门店任务的「有效现场佐证」。
+
+任务标题：${String(task.title || '未知').slice(0, 200)}
+任务类型：${String(task.source || '未知')}
+任务详情：${String(task.detail || '').slice(0, 400)}
+门店：${String(task.store || '')}
+
+判定规则：
+- 与餐饮门店现场强相关（菜品、档口、后厨、餐桌、试味、清洁、厨房设备、食材、价签、门店环境、员工工装等）→ relevant=true
+- 明显无关（家用呼吸机/医疗设备、纯风景、表情包、与餐饮无关的商品特写、电脑/手机截图、汽车、宠物等）→ relevant=false
+- 不确定时偏严格，判 relevant=false
+
+只输出 JSON，不要其他文字：
+{"relevant":true或false,"reason":"一句话中文说明"}`;
+          const vr = await callVisionLLM(dataUrl, vPrompt);
+          if (!vr.ok || !String(vr.content || '').trim()) {
+            imageRelevant = false;
+            imageVisionReason = '图片识别失败或服务不可用，请稍后重试';
+          } else {
+            const vraw = String(vr.content || '').trim().replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+            try {
+              const vp = JSON.parse(vraw);
+              // 必须显式 relevant:true，缺字段或模糊输出一律不通过（防止模型省略字段时误放行）
+              imageRelevant = vp.relevant === true;
+              imageVisionReason = String(vp.reason || '').trim();
+            } catch {
+              imageRelevant = false;
+              imageVisionReason = '图片审核结果无法解析，请重新上传清晰现场照片';
+            }
+          }
+        }
+      }
+    }
+
+    if (hasImages && !imageRelevant) {
+      passed = false;
+      reason = imageVisionReason || '附图与任务现场不相关，不能作为有效凭证';
+      feedback =
+        '请上传与任务相关的门店现场照片（如试味、档口出品、后厨、餐品、环境整改前后等）。勿使用无关图片或网图凑数。';
+    } else if (isTooShort || isPlaceholder) {
       // 规则直接判定：明显不合格
       passed = false;
       reason = isPlaceholder ? '回复仅为占位词，无实质内容' : '回复文字过短（<15字）且无图片';
-      feedback = `回复需包含：①实际情况描述（至少20字）②处理措施③若有现场问题请附照片。`;
+      feedback = `回复需包含：①实际情况描述（至少20字）②处理措施③现场问题须附**与任务相关的**照片。`;
     } else {
-      // LLM 语义审核
-      try {
-        const prompt = `任务标题：${task.title || '未知'}\n任务类型：${task.source || '未知'}\n任务详情：${(task.detail || '').slice(0, 200)}\n\n负责人回复：\n${t.slice(0, 800)}${hasImages ? '\n（附有图片）' : '\n（无图片）'}`;
-        const r = await callLLM([
-          { role: 'system', content: `你是HRMS任务审核员，对门店负责人的任务卡回复进行质量审核。
+      const trivialText = t.length < 12;
+      if (hasImages && imageRelevant && trivialText) {
+        passed = true;
+        reason = imageVisionReason ? `附图已通过现场校验：${imageVisionReason}` : '附图已通过现场相关性校验';
+      } else {
+        // LLM 语义审核（已带图且非琐碎文字时，仍审文字是否具体）
+        try {
+          const imgNote = hasImages
+            ? `\n（已附图，且图片已通过「门店现场相关性」校验${imageVisionReason ? `：${imageVisionReason}` : ''}）`
+            : '\n（无图片）';
+          const prompt = `任务标题：${task.title || '未知'}\n任务类型：${task.source || '未知'}\n任务详情：${(task.detail || '').slice(0, 200)}\n\n负责人回复：\n${t.slice(0, 800)}${imgNote}`;
+          const r = await callLLM([
+            { role: 'system', content: `你是HRMS任务审核员，对门店负责人的任务卡回复进行质量审核。
 
 合格标准（必须全部满足）：
 1. 内容具体，描述了实际情况（非泛泛而谈）
 2. 有具体处理措施或行动结果
-3. 若是巡检/抽检/异常类任务，须说明巡检发现和处理结果
-4. 字数 ≥ 20 字 OR 附有图片
+3. 若是巡检/抽检/试味/异常类任务，须说明发现与处理结果
+4. 若仅声称「有图」但文字明显敷衍、与任务无关，判不通过
+5. 无附图时：字数须充足（≥20字）且满足 1–3
 
 输出 JSON（不要输出其他内容）：
 {"passed": true或false, "reason": "一句话说明", "feedback": "给用户的改进建议（不合格时才填，合格时空字符串）"}` },
-          { role: 'user', content: prompt }
-        ], { temperature: 0.1, max_tokens: 200, purpose: 'routing' });
-        const raw = String(r.content || '').trim().replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
-        const parsed = JSON.parse(raw);
-        passed = !!parsed.passed;
-        reason = parsed.reason || '';
-        feedback = parsed.feedback || '';
-      } catch (_) {
-        // LLM 审核失败 → 宽松处理，默认通过
-        passed = true;
-        reason = '审核服务暂时不可用，默认通过';
+            { role: 'user', content: prompt }
+          ], { temperature: 0.1, max_tokens: 200, purpose: 'routing' });
+          const raw = String(r.content || '').trim().replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+          const parsed = JSON.parse(raw);
+          passed = !!parsed.passed;
+          reason = parsed.reason || '';
+          feedback = parsed.feedback || '';
+        } catch (_) {
+          passed = false;
+          reason = '智能审核暂时不可用，请稍后重新提交';
+          feedback = '若多次失败请联系总部信息部；请勿使用无关图片代替文字说明。';
+        }
       }
     }
 

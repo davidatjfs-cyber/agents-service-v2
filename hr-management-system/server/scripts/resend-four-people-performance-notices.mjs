@@ -116,7 +116,7 @@ for (const score of rows.rows || []) {
     .replace(/\bexecution_rating\b/g, '执行力');
 
   const msgText =
-    `📊 绩效考核通知\n\n` +
+    `📊 绩效考核日报\n\n` +
     `${fu.name || score.name || score.username}，你好！以下是你在${score.store}（${score.brand}）的绩效考核结果：\n\n` +
     `📋 岗位：${roleLabel}\n` +
     `🗓️ ${periodLabelFrom(score.period)}\n` +

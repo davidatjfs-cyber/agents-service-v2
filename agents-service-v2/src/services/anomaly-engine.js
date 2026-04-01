@@ -6,8 +6,7 @@
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { getAnomalyRules, toFeishuStoreName, getBrandForStore as getBrandFromConfig } from './config-service.js';
-import { onAnomalyTriggered } from './agent-collaboration.js';
-import { runBiAnomalyNotifyPipeline } from './anomaly-notify-pipeline.js';
+import { enqueueNotifyJob, enqueueCollabJob } from './anomaly-queue.js';
 import {
   fetchMergedTableVisitEntries,
   tableVisitEntryIsDissatisfied,
@@ -17,6 +16,7 @@ import {
 } from './deterministic-replies.js';
 import { expandAgentStoreLabels } from '../config/store-mapping.js';
 import { shanghaiLastCompletedWeekBounds } from '../utils/anomaly-week-bounds.js';
+import { ANOMALY_RULES } from '../config/anomaly-rules.js';
 
 // ─── 工具函数 ───
 function getMonthDays(year, month) {
@@ -38,6 +38,12 @@ function getShanghaiYmdParts(date = new Date()) {
 
 function shanghaiTodayYmd() {
   return getShanghaiYmdParts().ymd;
+}
+
+/** 与 anomaly-rules.js 一致：防止 DB 将 monthly/weekly 误配为 daily 后在巡检日频重复触发 */
+function canonicalAnomalyFrequency(ruleKey) {
+  const r = ANOMALY_RULES.find((x) => x.key === ruleKey);
+  return r?.frequency || null;
 }
 
 function addDaysYmdShanghai(ymd, deltaDays) {
@@ -843,10 +849,14 @@ export async function runAnomalyChecks(frequency, stores) {
   const allRules = await getAnomalyRules();
   if (!allRules) return [{ error: 'anomaly_rules config not found in DB' }];
 
-  // 按frequency过滤启用的规则
-  const ruleEntries = Object.entries(allRules).filter(
-    ([, cfg]) => cfg.enabled && cfg.frequency === frequency
-  );
+  // 按frequency过滤启用的规则；并以静态 anomaly-rules 为准校正频率（避免 gross_margin 等被错配成 daily）
+  const ruleEntries = Object.entries(allRules).filter(([ruleKey, cfg]) => {
+    if (!cfg?.enabled) return false;
+    if (cfg.frequency !== frequency) return false;
+    const canon = canonicalAnomalyFrequency(ruleKey);
+    if (canon && canon !== frequency) return false;
+    return true;
+  });
   const results = [];
 
   for (const store of stores) {
@@ -877,6 +887,32 @@ export async function runAnomalyChecks(frequency, stores) {
           }
 
           const isDeferred = !!result.deferred;
+
+          // 月维度（毛利率、月营收达成）：同一统计期只正式落库/通知一次，防止错误调度重复派单
+          if (
+            result.triggered &&
+            !isDeferred &&
+            (ruleKey === 'gross_margin' || ruleKey === 'revenue_achievement_monthly')
+          ) {
+            const dupFinal = await query(
+              `SELECT 1 FROM anomaly_triggers
+               WHERE anomaly_key = $1 AND store = $2 AND trigger_date = $3::date
+                 AND COALESCE(status, '') NOT IN ('pending_data', 'superseded')
+               LIMIT 1`,
+              [ruleKey, store, triggerDate]
+            );
+            if (dupFinal.rows?.length) {
+              results.push({
+                store,
+                rule: ruleKey,
+                name: ruleCfg.name,
+                ...result,
+                skipped: 'duplicate_period'
+              });
+              continue;
+            }
+          }
+
           if (isDeferred) {
             // 10号前仅落库为 pending_data，避免提前计分/派单；同店同规则同触发日只保留一条
             const dupPending = await query(
@@ -940,18 +976,23 @@ export async function runAnomalyChecks(frequency, stores) {
           logger.warn({ anomaly: ruleKey, store, severity: result.severity, detail: result.detail }, 'Anomaly triggered');
 
           // 立刻通知责任人 + 建任务 + Planner + OP 跟进（不再等固定巡检时刻）
-          runBiAnomalyNotifyPipeline({
+          enqueueNotifyJob({
             store,
             brand,
             ruleKey,
             severity: result.severity,
             detail: result.detail,
             value: result.value
-          }).catch((e) => logger.warn({ err: e?.message, rule: ruleKey, store }, 'bi anomaly pipeline failed'));
+          }).catch((e) => logger.warn({ err: e?.message, rule: ruleKey, store }, 'bi anomaly queue enqueue failed'));
 
           // 触发Agent协作链（营销类异常等）
-          onAnomalyTriggered(ruleKey, store, result.severity, result.detail, result.value).catch((e) =>
-            logger.warn({ err: e?.message, rule: ruleKey, store }, 'collab chain err'));
+          enqueueCollabJob({
+            ruleKey,
+            store,
+            severity: result.severity,
+            detail: result.detail,
+            value: result.value
+          }).catch((e) => logger.warn({ err: e?.message, rule: ruleKey, store }, 'collab queue enqueue failed'));
         }
         results.push({ store, rule: ruleKey, name: ruleCfg.name, ...result });
       } catch (err) {

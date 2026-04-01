@@ -11,6 +11,7 @@ import { logger } from '../utils/logger.js';
 import { ANOMALY_RULES } from '../config/anomaly-rules.js';
 import { getBrandForStore, getAnomalyRules } from './config-service.js';
 import { sendCard, sendText, buildAnomalyCard } from './feishu-client.js';
+import { anomalyRuleLabelZh } from '../utils/anomaly-labels.js';
 import { planAndExecute } from './master-planner.js';
 
 function storeKey(v) {
@@ -144,7 +145,8 @@ export async function runBiAnomalyNotifyPipeline({
 
   const taskId = `ANO-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
 
-  const title = `${store} · BI异常 · ${ruleKey}`;
+  const typeZh = anomalyRuleLabelZh(ruleKey);
+  const title = `${store} · BI异常 · ${typeZh}`;
   const detailCap = ruleKey === 'food_safety' ? 5200 : 1800;
   let initialDetail = String(detail || '').slice(0, detailCap);
   if (ruleKey === 'food_safety') {
@@ -160,7 +162,7 @@ export async function runBiAnomalyNotifyPipeline({
       const emoji = severity === 'high' ? '🚨' : '⚠️';
       r = await sendText(
         u.open_id,
-        `${emoji} 【BI异常｜立刻处理】${store}\n类型: ${ruleKey}\n严重度: ${severity}\n任务ID: ${taskId}\n\n${initialDetail.slice(0, 1200)}`,
+        `${emoji} 【BI异常｜立刻处理】${store}\n类型: ${typeZh}\n严重度: ${severity}\n任务ID: ${taskId}\n\n${initialDetail.slice(0, 1200)}`,
         'open_id'
       );
     }

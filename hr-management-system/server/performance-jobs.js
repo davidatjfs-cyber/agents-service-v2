@@ -1,7 +1,7 @@
 /**
  * 月度绩效闭环 + 菜品优化报告（飞书卡片）
- * - 每月 1 日 01:00（上海）：上月 employee_scores + store_ratings + agent_scores(YYYY-MM)
- * - 每月 1 日 08:00（上海）：绩效摘要文本 + **上月整月**菜品优化月报（卡片）→ admin/hq_manager
+ * - 每月 10 日 01:00（上海）：上月 employee_scores + store_ratings + agent_scores(YYYY-MM)（与毛利率等关账口径对齐）
+ * - 每月 10 日 08:00（上海）：绩效摘要文本 + **上月整月**菜品优化月报（卡片）→ admin/hq_manager
  * - 每周一 08:00（上海）：**上周 Mon–Sun** 菜品优化周报（卡片）→ admin/hq_manager
  *
  * 菜品四象限（按门店 × 堂食/外卖 分别计算）：
@@ -17,6 +17,26 @@ import {
   inferBrandFromStoreName
 } from './agents.js';
 import { calculateStoreRating, calculateEmployeeScore } from './new-scoring-model.js';
+import {
+  dailyReportIlikePatterns,
+  feishuStoreSearchPatterns,
+  resolveAgentCanonicalStore
+} from './v2-store-alignment.js';
+
+function roleLabelZh(r) {
+  const x = String(r || '').trim();
+  if (x === 'store_manager') return '店长';
+  if (x === 'store_production_manager') return '出品经理';
+  return x || '未知';
+}
+
+/** 飞书展示：避免「店—」与「店一」混淆，缺数据用「暂无」 */
+function fmtStoreLevelLabel(v) {
+  const s = String(v ?? '').trim();
+  if (!s || s === '—' || s === '-') return '暂无';
+  if (/^[ABCD]$/i.test(s)) return `店${s.toUpperCase()}`;
+  return s;
+}
 
 /** 上海日历与钟点（避免 new Date(toLocaleString) 解析问题） */
 function shanghaiCalendar(now = new Date()) {
@@ -124,10 +144,32 @@ export async function runMonthlyPerformanceClose() {
     const store = u.store;
     const brand = inferBrandFromStoreName(store);
     const es = await calculateEmployeeScore(store, u.username, u.role, period);
-    const sr = await pool().query(
-      `SELECT rating FROM store_ratings WHERE store = $1 AND period = $2 LIMIT 1`,
-      [store, period]
-    );
+    const canon = String(resolveAgentCanonicalStore(store) || store).trim();
+    const pats = [...new Set([
+      ...dailyReportIlikePatterns(store),
+      ...feishuStoreSearchPatterns(store),
+      ...dailyReportIlikePatterns(canon),
+      ...feishuStoreSearchPatterns(canon)
+    ])];
+    let sr = { rows: [] };
+    for (const key of [canon, store].filter((k, i, a) => k && a.indexOf(k) === i)) {
+      sr = await pool().query(
+        `SELECT rating FROM store_ratings WHERE store = $1 AND period = $2 LIMIT 1`,
+        [key, period]
+      );
+      if (sr.rows?.length) break;
+    }
+    if (!sr.rows?.length) {
+      sr = await pool().query(
+        `SELECT rating FROM store_ratings
+         WHERE period = $1 AND store ILIKE ANY($2::text[])
+         ORDER BY (actual_revenue > 0) DESC,
+           actual_revenue DESC NULLS LAST,
+           LENGTH(store) DESC NULLS LAST
+         LIMIT 1`,
+        [period, pats]
+      );
+    }
     const storeRating = sr.rows?.[0]?.rating ?? null;
     const breakdown = {
       execution_rating: es.execution_rating,
@@ -136,7 +178,7 @@ export async function runMonthlyPerformanceClose() {
       store_rating: storeRating
     };
     const deductions = [];
-    const summary = `月度自动评分（${period}）：执行力 ${es.execution_rating || '—'}，态度 ${es.attitude_rating || '—'}，能力 ${es.ability_rating || '—'}，门店 ${storeRating || '—'}。`;
+    const summary = `月度自动评分（${period}）：执行力 ${es.execution_rating || '—'}，态度 ${es.attitude_rating || '—'}，能力 ${es.ability_rating || '—'}，门店 ${fmtStoreLevelLabel(storeRating)}。`;
     try {
       await pool().query(
         `INSERT INTO agent_scores (brand, store, username, name, role, period, score_model, total_score, breakdown, deductions, summary)
@@ -191,7 +233,7 @@ async function sendFeishuPerformanceDigest(period) {
       `执行力：${b.execution_rating || '—'}\n` +
       `工作态度：${b.attitude_rating || '—'}\n` +
       `工作能力：${b.ability_rating || '—'}\n` +
-      `门店级别：${b.store_rating || '—'}\n\n` +
+      `门店级别：${fmtStoreLevelLabel(b.store_rating)}\n\n` +
       `${row.summary || ''}\n\n如有异议请回复「申诉」说明原因。`;
     await sendLarkMessage(fu.open_id, text).catch(() => {});
   }
@@ -201,7 +243,7 @@ async function sendFeishuPerformanceDigest(period) {
   );
   const lines = (rows.rows || []).map(
     (r) =>
-      `• ${r.store} · ${r.name || r.username}（${r.role}）：${r.total_score}分 执行${r.breakdown?.execution_rating || '—'} 态度${r.breakdown?.attitude_rating || '—'} 能力${r.breakdown?.ability_rating || '—'} 店${r.breakdown?.store_rating || '—'}`
+      `• ${r.store} · ${r.name || r.username}（${roleLabelZh(r.role)}）：${r.total_score}分 执行${r.breakdown?.execution_rating || '—'} 态度${r.breakdown?.attitude_rating || '—'} 能力${r.breakdown?.ability_rating || '—'} ${fmtStoreLevelLabel(r.breakdown?.store_rating)}`
   );
   const digest = `${title} — 全员汇总\n\n${lines.join('\n') || '无记录'}`;
   for (const h of hq.rows || []) {
@@ -488,7 +530,7 @@ export function startHrmsPerformanceJobs() {
       const { y, m, d, hour, minute } = cal;
       const slotBase = `${y}-${m}-${d}_${hour}`;
 
-      if (d === 1 && hour === 1 && minute < 12) {
+      if (d === 10 && hour === 1 && minute < 12) {
         if (_slotMonthlyCalc !== slotBase) {
           _slotMonthlyCalc = slotBase;
           await runMonthlyPerformanceClose();
@@ -496,7 +538,7 @@ export function startHrmsPerformanceJobs() {
       }
 
       if (hour === 8 && minute < 12) {
-        if (d === 1) {
+        if (d === 10) {
           if (_slotMonthlyPush !== slotBase) {
             _slotMonthlyPush = slotBase;
             const period = prevMonthPeriod(cal);
@@ -524,6 +566,6 @@ export function startHrmsPerformanceJobs() {
     }
   }, 5 * 60 * 1000);
   console.log(
-    '[perf-jobs] scheduler on (5m tick): monthly close 1st 01:00; digest+monthly dish 1st 08:00; weekly dish Mon 08:00–11:59 (Asia/Shanghai)'
+    '[perf-jobs] scheduler on (5m tick): monthly close 10th 01:00; digest+monthly dish 10th 08:00; weekly dish Mon 08:00–11:59 (Asia/Shanghai)'
   );
 }

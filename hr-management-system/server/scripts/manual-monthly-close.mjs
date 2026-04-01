@@ -11,6 +11,11 @@ import { Pool } from 'pg';
 
 import { setPool, inferBrandFromStoreName } from '../agents.js';
 import { calculateStoreRating, calculateEmployeeScore } from '../new-scoring-model.js';
+import {
+  dailyReportIlikePatterns,
+  feishuStoreSearchPatterns,
+  resolveAgentCanonicalStore
+} from '../v2-store-alignment.js';
 
 function normalizeStoreKey(s) {
   return String(s || '')
@@ -58,10 +63,32 @@ async function main() {
     const brand = inferBrandFromStoreName(store);
     const es = await calculateEmployeeScore(store, u.username, u.role, period);
 
-    const sr = await pgPool.query(
-      `SELECT rating FROM store_ratings WHERE store = $1 AND period = $2 LIMIT 1`,
-      [store, period]
-    );
+    const canon = String(resolveAgentCanonicalStore(store) || store).trim();
+    const pats = [...new Set([
+      ...dailyReportIlikePatterns(store),
+      ...feishuStoreSearchPatterns(store),
+      ...dailyReportIlikePatterns(canon),
+      ...feishuStoreSearchPatterns(canon)
+    ])];
+    let sr = { rows: [] };
+    for (const key of [canon, store].filter((k, i, a) => k && a.indexOf(k) === i)) {
+      sr = await pgPool.query(
+        `SELECT rating FROM store_ratings WHERE store = $1 AND period = $2 LIMIT 1`,
+        [key, period]
+      );
+      if (sr.rows?.length) break;
+    }
+    if (!sr.rows?.length) {
+      sr = await pgPool.query(
+        `SELECT rating FROM store_ratings
+         WHERE period = $1 AND store ILIKE ANY($2::text[])
+         ORDER BY (actual_revenue > 0) DESC,
+           actual_revenue DESC NULLS LAST,
+           LENGTH(store) DESC NULLS LAST
+         LIMIT 1`,
+        [period, pats]
+      );
+    }
     const storeRating = sr.rows?.[0]?.rating ?? null;
 
     const breakdown = {

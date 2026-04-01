@@ -167,11 +167,8 @@ async function checkAndProcessPendingReply(openId, text, messageId) {
     logger.info({ openId, taskId, replyLen: replyContent.length }, 'pending reply processed → task pending_review');
     // 确认消息
     const confirmMsg = `✅ 已收到您对任务 ${taskId} 的整改回复，已提交审核。系统将跟踪直至审核通过。`;
-    if (messageId) {
-      await replyMsg(messageId, confirmMsg).catch(() => {});
-    } else {
-      await sendText(openId, confirmMsg, 'open_id').catch(() => {});
-    }
+    const dPc = await sendReplyWithFallback({ messageId, userId: openId, chatId: null }, confirmMsg, 'pending_reply');
+    if (!dPc.ok) logger.error({ openId, taskId }, 'pending_reply: confirm message deliver failed');
     return taskId;
   } catch (e) {
     logger.warn({ err: e?.message, openId }, 'checkAndProcessPendingReply error');
@@ -179,8 +176,45 @@ async function checkAndProcessPendingReply(openId, text, messageId) {
   }
 }
 
+/** reply 失败时降级为 sendText（私聊优先 open_id，再 chat_id）；仅以飞书 API 成功为准，避免“逻辑成功但没收件”。 */
+async function sendReplyWithFallback(ev, text, logTag = 'reply') {
+  const mid = ev?.messageId ? String(ev.messageId).trim() : '';
+  const cid = ev?.chatId ? String(ev.chatId).trim() : '';
+  const uid = ev?.userId ? String(ev.userId).trim() : '';
+  if (!String(text || '').trim() || (!mid && !cid && !uid)) {
+    logger.warn({ logTag }, 'sendReplyWithFallback: no target or empty text');
+    return { ok: false, channel: 'none' };
+  }
+  if (mid) {
+    let r;
+    try {
+      r = await replyMsg(mid, text);
+    } catch (e) {
+      r = { ok: false, error: e?.message };
+    }
+    if (r?.ok) return { ok: true, channel: 'reply' };
+    logger.warn(
+      { logTag, reason: r?.reason || r?.error || 'unknown' },
+      'sendReplyWithFallback: replyMsg failed, trying sendText'
+    );
+  }
+  if (uid) {
+    const r = await sendText(uid, text, 'open_id');
+    if (r?.ok) return { ok: true, channel: 'open_id' };
+    logger.warn({ logTag, err: r?.error, code: r?.data?.code }, 'sendReplyWithFallback: sendText(open_id) failed');
+  }
+  if (cid) {
+    const r = await sendText(cid, text, 'chat_id');
+    if (r?.ok) return { ok: true, channel: 'chat_id' };
+    logger.warn({ logTag, err: r?.error, code: r?.data?.code }, 'sendReplyWithFallback: sendText(chat_id) failed');
+  }
+  logger.error({ logTag, hasMid: !!mid, hasUid: !!uid, hasCid: !!cid }, 'sendReplyWithFallback: all channels failed');
+  return { ok: false, channel: 'all_failed' };
+}
+
 export async function processMessage(ev) {
   if (!ev.text) return { ok: false, reason: 'empty' };
+  const traceId = ev.eventId || ev.messageId || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   // ── 检查待回复任务状态（在幂等检查之后，业务路由之前）──
   if (ev.userId) {
@@ -202,10 +236,10 @@ export async function processMessage(ev) {
 
   const t0 = Date.now();
   const pipelineIntent = detectIntent(ev.text);
-  logger.info({ text: ev.text?.slice(0, 50), userId: ev.userId, pipelineIntent }, 'pipeline start');
+  logger.info({ traceId, text: ev.text?.slice(0, 50), userId: ev.userId, pipelineIntent }, 'pipeline start');
   try {
     const user = await resolveUser(ev.userId);
-    logger.info({ user: user?.username, store: user?.store, role: user?.role }, 'resolved user');
+    logger.info({ traceId, user: user?.username, store: user?.store, role: user?.role }, 'resolved user');
 
     // ── 检查员工是否在职：若未绑定或已离职/禁用，禁止使用 ──
     let hrmsEmp = null;
@@ -222,17 +256,17 @@ export async function processMessage(ev) {
       // 未绑定HRMS：如果feishu_users有注册记录则放行（用feishu_users数据），否则提示绑定
       if (!user) {
         const bindPrompt = '小年：您尚未绑定员工信息，请联系管理员完成绑定后再使用。';
-        if (ev.messageId) await replyMsg(ev.messageId, bindPrompt).catch(() => {});
-        else if (ev.chatId) await sendText(ev.chatId, bindPrompt).catch(() => {});
-        return { ok: false, reason: 'not_bound', ms: Date.now() - t0 };
+        const d = await sendReplyWithFallback(ev, bindPrompt, 'not_bound');
+        if (!d.ok) logger.error({ traceId }, 'not_bound: deliver failed');
+        return { ok: false, reason: 'not_bound', ms: Date.now() - t0, deliverOk: d.ok };
       }
       logger.info({ userId: ev.userId, username: user?.username }, 'User in feishu_users but not HRMS, allowing');
     } else if (!isHrmsEmployeeActive(hrmsEmp)) {
       // 已离职/禁用，禁止使用
       const inactiveMsg = '小年: 您的账号已离职或已禁用，无法使用智能助理。如有疑问，请联系人事部门。';
-      if (ev.messageId) await replyMsg(ev.messageId, inactiveMsg).catch(() => {});
-      else if (ev.chatId) await sendText(ev.chatId, inactiveMsg).catch(() => {});
-      return { ok: false, reason: 'inactive_employee', ms: Date.now() - t0 };
+      const dIn = await sendReplyWithFallback(ev, inactiveMsg, 'inactive_employee');
+      if (!dIn.ok) logger.error({ traceId }, 'inactive_employee: deliver failed');
+      return { ok: false, reason: 'inactive_employee', ms: Date.now() - t0, deliverOk: dIn.ok };
     }
 
     // c) 我是谁：优先 HRMS 员工姓名 → feishu_users.name → 飞书 API → username
@@ -256,9 +290,8 @@ export async function processMessage(ev) {
                        (hrmsEmp?.role || user?.role) === 'hq_manager' ? '总部主管' :
                        (hrmsEmp?.role || user?.role) || '员工';
       const identityReply = `小年: 您是 **${displayName}**（${roleDesc}），当前门店：${storeLabel}。`;
-      if (ev.messageId) await replyMsg(ev.messageId, identityReply).catch(() => {});
-      else if (ev.chatId) await sendText(ev.chatId, identityReply).catch(() => {});
-      return { ok: true, route: 'identity', agent: 'master', ms: Date.now() - t0 };
+      const dId = await sendReplyWithFallback(ev, identityReply, 'identity');
+      return { ok: dId.ok, route: 'identity', agent: 'master', ms: Date.now() - t0, deliverChannel: dId.channel };
     }
 
     // 使用 HRMS 员工信息覆盖 feishu_users（姓名/门店/角色均以 HRMS 为准），若无则用 feishu_users
@@ -301,12 +334,19 @@ export async function processMessage(ev) {
             store,
             ev.text?.trim() || ''
           );
-          if (ev.messageId) await replyMsg(ev.messageId, prefixedResponse).catch(e => logger.error({ err: e?.message }, 'planner reply failed'));
-          else if (ev.chatId) await sendText(ev.chatId, prefixedResponse).catch(e => logger.error({ err: e?.message }, 'planner send failed'));
+          const deliverPl = await sendReplyWithFallback(ev, prefixedResponse, 'planner');
 
           await logTaskResult({ agent: 'planner_workflow', store, data: plannerRes.data }, ctx, Date.now() - t0).catch(() => {});
-          const result = { ok: true, route: 'planner', agent: 'planner_workflow', ms: Date.now() - t0, evidence: true };
-          if (idemKey) await saveIdempotency(idemKey, result).catch(() => {});
+          const result = {
+            ok: deliverPl.ok,
+            route: 'planner',
+            agent: 'planner_workflow',
+            ms: Date.now() - t0,
+            evidence: true,
+            traceId,
+            deliverChannel: deliverPl.channel
+          };
+          if (deliverPl.ok && idemKey) await saveIdempotency(idemKey, result).catch(() => {});
           return result;
         }
       } catch (e) {
@@ -331,11 +371,18 @@ export async function processMessage(ev) {
       if (detReply) {
         const prefixed = '小年：' + detReply;
         logger.info({ store, detReplyLen: detReply.length }, 'deterministic reply hit');
-        if (ev.messageId) await replyMsg(ev.messageId, prefixed).catch(e => logger.error({ err: e?.message }, 'det reply failed'));
-        else if (ev.chatId) await sendText(ev.chatId, prefixed).catch(e => logger.error({ err: e?.message }, 'det send failed'));
+        const deliverDet = await sendReplyWithFallback(ev, prefixed, 'deterministic');
         await logTaskResult({ agent: 'deterministic', store, data: detReply }, ctx, Date.now() - t0).catch(() => {});
-        const result = { ok: true, route: 'deterministic', agent: 'deterministic', ms: Date.now() - t0, evidence: true };
-        if (idemKey) await saveIdempotency(idemKey, result).catch(() => {});
+        const result = {
+          ok: deliverDet.ok,
+          route: 'deterministic',
+          agent: 'deterministic',
+          ms: Date.now() - t0,
+          evidence: true,
+          traceId,
+          deliverChannel: deliverDet.channel
+        };
+        if (deliverDet.ok && idemKey) await saveIdempotency(idemKey, result).catch(() => {});
         return result;
       }
     } catch (detErr) {
@@ -359,17 +406,24 @@ export async function processMessage(ev) {
     }
     const prefixedResponse = formatReplyV1(res, store, ev.text?.trim() || '');
     logger.info({ route: rt.route, agent: res.agent, responsePreview: prefixedResponse?.slice(0, 100) }, 'sending reply');
-    if (ev.messageId) await replyMsg(ev.messageId, prefixedResponse).catch(e => logger.error({ err: e?.message }, 'reply failed'));
-    else if (ev.chatId) await sendText(ev.chatId, prefixedResponse).catch(e => logger.error({ err: e?.message }, 'send failed'));
+    const deliverNorm = await sendReplyWithFallback(ev, prefixedResponse, 'normal');
     await logTaskResult(res, ctx, Date.now() - t0).catch(() => {});
-    const result = { ok:true, route:rt.route, agent:res.agent, ms:Date.now()-t0, evidence: ev_check.valid };
+    const result = {
+      ok: deliverNorm.ok,
+      route: rt.route,
+      agent: res.agent,
+      ms: Date.now() - t0,
+      evidence: ev_check.valid,
+      traceId,
+      deliverChannel: deliverNorm.channel
+    };
 
-    if (idemKey) await saveIdempotency(idemKey, result).catch(() => {});
+    if (deliverNorm.ok && idemKey) await saveIdempotency(idemKey, result).catch(() => {});
 
     return result;
   } catch(e) {
-    logger.error({err:e?.message},'pipeline err');
-    return { ok:false, error:e?.message };
+    logger.error({ traceId, err:e?.message},'pipeline err');
+    return { ok:false, error:e?.message, traceId };
   }
 }
 

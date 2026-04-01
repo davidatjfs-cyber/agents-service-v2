@@ -28,19 +28,20 @@ rsync -avz -e ssh \
 REMOTE_SCRIPT=$(cat <<'EOS'
 set -euo pipefail
 cd "$REMOTE_DIR"
+ensure_kv() {
+  local file="$1" key="$2" val="$3"
+  if [[ ! -f "$file" ]]; then
+    echo ">>> WARN: ${file} 不存在，跳过写入 ${key}（禁止创建仅含单项的 .env，避免丢失 DATABASE_URL）" >&2
+    return 0
+  fi
+  if grep -q "^${key}=" "$file" 2>/dev/null; then
+    # 使用 | 分隔符，避免 val 中含 / 时破坏 sed
+    sed -i "s|^${key}=.*|${key}=${val}|" "$file"
+  else
+    printf '\n# deploy-hrms-server-ecs.sh\n%s=%s\n' "$key" "$val" >> "$file"
+  fi
+}
 if [[ "${DISABLE_SCHEDULED_CHECKLIST}" == "1" ]]; then
-  ensure_kv() {
-    local file="$1" key="$2" val="$3"
-    if [[ -f "$file" ]]; then
-      if grep -q "^${key}=" "$file" 2>/dev/null; then
-        sed -i "s/^${key}=.*/${key}=${val}/" "$file"
-      else
-        printf '\n# deploy-hrms-server-ecs.sh: 关闭 V1 定时检查单\n%s=%s\n' "$key" "$val" >> "$file"
-      fi
-    else
-      printf '%s=%s\n' "$key" "$val" > "$file"
-    fi
-  }
   ensure_kv .env HRMS_DISABLE_SCHEDULED_CHECKLIST 1
   [[ -f .env.production ]] && ensure_kv .env.production HRMS_DISABLE_SCHEDULED_CHECKLIST 1 || true
   echo ">>> HRMS_DISABLE_SCHEDULED_CHECKLIST=1 已写入 .env（及 .env.production 若存在）"

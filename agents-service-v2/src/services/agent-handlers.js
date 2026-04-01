@@ -21,7 +21,8 @@ import {
   buildTableVisitKpiMarkdownSection,
   fetchActualGrossMarginForStorePeriod,
   formatActualGrossMarginBitableLines,
-  pickStoreFromQuestionText
+  pickStoreFromQuestionText,
+  resolveMonthlyRevenueTargetYuan
 } from './deterministic-replies.js';
 import { analyzeMetricTree, formatMetricAnalysisForPrompt } from './analysis-engine.js';
 import { getBestStrategy, formatExperiencePromptBlock } from './agent-experience.js';
@@ -1203,19 +1204,20 @@ async function buildDeterministicRevenueReply(store, start, end, periodLabel) {
     const monthStart = `${refMonth}-01`;
     const totalDaysInMonth = new Date(refY, refM, 0).getDate();
     const monthEnd = `${refMonth}-${String(totalDaysInMonth).padStart(2, '0')}`;
-    let monthBudget = 0;
-    try {
-      // 月目标以 daily_reports 为准（避免 revenue_targets 与 daily_reports 口径不一致导致 458000/850000 错位）
-      const mb = await query(
-        `SELECT COALESCE(SUM(target_revenue),0) AS b
-         FROM daily_reports
-         WHERE lower(regexp_replace(coalesce(store,''), '\\s+', '', 'g')) LIKE $1
-           AND date >= $2 AND date <= $3`,
-        [storeLike, monthStart, monthEnd]
-      );
-      monthBudget = parseFloat(mb.rows?.[0]?.b || 0) || 0;
-    } catch (_) {}
-    // 兜底：如果 daily_reports 没回填 target_revenue，就用 budget 列
+    // 实收达成率分母：优先 revenue_targets「本月实收目标」（支持 period 为 2026-04 / 202604 等）；再兜底 daily_reports 日目标加总
+    let monthBudget = await resolveMonthlyRevenueTargetYuan(store, refMonth);
+    if (!monthBudget) {
+      try {
+        const mb = await query(
+          `SELECT COALESCE(SUM(target_revenue),0) AS b
+           FROM daily_reports
+           WHERE lower(regexp_replace(coalesce(store,''), '\\s+', '', 'g')) LIKE $1
+             AND date >= $2 AND date <= $3`,
+          [storeLike, monthStart, monthEnd]
+        );
+        monthBudget = parseFloat(mb.rows?.[0]?.b || 0) || 0;
+      } catch (_) {}
+    }
     if (!monthBudget) {
       try {
         const mb2 = await query(
@@ -1226,33 +1228,7 @@ async function buildDeterministicRevenueReply(store, start, end, periodLabel) {
           [storeLike, monthStart, monthEnd]
         );
         monthBudget = parseFloat(mb2.rows?.[0]?.b || 0) || 0;
-      } catch(_e) {}
-    }
-    // 口径校验：如果 revenue_targets 里的月目标明显更大，则以它覆盖
-    // （修复 daily_reports 回填不完整时，月目标被算小从而出现 458000/850000 错位）
-    let monthTarget = 0;
-    const brand = rows?.[0]?.brand ? String(rows[0].brand).trim() : '';
-    try {
-      // 直接拉取当月所有 revenue_targets，再用 JS 做门店相似匹配取最大值。
-      // 这样可以绕开 revenue_targets.store 与 daily_reports.store 命名不一致导致的 LIKE/映射失败问题。
-      const rtAll = await query(
-        `SELECT store, target_revenue
-         FROM revenue_targets
-         WHERE period = $1`,
-        [refMonth]
-      );
-      const candidates = rtAll.rows || [];
-      const matched = candidates.filter(r =>
-        sameStore(r?.store || '', store) ||
-        (brand && sameStore(r?.store || '', brand))
-      );
-      monthTarget = matched.reduce((mx, r) => {
-        const v = parseFloat(r?.target_revenue) || 0;
-        return v > mx ? v : mx;
-      }, 0);
-    } catch(_e) {}
-    if (monthTarget > 0 && (monthBudget <= 0 || Math.abs(monthTarget - monthBudget) / monthTarget > 0.02)) {
-      monthBudget = monthTarget;
+      } catch (_e) {}
     }
     let mR;
     try {
@@ -1299,7 +1275,7 @@ async function buildDeterministicRevenueReply(store, start, end, periodLabel) {
       if (monthBudget > 0) {
         const achRate = (cumRev / monthBudget * 100).toFixed(1);
         const theoRate = (monthDays / totalDaysInMonth * 100).toFixed(1);
-        lines.push(`- **实收营业目标达成率**: ${achRate}%(累计实收¥${cumRev.toLocaleString('zh-CN', { minimumFractionDigits: 0 })} / 本月目标 ¥${monthBudget.toLocaleString('zh-CN', { minimumFractionDigits: 0 })})`);
+        lines.push(`- **实收营业目标达成率**: ${achRate}%(本月累计实收¥${cumRev.toLocaleString('zh-CN', { minimumFractionDigits: 0 })} / 本月实收目标 ¥${monthBudget.toLocaleString('zh-CN', { minimumFractionDigits: 0 })})`);
         lines.push(`- **理论达成率**: ${theoRate}% (${monthDays}/${totalDaysInMonth}天)`);
       }
       const margin = row.actual_margin != null ? parseFloat(row.actual_margin) : null;
@@ -1327,7 +1303,7 @@ async function buildDeterministicRevenueReply(store, start, end, periodLabel) {
       if (monthBudget > 0) {
         const achRate = (cumRev / monthBudget * 100).toFixed(1);
         const theoRate = (monthDays / totalDaysInMonth * 100).toFixed(1);
-        lines.push(`- **实收达成率**: ${achRate}%（累计 ¥${cumRev.toLocaleString('zh-CN', { minimumFractionDigits: 0 })} / 目标 ¥${monthBudget.toLocaleString('zh-CN', { minimumFractionDigits: 0 })}）`);
+        lines.push(`- **实收达成率**: ${achRate}%（本月累计实收 ¥${cumRev.toLocaleString('zh-CN', { minimumFractionDigits: 0 })} / 本月实收目标 ¥${monthBudget.toLocaleString('zh-CN', { minimumFractionDigits: 0 })}）`);
         lines.push(`- **理论达成率**: ${theoRate}%（${monthDays}/${totalDaysInMonth}天）`);
       }
       const avgMarginArr = rows.filter(r => r.actual_margin != null);

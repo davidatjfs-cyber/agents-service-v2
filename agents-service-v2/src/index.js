@@ -8,6 +8,7 @@ import cron from 'node-cron';
 import { logger } from './utils/logger.js';
 import { checkDbHealth } from './utils/db.js';
 import { checkRedisHealth } from './utils/queue.js';
+import { startAnomalyQueueWorker, getAnomalyQueueStats } from './services/anomaly-queue.js';
 import { authRequired, requireRole } from './middleware/auth.js';
 import { startRhythmScheduler, morningStandup, patrol, endOfDay, weeklyReport, monthlyEvaluation } from './services/rhythm-engine.js';
 import { runAnomalyChecks, checkFoodSafetyFromMessage, runFoodSafetyDailyScan } from './services/anomaly-engine.js';
@@ -560,6 +561,15 @@ app.get('/api/feishu/status', authRequired, (req, res) => {
   res.json(getFeishuStatus());
 });
 
+app.get('/api/queue/anomaly-status', authRequired, requireRole('admin', 'hq_manager'), async (_req, res) => {
+  try {
+    const stats = await getAnomalyQueueStats();
+    res.json({ ok: true, queue: 'anomaly-pipeline', stats });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message });
+  }
+});
+
 app.post('/api/feishu/send', authRequired, requireRole('admin', 'hq_manager'), async (req, res) => {
   try {
     const { openId, text } = req.body;
@@ -794,6 +804,7 @@ async function start() {
   const redis = await checkRedisHealth();
   if (redis) {
     logger.info('✅ Redis connected');
+    startAnomalyQueueWorker();
   } else {
     logger.warn('⚠️ Redis not available, queues will not work');
   }
@@ -864,6 +875,17 @@ async function start() {
       }
     }, { timezone: 'Asia/Shanghai' });
     logger.info('Monthly anomaly item bonus scheduled at 06:15 on 1st (Asia/Shanghai)');
+    // 毛利率等月度规则：1～9 号仅 pending_data，10 号起用飞书/月表数据复检并正式通知（与业务「每月 10 号前同步」对齐）
+    cron.schedule('20 8 10 * *', async () => {
+      try {
+        const stores = await getActiveStores();
+        logger.info({ n: stores.length }, 'monthly anomaly re-check on 10th (Asia/Shanghai)');
+        await runAnomalyChecks('monthly', stores);
+      } catch (e) {
+        logger.error({ err: e?.message }, 'monthly anomaly 10th re-check failed');
+      }
+    }, { timezone: 'Asia/Shanghai' });
+    logger.info('Monthly BI anomaly re-check scheduled at 08:20 on 10th (Asia/Shanghai)');
     // 随机抽检存在启动时序问题（DB 配置缓存可能尚未就绪），这里做一次“空定时器重试”，保证生产常驻运行
     startRandomInspections()
       .catch(e => logger.warn({ err: e?.message }, 'random-inspection start failed'))

@@ -488,50 +488,51 @@ async function resolveAssignee(category, store, existingAssignee) {
 // 5. Agent Listeners - 扩展支持Agent沟通
 // ─────────────────────────────────────────────
 
+/** 将 data_auditor 新写入的 agent_issues 同步为 master_tasks（供 Master 监听与周审计后调用） */
+export async function syncDataAuditorIssuesToMasterTasks(newIssueIds) {
+  if (!newIssueIds?.length) return 0;
+  let created = 0;
+  for (const issueId of newIssueIds) {
+    try {
+      const ir = await pool().query(
+        `SELECT * FROM agent_issues WHERE id = $1 LIMIT 1`,
+        [String(issueId)]
+      );
+      const issue = ir.rows?.[0];
+      if (!issue) continue;
+
+      const dup = await pool().query(
+        `SELECT id FROM master_tasks WHERE source_ref = $1 AND source = 'data_auditor' LIMIT 1`,
+        [String(issueId)]
+      );
+      if (dup.rows?.length) continue;
+
+      const taskId = await createTask({
+        source: 'data_auditor',
+        sourceRef: String(issueId),
+        category: issue.category,
+        severity: issue.severity,
+        store: issue.store,
+        brand: issue.brand,
+        title: issue.title,
+        detail: issue.detail,
+        sourceData: issue.data
+      });
+      if (taskId) created++;
+    } catch (e) {
+      console.error('[master:data_auditor] Failed to sync issue to master_tasks:', e?.message);
+    }
+  }
+  if (created > 0) console.log(`[master:data_auditor] Created ${created} new tasks`);
+  return created;
+}
+
 // ── 5a. Data Auditor Listener ──
-// 扫描 pending_audit 任务 → 执行审计 → 创建异常任务
+// 仅跑「日频」审计（上海昨日），避免 all 模式滚动 7 天导致晨报待办标题日期混乱、并与周审计重复
 async function dataAuditorListener() {
   try {
-    // Data Auditor 主动扫描：运行审计引擎，将发现的异常直接创建为 master_tasks
-    const result = await runDataAuditor();
-    if (!result.newIssueIds?.length) return 0;
-
-    // 将 agent_issues 中的新异常同步到 master_tasks
-    let created = 0;
-    for (const issueId of result.newIssueIds) {
-      try {
-        const ir = await pool().query(
-          `SELECT * FROM agent_issues WHERE id = $1 LIMIT 1`,
-          [String(issueId)]
-        );
-        const issue = ir.rows?.[0];
-        if (!issue) continue;
-
-        // 检查去重：同一个 agent_issues.id 是否已在 master_tasks
-        const dup = await pool().query(
-          `SELECT id FROM master_tasks WHERE source_ref = $1 AND source = 'data_auditor' LIMIT 1`,
-          [String(issueId)]
-        );
-        if (dup.rows?.length) continue;
-
-        const taskId = await createTask({
-          source: 'data_auditor',
-          sourceRef: String(issueId),
-          category: issue.category,
-          severity: issue.severity,
-          store: issue.store,
-          brand: issue.brand,
-          title: issue.title,
-          detail: issue.detail,
-          sourceData: issue.data
-        });
-        created++;
-      } catch (e) {
-        console.error('[master:data_auditor] Failed to sync issue to master_tasks:', e?.message);
-      }
-    }
-    if (created > 0) console.log(`[master:data_auditor] Created ${created} new tasks`);
-    return created;
+    const result = await runDataAuditor('daily');
+    return await syncDataAuditorIssuesToMasterTasks(result.newIssueIds || []);
   } catch (e) {
     console.error('[master:data_auditor] listener error:', e?.message);
     return 0;

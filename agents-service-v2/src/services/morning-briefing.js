@@ -6,18 +6,8 @@
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { sendCard } from './feishu-client.js';
-import { getBadReviewRowsForStoreDateRange, buildYesterdayOpsBriefingSection, sameStore } from './deterministic-replies.js';
-
-/** 与 revenue_targets.period 常见写法对齐（如 2026-03 / 202603） */
-function monthPeriodVariants(ym) {
-  const s = String(ym || '').trim();
-  const m = s.match(/^(\d{4})-(\d{2})$/);
-  if (!m) return s ? [s] : [];
-  const y = m[1];
-  const mo = m[2];
-  const compact = `${y}${mo}`;
-  return [...new Set([s, compact, `${y}/${mo}`])];
-}
+import { getBadReviewRowsForStoreDateRange, buildYesterdayOpsBriefingSection, sameStore, monthPeriodVariants } from './deterministic-replies.js';
+import { anomalyRuleLabelZh } from '../utils/anomaly-labels.js';
 
 /** 晨报月目标：多 period 格式 + sameStore 模糊门店名，避免 Daily Report 有数但目标行因命名不一致被跳过 */
 async function resolveBriefingMonthlyTarget(store, curMo) {
@@ -62,6 +52,16 @@ const ANOMALY_LABEL_ZH = {
   service_review: '服务差评异常',
   food_safety: '食品安全'
 };
+
+/** 历史任务 title 形如「店 · BI异常 · gross_margin」→ 末段英文化中文 */
+function briefingPrettyTaskTitle(title) {
+  const s = String(title || '').trim();
+  const m = s.match(/[·•]\s*BI异常\s*[·•]\s*([\w_]+)\s*$/);
+  if (!m) return s;
+  const zh = anomalyRuleLabelZh(m[1]);
+  const prefix = s.slice(0, m.index).replace(/\s+$/, '');
+  return `${prefix} · BI异常 · ${zh}`;
+}
 
 function severityZh(s) {
   const x = String(s || '').toLowerCase();
@@ -135,6 +135,15 @@ const BRIEFING_BI_DAILY_ONLY_SQL = `AND (
   )
 )`;
 
+/** data_auditor 任务：晨报仅展示「业务日 = 昨日」的日频项；周标签(YYYY-Www)等不进入昨日待办，避免标题出现整周区间 */
+const BRIEFING_DATA_AUDITOR_YESTERDAY_SQL = `AND (
+  source <> 'data_auditor'
+  OR (
+    NULLIF(trim(COALESCE(source_data->>'date', '')), '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+    AND trim(COALESCE(source_data->>'date', '')) = $2::text
+  )
+)`;
+
 /** username → 飞书展示名（优先真实姓名 name，避免晨报里 @NNYX… 账号） */
 async function briefAssigneeDisplayMap(usernames) {
   const u = [...new Set((usernames || []).map((x) => String(x || '').trim().toLowerCase()).filter(Boolean))];
@@ -187,7 +196,8 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
   try {
     const dr = await query(
       `SELECT date, actual_revenue, budget_rate, dine_traffic, dine_orders,
-              delivery_actual, efficiency, pre_discount_revenue
+              delivery_actual, efficiency, pre_discount_revenue,
+              operational_anomaly_note
        FROM daily_reports WHERE store ILIKE $1 AND date = $2 LIMIT 1`,
       [`%${store}%`, yesterday]
     );
@@ -195,11 +205,17 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
       const d = dr.rows[0];
       const rate = Number(d.budget_rate || 0);
       const rateIcon = rate >= 1 ? '✅' : rate >= 0.8 ? '⚠️' : '🔴';
+      const opRaw = String(d.operational_anomaly_note || '').trim();
+      const opOne = opRaw.replace(/\s+/g, ' ');
+      const opLine = opOne
+        ? `· **营运异常报备**：${opOne.slice(0, 600)}${opOne.length > 600 ? '…' : ''}`
+        : '· **营运异常报备**：✅ 无（昨日营业日报未填写）';
       sections.push(
         `**📊 昨日营业 (${yesterday})**\n` +
         `· 实收营业额：${FMT_MONEY(d.actual_revenue)}　达成率：${rateIcon} ${FMT_PCT(d.budget_rate)}\n` +
         `· 堂食客流：${d.dine_traffic || 0}人　堂食桌数：${d.dine_orders || 0}桌\n` +
-        `· 外卖营收：${FMT_MONEY(d.delivery_actual)}　人效：${FMT_MONEY(d.efficiency)}/人`
+        `· 外卖营收：${FMT_MONEY(d.delivery_actual)}　人效：${FMT_MONEY(d.efficiency)}/人\n` +
+        opLine
       );
     } else {
       sections.push(`**📊 昨日营业 (${yesterday})**\n⚠️ 暂未提交营业日报`);
@@ -257,6 +273,7 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
        WHERE store ILIKE $1 AND ${taskDaySql}
          AND source = ANY($3::text[])
          ${BRIEFING_BI_DAILY_ONLY_SQL}
+         ${BRIEFING_DATA_AUDITOR_YESTERDAY_SQL}
          AND COALESCE(hr_performance_recorded,false) = true
          AND status IN ('pending_response','pending_review')`,
       [`%${store}%`, yesterday, BRIEFING_PENDING_TASK_SOURCES, BRIEFING_BI_WEEKLY_MONTHLY_CATEGORIES]
@@ -269,6 +286,7 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
        WHERE store ILIKE $1 AND ${taskDaySql}
          AND source = ANY($3::text[])
          ${BRIEFING_BI_DAILY_ONLY_SQL}
+         ${BRIEFING_DATA_AUDITOR_YESTERDAY_SQL}
          AND COALESCE(hr_performance_recorded,false) = true
          AND status IN ('pending_response','pending_review')
        ORDER BY updated_at DESC NULLS LAST LIMIT 5`,
@@ -280,6 +298,7 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
        WHERE store ILIKE $1 AND ${taskDaySql}
          AND source = ANY($3::text[])
          ${BRIEFING_BI_DAILY_ONLY_SQL}
+         ${BRIEFING_DATA_AUDITOR_YESTERDAY_SQL}
          AND status IN ('pending_response','pending_review')
          AND COALESCE(hr_performance_recorded,false) = false`,
       [`%${store}%`, yesterday, BRIEFING_PENDING_TASK_SOURCES, BRIEFING_BI_WEEKLY_MONTHLY_CATEGORIES]
@@ -292,6 +311,7 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
        WHERE store ILIKE $1 AND ${taskDaySql}
          AND source = ANY($3::text[])
          ${BRIEFING_BI_DAILY_ONLY_SQL}
+         ${BRIEFING_DATA_AUDITOR_YESTERDAY_SQL}
          AND status IN ('pending_response','pending_review')
          AND COALESCE(hr_performance_recorded,false) = false
        ORDER BY timeout_at ASC NULLS LAST LIMIT 5`,
@@ -323,7 +343,8 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
       } else {
         trail = `｜待回复｜催办 ${rc}/3 次`;
       }
-      return `${urgency} [${t.task_id}] ${t.title.slice(0, 36)}｜${who}｜截止 ${deadline}${trail}`;
+      const ttl = briefingPrettyTaskTitle(t.title);
+      return `${urgency} [${t.task_id}] ${ttl.slice(0, 48)}｜${who}｜截止 ${deadline}${trail}`;
     });
 
     if (perfTotal > 0) {

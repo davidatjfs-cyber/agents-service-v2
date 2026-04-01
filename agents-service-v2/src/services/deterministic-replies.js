@@ -64,6 +64,121 @@ export function sameStore(a, b) {
   return !!(ax && by && (ax === by || ax.includes(by) || by.includes(ax)));
 }
 
+/** 与 revenue_targets.period 常见写法对齐（2026-04 / 202604 / 2026/04），避免查不到月目标退回「日目标加总」 */
+export function monthPeriodVariants(ym) {
+  const s = String(ym || '').trim();
+  const m = s.match(/^(\d{4})-(\d{2})$/);
+  if (!m) return s ? [s] : [];
+  const y = m[1];
+  const mo = m[2];
+  const compact = `${y}${mo}`;
+  return [...new Set([s, compact, `${y}/${mo}`])];
+}
+
+/** 统一成 YYYY-MM，供月份先后比较（避免 202604 与 2026-04 混用） */
+export function normalizePeriodToYm(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  const m = s.match(/^(\d{4})-(\d{2})$/);
+  if (m) return `${m[1]}-${m[2]}`;
+  const m2 = s.match(/^(\d{4})(\d{2})$/);
+  if (m2) return `${m2[1]}-${m2[2]}`;
+  const m3 = s.match(/^(\d{4})\/(\d{1,2})/);
+  if (m3) return `${m3[1]}-${m3[2].padStart(2, '0')}`;
+  return '';
+}
+
+/**
+ * 当月 revenue_targets 尚未录入时：取「不晚于 refMonth」的最近一期月目标，避免退回日报单日 target（如 1.8 万）。
+ */
+async function matchLatestRevenueTargetAtOrBefore(labels, refMonthYm) {
+  const refNorm = normalizePeriodToYm(refMonthYm) || String(refMonthYm || '').trim();
+  if (!refNorm || refNorm.length < 7) return 0;
+  try {
+    const r = await query(`SELECT store, period, target_revenue FROM revenue_targets`, []);
+    let bestYm = '';
+    let bestVal = 0;
+    for (const row of r.rows || []) {
+      const tr = parseFloat(row.target_revenue);
+      if (!Number.isFinite(tr) || tr <= 0) continue;
+      const rs = String(row.store || '');
+      let matched = false;
+      for (const lab of labels) {
+        if (sameStore(rs, lab)) {
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) continue;
+      const pn = normalizePeriodToYm(row.period);
+      if (!pn || pn > refNorm) continue;
+      if (pn > bestYm) {
+        bestYm = pn;
+        bestVal = tr;
+      }
+    }
+    if (bestVal > 0) {
+      logger.info(
+        { refMonth: refNorm, pickedPeriod: bestYm, bestVal },
+        'resolveMonthlyRevenueTargetYuan: no exact row; using latest revenue_targets period <= ref month'
+      );
+    }
+    return bestVal;
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'matchLatestRevenueTargetAtOrBefore failed');
+    return 0;
+  }
+}
+
+/**
+ * 本月实收目标（元）：以 revenue_targets 为权威口径；period 多格式 + 门店 sameStore / 别名；与晨报逻辑一致。
+ */
+export async function resolveMonthlyRevenueTargetYuan(displayStore, refMonth) {
+  const store = String(displayStore || '').trim();
+  const curMo = String(refMonth || '').trim();
+  if (!store || !curMo) return 0;
+  const variants = monthPeriodVariants(curMo);
+  if (!variants.length) return 0;
+  const labels = [...new Set([store, ...expandAgentStoreLabels(store)])].filter(Boolean);
+
+  const matchRows = async () => {
+    try {
+      const r = await query(
+        `SELECT store, target_revenue FROM revenue_targets WHERE period = ANY($1::text[])`,
+        [variants]
+      );
+      let best = 0;
+      for (const row of r.rows || []) {
+        const tr = parseFloat(row.target_revenue);
+        if (!Number.isFinite(tr) || tr <= 0) continue;
+        const rs = String(row.store || '');
+        for (const lab of labels) {
+          if (sameStore(rs, lab)) {
+            if (tr > best) best = tr;
+            break;
+          }
+        }
+      }
+      return best;
+    } catch (e) {
+      logger.warn({ err: e?.message, store, curMo }, 'resolveMonthlyRevenueTargetYuan query failed');
+      return 0;
+    }
+  };
+
+  let v = await matchRows();
+  if (v > 0) return v;
+  try {
+    const resolved = await resolveDbStoreName('revenue_targets', store);
+    if (resolved && !sameStore(resolved, store)) {
+      v = await resolveMonthlyRevenueTargetYuan(resolved, refMonth);
+    }
+  } catch (_) {}
+  if (v > 0) return v;
+  v = await matchLatestRevenueTargetAtOrBefore(labels, curMo);
+  return v || 0;
+}
+
 /** 桌访行门店是否与用户查询门店为同一店（含 马己仙↔马己仙大宁店、洪潮↔洪潮久光店） */
 export function visitEntryStoreMatches(rowStore, userStore) {
   const r = String(rowStore || '').trim();
@@ -1346,10 +1461,12 @@ export async function buildTableVisitBriefingBlock(store, ymd, opts = {}) {
       rushMap.set(t, (rushMap.get(t) || 0) + 1);
     }
     const rushSorted = topN(rushMap, 10);
+    lines.push('', '⏱️ **催菜内容（昨日汇总）**');
+    lines.push('_字段：今天催菜内容_');
     if (rushSorted.length) {
-      lines.push('', '⏱️ **催菜内容（昨日汇总）**');
-      lines.push('_字段：今天催菜内容_');
       rushSorted.forEach(([x, c], i) => lines.push(`${i + 1}. ${x}（${c}次）`));
+    } else {
+      lines.push('本日无催菜记录或字段未填写。');
     }
 
     const kpi = await buildTableVisitKpiMarkdownSection(s, day, day, { skipIfEmpty: false }).catch(() => '');
@@ -1715,6 +1832,8 @@ async function buildDailyReportReply(store, text, ctx = {}) {
   // 不在这里做“模糊选一个门店”，避免把用户输入映射到错误的 daily_reports 行。
   // 对日/月目标等关键口径，优先使用用户传入的门店字符串进行 LIKE 匹配；若 daily_reports 没查到，后续再走销售兜底。
   let sl = storeLike(s);
+  /** 今日/昨日日报未同步时改用最近一条已入库日报时的提示（插在报告最前） */
+  let stalenessBanner = '';
   try {
     let sql = `SELECT * FROM daily_reports WHERE lower(regexp_replace(coalesce(store,''),'\\s+','','g')) LIKE $1`;
     const params = [sl];
@@ -1739,6 +1858,37 @@ async function buildDailyReportReply(store, text, ctx = {}) {
           rows = r2.rows || [];
         }
       } catch(_e) {}
+
+      // 单日（今日/昨日）查询：当天行未入库时，用「截至查询日」最近一条日报，避免长期误报「暂无营业数据」
+      if (
+        !rows.length &&
+        p.start &&
+        p.end &&
+        p.start === p.end &&
+        (p.label === '今日' || p.label === '昨日')
+      ) {
+        try {
+          const st = await query(
+            `SELECT * FROM daily_reports WHERE lower(regexp_replace(coalesce(store,''),'\\s+','','g')) LIKE $1
+             AND date <= $2::date
+             ORDER BY date DESC LIMIT 1`,
+            [sl, p.end]
+          );
+          if (st.rows?.length) {
+            rows = st.rows;
+            const rawD = st.rows[0].date;
+            const d0 =
+              rawD instanceof Date
+                ? rawD.toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10)
+                : String(rawD || '').slice(0, 10);
+            const ask = String(p.end).slice(0, 10);
+            if (d0 && ask && d0 !== ask) {
+              stalenessBanner =
+                `⚠️ **${p.label}（${ask}）**营业日报尚未入库或未同步，以下为该店**最近一条**已入库日报（**${d0}**）。\n\n`;
+            }
+          }
+        } catch (_e) {}
+      }
 
       if (rows.length) {
         // retry 成功，继续走后续“有数据”逻辑
@@ -1780,6 +1930,8 @@ async function buildDailyReportReply(store, text, ctx = {}) {
     const mM = Number(refMonth.slice(5, 7));
     const totalDays = new Date(yM, mM, 0).getDate();
     const monthEnd = `${refMonth}-${String(totalDays).padStart(2,'0')}`;
+    /** revenue_targets 本月实收目标（与 period 写法 2026-04 / 202604 无关，一律能命中） */
+    const configMonthTarget = await resolveMonthlyRevenueTargetYuan(s, refMonth);
 
     let cumRev=0, cumPre=0, mBudget=0, mDays=0, cumLabor=0;
     try {
@@ -1823,65 +1975,8 @@ async function buildDailyReportReply(store, text, ctx = {}) {
       } catch(_e) {}
     }
 
-    // daily_reports 若缺 budget，再兜底使用 revenue_targets（保底而非主口径）
-    if (!mBudget) {
-      try {
-        const rtR = await query(
-          `SELECT target_revenue FROM revenue_targets
-           WHERE lower(regexp_replace(coalesce(store,''),'\\s+','','g')) LIKE $1
-             AND period=$2 LIMIT 1`,
-          [sl, refMonth]
-        );
-        if (rtR.rows?.[0]?.target_revenue) mBudget = parseFloat(rtR.rows[0].target_revenue)||0;
-      } catch(_e){}
-    }
-
-    // 强制校验口径：如果 revenue_targets 存在“更合理的月目标”，以它为准。
-    // 常见场景：daily_reports 的 budget/target_revenue 回填是“到日/日目标”，而月目标应以 revenue_targets 为准。
-    try {
-      let monthTarget = 0;
-      const rtR1 = await query(
-        `SELECT target_revenue FROM revenue_targets
-         WHERE lower(regexp_replace(coalesce(store,''),'\\s+','','g')) LIKE $1
-           AND period=$2 LIMIT 1`,
-        [sl, refMonth]
-      );
-      if (rtR1.rows?.[0]?.target_revenue) monthTarget = parseFloat(rtR1.rows[0].target_revenue)||0;
-
-      const brand = rows?.[0]?.brand ? String(rows[0].brand).trim() : '';
-      // 若直接按当前 sl 找不到，再尝试对 revenue_targets.store 做一次映射（处理 store 命名细微差异）。
-      if (!monthTarget) {
-        try {
-          const resolvedRTStore = await resolveDbStoreName('revenue_targets', s);
-          const rtSl2 = storeLike(resolvedRTStore);
-          const rtR1b = await query(
-            `SELECT target_revenue FROM revenue_targets
-             WHERE lower(regexp_replace(coalesce(store,''),'\\s+','','g')) LIKE $1
-               AND period=$2 LIMIT 1`,
-            [rtSl2, refMonth]
-          );
-          if (rtR1b.rows?.[0]?.target_revenue) monthTarget = parseFloat(rtR1b.rows[0].target_revenue)||0;
-        } catch(_e) {}
-      }
-      if (brand) {
-        const brandLike = storeLike(brand);
-        const rtR2 = await query(
-          `SELECT target_revenue FROM revenue_targets
-           WHERE lower(regexp_replace(coalesce(store,''),'\\s+','','g')) LIKE $1
-             AND period=$2 LIMIT 1`,
-          [brandLike, refMonth]
-        );
-        if (rtR2.rows?.[0]?.target_revenue) {
-          const brandTarget = parseFloat(rtR2.rows[0].target_revenue)||0;
-          if (brandTarget > monthTarget) monthTarget = brandTarget;
-        }
-      }
-
-      // 如果找到了月目标且明显大于当前分母口径，则以它为准。
-      if (monthTarget > 0 && (mBudget <= 0 || Math.abs(monthTarget - mBudget) / monthTarget > 0.02)) {
-        mBudget = monthTarget;
-      }
-    } catch(_e) {}
+    // 实收达成率分母：优先 revenue_targets 月目标；否则 daily_reports 整月日目标加总（可能仅部分日期有行，会偏小）
+    let achievementDenominator = configMonthTarget > 0 ? configMonthTarget : mBudget;
 
     if (rows.length <= 2) {
       const row = rows[0];
@@ -1889,15 +1984,18 @@ async function buildDailyReportReply(store, text, ctx = {}) {
       const pDis = parseFloat(row.pre_discount_revenue)||0;
       const tDis = parseFloat(row.total_discount)||0;
       if (!mBudget) mBudget = parseFloat(row.budget)||0;
-      const lines = [`📊 **营收分析 | ${s}**`, `📅 ${p.label}`, '─────────────────────'];
+      achievementDenominator = configMonthTarget > 0 ? configMonthTarget : mBudget;
+      const lines = [];
+      if (stalenessBanner) lines.push(stalenessBanner);
+      lines.push(`📊 **营收分析 | ${s}**`, `📅 ${p.label}`, '─────────────────────');
       lines.push(`💰 **实收营业额**: ¥${aRev.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}（已扣优惠）`);
       if (pDis>0) lines.push(`💳 **折前营业额**: ¥${pDis.toLocaleString('zh-CN',{minimumFractionDigits:1,maximumFractionDigits:1})}`);
       if (tDis>0) lines.push(`🏷️ **总折扣金额**: ¥${tDis.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}`);
       lines.push('─────────────────────','📈 **目标达成情况**');
-      if (mBudget>0) {
-        const ar = (cumRev/mBudget*100).toFixed(1), tr = (mDays/totalDays*100).toFixed(1);
+      if (achievementDenominator>0) {
+        const ar = (cumRev/achievementDenominator*100).toFixed(1), tr = (mDays/totalDays*100).toFixed(1);
         const an=parseFloat(ar), tn=parseFloat(tr);
-        lines.push(`${an>=tn?'✅':an>=tn-5?'⚠️':'🔴'} **实收达成率**: ${ar}%（累计 ¥${cumRev.toLocaleString('zh-CN',{minimumFractionDigits:0})} / 目标 ¥${mBudget.toLocaleString('zh-CN',{minimumFractionDigits:0})}）`);
+        lines.push(`${an>=tn?'✅':an>=tn-5?'⚠️':'🔴'} **实收达成率**: ${ar}%（本月累计实收 ¥${cumRev.toLocaleString('zh-CN',{minimumFractionDigits:0})} / 本月实收目标 ¥${achievementDenominator.toLocaleString('zh-CN',{minimumFractionDigits:0})}）`);
         lines.push(`📐 **理论达成率**: ${tr}%（${mDays}/${totalDays}天）`);
         const gap = an-tn;
         lines.push(`${gap>=0?'🟢':'🔴'} **进度差值**: ${gap>=0?'+':''}${gap.toFixed(1)}%（${gap>=0?'超前':'落后'}目标进度）`);
@@ -1926,7 +2024,7 @@ async function buildDailyReportReply(store, text, ctx = {}) {
         lines.push('─────────────────────', '📗 **实际毛利率表**：本时段日报无毛利率字段，且未命中飞书同步行');
       }
       lines.push(...buildDailyReportSuggestionBlock({
-        mBudget,
+        mBudget: achievementDenominator,
         cumRev,
         totalDays,
         mDays,
@@ -1944,16 +2042,18 @@ async function buildDailyReportReply(store, text, ctx = {}) {
     const amVal = amArr.length ? (amArr.reduce((a,r2)=>a+parseFloat(r2.actual_margin),0)/amArr.length).toFixed(1) : null;
     const dpR = rows.filter(r2=>r2.dianping_rating!=null);
     const avgDp = dpR.length ? (dpR.reduce((a,r2)=>a+parseFloat(r2.dianping_rating),0)/dpR.length).toFixed(2) : null;
-    const lines = [`📊 **营收分析 | ${s}**`, `📅 ${p.label}`, '─────────────────────'];
+    const lines = [];
+    if (stalenessBanner) lines.push(stalenessBanner);
+    lines.push(`📊 **营收分析 | ${s}**`, `📅 ${p.label}`, '─────────────────────');
     lines.push(`💰 **实收营业额**: ¥${totRev.toLocaleString('zh-CN',{minimumFractionDigits:0})}（${rows.length}天合计）`);
     if (totPre>0) lines.push(`💳 **折前营业额**: ¥${totPre.toLocaleString('zh-CN',{minimumFractionDigits:0})}`);
     if (totDisc>0) lines.push(`🏷️ **总折扣金额**: ¥${totDisc.toLocaleString('zh-CN',{minimumFractionDigits:0})}`);
     lines.push(`📆 **日均实收**: ¥${Math.round(totRev/rows.length).toLocaleString('zh-CN')}`);
     lines.push('─────────────────────','📈 **目标达成情况**');
-    if (mBudget>0) {
-      const ar=(cumRev/mBudget*100).toFixed(1), tr=(mDays/totalDays*100).toFixed(1);
+    if (achievementDenominator>0) {
+      const ar=(cumRev/achievementDenominator*100).toFixed(1), tr=(mDays/totalDays*100).toFixed(1);
       const an=parseFloat(ar), tn=parseFloat(tr);
-      lines.push(`${an>=tn?'✅':an>=tn-5?'⚠️':'🔴'} **实收达成率**: ${ar}%`);
+      lines.push(`${an>=tn?'✅':an>=tn-5?'⚠️':'🔴'} **实收达成率**: ${ar}%（本月累计实收 ¥${cumRev.toLocaleString('zh-CN',{minimumFractionDigits:0})} / 本月实收目标 ¥${achievementDenominator.toLocaleString('zh-CN',{minimumFractionDigits:0})}）`);
       lines.push(`📐 **理论达成率**: ${tr}%（${mDays}/${totalDays}天）`);
     }
     if (amVal) lines.push(`📊 **平均毛利率**: ${amVal}%`);
@@ -1970,7 +2070,7 @@ async function buildDailyReportReply(store, text, ctx = {}) {
     if (bitMulti) lines.push(...formatActualGrossMarginBitableLines(bitMulti, refMonth));
     else if (!amVal) lines.push('─────────────────────', '📗 **实际毛利率表**：未命中该月同步行（可核对飞书表中门店名与「毛利日期」月份）');
     lines.push(...buildDailyReportSuggestionBlock({
-      mBudget,
+      mBudget: achievementDenominator,
       cumRev,
       totalDays,
       mDays,

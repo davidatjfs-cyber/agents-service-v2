@@ -44,11 +44,19 @@ import {
   setReportPool,
   resolveStoreKeyForReports,
   queryMarginByBiz,
-  queryCostCoverageDiagnostics
+  queryCostCoverageDiagnostics,
+  calendarPreviousMonthRangeShanghai,
+  calendarLastCompletedWeekMonSunShanghai
 } from './bi-weekly-report.js';
 import { extractRelationsFromBitableRecord, extractAnomalyRelations } from './knowledge-graph.js';
 import { handleHqBrainMessage } from './hq-planner-agent.js';
-import { feishuStoreSearchPatterns, dailyReportRowMatches, feishuTableRowMatches } from './v2-store-alignment.js';
+import {
+  feishuStoreSearchPatterns,
+  dailyReportIlikePatterns,
+  dailyReportRowMatches,
+  feishuTableRowMatches,
+  resolveAgentCanonicalStore
+} from './v2-store-alignment.js';
 import {
   getModelForRole,
   getTemperatureForRole,
@@ -6485,21 +6493,194 @@ async function validateSubmissionLogic(submission) {
   }
 }
 
+/** 上海日历当前 YYYY-MM（档案门店级别：本月展示上月数据用） */
+function shanghaiCalendarYm() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 7);
+}
+
+function shanghaiPrevCalendarYm() {
+  const cur = shanghaiCalendarYm();
+  const [y, m] = cur.split('-').map((x) => parseInt(x, 10));
+  let mm = m - 1;
+  let yy = y;
+  if (mm < 1) {
+    mm = 12;
+    yy -= 1;
+  }
+  return `${yy}-${String(mm).padStart(2, '0')}`;
+}
+
+/** 档案绩效展示周期：每月 10 日（上海）起展示上月整月；10 日前仍展示上上月（冻结） */
+function profilePerformanceDisplayPeriodShanghai() {
+  const ymd = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+  const [y, m, d] = ymd.split('-').map((x) => parseInt(x, 10));
+  const pad = (n) => String(n).padStart(2, '0');
+  const subMonth = (yy, mm, delta) => {
+    let M = mm + delta;
+    let Y = yy;
+    while (M < 1) {
+      M += 12;
+      Y -= 1;
+    }
+    while (M > 12) {
+      M -= 12;
+      Y += 1;
+    }
+    return `${Y}-${pad(M)}`;
+  };
+  if (d >= 10) return subMonth(y, m, -1);
+  return subMonth(y, m, -2);
+}
+
+/**
+ * 飞书绩效类文本统一中文化：内部字段名、模型 key、英文「分」→「级」、通知标题改名
+ */
+export function sanitizePerformanceZhText(text) {
+  if (typeof text !== 'string' || !text) return text;
+  if (!/(绩效|考核|评分|总分|扣分明细|store_rating|execution_rating|attitude_rating|ability_rating|new_model|anomaly_rollups|task_reminder|模型|门店级别|门店评级)/i.test(text)) {
+    return text;
+  }
+  let t = text;
+  t = t.replace(/📊\s*绩效考核通知/g, '📊 绩效考核日报');
+  t = t.replace(/(^|[\n\u200b])绩效考核通知/g, '$1绩效考核日报');
+  t = t.replace(/📋\s*模型[：:]\s*`?new_model_monthly`?/gi, '📋 评分类型：月度自动评分');
+  t = t.replace(/📋\s*模型[：:]\s*`?new_model`?/gi, '📋 评分类型：人力资源综合模型');
+  t = t.replace(/\*\*📋\s*模型\*\*\s*[：:]\s*`?new_model_monthly`?/gi, '**📋 评分类型**：月度自动评分');
+  t = t.replace(/\bnew_model_monthly\b/g, '月度自动评分');
+  t = t.replace(/\bnew_model\b/g, '人力资源综合模型');
+  t = t.replace(/\banomaly_rollups_v2\b/g, '周度异常汇总');
+  t = t.replace(/\btask_reminder_v1\b/g, '任务催办绩效记录');
+  t = t.replace(/\bmonthly_anomaly_bonus_v1\b/g, '月度异常免罚加分');
+  t = t.replace(/\bstore_production_manager\b/g, '出品经理');
+  t = t.replace(/\bstore_manager\b/g, '店长');
+  t = t.replace(/\bstore_rating\b\s*[:：]\s*null\b/gi, '门店级别：待评估');
+  t = t.replace(/\bstore_rating\b\s*[:：]\s*'?(A|B|C|D)'?\s*分\b/gi, '门店级别：$1级');
+  t = t.replace(/\bstore_rating\b\s*[:：]\s*'?(A|B|C|D)'?\b(?!级)/gi, '门店级别：$1级');
+  t = t.replace(/\bexecution_rating\b\s*[:：]\s*'?(A|B|C|D)'?\s*分\b/gi, '执行力：$1级');
+  t = t.replace(/\bexecution_rating\b\s*[:：]\s*'?(A|B|C|D)'?\b(?!级)/gi, '执行力：$1级');
+  t = t.replace(/\battitude_rating\b\s*[:：]\s*'?(A|B|C|D)'?\s*分\b/gi, '工作态度：$1级');
+  t = t.replace(/\battitude_rating\b\s*[:：]\s*'?(A|B|C|D)'?\b(?!级)/gi, '工作态度：$1级');
+  t = t.replace(/\bability_rating\b\s*[:：]\s*'?(A|B|C|D)'?\s*分\b/gi, '工作能力：$1级');
+  t = t.replace(/\bability_rating\b\s*[:：]\s*'?(A|B|C|D)'?\b(?!级)/gi, '工作能力：$1级');
+  t = t.replace(/^[ \t]*[•\-*]\s*store_rating\s*[:：]\s*null\s*$/gim, '• 门店级别：待评估');
+  t = t.replace(/^[ \t]*[•\-*]\s*store_rating\s*[:：]\s*([A-D])\s*分?\b/gim, '• 门店级别：$1级');
+  t = t.replace(/^[ \t]*[•\-*]\s*ability_rating\s*[:：]\s*([A-D])\s*分?\b/gim, '• 工作能力：$1级');
+  t = t.replace(/^[ \t]*[•\-*]\s*attitude_rating\s*[:：]\s*([A-D])\s*分?\b/gim, '• 工作态度：$1级');
+  t = t.replace(/^[ \t]*[•\-*]\s*execution_rating\s*[:：]\s*([A-D])\s*分?\b/gim, '• 执行力：$1级');
+  return t;
+}
+
+function deepSanitizeFeishuCardStrings(node, fn) {
+  if (node == null) return;
+  if (Array.isArray(node)) {
+    for (let i = 0; i < node.length; i++) {
+      if (typeof node[i] === 'string') node[i] = fn(node[i]);
+      else deepSanitizeFeishuCardStrings(node[i], fn);
+    }
+    return;
+  }
+  if (typeof node === 'object') {
+    for (const k of Object.keys(node)) {
+      const v = node[k];
+      if (typeof v === 'string') node[k] = fn(v);
+      else deepSanitizeFeishuCardStrings(v, fn);
+    }
+  }
+}
+
+/**
+ * 档案「门店级别」：默认取上月闭合月；若传入 lockedPeriodYm 则只查该月（不回落到「任意最新」，与档案冻结展示一致）
+ */
+async function fetchStoreRatingForProfileDisplay(storeLabel, lockedPeriodYm = null) {
+  const raw = String(storeLabel || '').trim();
+  if (!raw) return { rating: null, period: null };
+  const canon = String(resolveAgentCanonicalStore(raw) || raw).trim();
+  const patSets = [...new Set([
+    ...dailyReportIlikePatterns(raw),
+    ...feishuStoreSearchPatterns(raw),
+    ...dailyReportIlikePatterns(canon),
+    ...feishuStoreSearchPatterns(canon)
+  ])];
+  const curYm = shanghaiCalendarYm();
+  const prevYm = shanghaiPrevCalendarYm();
+  const wantYm = String(lockedPeriodYm || '').trim() || prevYm;
+  const strictPeriod = !!String(lockedPeriodYm || '').trim();
+
+  const keys = [canon, raw].filter((k, i, a) => k && a.indexOf(k) === i);
+
+  for (const key of keys) {
+    const r = await pool().query(
+      `SELECT rating, period FROM store_ratings WHERE store = $1 AND period = $2 LIMIT 1`,
+      [key, wantYm]
+    );
+    if (r.rows?.[0]?.rating) return { rating: r.rows[0].rating, period: r.rows[0].period };
+  }
+
+  let r = await pool().query(
+    `SELECT rating, period FROM store_ratings
+     WHERE period = $1 AND store ILIKE ANY($2::text[])
+     ORDER BY (actual_revenue > 0) DESC,
+       actual_revenue DESC NULLS LAST,
+       LENGTH(store) DESC NULLS LAST
+     LIMIT 1`,
+    [wantYm, patSets]
+  );
+  if (r.rows?.[0]?.rating) return { rating: r.rows[0].rating, period: r.rows[0].period };
+
+  if (strictPeriod) {
+    return { rating: null, period: wantYm };
+  }
+
+  for (const key of keys) {
+    r = await pool().query(
+      `SELECT rating, period FROM store_ratings
+       WHERE store = $1 AND period < $2
+       ORDER BY period DESC NULLS LAST
+       LIMIT 1`,
+      [key, curYm]
+    );
+    if (r.rows?.[0]?.rating) return { rating: r.rows[0].rating, period: r.rows[0].period };
+  }
+
+  r = await pool().query(
+    `SELECT rating, period FROM store_ratings
+     WHERE store ILIKE ANY($1::text[]) AND period < $2
+     ORDER BY period DESC NULLS LAST,
+       (actual_revenue > 0) DESC,
+       actual_revenue DESC NULLS LAST,
+       LENGTH(store) DESC NULLS LAST
+     LIMIT 1`,
+    [patSets, curYm]
+  );
+  if (r.rows?.[0]?.rating) return { rating: r.rows[0].rating, period: r.rows[0].period };
+
+  for (const key of keys) {
+    r = await pool().query(
+      `SELECT rating, period FROM store_ratings WHERE store = $1 ORDER BY period DESC NULLS LAST LIMIT 1`,
+      [key]
+    );
+    if (r.rows?.[0]?.rating) return { rating: r.rows[0].rating, period: r.rows[0].period };
+  }
+
+  r = await pool().query(
+    `SELECT rating, period FROM store_ratings
+     WHERE store ILIKE ANY($1::text[])
+     ORDER BY period DESC NULLS LAST,
+       (actual_revenue > 0) DESC,
+       actual_revenue DESC NULLS LAST,
+       LENGTH(store) DESC NULLS LAST
+     LIMIT 1`,
+    [patSets]
+  );
+  const row = r.rows?.[0];
+  return { rating: row?.rating || null, period: row?.period || null };
+}
+
 // ─────────────────────────────────────────────
 // Send plain text message to a user by open_id
 export async function sendLarkMessage(openId, text, options = {}) {
-  // 绩效通知中文化兜底：即便上游误传内部字段，也在发送前统一替换为中文展示
-  if (typeof text === 'string' && /绩效|考核|评分|总分|扣分明细/.test(text)) {
-    text = text
-      .replace(/📋\s*模型：\s*new_model_monthly/gi, '📋 评分类型：月度自动评分')
-      .replace(/📋\s*模型：\s*new_model/gi, '📋 评分类型：人力资源综合模型')
-      .replace(/\bnew_model_monthly\b/g, '月度自动评分')
-      .replace(/\bnew_model\b/g, '人力资源综合模型')
-      .replace(/^[ \t]*[•\-]\s*store_rating\s*:\s*([A-D])\s*分?/gim, '• 门店评级：$1级')
-      .replace(/^[ \t]*[•\-]\s*store_rating\s*:\s*null\s*$/gim, '• 门店评级：待评估')
-      .replace(/^[ \t]*[•\-]\s*ability_rating\s*:\s*([A-D])\s*分?/gim, '• 工作能力：$1分')
-      .replace(/^[ \t]*[•\-]\s*attitude_rating\s*:\s*([A-D])\s*分?/gim, '• 工作态度：$1分')
-      .replace(/^[ \t]*[•\-]\s*execution_rating\s*:\s*([A-D])\s*分?/gim, '• 执行力：$1分');
+  if (typeof text === 'string' && /绩效|考核|评分|总分|扣分明细|store_rating|模型/.test(text)) {
+    text = sanitizePerformanceZhText(text);
   }
   // 消息去重检查（BI确定性回复跳过去重，因为用户可能重复查同一指标）
   if (!options.skipDedup && !deduplicateMessage(text, openId)) {
@@ -6546,6 +6727,11 @@ export async function sendLarkMessage(openId, text, options = {}) {
 
 // Send interactive card (rich message) to a user
 export async function sendLarkCard(openId, card) {
+  try {
+    deepSanitizeFeishuCardStrings(card, sanitizePerformanceZhText);
+  } catch (e) {
+    console.warn('[feishu] card sanitize skipped:', e?.message);
+  }
   const token = await getLarkTenantToken();
   if (!token) return { ok: false, error: 'no_token' };
   try {
@@ -6938,7 +7124,16 @@ function getPreviousWeekRange() {
   return { weekStart:toDateOnly(pM.toISOString()), weekEnd:toDateOnly(pS.toISOString()), weekLabel:`${pM.getFullYear()}-W${String(wn).padStart(2,'0')}` };
 }
 
-export async function runDataAuditor(checkMode='all') {
+function shanghaiYesterdayYmd() {
+  const sh = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+  sh.setDate(sh.getDate() - 1);
+  const y = sh.getFullYear();
+  const m = String(sh.getMonth() + 1).padStart(2, '0');
+  const d = String(sh.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export async function runDataAuditor(checkMode = 'daily') {
   await refreshBiAgentRuntimeConfig();
   const state = await getSharedState();
   const reports = Array.isArray(state?.dailyReports) ? state.dailyReports : [];
@@ -6963,6 +7158,11 @@ export async function runDataAuditor(checkMode='all') {
     if (isWeekly) {
       const wr = getPreviousWeekRange();
       weekAgoDate = wr.weekStart; nowDate = wr.weekEnd; periodLabel = wr.weekLabel;
+    } else if (isDaily) {
+      const y = shanghaiYesterdayYmd();
+      nowDate = y;
+      weekAgoDate = y;
+      periodLabel = y;
     } else {
       nowDate = toDateOnly(now.toISOString());
       weekAgoDate = toDateOnly(new Date(now.getTime() - 7 * 86400000).toISOString());
@@ -7040,13 +7240,13 @@ export async function runDataAuditor(checkMode='all') {
     }
     }
 
-    // 2) 人效值异常 - weekly only
+    // 2) 人效值异常：daily=仅昨日营业日；weekly=滚动窗口内逐日（店长 + 出品经理各一条闭环）
     const efficiencyThresholds = {
       medium: getStoreThreshold(storeName, 'efficiencyMedium', 1100),
       high: getStoreThreshold(storeName, 'efficiencyHigh', 1000)
     };
 
-    if (!isDaily && enableDailyReports) for (const report of reportsSorted) {
+    if (enableDailyReports) for (const report of reportsSorted) {
       const data = report?.data || {};
       const reportDate = toDateOnly(report?.date);
       if (!reportDate) continue;
@@ -7060,13 +7260,15 @@ export async function runDataAuditor(checkMode='all') {
       else if (efficiency < efficiencyThresholds.medium) severity = 'medium';
       if (!severity) continue;
 
-      issues.push({
-        agent: 'data_auditor', brand, store: storeName, category: '人效值异常',
-        severity,
-        title: `${storeName} ${reportDate} 人效偏低（${efficiency.toFixed(0)}）`,
-        detail: `品牌阈值：medium < ${efficiencyThresholds.medium}，high < ${efficiencyThresholds.high}。当前人效 ${efficiency.toFixed(0)}。`,
-        data: { date: reportDate, efficiency: Number(efficiency.toFixed(2)) }
-      });
+      for (const audRole of ['store_manager', 'store_production_manager']) {
+        issues.push({
+          agent: 'data_auditor', brand, store: storeName, category: '人效值异常',
+          severity,
+          title: `${storeName} ${reportDate} 人效偏低（${efficiency.toFixed(0)}）`,
+          detail: `品牌阈值：medium < ${efficiencyThresholds.medium}，high < ${efficiencyThresholds.high}。当前人效 ${efficiency.toFixed(0)}。`,
+          data: { date: reportDate, efficiency: Number(efficiency.toFixed(2)), _auditee_role: audRole }
+        });
+      }
     }
 
     // 3) 充值异常 - daily only
@@ -7146,50 +7348,7 @@ export async function runDataAuditor(checkMode='all') {
       });
     }
 
-    // 6) 总实收毛利率异常 — 仅可信口径（sales_raw+成本库 或 PG 日报），阈值从配置中心读取
-    const marginMedium = getStoreThreshold(storeName, 'marginMedium', 0.69);
-    const marginHigh = getStoreThreshold(storeName, 'marginHigh', 0.68);
-    const marginThresholds = { medium: marginMedium, high: marginHigh };
-    if (!isDaily) {
-      const trusted = await resolveTrustedNetMarginForAuditorIssue(storeName, weekAgoDate, nowDate);
-      if (!trusted.ok) {
-        console.log(
-          `[data_auditor] 总实收毛利率：跳过 ${storeName}（${weekAgoDate}~${nowDate}）原因=${trusted.reason} ${trusted.message || ''}`
-        );
-      } else {
-        const totalMarginRate = toNum(trusted.marginRate, 0);
-        const hasRev = trusted.source === 'sales_raw_plus_cost_library' && toNum(trusted.actualRevenue, 0) > 0;
-        const allowDailyMarginOnly = trusted.source === 'daily_reports_pg' && totalMarginRate > 0;
-        if ((hasRev || allowDailyMarginOnly) && totalMarginRate < marginThresholds.medium) {
-          issues.push({
-            agent: 'data_auditor',
-            brand,
-            store: storeName,
-            category: '总实收毛利率异常',
-            severity: totalMarginRate < marginThresholds.high ? 'high' : 'medium',
-            title: `${storeName} ${weekAgoDate}~${nowDate} 总实收毛利率偏低（${(totalMarginRate * 100).toFixed(1)}%）`,
-            detail:
-              `品牌阈值：medium < ${(marginThresholds.medium * 100).toFixed(0)}%，high < ${(marginThresholds.high * 100).toFixed(0)}%。当前 ${(totalMarginRate * 100).toFixed(1)}%。\n\n` +
-              `【数据口径】${trusted.summary || trusted.source}`,
-            data: {
-              date: periodLabel,
-              marginSource: trusted.source,
-              storeDbKey: trusted.storeDbKey || null,
-              revenueCostCoveragePct:
-                trusted.coverage?.revenueCoveragePct != null
-                  ? Number(Number(trusted.coverage.revenueCoveragePct).toFixed(2))
-                  : null,
-              totalActualRevenue:
-                trusted.actualRevenue != null ? Number(toNum(trusted.actualRevenue, 0).toFixed(2)) : null,
-              totalEstimatedCost:
-                trusted.estimatedCost != null ? Number(toNum(trusted.estimatedCost, 0).toFixed(2)) : null,
-              drDaysWithMargin: trusted.drDays != null ? trusted.drDays : null,
-              totalMarginRate: Number((totalMarginRate * 100).toFixed(2))
-            }
-          });
-        }
-      }
-    }
+    // 6) 总实收毛利率：已迁至 agents-service-v2 月规（每月 10 日等），此处不再写入 agent_issues/MT，避免与日晨报/绩效重复扣分
 
     // 7) 产品差评异常 / 服务差评异常 - weekly only
     const badReviewMedium = Math.max(1, getStoreThreshold(storeName, 'badReviewMedium', 1));
@@ -7294,13 +7453,18 @@ export async function runDataAuditor(checkMode='all') {
     try {
       // Dedup by store + category + report date (not title, which can vary between runs)
       const issueDate = String(issue.data?.date || '').trim();
+      const auditeeRole = String(issue.data?._auditee_role || '').trim();
       const existing = await pool().query(
         `SELECT id FROM agent_issues
          WHERE store = $1 AND category = $2
-           AND (data->>'date' = $3 OR ($3 = '' AND created_at > NOW() - INTERVAL '24 hours'))
-           AND created_at > NOW() - INTERVAL '7 days'
+           AND COALESCE(data->>'date','') = COALESCE($3,'')
+           AND COALESCE(data->>'_auditee_role','') = COALESCE($4,'')
+           AND (
+             ($3 <> '' AND created_at > NOW() - INTERVAL '7 days')
+             OR ($3 = '' AND created_at > NOW() - INTERVAL '24 hours')
+           )
          LIMIT 1`,
-        [issue.store, issue.category, issueDate]
+        [issue.store, issue.category, issueDate, auditeeRole]
       );
       if (existing.rows?.length) continue;
 
@@ -7308,7 +7472,7 @@ export async function runDataAuditor(checkMode='all') {
       let assignee = null;
       try {
         const roleMap = await getCategoryAssigneeRoleMap();
-        const targetRole = roleMap[issue.category] || 'store_manager';
+        const targetRole = auditeeRole || roleMap[issue.category] || 'store_manager';
         const normalizedStore = normalizeStoreKey(issue.store);
         const allUsers = [
           ...(Array.isArray(state?.employees) ? state.employees : []),
@@ -10252,7 +10416,7 @@ async function pushScoresToFeishu() {
         modelKey && SCORE_MODEL_ZH[modelKey]
           ? `\n📌 评分类型：**${SCORE_MODEL_ZH[modelKey]}**`
           : modelKey
-            ? `\n📌 评分类型：**周度自动评分**`
+            ? `\n📌 评分类型：**其他自动评分**`
             : '';
 
       let periodLabel = String(score.period || '').trim();
@@ -10272,25 +10436,24 @@ async function pushScoresToFeishu() {
       summaryZh = summaryZh
         .replace(/\bstore_production_manager\b/g, '出品经理')
         .replace(/\bstore_manager\b/g, '店长')
-        // 评分模型键中文化
         .replace(/\bnew_model_monthly\b/g, '月度自动评分')
         .replace(/\bnew_model\b/g, '人力资源综合模型')
-        // breakdown 字段名中文化（兼容  : null / : 'C' / : C / : C 分 这种拼法）
-        .replace(/(\bstore_rating)\s*[:：]\s*null\b/gi, '门店评级：待评估')
-        .replace(/(\bstore_rating)\s*[:：]\s*'?(A|B|C|D|null)'?\s*分?\b/gi, (m, _k, v) => (v === 'null' ? '门店评级：待评估' : `门店评级：${v}级`))
+        .replace(/(\bstore_rating)\s*[:：]\s*null\b/gi, '门店级别：待评估')
+        .replace(/(\bstore_rating)\s*[:：]\s*'?(A|B|C|D|null)'?\s*分?\b/gi, (m, _k, v) => (v === 'null' ? '门店级别：待评估' : `门店级别：${v}级`))
         .replace(/(\bexecution_rating)\s*[:：]\s*'?(A|B|C|D)'?\s*分?\b/gi, (m, _k, v) => `执行力：${v}级`)
         .replace(/(\battitude_rating)\s*[:：]\s*'?(A|B|C|D)'?\s*分?\b/gi, (m, _k, v) => `工作态度：${v}级`)
         .replace(/(\bability_rating)\s*[:：]\s*'?(A|B|C|D)'?\s*分?\b/gi, (m, _k, v) => `工作能力：${v}级`);
+      summaryZh = sanitizePerformanceZhText(summaryZh);
 
       const bd = score.breakdown && typeof score.breakdown === 'object' ? score.breakdown : {};
       const dimLines = [];
-      if (bd.store_rating != null && String(bd.store_rating).trim() !== '') dimLines.push(`• 门店评级：${String(bd.store_rating).trim()}级`);
+      if (bd.store_rating != null && String(bd.store_rating).trim() !== '') dimLines.push(`• 门店级别：${String(bd.store_rating).trim()}级`);
       if (bd.ability_rating != null && String(bd.ability_rating).trim() !== '') dimLines.push(`• 工作能力：${String(bd.ability_rating).trim()}级`);
       if (bd.attitude_rating != null && String(bd.attitude_rating).trim() !== '') dimLines.push(`• 工作态度：${String(bd.attitude_rating).trim()}级`);
       if (bd.execution_rating != null && String(bd.execution_rating).trim() !== '') dimLines.push(`• 执行力：${String(bd.execution_rating).trim()}级`);
       const dimText = dimLines.length ? dimLines.join('\n') : '• 暂无维度评级';
 
-      const msgText = `📊 绩效考核通知\n\n${fu.name || score.username}，你好！以下是你在${score.store}（${score.brand}）的绩效考核结果：\n\n📋 岗位：${roleLabel}\n🗓️ ${periodLabel}${modelLine}\n\n📊 本期总分：**${score.total_score} 分**（满分100）\n\n评分维度：\n${dimText}\n\n扣分明细：\n${deductionText}\n\n${summaryZh ? '说明：' + summaryZh + '\n\n' : ''}如有异议，请回复「申诉」并说明原因。`;
+      const msgText = `📊 绩效考核日报\n\n${fu.name || score.username}，你好！以下是你在${score.store}（${score.brand}）的绩效考核日报（与月度总结区分：本条对应系统刚写入的一条评分记录）。\n\n📋 岗位：${roleLabel}\n🗓️ ${periodLabel}${modelLine}\n\n📊 本期总分：**${score.total_score} 分**（满分100）\n\n评分维度：\n${dimText}\n\n扣分明细：\n${deductionText}\n\n${summaryZh ? '说明：' + summaryZh + '\n\n' : ''}如有异议，请回复「申诉」并说明原因。`;
       const msg = prefixWithAgentName('chief_evaluator', msgText);
 
       const scoreNum = Number(score.total_score || 0);
@@ -10299,7 +10462,7 @@ async function pushScoresToFeishu() {
 
       const card = {
         header: {
-          title: { tag: 'plain_text', content: '📊 高管绩效简报' },
+          title: { tag: 'plain_text', content: '📊 绩效考核日报' },
           template: cardTemplate
         },
         elements: [
@@ -10331,6 +10494,48 @@ async function pushScoresToFeishu() {
       if (sendResult.ok) {
         await pool().query(`UPDATE agent_scores SET feishu_notified = TRUE WHERE id = $1`, [score.id]);
         pushed++;
+        try {
+          const ccR = await pool().query(
+            `SELECT username, open_id, name FROM feishu_users
+             WHERE COALESCE(registered, false) = true
+               AND TRIM(COALESCE(open_id, '')) <> ''
+               AND role IN ('admin', 'hq_manager')`
+          );
+          const seenOid = new Set([String(fu.open_id || '').trim()]);
+          const cardBase = typeof structuredClone === 'function' ? structuredClone(card) : JSON.parse(JSON.stringify(card));
+          for (const row of ccR.rows || []) {
+            const oid = String(row.open_id || '').trim();
+            if (!oid || seenOid.has(oid)) continue;
+            seenOid.add(oid);
+            const cardCc = typeof structuredClone === 'function' ? structuredClone(cardBase) : JSON.parse(JSON.stringify(cardBase));
+            cardCc.elements = [
+              {
+                tag: 'div',
+                text: {
+                  tag: 'lark_md',
+                  content:
+                    `📋 **抄送**｜绩效考核日报（与当事人同内容）\n` +
+                    `👤 考核对象：**${fu.name || score.username}**｜${score.store}（${score.brand}）`
+                }
+              },
+              { tag: 'hr' },
+              ...(cardCc.elements || [])
+            ];
+            let ccSend = await sendLarkCard(oid, cardCc);
+            if (!ccSend.ok) {
+              const ccMsg = prefixWithAgentName(
+                'chief_evaluator',
+                `📋 抄送·绩效考核日报\n对象：${fu.name || score.username}｜${score.store}\n\n${msgText}`
+              );
+              ccSend = await sendLarkMessage(oid, ccMsg);
+            }
+            if (!ccSend.ok) {
+              console.warn('[feishu] perf score CC failed:', row.username, ccSend?.error || ccSend);
+            }
+          }
+        } catch (ccErr) {
+          console.error('[feishu] perf score CC error:', ccErr?.message);
+        }
       }
     }
     return pushed;
@@ -10502,7 +10707,13 @@ export function startAgentScheduler() {
       if (result.issuesCreated > 0) {
         console.log(`[scheduler] Data Auditor(daily): ${result.issuesCreated} new issues`);
       }
-      // Push new issues to Feishu
+      try {
+        const { syncDataAuditorIssuesToMasterTasks } = await import('./master-agent.js');
+        const n = await syncDataAuditorIssuesToMasterTasks(result.newIssueIds || []);
+        if (n > 0) console.log(`[scheduler] Data Auditor(daily): synced ${n} to master_tasks`);
+      } catch (e) {
+        console.error('[scheduler] daily master sync:', e?.message);
+      }
       const pushed = await pushIssuesToFeishu();
       if (pushed > 0) console.log(`[scheduler] Pushed ${pushed} issues to Feishu`);
     } catch (e) {
@@ -10519,6 +10730,13 @@ export function startAgentScheduler() {
         const r = await runDataAuditor('weekly');
         console.log(`[scheduler] Weekly audit: ${r.issuesCreated} issues`);
         await pushIssuesToFeishu();
+        try {
+          const { syncDataAuditorIssuesToMasterTasks } = await import('./master-agent.js');
+          const n = await syncDataAuditorIssuesToMasterTasks(r.newIssueIds || []);
+          if (n > 0) console.log(`[scheduler] Weekly audit: synced ${n} issues to master_tasks`);
+        } catch (e) {
+          console.error('[scheduler] weekly master sync:', e?.message);
+        }
       }
     } catch(e){ console.error('[scheduler] weekly audit err:', e?.message); }
   };
@@ -10996,11 +11214,13 @@ export function registerAgentRoutes(app, authRequired) {
     } catch (e) { return res.status(500).json({ error: String(e?.message || e) }); }
   });
 
-  // ── My Score (for profile page)：合并 employee_scores（执行力/态度/能力）+ agent_scores（周度异常扣分等）+ store_ratings
+  // ── My Score (for profile page)：门店级别按自然月 1 日起展示「上月」闭合；个人绩效每月 10 日（上海）起展示「上月」闭合，10 日前仍展示上上月
   app.get('/api/agent-scores/me', authRequired, async (req, res) => {
     const username = String(req.user?.username || '').trim();
     if (!username) return res.status(400).json({ error: 'missing_username' });
     try {
+      const personalPeriod = profilePerformanceDisplayPeriodShanghai();
+      const storePeriod = shanghaiPrevCalendarYm();
       let store = null;
       let brand = null;
       try {
@@ -11011,81 +11231,87 @@ export function registerAgentRoutes(app, authRequired) {
         store = String(fu.rows?.[0]?.store || '').trim() || null;
       } catch (_e) {}
 
+      if (!store) {
+        try {
+          const state = await getSharedState();
+          const emps = [
+            ...(Array.isArray(state?.employees) ? state.employees : []),
+            ...(Array.isArray(state?.users) ? state.users : [])
+          ];
+          const me = emps.find((e) => String(e?.username || '').trim().toLowerCase() === username.toLowerCase());
+          if (me?.store) store = String(me.store).trim();
+        } catch (_e2) {}
+      }
+
       const es = await pool().query(
         `SELECT total_score, execution_rating, attitude_rating, ability_rating, period, store
-         FROM employee_scores WHERE lower(username) = lower($1) ORDER BY period DESC NULLS LAST LIMIT 1`,
-        [username]
+         FROM employee_scores WHERE lower(username) = lower($1) AND period = $2 LIMIT 1`,
+        [username, personalPeriod]
       ).catch(() => ({ rows: [] }));
       const emp = es.rows?.[0];
       if (!store && emp?.store) store = String(emp.store).trim();
 
       const asMonth = await pool().query(
         `SELECT total_score, breakdown, summary, period, brand, store
-         FROM agent_scores WHERE lower(username) = lower($1) AND period ~ '^[0-9]{4}-[0-9]{2}$'
-         ORDER BY period DESC NULLS LAST LIMIT 1`,
-        [username]
-      ).catch(() => ({ rows: [] }));
-      const asWeek = await pool().query(
-        `SELECT total_score, breakdown, summary, period, brand, store
-         FROM agent_scores WHERE lower(username) = lower($1) AND period LIKE 'week_%'
-         ORDER BY updated_at DESC NULLS LAST LIMIT 1`,
-        [username]
-      ).catch(() => ({ rows: [] }));
-      const asAny = await pool().query(
-        `SELECT total_score, breakdown, summary, period, brand, store
-         FROM agent_scores WHERE lower(username) = lower($1)
-         ORDER BY updated_at DESC NULLS LAST LIMIT 1`,
-        [username]
+         FROM agent_scores WHERE lower(username) = lower($1) AND period = $2 AND period ~ '^[0-9]{4}-[0-9]{2}$'
+         LIMIT 1`,
+        [username, personalPeriod]
       ).catch(() => ({ rows: [] }));
 
       const rowM = asMonth.rows?.[0];
-      const rowW = asWeek.rows?.[0];
-      const rowA = asAny.rows?.[0];
       if (!store && rowM?.store) store = String(rowM.store).trim();
-      if (!store && rowW?.store) store = String(rowW.store).trim();
-      if (!store && rowA?.store) store = String(rowA.store).trim();
-      brand = rowM?.brand || rowW?.brand || rowA?.brand || null;
+      brand = rowM?.brand || null;
       if (store && !brand) brand = inferBrandFromStoreName(store);
 
       let store_rating = null;
+      let store_rating_period = null;
       if (store) {
-        const sr = await pool().query(
-          `SELECT rating, period FROM store_ratings WHERE store = $1 ORDER BY period DESC NULLS LAST LIMIT 1`,
-          [store]
-        ).catch(() => ({ rows: [] }));
-        store_rating = sr.rows?.[0]?.rating || null;
+        const srInfo = await fetchStoreRatingForProfileDisplay(store, storePeriod);
+        store_rating = srInfo.rating;
+        store_rating_period = srInfo.period;
       }
 
       const bM = rowM?.breakdown && typeof rowM.breakdown === 'object' ? rowM.breakdown : {};
-      const bW = rowW?.breakdown && typeof rowW.breakdown === 'object' ? rowW.breakdown : {};
-      const bA = rowA?.breakdown && typeof rowA.breakdown === 'object' ? rowA.breakdown : {};
 
       const total_score =
         emp?.total_score != null ? emp.total_score
           : rowM?.total_score != null ? rowM.total_score
-            : rowW?.total_score != null ? rowW.total_score
-              : rowA?.total_score != null ? rowA.total_score
-                : null;
+            : null;
 
-      const execution_rating = emp?.execution_rating ?? bM.execution_rating ?? bA.execution_rating ?? null;
-      const attitude_rating = emp?.attitude_rating ?? bM.attitude_rating ?? bA.attitude_rating ?? null;
-      const ability_rating = emp?.ability_rating ?? bM.ability_rating ?? bA.ability_rating ?? null;
-      const store_rating_out = store_rating ?? bM.store_rating ?? bW.store_rating ?? bA.store_rating ?? null;
+      const execution_rating = emp?.execution_rating ?? bM.execution_rating ?? null;
+      const attitude_rating = emp?.attitude_rating ?? bM.attitude_rating ?? null;
+      const ability_rating = emp?.ability_rating ?? bM.ability_rating ?? null;
+      const store_rating_out = store_rating ?? bM.store_rating ?? null;
 
-      const summary = rowM?.summary || rowW?.summary || rowA?.summary || null;
-      const period = emp?.period || rowM?.period || rowW?.period || rowA?.period || null;
+      const summary = rowM?.summary || null;
+      const period = personalPeriod;
+      const displayPeriod = personalPeriod;
+      const storeRatingPeriodNote =
+        `门店级别对应「${storePeriod}」月闭合结果；每月 1 日（上海）起随自然月切换为上月。`;
+      const personalPerformanceNote =
+        `个人绩效（得分与执行力/态度/能力）对应「${personalPeriod}」月闭合；每月 10 日（上海）起更新为上月的整月结果，10 日前仍展示上一闭合月，期间不变。`;
+      const displayPeriodNote = `${storeRatingPeriodNote} ${personalPerformanceNote}`;
 
       return res.json({
         total_score,
-        breakdown: { ...bA, ...bW, ...bM, execution_rating, attitude_rating, ability_rating, store_rating: store_rating_out },
+        breakdown: { ...bM, execution_rating, attitude_rating, ability_rating, store_rating: store_rating_out },
         summary,
         period,
+        displayPeriod,
+        storeRatingDisplayPeriod: storePeriod,
+        personalPerformanceDisplayPeriod: personalPeriod,
+        storeRatingPeriodNote,
+        personalPerformanceNote,
+        displayPeriodNote,
         brand,
         store,
         execution_rating,
         attitude_rating,
         ability_rating,
-        store_rating: store_rating_out
+        store_rating: store_rating_out,
+        store_rating_period,
+        store_rating_matches_display_period: !!(store_rating_period && store_rating_period === storePeriod),
+        store_rating_is_prev_month: !!(store_rating_period && store_rating_period === shanghaiPrevCalendarYm())
       });
     } catch (e) { return res.status(500).json({ error: String(e?.message || e) }); }
   });
@@ -11208,10 +11434,74 @@ export function registerAgentRoutes(app, authRequired) {
     const role = String(req.user?.role || '').trim();
     if (role !== 'admin' && role !== 'hq_manager') return res.status(403).json({ error: 'forbidden' });
     try {
-      const result = await runDataAuditor();
+      const mode = String(req.body?.mode || 'full').trim().toLowerCase();
+      let issuesCreated = 0;
+      let newIssueIds = [];
+      if (mode === 'daily') {
+        const r = await runDataAuditor('daily');
+        issuesCreated = r.issuesCreated;
+        newIssueIds = r.newIssueIds || [];
+      } else if (mode === 'weekly') {
+        const r = await runDataAuditor('weekly');
+        issuesCreated = r.issuesCreated;
+        newIssueIds = r.newIssueIds || [];
+      } else {
+        const d = await runDataAuditor('daily');
+        const w = await runDataAuditor('weekly');
+        issuesCreated = d.issuesCreated + w.issuesCreated;
+        newIssueIds = [...(d.newIssueIds || []), ...(w.newIssueIds || [])];
+      }
       const pushed = await pushIssuesToFeishu();
-      return res.json({ ...result, feishuPushed: pushed });
+      let masterSynced = 0;
+      try {
+        const { syncDataAuditorIssuesToMasterTasks } = await import('./master-agent.js');
+        masterSynced = await syncDataAuditorIssuesToMasterTasks(newIssueIds);
+      } catch (e) {
+        console.error('[agents/run/audit] master sync:', e?.message);
+      }
+      return res.json({ issuesCreated, newIssueIds, feishuPushed: pushed, masterSynced });
     } catch (e) { return res.status(500).json({ error: String(e?.message || e) }); }
+  });
+
+  /** 按门店重算并写入 store_ratings（规范店名 + 宽匹配目标营业额）；用于洪潮等门店级别未及时落库时手工触发 */
+  app.post('/api/agents/run/store-ratings', authRequired, async (req, res) => {
+    const role = String(req.user?.role || '').trim();
+    if (role !== 'admin' && role !== 'hq_manager') return res.status(403).json({ error: 'forbidden' });
+    try {
+      let period = String(req.body?.period || '').trim();
+      if (!period || !/^\d{4}-\d{2}$/.test(period)) {
+        const sh = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+        period = `${sh.getFullYear()}-${String(sh.getMonth() + 1).padStart(2, '0')}`;
+      }
+      const ur = await pool().query(
+        `SELECT DISTINCT TRIM(store) AS store FROM feishu_users
+         WHERE registered = true AND TRIM(COALESCE(store,'')) <> ''
+           AND role IN ('store_manager','store_production_manager')`
+      );
+      const seen = new Set();
+      const results = [];
+      for (const row of ur.rows || []) {
+        const st = String(row.store || '').trim();
+        const k = st.toLowerCase().replace(/\s+/g, '');
+        if (!st || seen.has(k)) continue;
+        seen.add(k);
+        const brand = inferBrandFromStoreName(st);
+        const r = await calculateStoreRating(st, brand, period);
+        results.push({
+          store: st,
+          brand,
+          period,
+          rating: r.rating ?? null,
+          reason: r.reason,
+          achievementRate: r.achievementRate,
+          actualRevenue: r.actualRevenue,
+          targetRevenue: r.targetRevenue
+        });
+      }
+      return res.json({ ok: true, period, count: results.length, results });
+    } catch (e) {
+      return res.status(500).json({ error: String(e?.message || e) });
+    }
   });
 
   app.post('/api/agents/run/evaluate', authRequired, async (req, res) => {
@@ -11501,6 +11791,53 @@ function splitMarkdownForCard(md, maxLen = 3600) {
   return chunks;
 }
 
+/** 月报投递：匹配该门店的飞书店长（店名字段与 canonical / 日报别名对齐） */
+async function feishuStoreManagersForMonthlyReport(storeDisplayName) {
+  const canon = String(resolveAgentCanonicalStore(storeDisplayName) || storeDisplayName).trim();
+  const pats = [...new Set([
+    ...dailyReportIlikePatterns(storeDisplayName),
+    ...dailyReportIlikePatterns(canon)
+  ])].filter((x) => x && String(x).length > 1);
+  const patArr = pats.length ? pats : [`%${String(storeDisplayName).replace(/%/g, '')}%`];
+  try {
+    const r = await pool().query(
+      `SELECT username FROM feishu_users
+       WHERE COALESCE(registered, false) = true
+         AND TRIM(COALESCE(open_id, '')) <> ''
+         AND role = 'store_manager'
+         AND (
+           TRIM(COALESCE(store, '')) = $1
+           OR TRIM(COALESCE(store, '')) = $2
+           OR TRIM(COALESCE(store, '')) ILIKE ANY($3::text[])
+         )`,
+      [storeDisplayName, canon, patArr]
+    );
+    const seen = new Set();
+    const out = [];
+    for (const row of r.rows || []) {
+      const u = String(row.username || '').trim();
+      const k = u.toLowerCase();
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      out.push({ username: u });
+    }
+    return out;
+  } catch (e) {
+    console.error('[bi-report] feishuStoreManagersForMonthlyReport failed:', e?.message);
+    return [];
+  }
+}
+
+function uniqBiReportRecipients(list) {
+  const seen = new Set();
+  return (list || []).filter((u) => {
+    const k = String(u?.username || '').trim().toLowerCase();
+    if (!k || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
 async function sendBiReportToAdmins({ admins, title, note, md, cardTemplate = 'blue' }) {
   const chunks = splitMarkdownForCard(md, 3600);
   for (const a of admins) {
@@ -11528,14 +11865,10 @@ async function sendBiReportToAdmins({ admins, title, note, md, cardTemplate = 'b
 
 export async function sendWeeklyReports() {
   console.log('[bi-report] generating weekly reports...');
-  const now = new Date();
-  const we = new Date(now); we.setDate(now.getDate() - now.getDay());
-  const ws = new Date(we); ws.setDate(we.getDate() - 6);
-  const wsS = ws.toISOString().slice(0,10), weS = we.toISOString().slice(0,10);
+  const { wsS, weS } = calendarLastCompletedWeekMonSunShanghai();
   const state = await getSharedState();
-  const adminsRaw = [...(state?.employees||[]),...(state?.users||[])].filter(u => u?.role === 'admin');
-  const seenUser = new Set();
-  const admins = adminsRaw.filter(u => { const k = String(u?.username||'').trim().toLowerCase(); if (!k || seenUser.has(k)) return false; seenUser.add(k); return true; });
+  const adminsRaw = [...(state?.employees||[]),...(state?.users||[])].filter(u => ['admin','hq_manager'].includes(u?.role));
+  const admins = uniqBiReportRecipients(adminsRaw);
   const stores = await getReportStoresForBiReports();
   for (const store of stores) {
     try {
@@ -11555,20 +11888,17 @@ export async function sendWeeklyReports() {
 
 export async function sendMonthlyReports() {
   console.log('[bi-report] generating monthly reports...');
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-  const msS = monthStart.toISOString().slice(0, 10);
-  const meS = monthEnd.toISOString().slice(0, 10);
+  const { msS, meS } = calendarPreviousMonthRangeShanghai();
   const state = await getSharedState();
-  const adminsRaw2 = [...(state?.employees || []), ...(state?.users || [])].filter(u => u?.role === 'admin');
-  const seenUser2 = new Set();
-  const admins = adminsRaw2.filter(u => { const k = String(u?.username||'').trim().toLowerCase(); if (!k || seenUser2.has(k)) return false; seenUser2.add(k); return true; });
+  const adminsRaw2 = [...(state?.employees || []), ...(state?.users || [])].filter(u => ['admin','hq_manager'].includes(u?.role));
+  const baseRecipients = uniqBiReportRecipients(adminsRaw2);
   const stores = await getReportStoresForBiReports();
   for (const store of stores) {
     try {
       const r = await generateMonthlyReport(store, msS, meS);
       const md = formatReportMarkdown(r);
+      const managers = await feishuStoreManagersForMonthlyReport(store);
+      const admins = uniqBiReportRecipients([...baseRecipients, ...managers]);
       await sendBiReportToAdmins({
         admins,
         title: `📈 ${store} 月报`,
@@ -11576,7 +11906,7 @@ export async function sendMonthlyReports() {
         md,
         cardTemplate: 'turquoise'
       });
-      console.log(`[bi-report] sent ${store} monthly report to ${admins.length} admins`);
+      console.log(`[bi-report] sent ${store} monthly report to ${admins.length} recipients (admin/hq + store managers)`);
     } catch (e) { console.error(`[bi-report] ${store} monthly failed:`, e?.message); }
   }
 }
@@ -11589,13 +11919,10 @@ export async function sendTestReportsToUser(targetUsername) {
     return { ok: false, error: 'user_not_found_or_not_bound', username: targetUsername };
   }
   const testAdmins = [{ username: targetUsername }];
-  const now = new Date();
   const results = [];
 
-  // 周报：上周
-  const we = new Date(now); we.setDate(now.getDate() - now.getDay());
-  const ws = new Date(we); ws.setDate(we.getDate() - 6);
-  const wsS = ws.toISOString().slice(0, 10), weS = we.toISOString().slice(0, 10);
+  // 周报：上一完整自然周（上海历）
+  const { wsS, weS } = calendarLastCompletedWeekMonSunShanghai();
   const stores = await getReportStoresForBiReports();
   for (const store of stores) {
     try {
@@ -11610,10 +11937,8 @@ export async function sendTestReportsToUser(targetUsername) {
     }
   }
 
-  // 月报：上月
-  const monthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-  const msS = monthStart.toISOString().slice(0, 10), meS = monthEnd.toISOString().slice(0, 10);
+  // 月报：上一自然月（上海历）
+  const { msS, meS } = calendarPreviousMonthRangeShanghai();
   for (const store of stores) {
     try {
       const r = await generateMonthlyReport(store, msS, meS);
