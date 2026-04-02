@@ -1,0 +1,149 @@
+name: Safe Deployment System
+
+on:
+  push:
+    paths:
+      - 'agents-service-v2/**'
+      - 'hr-management-system/**'
+      - 'scripts/**'
+      - '.github/workflows/safe-deployment.yml'
+  workflow_dispatch:
+    inputs:
+      deploy_full:
+        description: '执行完整安全部署 (agents + hrms)'
+        type: boolean
+        default: true
+      deploy_agents_only:
+        description: '仅部署agents-service-v2'
+        type: boolean
+        default: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: 语法检查
+        run: |
+          node --check agents-service-v2/src/index.js
+          node --check hr-management-system/server/agents.js
+      
+      - name: 前端文件检查
+        run: |
+          # 检查前端两个文件都存在 (解决历史问题1)
+          if [ ! -f "hr-management-system/working-fixed.html" ]; then
+            echo "❌ 前端文件缺失: working-fixed.html"
+            exit 1
+          fi
+          if [ ! -f "hr-management-system/mobile-nav-production.html" ]; then
+            echo "❌ 前端文件缺失: mobile-nav-production.html"
+            exit 1
+          fi
+          echo "✅ 前端两个文件检查通过 (网页版 + 手机版)"
+
+  deploy-full:
+    needs: verify
+    if: needs.verify.result == 'success' && (github.event.inputs.deploy_full == 'true' || github.event_name == 'push')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: 执行安全部署
+        env:
+          ECS_SSH_PRIVATE_KEY: ${{ secrets.ECS_SSH_PRIVATE_KEY }}
+          ECS_HOST: ${{ secrets.ECS_HOST || 'root@47.100.96.30' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ECS_SSH_PRIVATE_KEY:-}" ]; then
+            echo "::error::缺少 Secret ECS_SSH_PRIVATE_KEY"
+            exit 1
+          fi
+          
+          # SSH配置
+          mkdir -p ~/.ssh
+          printf '%s\n' "$ECS_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          HOSTPORT="${ECS_HOST:-root@47.100.96.30}"
+          H="${HOSTPORT##*@}"
+          ssh-keyscan -H "$H" 2>/dev/null >> ~/.ssh/known_hosts || true
+          export ECS_HOST="$HOSTPORT"
+          
+          # 执行完整安全部署
+          echo "🚀 执行完整安全部署 (agents + hrms)..."
+          bash scripts/deploy-safe.sh
+
+  deploy-agents-only:
+    needs: verify
+    if: needs.verify.result == 'success' && github.event.inputs.deploy_agents_only == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: 执行agents部署
+        env:
+          ECS_SSH_PRIVATE_KEY: ${{ secrets.ECS_SSH_PRIVATE_KEY }}
+          ECS_HOST: ${{ secrets.ECS_HOST || 'root@47.100.96.30' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ECS_SSH_PRIVATE_KEY:-}" ]; then
+            echo "::error::缺少 Secret ECS_SSH_PRIVATE_KEY"
+            exit 1
+          fi
+          
+          # SSH配置
+          mkdir -p ~/.ssh
+          printf '%s\n' "$ECS_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          HOSTPORT="${ECS_HOST:-root@47.100.96.30}"
+          H="${HOSTPORT##*@}"
+          ssh-keyscan -H "$H" 2>/dev/null >> ~/.ssh/known_hosts || true
+          export ECS_HOST="$HOSTPORT"
+          
+          # 执行agents部署
+          echo "⚡ 执行agents-service-v2部署..."
+          cd agents-service-v2
+          bash scripts/deploy-agents-ecs-safe.sh
+
+  health-check:
+    needs: [deploy-full, deploy-agents-only]
+    if: always() && (needs.deploy-full.result == 'success' || needs.deploy-agents-only.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: 部署后健康检查
+        env:
+          ECS_HOST: ${{ secrets.ECS_HOST || 'root@47.100.96.30' }}
+        run: |
+          set -euo pipefail
+          HOSTPORT="${ECS_HOST:-root@47.100.96.30}"
+          H="${HOSTPORT##*@}"
+          ssh-keyscan -H "$H" 2>/dev/null >> ~/.ssh/known_hosts || true
+          
+          echo "🏥 执行部署后健康检查..."
+          ssh "$HOSTPORT" '/opt/scripts/deploy-status.sh'
+
+  rollback:
+    needs: health-check
+    if: failure() && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 自动回滚
+        env:
+          ECS_HOST: ${{ secrets.ECS_HOST || 'root@47.100.96.30' }}
+        run: |
+          set -euo pipefail
+          HOSTPORT="${ECS_HOST:-root@47.100.96.30}"
+          H="${HOSTPORT##*@}"
+          ssh-keyscan -H "$H" 2>/dev/null >> ~/.ssh/known_hosts || true
+          
+          echo "🔄 部署失败，执行自动回滚..."
+          ssh "$HOSTPORT" '/opt/scripts/deploy-rollback.sh'
