@@ -127,6 +127,59 @@ export async function sendCard(receiveId, card, idType = 'open_id') {
 
 export async function sendGroup(chatId, text) { return sendText(chatId, text, 'chat_id'); }
 
+/**
+ * 绩效/扣分「公司通知」：解析任务责任人飞书 open_id（username 优先，其次门店+角色精确/模糊）
+ */
+export async function lookupAssigneeOpenIds(task) {
+  const un = String(task?.assignee_username || '').trim();
+  if (un) {
+    const r = await query(
+      `SELECT open_id FROM feishu_users
+       WHERE lower(username) = lower($1) AND registered = true AND open_id IS NOT NULL AND trim(open_id) <> ''
+       LIMIT 3`,
+      [un]
+    );
+    if (r.rows?.length) return r.rows.map((x) => x.open_id).filter(Boolean);
+  }
+  const role = String(task?.assignee_role || 'store_manager').trim();
+  const st = String(task?.store || '').trim();
+  const r2 = await query(
+    `SELECT open_id FROM feishu_users
+     WHERE store = $1 AND role = $2 AND registered = true AND open_id IS NOT NULL AND trim(open_id) <> ''
+     LIMIT 5`,
+    [st, role]
+  );
+  if (r2.rows?.length) return r2.rows.map((x) => x.open_id).filter(Boolean);
+  const sk = st.trim().toLowerCase().replace(/\s+/g, '');
+  if (!sk) return [];
+  const r3 = await query(
+    `SELECT open_id FROM feishu_users
+     WHERE registered = true AND open_id IS NOT NULL AND trim(open_id) <> '' AND role = $2
+       AND lower(regexp_replace(coalesce(store,''), '\\s+', '', 'g')) LIKE $1
+     LIMIT 5`,
+    [`%${sk}%`, role]
+  );
+  return (r3.rows || []).map((x) => x.open_id).filter(Boolean);
+}
+
+/** 向责任人发送带【公司通知】前缀的文本（绩效扣分、备案等须可感知） */
+export async function sendCompanyNoticeToAssignees(task, body) {
+  const text = String(body || '').trim();
+  if (!text) return { targets: 0, sent: 0 };
+  const oids = await lookupAssigneeOpenIds(task);
+  let sent = 0;
+  for (const oid of oids) {
+    const res = await sendText(oid, `【公司通知】\n${text}`, 'open_id');
+    if (res?.ok) sent += 1;
+  }
+  if (!oids.length) {
+    logger.warn({ taskId: task?.task_id, store: task?.store }, 'company notice: no assignee open_id');
+  } else {
+    logger.info({ taskId: task?.task_id, sent, targets: oids.length }, 'company notice to assignee');
+  }
+  return { targets: oids.length, sent };
+}
+
 export async function replyMsg(messageId, text) {
   if (!isExternalEnabled()) return { ok: false, reason: 'external_disabled' };
   const t = await getTenantToken(); if (!t) {
@@ -1208,6 +1261,10 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
             [taskId]
           ).catch(() => {});
           logger.info({ taskId, store: task.store }, 'Task reply review: 3x fail → HR penalty recorded');
+          await sendCompanyNoticeToAssignees(
+            task,
+            `因任务回复连续三次审核不合格，已记入绩效扣分 10 分（周度 agent_scores，供 HR 复核）。\n门店：${task.store}\n任务ID：${taskId}\n标题：${String(task.title || '').slice(0, 280)}`
+          ).catch((e) => logger.warn({ err: e?.message, taskId }, 'review penalty: company notice failed'));
         } catch (_) {}
       }
     }

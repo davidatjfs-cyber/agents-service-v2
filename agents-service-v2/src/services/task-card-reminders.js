@@ -5,7 +5,7 @@
 import cron from 'node-cron';
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
-import { sendText, sendCard, sendGroup } from './feishu-client.js';
+import { sendText, sendCard, sendGroup, sendCompanyNoticeToAssignees } from './feishu-client.js';
 import { getBrandForStore } from './config-service.js';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -125,6 +125,13 @@ async function recordHrPerformancePenalty(task) {
       : `【HR/总部备案·异常】门店 ${task.store} 任务 ${task.task_id} 已打标「记绩效」，但 agent_scores 写入失败，请技术核对库表/唯一约束；任务 resolution_code=hr_task_penalty_score_write_failed。`;
     await sendGroup(chatId, msg).catch(() => {});
   }
+
+  const assigneeNotice = scoreWriteOk
+    ? `您的任务在多次系统催办后仍未有效闭环，已记入周度绩效扣分 ${pts} 分（写入 agent_scores，供 HR 复核；如有异议请联系营运或 HR）。\n门店：${task.store}\n任务ID：${task.task_id}\n来源：${task.source}\n标题：${String(task.title || '').slice(0, 300)}`
+    : `系统已尝试将任务 ${task.task_id} 记入绩效，但写入失败，请联系总部技术核对。\n门店：${task.store}\n来源：${task.source}`;
+  await sendCompanyNoticeToAssignees(task, assigneeNotice).catch((e) =>
+    logger.warn({ err: e?.message, taskId: task.task_id }, 'task-reminder: company notice to assignee failed')
+  );
 
   return true;
 }
