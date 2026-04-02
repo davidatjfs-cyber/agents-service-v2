@@ -86,55 +86,22 @@ function isBriefingExcludedStore(store) {
 }
 
 /**
- * 晨报「待处理/备案任务」白名单：仅展示异常类闭环任务。
- * - bi_anomaly：agents-service-v2 异常引擎 + 通知管线写入
- * - data_auditor：HRMS runDataAuditor → agent_issues → master_tasks 同步（MT-*）
- * 排除：scheduled_checklist(OPS-*)、scheduled_inspection、random_inspection、auto_collab 等控制台非异常项
+ * 晨报「BI 异常 / 数据审计」任务：凡昨日派发的闭环任务一律列出（与业务要求对齐）。
+ * - bi_anomaly：agents 异常引擎 + 通知管线（ANO-*）
+ * - data_auditor：HRMS runDataAuditor → MT-*（含日/周/月频 KPI）
+ * 不含：scheduled_inspection、random_inspection 等（见定时任务催办与绩效链路）
  */
-const BRIEFING_PENDING_TASK_SOURCES = ['bi_anomaly', 'data_auditor'];
+const BRIEFING_BI_TASK_SOURCES = ['bi_anomaly', 'data_auditor'];
 
-/** 晨报「待处理」仅展示日频闭环：周/月维度的 BI 任务（桌访产品、桌访占比、营收达成、差评、包房、毛利等）不进入晨报，避免标题里出现整周区间造成「天天同一批周期任务」 */
-const BRIEFING_BI_WEEKLY_MONTHLY_CATEGORIES = [
-  'table_visit_product',
-  'table_visit_ratio',
-  'revenue_achievement',
-  'revenue_achievement_monthly',
-  'gross_margin',
-  'bad_review_product',
-  'bad_review_service',
-  'hongchao_jiuguang_private_room'
-];
-
-/** 禁止把「未写 frequency」默认当 daily，否则 gross_margin 等周/月键在库里缺字段时会误进晨报 */
-const BRIEFING_BI_DAILY_ONLY_SQL = `AND (
-  source = 'data_auditor'
-  OR (
-    source = 'bi_anomaly'
-    AND (
-      lower(trim(COALESCE(source_data->>'anomaly_frequency', ''))) = 'daily'
-      OR (
-        (source_data->>'anomaly_frequency' IS NULL OR trim(source_data->>'anomaly_frequency') = '')
-        AND NOT (category = ANY($4::text[]))
-      )
-    )
-  )
-)`;
-
-/** data_auditor 任务：晨报仅展示「业务日 = 昨日」的日频项；周标签(YYYY-Www)等不进入昨日待办，避免标题出现整周区间 */
-const BRIEFING_DATA_AUDITOR_YESTERDAY_SQL = `AND (
-  source <> 'data_auditor'
-  OR (
-    NULLIF(trim(COALESCE(source_data->>'date', '')), '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
-    AND trim(COALESCE(source_data->>'date', '')) = $2::text
-  )
-)`;
-
-/** 晨报待办：data_auditor 仅保留「真·日频」闭环（充值/单日人效）；周桌访/周差评/周毛利等走周审计，勿进昨日待办 */
-const BRIEFING_DATA_AUDITOR_ALLOW_CATEGORIES = ['充值异常', '人效值异常'];
-const BRIEFING_DATA_AUDITOR_CATEGORY_SQL = `AND (
-  source <> 'data_auditor'
-  OR (category = ANY($5::text[]))
-)`;
+function briefingTaskStatusZh(st) {
+  const s = String(st || '').trim().toLowerCase();
+  if (s === 'pending_response') return '待回复';
+  if (s === 'pending_review') return '待审核';
+  if (s === 'pending_dispatch' || s === 'dispatched') return '待分派/待送达';
+  if (s === 'closed' || s === 'settled' || s === 'resolved') return '已闭环';
+  if (s === 'rejected') return '已驳回';
+  return st || '其它';
+}
 
 /** username → 飞书展示名（优先真实姓名 name，避免晨报里 @NNYX… 账号） */
 async function briefAssigneeDisplayMap(usernames) {
@@ -252,7 +219,7 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
     sections.push(`**──────── 昨日营运速览 ────────**\n⚠️ 加载失败：${e?.message || '未知错误'}`);
   }
 
-  // 3. 任务跟进（晨报口径：**仅昨日上海日历当天派发的任务**，不含历史积压，避免与多日前的 INSP-* 混淆）
+  // 3. 昨日派发的 BI 异常 + 数据审计任务（全量汇报：日/周/月频、已闭环/未闭环均列出）
   try {
     const roleZh = (r) =>
       r === 'store_production_manager' ? '出品经理' : r === 'store_manager' ? '店长' : (r || '责任人');
@@ -260,137 +227,86 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
     /** 派发日：优先 dispatched_at，否则 created_at，按 Asia/Shanghai 日历与「昨日」对齐 */
     const taskDaySql = `(timezone('Asia/Shanghai', COALESCE(dispatched_at, created_at)))::date = $2::date`;
 
-    const perfCntR = await query(
+    const bioCntR = await query(
       `SELECT COUNT(*)::int AS c FROM master_tasks
-       WHERE store ILIKE $1 AND ${taskDaySql}
-         AND source = ANY($3::text[])
-         ${BRIEFING_BI_DAILY_ONLY_SQL}
-         ${BRIEFING_DATA_AUDITOR_YESTERDAY_SQL}
-         ${BRIEFING_DATA_AUDITOR_CATEGORY_SQL}
-         AND COALESCE(hr_performance_recorded,false) = true
-         AND status IN ('pending_response','pending_review')`,
-      [
-        `%${store}%`,
-        yesterday,
-        BRIEFING_PENDING_TASK_SOURCES,
-        BRIEFING_BI_WEEKLY_MONTHLY_CATEGORIES,
-        BRIEFING_DATA_AUDITOR_ALLOW_CATEGORIES
-      ]
+       WHERE store ILIKE $1 AND ${taskDaySql} AND source = ANY($3::text[])`,
+      [`%${store}%`, yesterday, BRIEFING_BI_TASK_SOURCES]
     );
-    const perfTotal = parseInt(perfCntR.rows[0]?.c || 0, 10);
-    const perfR = await query(
+    const bioTotal = parseInt(bioCntR.rows[0]?.c || 0, 10);
+
+    const bioOpenR = await query(
+      `SELECT COUNT(*)::int AS c FROM master_tasks
+       WHERE store ILIKE $1 AND ${taskDaySql} AND source = ANY($3::text[])
+         AND status IN ('pending_response','pending_review','pending_dispatch','dispatched')`,
+      [`%${store}%`, yesterday, BRIEFING_BI_TASK_SOURCES]
+    );
+    const bioOpen = parseInt(bioOpenR.rows[0]?.c || 0, 10);
+
+    const bioR = await query(
       `SELECT task_id, title, status, source, timeout_at, assignee_username, assignee_role,
-              COALESCE(remind_count,0)::int AS remind_count, COALESCE(review_count,0)::int AS review_count
+              COALESCE(remind_count,0)::int AS remind_count, COALESCE(review_count,0)::int AS review_count,
+              COALESCE(hr_performance_recorded,false) AS hr_performance_recorded
        FROM master_tasks
-       WHERE store ILIKE $1 AND ${taskDaySql}
-         AND source = ANY($3::text[])
-         ${BRIEFING_BI_DAILY_ONLY_SQL}
-         ${BRIEFING_DATA_AUDITOR_YESTERDAY_SQL}
-         ${BRIEFING_DATA_AUDITOR_CATEGORY_SQL}
-         AND COALESCE(hr_performance_recorded,false) = true
-         AND status IN ('pending_response','pending_review')
-       ORDER BY updated_at DESC NULLS LAST LIMIT 5`,
-      [
-        `%${store}%`,
-        yesterday,
-        BRIEFING_PENDING_TASK_SOURCES,
-        BRIEFING_BI_WEEKLY_MONTHLY_CATEGORIES,
-        BRIEFING_DATA_AUDITOR_ALLOW_CATEGORIES
-      ]
+       WHERE store ILIKE $1 AND ${taskDaySql} AND source = ANY($3::text[])
+       ORDER BY
+         CASE WHEN status IN ('pending_response','pending_review','pending_dispatch','dispatched') THEN 0 ELSE 1 END,
+         CASE WHEN COALESCE(hr_performance_recorded,false) THEN 0 ELSE 1 END,
+         updated_at DESC NULLS LAST
+       LIMIT 25`,
+      [`%${store}%`, yesterday, BRIEFING_BI_TASK_SOURCES]
     );
 
-    const pendCntR = await query(
-      `SELECT COUNT(*)::int AS c FROM master_tasks
-       WHERE store ILIKE $1 AND ${taskDaySql}
-         AND source = ANY($3::text[])
-         ${BRIEFING_BI_DAILY_ONLY_SQL}
-         ${BRIEFING_DATA_AUDITOR_YESTERDAY_SQL}
-         ${BRIEFING_DATA_AUDITOR_CATEGORY_SQL}
-         AND status IN ('pending_response','pending_review')
-         AND COALESCE(hr_performance_recorded,false) = false`,
-      [
-        `%${store}%`,
-        yesterday,
-        BRIEFING_PENDING_TASK_SOURCES,
-        BRIEFING_BI_WEEKLY_MONTHLY_CATEGORIES,
-        BRIEFING_DATA_AUDITOR_ALLOW_CATEGORIES
-      ]
-    );
-    const pendTotal = parseInt(pendCntR.rows[0]?.c || 0, 10);
-    const pendR = await query(
-      `SELECT task_id, title, status, source, timeout_at, assignee_username, assignee_role,
-              COALESCE(remind_count,0)::int AS remind_count, COALESCE(review_count,0)::int AS review_count
-       FROM master_tasks
-       WHERE store ILIKE $1 AND ${taskDaySql}
-         AND source = ANY($3::text[])
-         ${BRIEFING_BI_DAILY_ONLY_SQL}
-         ${BRIEFING_DATA_AUDITOR_YESTERDAY_SQL}
-         ${BRIEFING_DATA_AUDITOR_CATEGORY_SQL}
-         AND status IN ('pending_response','pending_review')
-         AND COALESCE(hr_performance_recorded,false) = false
-       ORDER BY timeout_at ASC NULLS LAST LIMIT 5`,
-      [
-        `%${store}%`,
-        yesterday,
-        BRIEFING_PENDING_TASK_SOURCES,
-        BRIEFING_BI_WEEKLY_MONTHLY_CATEGORIES,
-        BRIEFING_DATA_AUDITOR_ALLOW_CATEGORIES
-      ]
-    );
-
-    const taskUsernames = [...(perfR.rows || []), ...(pendR.rows || [])]
-      .map((t) => t.assignee_username)
-      .filter(Boolean);
+    const taskUsernames = (bioR.rows || []).map((t) => t.assignee_username).filter(Boolean);
     const displayNameMap = await briefAssigneeDisplayMap(taskUsernames);
 
-    /** 每条附带催办/审核进度；责任人展示飞书姓名，不展示内部账号串 */
-    const fmtTaskLines = (rows) => rows.map((t) => {
-      const deadline = t.timeout_at
-        ? String(t.timeout_at).slice(5, 16).replace('T', ' ')
-        : '无截止';
-      const urgency = t.timeout_at && new Date(t.timeout_at) < new Date() ? '🔴' : '📌';
-      const un = t.assignee_username ? String(t.assignee_username).trim() : '';
-      const nm = un ? displayNameMap.get(un.toLowerCase()) : null;
-      const atLabel = nm || (un ? '责任人（未匹配飞书姓名）' : '');
-      const who = un
-        ? `@${atLabel}（${roleZh(t.assignee_role)}）`
-        : `默认${roleZh(t.assignee_role)}`;
-      const rc = Math.min(3, Math.max(0, parseInt(t.remind_count ?? 0, 10) || 0));
-      const rv = Math.min(3, Math.max(0, parseInt(t.review_count ?? 0, 10) || 0));
-      let trail = '';
-      if (String(t.status) === 'pending_review') {
-        trail = `｜待审核｜审核累计 ${rv}/3 次`;
-      } else {
-        trail = `｜待回复｜催办 ${rc}/3 次`;
-      }
-      const ttl = briefingPrettyTaskTitle(t.title);
-      return `${urgency} [${t.task_id}] ${ttl.slice(0, 48)}｜${who}｜截止 ${deadline}${trail}`;
-    });
+    const srcZh = (s) => (String(s) === 'bi_anomaly' ? 'BI引擎' : '数据审计');
 
-    if (perfTotal > 0) {
-      sections.push(
-        `**⚠️ 已备案工作态度的任务（昨日 ${yesterday} 派发 · ${perfTotal}个）**\n` +
-        `_以下任务已打**工作态度备案**标（**不计入绩效总分**），且来源为 **BI 异常 / 数据审计**；若仍待回复/待审核请优先处理。仅含 **${yesterday}** 派发。_\n` +
-        fmtTaskLines(perfR.rows || []).join('\n') +
-        (perfTotal > (perfR.rows?.length || 0) ? `\n_…共${perfTotal}个，此处仅列5条_` : '') +
-        '\n_触发条件：「满 3 次催办 + 再等 1 小时仍无有效回复」或「回复连续 **3 次**审核不合格」。_'
-      );
-    }
+    const fmtBioLines = (rows) =>
+      (rows || []).map((t) => {
+        const deadline = t.timeout_at
+          ? String(t.timeout_at).slice(5, 16).replace('T', ' ')
+          : '无截止';
+        const open = ['pending_response', 'pending_review', 'pending_dispatch', 'dispatched'].includes(
+          String(t.status || '').trim()
+        );
+        const urgency =
+          open && t.timeout_at && new Date(t.timeout_at) < new Date() ? '🔴' : open ? '📌' : '✅';
+        const un = t.assignee_username ? String(t.assignee_username).trim() : '';
+        const nm = un ? displayNameMap.get(un.toLowerCase()) : null;
+        const atLabel = nm || (un ? '责任人（未匹配飞书姓名）' : '');
+        const who = un
+          ? `@${atLabel}（${roleZh(t.assignee_role)}）`
+          : `默认${roleZh(t.assignee_role)}`;
+        const stZh = briefingTaskStatusZh(t.status);
+        const rc = Math.min(3, Math.max(0, parseInt(t.remind_count ?? 0, 10) || 0));
+        const rv = Math.min(3, Math.max(0, parseInt(t.review_count ?? 0, 10) || 0));
+        let trail = '';
+        if (open) {
+          if (String(t.status) === 'pending_review') {
+            trail = `｜审核累计 ${rv}/3 次`;
+          } else if (String(t.status) === 'pending_response') {
+            trail = `｜催办 ${rc}/3 次`;
+          }
+        }
+        const flagged = t.hr_performance_recorded ? '｜工作态度已备案' : '';
+        const ttl = briefingPrettyTaskTitle(t.title);
+        return `${urgency} [${t.task_id}] ${srcZh(t.source)}｜**${stZh}**｜${ttl.slice(0, 44)}｜${who}｜截止 ${deadline}${trail}${flagged}`;
+      });
 
-    if (pendTotal > 0) {
+    if (bioTotal > 0) {
       sections.push(
-        `**📋 待处理任务（昨日 ${yesterday} 派发 · ${pendTotal}个）**\n` +
-        `_仅含 **日频** BI 异常，及数据审计中 **昨日单日** 的 **充值异常 / 人效值异常**；**不含**周/月维度的桌访、差评、桌访占比、实收营收累计、毛利等 MT 任务。仅统计 **${yesterday}** 派发。_\n` +
-        fmtTaskLines(pendR.rows || []).join('\n') +
-        (pendTotal > (pendR.rows?.length || 0) ? `\n_…共${pendTotal}个，此处仅列5条_` : '') +
-        '\n\n**为何还没备案？（核心）**\n' +
-        '· **待回复**：自动催办约每 **1 小时**可记 1 次，**满 3 次后还须再经过 1 小时**仍无有效回复，才会**改打标**并记入工作态度统计（请看每行末尾「催办 x/3」）。\n' +
-        '· **待审核**：已提交回复、在等审核，**不走「未回复催办」**；若审核不通过，须累计 **3 次不合格**才打标备案（请看「审核累计 x/3」）。\n' +
-        '· **打标之后**：同一条会**只出现在上方「已备案工作态度的任务」**，**不再**出现在本节「待处理」。'
+        `**📋 昨日 BI 异常与数据审计任务（派发日 ${yesterday} · 共 ${bioTotal} 条，未闭环 ${bioOpen} 条）**\n` +
+        `_含 **bi_anomaly（ANO）** 与 **data_auditor（MT）**，**不论日/周/月频**；已闭环的也会列出便于核对。仅统计 **${yesterday}** 在上海时区派发/创建的任务。_\n` +
+        fmtBioLines(bioR.rows || []).join('\n') +
+        (bioTotal > (bioR.rows?.length || 0) ? `\n_…共 ${bioTotal} 条，此处最多列 25 条_` : '') +
+        '\n\n**催办与绩效（与定时任务同一套规则）**\n' +
+        '· **待回复**：约每 **1 小时**可催 1 次；**满 3 次催办后再过 1 小时**仍无有效回复 → 写入 **agent_scores** 扣分并标记任务「工作态度已备案」。\n' +
+        '· **待审核**：不走催办计数；审核不通过累计 **3 次** → 工作态度备案。\n' +
+        '· **定时巡检/抽检**（scheduled_inspection / random_inspection）不在本列表，由任务催办 cron 单独跟进并同样可记 **agent_scores**。'
       );
-    } else if (perfTotal === 0) {
+    } else {
       sections.push(
-        `**📋 昨日派发任务（${yesterday}）**\n✅ 无「待处理」项（晨报仅统计异常类任务；昨日无此类未闭环项）。`
+        `**📋 昨日 BI 异常与数据审计（${yesterday}）**\n✅ 无昨日派发记录（bi_anomaly / data_auditor）。`
       );
     }
   } catch (e) { logger.warn({ err: e?.message, store }, 'briefing tasks'); }
