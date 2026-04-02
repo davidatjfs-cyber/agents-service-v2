@@ -1,19 +1,19 @@
-# agents-service-v2 · 安全部署（与 Cursor 规则、手动脚本一致）
+# hr-management-system · 安全部署（与 Cursor 规则、手动脚本一致）
 #
-# 流程：修改 agents-service-v2 → git add / commit / push origin main → 本 workflow 在 GitHub 上执行部署。
-# 手动等价：cd agents-service-v2 && bash scripts/deploy-safe.sh
+# 流程：修改 hr-management-system → git add / commit / push origin main → 本 workflow 在 GitHub 上执行部署。
+# 手动等价：cd hr-management-system && bash scripts/deploy-hrms-safe.sh
 # 回滚：ssh root@47.100.96.30 '/opt/scripts/deploy-rollback.sh'
 #
 # Secrets: ECS_SSH_PRIVATE_KEY（必填）；可选 ECS_HOST（默认 root@47.100.96.30）
-# 仓库（若拆仓独立发布）：https://github.com/davidatjfs-cyber/agents-service-v2
-name: safe-deployment
+# 仓库（若拆仓独立发布）：https://github.com/davidatjfs-cyber/hr-management-system
+name: hrms-safe-deployment
 
 on:
   push:
     branches: [main]
     paths:
-      - 'agents-service-v2/**'
-      - '.github/workflows/safe-deployment.yml'
+      - 'hr-management-system/**'
+      - '.github/workflows/hrms-safe-deployment.yml'
   workflow_dispatch:
     inputs:
       deploy_ecs:
@@ -29,8 +29,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Verify agents-service-v2
-        run: bash agents-service-v2/scripts/verify-agents-local.sh
+      - name: Syntax check (server)
+        run: |
+          node --check hr-management-system/server/agents.js
+          node --check hr-management-system/server/bi-weekly-report.js
+      - name: Frontend entry files
+        run: |
+          test -f hr-management-system/working-fixed.html
+          test -f hr-management-system/mobile-nav-production.html
+          test -f hr-management-system/sw.js
 
   deploy-ecs:
     needs: verify
@@ -46,7 +53,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Setup SSH and run deploy-safe.sh
+      - name: Setup SSH and run deploy-hrms-safe.sh
         env:
           ECS_SSH_PRIVATE_KEY: ${{ secrets.ECS_SSH_PRIVATE_KEY }}
           ECS_HOST: ${{ secrets.ECS_HOST }}
@@ -63,4 +70,4 @@ jobs:
           H="${HOSTPORT##*@}"
           ssh-keyscan -H "$H" 2>/dev/null >> ~/.ssh/known_hosts || true
           export ECS_HOST="$HOSTPORT"
-          bash agents-service-v2/scripts/deploy-safe.sh
+          bash hr-management-system/scripts/deploy-hrms-safe.sh

@@ -1,9 +1,11 @@
-#!/bin/bash
-# 安全部署脚本 - 彻底解决历史部署问题
-# 解决：1.前端两个文件部署 2.部署路径 3.版本一致性 4.数据丢失
+#!/usr/bin/env bash
+# 全栈安全部署（agents + HRMS 前后端）— 可选手动使用。
+# 日常规范：仅改 agents 请用 agents-service-v2/scripts/deploy-safe.sh + safe-deployment.yml；
+#           仅改 HRMS 请用 hr-management-system/scripts/deploy-hrms-safe.sh + hrms-safe-deployment.yml。
+# 回滚：ssh root@47.100.96.30 '/opt/scripts/deploy-rollback.sh'
 set -euo pipefail
 
-ROOT="/Users/magainze/HRMS"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ECS_HOST="${ECS_HOST:-root@47.100.96.30}"
 AGENTS_DIR="${ROOT}/agents-service-v2"
 HRMS_DIR="${ROOT}/hr-management-system"

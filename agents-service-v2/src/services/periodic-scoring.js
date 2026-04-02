@@ -1,5 +1,7 @@
 /**
  * 周度门店评级：按 anomaly_triggers 聚合扣分，写入 agent_scores（店长 / 出品经理维度）。
+ * score_model=anomaly_rollups_v2；扣分按异常类型/严重度/频次由 scoring-model.calcDeductions 等计算。
+ * 任务卡催办链路不向 agent_scores 写入扣分，仅打工作态度标；与本周度 BI 汇总独立。
  * 同步：HRMS 公司通知栏 hrms_user_notifications + 飞书周度卡片（本人 + 管理员/总部营运汇总）
  */
 import cron from 'node-cron';

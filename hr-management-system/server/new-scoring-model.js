@@ -569,8 +569,8 @@ async function getStoreMeetingReports(store, period) {
 
 /**
  * 当月「工作态度」关联任务备案数（与 agents-service-v2 催办/审核链路一致）：
- * master_tasks 中 assignee 命中、来源为抽检/定时巡检/BI/协作，且已打标 hr_performance_recorded
- *（满 3 次催办仍未闭环、或审核多次不通过等场景由 v2 写入该标记）。
+ * master_tasks 中 assignee 命中、来源含抽检/定时/BI 任务卡/数据审计/协作，且已打标 hr_performance_recorded
+ *（满 3 次催办仍未闭环、或审核 3 次不通过等；催办路径不向 agent_scores 扣分，仅态度统计）。
  */
 async function getIncompleteTaskCount(username, period) {
   const un = String(username || '').trim();
@@ -578,7 +578,7 @@ async function getIncompleteTaskCount(username, period) {
   const [year, month] = period.split('-');
   const startDate = `${year}-${month}-01`;
   const endDate = `${year}-${month}-31`;
-  const sources = ['random_inspection', 'scheduled_inspection', 'bi_anomaly', 'auto_collab'];
+  const sources = ['random_inspection', 'scheduled_inspection', 'bi_anomaly', 'auto_collab', 'data_auditor'];
   try {
     const result = await pool().query(
       `SELECT COUNT(DISTINCT task_id)::int AS c

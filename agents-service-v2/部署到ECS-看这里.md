@@ -42,12 +42,14 @@ curl -sS http://127.0.0.1:3101/health
 
 ### 办法 B：用 GitHub 自动部署（push 后由 GitHub 帮你 SSH 到 ECS）
 
-1. 代码 **commit 并 push** 到 GitHub 的 **`main`** 分支。
+1. 代码 **commit 并 push** 到 GitHub 的 **`main`** 分支（变更需在 `agents-service-v2/**` 下才会触发）。
 2. 仓库 **Settings → Secrets** 里配置好 **`ECS_SSH_PRIVATE_KEY`**（以及可选 **`ECS_HOST`**）。
-3. 仓库 **Settings → Variables** 里把 **`AGENTS_V2_AUTO_DEPLOY`** 设为 **`true`**（见 `.github/workflows/agents-service-v2.yml` 顶部说明）。  
-   这样：**每次 push 改到 `agents-service-v2` 且 verify 通过，就会自动部署。**
+3. Workflow 文件：`.github/workflows/safe-deployment.yml`。  
+   **push 到 `main` 且 verify 通过后即自动部署**（无需再设 `AGENTS_V2_AUTO_DEPLOY`）。
 
-若不想自动部署：到 **Actions** 里手动 **Run workflow**，勾选 **deploy_ecs**。
+若不想随 push 部署：到 **Actions** 里手动 **Run workflow**（`safe-deployment`），勾选 **deploy_ecs**。
+
+标准入口脚本与本地一致：`bash scripts/deploy-safe.sh`（在 `agents-service-v2` 目录下）。
 
 ---
 

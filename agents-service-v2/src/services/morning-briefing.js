@@ -296,7 +296,7 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
         } else if (String(t.status) === 'pending_response') {
           trail = `｜催办 ${rc}/3 次`;
         }
-        const flagged = t.hr_performance_recorded ? '｜绩效已备案' : '';
+        const flagged = t.hr_performance_recorded ? '｜HR已备案' : '';
         const ttl = briefingPrettyTaskTitle(t.title);
         const src = briefingSourceLabel(t.source);
         return `${urgency} [${t.task_id}] ${src}｜**${stZh}**｜${ttl.slice(0, 40)}｜${who}｜截止 ${deadline}${trail}${flagged}`;
@@ -308,10 +308,10 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
         `_仅含 **派发/创建日 = 昨日（上海）** 且 **尚未闭环** 的任务：BI 异常、数据审计、定时任务、随机巡检、营销协作。**不含**前几日派发仍未完成的积压（避免刷屏）。_\n` +
         fmtOpenLines(openR.rows || []).join('\n') +
         (openTotal > (openR.rows?.length || 0) ? `\n_…共 ${openTotal} 条，此处最多列 30 条_` : '') +
-        '\n\n**催办与绩效**\n' +
-        '· **待回复**：约每 **1 小时**可催 1 次；**满 3 次催办 + 再等 1 小时**仍无有效回复 → 写入 **agent_scores** 并 **向责任人发送【公司通知】**。\n' +
-        '· **待审核**：回复连续 **3 次**不合格 → 扣分并 **【公司通知】** 责任人。\n' +
-        '· 若已记绩效，行末显示「绩效已备案」。'
+        '\n\n**催办与 HR 备案**\n' +
+        '· **待回复**：约每 **1 小时**可催 1 次；**满 3 次催办 + 再等 1 小时**仍无有效闭环：**BI 异常任务卡、定时任务、随机抽检、数据审计、营销协作** → **仅**记入工作态度未完成（`hr_performance_recorded`），影响当月态度评级；**不因催办写入 agent_scores 扣分**。**BI 异常触发的绩效扣分**仅按 BI 规则在周度 **anomaly_rollups_v2** 中计算，与任务卡催办无关。均 **【公司通知】**（飞书卡片+文本）。\n' +
+        '· **待审核**：回复连续 **3 次**不合格 → **工作态度**备案（与任务卡说明一致：**不计**绩效分），并 **【公司通知】**。\n' +
+        '· 已打标 `hr_performance_recorded` 时行末显示「HR已备案」。'
       );
     } else {
       sections.push(

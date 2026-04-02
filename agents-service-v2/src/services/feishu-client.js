@@ -162,22 +162,48 @@ export async function lookupAssigneeOpenIds(task) {
   return (r3.rows || []).map((x) => x.open_id).filter(Boolean);
 }
 
-/** 向责任人发送带【公司通知】前缀的文本（绩效扣分、备案等须可感知） */
+/**
+ * 向责任人发送【公司通知】：飞书交互卡片 + 文本各一条（卡片失败则仅文本），便于会话列表与富文本同时可见。
+ */
 export async function sendCompanyNoticeToAssignees(task, body) {
   const text = String(body || '').trim();
-  if (!text) return { targets: 0, sent: 0 };
+  if (!text) return { targets: 0, sentCards: 0, sentTexts: 0 };
   const oids = await lookupAssigneeOpenIds(task);
-  let sent = 0;
+  let sentCards = 0;
+  let sentTexts = 0;
+  const plain = text.length > 3500 ? `${text.slice(0, 3497)}…` : text;
+  const card = {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: '【公司通知】' },
+      template: 'blue'
+    },
+    elements: [
+      {
+        tag: 'div',
+        text: { tag: 'plain_text', content: plain }
+      },
+      {
+        tag: 'note',
+        elements: [{ tag: 'plain_text', content: '请妥善留存；如有异议请联系营运或 HR。' }]
+      }
+    ]
+  };
   for (const oid of oids) {
-    const res = await sendText(oid, `【公司通知】\n${text}`, 'open_id');
-    if (res?.ok) sent += 1;
+    const cardRes = await sendCard(oid, card, 'open_id');
+    if (cardRes?.ok) sentCards += 1;
+    const txtRes = await sendText(oid, `【公司通知】\n${text}`, 'open_id');
+    if (txtRes?.ok) sentTexts += 1;
   }
   if (!oids.length) {
     logger.warn({ taskId: task?.task_id, store: task?.store }, 'company notice: no assignee open_id');
   } else {
-    logger.info({ taskId: task?.task_id, sent, targets: oids.length }, 'company notice to assignee');
+    logger.info(
+      { taskId: task?.task_id, targets: oids.length, sentCards, sentTexts },
+      'company notice to assignee'
+    );
   }
-  return { targets: oids.length, sent };
+  return { targets: oids.length, sentCards, sentTexts };
 }
 
 export async function replyMsg(messageId, text) {
@@ -1211,7 +1237,7 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
           },
           {
             tag: 'note',
-            elements: [{ tag: 'plain_text', content: `审核次数：${rc + 1}/3 · 三次不合格将记入绩效` }]
+            elements: [{ tag: 'plain_text', content: `审核次数：${rc + 1}/3 · 三次不合格将备案工作态度（不计绩效分）` }]
           }
         ]
       };
@@ -1226,44 +1252,26 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
             { headers: { Authorization: 'Bearer ' + t2 }, timeout: 10000 }
           ).catch(() => {
             // 降级：文本回复
-            replyMsg(replyMessageId, `⚠️ 回复审核未通过：${reason}\n\n${feedback || '请补充完整处理记录（实际情况+处理措施+照片）。'}\n审核次数：${rc + 1}/3，三次不合格将记入绩效。`).catch(() => {});
+            replyMsg(replyMessageId, `⚠️ 回复审核未通过：${reason}\n\n${feedback || '请补充完整处理记录（实际情况+处理措施+照片）。'}\n审核次数：${rc + 1}/3，三次不合格将备案工作态度（不计绩效分）。`).catch(() => {});
           });
         }
       }
 
-      // 若已满3次不合格 → 触发HR绩效记录
+      // 若已满3次不合格 → 工作态度备案（与任务卡审核说明一致：不计 agent_scores 绩效分）
       if (rc + 1 >= 3) {
         try {
-          const brand = await query(`SELECT brand FROM daily_reports WHERE store = $1 LIMIT 1`, [task.store])
-            .then(r => r.rows[0]?.brand || '未知').catch(() => '未知');
-          const mon = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 7).replace('-', '') + '01';
-          const period = `week_${mon}`;
           await query(
-            `INSERT INTO agent_scores (brand, store, username, name, role, period, score_model,
-               base_score, total_score, additions, deductions, breakdown, summary)
-             VALUES ($1,$2,$3,$4,$5,$6,'task_review_v1',100,GREATEST(0,100-10),'[]','[]','{}', $7)
-             ON CONFLICT (brand, store, username, period)
-             DO UPDATE SET
-               total_score = GREATEST(0, agent_scores.total_score - 10),
-               summary = LEFT(COALESCE(agent_scores.summary,'') || E'\\n' || EXCLUDED.summary, 2000),
-               updated_at = NOW()`,
-            [
-              brand, task.store,
-              task.assignee_username || '__unknown__',
-              task.assignee_role === 'store_production_manager' ? '出品经理' : '店长',
-              task.assignee_role || 'store_manager',
-              period,
-              `【任务审核不合格 x3】${task.task_id}（${task.title}）三次回复均不合格，扣10分`
-            ]
-          ).catch(() => {});
-          await query(
-            `UPDATE master_tasks SET hr_performance_recorded = true, updated_at = NOW() WHERE task_id = $1`,
+            `UPDATE master_tasks SET
+               hr_performance_recorded = true,
+               resolution_code = 'hr_attitude_review_fail_3x',
+               updated_at = NOW()
+             WHERE task_id = $1`,
             [taskId]
           ).catch(() => {});
-          logger.info({ taskId, store: task.store }, 'Task reply review: 3x fail → HR penalty recorded');
+          logger.info({ taskId, store: task.store }, 'Task reply review: 3x fail → attitude record (no score deduction)');
           await sendCompanyNoticeToAssignees(
             task,
-            `因任务回复连续三次审核不合格，已记入绩效扣分 10 分（周度 agent_scores，供 HR 复核）。\n门店：${task.store}\n任务ID：${taskId}\n标题：${String(task.title || '').slice(0, 280)}`
+            `因任务回复连续三次审核不合格，已记入工作态度备案（影响月度工作态度评级；不计周度绩效分/agent_scores）。\n门店：${task.store}\n任务ID：${taskId}\n标题：${String(task.title || '').slice(0, 280)}`
           ).catch((e) => logger.warn({ err: e?.message, taskId }, 'review penalty: company notice failed'));
         } catch (_) {}
       }
