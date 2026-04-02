@@ -24,6 +24,13 @@ async function ensureReminderColumns() {
   }
 }
 
+function storeKeyForMatch(v) {
+  return String(v || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '');
+}
+
 async function lookupOpenIdsForTask(task) {
   const un = String(task.assignee_username || '').trim();
   if (un) {
@@ -34,11 +41,22 @@ async function lookupOpenIdsForTask(task) {
     if (r.rows?.length) return r.rows.map((x) => x.open_id);
   }
   const role = String(task.assignee_role || 'store_manager').trim();
+  const st = String(task.store || '').trim();
   const r2 = await query(
     `SELECT open_id FROM feishu_users WHERE store = $1 AND role = $2 AND registered = true AND open_id IS NOT NULL LIMIT 5`,
-    [task.store, role]
+    [st, role]
   );
-  return (r2.rows || []).map((x) => x.open_id);
+  if (r2.rows?.length) return r2.rows.map((x) => x.open_id);
+  const sk = storeKeyForMatch(st);
+  if (!sk) return [];
+  const r3 = await query(
+    `SELECT open_id FROM feishu_users
+     WHERE registered = true AND open_id IS NOT NULL AND role = $2
+       AND lower(regexp_replace(coalesce(store,''), '\\s+', '', 'g')) LIKE $1
+     LIMIT 5`,
+    [`%${sk}%`, role]
+  );
+  return (r3.rows || []).map((x) => x.open_id);
 }
 
 /**
@@ -119,8 +137,8 @@ export async function processTaskCardReminders() {
             dispatched_at, created_at, remind_count, last_reminder_at, response_text,
             COALESCE(hr_performance_recorded, false) AS hr_done
      FROM master_tasks
-     WHERE status = 'pending_response'
-       AND source IN ('random_inspection','scheduled_inspection','bi_anomaly','auto_collab')
+       WHERE status = 'pending_response'
+       AND source IN ('random_inspection','scheduled_inspection','bi_anomaly','auto_collab','data_auditor')
        AND (COALESCE(hr_performance_recorded, false) = false)`
   );
   const tasks = r2.rows || [];
@@ -174,7 +192,15 @@ export async function processTaskCardReminders() {
           tag: 'div',
           text: {
             tag: 'lark_md',
-            content: `**门店**：${t.store}\n**任务ID**：${t.task_id}\n**来源**：${t.source === 'bi_anomaly' ? 'BI异常' : t.source === 'random_inspection' ? '随机抽检' : '定时任务'}`
+            content: `**门店**：${t.store}\n**任务ID**：${t.task_id}\n**来源**：${
+              t.source === 'bi_anomaly'
+                ? 'BI异常'
+                : t.source === 'random_inspection'
+                  ? '随机抽检'
+                  : t.source === 'data_auditor'
+                    ? '数据审计'
+                    : '定时任务'
+            }`
           }
         },
         { tag: 'hr' },

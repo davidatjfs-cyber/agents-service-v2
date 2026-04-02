@@ -183,6 +183,10 @@ export async function runBiAnomalyNotifyPipeline({
   } catch (_e) {
     /* keep daily */
   }
+  const staticFreq = ANOMALY_RULES.find((x) => x.key === ruleKey)?.frequency;
+  if (staticFreq && staticFreq !== anomalyFrequency) {
+    anomalyFrequency = staticFreq;
+  }
   const sourceDataBase = {
     anomaly_key: ruleKey,
     anomaly_frequency: anomalyFrequency,

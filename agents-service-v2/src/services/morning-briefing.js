@@ -6,28 +6,12 @@
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { sendCard } from './feishu-client.js';
-import { getBadReviewRowsForStoreDateRange, buildYesterdayOpsBriefingSection, sameStore, monthPeriodVariants } from './deterministic-replies.js';
+import {
+  getBadReviewRowsForStoreDateRange,
+  buildYesterdayOpsBriefingSection,
+  resolveMonthlyRevenueTargetYuan
+} from './deterministic-replies.js';
 import { anomalyRuleLabelZh } from '../utils/anomaly-labels.js';
-
-/** 晨报月目标：多 period 格式 + sameStore 模糊门店名，避免 Daily Report 有数但目标行因命名不一致被跳过 */
-async function resolveBriefingMonthlyTarget(store, curMo) {
-  if (!store || !curMo) return 0;
-  const variants = monthPeriodVariants(curMo);
-  try {
-    const r = await query(
-      `SELECT store, target_revenue FROM revenue_targets WHERE period = ANY($1::text[])`,
-      [variants]
-    );
-    for (const row of r.rows || []) {
-      const tr = parseFloat(row.target_revenue);
-      if (!Number.isFinite(tr) || tr <= 0) continue;
-      if (sameStore(String(row.store || ''), store)) return tr;
-    }
-  } catch (e) {
-    logger.warn({ err: e?.message, store, curMo }, 'resolveBriefingMonthlyTarget');
-  }
-  return 0;
-}
 
 const FMT_MONEY = (n) => `¥${Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 0 })}`;
 const FMT_PCT   = (n) => `${(Number(n || 0) * 100).toFixed(1)}%`;
@@ -121,12 +105,13 @@ const BRIEFING_BI_WEEKLY_MONTHLY_CATEGORIES = [
   'hongchao_jiuguang_private_room'
 ];
 
+/** 禁止把「未写 frequency」默认当 daily，否则 gross_margin 等周/月键在库里缺字段时会误进晨报 */
 const BRIEFING_BI_DAILY_ONLY_SQL = `AND (
   source = 'data_auditor'
   OR (
     source = 'bi_anomaly'
     AND (
-      COALESCE(NULLIF(trim(source_data->>'anomaly_frequency'), ''), 'daily') = 'daily'
+      lower(trim(COALESCE(source_data->>'anomaly_frequency', ''))) = 'daily'
       OR (
         (source_data->>'anomaly_frequency' IS NULL OR trim(source_data->>'anomaly_frequency') = '')
         AND NOT (category = ANY($4::text[]))
@@ -142,6 +127,13 @@ const BRIEFING_DATA_AUDITOR_YESTERDAY_SQL = `AND (
     NULLIF(trim(COALESCE(source_data->>'date', '')), '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
     AND trim(COALESCE(source_data->>'date', '')) = $2::text
   )
+)`;
+
+/** 晨报待办：data_auditor 仅保留「真·日频」闭环（充值/单日人效）；周桌访/周差评/周毛利等走周审计，勿进昨日待办 */
+const BRIEFING_DATA_AUDITOR_ALLOW_CATEGORIES = ['充值异常', '人效值异常'];
+const BRIEFING_DATA_AUDITOR_CATEGORY_SQL = `AND (
+  source <> 'data_auditor'
+  OR (category = ANY($5::text[]))
 )`;
 
 /** username → 飞书展示名（优先真实姓名 name，避免晨报里 @NNYX… 账号） */
@@ -231,7 +223,7 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
       [`%${store}%`, curMo]
     );
     const curRev = Number(moR.rows?.[0]?.cur_rev ?? 0);
-    const tgt = await resolveBriefingMonthlyTarget(store, curMo);
+    const tgt = await resolveMonthlyRevenueTargetYuan(store, curMo);
     if (tgt > 0) {
       const ach = (curRev / tgt * 100).toFixed(1);
       const icon = +ach >= 100 ? '✅' : +ach >= 80 ? '⚠️' : '🔴';
@@ -274,9 +266,16 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
          AND source = ANY($3::text[])
          ${BRIEFING_BI_DAILY_ONLY_SQL}
          ${BRIEFING_DATA_AUDITOR_YESTERDAY_SQL}
+         ${BRIEFING_DATA_AUDITOR_CATEGORY_SQL}
          AND COALESCE(hr_performance_recorded,false) = true
          AND status IN ('pending_response','pending_review')`,
-      [`%${store}%`, yesterday, BRIEFING_PENDING_TASK_SOURCES, BRIEFING_BI_WEEKLY_MONTHLY_CATEGORIES]
+      [
+        `%${store}%`,
+        yesterday,
+        BRIEFING_PENDING_TASK_SOURCES,
+        BRIEFING_BI_WEEKLY_MONTHLY_CATEGORIES,
+        BRIEFING_DATA_AUDITOR_ALLOW_CATEGORIES
+      ]
     );
     const perfTotal = parseInt(perfCntR.rows[0]?.c || 0, 10);
     const perfR = await query(
@@ -287,10 +286,17 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
          AND source = ANY($3::text[])
          ${BRIEFING_BI_DAILY_ONLY_SQL}
          ${BRIEFING_DATA_AUDITOR_YESTERDAY_SQL}
+         ${BRIEFING_DATA_AUDITOR_CATEGORY_SQL}
          AND COALESCE(hr_performance_recorded,false) = true
          AND status IN ('pending_response','pending_review')
        ORDER BY updated_at DESC NULLS LAST LIMIT 5`,
-      [`%${store}%`, yesterday, BRIEFING_PENDING_TASK_SOURCES, BRIEFING_BI_WEEKLY_MONTHLY_CATEGORIES]
+      [
+        `%${store}%`,
+        yesterday,
+        BRIEFING_PENDING_TASK_SOURCES,
+        BRIEFING_BI_WEEKLY_MONTHLY_CATEGORIES,
+        BRIEFING_DATA_AUDITOR_ALLOW_CATEGORIES
+      ]
     );
 
     const pendCntR = await query(
@@ -299,9 +305,16 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
          AND source = ANY($3::text[])
          ${BRIEFING_BI_DAILY_ONLY_SQL}
          ${BRIEFING_DATA_AUDITOR_YESTERDAY_SQL}
+         ${BRIEFING_DATA_AUDITOR_CATEGORY_SQL}
          AND status IN ('pending_response','pending_review')
          AND COALESCE(hr_performance_recorded,false) = false`,
-      [`%${store}%`, yesterday, BRIEFING_PENDING_TASK_SOURCES, BRIEFING_BI_WEEKLY_MONTHLY_CATEGORIES]
+      [
+        `%${store}%`,
+        yesterday,
+        BRIEFING_PENDING_TASK_SOURCES,
+        BRIEFING_BI_WEEKLY_MONTHLY_CATEGORIES,
+        BRIEFING_DATA_AUDITOR_ALLOW_CATEGORIES
+      ]
     );
     const pendTotal = parseInt(pendCntR.rows[0]?.c || 0, 10);
     const pendR = await query(
@@ -312,10 +325,17 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
          AND source = ANY($3::text[])
          ${BRIEFING_BI_DAILY_ONLY_SQL}
          ${BRIEFING_DATA_AUDITOR_YESTERDAY_SQL}
+         ${BRIEFING_DATA_AUDITOR_CATEGORY_SQL}
          AND status IN ('pending_response','pending_review')
          AND COALESCE(hr_performance_recorded,false) = false
        ORDER BY timeout_at ASC NULLS LAST LIMIT 5`,
-      [`%${store}%`, yesterday, BRIEFING_PENDING_TASK_SOURCES, BRIEFING_BI_WEEKLY_MONTHLY_CATEGORIES]
+      [
+        `%${store}%`,
+        yesterday,
+        BRIEFING_PENDING_TASK_SOURCES,
+        BRIEFING_BI_WEEKLY_MONTHLY_CATEGORIES,
+        BRIEFING_DATA_AUDITOR_ALLOW_CATEGORIES
+      ]
     );
 
     const taskUsernames = [...(perfR.rows || []), ...(pendR.rows || [])]
@@ -360,7 +380,7 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
     if (pendTotal > 0) {
       sections.push(
         `**📋 待处理任务（昨日 ${yesterday} 派发 · ${pendTotal}个）**\n` +
-        `_仅含 **日频** BI 异常与 **数据审计（data_auditor）**；**不含**周/月维度异常（桌访产品/桌访占比/周营收/差评周结/包房周结/毛利月结等），避免晨报重复同一统计周期。仅统计 **${yesterday}** 派发。_\n` +
+        `_仅含 **日频** BI 异常，及数据审计中 **昨日单日** 的 **充值异常 / 人效值异常**；**不含**周/月维度的桌访、差评、桌访占比、实收营收累计、毛利等 MT 任务。仅统计 **${yesterday}** 派发。_\n` +
         fmtTaskLines(pendR.rows || []).join('\n') +
         (pendTotal > (pendR.rows?.length || 0) ? `\n_…共${pendTotal}个，此处仅列5条_` : '') +
         '\n\n**为何还没备案？（核心）**\n' +

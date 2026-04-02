@@ -7133,6 +7133,29 @@ function shanghaiYesterdayYmd() {
   return `${y}-${m}-${d}`;
 }
 
+/** 与 agents-service-v2 充值异常一致：以 PG daily_reports.recharge_* 为准，避免 state.dailyReports JSON 滞后或未同步导致误报「无充值」 */
+async function fetchRechargeFromDailyReportsPg(storeName, reportDate) {
+  if (!storeName || !reportDate) return { cnt: 0, amt: 0 };
+  try {
+    const like = normalizeStoreLike(storeName);
+    const r = await pool().query(
+      `SELECT COALESCE(SUM(COALESCE(recharge_count,0)), 0)::int AS cnt,
+              COALESCE(SUM(COALESCE(recharge_amount,0)), 0)::numeric AS amt
+       FROM daily_reports
+       WHERE date = $1::date
+         AND lower(regexp_replace(coalesce(store,''), '\\s+', '', 'g')) LIKE $2`,
+      [reportDate, like]
+    );
+    const row = r.rows?.[0];
+    return {
+      cnt: parseInt(row?.cnt ?? 0, 10) || 0,
+      amt: parseFloat(row?.amt ?? 0) || 0
+    };
+  } catch (_e) {
+    return { cnt: 0, amt: 0 };
+  }
+}
+
 export async function runDataAuditor(checkMode = 'daily') {
   await refreshBiAgentRuntimeConfig();
   const state = await getSharedState();
@@ -7279,16 +7302,20 @@ export async function runDataAuditor(checkMode = 'daily') {
     for (const report of reportsSorted) {
       const reportDate = toDateOnly(report?.date);
       if (!reportDate) continue;
-      const rechargeAmount = toNum(report?.data?.recharge?.amount, 0);
-      const noRecharge = rechargeAmount <= 0;
+      const jsonAmt = toNum(report?.data?.recharge?.amount, 0);
+      const jsonCnt = toNum(report?.data?.recharge?.count, 0);
+      const pg = await fetchRechargeFromDailyReportsPg(storeName, reportDate);
+      const rechargeAmount = Math.max(jsonAmt, pg.amt);
+      const rechargeCount = Math.max(jsonCnt, pg.cnt);
+      const noRecharge = rechargeAmount <= 0 && rechargeCount <= 0;
 
       if (noRecharge) {
         issues.push({
           agent: 'data_auditor', brand, store: storeName, category: '充值异常',
           severity: 'medium',
           title: `${storeName} ${reportDate} 当日无充值`,
-          detail: `当日充值金额为 0。`,
-          data: { date: reportDate, rechargeAmount: 0 }
+          detail: `当日充值金额为 0（已交叉核对营业日报表 recharge_amount / recharge_count）。`,
+          data: { date: reportDate, rechargeAmount: 0, rechargeCount: 0 }
         });
       }
 

@@ -7,6 +7,7 @@ import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { getAnomalyRules, toFeishuStoreName, getBrandForStore as getBrandFromConfig } from './config-service.js';
 import { enqueueNotifyJob, enqueueCollabJob } from './anomaly-queue.js';
+import { runBiAnomalyNotifyPipeline } from './anomaly-notify-pipeline.js';
 import {
   fetchMergedTableVisitEntries,
   tableVisitEntryIsDissatisfied,
@@ -240,12 +241,13 @@ export async function checkRechargeZero(store) {
 
     const r = await query(
       `SELECT date::date::text AS d,
-              COALESCE(recharge_count, 0)::int AS cnt,
-              COALESCE(recharge_amount, 0)::numeric AS amt
+              COALESCE(SUM(COALESCE(recharge_count, 0)), 0)::int AS cnt,
+              COALESCE(SUM(COALESCE(recharge_amount, 0)), 0)::numeric AS amt
        FROM daily_reports
        WHERE store ILIKE ANY($1::text[])
          AND date::date <= $2::date
          AND date::date >= $3::date
+       GROUP BY date::date
        ORDER BY date::date ASC`,
       [dailyReportIlikePatterns(store), todaySh, addDaysYmdShanghai(todaySh, -120)]
     );
@@ -399,6 +401,15 @@ export async function checkGrossMargin(store) {
   const brandThresholds = ruleConfig.threshold[brand] || ruleConfig.threshold.default;
   if (!brandThresholds) return { triggered: false, detail: `品牌${brand}无阈值配置` };
 
+  // 业务固定：仅每月 10 日（上海日历）做一次上月毛利率判定与派单，与 08:20 月规复检 cron 对齐；其它日期直接跳过，避免与周报/日巡检误触发混淆
+  const { d: shanghaiDom } = getShanghaiYmdParts();
+  if (shanghaiDom !== 10) {
+    return {
+      triggered: false,
+      detail: `总实收毛利率为月度项，仅在每月10日统计上月结（今日${shanghaiTodayYmd()}已跳过）`
+    };
+  }
+
   // 上月实收毛利率：优先 monthly_margins（飞书「实际毛利率表」同步），其次多维表行，最后日报均值
   const { first: lmFirst, last: lmLast } = shanghaiPrevCalendarMonthBounds();
   const periodYm = lmFirst.slice(0, 7);
@@ -435,29 +446,19 @@ export async function checkGrossMargin(store) {
   if (avgMargin < brandThresholds.high.below_pct) severity = 'high';
   else if (avgMargin < brandThresholds.medium.below_pct) severity = 'medium';
 
-  // 业务约束：实收毛利率通常在每月 10 号前后才稳定，10 号前命中仅记为“待数据”，不进入扣分/派单
-  const todayYmd = shanghaiTodayYmd();
-  const todayDay = Number(String(todayYmd).slice(-2));
-  const deferBeforeDay = 10;
-  const shouldDefer = Number.isFinite(todayDay) && todayDay < deferBeforeDay;
-
   return {
     triggered: !!severity,
     severity,
-    deferred: !!severity && shouldDefer,
-    deferUntilDay: deferBeforeDay,
+    deferred: false,
     value: {
       avgMargin: avgMargin.toFixed(1),
       brand,
-      period: periodYm,
-      deferred_until_day: shouldDefer ? deferBeforeDay : null
+      period: periodYm
     },
     threshold: brandThresholds,
     detail: severity
-      ? shouldDefer
-        ? `${brand}实收毛利率${avgMargin.toFixed(1)}%，低于阈值；因月度数据未完全稳定，已标记为待数据（${deferBeforeDay}号后自动生效）`
-        : `${brand}实收毛利率${avgMargin.toFixed(1)}%，低于${severity==='high'?brandThresholds.high.below_pct:brandThresholds.medium.below_pct}%`
-      : `毛利率正常 ${avgMargin.toFixed(1)}%`
+      ? `${brand}实收毛利率${avgMargin.toFixed(1)}%，低于${severity==='high'?brandThresholds.high.below_pct:brandThresholds.medium.below_pct}%（${periodYm} 月结｜每月10日检测）`
+      : `毛利率正常 ${avgMargin.toFixed(1)}%（${periodYm}）`
   };
 }
 
