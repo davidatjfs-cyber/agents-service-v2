@@ -2836,6 +2836,63 @@ app.delete('/api/approvals/:id', authRequired, async (req, res) => {
   }
 });
 
+/**
+ * 从入职审批 payload.employee 生成待写入 hrms_state.employees 的记录（与 decide 终审逻辑一致）。
+ * @returns {{ ok: true, nextEmp: object, newUsername: string, empName: string, empPassword: string } | { ok: false, reason: string, nextEmp: null }}
+ */
+function buildOnboardingEmployeeRecordFromPayload(emp, stateForId) {
+  const employees = Array.isArray(stateForId?.employees) ? stateForId.employees : [];
+  const newUsername = String(emp?.username || '').trim();
+  if (!newUsername) return { ok: false, reason: 'missing_employee_username', nextEmp: null };
+  let empId = String(emp?.id || '').trim();
+  if (!empId) {
+    let maxNum = 0;
+    employees.forEach(e => {
+      const eid = String(e?.id || '').trim();
+      const m = eid.match(/^(?:EMP)?(\d+)$/i);
+      if (m) { const n = Number(m[1]); if (n > maxNum) maxNum = n; }
+    });
+    empId = String(maxNum + 1).padStart(4, '0');
+  }
+  const empPassword = String(emp?.password || '').trim() || '123456';
+  const empName = String(emp?.name || '').trim() || newUsername;
+  const nextEmp = {
+    id: empId,
+    username: newUsername,
+    name: empName,
+    password: empPassword,
+    gender: String(emp?.gender || '').trim() || '',
+    birthday: String(emp?.birthday || '').trim() || '',
+    idCardNumber: String(emp?.idCardNumber || emp?.idCardNo || emp?.idNumber || '').trim() || '',
+    hometown: String(emp?.hometown || '').trim() || '',
+    registeredResidence: String(emp?.registeredResidence || '').trim() || '',
+    maritalStatus: String(emp?.maritalStatus || '').trim() || '',
+    wechat: String(emp?.wechat || '').trim() || '',
+    store: String(emp?.store || '').trim() || '',
+    role: String(emp?.role || '').trim() || 'store_employee',
+    department: String(emp?.department || '').trim() || '',
+    position: String(emp?.position || '').trim() || '',
+    level: String(emp?.level || '').trim() || '',
+    managerUsername: String(emp?.managerUsername || '').trim() || '',
+    salary: emp?.salary == null ? '' : emp.salary,
+    education: String(emp?.education || '').trim() || '',
+    bankCard: String(emp?.bankCard || '').trim() || '',
+    emergencyContactName: String(emp?.emergencyContactName || '').trim() || '',
+    emergencyContactPhone: String(emp?.emergencyContactPhone || '').trim() || '',
+    emergencyContactRelation: String(emp?.emergencyContactRelation || '').trim() || '',
+    idCardFrontUrl: String(emp?.idCardFrontUrl || '').trim() || '',
+    idCardBackUrl: String(emp?.idCardBackUrl || '').trim() || '',
+    joinDate: String(emp?.joinDate || '').trim() || '',
+    phone: String(emp?.phone || '').trim() || '',
+    email: String(emp?.email || '').trim() || '',
+    status: 'active',
+    promotionHistory: Array.isArray(emp?.promotionHistory) ? emp.promotionHistory : [],
+    createdAt: hrmsNowISO().slice(0, 10),
+    lastLogin: null
+  };
+  return { ok: true, nextEmp, newUsername, empName, empPassword };
+}
+
 app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
   const username = String(req.user?.username || '').trim();
   const role = String(req.user?.role || '').trim();
@@ -2852,6 +2909,9 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
   const promotedSalaryRaw = req.body?.promotedSalary;
   if (!username) return res.status(400).json({ error: 'missing_user' });
   if (!id) return res.status(400).json({ error: 'missing_id' });
+
+  /** 入职审批通过后同步员工档案时的告警（写入 hrms_state.employees） */
+  let decideExtras = {};
 
   try {
     const r0 = await pool.query(
@@ -2955,81 +3015,95 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
     const updated = r1.rows?.[0] || null;
 
     if (updated && String(updated.status || '') === 'approved' && String(updated.type || '') === 'onboarding') {
-      let state = (await getSharedState()) || {};
-      const employees = Array.isArray(state.employees) ? state.employees : [];
       const emp = updated.payload?.employee && typeof updated.payload.employee === 'object' ? updated.payload.employee : {};
-      const newUsername = String(emp?.username || '').trim();
-      if (newUsername && !stateFindUserRecord(state, newUsername)) {
-        const nextEmployees = employees.slice();
-        let empId = String(emp?.id || '').trim();
-        if (!empId) {
-          let maxNum = 0;
-          employees.forEach(e => {
-            const eid = String(e?.id || '').trim();
-            const m = eid.match(/^(?:EMP)?(\d+)$/i);
-            if (m) { const n = Number(m[1]); if (n > maxNum) maxNum = n; }
+      const stateForId = (await getSharedState()) || {};
+      const built = buildOnboardingEmployeeRecordFromPayload(emp, stateForId);
+      if (!built.ok) {
+        console.error('[approval/onboarding] 审批已通过但无法构建员工记录', {
+          approvalId: updated.id,
+          reason: built.reason,
+          employeeName: String(emp?.name || '').trim() || null
+        });
+        decideExtras.onboardingEmployeeSync = { ok: false, reason: built.reason };
+      } else {
+        const { nextEmp, newUsername, empName, empPassword } = built;
+        try {
+          // 原子合并，避免 saveSharedState 全量写回与并发请求互相覆盖导致「审批过了但员工没进表」
+          await mergeSharedStateFields({ employees: [nextEmp] }, { employees: 'username' });
+          decideExtras.onboardingEmployeeSync = { ok: true, username: newUsername };
+        } catch (mergeErr) {
+          console.error('[approval/onboarding] mergeSharedStateFields(employees) 失败', {
+            approvalId: updated.id,
+            username: newUsername,
+            err: String(mergeErr?.message || mergeErr)
           });
-          empId = String(maxNum + 1).padStart(4, '0');
+          decideExtras.onboardingEmployeeSync = { ok: false, reason: 'merge_failed', username: newUsername };
         }
-        const empPassword = String(emp?.password || '').trim() || '123456';
-        const empName = String(emp?.name || '').trim() || newUsername;
-        const nextEmp = {
-          id: empId,
-          username: newUsername,
-          name: empName,
-          password: empPassword,
-          gender: String(emp?.gender || '').trim() || '',
-          birthday: String(emp?.birthday || '').trim() || '',
-          idCardNumber: String(emp?.idCardNumber || emp?.idCardNo || emp?.idNumber || '').trim() || '',
-          hometown: String(emp?.hometown || '').trim() || '',
-          registeredResidence: String(emp?.registeredResidence || '').trim() || '',
-          maritalStatus: String(emp?.maritalStatus || '').trim() || '',
-          wechat: String(emp?.wechat || '').trim() || '',
-          store: String(emp?.store || '').trim() || '',
-          role: String(emp?.role || '').trim() || 'store_employee',
-          department: String(emp?.department || '').trim() || '',
-          position: String(emp?.position || '').trim() || '',
-          level: String(emp?.level || '').trim() || '',
-          managerUsername: String(emp?.managerUsername || '').trim() || '',
-          salary: emp?.salary == null ? '' : emp.salary,
-          education: String(emp?.education || '').trim() || '',
-          bankCard: String(emp?.bankCard || '').trim() || '',
-          emergencyContactName: String(emp?.emergencyContactName || '').trim() || '',
-          emergencyContactPhone: String(emp?.emergencyContactPhone || '').trim() || '',
-          emergencyContactRelation: String(emp?.emergencyContactRelation || '').trim() || '',
-          idCardFrontUrl: String(emp?.idCardFrontUrl || '').trim() || '',
-          idCardBackUrl: String(emp?.idCardBackUrl || '').trim() || '',
-          joinDate: String(emp?.joinDate || '').trim() || '',
-          phone: String(emp?.phone || '').trim() || '',
-          email: String(emp?.email || '').trim() || '',
-          status: 'active',
-          promotionHistory: Array.isArray(emp?.promotionHistory) ? emp.promotionHistory : [],
-          createdAt: hrmsNowISO().slice(0, 10),
-          lastLogin: null
-        };
-        nextEmployees.push(nextEmp);
-        state = { ...state, employees: nextEmployees };
 
-        // Notify submitter, direct manager, AND store manager of the employee's store
-        const submitter = String(updated.applicant_username || '').trim();
-        const empManager = String(nextEmp.managerUsername || '').trim();
-        const empStore = String(nextEmp.store || '').trim();
-        let storeManagerUsername = '';
-        if (empStore) {
-          const allEmps = Array.isArray(state.employees) ? state.employees : [];
-          const smRec = allEmps.find(e => String(e?.store || '').trim() === empStore && String(e?.role || '').trim() === 'store_manager');
-          if (smRec) storeManagerUsername = String(smRec.username || '').trim();
+        // 创建 users 表登录账号 + feishu_users 绑定记录（修复：入职审批通过后必须创建登录账号和飞书绑定）
+        if (decideExtras.onboardingEmployeeSync?.ok) {
+          try {
+            const hash = await bcrypt.hash(empPassword, 10);
+            await pool.query(
+              `INSERT INTO users (username, password_hash, real_name, role, department, position, is_active)
+               VALUES ($1, $2, $3, $4, $5, $6, true)
+               ON CONFLICT (username) DO UPDATE SET password_hash = $2, real_name = $3, role = $4, department = $5, position = $6, is_active = true`,
+              [newUsername, hash, empName, nextEmp.role, nextEmp.department || '', nextEmp.position || '']
+            );
+            console.log('[approval/onboarding] users account created:', newUsername);
+            decideExtras.userAccountCreated = true;
+          } catch (userErr) {
+            console.error('[approval/onboarding] 创建 users 账号失败', {
+              approvalId: updated.id,
+              username: newUsername,
+              err: String(userErr?.message || userErr)
+            });
+          }
+          try {
+            await pool.query(
+              `INSERT INTO feishu_users (username, name, store, role, registered)
+               VALUES ($1, $2, $3, $4, FALSE)
+               ON CONFLICT (username) DO UPDATE SET name = $2, store = $3, role = $4`,
+              [newUsername, empName, nextEmp.store || '', nextEmp.role || '']
+            );
+            console.log('[approval/onboarding] feishu_users record created:', newUsername);
+            decideExtras.feishuUsersCreated = true;
+          } catch (feishuErr) {
+            console.error('[approval/onboarding] 创建 feishu_users 记录失败', {
+              approvalId: updated.id,
+              username: newUsername,
+              err: String(feishuErr?.message || feishuErr)
+            });
+          }
         }
-        const title = '新员工入职审批已通过';
-        const todayStr = hrmsNowISO().slice(0, 10).replace(/-/g, '年').replace(/年(\d{2})$/, '月$1日');
-        const submitterRec = stateFindUserRecord(state, submitter) || {};
-        const submitterName = String(submitterRec?.name || submitter).trim() || submitter;
-        const msg = `${submitterName}你好，你提交的新员工「${empName}」入职已经成功，该员工的系统账号是 ${newUsername}，密码是 ${empPassword}，请通知该员工上线吧！\n门店：${empStore || '-'}\n总部 ${todayStr}`;
-        const recipients = uniqUsernames([submitter, empManager, storeManagerUsername].filter(Boolean));
-        for (const u of recipients) {
-          state = addStateNotification(state, makeNotif(u, title, msg, { type: 'onboarding_result', approvalId: updated.id }));
+
+        if (decideExtras.onboardingEmployeeSync?.ok) {
+          const state = (await getSharedState()) || {};
+          const submitter = String(updated.applicant_username || '').trim();
+          const empManager = String(nextEmp.managerUsername || '').trim();
+          const empStore = String(nextEmp.store || '').trim();
+          let storeManagerUsername = '';
+          if (empStore) {
+            const allEmps = Array.isArray(state.employees) ? state.employees : [];
+            const smRec = allEmps.find(e => String(e?.store || '').trim() === empStore && String(e?.role || '').trim() === 'store_manager');
+            if (smRec) storeManagerUsername = String(smRec.username || '').trim();
+          }
+          const title = '新员工入职审批已通过';
+          const todayStr = hrmsNowISO().slice(0, 10).replace(/-/g, '年').replace(/年(\d{2})$/, '月$1日');
+          const submitterRec = stateFindUserRecord(state, submitter) || {};
+          const submitterName = String(submitterRec?.name || submitter).trim() || submitter;
+          const msg = `${submitterName}你好，你提交的新员工「${empName}」入职已经成功，该员工的系统账号是 ${newUsername}，密码是 ${empPassword}，请通知该员工上线吧！\n门店：${empStore || '-'}\n总部 ${todayStr}`;
+          const recipients = uniqUsernames([submitter, empManager, storeManagerUsername].filter(Boolean));
+          const notifs = recipients.map(u => makeNotif(u, title, msg, { type: 'onboarding_result', approvalId: updated.id }));
+          try {
+            await mergeSharedStateFields({ notifications: notifs }, { notifications: 'id' });
+          } catch (notifErr) {
+            console.error('[approval/onboarding] mergeSharedStateFields(notifications) 失败', {
+              approvalId: updated.id,
+              err: String(notifErr?.message || notifErr)
+            });
+          }
         }
-        await saveSharedState(state);
       }
     }
 
@@ -3691,8 +3765,46 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
       }
     } catch (e) {}
 
-    return res.json({ item: updated });
+    return res.json(Object.keys(decideExtras).length ? { item: updated, ...decideExtras } : { item: updated });
   } catch (e) {
+    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+  }
+});
+
+/**
+ * 管理端：根据已通过的入职审批，将员工补写入 hrms_state.employees（幂等：同 username 会覆盖为审批单中的快照）。
+ * 用于修复历史「审批通过但未进员工表」或 merge 失败后的补救。
+ */
+app.post('/api/admin/repair-onboarding-employee/:id', authRequired, async (req, res) => {
+  const role = String(req.user?.role || '').trim();
+  if (!(role === 'admin' || role === 'hr_manager' || role === 'hq_manager')) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  const id = String(req.params?.id || '').trim();
+  if (!id) return res.status(400).json({ error: 'missing_id' });
+  try {
+    const r0 = await pool.query(
+      'select id, type, status, payload from approval_requests where id = $1 limit 1',
+      [id]
+    );
+    const row = r0.rows?.[0];
+    if (!row) return res.status(404).json({ error: 'not_found' });
+    if (String(row.type || '') !== 'onboarding') return res.status(400).json({ error: 'not_onboarding' });
+    if (String(row.status || '') !== 'approved') return res.status(400).json({ error: 'not_approved' });
+    const payload = row.payload && typeof row.payload === 'object' ? row.payload : {};
+    const emp = payload?.employee && typeof payload.employee === 'object' ? payload.employee : {};
+    const stateForId = (await getSharedState()) || {};
+    const built = buildOnboardingEmployeeRecordFromPayload(emp, stateForId);
+    if (!built.ok) return res.status(400).json({ error: built.reason, message: '审批单中缺少 employee.username，无法补录' });
+    await mergeSharedStateFields({ employees: [built.nextEmp] }, { employees: 'username' });
+    return res.json({
+      ok: true,
+      approvalId: row.id,
+      username: built.newUsername,
+      name: built.empName
+    });
+  } catch (e) {
+    console.error('[admin/repair-onboarding-employee]', e);
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
   }
 });
@@ -10996,6 +11108,36 @@ app.get('/api/state', authRequired, async (req, res) => {
   }
 });
 
+/**
+ * 管理员 PUT 全量 state 时，浏览器 localStorage 里的 employees 往往滞后于服务端（如入职终审刚写入）。
+ * 若直接覆盖会抹掉新人。规则：同 username 以请求体为主并叠在旧记录上；仅服务端存在的员工追加保留。
+ */
+function mergeEmployeesForStatePut(incomingEmployees, existingEmployees) {
+  const norm = (u) => String(u || '').trim().toLowerCase();
+  const inc = Array.isArray(incomingEmployees) ? incomingEmployees : [];
+  const ex = Array.isArray(existingEmployees) ? existingEmployees : [];
+  const exMap = new Map();
+  for (const e of ex) {
+    const k = norm(e?.username);
+    if (k) exMap.set(k, e);
+  }
+  const seen = new Set();
+  const out = [];
+  for (const e of inc) {
+    const k = norm(e?.username);
+    if (!k) continue;
+    seen.add(k);
+    const base = exMap.get(k) || {};
+    out.push({ ...base, ...e });
+  }
+  for (const e of ex) {
+    const k = norm(e?.username);
+    if (!k || seen.has(k)) continue;
+    out.push(e);
+  }
+  return out;
+}
+
 app.put('/api/state', authRequired, async (req, res) => {
   if (String(req.user?.role || '') !== 'admin') {
     return res.status(403).json({ error: 'forbidden' });
@@ -11011,6 +11153,7 @@ app.put('/api/state', authRequired, async (req, res) => {
     // that the frontend may not have in its stale localStorage copy
     const existingState = await getSharedState();
     if (existingState) {
+      data.employees = mergeEmployeesForStatePut(data.employees, existingState.employees);
       const existingStores = Array.isArray(existingState.stores) ? existingState.stores : [];
       const incomingStores = Array.isArray(data.stores) ? data.stores : [];
       if (existingStores.length && incomingStores.length) {

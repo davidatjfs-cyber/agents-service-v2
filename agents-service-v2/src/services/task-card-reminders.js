@@ -181,21 +181,47 @@ export async function processTaskCardReminders() {
   const now = Date.now();
 
   for (const t of tasks) {
-    const base = new Date(t.dispatched_at || t.created_at).getTime();
-    if (!base) continue;
+    const dispatchTime = new Date(t.dispatched_at || t.created_at).getTime();
+    if (!dispatchTime) continue;
 
     const rc = parseInt(t.remind_count || 0, 10);
-    const last = t.last_reminder_at ? new Date(t.last_reminder_at).getTime() : null;
+    const lastReminderTime = t.last_reminder_at ? new Date(t.last_reminder_at).getTime() : null;
 
+    // 如果已经催办了3次,检查是否需要记录绩效
     if (rc >= 3) {
-      const lastChase = last || base + 3 * HOUR_MS;
-      if (now >= lastChase + HOUR_MS) {
+      // 必须有最后一次催办时间才检查绩效
+      if (!lastReminderTime) {
+        logger.warn({ taskId: t.task_id, remind_count: rc }, 'remind_count >= 3 但 last_reminder_at 为空,跳过绩效记录');
+        continue;
+      }
+      
+      // 检查距离最后一次催办是否已过1小时
+      if (now >= lastReminderTime + HOUR_MS) {
+        logger.info({ taskId: t.task_id, lastReminderTime, now }, '满3次催办且已过1小时,记录绩效');
         await recordHrPerformancePenalty(t);
+      } else {
+        logger.debug({ taskId: t.task_id, lastReminderTime, now }, '满3次催办但未过1小时,跳过');
       }
       continue;
     }
 
-    const nextChaseAt = base + (rc + 1) * HOUR_MS;
+    // 计算下次催办时间
+    // 第1次催办: dispatchTime + 1小时
+    // 第2次催办: lastReminderTime + 1小时 (如果已有催办)
+    // 第3次催办: lastReminderTime + 1小时
+    let nextChaseAt;
+    if (rc === 0) {
+      // 第1次催办: 任务创建后1小时
+      nextChaseAt = dispatchTime + HOUR_MS;
+    } else if (lastReminderTime) {
+      // 第2-3次催办: 上次催办后1小时
+      nextChaseAt = lastReminderTime + HOUR_MS;
+    } else {
+      // 异常情况: 有remind_count但没有last_reminder_at,跳过
+      logger.warn({ taskId: t.task_id, remind_count: rc }, '有remind_count但无last_reminder_at,跳过');
+      continue;
+    }
+    
     if (now < nextChaseAt) continue;
 
     const seq = rc + 1;

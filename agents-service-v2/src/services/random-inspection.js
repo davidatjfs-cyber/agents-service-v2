@@ -189,21 +189,20 @@ async function sendSafetyCheck(config) {
 
   // Create master_task
   try {
-    await query(
-      `INSERT INTO master_tasks (task_id, status, source, category, store, assignee_username, assignee_role, title, detail, source_data, feishu_msg_ids, dispatched_at, timeout_at)
-       VALUES ($1, 'pending_response', 'random_inspection', $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, NOW(), NOW() + INTERVAL '${timeWindow} minutes')`,
-      [
-        taskId,
-        taskType,
-        pickedStore,
-        assigneeUsername || usernames[0] || '',
-        assigneeRole,
-        `${pickedStore} ${taskType}`,
-        `类型：${taskType}\n任务：${taskDesc}\n时限：${timeWindow}分钟`,
-        JSON.stringify({ timeWindow, taskDesc }),
-        JSON.stringify(sentMessageIds)
-      ]
-    );
+      await query(
+        `INSERT INTO master_tasks (task_id, status, source, category, store, assignee_username, assignee_role, title, detail, source_data, feishu_msg_ids, dispatched_at, timeout_at, remind_count, last_reminder_at)
+         VALUES ($1, 'pending_response', 'random_inspection', $2, $3, $4, $5, $6::jsonb, $7::jsonb, NOW(), NOW() + INTERVAL '${timeWindow} minutes', 0, 0, NOW())`,
+        [
+          taskId,
+          taskType,
+          pickedStore,
+          assigneeUsername || usernames[0] || '',
+          `${pickedStore} ${taskType}`,
+          `类型：${taskType}\n任务：${taskDesc}\n时限：${timeWindow}分钟`,
+          JSON.stringify({ taskType, taskDesc }),
+          JSON.stringify(sentMessageIds)
+        ]
+      );
     logger.info({ taskId, store: pickedStore, type: taskType }, 'random-inspection: task created');
   } catch (e) {
     logger.warn({ err: e?.message }, 'random-inspection: failed to create master_task');
