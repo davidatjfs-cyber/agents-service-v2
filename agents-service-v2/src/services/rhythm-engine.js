@@ -301,8 +301,24 @@ export async function weeklyReport() {
   logger.info('📊 Generating weekly report');
   const stores = await getActiveStores();
 
-  // 运行周频异常检测
-  const weeklyResults = await runAnomalyChecks('weekly', stores);
+  // 周度异常已在周日22:00触发，此处仅读取已有数据生成报告，不再重复检测
+  const { weekStart, weekEnd } = await (async () => {
+    const { shanghaiLastCompletedWeekBounds } = await import('../utils/anomaly-week-bounds.js');
+    return shanghaiLastCompletedWeekBounds();
+  })();
+  const weeklyResults = [];
+  try {
+    const r = await query(
+      `SELECT anomaly_key, store, brand, severity, trigger_date, trigger_value
+       FROM anomaly_triggers
+       WHERE trigger_date >= $1::date AND trigger_date <= $2::date
+         AND anomaly_key IN ('revenue_achievement', 'labor_efficiency', 'table_visit_product', 'table_visit_ratio', 'bad_review_product', 'bad_review_service', 'recharge_zero')
+       ORDER BY CASE severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END`,
+      [weekStart, weekEnd]
+    );
+    weeklyResults.push(...r.rows.map(row => ({ ...row, triggered: true })));
+  } catch (_e) { /* ignore */ }
+
   const triggered = weeklyResults.filter(r => r.triggered);
 
   // KPI汇总
@@ -405,8 +421,18 @@ export async function monthlyEvaluation() {
   logger.info('📈 Running monthly evaluation');
   const stores = await getActiveStores();
 
-  // 运行月频检测
-  const monthlyResults = await runAnomalyChecks('monthly', stores);
+  // 月度异常已在月末最后一天22:00（营收）和10号08:00（毛利率）触发，此处仅读取已有数据
+  const monthlyResults = [];
+  try {
+    const r = await query(
+      `SELECT anomaly_key, store, brand, severity, trigger_date, trigger_value
+       FROM anomaly_triggers
+       WHERE trigger_date >= CURRENT_DATE - 35
+         AND anomaly_key IN ('revenue_achievement_monthly', 'gross_margin')
+       ORDER BY CASE severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END`
+    );
+    monthlyResults.push(...r.rows.map(row => ({ ...row, triggered: true })));
+  } catch (_e) { /* ignore */ }
 
   // 月度KPI汇总
   const kpiR = await query(
@@ -453,8 +479,36 @@ export async function monthlyEvaluation() {
 
 // ─── 启动Cron调度（读取配置，尊重 enabled 开关） ───
 // 产品约定（2026-03）：总部节律仅保留 **周报、月评**；晨检/午晚巡/日终暂不注册 cron（函数仍保留供手工 API 触发）。
+async function runAnomalyChecksForStores(frequency) {
+  const storesR = await query(
+    `SELECT DISTINCT store FROM daily_reports WHERE date >= CURRENT_DATE - 30 AND store IS NOT NULL`
+  );
+  const stores = (storesR.rows || []).map((x) => x.store).filter(Boolean);
+  if (!stores.length) { logger.warn({ frequency }, 'runAnomalyChecksForStores: no active stores'); return; }
+  logger.info({ frequency, stores }, `BI anomaly check (${frequency}) starting`);
+  const results = await runAnomalyChecks(frequency, stores);
+  const triggered = results.filter((r) => r.triggered);
+  logger.info({ frequency, triggered: triggered.length, total: results.length }, `BI anomaly check (${frequency}) done`);
+  return { triggered, total: results.length };
+}
+
+/** 上海日历当月最后一天 yyyy-mm-dd */
+function shanghaiLastDayOfMonth() {
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const s = fmt.format(now);
+  const [y, m] = s.split('-').map(Number);
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+}
+
 export function startRhythmScheduler() {
-  // 周一 10:00 周报
+  // 周日 22:00 — 周度 BI 异常检测（revenue_achievement/labor_efficiency/table_visit/bad_review 等）
+  cron.schedule('0 22 * * 0', async () => {
+    try { await runAnomalyChecksForStores('weekly'); } catch (e) { logger.error({ err: e?.message }, 'weekly anomaly check cron failed'); }
+  }, { timezone: 'Asia/Shanghai' });
+
+  // 周一 10:00 周报（发送飞书汇总卡片，不重复触发异常检测）
   cron.schedule('0 10 * * 1', async () => {
     if (!await isRhythmTaskEnabled('weekly')) { logger.info('Cron: weekly report SKIPPED (disabled in config)'); return; }
     try { await weeklyReport(); } catch (e) { logger.error({ err: e }, 'Cron: weekly report failed'); }
@@ -466,5 +520,20 @@ export function startRhythmScheduler() {
     try { await monthlyEvaluation(); } catch (e) { logger.error({ err: e }, 'Cron: monthly evaluation failed'); }
   }, { timezone: 'Asia/Shanghai' });
 
-  logger.info('✅ HQ Rhythm Scheduler started — 仅周报(周一10:00)+月评(每月1日10:00)；晨检/巡检/日终已暂停自动执行');
+  // 每日 22:00 充值异常检测（daily 频率，仅 recharge_zero）
+  cron.schedule('0 22 * * *', async () => {
+    try { await runAnomalyChecksForStores('daily'); } catch (e) { logger.error({ err: e?.message }, '充值异常日检 22:00 failed'); }
+  }, { timezone: 'Asia/Shanghai' });
+
+  // 每月最后一天 22:00 — 月度实收营收达成检测（revenue_achievement_monthly）
+  cron.schedule('0 22 28-31 * *', async () => {
+    try {
+      const todaySh = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
+      const lastDay = shanghaiLastDayOfMonth();
+      if (todaySh !== lastDay) return;
+      await runAnomalyChecksForStores('monthly');
+    } catch (e) { logger.error({ err: e?.message }, '月末月度实收营收检测 22:00 failed'); }
+  }, { timezone: 'Asia/Shanghai' });
+
+  logger.info('✅ HQ Rhythm Scheduler started — 周度BI(周日22:00)+周报(周一10:00)+月评(每月1日10:00)+充值日检(22:00)+月末月收(最后一天22:00)');
 }

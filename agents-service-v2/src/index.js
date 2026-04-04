@@ -59,7 +59,8 @@ import { REPLY_ENGINE_BUILD } from './reply-engine-version.js';
 let randomInspectionStartRetried = false;
 
 const app = express();
-const PORT = parseInt(process.env.PORT || '3100');
+/** 生产与 ecosystem.config.cjs 固定 3101；勿改为 3000（HRMS）或 3100（历史易与文档/旧进程混淆） */
+const PORT = parseInt(process.env.PORT || '3101', 10);
 enforceRuntimeSafetyOrExit({ serviceName: 'agents-service-v2' });
 
 app.use(helmet({
@@ -759,6 +760,25 @@ app.get('/api/rhythm/logs', authRequired, async (req, res) => {
 });
 
 // ─── Helper ───
+function getMonthDays(year, month) {
+  return new Date(year, month, 0).getDate();
+}
+
+function shanghaiPrevCalendarMonthBounds() {
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const s = fmt.format(now);
+  const [y, m] = s.split('-').map(Number);
+  let py = y;
+  let pm = m - 1;
+  if (pm < 1) { pm = 12; py -= 1; }
+  const pad = (n) => String(n).padStart(2, '0');
+  const first = `${py}-${pad(pm)}-01`;
+  const lastD = getMonthDays(py, pm);
+  const last = `${py}-${pad(pm)}-${String(lastD).padStart(2, '0')}`;
+  return { first, last };
+}
+
 async function getActiveStores() {
   const { query: dbQuery } = await import('./utils/db.js');
   const r = await dbQuery(`SELECT DISTINCT store FROM daily_reports WHERE date >= CURRENT_DATE - 30 AND store IS NOT NULL`);
@@ -832,7 +852,9 @@ async function start() {
     startTaskCardReminderScheduler();
     logger.info('Task card reminder cron enabled');
   } else {
-    logger.warn('Task reminder cron DISABLED');
+    logger.warn(
+      'Task reminder cron DISABLED (ENABLE_TASK_REMINDER_CRON=false 或与 ENABLE_DAILY_INSPECTION_CRON / ENABLE_AUTOMATIONS 全关)'
+    );
   }
   // 每日晨报：固定 07:30（Asia/Shanghai），业务约定勿改时刻/时区
   cron.schedule('30 7 * * *', () => {
@@ -875,17 +897,44 @@ async function start() {
       }
     }, { timezone: 'Asia/Shanghai' });
     logger.info('Monthly anomaly item bonus scheduled at 06:15 on 1st (Asia/Shanghai)');
-    // 毛利率等月度规则：1～9 号仅 pending_data，10 号起用飞书/月表数据复检并正式通知（与业务「每月 10 号前同步」对齐）
-    cron.schedule('20 8 10 * *', async () => {
+    // 总实收毛利率：每月10号 08:00 单独检测（与业务「每月10号前同步」对齐；月末跑的是月度实收营收，毛利率固定10号）
+    cron.schedule('0 8 10 * *', async () => {
       try {
         const stores = await getActiveStores();
-        logger.info({ n: stores.length }, 'monthly anomaly re-check on 10th (Asia/Shanghai)');
-        await runAnomalyChecks('monthly', stores);
+        logger.info({ n: stores.length }, 'gross_margin monthly check on 10th (Asia/Shanghai)');
+        // 仅跑 gross_margin，不跑 revenue_achievement_monthly（已在月末最后一天22:00处理）
+        for (const store of stores) {
+          try {
+            const { checkGrossMargin } = await import('./services/anomaly-engine.js');
+            const result = await checkGrossMargin(store);
+            if (result.triggered) {
+              const brand = await getBrandForStore(store).catch(() => null);
+              const { query: dbQuery } = await import('./utils/db.js');
+              const triggerDate = shanghaiPrevCalendarMonthBounds().last;
+              const dupFinal = await dbQuery(
+                `SELECT 1 FROM anomaly_triggers WHERE anomaly_key = 'gross_margin' AND store = $1 AND trigger_date = $2::date AND COALESCE(status, '') NOT IN ('pending_data', 'superseded') LIMIT 1`,
+                [store, triggerDate]
+              );
+              if (!dupFinal.rows?.length) {
+                await dbQuery(
+                  `INSERT INTO anomaly_triggers (anomaly_key, store, brand, severity, trigger_date, trigger_value, threshold_value, assigned_role, notify_target_role) VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9)`,
+                  ['gross_margin', store, brand || null, result.severity, triggerDate, JSON.stringify(result.value), JSON.stringify(result.threshold), 'store_production_manager', 'kitchen_manager']
+                );
+                const { enqueueNotifyJob, enqueueCollabJob } = await import('./services/anomaly-queue.js');
+                enqueueNotifyJob({ store, brand, ruleKey: 'gross_margin', severity: result.severity, detail: result.detail, value: result.value }).catch(() => {});
+                enqueueCollabJob({ ruleKey: 'gross_margin', store, severity: result.severity, detail: result.detail, value: result.value }).catch(() => {});
+                logger.warn({ anomaly: 'gross_margin', store, severity: result.severity }, 'Gross margin anomaly triggered (10th)');
+              }
+            }
+          } catch (e) {
+            logger.error({ err: e?.message, store }, 'gross_margin 10th check failed');
+          }
+        }
       } catch (e) {
-        logger.error({ err: e?.message }, 'monthly anomaly 10th re-check failed');
+        logger.error({ err: e?.message }, 'gross_margin 10th check failed');
       }
     }, { timezone: 'Asia/Shanghai' });
-    logger.info('Monthly BI anomaly re-check scheduled at 08:20 on 10th (Asia/Shanghai)');
+    logger.info('Gross margin monthly check scheduled at 08:00 on 10th (Asia/Shanghai)');
     // 随机抽检存在启动时序问题（DB 配置缓存可能尚未就绪），这里做一次“空定时器重试”，保证生产常驻运行
     startRandomInspections()
       .catch(e => logger.warn({ err: e?.message }, 'random-inspection start failed'))
@@ -904,8 +953,38 @@ async function start() {
   }
   ensureKnowledgeTable().catch(() => {});
 
-  app.listen(PORT, () => {
-    logger.info({ port: PORT }, `🚀 agents-service-v2 running on port ${PORT}`);
+  // Self-healing port claim: kill any process occupying our port before binding
+  // Prevents EADDRINUSE crash loops caused by orphan node processes from bad deploys
+  await new Promise((resolve) => {
+    const server = app.listen(PORT, () => {
+      logger.info({ port: PORT }, `🚀 agents-service-v2 running on port ${PORT}`);
+      resolve();
+    });
+    server.on('error', async (err) => {
+      if (err.code === 'EADDRINUSE') {
+        logger.warn({ port: PORT }, `Port ${PORT} in use — attempting to evict orphan process`);
+        try {
+          const { execSync } = await import('child_process');
+          execSync(`fuser -k ${PORT}/tcp 2>/dev/null || true`);
+          await new Promise(r => setTimeout(r, 1500));
+          // Retry once
+          const server2 = app.listen(PORT, () => {
+            logger.info({ port: PORT }, `🚀 agents-service-v2 running on port ${PORT} (after eviction)`);
+            resolve();
+          });
+          server2.on('error', (err2) => {
+            logger.fatal({ port: PORT, err: err2?.message }, 'Port still busy after eviction, giving up');
+            process.exit(1);
+          });
+        } catch (e) {
+          logger.fatal({ port: PORT, err: e?.message }, 'Failed to evict port holder');
+          process.exit(1);
+        }
+      } else {
+        logger.fatal({ err: err?.message }, 'Server listen error');
+        process.exit(1);
+      }
+    });
   });
 }
 

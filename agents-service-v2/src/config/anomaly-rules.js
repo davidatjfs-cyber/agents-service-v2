@@ -16,7 +16,7 @@
  */
 
 export const ANOMALY_RULES = [
-  // ─── 1. 实收营收异常 ───
+  // ─── 1. 实收营收异常（周度）───
   {
     key: 'revenue_achievement',
     name: '实收营收异常',
@@ -31,7 +31,7 @@ export const ANOMALY_RULES = [
       table: 'daily_reports',
       fields: ['actual_revenue'],
       target: 'revenue_targets.target_revenue',
-      calc: '累计实收/月目标 vs 累计天数/月天数，差值>=阈值触发'
+      calc: '周实收 vs 周目标（月目标×7/当月天数），差值>=阈值触发'
     },
     assignTo: { role: 'ops', title: '运营' },
     notifyTarget: { role: 'store_manager', title: '店长' },
@@ -42,7 +42,35 @@ export const ANOMALY_RULES = [
       optional: ['数据截图']
     },
     autoActions: ['trigger', 'remind', 'follow_up', 'pdca_generate'],
-    notes: '每周统计截止昨天的累计，月底统计整月'
+    notes: '每周日22:00触发，统计上一完整自然周'
+  },
+
+  // ─── 1b. 实收营收异常（月度）───
+  {
+    key: 'revenue_achievement_monthly',
+    name: '月度实收营收达成异常',
+    frequency: 'monthly',
+    brands: null,
+    thresholds: {
+      medium: { achievement_gap_pct: 10 },
+      high: { achievement_gap_pct: 15 }
+    },
+    dataSource: {
+      table: 'daily_reports',
+      fields: ['actual_revenue'],
+      target: 'revenue_targets.target_revenue',
+      calc: '上月全月实收 vs 月目标，差值>=阈值触发'
+    },
+    assignTo: { role: 'ops', title: '运营' },
+    notifyTarget: { role: 'store_manager', title: '店长' },
+    hrFollowUp: true,
+    hrTiming: 'on_trigger',
+    evidence: {
+      required: ['营收提升方案（文字）'],
+      optional: ['数据截图']
+    },
+    autoActions: ['trigger', 'remind', 'follow_up', 'pdca_generate'],
+    notes: '每月最后一天22:00触发，统计上月全月'
   },
 
   // ─── 2. 人效值异常 ───
@@ -53,7 +81,7 @@ export const ANOMALY_RULES = [
     brands: null,
     thresholds: {
       '洪潮': { medium: { below: 1100 }, high: { below: 1000 } },
-      '马己仙': { medium: { below: 1400 }, high: { below: 1300 } }
+      '马己仙': { medium: { below: 1500 }, high: { below: 1400 } }
     },
     dataSource: {
       table: 'daily_reports',
@@ -61,7 +89,10 @@ export const ANOMALY_RULES = [
       calc: '人效 = actual_revenue / labor_total'
     },
     assignTo: { role: 'ops', title: '运营' },
-    notifyTarget: { role: 'store_manager', title: '店长' },
+    notifyTarget: [
+      { role: 'store_manager', title: '店长' },
+      { role: 'kitchen_manager', title: '出品经理' }
+    ],
     hrFollowUp: true,
     hrTiming: 'month_end',
     evidence: {

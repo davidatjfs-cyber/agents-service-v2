@@ -8,6 +8,7 @@ import { query } from '../utils/db.js';
 import { getConfig } from './config-service.js';
 import { runAnomalyChecks } from './anomaly-engine.js';
 import { sendText, sendCard } from './feishu-client.js';
+import { collectStoreLookupVariants } from '../utils/feishu-assignee-resolve.js';
 import { formatTaskCardAuditSection } from './task-reply-audit-hint.js';
 
 const DEDUPE_MS = 120_000;
@@ -81,12 +82,37 @@ function shouldSkipLegacyScheduledLabels(item, label, desc) {
   return parts.some((p) => p && blob.includes(p));
 }
 
-function frequencyMatches(freq) {
+function frequencyMatches(freq, type) {
   const f = String(freq || 'daily').toLowerCase();
+  const t = String(type || '').toLowerCase();
+
+  // 根据 type 强制约束触发日，避免 type=weekly 但 frequency=daily 导致每天跑周度异常
+  if (t === 'weekly' || t === 'patrol_am' || t === 'patrol_pm') {
+    // patrol 是日频，weekly 类型只在周一触发
+    if (t === 'weekly') {
+      const wday = getShanghaiWeekday();
+      return wday === 'Mon';
+    }
+    // patrol 每天可触发
+    return true;
+  }
+  if (t === 'monthly') {
+    return getShanghaiDayOfMonth() === 1;
+  }
+  if (t === 'biweekly') {
+    const wday = getShanghaiWeekday();
+    if (wday !== 'Mon') return false;
+    return biweeklyMondayOk();
+  }
+
+  // 非内置类型，按 frequency 字段判断
   if (f === 'daily') return true;
-  const wday = getShanghaiWeekday();
-  if (f === 'weekly') return wday === 'Mon';
+  if (f === 'weekly') {
+    const wday = getShanghaiWeekday();
+    return wday === 'Mon';
+  }
   if (f === 'biweekly') {
+    const wday = getShanghaiWeekday();
     if (wday !== 'Mon') return false;
     return biweeklyMondayOk();
   }
@@ -191,6 +217,7 @@ async function pingUsersForStores(stores, roles, cardOrText) {
   }
   let n = 0;
   const sentMsgIds = [];
+  const pingedOpenIds = [];
   const isCard = cardOrText && typeof cardOrText === 'object';
   for (const store of stores) {
     for (const row of r.rows || []) {
@@ -204,10 +231,11 @@ async function pingUsersForStores(stores, roles, cardOrText) {
       } else {
         await sendText(row.open_id, cardOrText, 'open_id').catch(() => {});
       }
+      pingedOpenIds.push(row.open_id);
       n++;
     }
   }
-  return { count: n, msgIds: sentMsgIds };
+  return { count: n, msgIds: sentMsgIds, pingedOpenIds: [...new Set(pingedOpenIds.filter(Boolean))] };
 }
 
 /**
@@ -267,9 +295,12 @@ export async function executeDailyInspectionItem(item) {
       // 写入 master_tasks，使巡检卡的回复可被精准追踪
       try {
         const roleList = Array.isArray(roles) && roles.length ? roles : ['store_manager'];
+        const storeVariants = collectStoreLookupVariants(store);
         const staffR = await query(
-          `SELECT username, role FROM feishu_users WHERE registered = true AND store = $1 AND role = ANY($2::text[]) LIMIT 1`,
-          [store, roleList]
+          `SELECT username, role FROM feishu_users
+           WHERE registered = true AND role = ANY($1::text[]) AND trim(store) = ANY($2::text[])
+           LIMIT 1`,
+          [roleList, storeVariants.length ? storeVariants : [store]]
         ).catch(() => ({ rows: [] }));
         const assigneeUsername = staffR.rows?.[0]?.username || '';
         const assigneeRole = staffR.rows?.[0]?.role || roleList[0] || 'store_manager';
@@ -285,7 +316,12 @@ export async function executeDailyInspectionItem(item) {
             taskId, type, store, assigneeUsername, assigneeRole,
             `${store} · ${label}`,
             `类型：${label}\nBI检测：${alertN ? `触发${alertN}条异常` : '无异常'}\n时间：${timeNow}`,
-            JSON.stringify({ taskType: type, label, alertN }),
+            JSON.stringify({
+              taskType: type,
+              label,
+              alertN,
+              assignee_open_ids: pingResult.pingedOpenIds || []
+            }),
             JSON.stringify(sentMsgIds)
           ]
         );
@@ -310,9 +346,12 @@ export async function executeDailyInspectionItem(item) {
     try {
       // 先查 assignee_username / role（取第一个匹配的人）
       const roleList = Array.isArray(roles) && roles.length ? roles : ['store_manager'];
+      const storeVariants = collectStoreLookupVariants(store);
       const staffR = await query(
-        `SELECT username, role FROM feishu_users WHERE registered = true AND store = $1 AND role = ANY($2::text[]) LIMIT 1`,
-        [store, roleList]
+        `SELECT username, role FROM feishu_users
+         WHERE registered = true AND role = ANY($1::text[]) AND trim(store) = ANY($2::text[])
+         LIMIT 1`,
+        [roleList, storeVariants.length ? storeVariants : [store]]
       ).catch(() => ({ rows: [] }));
       const assigneeUsername = staffR.rows?.[0]?.username || '';
       const assigneeRole = staffR.rows?.[0]?.role || roleList[0] || 'store_manager';
@@ -332,7 +371,12 @@ export async function executeDailyInspectionItem(item) {
           assigneeRole,
           `${store} · ${label}`,
           `类型：${label}\n任务：${desc || '请按要求完成并反馈'}\n时间：${timeNow}`,
-          JSON.stringify({ taskType: type, label, desc }),
+          JSON.stringify({
+            taskType: type,
+            label,
+            desc,
+            assignee_open_ids: pingResult.pingedOpenIds || []
+          }),
           JSON.stringify(sentMsgIds)
         ]
       );
@@ -367,7 +411,7 @@ export async function runDailyInspectionsTick(opts = {}) {
     const tnorm = normalizeTime(item.time);
     if (!force) {
       if (tnorm !== hm) continue;
-      if (!frequencyMatches(item.frequency)) continue;
+      if (!frequencyMatches(item.frequency, item.type)) continue;
     }
 
     const dedupeKey = `${dateStr}|${tnorm}|${item.type}|${item.store || ''}|${item.brand || ''}|${item.frequency || 'daily'}`;
