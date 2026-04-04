@@ -1,13 +1,13 @@
 /**
  * AI 营运诊断（第一阶段）
  * 只做分析+建议，不修改业务、不执行操作。
- * 数据来源：HRMS 营业日报(daily_reports) + 飞书(桌访/差评)，本地 Ollama qwen2:7b。
+ * 数据来源：HRMS 营业日报(daily_reports) + 飞书(桌访/差评)，本地 Ollama gemma4:31b。
  */
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 
 const OLLAMA_BASE = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-const OLLAMA_MODEL = process.env.OLLAMA_OPERATIONS_MODEL || 'qwen2:7b';
+const OLLAMA_MODEL = process.env.OLLAMA_OPERATIONS_MODEL || 'gemma4:31b';
 
 /** 从 DB 读取指定日期的营业日报，组装为按门店的 daily_operation_summary 列表 */
 export async function buildDailyOperationSummaries(dateStr, opts = {}) {
