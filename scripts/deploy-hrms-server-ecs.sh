@@ -13,7 +13,8 @@ REMOTE_DIR="${REMOTE_DIR:-/opt/hrms/server}"
 LOCAL_SRC="$(cd "$(dirname "$0")/../hr-management-system/server" && pwd)"
 DISABLE_SCHEDULED_CHECKLIST="${DISABLE_SCHEDULED_CHECKLIST:-1}"
 
-echo ">>> node --check (local agents.js + bi-weekly-report.js)"
+echo ">>> node --check (local index.js + agents.js + bi-weekly-report.js)"
+node --check "${LOCAL_SRC}/index.js"
 node --check "${LOCAL_SRC}/agents.js"
 node --check "${LOCAL_SRC}/bi-weekly-report.js"
 
@@ -61,7 +62,22 @@ ensure_lark_from_feishu() {
 }
 ensure_lark_from_feishu .env
 [[ -f .env.production ]] && ensure_lark_from_feishu .env.production || true
-pm2 restart hrms-service --update-env
+ensure_kv .env PORT 3000
+[[ -f .env.production ]] && ensure_kv .env.production PORT 3000 || true
+# 彻底清理：先 PM2 delete，再杀所有孤儿 node 进程，最后释放端口
+pm2 delete hrms-service 2>/dev/null || true
+sleep 1
+pkill -9 -f "node.*hrms/server/index" 2>/dev/null || true
+pkill -9 -f "node index.js" 2>/dev/null || true
+sleep 1
+fuser -k 3000/tcp 2>/dev/null || true
+sleep 2
+if ss -tlnp 2>/dev/null | grep -q ':3000 '; then
+  echo '>>> WARNING: 3000 仍被占用，强制清理' >&2
+  fuser -k 3000/tcp 2>/dev/null || true
+  sleep 2
+fi
+pm2 start ecosystem.config.cjs --update-env
 sleep 4
 echo "--- /api/health ---"
 curl -sS -m 15 http://127.0.0.1:3000/api/health | head -c 500

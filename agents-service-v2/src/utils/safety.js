@@ -74,12 +74,16 @@ export function isWeeklyScoringCronEnabled() {
   return isAutomationsEnabled();
 }
 
-/** 任务卡 1h×3 催办 + HR 备案 */
+/**
+ * 任务卡 1h×3 催办 + HR 备案
+ * 须与「每日巡检/定时任务派发」同开：若仅开 ENABLE_DAILY_INSPECTION_CRON 而未开 ENABLE_AUTOMATIONS，
+ * 以前会只发卡不催办。未显式设置时跟随 isDailyInspectionCronEnabled()。
+ */
 export function isTaskReminderCronEnabled() {
   const v = String(process.env.ENABLE_TASK_REMINDER_CRON || '').trim().toLowerCase();
   if (v === 'true') return true;
   if (v === 'false') return false;
-  return isAutomationsEnabled();
+  return isDailyInspectionCronEnabled();
 }
 
 export function isExternalEnabled() {

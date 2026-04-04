@@ -11017,6 +11017,15 @@
             }
         }
 
+        function hrmsShanghaiYYYYMM() {
+            try {
+                const s = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+                return s.length >= 7 ? s.slice(0, 7) : new Date().toISOString().slice(0, 7);
+            } catch (e) {
+                return new Date().toISOString().slice(0, 7);
+            }
+        }
+
         async function queryPointsAdminRecords() {
             const listEl = document.getElementById('points-records-list');
             const monthPointsEl = document.getElementById('points-month-points');
@@ -11048,7 +11057,7 @@
                 if (sa) sa.textContent = '¥' + sumAmt.toFixed(2);
                 if (sc) sc.textContent = String(sumCnt);
                 if (spe) spe.textContent = String(sumPeople);
-                const nowMonth = new Date().toISOString().slice(0, 7);
+                const nowMonth = hrmsShanghaiYYYYMM();
                 const monthPoints = items
                     .filter(x => String(x?.approvedAt || x?.createdAt || '').slice(0, 7) === nowMonth)
                     .reduce((s, x) => s + (Number(x?.points || 0) || 0), 0);
@@ -11505,9 +11514,21 @@
             }
 
             HRMS_API.decideApproval(id, !!approved, String(note || ''), extra)
-                .then(() => {
+                .then(async (data) => {
                     __OFFB_DEPARTURE_TYPE = '';
-                    showNotification(approved ? '已通过' : '已拒绝', 'success');
+                    const isOnboarding = String(item?.type || '') === 'onboarding';
+                    const sync = data && data.onboardingEmployeeSync;
+                    if (isOnboarding && approved && sync && sync.ok === false) {
+                        const r = String(sync.reason || '');
+                        const hint = r === 'missing_employee_username' ? '缺少员工登录账号' : r === 'merge_failed' ? '档案写入失败' : r;
+                        showNotification('审批已通过，但员工未进档案：' + hint + '。请下拉刷新或联系技术。', 'error');
+                    } else {
+                        showNotification(approved ? '已通过' : '已拒绝', 'success');
+                    }
+                    if (isOnboarding && approved) {
+                        try { await hrmsLoadStateFromServer(); } catch (e) {}
+                        try { loadEmployeesData(); } catch (e) {}
+                    }
                     closeApprovalDetailModal();
                     loadApprovalsData();
                     try { loadPaymentData(); } catch (e) {}
@@ -11582,6 +11603,62 @@
         let __hrmsStateSyncTimer = null;
         let __hrmsStateSyncInFlight = false;
 
+        /**
+         * 把服务端的 pointRecords 合并进本地准备 PUT 的数据：
+         * 本地有的按 id 覆盖服务端旧记录；服务端有但本地没有（如刚审批写入）的追加保留。
+         * pointsAppliedApprovals / payrollAdjustments 同理做 object merge（服务端优先）。
+         */
+        function hrmsServerMergePoints(serverData, merged) {
+            const srvPts = Array.isArray(serverData.pointRecords) ? serverData.pointRecords : [];
+            const locPts = Array.isArray(merged.pointRecords) ? merged.pointRecords : [];
+            if (srvPts.length) {
+                const locIds = new Set(locPts.map(r => String(r?.id || '')).filter(Boolean));
+                const srvOnly = srvPts.filter(r => !locIds.has(String(r?.id || '')));
+                merged.pointRecords = [...locPts, ...srvOnly];
+            }
+            if (serverData.pointsAppliedApprovals && typeof serverData.pointsAppliedApprovals === 'object') {
+                merged.pointsAppliedApprovals = Object.assign(
+                    {},
+                    serverData.pointsAppliedApprovals,
+                    merged.pointsAppliedApprovals && typeof merged.pointsAppliedApprovals === 'object' ? merged.pointsAppliedApprovals : {}
+                );
+            }
+            if (serverData.payrollAdjustments && typeof serverData.payrollAdjustments === 'object') {
+                merged.payrollAdjustments = Object.assign(
+                    {},
+                    serverData.payrollAdjustments,
+                    merged.payrollAdjustments && typeof merged.payrollAdjustments === 'object' ? merged.payrollAdjustments : {}
+                );
+            }
+        }
+
+        /** 与服务端 mergeEmployeesForStatePut 一致：避免陈旧 localStorage 覆盖掉刚入职写入的员工 */
+        function hrmsMergeEmployeesForSave(serverEmps, localEmps) {
+            const norm = (u) => String(u || '').trim().toLowerCase();
+            const srv = Array.isArray(serverEmps) ? serverEmps : [];
+            const loc = Array.isArray(localEmps) ? localEmps : [];
+            const srvMap = new Map();
+            for (const e of srv) {
+                const k = norm(e?.username);
+                if (k) srvMap.set(k, e);
+            }
+            const seen = new Set();
+            const out = [];
+            for (const e of loc) {
+                const k = norm(e?.username);
+                if (!k) continue;
+                seen.add(k);
+                const base = srvMap.get(k) || {};
+                out.push({ ...base, ...e });
+            }
+            for (const e of srv) {
+                const k = norm(e?.username);
+                if (!k || seen.has(k)) continue;
+                out.push(e);
+            }
+            return out;
+        }
+
         function hrmsScheduleStateSave() {
             try {
                 if (!isLoggedIn || !currentUser) return;
@@ -11604,6 +11681,8 @@
                         const localData = HRMS_STORE.ensure();
                         const serverOnlyKeys = ['approvalFlows', 'paymentFlowByStore'];
                         const merged = { ...localData };
+                        merged.employees = hrmsMergeEmployeesForSave(serverData.employees, localData.employees);
+                        hrmsServerMergePoints(serverData, merged);
                         serverOnlyKeys.forEach(k => { if (serverData[k] !== undefined && merged[k] === undefined) merged[k] = serverData[k]; });
                         await HRMS_API.saveState(merged);
                     } catch (e) {
@@ -11633,6 +11712,8 @@
                 const localData = HRMS_STORE.ensure();
                 const serverOnlyKeys = ['approvalFlows', 'paymentFlowByStore'];
                 const merged = { ...localData };
+                merged.employees = hrmsMergeEmployeesForSave(serverData.employees, localData.employees);
+                hrmsServerMergePoints(serverData, merged);
                 serverOnlyKeys.forEach(k => { if (serverData[k] !== undefined && merged[k] === undefined) merged[k] = serverData[k]; });
                 await HRMS_API.saveState(merged);
                 return true;
@@ -11644,22 +11725,15 @@
             }
         }
 
+        // beforeunload: 直接把 localStorage 整包 PUT 极易覆盖服务端刚写入的积分/员工记录。
+        // 改为：仅做非阻塞日志记录，不再同步整包 state（所有写操作已通过带合并的 hrmsScheduleStateSave 处理）。
         window.addEventListener('beforeunload', () => {
             try {
                 if (!isLoggedIn || !currentUser) return;
                 if (!isAdminUser()) return;
                 const token = HRMS_API.token();
                 if (!token) return;
-                const url = (HRMS_API.baseUrl() || '') + '/api/state';
-                const payload = JSON.stringify({ data: HRMS_STORE.ensure() });
-                try {
-                    fetch(url, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                        body: payload,
-                        keepalive: true
-                    });
-                } catch (e) {}
+                // 不再整包 PUT，避免陈旧 localStorage 覆盖服务端积分/员工等关键数据
             } catch (e) {}
         });
 
@@ -23928,8 +24002,19 @@ ${knowledgeContent.slice(0, 30000)}`;
             }
             if (!confirm(`确认${action}该审批？`)) return;
             try {
-                await HRMS_API.decideApproval(id, !!approved, note || '');
-                showNotification(`审批已${action}`, 'success');
+                const data = await HRMS_API.decideApproval(id, !!approved, note || '');
+                const sync = data && data.onboardingEmployeeSync;
+                if (approved && sync && sync.ok === false) {
+                    const r = String(sync.reason || '');
+                    const hint = r === 'missing_employee_username' ? '缺少员工登录账号' : r === 'merge_failed' ? '档案写入失败' : r;
+                    showNotification('审批已通过，但员工档案异常：' + hint, 'error');
+                } else {
+                    showNotification(`审批已${action}`, 'success');
+                }
+                if (approved) {
+                    try { await hrmsLoadStateFromServer(); } catch (e) {}
+                    try { loadEmployeesData(); } catch (e) {}
+                }
                 renderProfilePendingApprovals();
                 renderProfileNotifications();
             } catch (e) {

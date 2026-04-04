@@ -12317,6 +12317,15 @@
             }
         }
 
+        function hrmsShanghaiYYYYMM() {
+            try {
+                const s = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+                return s.length >= 7 ? s.slice(0, 7) : new Date().toISOString().slice(0, 7);
+            } catch (e) {
+                return new Date().toISOString().slice(0, 7);
+            }
+        }
+
         async function loadPointsRanking() {
             const rankListEl = document.getElementById('points-ranking-list');
             const myRankBadge = document.getElementById('points-my-rank-badge');
@@ -12328,11 +12337,8 @@
             rankCard.style.display = '';
             try {
                 const store = (_rkRole === ROLES.STORE_MANAGER) ? String(currentUser?.store || '').trim() : '';
-                const resp = await fetch('/api/points/ranking?store=' + encodeURIComponent(store), {
-                    headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('hrms_token') || '') }
-                });
-                if (!resp.ok) throw new Error('HTTP ' + resp.status);
-                const data = await resp.json();
+                const month = hrmsShanghaiYYYYMM();
+                const data = await HRMS_API.getPointsRanking({ month, store });
                 const ranking = Array.isArray(data?.ranking) ? data.ranking : [];
 
                 if (myRankBadge && data.myRank) {
@@ -12368,7 +12374,7 @@
                     </div>`;
                 }).join('');
             } catch (e) {
-                rankListEl.innerHTML = '<div style="color:rgba(200,215,230,0.5); font-size:12px;">排行榜加载失败</div>';
+                rankListEl.innerHTML = '<div style="color:rgba(200,215,230,0.5); font-size:12px;">排行榜加载失败' + (e && e.message ? '（' + escapeHtml(String(e.message)) + '）' : '') + '</div>';
                 console.warn('loadPointsRanking error:', e);
             }
         }
@@ -12404,7 +12410,7 @@
                 if (sa) sa.textContent = '¥' + sumAmt.toFixed(2);
                 if (sc) sc.textContent = String(sumCnt);
                 if (spe) spe.textContent = String(sumPeople);
-                const nowMonth = new Date().toISOString().slice(0, 7);
+                const nowMonth = hrmsShanghaiYYYYMM();
                 const monthPoints = items
                     .filter(x => String(x?.approvedAt || x?.createdAt || '').slice(0, 7) === nowMonth)
                     .reduce((s, x) => s + (Number(x?.points || 0) || 0), 0);
@@ -28570,7 +28576,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             const usernameLower = username.toLowerCase();
             const data = HRMS_STORE.ensure();
             const adjs = Array.isArray(data.salaryAdjustments) ? data.salaryAdjustments : [];
-            const nowMonth = new Date().toISOString().slice(0, 7);
+            const nowMonth = hrmsShanghaiYYYYMM();
             const myAdjs = adjs.filter(a => {
                 const target = String(a?.targetUsername || '').trim().toLowerCase();
                 const st = String(a?.status || '').trim().toLowerCase();

@@ -239,6 +239,11 @@ export async function checkRechargeZero(store) {
     const todaySh = shanghaiTodayYmd();
     const hasRecharge = (rec) => rec && (rec.cnt > 0 || rec.amt > 0);
 
+    // 充值 streak 只在当月内累计，月初（1日）自动重置，不跨月统计
+    const [ty, tm] = todaySh.split('-').map(Number);
+    const pad = (n) => String(n).padStart(2, '0');
+    const monthStart = `${ty}-${pad(tm)}-01`;
+
     const r = await query(
       `SELECT date::date::text AS d,
               COALESCE(SUM(COALESCE(recharge_count, 0)), 0)::int AS cnt,
@@ -249,7 +254,7 @@ export async function checkRechargeZero(store) {
          AND date::date >= $3::date
        GROUP BY date::date
        ORDER BY date::date ASC`,
-      [dailyReportIlikePatterns(store), todaySh, addDaysYmdShanghai(todaySh, -120)]
+      [dailyReportIlikePatterns(store), todaySh, monthStart]
     );
     const byDay = new Map();
     for (const row of r.rows || []) {
@@ -265,16 +270,19 @@ export async function checkRechargeZero(store) {
       return { triggered: false, detail: `${todaySh} 有充值，正常` };
     }
 
+    // streak 向回数，遇到当月1号则截止（不跨月）
     let streak = 0;
-    for (let i = 0; i < 90; i++) {
+    for (let i = 0; i < 31; i++) {
       const d = addDaysYmdShanghai(todaySh, -i);
+      if (d < monthStart) break; // 不跨月
       const rec = byDay.get(d);
       if (!rec) break;
       if (hasRecharge(rec)) break;
       streak++;
     }
 
-    const penalty_points = streak % 2 === 1 ? 2 : 4;
+    // 规则：连续第1天无充值扣2分，连续第2天起（streak≥2）扣4分；有充值则 streak 重置
+    const penalty_points = streak >= 2 ? 4 : 2;
     const severity = penalty_points >= 4 ? 'high' : 'medium';
 
     return {
@@ -284,10 +292,11 @@ export async function checkRechargeZero(store) {
         dateToday: todaySh,
         consecutive_zero_days: streak,
         penalty_points,
+        month_start: monthStart,
         today: { count: todayR.cnt, amount: todayR.amt }
       },
-      threshold: { medium: '2分/日( streak 奇数日 )', high: '4分/日( streak 偶数日 )' },
-      detail: `连续${streak}日无充值（截至${todaySh}），本日绩效扣分 ${penalty_points} 分`
+      threshold: { medium: '2分（连续第1天无充值）', high: '4分（连续第2天起无充值）' },
+      detail: `本月连续${streak}日无充值（${monthStart}起不跨月，截至${todaySh}），本日绩效扣分 ${penalty_points} 分`
     };
   } catch (err) {
     return { triggered: false, detail: `充值检测异常: ${err.message}` };

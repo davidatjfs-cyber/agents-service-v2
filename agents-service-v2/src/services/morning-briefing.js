@@ -12,9 +12,28 @@ import {
   resolveMonthlyRevenueTargetYuan
 } from './deterministic-replies.js';
 import { anomalyRuleLabelZh } from '../utils/anomaly-labels.js';
+import { expandAgentStoreLabels } from '../config/store-mapping.js';
 
 const FMT_MONEY = (n) => `¥${Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 0 })}`;
 const FMT_PCT   = (n) => `${(Number(n || 0) * 100).toFixed(1)}%`;
+
+/** 晨报 SQL：与日报/任务库门店别名对齐（洪潮久光 ↔ 洪潮大宁久光等） */
+function briefingStoreSqlPatterns(store) {
+  const labs = expandAgentStoreLabels(String(store || '').trim());
+  const pats = labs.map((lab) => `%${String(lab).replace(/%/g, '')}%`);
+  return pats.length ? pats : [`%${String(store || '').replace(/%/g, '')}%`];
+}
+
+/** 理论进度：截至昨日累计天数 / 本月自然天总数（上海当月） */
+function theoreticalProgressLine(todayYmd, yesterdayYmd, curMoYyyyMm) {
+  const ty = parseInt(todayYmd.slice(0, 4), 10);
+  const tm = parseInt(todayYmd.slice(5, 7), 10);
+  const daysInMonth = new Date(ty, tm, 0).getDate();
+  const ymo = yesterdayYmd.slice(0, 7);
+  const elapsed = ymo === curMoYyyyMm ? parseInt(yesterdayYmd.slice(8, 10), 10) || 0 : 0;
+  const pct = daysInMonth > 0 ? ((elapsed / daysInMonth) * 100).toFixed(1) : '0.0';
+  return `· **理论进度**：**${pct}%**（截至昨日已过 **${elapsed}** 天 / 本月共 **${daysInMonth}** 天）`;
+}
 
 /** 异常 key → 中文（晨报展示） */
 const ANOMALY_LABEL_ZH = {
@@ -171,6 +190,7 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
     .toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
 
   let sections = [];
+  const storePatsBrief = briefingStoreSqlPatterns(store);
 
   // 1. 昨日营业数据
   try {
@@ -178,8 +198,8 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
       `SELECT date, actual_revenue, budget_rate, dine_traffic, dine_orders,
               delivery_actual, efficiency, pre_discount_revenue,
               operational_anomaly_note
-       FROM daily_reports WHERE store ILIKE $1 AND date = $2 LIMIT 1`,
-      [`%${store}%`, yesterday]
+       FROM daily_reports WHERE store ILIKE ANY($1::text[]) AND date = $2 LIMIT 1`,
+      [storePatsBrief, yesterday]
     );
     if (dr.rows?.[0]) {
       const d = dr.rows[0];
@@ -207,52 +227,45 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
     const curMo = today.slice(0, 7);
     const moR = await query(
       `SELECT COALESCE(SUM(actual_revenue), 0) AS cur_rev FROM daily_reports
-       WHERE store ILIKE $1 AND TO_CHAR(date,'YYYY-MM') = $2`,
-      [`%${store}%`, curMo]
+       WHERE store ILIKE ANY($1::text[]) AND TO_CHAR(date,'YYYY-MM') = $2`,
+      [storePatsBrief, curMo]
     );
     const curRev = Number(moR.rows?.[0]?.cur_rev ?? 0);
     const tgt = await resolveMonthlyRevenueTargetYuan(store, curMo);
+    const theoryLn = theoreticalProgressLine(today, yesterday, curMo);
     if (tgt > 0) {
       const ach = (curRev / tgt * 100).toFixed(1);
       const icon = +ach >= 100 ? '✅' : +ach >= 80 ? '⚠️' : '🔴';
       sections.push(
         `**🎯 本月进度 (${curMo})**\n` +
         `· 累计营收：${FMT_MONEY(curRev)}　月目标：${FMT_MONEY(tgt)}\n` +
-        `· 达成率：${icon} **${ach}%**`
+        `· 达成率：${icon} **${ach}%**\n` +
+        theoryLn
       );
     } else {
       sections.push(
         `**🎯 本月进度 (${curMo})**\n` +
         `· 累计营收：${FMT_MONEY(curRev)}　月目标：⚠️ **未配置**（请在营收目标中维护本店「${curMo}」目标）\n` +
-        `· 达成率：—（配置目标后自动计算）`
+        `· 达成率：—（配置目标后自动计算）\n` +
+        theoryLn
       );
     }
   } catch (e) { logger.warn({ err: e?.message, store }, 'briefing monthly'); }
 
-  // 2b. 昨日桌访 + 开档 + 收档 + 例会 + 原料（与飞书助手问答同源口径）
-  try {
-    const opsMd = await buildYesterdayOpsBriefingSection(store, yesterday, {
-      displayName: String(recipientName || '').trim()
-    });
-    if (opsMd) sections.push(opsMd);
-  } catch (e) {
-    logger.warn({ err: e?.message, store }, 'briefing yesterday ops');
-    sections.push(`**──────── 昨日营运速览 ────────**\n⚠️ 加载失败：${e?.message || '未知错误'}`);
-  }
-
-  // 3. 昨日派发、仍未闭环的系统任务（BI 异常 / 数据审计 / 定时 / 抽检 / 协作；不含更早派发的积压）
+  // 3. 待办任务（提前于营运速览，避免飞书卡片过长时尾部被截断；门店名与任务库多别名对齐）
   try {
     const roleZh = (r) =>
       r === 'store_production_manager' ? '出品经理' : r === 'store_manager' ? '店长' : (r || '责任人');
 
     /** 派发日：优先 dispatched_at，否则 created_at，按 Asia/Shanghai 日历与「昨日」对齐 */
     const taskDaySql = `(timezone('Asia/Shanghai', COALESCE(dispatched_at, created_at)))::date = $2::date`;
+    const storePats = briefingStoreSqlPatterns(store);
 
     const openCntR = await query(
       `SELECT COUNT(*)::int AS c FROM master_tasks
-       WHERE store ILIKE $1 AND ${taskDaySql}
+       WHERE store ILIKE ANY($1::text[]) AND ${taskDaySql}
          AND source = ANY($3::text[]) AND status = ANY($4::text[])`,
-      [`%${store}%`, yesterday, BRIEFING_YESTERDAY_OPEN_SOURCES, BRIEFING_OPEN_STATUSES]
+      [storePats, yesterday, BRIEFING_YESTERDAY_OPEN_SOURCES, BRIEFING_OPEN_STATUSES]
     );
     const openTotal = parseInt(openCntR.rows[0]?.c || 0, 10);
 
@@ -261,20 +274,47 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
               COALESCE(remind_count,0)::int AS remind_count, COALESCE(review_count,0)::int AS review_count,
               COALESCE(hr_performance_recorded,false) AS hr_performance_recorded
        FROM master_tasks
-       WHERE store ILIKE $1 AND ${taskDaySql}
+       WHERE store ILIKE ANY($1::text[]) AND ${taskDaySql}
          AND source = ANY($3::text[]) AND status = ANY($4::text[])
        ORDER BY
          CASE WHEN COALESCE(hr_performance_recorded,false) THEN 0 ELSE 1 END,
          timeout_at ASC NULLS LAST,
          updated_at DESC NULLS LAST
        LIMIT 30`,
-      [`%${store}%`, yesterday, BRIEFING_YESTERDAY_OPEN_SOURCES, BRIEFING_OPEN_STATUSES]
+      [storePats, yesterday, BRIEFING_YESTERDAY_OPEN_SOURCES, BRIEFING_OPEN_STATUSES]
     );
 
-    const taskUsernames = (openR.rows || []).map((t) => t.assignee_username).filter(Boolean);
+    const backlogCntR = await query(
+      `SELECT COUNT(*)::int AS c FROM master_tasks
+       WHERE store ILIKE ANY($1::text[])
+         AND source = ANY($2::text[]) AND status = ANY($3::text[])
+         AND NOT ((timezone('Asia/Shanghai', COALESCE(dispatched_at, created_at)))::date = $4::date)`,
+      [storePats, BRIEFING_YESTERDAY_OPEN_SOURCES, BRIEFING_OPEN_STATUSES, yesterday]
+    );
+    const backlogTotal = parseInt(backlogCntR.rows[0]?.c || 0, 10);
+
+    const backlogR = backlogTotal
+      ? await query(
+          `SELECT task_id, title, status, source, timeout_at, assignee_username, assignee_role,
+                  COALESCE(remind_count,0)::int AS remind_count, COALESCE(review_count,0)::int AS review_count,
+                  COALESCE(hr_performance_recorded,false) AS hr_performance_recorded,
+                  (timezone('Asia/Shanghai', COALESCE(dispatched_at, created_at)))::date AS dispatch_day
+           FROM master_tasks
+           WHERE store ILIKE ANY($1::text[])
+             AND source = ANY($2::text[]) AND status = ANY($3::text[])
+             AND NOT ((timezone('Asia/Shanghai', COALESCE(dispatched_at, created_at)))::date = $4::date)
+           ORDER BY timeout_at ASC NULLS LAST, updated_at DESC NULLS LAST
+           LIMIT 8`,
+          [storePats, BRIEFING_YESTERDAY_OPEN_SOURCES, BRIEFING_OPEN_STATUSES, yesterday]
+        )
+      : { rows: [] };
+
+    const taskUsernames = [...(openR.rows || []), ...(backlogR.rows || [])]
+      .map((t) => t.assignee_username)
+      .filter(Boolean);
     const displayNameMap = await briefAssigneeDisplayMap(taskUsernames);
 
-    const fmtOpenLines = (rows) =>
+    const fmtOpenLines = (rows, opts = {}) =>
       (rows || []).map((t) => {
         const deadline = t.timeout_at
           ? String(t.timeout_at).slice(5, 16).replace('T', ' ')
@@ -299,26 +339,52 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
         const flagged = t.hr_performance_recorded ? '｜HR已备案' : '';
         const ttl = briefingPrettyTaskTitle(t.title);
         const src = briefingSourceLabel(t.source);
-        return `${urgency} [${t.task_id}] ${src}｜**${stZh}**｜${ttl.slice(0, 40)}｜${who}｜截止 ${deadline}${trail}${flagged}`;
+        const dday =
+          opts.showDispatch && t.dispatch_day
+            ? `｜派发日 ${String(t.dispatch_day).slice(0, 10)}`
+            : '';
+        return `${urgency} [${t.task_id}] ${src}｜**${stZh}**｜${ttl.slice(0, 40)}｜${who}｜截止 ${deadline}${dday}${trail}${flagged}`;
       });
 
-    if (openTotal > 0) {
-      sections.push(
-        `**📋 昨日派发 · 仍待处理（${yesterday} · ${openTotal} 条）**\n` +
-        `_仅含 **派发/创建日 = 昨日（上海）** 且 **尚未闭环** 的任务：BI 异常、数据审计、定时任务、随机巡检、营销协作。**不含**前几日派发仍未完成的积压（避免刷屏）。_\n` +
-        fmtOpenLines(openR.rows || []).join('\n') +
-        (openTotal > (openR.rows?.length || 0) ? `\n_…共 ${openTotal} 条，此处最多列 30 条_` : '') +
-        '\n\n**催办与 HR 备案**\n' +
+    const yLines =
+      openTotal > 0
+        ? fmtOpenLines(openR.rows || []).join('\n') +
+          (openTotal > (openR.rows?.length || 0) ? `\n_…共 ${openTotal} 条，此处最多列 30 条_` : '')
+        : `✅ 无（昨日未派发此类任务，或均已闭环）。`;
+
+    const bLines =
+      backlogTotal > 0
+        ? fmtOpenLines(backlogR.rows || [], { showDispatch: true }).join('\n') +
+          (backlogTotal > (backlogR.rows?.length || 0) ? `\n_…共 ${backlogTotal} 条较早未闭环，此处最多列 8 条_` : '')
+        : '';
+
+    sections.push(
+      `**📋 待办任务**\n\n` +
+        `**（1）昨日派发 · 仍待处理（${yesterday}）**　**${openTotal} 条**\n` +
+        `_派发/创建日=昨日（上海）且未闭环：BI 异常、数据审计、定时、抽检、协作。_\n` +
+        `${yLines}` +
+        (bLines
+          ? `\n\n**（2）更早派发 · 仍待处理**　**${backlogTotal} 条**\n` +
+            `_非昨日派发日的积压，便于排查是否漏处理。_\n` +
+            bLines
+          : '') +
+        `\n\n**催办与 HR 备案**\n` +
         '· **待回复**：约每 **1 小时**可催 1 次；**满 3 次催办 + 再等 1 小时**仍无有效闭环：**BI 异常任务卡、定时任务、随机抽检、数据审计、营销协作** → **仅**记入工作态度未完成（`hr_performance_recorded`），影响当月态度评级；**不因催办写入 agent_scores 扣分**。**BI 异常触发的绩效扣分**仅按 BI 规则在周度 **anomaly_rollups_v2** 中计算，与任务卡催办无关。均 **【公司通知】**（飞书卡片+文本）。\n' +
         '· **待审核**：回复连续 **3 次**不合格 → **工作态度**备案（与任务卡说明一致：**不计**绩效分），并 **【公司通知】**。\n' +
         '· 已打标 `hr_performance_recorded` 时行末显示「HR已备案」。'
-      );
-    } else {
-      sections.push(
-        `**📋 昨日派发 · 仍待处理（${yesterday}）**\n✅ 无未闭环项（或昨日无此类系统任务派发）。`
-      );
-    }
+    );
   } catch (e) { logger.warn({ err: e?.message, store }, 'briefing tasks'); }
+
+  // 2b. 昨日桌访 + 开档 + 收档 + 例会 + 原料（放在待办之后，避免卡片过长截断待办）
+  try {
+    const opsMd = await buildYesterdayOpsBriefingSection(store, yesterday, {
+      displayName: String(recipientName || '').trim()
+    });
+    if (opsMd) sections.push(opsMd);
+  } catch (e) {
+    logger.warn({ err: e?.message, store }, 'briefing yesterday ops');
+    sections.push(`**──────── 昨日营运速览 ────────**\n⚠️ 加载失败：${e?.message || '未知错误'}`);
+  }
 
   // 4. 昨日差评摘要（飞书差评报告）
   try {
@@ -353,13 +419,13 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
                   ORDER BY created_at DESC NULLS LAST
                 ) AS rn
          FROM anomaly_triggers
-         WHERE store ILIKE $1
+         WHERE store ILIKE ANY($1::text[])
            AND trigger_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::date - INTERVAL '3 days'
        ) sub
        WHERE rn = 1
        ORDER BY td DESC
        LIMIT 8`,
-      [`%${store}%`]
+      [briefingStoreSqlPatterns(store)]
     );
     if (anomalies.rows?.length) {
       const aLines = anomalies.rows.map(a => {

@@ -33,7 +33,7 @@ import { startRandomInspections, getRandomInspectionStatus, triggerManualInspect
 import adminApi from './routes/admin-api.js';
 
 const app = express();
-const PORT = parseInt(process.env.PORT || '3100');
+const PORT = parseInt(process.env.PORT || '3101', 10);
 
 app.use(helmet({
   contentSecurityPolicy: {

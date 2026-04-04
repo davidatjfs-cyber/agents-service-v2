@@ -1,8 +1,12 @@
 # hr-management-system · 安全部署（与 Cursor 规则、手动脚本一致）
 #
-# 流程：修改 hr-management-system → git add / commit / push origin main → 本 workflow 在 GitHub 上执行部署。
+# 流程：修改 hr-management-system 或根目录 deploy 脚本 → push main → 本 workflow 部署 ECS。
 # 手动等价：cd hr-management-system && bash scripts/deploy-hrms-safe.sh
+# 根目录一键：bash scripts/deploy-hrms-server-ecs.sh（仅服务端）+ scripts/deploy-hrms-frontend.sh（前端）
 # 回滚：ssh root@47.100.96.30 '/opt/scripts/deploy-rollback.sh'
+#
+# 数据加固（2026-04）：启动执行 migrations/014（employee_attendance_records、hrms_payroll_domain）；
+# 备份见 server/backup.sh（critical 含上述表）。详见 scripts/CURSOR_DEPLOYMENT_GUIDE.md。
 #
 # Secrets: ECS_SSH_PRIVATE_KEY（必填）；可选 ECS_HOST（默认 root@47.100.96.30）
 # 仓库（若拆仓独立发布）：https://github.com/davidatjfs-cyber/hr-management-system
@@ -13,6 +17,8 @@ on:
     branches: [main]
     paths:
       - 'hr-management-system/**'
+      - 'scripts/deploy-hrms-server-ecs.sh'
+      - 'scripts/deploy-hrms-frontend.sh'
       - '.github/workflows/hrms-safe-deployment.yml'
   workflow_dispatch:
     inputs:
@@ -31,8 +37,12 @@ jobs:
           node-version: '20'
       - name: Syntax check (server)
         run: |
+          node --check hr-management-system/server/index.js
           node --check hr-management-system/server/agents.js
           node --check hr-management-system/server/bi-weekly-report.js
+      - name: Migrations present (014 attendance + payroll domain)
+        run: |
+          test -f hr-management-system/server/migrations/014_employee_attendance_payroll_domain.sql
       - name: Frontend entry files
         run: |
           test -f hr-management-system/working-fixed.html

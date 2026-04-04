@@ -8,10 +8,13 @@
  *    计入当月工作态度统计（getIncompleteTaskCount 等），不向 agent_scores 写入任何催办扣分：
  *    bi_anomaly、scheduled_inspection、random_inspection、data_auditor、auto_collab。
  * 3）本文件不再写入 task_reminder_v1；除上述第 1 条 BI 引擎外，催办路径不产生其它扣分。
+ * 4）收信人：优先 source_data.assignee_open_ids（与发卡时实际 ping 的 open_id 一致）；否则走
+ *    utils/feishu-assignee-resolve（门店规范名/飞书简称/马已仙 等别名与 feishu_users 双向对齐）。
  */
 import cron from 'node-cron';
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
+import { resolveAssigneeOpenIdsForTask } from '../utils/feishu-assignee-resolve.js';
 import { sendText, sendCard, sendGroup, sendCompanyNoticeToAssignees } from './feishu-client.js';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -30,39 +33,14 @@ async function ensureReminderColumns() {
   }
 }
 
-function storeKeyForMatch(v) {
-  return String(v || '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '');
-}
-
-async function lookupOpenIdsForTask(task) {
-  const un = String(task.assignee_username || '').trim();
-  if (un) {
-    const r = await query(
-      `SELECT open_id FROM feishu_users WHERE lower(username) = lower($1) AND registered = true AND open_id IS NOT NULL LIMIT 3`,
-      [un]
-    );
-    if (r.rows?.length) return r.rows.map((x) => x.open_id);
+function parseTaskSourceData(sd) {
+  if (sd == null) return {};
+  if (typeof sd === 'object' && !Array.isArray(sd)) return sd;
+  try {
+    return JSON.parse(String(sd));
+  } catch {
+    return {};
   }
-  const role = String(task.assignee_role || 'store_manager').trim();
-  const st = String(task.store || '').trim();
-  const r2 = await query(
-    `SELECT open_id FROM feishu_users WHERE store = $1 AND role = $2 AND registered = true AND open_id IS NOT NULL LIMIT 5`,
-    [st, role]
-  );
-  if (r2.rows?.length) return r2.rows.map((x) => x.open_id);
-  const sk = storeKeyForMatch(st);
-  if (!sk) return [];
-  const r3 = await query(
-    `SELECT open_id FROM feishu_users
-     WHERE registered = true AND open_id IS NOT NULL AND role = $2
-       AND lower(regexp_replace(coalesce(store,''), '\\s+', '', 'g')) LIKE $1
-     LIMIT 5`,
-    [`%${sk}%`, role]
-  );
-  return (r3.rows || []).map((x) => x.open_id);
 }
 
 /** 飞书催办卡片文案：BI 任务卡多一行说明「扣分仅来自周度异常汇总」 */
@@ -170,6 +148,7 @@ export async function processTaskCardReminders() {
 
   const r2 = await query(
     `SELECT task_id, store, source, status, title, detail, assignee_username, assignee_role,
+            source_data,
             dispatched_at, created_at, remind_count, last_reminder_at, response_text,
             COALESCE(hr_performance_recorded, false) AS hr_done
      FROM master_tasks
@@ -225,7 +204,18 @@ export async function processTaskCardReminders() {
     if (now < nextChaseAt) continue;
 
     const seq = rc + 1;
-    const oids = await lookupOpenIdsForTask(t);
+    const sd = parseTaskSourceData(t.source_data);
+    const frozen = Array.isArray(sd.assignee_open_ids)
+      ? sd.assignee_open_ids.map((x) => String(x || '').trim()).filter(Boolean)
+      : [];
+    const oids = frozen.length ? frozen : await resolveAssigneeOpenIdsForTask(t);
+    if (!oids.length) {
+      logger.warn(
+        { taskId: t.task_id, store: t.store, assignee: t.assignee_username, role: t.assignee_role, hadFrozen: frozen.length > 0 },
+        'task-card-reminder: no feishu open_id, skip send (仍不递增 remind_count 以免假催办)'
+      );
+      continue;
+    }
 
     const nowStr = new Date().toLocaleString('zh-CN', {
       timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'

@@ -1,0 +1,5 @@
+ECS Nginx 与 PM2 端口约定
+- HRMS 业务 API location /api/  -> http://127.0.0.1:3000/api/  (hrms-service)
+- Agents: /agents-admin/ /agents-api/ /api/webhook/feishu -> 127.0.0.1:3101
+若 /api/ 指向 3100 会导致 502（登录失败）。
+nginx 修改前备份: hrms.bak-port agents-v2.bak-port2

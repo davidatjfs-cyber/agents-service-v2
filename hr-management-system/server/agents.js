@@ -10696,7 +10696,12 @@ export function trackLLMResult(ok) {
   } else {
     _errorTracker.consecutiveLLMErrors++;
     if (_errorTracker.consecutiveLLMErrors >= 5) {
-      sendErrorAlertToAdmin(`LLM 连续调用失败 ${_errorTracker.consecutiveLLMErrors} 次，Agent 可能无法正常回复。请检查 API Key 和网络。`);
+      sendErrorAlertToAdmin(
+        `LLM 连续调用失败 ${_errorTracker.consecutiveLLMErrors} 次，Agent 可能无法正常回复。\n\n` +
+        `说明：厂商控制台「账号正常」不等于 ECS 上 hrms-service 能调通 API（密钥、模型名、出网、429/欠费均会导致失败）。\n` +
+        `健康检查会测 DeepSeek、通义(Qwen)、豆包(Vision) 三条链路，任一条失败都会计入。\n\n` +
+        `请 SSH 到服务器执行：pm2 logs hrms-service --lines 80\n搜索 [LLM-FALLBACK]、401、429、timeout 定位具体 Provider。`
+      );
     }
   }
 }

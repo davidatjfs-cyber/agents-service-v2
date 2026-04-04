@@ -170,8 +170,11 @@ AGENTS_DEPLOY=$(ssh -o ConnectTimeout=120 "$ECS_HOST" \
    node scripts/apply-agent-experience-context-sql.mjs && \
    node scripts/apply-anomaly-rules-v2.mjs && \
    node scripts/apply-private-room-column.mjs && \
-   (fuser -k 3101/tcp 2>/dev/null && echo '>>> 已释放3101端口' && sleep 2 || true) && \
-   pm2 restart agents-service-v2 && \
+   (grep -q '^PORT=' .env 2>/dev/null && sed -i 's/^PORT=.*/PORT=3101/' .env || true) && \
+   ( [ -f .env.production ] && { grep -q '^PORT=' .env.production && sed -i 's/^PORT=.*/PORT=3101/' .env.production || echo 'PORT=3101' >> .env.production; } ) || true && \
+   pm2 delete agents-service-v2 2>/dev/null || true && sleep 2 && \
+   (command -v ss >/dev/null 2>&1 && ss -tlnp 2>/dev/null | grep -q ':3101 ' && (fuser -k 3101/tcp 2>/dev/null; sleep 2) || true) && \
+   pm2 start ecosystem.config.cjs --update-env && \
    sleep 6" 2>&1)
 
 echo "$AGENTS_DEPLOY" | tee -a "$LOG_FILE"
@@ -288,8 +291,11 @@ HRMS_DEPLOY=$(ssh -o ConnectTimeout=120 "$ECS_HOST" \
    }; \
    ensure_lark_from_feishu .env; \
    [[ -f .env.production ]] && ensure_lark_from_feishu .env.production || true; \
+   ensure_kv .env PORT 3000; \
+   [[ -f .env.production ]] && ensure_kv .env.production PORT 3000 || true; \
    npm install --omit=dev && \
-   pm2 restart hrms-service --update-env && \
+   pm2 delete hrms-service 2>/dev/null || true && sleep 1 && \
+   pm2 start ecosystem.config.cjs --update-env && \
    sleep 4" 2>&1)
 
 echo "$HRMS_DEPLOY" | tee -a "$LOG_FILE"
@@ -318,7 +324,7 @@ echo "$FINAL_STATUS" | tee -a "$LOG_FILE"
 # 7.2 前端文件验证（确保两个文件都正确部署）
 log "🌐 验证前端文件部署..."
 FRONTEND_CHECK_AGENTS=$(ssh "$ECS_HOST" \
-  "curl -sS -m 10 http://127.0.0.1:3100/working-fixed.html | wc -l")
+  "curl -sS -m 10 http://127.0.0.1:3101/working-fixed.html | wc -l")
 FRONTEND_CHECK_HRMS=$(ssh "$ECS_HOST" \
   "curl -sS -m 10 http://127.0.0.1:3000/working-fixed.html | wc -l")
 

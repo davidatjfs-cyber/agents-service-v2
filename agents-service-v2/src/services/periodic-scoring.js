@@ -1,6 +1,7 @@
 /**
  * 周度门店评级：按 anomaly_triggers 聚合扣分，写入 agent_scores（店长 / 出品经理维度）。
  * score_model=anomaly_rollups_v2；扣分按异常类型/严重度/频次由 scoring-model.calcDeductions 等计算。
+ * 人效异常（labor_efficiency）：店长与出品经理各写一行 agent_scores（efficiency_anomaly 双岗）；并有 mergeLaborEfficiencyIfMissing 兜底防漏记出品。
  * 任务卡催办链路不向 agent_scores 写入扣分，仅打工作态度标；与本周度 BI 汇总独立。
  * 同步：HRMS 公司通知栏 hrms_user_notifications + 飞书周度卡片（本人 + 管理员/总部营运汇总）
  */
@@ -62,36 +63,79 @@ async function ensureHrmsNotifTable() {
   }
 }
 
-/** 每条扣分写入 HRMS 档案「公司通知」数据源 */
+/** 每条扣分写入 HRMS 档案「公司通知」数据源，同时发飞书即时消息给责任人 + admin/hq_manager 抄送 */
 async function recordDeductionNotifications({ username, store, role, periodMonday, weekEndStr, details }) {
   if (!username || String(username).startsWith('__periodic')) return;
   await ensureHrmsNotifTable();
   const rangeZh = `${periodMonday}～${weekEndStr}`;
+
+  // 查询责任人飞书 open_id
+  let assigneeOpenId = null;
+  let assigneeName = username;
+  try {
+    const fu = await query(
+      `SELECT open_id, COALESCE(NULLIF(TRIM(name),''), username) AS name
+       FROM feishu_users WHERE username = $1 AND registered = true AND open_id IS NOT NULL LIMIT 1`,
+      [username]
+    );
+    assigneeOpenId = fu.rows?.[0]?.open_id || null;
+    assigneeName = fu.rows?.[0]?.name || username;
+  } catch (_e) { /* ignore */ }
+
+  // 查询 admin+hq_manager 的飞书 open_id（管理层抄送）
+  let mgmtOpenIds = [];
+  try {
+    const mg = await query(
+      `SELECT DISTINCT open_id FROM feishu_users
+       WHERE role IN ('admin','hq_manager') AND registered = true AND open_id IS NOT NULL`
+    );
+    mgmtOpenIds = (mg.rows || []).map((r) => r.open_id).filter(Boolean);
+  } catch (_e) { /* ignore */ }
+
   for (const d of details || []) {
     const pts = Number(d.points || 0);
     if (!pts) continue;
     const reason = CAT_ZH[d.category] || d.category || '异常规则';
     const keyZh = ANOMALY_KEY_ZH[d.anomaly_key] || '相关规则';
     const sevZh = d.severity === 'high' ? '高' : d.severity === 'medium' ? '中' : String(d.severity || '-');
+    const roleLabelStr = roleLabelZh(role);
     const msg = `${rangeZh} 因「${reason}」（${keyZh}，严重度 ${sevZh}），本周绩效扣 ${pts} 分。说明：周度汇总已写入绩效档案，如有异议请在飞书联系总部营运或回复「申诉」。`;
+    const metaJson = JSON.stringify({ store, role, anomaly_key: d.anomaly_key, category: d.category, points: pts, period_week_start: periodMonday });
+
+    // 写入责任人 HRMS 档案通知
     try {
       await query(
         `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
          VALUES ($1, $2, $3, 'performance_deduction', $4::jsonb)`,
-        [
-          username,
-          '绩效扣分通知',
-          msg,
-          JSON.stringify({ store, role, anomaly_key: d.anomaly_key, category: d.category, points: pts, period_week_start: periodMonday })
-        ]
+        [username, '绩效扣分通知', msg, metaJson]
       );
     } catch (e) {
       logger.warn({ err: e?.message, username }, 'recordDeductionNotifications insert failed');
     }
+
+    // 发飞书给责任人
+    if (assigneeOpenId) {
+      sendText(assigneeOpenId, `【绩效扣分通知】\n${msg}`, 'open_id').catch((e) =>
+        logger.warn({ err: e?.message, username }, 'recordDeductionNotifications: feishu to assignee failed')
+      );
+    }
+
+    // 管理层抄送：admin + hq_manager 收到汇总提醒
+    const mgmtMsg = `【绩效扣分·管理层抄送】\n门店：${store}｜${roleLabelStr}：${assigneeName}\n${msg}`;
+    for (const oid of mgmtOpenIds) {
+      sendText(oid, mgmtMsg, 'open_id').catch((e) =>
+        logger.warn({ err: e?.message, oid }, 'recordDeductionNotifications: feishu to mgmt failed')
+      );
+    }
   }
 }
 
-/** anomaly_key → scoring-model 的 category（周度汇总；充值/大众点评差评按 trigger_value 另行计分；月毛利/月营收不进自然周汇总） */
+/**
+ * anomaly_key → scoring-model 的 category（周度汇总专用）
+ * ⚠️ 注意：gross_margin 和 revenue_achievement_monthly 是月度规则，
+ *    仅在每月10号由 checkGrossMargin 落库一次，周度查询已在 SQL 层排除，
+ *    此 Map 也不含这两个 key，防止未来被误加进来导致每周重复扣分。
+ */
 const ANOMALY_TO_CATEGORY = {
   revenue_achievement: 'revenue_anomaly',
   labor_efficiency: 'efficiency_anomaly',
@@ -99,8 +143,7 @@ const ANOMALY_TO_CATEGORY = {
   // table_visit_ratio 的 BI notifyTarget=店长，因此扣分也应落到 store_manager
   table_visit_ratio: 'table_visit_ratio_anomaly',
   hongchao_jiuguang_private_room: 'private_room_anomaly',
-  /** 周度汇总须计入毛利率异常（此前被跳过导致多人显示 100 分） */
-  gross_margin: 'margin_anomaly',
+  // gross_margin / revenue_achievement_monthly 为月度规则，不参与自然周汇总
   /** 菜品优化/单位产品类触发 → 按毛利线由出品经理担责 */
   dish_unit_product: 'margin_anomaly',
   cost_spike: 'margin_anomaly'
@@ -165,6 +208,32 @@ function parseTriggerValue(row) {
   return {};
 }
 
+/**
+ * 人效异常：周度汇总须同时落在店长与出品经理的 agent_scores（与 scoring-model efficiency_anomaly 双岗一致）。
+ * 若 calcDeductions 因映射遗漏未写入 labor_efficiency 行，在此兜底补一条，避免只记店长、漏记出品。
+ */
+function mergeLaborEfficiencyIfMissing(baseTotal, baseDetails, role, triggerRows) {
+  const hasLabor = (triggerRows || []).some((row) => row.anomaly_key === 'labor_efficiency');
+  if (!hasLabor) return { baseTotal, baseDetails };
+  if ((baseDetails || []).some((d) => d.anomaly_key === 'labor_efficiency')) {
+    return { baseTotal, baseDetails };
+  }
+  if (role !== 'store_manager' && role !== 'store_production_manager') {
+    return { baseTotal, baseDetails };
+  }
+  const laborRows = (triggerRows || []).filter((row) => row.anomaly_key === 'labor_efficiency');
+  const high = laborRows.some((x) => String(x.severity || '').toLowerCase() === 'high');
+  const sev = high ? 'high' : 'medium';
+  const pts = sev === 'high' ? 20 : 10;
+  const det = {
+    category: 'efficiency_anomaly',
+    severity: sev,
+    anomaly_key: 'labor_efficiency',
+    points: pts
+  };
+  return { baseTotal: baseTotal + pts, baseDetails: [...(baseDetails || []), det] };
+}
+
 /** 按门店 × 周期写入 agent_scores（period=week_周一，score_model=anomaly_rollups_v2）— 供飞书「异常周汇总」与 HRMS new_model 区分 */
 export async function scoreStoreForPeriod(store, periodMonday) {
   const weekEnd = new Date(periodMonday);
@@ -172,14 +241,21 @@ export async function scoreStoreForPeriod(store, periodMonday) {
   const endStr = weekEnd.toISOString().slice(0, 10);
   const brand = (await getBrandForStore(store).catch(() => null)) || '未知';
 
+  // 绩效统计只在自然月内进行，不跨月累计：取 weekEnd 所在月的1号作为下限，
+  // 如果 periodMonday 和 weekEnd 跨月（例如 3/31~4/6），统计区间限制为 4/1~4/6，不含上月触发。
+  const weekEndMonth = endStr.slice(0, 7); // e.g. "2026-04"
+  const monthStart = `${weekEndMonth}-01`;
+  const effectiveStart = periodMonday > monthStart ? periodMonday : monthStart;
+
   const r = await query(
     `SELECT anomaly_key, severity, trigger_value
      FROM anomaly_triggers
      WHERE store = $1
        AND trigger_date >= $2::date
        AND trigger_date <= $3::date
-       AND COALESCE(status, 'open') = 'open'`,
-    [store, periodMonday, endStr]
+       AND COALESCE(status, 'open') = 'open'
+       AND anomaly_key NOT IN ('gross_margin', 'revenue_achievement_monthly')`,
+    [store, effectiveStart, endStr]
   );
 
   let rechargeSum = 0;
@@ -219,7 +295,10 @@ export async function scoreStoreForPeriod(store, periodMonday) {
   const anomalies = [...worst.values()];
 
   for (const role of ['store_manager', 'store_production_manager']) {
-    const { total: baseTotal, details: baseDetails } = calcDeductions(anomalies, role);
+    let { total: baseTotal, details: baseDetails } = calcDeductions(anomalies, role);
+    const laborFix = mergeLaborEfficiencyIfMissing(baseTotal, baseDetails, role, r.rows || []);
+    baseTotal = laborFix.baseTotal;
+    baseDetails = laborFix.baseDetails;
     let extra = 0;
     const extraDetails = [];
     if (role === 'store_manager') {

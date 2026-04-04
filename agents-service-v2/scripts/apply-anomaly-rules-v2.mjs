@@ -61,7 +61,7 @@ const PATCH = {
       default: { medium: { below: 1200 }, high: { below: 1000 } }
     },
     assign_to: 'store_manager',
-    notify_target_role: 'store_manager,store_production_manager',
+    notify_target_role: 'store_production_manager,store_manager',
     evidence: ['排班与营收'],
     auto_actions: ['推送店长与出品'],
     human_required: ['排班优化']

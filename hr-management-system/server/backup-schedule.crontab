@@ -1,0 +1,8 @@
+# HRMS 本地备份（含 hrms_state 全量 + 积分 pointRecords JSONL）
+# 安装：sudo crontab -e，把下面两行（及 CRON_TZ）合并进 root 或运行备份的用户
+#
+# 上海时区：每天 12:00、每天 0:00 各一次 → 同一天内积分会随整库备份落盘 2 份（文件名带不同时间戳）
+
+CRON_TZ=Asia/Shanghai
+0 12 * * * /bin/bash /opt/hrms/server/backup.sh
+0 0 * * * /bin/bash /opt/hrms/server/backup.sh

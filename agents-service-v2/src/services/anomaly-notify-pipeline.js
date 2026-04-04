@@ -39,9 +39,27 @@ const SKIP_OP_SUPERVISOR_FOLLOWUP = new Set([
   // 例: 'material_receipt_weekly'
 ]);
 
-export function getNotifyDbRoles(ruleKey) {
+/**
+ * 通知/任务卡责任人岗位：优先读 DB `anomaly_rules.<key>.notify_target_role`（与 apply-anomaly-rules-v2 一致，支持逗号多岗），
+ * 再回落静态 ANOMALY_RULES（避免仅店长、漏发出品经理）。
+ */
+export async function getNotifyDbRoles(ruleKey) {
   if (ruleKey === 'food_safety') {
     return ['store_manager', 'store_production_manager', 'hq_manager', 'admin'];
+  }
+  try {
+    const dbRules = await getAnomalyRules();
+    const patch = dbRules?.[ruleKey];
+    const ntr = patch && typeof patch.notify_target_role === 'string' ? patch.notify_target_role.trim() : '';
+    if (ntr) {
+      const roles = ntr
+        .split(/[,，;；]/)
+        .map((s) => mapNotifyRoleToDbRole(s.trim()))
+        .filter(Boolean);
+      if (roles.length) return [...new Set(roles)];
+    }
+  } catch (_e) {
+    /* fall through */
   }
   const rule = ANOMALY_RULES.find((x) => x.key === ruleKey);
   const tgt = rule?.notifyTarget;
@@ -113,7 +131,15 @@ function pickPrimaryAssignee(ruleKey, users, dbRoles) {
     const ad = users.find((x) => x.role === 'admin');
     if (ad) return { username: ad.username || '', role: 'admin' };
   }
-  const ordered = Array.isArray(dbRoles) && dbRoles.length ? dbRoles : ['store_manager'];
+  const base = Array.isArray(dbRoles) && dbRoles.length ? [...dbRoles] : ['store_manager'];
+  /** 人效：主责任人优先出品经理（与周度绩效双岗扣分一致，任务卡/态度统计主挂人） */
+  let ordered = base;
+  if (ruleKey === 'labor_efficiency') {
+    const want = ['store_production_manager', 'store_manager'];
+    const head = want.filter((r) => base.includes(r));
+    const tail = base.filter((r) => !head.includes(r));
+    ordered = [...head, ...tail];
+  }
   for (const role of ordered) {
     const u = users.find((x) => x.role === role);
     if (u) return { username: u.username || '', role: u.role };
@@ -139,7 +165,7 @@ export async function runBiAnomalyNotifyPipeline({
   value
 }) {
   const brand = brandIn || (await getBrandForStore(store).catch(() => null)) || '';
-  const roles = getNotifyDbRoles(ruleKey);
+  const roles = await getNotifyDbRoles(ruleKey);
   const users =
     ruleKey === 'food_safety' ? await pickUsersForFoodSafety(store, roles) : await pickUsersForStoreAndRoles(store, roles);
 
@@ -191,54 +217,72 @@ export async function runBiAnomalyNotifyPipeline({
     anomaly_key: ruleKey,
     anomaly_frequency: anomalyFrequency,
     value: value || {},
-    pipeline: 'v2'
+    pipeline: 'v2',
+    assignee_open_ids: users.map((u) => u.open_id).filter(Boolean)
   };
 
   // ── 建 master_tasks（供催办 / HR 绩效 / 状态跟踪）；食安类时限 24h，其它 7 天 ──
+  // labor_efficiency: 店长+出品经理都是责任人，分别建任务以便各自催办跟踪
   const timeoutHours = ruleKey === 'food_safety' ? 24 : 168;
-  try {
-    await query(
-      `INSERT INTO master_tasks (
-         task_id, status, source, category, severity, store, brand, assignee_username, assignee_role,
-         title, detail, source_data, feishu_msg_ids, dispatched_at, timeout_at, remind_count
-       ) VALUES (
-         $1, 'pending_response', 'bi_anomaly', $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, NOW(),
-         NOW() + INTERVAL '${timeoutHours} hours', 0
-       )`,
-      [
-        taskId,
-        ruleKey,
-        severity || 'medium',
-        store,
-        brand || null,
-        assigneeUsername,
-        assigneeRole,
-        title,
-        initialDetail,
-        JSON.stringify(sourceDataBase),
-        JSON.stringify(msgIds)
-      ]
-    );
-  } catch (e) {
-    logger.warn({ err: e?.message, taskId }, 'bi-anomaly: full insert failed, retry minimal columns');
+
+  // 人效异常需要给每个责任人分别建任务；其他异常只建主责任人任务
+  const taskAssignees = ruleKey === 'labor_efficiency'
+    ? users.filter((u) => ['store_manager', 'store_production_manager'].includes(u.role))
+    : [{ username: assigneeUsername, role: assigneeRole }];
+
+  // 至少保证有一个责任人
+  const effectiveAssignees = taskAssignees.length > 0
+    ? taskAssignees
+    : [{ username: assigneeUsername, role: assigneeRole }];
+
+  for (const assignee of effectiveAssignees) {
+    const subTaskId = effectiveAssignees.length > 1
+      ? `${taskId}-${assignee.role === 'store_manager' ? 'SM' : 'PM'}`
+      : taskId;
     try {
       await query(
-        `INSERT INTO master_tasks (task_id, status, source, category, store, assignee_username, assignee_role, title, detail, source_data, feishu_msg_ids, dispatched_at, timeout_at, remind_count)
-         VALUES ($1, 'pending_response', 'bi_anomaly', $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, NOW(), NOW() + INTERVAL '${timeoutHours} hours', 0)`,
+        `INSERT INTO master_tasks (
+           task_id, status, source, category, severity, store, brand, assignee_username, assignee_role,
+           title, detail, source_data, feishu_msg_ids, dispatched_at, timeout_at, remind_count
+         ) VALUES (
+           $1, 'pending_response', 'bi_anomaly', $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, NOW(),
+           NOW() + INTERVAL '${timeoutHours} hours', 0
+         )`,
         [
-          taskId,
+          subTaskId,
           ruleKey,
+          severity || 'medium',
           store,
-          assigneeUsername,
-          assigneeRole,
+          brand || null,
+          assignee.username,
+          assignee.role,
           title,
           initialDetail,
-          JSON.stringify({ ...sourceDataBase, pipeline: 'v2_min' }),
+          JSON.stringify(sourceDataBase),
           JSON.stringify(msgIds)
         ]
       );
-    } catch (e2) {
-      logger.error({ err: e2?.message, taskId, store, ruleKey }, 'bi-anomaly: master_tasks insert failed');
+    } catch (e) {
+      logger.warn({ err: e?.message, taskId: subTaskId }, 'bi-anomaly: full insert failed, retry minimal columns');
+      try {
+        await query(
+          `INSERT INTO master_tasks (task_id, status, source, category, store, assignee_username, assignee_role, title, detail, source_data, feishu_msg_ids, dispatched_at, timeout_at, remind_count)
+           VALUES ($1, 'pending_response', 'bi_anomaly', $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, NOW(), NOW() + INTERVAL '${timeoutHours} hours', 0)`,
+          [
+            subTaskId,
+            ruleKey,
+            store,
+            assignee.username,
+            assignee.role,
+            title,
+            initialDetail,
+            JSON.stringify({ ...sourceDataBase, pipeline: 'v2_min' }),
+            JSON.stringify(msgIds)
+          ]
+        );
+      } catch (e2) {
+        logger.error({ err: e2?.message, taskId: subTaskId, store, ruleKey }, 'bi-anomaly: master_tasks insert failed');
+      }
     }
   }
 

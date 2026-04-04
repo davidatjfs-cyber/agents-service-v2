@@ -26,9 +26,55 @@ rsync -avz -e ssh \
   --exclude 'dist' \
   "${ROOT}/" "${ECS_HOST}:${REMOTE_DIR}/"
 
-# 合并为一次 SSH：少输一次密码；务必看到下方打印的 JSON（含 replyEngine）再关终端
-echo ">>> remote: npm install + pm2 restart + health"
-ssh -o ConnectTimeout=60 "${ECS_HOST}" \
-  "cd '${REMOTE_DIR}' && if [ -f '.env.production' ]; then grep -q '^ENABLE_AUTOMATIONS=false\$' '.env.production' 2>/dev/null && sed -i 's/^ENABLE_AUTOMATIONS=false\$/ENABLE_AUTOMATIONS=true/' '.env.production' || true; sed -i 's/^ENABLE_DB_WRITE=false\$/ENABLE_DB_WRITE=true/' '.env.production' 2>/dev/null || true; grep -q '^ENABLE_DB_WRITE=' '.env.production' 2>/dev/null || echo 'ENABLE_DB_WRITE=true' >> '.env.production'; fi && (npm ci --omit=dev 2>/dev/null || npm install --omit=dev) && node scripts/apply-analysis-sop-sql.mjs && node scripts/apply-strategy-rules-sql.mjs && node scripts/apply-strategy-rules-tags-sql.mjs && node scripts/apply-agent-experience-context-sql.mjs && node scripts/apply-anomaly-rules-v2.mjs && node scripts/apply-private-room-column.mjs && echo '>>> 彻底清理 3101 端口占用...' && (pm2 stop agents-service-v2 2>/dev/null || true) && (pm2 delete agents-service-v2 2>/dev/null || true) && (fuser -k 3101/tcp 2>/dev/null || true) && (lsof -ti:3101 2>/dev/null | xargs -r kill -9 || true) && sleep 3 && echo '>>> 3101 端口已释放' && pm2 start '${REMOTE_DIR}/src/index.js' --name agents-service-v2 --update-env && sleep 6 && echo '--- health ---' && H=\$(curl -sS -m 10 http://127.0.0.1:3101/health) && echo \"\$H\" && echo \"\$H\" | grep -q '\"replyEngine\"' || { echo 'ERROR: /health 无 replyEngine — 常见原因：另有 node 占用 3101（非 pm2）。在服务器执行: ss -tlnp | grep 3101；若非 pm2 的 node 则 kill 该 pid 后再 pm2 restart agents-service-v2。' >&2; exit 1; }"
+# 合并为一次 SSH：固定 PORT=3101（ecosystem.config.cjs），删 pm2 后再起；仅当 3101 仍被占才 fuser
+echo ">>> remote: npm install + pm2 ecosystem (3101) + health"
+ssh -o ConnectTimeout=60 "${ECS_HOST}" bash -s <<EOS
+set -euo pipefail
+cd "${REMOTE_DIR}"
+ensure_kv() {
+  local file="\$1" key="\$2" val="\$3"
+  [[ -f "\$file" ]] || return 0
+  if grep -q "^\${key}=" "\$file" 2>/dev/null; then
+    sed -i "s|^\${key}=.*|\${key}=\${val}|" "\$file"
+  else
+    printf '\n# deploy-agents-ecs.sh\n%s=%s\n' "\$key" "\$val" >> "\$file"
+  fi
+}
+if [[ -f '.env.production' ]]; then
+  grep -q '^ENABLE_AUTOMATIONS=false\$' '.env.production' 2>/dev/null && sed -i 's/^ENABLE_AUTOMATIONS=false\$/ENABLE_AUTOMATIONS=true/' '.env.production' || true
+  sed -i 's/^ENABLE_DB_WRITE=false\$/ENABLE_DB_WRITE=true/' '.env.production' 2>/dev/null || true
+  grep -q '^ENABLE_DB_WRITE=' '.env.production' 2>/dev/null || echo 'ENABLE_DB_WRITE=true' >> '.env.production'
+fi
+ensure_kv .env PORT 3101
+[[ -f .env.production ]] && ensure_kv .env.production PORT 3101 || true
+(npm ci --omit=dev 2>/dev/null || npm install --omit=dev)
+node scripts/apply-analysis-sop-sql.mjs
+node scripts/apply-strategy-rules-sql.mjs
+node scripts/apply-strategy-rules-tags-sql.mjs
+node scripts/apply-agent-experience-context-sql.mjs
+node scripts/apply-anomaly-rules-v2.mjs
+node scripts/apply-private-room-column.mjs
+# 彻底清理：先 PM2 delete，再杀所有孤儿 node 进程，最后释放端口
+pm2 delete agents-service-v2 2>/dev/null || true
+sleep 1
+# Kill ALL node processes running src/index.js (orphans from bad previous deploys)
+pkill -9 -f "node.*agents-service-v2/src/index" 2>/dev/null || true
+pkill -9 -f "/usr/bin/node src/index.js" 2>/dev/null || true
+sleep 1
+fuser -k 3101/tcp 2>/dev/null || true
+sleep 2
+# Verify port is free
+if ss -tlnp 2>/dev/null | grep -q ':3101 '; then
+  echo '>>> WARNING: 3101 仍被占用，强制清理' >&2
+  fuser -k 3101/tcp 2>/dev/null || true
+  sleep 2
+fi
+pm2 start ecosystem.config.cjs --update-env
+sleep 6
+echo '--- health ---'
+H=\$(curl -sS -m 10 http://127.0.0.1:3101/health)
+echo "\$H"
+echo "\$H" | grep -q '"replyEngine"' || { echo 'ERROR: /health 无 replyEngine — ss -tlnp | grep 3101 查看占用' >&2; exit 1; }
+EOS
 echo ""
 echo "Done. replyEngine 应与 src/reply-engine-version.js 中 REPLY_ENGINE_BUILD 一致。"

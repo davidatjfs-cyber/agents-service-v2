@@ -14,8 +14,9 @@ import OSS from 'ali-oss';
 import COS from 'cos-nodejs-sdk-v5';
 import pg from 'pg';
 const { Pool } = pg;
-// Return raw timestamp strings (Beijing time) instead of JS Date objects
-// OID 1114 = timestamp without time zone, OID 1184 = timestamp with time zone
+// Return raw strings instead of JS Date objects to avoid UTC-to-local timezone shift
+// OID 1082 = date, OID 1114 = timestamp without time zone, OID 1184 = timestamp with time zone
+pg.types.setTypeParser(1082, str => str);  // date → keep as 'YYYY-MM-DD' string
 pg.types.setTypeParser(1114, str => str);
 pg.types.setTypeParser(1184, str => {
   // Convert timestamptz to Beijing time string
@@ -2190,7 +2191,10 @@ app.get('/api/points/records', authRequired, async (req, res) => {
     const myStore = role === 'store_manager' ? String(pickMyStoreFromState(state0, username) || '').trim() : '';
     const effectiveStore = role === 'store_manager' ? myStore : store;
     let list = Array.isArray(state0.pointRecords) ? state0.pointRecords.slice() : [];
-    if (effectiveStore) list = list.filter(x => String(x?.store || '').trim() === effectiveStore);
+    if (effectiveStore) {
+      const want = canonicalizeStoreKeyForPoints(effectiveStore);
+      list = list.filter(x => canonicalizeStoreKeyForPoints(x?.store) === want);
+    }
     if (name) {
       list = list.filter(x => {
         const n = String(x?.name || '').trim().toLowerCase();
@@ -2226,14 +2230,17 @@ app.get('/api/points/ranking', authRequired, async (req, res) => {
   const username = String(req.user?.username || '').trim();
   if (!username) return res.status(400).json({ error: 'missing_user' });
 
-  const month = safeMonthOnly(req.query?.month) || new Date().toISOString().slice(0, 7);
+  const month = safeMonthOnly(req.query?.month) || hrmsNowISO().slice(0, 7);
   const store = String(req.query?.store || '').trim();
 
   try {
     const state0 = (await getSharedState()) || {};
     let list = Array.isArray(state0.pointRecords) ? state0.pointRecords.slice() : [];
     list = list.filter(x => String(x?.approvedAt || x?.createdAt || '').slice(0, 7) === month);
-    if (store) list = list.filter(x => String(x?.store || '').trim() === store);
+    if (store) {
+      const want = canonicalizeStoreKeyForPoints(store);
+      list = list.filter(x => canonicalizeStoreKeyForPoints(x?.store) === want);
+    }
 
     const map = {};
     for (const r of list) {
@@ -3615,6 +3622,27 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
               },
               pointsAppliedApprovals: { [approvalId]: true }
             }, { pointRecords: 'id' });
+
+            // Dual-write to point_records table (authoritative backup)
+            try {
+              for (const rec of newRecords) {
+                const approvedAtVal = (rec.approvedAt && rec.approvedAt !== '') ? rec.approvedAt : null;
+                await pool.query(
+                  `INSERT INTO point_records (id, approval_id, username, name, store, item_name, reason, points, amount, approved_at, approved_by)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                   ON CONFLICT (id) DO UPDATE SET
+                     approval_id=EXCLUDED.approval_id, username=EXCLUDED.username, name=EXCLUDED.name,
+                     store=EXCLUDED.store, item_name=EXCLUDED.item_name, reason=EXCLUDED.reason,
+                     points=EXCLUDED.points, amount=EXCLUDED.amount, approved_at=EXCLUDED.approved_at,
+                     approved_by=EXCLUDED.approved_by, updated_at=NOW()`,
+                  [rec.id, rec.approvalId || null, rec.username || '', rec.name || '', rec.store || '',
+                   rec.itemName || '积分事项', rec.reason || '', Number(rec.points) || 0,
+                   Number(rec.amount) || 0, approvedAtVal, rec.approvedBy || '']
+                );
+              }
+            } catch (e2) {
+              console.error('[point_records] dual-write failed (non-fatal):', e2?.message);
+            }
           }
 
           // Notifications: read fresh state AFTER the atomic merge
@@ -4146,7 +4174,11 @@ app.post('/api/checkin', authRequired, async (req, res) => {
        returning *`,
       [username, storeName || null, type, lat, lng, distMeters, faceMatch, faceScore, photoUrl, status]
     );
-    return res.json({ ok: true, record: r.rows[0] });
+    const inserted = r.rows[0];
+    upsertEmployeeAttendanceMirrorFromCheckinRow(inserted).catch((e) =>
+      console.error('[employee_attendance_records] dual-write failed (non-fatal):', e?.message)
+    );
+    return res.json({ ok: true, record: inserted });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
   }
@@ -4909,6 +4941,7 @@ async function saveSharedState(nextData) {
      on conflict (key) do update set data = excluded.data, updated_at = now()`,
     ['default', JSON.stringify(nextData || {})]
   );
+  schedulePayrollDomainSync();
 }
 
 /**
@@ -4965,15 +4998,105 @@ async function mergeSharedStateFields(patches, arrayIdFields = {}) {
       `UPDATE hrms_state SET data = $2::jsonb, updated_at = NOW() WHERE key = $1`,
       ['default', JSON.stringify(next)]
     );
-    if (updateResult.rowCount > 0) return; // success
+    if (updateResult.rowCount > 0) {
+      schedulePayrollDomainSync();
+      return;
+    }
     // If no row exists yet, insert
     await pool.query(
       `INSERT INTO hrms_state (key, data, updated_at) VALUES ($1, $2::jsonb, NOW()) ON CONFLICT (key) DO NOTHING`,
       ['default', JSON.stringify(next)]
     );
+    schedulePayrollDomainSync();
     return;
   }
   throw new Error('mergeSharedStateFields: max retries exceeded');
+}
+
+/** 薪资域 JSON 是否视为「空」（用于 state ↔ hrms_payroll_domain 互备回灌） */
+function payrollDomainFieldEmpty(v) {
+  if (v === undefined || v === null) return true;
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === 'object') return Object.keys(v).length === 0;
+  return false;
+}
+
+/** 将当前 state 中的薪资相关字段写入独立表 hrms_payroll_domain（双写备份） */
+async function upsertPayrollDomainFromState(state) {
+  if (!state || typeof state !== 'object') return;
+  const pa = state.payrollAdjustments && typeof state.payrollAdjustments === 'object' ? state.payrollAdjustments : {};
+  const pau = state.payrollAudits && typeof state.payrollAudits === 'object' ? state.payrollAudits : {};
+  const sa = Array.isArray(state.salaryAdjustments) ? state.salaryAdjustments : [];
+  const mc = Array.isArray(state.monthlyConfirmations) ? state.monthlyConfirmations : [];
+  await pool.query(
+    `INSERT INTO hrms_payroll_domain (id, payroll_adjustments, payroll_audits, salary_adjustments, monthly_confirmations, updated_at)
+     VALUES ('default', $1::jsonb, $2::jsonb, $3::jsonb, $4::jsonb, NOW())
+     ON CONFLICT (id) DO UPDATE SET
+       payroll_adjustments = EXCLUDED.payroll_adjustments,
+       payroll_audits = EXCLUDED.payroll_audits,
+       salary_adjustments = EXCLUDED.salary_adjustments,
+       monthly_confirmations = EXCLUDED.monthly_confirmations,
+       updated_at = NOW()`,
+    [JSON.stringify(pa), JSON.stringify(pau), JSON.stringify(sa), JSON.stringify(mc)]
+  );
+}
+
+function schedulePayrollDomainSync() {
+  setImmediate(async () => {
+    try {
+      const s = await getSharedState();
+      await upsertPayrollDomainFromState(s);
+    } catch (e) {
+      console.error('[hrms_payroll_domain] async sync failed (non-fatal):', e?.message);
+    }
+  });
+}
+
+/** 打卡记录写入 employee_attendance_records（与 checkin_records 同 id） */
+async function upsertEmployeeAttendanceMirrorFromCheckinRow(rec) {
+  if (!rec?.id) return;
+  await pool.query(
+    `INSERT INTO employee_attendance_records (
+       id, username, store, type, check_time, latitude, longitude, distance_meters,
+       face_match, face_score, photo_url, status, note, confirmed_by, confirmed_at, created_at, synced_at
+     ) VALUES (
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,COALESCE($16::timestamptz, NOW()), NOW()
+     )
+     ON CONFLICT (id) DO UPDATE SET
+       username = EXCLUDED.username,
+       store = EXCLUDED.store,
+       type = EXCLUDED.type,
+       check_time = EXCLUDED.check_time,
+       latitude = EXCLUDED.latitude,
+       longitude = EXCLUDED.longitude,
+       distance_meters = EXCLUDED.distance_meters,
+       face_match = EXCLUDED.face_match,
+       face_score = EXCLUDED.face_score,
+       photo_url = EXCLUDED.photo_url,
+       status = EXCLUDED.status,
+       note = EXCLUDED.note,
+       confirmed_by = EXCLUDED.confirmed_by,
+       confirmed_at = EXCLUDED.confirmed_at,
+       synced_at = NOW()`,
+    [
+      rec.id,
+      rec.username,
+      rec.store,
+      rec.type,
+      rec.check_time,
+      rec.latitude,
+      rec.longitude,
+      rec.distance_meters,
+      rec.face_match,
+      rec.face_score,
+      rec.photo_url,
+      rec.status,
+      rec.note,
+      rec.confirmed_by,
+      rec.confirmed_at,
+      rec.created_at
+    ]
+  );
 }
 
 function stateFindUserRecord(state, username) {
@@ -8635,10 +8758,8 @@ app.post('/api/reports/payroll/adjustment', authRequired, async (req, res) => {
   if (subsidy == null) return res.status(400).json({ error: 'invalid_subsidy' });
 
   try {
-    const state0 = (await getSharedState()) || {};
-    const payrollAdjustments = state0?.payrollAdjustments && typeof state0.payrollAdjustments === 'object' ? { ...state0.payrollAdjustments } : {};
     const key = `${month}||${store || 'ALL'}||${targetUsername.toLowerCase()}`;
-    payrollAdjustments[key] = {
+    const item = {
       month,
       store: store || '',
       username: targetUsername,
@@ -8646,8 +8767,9 @@ app.post('/api/reports/payroll/adjustment', authRequired, async (req, res) => {
       updatedBy: username,
       updatedAt: hrmsNowISO()
     };
-    await saveSharedState({ ...state0, payrollAdjustments });
-    return res.json({ ok: true, item: payrollAdjustments[key] });
+    // 原子合并，避免整包 saveSharedState 覆盖由积分审批写入的 pointRecords/payrollAdjustments
+    await mergeSharedStateFields({ payrollAdjustments: { [key]: item } });
+    return res.json({ ok: true, item });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
   }
@@ -10564,6 +10686,13 @@ function normalizeStoreKey(v) {
   return String(v || '').trim().toLowerCase().replace(/\s+/g, '');
 }
 
+/** 积分门店筛选：统一常见异写（如 马已仙 / 马己仙），避免排行榜与记录查询全空 */
+function canonicalizeStoreKeyForPoints(store) {
+  let s = String(store || '').trim();
+  s = s.replace(/马已仙/g, '马己仙');
+  return normalizeStoreKey(s);
+}
+
 function safeDateOnly(input) {
   const v = String(input || '').trim();
   if (!v) return null;
@@ -10870,22 +10999,7 @@ async function ensureExamResultsTable() {
 }
 
 function getOssClient() {
-  if (!OSS_REGION || !OSS_BUCKET || !OSS_ACCESS_KEY_ID || !OSS_ACCESS_KEY_SECRET) return null;
-  const agent = new https.Agent({
-    keepAlive: true,
-    maxSockets: Math.max(4, OSS_PARALLEL * 4),
-    maxFreeSockets: Math.max(2, OSS_PARALLEL * 2),
-    timeout: Math.max(10000, OSS_TIMEOUT_MS)
-  });
-  return new OSS({
-    region: OSS_REGION,
-    bucket: OSS_BUCKET,
-    accessKeyId: OSS_ACCESS_KEY_ID,
-    accessKeySecret: OSS_ACCESS_KEY_SECRET,
-    secure: true,
-    timeout: Math.max(10000, OSS_TIMEOUT_MS),
-    agent
-  });
+  return null;
 }
 
 function getCosClient() {
@@ -10906,12 +11020,7 @@ function buildCosPublicUrl(objectKey) {
 }
 
 function buildOssPublicUrl(objectKey) {
-  const key = String(objectKey || '').replace(/^\/+/, '');
-  if (!key) return '';
-  const base = String(OSS_PUBLIC_BASE_URL || '').trim().replace(/\/$/, '');
-  if (base) return `${base}/${key}`;
-  if (!OSS_BUCKET || !OSS_REGION) return '';
-  return `https://${OSS_BUCKET}.${OSS_REGION}.aliyuncs.com/${key}`;
+  return '';
 }
 
 function encodeRFC5987ValueChars(str) {
@@ -11154,6 +11263,37 @@ app.put('/api/state', authRequired, async (req, res) => {
     const existingState = await getSharedState();
     if (existingState) {
       data.employees = mergeEmployeesForStatePut(data.employees, existingState.employees);
+
+      // ── 积分安全保护 ──────────────────────────────────────────────────────────
+      // pointRecords / pointsAppliedApprovals / payrollAdjustments 由服务端
+      // mergeSharedStateFields 原子写入；前端 localStorage 可能比这几个字段旧，
+      // 直接 PUT 会把刚审批通过的积分/薪酬调整记录全部抹掉。
+      // 策略：以服务端为主，把浏览器没有的 id 追加进来（不回退已存在记录）。
+      const srvPoints = Array.isArray(existingState.pointRecords) ? existingState.pointRecords : [];
+      const incPoints = Array.isArray(data.pointRecords) ? data.pointRecords : [];
+      if (srvPoints.length) {
+        const incIds = new Set(incPoints.map(r => String(r?.id || '')).filter(Boolean));
+        const srvOnly = srvPoints.filter(r => !incIds.has(String(r?.id || '')));
+        data.pointRecords = [...incPoints, ...srvOnly];
+      }
+      // pointsAppliedApprovals：object merge，服务端字段不被浏览器覆盖
+      if (existingState.pointsAppliedApprovals && typeof existingState.pointsAppliedApprovals === 'object') {
+        data.pointsAppliedApprovals = Object.assign(
+          {},
+          existingState.pointsAppliedApprovals,
+          data.pointsAppliedApprovals && typeof data.pointsAppliedApprovals === 'object' ? data.pointsAppliedApprovals : {}
+        );
+      }
+      // payrollAdjustments：object merge，服务端字段不被浏览器覆盖
+      if (existingState.payrollAdjustments && typeof existingState.payrollAdjustments === 'object') {
+        data.payrollAdjustments = Object.assign(
+          {},
+          existingState.payrollAdjustments,
+          data.payrollAdjustments && typeof data.payrollAdjustments === 'object' ? data.payrollAdjustments : {}
+        );
+      }
+      // ─────────────────────────────────────────────────────────────────────────
+
       const existingStores = Array.isArray(existingState.stores) ? existingState.stores : [];
       const incomingStores = Array.isArray(data.stores) ? data.stores : [];
       if (existingStores.length && incomingStores.length) {
@@ -11185,6 +11325,50 @@ app.put('/api/state', authRequired, async (req, res) => {
        on conflict (key) do update set data = excluded.data, updated_at = now()`,
       ['default', JSON.stringify(data)]
     );
+    // Dual-write employees to independent table for disaster recovery
+    setImmediate(async () => {
+      try {
+        const emps = Array.isArray(data.employees) ? data.employees : [];
+        for (const emp of emps) {
+          const username = String(emp?.username || '').trim();
+          if (!username) continue;
+          const { id, name, role, store, department, position, status, gender, phone, email,
+                  joinDate, birthday, salary, password, managerUsername, idCardNumber, bankCard,
+                  createdAt, updatedAt, ...rest } = emp;
+          await pool.query(
+            `INSERT INTO employees (id, username, name, role, store, department, position, status,
+               gender, phone, email, join_date, birthday, salary, password_hash, manager_username,
+               id_card_number, bank_card, extra_json, created_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+             ON CONFLICT (username) DO UPDATE SET
+               name=EXCLUDED.name, role=EXCLUDED.role, store=EXCLUDED.store,
+               department=EXCLUDED.department, position=EXCLUDED.position, status=EXCLUDED.status,
+               gender=EXCLUDED.gender, phone=EXCLUDED.phone, email=EXCLUDED.email,
+               join_date=EXCLUDED.join_date, birthday=EXCLUDED.birthday, salary=EXCLUDED.salary,
+               password_hash=EXCLUDED.password_hash, manager_username=EXCLUDED.manager_username,
+               id_card_number=EXCLUDED.id_card_number, bank_card=EXCLUDED.bank_card,
+               extra_json=EXCLUDED.extra_json, updated_at=NOW()`,
+            [String(id || username), username,
+             String(name || ''), String(role || ''), String(store || ''), String(department || ''),
+             String(position || ''), String(status || 'active'), String(gender || ''),
+             String(phone || ''), String(email || ''), String(joinDate || ''), String(birthday || ''),
+             String(salary || ''), String(password || ''), String(managerUsername || ''),
+             String(idCardNumber || ''), String(bankCard || ''), JSON.stringify(rest),
+             createdAt ? new Date(createdAt).toISOString() : new Date().toISOString(),
+             new Date().toISOString()]
+          ).catch(e => console.error('[employees] dual-write error:', e?.message));
+        }
+      } catch (e) {
+        console.error('[employees] dual-write failed (non-fatal):', e?.message);
+      }
+    });
+    setImmediate(async () => {
+      try {
+        await upsertPayrollDomainFromState(data);
+      } catch (e) {
+        console.error('[hrms_payroll_domain] PUT /api/state sync failed (non-fatal):', e?.message);
+      }
+    });
     // 同步 feishu_users：更新在职员工的 role/store/name，注销已删除/离职员工
     setImmediate(async () => {
       try {
@@ -13344,6 +13528,212 @@ app.listen(PORT, HOST, async () => {
       console.error('[daily_reports] Migration 013 error (non-fatal):', e?.message);
     }
 
+    try {
+      const mig014 = await import('fs').then(f => f.promises.readFile(new URL('./migrations/014_employee_attendance_payroll_domain.sql', import.meta.url), 'utf8'));
+      await pool.query(mig014);
+      console.log('[hrms] Migration 014 applied: employee_attendance_records + hrms_payroll_domain');
+    } catch (e) {
+      console.error('[hrms] Migration 014 error (non-fatal):', e?.message);
+    }
+
+    // 启动时权威重建：每次启动都从 daily_reports 表完整重建 hrms_state.dailyReports
+    // 策略：DB 是唯一权威来源，state 里的条目只有在 DB 没有对应记录时才保留（防止丢失尚未落表的草稿）
+    // 修复历史：raw row_to_json 写入导致 data.actual=0，pg date 时区偏移导致日期差1天
+    try {
+      const pgAll = await pool.query(`
+        SELECT store, date, brand, actual_revenue, pre_discount_revenue, total_discount,
+               dine_orders, dine_revenue, dine_traffic, efficiency, labor_total,
+               actual_margin, gross_profit, dianping_rating, new_wechat_members, wechat_month_total,
+               private_room_uses, operational_anomaly_note, delivery_pre_revenue, delivery_actual,
+               delivery_orders, delivery_bad_reviews, budget, budget_rate, submitted, submitted_at, updated_at
+        FROM daily_reports
+        ORDER BY date DESC
+      `);
+      const dbItems = pgAll.rows.map(row => dailyReportItemFromPgRow(row));
+      const dbKeySet = new Set(dbItems.map(x => `${x.date}|${x.store}`));
+
+      // Keep state-only entries (draft reports not yet in DB), replace all DB-backed ones
+      const state0 = (await getSharedState()) || {};
+      const existingArr = Array.isArray(state0.dailyReports) ? state0.dailyReports : [];
+      const stateOnlyItems = existingArr.filter(r => {
+        const k = `${String(r?.date || '').slice(0, 10)}|${String(r?.store || '').trim()}`;
+        return !dbKeySet.has(k);
+      });
+
+      // Merge: DB items first (authoritative), then any state-only drafts
+      const merged = [...dbItems, ...stateOnlyItems];
+      const client2 = await pool.connect();
+      try {
+        await client2.query('BEGIN');
+        const cur = await client2.query(`SELECT data FROM hrms_state WHERE key=$1 FOR UPDATE`, ['default']);
+        const curData = cur.rows[0]?.data || {};
+        await client2.query(
+          `UPDATE hrms_state SET data=$2::jsonb, updated_at=NOW() WHERE key=$1`,
+          ['default', JSON.stringify({ ...curData, dailyReports: merged })]
+        );
+        await client2.query('COMMIT');
+      } finally {
+        client2.release();
+      }
+      console.log(`[startup] 日报权威重建：DB ${dbItems.length} 条 + 草稿 ${stateOnlyItems.length} 条 = 共 ${merged.length} 条`);
+    } catch (e) {
+      console.error('[startup] 日报权威重建失败（非致命，不影响启动）:', e?.message);
+    }
+
+    // 启动时权威重建：从 point_records 表完整重建 hrms_state.pointRecords
+    // 策略：DB 表是唯一权威，覆盖 state 里所有同 id 的条目，保留 state 里没有 id 的孤立记录
+    try {
+      const prRows = await pool.query(`
+        SELECT id::text, approval_id, username, name, store, item_name, reason,
+               points, amount, approved_at, approved_by
+        FROM point_records
+        ORDER BY approved_at DESC NULLS LAST, created_at DESC
+      `);
+      const dbPrItems = prRows.rows.map(row => ({
+        id: row.id,
+        approvalId: row.approval_id || '',
+        username: row.username || '',
+        name: row.name || '',
+        store: row.store || '',
+        itemName: row.item_name || '',
+        reason: row.reason || '',
+        points: Number(row.points) || 0,
+        amount: Number(row.amount) || 0,
+        approvedAt: row.approved_at ? String(row.approved_at) : '',
+        approvedBy: row.approved_by || '',
+      }));
+      const dbPrIds = new Set(dbPrItems.map(x => x.id));
+
+      const state1 = (await getSharedState()) || {};
+      const existingPr = Array.isArray(state1.pointRecords) ? state1.pointRecords : [];
+      // Keep state-only records without valid id (edge case)
+      const stateOnlyPr = existingPr.filter(r => r?.id && !dbPrIds.has(r.id));
+
+      const mergedPr = [...dbPrItems, ...stateOnlyPr];
+      const client3 = await pool.connect();
+      try {
+        await client3.query('BEGIN');
+        const cur3 = await client3.query(`SELECT data FROM hrms_state WHERE key=$1 FOR UPDATE`, ['default']);
+        const curData3 = cur3.rows[0]?.data || {};
+        await client3.query(
+          `UPDATE hrms_state SET data=$2::jsonb, updated_at=NOW() WHERE key=$1`,
+          ['default', JSON.stringify({ ...curData3, pointRecords: mergedPr })]
+        );
+        await client3.query('COMMIT');
+      } finally {
+        client3.release();
+      }
+      console.log(`[startup] 积分记录权威重建：DB ${dbPrItems.length} 条 + 孤立 ${stateOnlyPr.length} 条 = 共 ${mergedPr.length} 条`);
+    } catch (e) {
+      console.error('[startup] 积分记录权威重建失败（非致命，不影响启动）:', e?.message);
+    }
+
+    // 考勤双表互备：checkin_records ↔ employee_attendance_records 补缺（防单表损坏）
+    try {
+      const insToMirror = await pool.query(`
+        INSERT INTO employee_attendance_records (
+          id, username, store, type, check_time, latitude, longitude, distance_meters,
+          face_match, face_score, photo_url, status, note, confirmed_by, confirmed_at, created_at, synced_at
+        )
+        SELECT c.id, c.username, c.store, c.type, c.check_time::timestamptz, c.latitude, c.longitude, c.distance_meters,
+               c.face_match, c.face_score, c.photo_url, c.status, c.note, c.confirmed_by, c.confirmed_at::timestamptz,
+               c.created_at::timestamptz, NOW()
+        FROM checkin_records c
+        WHERE NOT EXISTS (SELECT 1 FROM employee_attendance_records e WHERE e.id = c.id)
+      `);
+      const insToCheckin = await pool.query(`
+        INSERT INTO checkin_records (
+          id, username, store, type, check_time, latitude, longitude, distance_meters,
+          face_match, face_score, photo_url, status, note, confirmed_by, confirmed_at, created_at
+        )
+        SELECT e.id, e.username, e.store, e.type, e.check_time, e.latitude, e.longitude, e.distance_meters,
+               e.face_match, e.face_score, e.photo_url, e.status, e.note, e.confirmed_by, e.confirmed_at, e.created_at
+        FROM employee_attendance_records e
+        WHERE NOT EXISTS (SELECT 1 FROM checkin_records c WHERE c.id = e.id)
+      `);
+      console.log(
+        `[startup] 考勤双表同步：→镜像 ${insToMirror.rowCount || 0} 条，→checkin ${insToCheckin.rowCount || 0} 条`
+      );
+    } catch (e) {
+      console.error('[startup] 考勤双表同步失败（非致命，不影响启动）:', e?.message);
+    }
+
+    // 薪资域双备：state 某字段空则从 hrms_payroll_domain 回灌，再写回独立表
+    try {
+      const domainR = await pool.query(`SELECT * FROM hrms_payroll_domain WHERE id = $1`, ['default']);
+      const row = domainR.rows?.[0];
+      if (row) {
+        let stateP = (await getSharedState()) || {};
+        let changed = false;
+        const pairs = [
+          ['payrollAdjustments', 'payroll_adjustments'],
+          ['payrollAudits', 'payroll_audits'],
+          ['salaryAdjustments', 'salary_adjustments'],
+          ['monthlyConfirmations', 'monthly_confirmations']
+        ];
+        for (const [sk, col] of pairs) {
+          const dbVal = row[col];
+          const stVal = stateP[sk];
+          if (payrollDomainFieldEmpty(stVal) && !payrollDomainFieldEmpty(dbVal)) {
+            stateP = { ...stateP, [sk]: dbVal };
+            changed = true;
+          }
+        }
+        if (changed) {
+          await pool.query(
+            `UPDATE hrms_state SET data = $2::jsonb, updated_at = NOW() WHERE key = $1`,
+            ['default', JSON.stringify(stateP)]
+          );
+          console.log('[startup] 薪资域从 hrms_payroll_domain 回灌到 hrms_state');
+        }
+      }
+      const freshState = (await getSharedState()) || {};
+      await upsertPayrollDomainFromState(freshState);
+    } catch (e) {
+      console.error('[startup] 薪资域互备同步失败（非致命，不影响启动）:', e?.message);
+    }
+
+    // 启动时同步员工信息：把 hrms_state.employees 同步到 employees 独立表
+    // 策略：state 是员工信息的权威来源（用户通过 PUT /api/state 管理），只做单向备份
+    try {
+      const stateEmp = (await getSharedState()) || {};
+      const empArr = Array.isArray(stateEmp.employees) ? stateEmp.employees : [];
+      let syncCount = 0;
+      for (const emp of empArr) {
+        const username = String(emp?.username || '').trim();
+        if (!username) continue;
+        const { id, name, role, store, department, position, status, gender, phone, email,
+                joinDate, birthday, salary, password, managerUsername, idCardNumber, bankCard,
+                createdAt, updatedAt, ...rest } = emp;
+        await pool.query(
+          `INSERT INTO employees (id, username, name, role, store, department, position, status,
+             gender, phone, email, join_date, birthday, salary, password_hash, manager_username,
+             id_card_number, bank_card, extra_json, created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+           ON CONFLICT (username) DO UPDATE SET
+             name=EXCLUDED.name, role=EXCLUDED.role, store=EXCLUDED.store,
+             department=EXCLUDED.department, position=EXCLUDED.position, status=EXCLUDED.status,
+             gender=EXCLUDED.gender, phone=EXCLUDED.phone, email=EXCLUDED.email,
+             join_date=EXCLUDED.join_date, birthday=EXCLUDED.birthday, salary=EXCLUDED.salary,
+             password_hash=EXCLUDED.password_hash, manager_username=EXCLUDED.manager_username,
+             id_card_number=EXCLUDED.id_card_number, bank_card=EXCLUDED.bank_card,
+             extra_json=EXCLUDED.extra_json, updated_at=NOW()`,
+          [String(id || username), username,
+           String(name || ''), String(role || ''), String(store || ''), String(department || ''),
+           String(position || ''), String(status || 'active'), String(gender || ''),
+           String(phone || ''), String(email || ''), String(joinDate || ''), String(birthday || ''),
+           String(salary || ''), String(password || ''), String(managerUsername || ''),
+           String(idCardNumber || ''), String(bankCard || ''), JSON.stringify(rest),
+           createdAt ? new Date(createdAt).toISOString() : new Date().toISOString(),
+           new Date().toISOString()]
+        );
+        syncCount++;
+      }
+      console.log(`[startup] 员工信息同步：${syncCount} 条 → employees 表`);
+    } catch (e) {
+      console.error('[startup] 员工信息同步失败（非致命，不影响启动）:', e?.message);
+    }
+
     await dedupeGlobalSocialMediaPointRules();
     await ensureGlobalSocialMediaPointRule();
 
@@ -13802,7 +14192,11 @@ app.post('/api/checkin/:id/confirm', authRequired, async (req, res) => {
       [newStatus, username, note, id]
     );
     if (!r.rows?.length) return res.status(404).json({ error: 'not_found' });
-    return res.json({ record: r.rows[0] });
+    const updated = r.rows[0];
+    upsertEmployeeAttendanceMirrorFromCheckinRow(updated).catch((e) =>
+      console.error('[employee_attendance_records] confirm sync failed (non-fatal):', e?.message)
+    );
+    return res.json({ record: updated });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
   }

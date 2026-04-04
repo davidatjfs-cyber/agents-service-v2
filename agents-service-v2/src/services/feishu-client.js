@@ -2,6 +2,7 @@ import axios from 'axios';
 import crypto from 'crypto';
 import dns from 'node:dns';
 import { query } from '../utils/db.js';
+import { resolveAssigneeOpenIdsForTask } from '../utils/feishu-assignee-resolve.js';
 import { anomalyRuleLabelZh } from '../utils/anomaly-labels.js';
 import { logger } from '../utils/logger.js';
 import { isMarketingPlanningIntent } from '../utils/marketing-intent.js';
@@ -128,54 +129,73 @@ export async function sendCard(receiveId, card, idType = 'open_id') {
 export async function sendGroup(chatId, text) { return sendText(chatId, text, 'chat_id'); }
 
 /**
- * 绩效/扣分「公司通知」：解析任务责任人飞书 open_id（username 优先，其次门店+角色精确/模糊）
+ * 绩效/扣分「公司通知」：与任务卡催办共用门店别名解析（洪潮/马己仙等）
  */
 export async function lookupAssigneeOpenIds(task) {
-  const un = String(task?.assignee_username || '').trim();
-  if (un) {
-    const r = await query(
-      `SELECT open_id FROM feishu_users
-       WHERE lower(username) = lower($1) AND registered = true AND open_id IS NOT NULL AND trim(open_id) <> ''
-       LIMIT 3`,
-      [un]
-    );
-    if (r.rows?.length) return r.rows.map((x) => x.open_id).filter(Boolean);
-  }
-  const role = String(task?.assignee_role || 'store_manager').trim();
-  const st = String(task?.store || '').trim();
-  const r2 = await query(
-    `SELECT open_id FROM feishu_users
-     WHERE store = $1 AND role = $2 AND registered = true AND open_id IS NOT NULL AND trim(open_id) <> ''
-     LIMIT 5`,
-    [st, role]
-  );
-  if (r2.rows?.length) return r2.rows.map((x) => x.open_id).filter(Boolean);
-  const sk = st.trim().toLowerCase().replace(/\s+/g, '');
-  if (!sk) return [];
-  const r3 = await query(
-    `SELECT open_id FROM feishu_users
-     WHERE registered = true AND open_id IS NOT NULL AND trim(open_id) <> '' AND role = $2
-       AND lower(regexp_replace(coalesce(store,''), '\\s+', '', 'g')) LIKE $1
-     LIMIT 5`,
-    [`%${sk}%`, role]
-  );
-  return (r3.rows || []).map((x) => x.open_id).filter(Boolean);
+  return resolveAssigneeOpenIdsForTask(task);
 }
 
 /**
  * 向责任人发送【公司通知】：飞书交互卡片 + 文本各一条（卡片失败则仅文本），便于会话列表与富文本同时可见。
  */
-export async function sendCompanyNoticeToAssignees(task, body) {
+export async function sendCompanyNoticeToAssignees(task, body, opts = {}) {
   const text = String(body || '').trim();
   if (!text) return { targets: 0, sentCards: 0, sentTexts: 0 };
   const oids = await lookupAssigneeOpenIds(task);
+
+  // 同时写入 HRMS 档案公司通知表，使责任人在 HRMS 里也能看到
+  const noticeTitle = opts.title || '公司通知';
+  const noticeType = opts.type || 'task_attitude_notice';
+  const assigneeUsernames = [];
+  try {
+    // 从 feishu_users 反查 open_id 对应的 username，以及 task.assignee_username
+    const un = String(task?.assignee_username || '').trim();
+    if (un) assigneeUsernames.push(un.toLowerCase());
+    // 额外从 feishu_users 拿同 open_id 的 username
+    for (const oid of oids) {
+      const fu = await query(
+        `SELECT username FROM feishu_users WHERE open_id = $1 AND registered = true LIMIT 1`,
+        [oid]
+      ).catch(() => ({ rows: [] }));
+      const fu_un = String(fu.rows?.[0]?.username || '').trim().toLowerCase();
+      if (fu_un && !assigneeUsernames.includes(fu_un)) assigneeUsernames.push(fu_un);
+    }
+    // 写 hrms_user_notifications（按 task_id+username 防止同一任务重复写入）
+    const taskId = task?.task_id;
+    for (const username of assigneeUsernames) {
+      if (!username) continue;
+      // 如果同任务同用户已有记录则跳过
+      if (taskId) {
+        const dup = await query(
+          `SELECT 1 FROM hrms_user_notifications
+           WHERE target_username = $1 AND meta->>'task_id' = $2 LIMIT 1`,
+          [username, String(taskId)]
+        ).catch(() => ({ rows: [] }));
+        if (dup.rows?.length) continue;
+      }
+      await query(
+        `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
+         VALUES ($1, $2, $3, $4, $5::jsonb)`,
+        [
+          username,
+          noticeTitle,
+          text,
+          noticeType,
+          JSON.stringify({ task_id: taskId, store: task?.store, source: task?.source })
+        ]
+      ).catch((e) => logger.warn({ err: e?.message, username }, 'company notice: hrms_user_notifications insert failed'));
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'company notice: hrms_user_notifications batch failed');
+  }
+
   let sentCards = 0;
   let sentTexts = 0;
   const plain = text.length > 3500 ? `${text.slice(0, 3497)}…` : text;
   const card = {
     config: { wide_screen_mode: true },
     header: {
-      title: { tag: 'plain_text', content: '【公司通知】' },
+      title: { tag: 'plain_text', content: `【${noticeTitle}】` },
       template: 'blue'
     },
     elements: [
@@ -192,7 +212,7 @@ export async function sendCompanyNoticeToAssignees(task, body) {
   for (const oid of oids) {
     const cardRes = await sendCard(oid, card, 'open_id');
     if (cardRes?.ok) sentCards += 1;
-    const txtRes = await sendText(oid, `【公司通知】\n${text}`, 'open_id');
+    const txtRes = await sendText(oid, `【${noticeTitle}】\n${text}`, 'open_id');
     if (txtRes?.ok) sentTexts += 1;
   }
   if (!oids.length) {
@@ -203,6 +223,38 @@ export async function sendCompanyNoticeToAssignees(task, body) {
       'company notice to assignee'
     );
   }
+
+  // 管理层抄送：admin + hq_manager 实时收到绩效/工作态度通知
+  try {
+    const mgR = await query(
+      `SELECT DISTINCT open_id, COALESCE(NULLIF(TRIM(name),''), username) AS name
+       FROM feishu_users WHERE role IN ('admin','hq_manager') AND registered = true AND open_id IS NOT NULL`
+    );
+    const mgRows = mgR.rows || [];
+    if (mgRows.length) {
+      // 找责任人姓名（供抄送消息显示）
+      const assigneeNameRows = oids.length
+        ? await query(
+            `SELECT COALESCE(NULLIF(TRIM(name),''), username) AS name
+             FROM feishu_users WHERE open_id = ANY($1::text[]) AND registered = true LIMIT 1`,
+            [oids]
+          ).then((r) => r.rows).catch(() => [])
+        : [];
+      const assigneeNameStr = assigneeNameRows[0]?.name || task?.assignee_username || '责任人';
+      const storeStr = task?.store || '';
+      const mgmtText = `【管理层抄送·${noticeTitle}】\n门店：${storeStr}｜责任人：${assigneeNameStr}\n${plain}`;
+      for (const mg of mgRows) {
+        if (oids.includes(mg.open_id)) continue; // 管理员本人已是责任人则跳过重复
+        sendText(mg.open_id, mgmtText, 'open_id').catch((e) =>
+          logger.warn({ err: e?.message, oid: mg.open_id }, 'company notice: mgmt cc failed')
+        );
+      }
+      logger.info({ mgmt: mgRows.length, taskId: task?.task_id }, 'company notice: mgmt cc sent');
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'company notice: mgmt cc batch failed');
+  }
+
   return { targets: oids.length, sentCards, sentTexts };
 }
 
@@ -762,29 +814,8 @@ export async function handleWebhookEvent(body) {
         }
       }
 
-      // 3) 兜底：bi_anomaly 的“引用 message_id”有时不会回传
-      //    此时按「发消息的人=任务 assignee，且最近 24h 内仍 pending_response/pending_review 的最新任务」匹配落库
-      if (!taskId && hasParsedText && openId) {
-        const hit = await query(
-          `SELECT mt.task_id
-           FROM master_tasks mt
-           JOIN feishu_users fu ON fu.open_id = $1 AND fu.registered = TRUE
-           WHERE mt.source = 'bi_anomaly'
-             AND mt.status IN ('pending_response','pending_review')
-             AND mt.store = fu.store
-             AND lower(COALESCE(mt.assignee_username,'')) = lower(COALESCE(fu.username,''))
-             AND COALESCE(mt.dispatched_at, mt.created_at) >= NOW() - INTERVAL '24 hours'
-           ORDER BY COALESCE(mt.dispatched_at, mt.created_at) DESC
-           LIMIT 1`,
-          [openId]
-        ).catch(() => ({ rows: [] }));
-
-        const found = hit?.rows?.[0]?.task_id || null;
-        if (found) {
-          taskId = found;
-          matchedCardMessageId = null;
-        }
-      }
+      // 已移除 3)「同店+责任人+24h 内最新 bi_anomaly」兜底：私聊里正常问数（如「昨天开档情况」）会被误判为任务回复并触发字数审核。
+      // 提交任务处理记录请：① 引用/回复任务卡片（message_id 命中 feishu_msg_ids）；② 或在正文中写任务号 ANO-xxxxxxxx-xxxx / SCHED-xxxxxxxx-xxxx。
 
       // 若无 thread 匹配且无任务ID正文，则走普通消息 pipeline，避免误记为任务。
 
@@ -1080,14 +1111,15 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
     const rc = parseInt(task.review_count || 0);
 
     const t = String(responseText || '').trim();
-    const isTooShort = t.length < 15 && !hasImages;
+    const MIN_TEXT = 20;
     const isPlaceholder = /^(无|没有|ok|好的|收到|test|测试|了解|\d+)$/i.test(t);
+    const textMeetsMin = t.length >= MIN_TEXT;
 
     let passed = false;
     let reason = '';
     let feedback = '';
 
-    /** 附图须与餐饮门店任务场景相关，禁止用无关图「凑数」通过 */
+    /** 有附图时：须与任务内容一致（底线），不凭长文绕过 */
     let imageRelevant = true;
     let imageVisionReason = '';
     if (hasImages) {
@@ -1102,19 +1134,20 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
           imageVisionReason = '图片下载失败，请重新上传';
         } else {
           const vPrompt =
-            `你是餐饮连锁总部质检。判断下面图片是否可作为本条门店任务的「有效现场佐证」。
+            `你是餐饮连锁总部质检。判断图片是否可作为本条任务的「有效佐证」，且**与任务所问/所述问题一致**。
 
 任务标题：${String(task.title || '未知').slice(0, 200)}
 任务类型：${String(task.source || '未知')}
-任务详情：${String(task.detail || '').slice(0, 400)}
+任务详情：${String(task.detail || '').slice(0, 500)}
 门店：${String(task.store || '')}
 
-判定规则：
-- 与餐饮门店现场强相关（菜品、档口、后厨、餐桌、试味、清洁、厨房设备、食材、价签、门店环境、员工工装等）→ relevant=true
-- 明显无关（家用呼吸机/医疗设备、纯风景、表情包、与餐饮无关的商品特写、电脑/手机截图、汽车、宠物等）→ relevant=false
-- 不确定时偏严格，判 relevant=false
+判定（须同时满足才算 relevant=true）：
+1) 图片内容与**本任务主题相关**（能体现任务要求的整改/异常/巡检/试味/出品等要点之一），而非泛泛门店照但与任务无关。
+2) 属于餐饮门店现场合理范畴（菜品、档口、后厨、餐桌、试味、清洁、设备、食材、环境、工装等）。
+3) 明显无关（表情包、纯风景、网图、无关商品、非本场景截图等）→ relevant=false。
+4) 不确定或与任务要点对不上 → relevant=false（偏严格）。
 
-只输出 JSON，不要其他文字：
+只输出 JSON：
 {"relevant":true或false,"reason":"一句话中文说明"}`;
           const vr = await callVisionLLM(dataUrl, vPrompt);
           if (!vr.ok || !String(vr.content || '').trim()) {
@@ -1138,50 +1171,47 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
 
     if (hasImages && !imageRelevant) {
       passed = false;
-      reason = imageVisionReason || '附图与任务现场不相关，不能作为有效凭证';
-      feedback =
-        '请上传与任务相关的门店现场照片（如试味、档口出品、后厨、餐品、环境整改前后等）。勿使用无关图片或网图凑数。';
-    } else if (isTooShort || isPlaceholder) {
-      // 规则直接判定：明显不合格
+      reason = imageVisionReason || '附图未通过与任务内容一致性的校验';
+      feedback = `请上传**与本任务问题直接相关**的现场照片，并配合至少 ${MIN_TEXT} 字说明。`;
+    } else if (isPlaceholder) {
       passed = false;
-      reason = isPlaceholder ? '回复仅为占位词，无实质内容' : '回复文字过短（<15字）且无图片';
-      feedback = `回复需包含：①实际情况描述（至少20字）②处理措施③现场问题须附**与任务相关的**照片。`;
+      reason = '回复仅为占位词，无实质内容';
+      feedback = `请针对本任务写明情况与处理（至少 ${MIN_TEXT} 字）。`;
+    } else if (!textMeetsMin) {
+      passed = false;
+      reason = `回复未满 ${MIN_TEXT} 字`;
+      feedback = `请至少回复 **${MIN_TEXT} 字**，且内容与任务问题一致；有附图时附图也须与任务一致。`;
     } else {
-      const trivialText = t.length < 12;
-      if (hasImages && imageRelevant && trivialText) {
-        passed = true;
-        reason = imageVisionReason ? `附图已通过现场校验：${imageVisionReason}` : '附图已通过现场相关性校验';
-      } else {
-        // LLM 语义审核（已带图且非琐碎文字时，仍审文字是否具体）
-        try {
-          const imgNote = hasImages
-            ? `\n（已附图，且图片已通过「门店现场相关性」校验${imageVisionReason ? `：${imageVisionReason}` : ''}）`
-            : '\n（无图片）';
-          const prompt = `任务标题：${task.title || '未知'}\n任务类型：${task.source || '未知'}\n任务详情：${(task.detail || '').slice(0, 200)}\n\n负责人回复：\n${t.slice(0, 800)}${imgNote}`;
-          const r = await callLLM([
-            { role: 'system', content: `你是HRMS任务审核员，对门店负责人的任务卡回复进行质量审核。
+      try {
+        const imgNote = hasImages
+          ? `\n（已附图：${imageRelevant ? '已与任务内容一致性校验通过' : '未通过'}${imageVisionReason ? ` — ${imageVisionReason}` : ''}）`
+          : '\n（无图片）';
+        const prompt = `任务标题：${task.title || '未知'}\n任务类型：${task.source || '未知'}\n任务详情：${(task.detail || '').slice(0, 500)}\n\n负责人回复：\n${t.slice(0, 1000)}${imgNote}`;
+        const r = await callLLM([
+          {
+            role: 'system',
+            content: `你是任务回复审核员。规则：
+1. 负责人回复已满足 **≥${MIN_TEXT} 字**（由系统已校验）。
+2. **有附图时**：系统已判定附图与任务内容一致，你只需审核文字是否与任务相关、非敷衍套话。
+3. **无附图时**：审核文字是否**明确针对本任务**（与任务主题/问题一致），非泛泛而谈或跑题。
+4. 通过：与任务一致且有实质说明；不通过：跑题、套话、与任务无关。
 
-合格标准（必须全部满足）：
-1. 内容具体，描述了实际情况（非泛泛而谈）
-2. 有具体处理措施或行动结果
-3. 若是巡检/抽检/试味/异常类任务，须说明发现与处理结果
-4. 若仅声称「有图」但文字明显敷衍、与任务无关，判不通过
-5. 无附图时：字数须充足（≥20字）且满足 1–3
-
-输出 JSON（不要输出其他内容）：
-{"passed": true或false, "reason": "一句话说明", "feedback": "给用户的改进建议（不合格时才填，合格时空字符串）"}` },
-            { role: 'user', content: prompt }
-          ], { temperature: 0.1, max_tokens: 200, purpose: 'routing' });
-          const raw = String(r.content || '').trim().replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
-          const parsed = JSON.parse(raw);
-          passed = !!parsed.passed;
-          reason = parsed.reason || '';
-          feedback = parsed.feedback || '';
-        } catch (_) {
-          passed = false;
-          reason = '智能审核暂时不可用，请稍后重新提交';
-          feedback = '若多次失败请联系总部信息部；请勿使用无关图片代替文字说明。';
-        }
+只输出 JSON：
+{"passed": true或false, "reason": "一句话", "feedback": "不通过时给建议，通过时空字符串"}`
+          },
+          { role: 'user', content: prompt }
+        ], { temperature: 0.12, max_tokens: 220, purpose: 'routing' });
+        const raw = String(r.content || '').trim().replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+        const parsed = JSON.parse(raw);
+        passed = !!parsed.passed;
+        reason = parsed.reason || '';
+        feedback = parsed.feedback || '';
+      } catch (_) {
+        passed = !hasImages && textMeetsMin;
+        reason = passed
+          ? '审核服务暂不可用，已按「无图且满字数」自动通过（请确保内容真实）'
+          : '智能审核暂时不可用，请稍后重试';
+        feedback = passed ? '' : '有附图时请稍后重试（须校验图片与任务一致性）；无附图时已满足字数可再试。';
       }
     }
 

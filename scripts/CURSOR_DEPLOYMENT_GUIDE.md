@@ -57,6 +57,66 @@ git push origin main
 | 2. 部署路径错误 | ✅ 已解决 | 验证ECS上的正确路径 |
 | 3. 版本不一致 | ✅ 已解决 | 对比本地和远程版本 |
 | 4. 数据丢失 | ✅ 已解决 | 每次部署前自动备份 |
+| 5. 端口冲突导致274次崩溃 | ✅ 2026-04-03 已解决 | 部署脚本加 pkill 清理 |
+
+## ⚠️ 关键运维注意事项（2026-04-03 发现，必须遵守）
+
+### 端口管理（最重要）
+
+**根因**：服务器上同时存在 `agents-v2.service`（systemd）和 PM2 两套进程管理，
+systemd `Restart=always` 不断重启孤儿进程，与 PM2 争抢端口，导致累计274次崩溃。
+
+**永久修复**：已执行 `systemctl disable agents-v2.service hrms.service`，禁止 systemd 管理这两个服务。
+**只能用 PM2 管理服务，禁止再 enable/start 这两个 systemd service！**
+
+端口分配（固定，禁止修改）：
+- HRMS 服务：`3000`（Nginx 代理到 `nnyx.cc/api/`）
+- Agents 服务：`3101`（Nginx 代理到 IP:80 的 `/agents-api/` 和 `/agents-admin/`）
+
+### 部署前必做检查
+
+```bash
+# 1. 确认 systemd 服务处于禁用状态
+systemctl is-enabled agents-v2.service   # 必须输出 disabled
+systemctl is-enabled hrms.service        # 必须输出 disabled
+
+# 2. 确认端口只有 PM2 的进程持有
+fuser -v 3000/tcp   # 只应看到 /opt/hrms/server/index.js
+fuser -v 3101/tcp   # 只应看到 /opt/agents-service-v2/src/index.js
+
+# 3. 确认无孤儿进程（不受 PM2 管控的 node src/index.js）
+ps aux | grep "node src/index" | grep -v grep
+```
+
+### 重新部署步骤（手动）
+
+```bash
+# HRMS 服务
+cd /Users/magainze/HRMS
+bash scripts/deploy-hrms-server-ecs.sh
+
+# Agents 服务
+cd /Users/magainze/HRMS/agents-service-v2
+bash scripts/deploy-agents-ecs.sh
+```
+
+部署脚本已内置：`pm2 delete → pkill -9 孤儿 → fuser -k 端口 → pm2 start ecosystem.config.cjs`
+
+### 数据安全（五类核心数据加固）
+
+与下图同口径对照表（可截图存档）：**独立表 / 启动自愈 / 定时备份** 三层防护。
+
+| 数据 | 权威来源 | 独立备份 / 每日备份 | 启动自愈 |
+|------|---------|---------------------|---------|
+| 营业日报 | `daily_reports` 表 | `hrms_critical_*.sql.gz` 每日2次 | 每次启动从表重建 `state.dailyReports` |
+| 员工积分 | `point_records` 表 + `state.pointRecords` | `hrms_pointRecords_*.jsonl.gz` + critical 全库 | 每次启动从 `point_records` 重建 state |
+| 员工档案 | `hrms_state.employees`（主） | `employees` 表 + critical 全库 | 每次启动同步写入 `employees` 表 |
+| **员工考勤记录** | **`checkin_records`**（业务写入）与 **`employee_attendance_records`**（独立镜像表，**同 UUID 双写**） | **`hrms_critical_*.sql.gz`**（含两表 + `attendance_records`） | **每次启动双向补缺**：两表互相同步缺失行，单表损坏可由另一表恢复 |
+| **员工薪资表（薪资域）** | **`hrms_state` 为主**；**`hrms_payroll_domain` 独立表**持久化四块 JSON（与 state 双写） | **`hrms_payroll_state_*.json.gz`** + **`hrms_state_*.json.gz`** + critical 全库（含 `hrms_payroll_domain`） | **每次启动**：state 中薪资域若为空则从 `hrms_payroll_domain` **回灌**，再 **UPSERT** 写回独立表 |
+
+**应急**：营业日报 / 积分 / 员工档案异常时，优先 **`pm2 restart hrms-service`**。**考勤**：两表互备 + critical 备份。**薪资域**：`hrms_payroll_domain` 与 state 互备 + 快照 / 切片；重启后会自动对齐。
+
+**配图（可钉群 / 打印存档，与上表同口径）**：[`scripts/data-security-five-core-data-table.png`](data-security-five-core-data-table.png)
 
 ## 🔄 手动部署 (如需要)
 

@@ -827,7 +827,6 @@ export async function buildTableVisitKpiMarkdownSection(store, start, end, opts 
   lines.push(`3. 预订占比：${resvRate}`);
   lines.push('');
   lines.push(`#### 2. 客流渠道`);
-  lines.push(`_字段：哪里知道我们的 等｜比率 = 该选项出现次数 ÷ 全样本桌访条数（${n}）_`);
   if (channelTop.length) {
     channelTop.forEach(([k, v], i) => {
       const pr = n ? ((v / n) * 100).toFixed(1) : '0.0';
@@ -838,13 +837,11 @@ export async function buildTableVisitKpiMarkdownSection(store, start, end, opts 
   }
   lines.push('');
   lines.push(`#### 3. 新客 / 老客`);
-  lines.push(`_字段：是否第一次来、新老客户 等（「客户类型」仅作兜底）_`);
   lines.push(`- ${newLine}`);
   lines.push(`- ${oldLine}`);
   if (unknC) lines.push(`- 未自动归类：**${unknC}** 条（请核对表单选项原文）`);
   lines.push('');
   lines.push(`#### 4. 不满意菜品（结构化字段汇总）`);
-  lines.push(`_说明：仅统计「今天不满意的菜品」+「不满意的主要原因是什么」同时成立的记录（或满意度明确为差且有菜品/原因），非全量菜单_`);
   if (dishTop.length) {
     dishTop.forEach(([k, v], i) => lines.push(`- ${i + 1}. ${k}（${v} 次）`));
   } else {
@@ -852,7 +849,6 @@ export async function buildTableVisitKpiMarkdownSection(store, start, end, opts 
   }
   lines.push('');
   lines.push(`#### 5. 比较喜欢 / 喜欢的菜品`);
-  lines.push(`_字段：今天比较喜欢的菜 等_`);
   if (favTop.length) {
     favTop.forEach(([k, v], i) => lines.push(`- ${i + 1}. ${k}（${v} 次）`));
   } else {
