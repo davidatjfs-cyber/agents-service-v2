@@ -3185,6 +3185,20 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
           list.unshift(rec);
           state = { ...state, leaveRecords: list };
 
+          // 双写：休假记录同步到 hrms_leave_records 表
+          try {
+            await pool.query(
+              `INSERT INTO hrms_leave_records (id, username, name, store, brand, start_date, end_date, days, type, reason, status, approval_id, approved_by, approved_at, submitted_by)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'approved',$11,$12,$13,$14)
+               ON CONFLICT (id) DO UPDATE SET
+                 status='approved', approved_by=$12, approved_at=$13, days=$8`,
+              [rec.id, String(applicant?.username || '').trim(), String(applicantName || '').trim(),
+               String(applicant?.store || '').trim(), String(applicant?.brand || '').trim(),
+               startDate, endDate, days == null ? 0 : days, String(updated.payload?.type || 'leave').trim(),
+               reason, updated.id, username, new Date(hrmsNowISO()), username]
+            );
+          } catch (e) { console.error('[leave_records] dual-write failed:', e?.message); }
+
           // Format dates as X月X日
           const fmtLeaveDate = (d) => { if (!d) return ''; const p = String(d).split('-'); return p.length >= 3 ? `${Number(p[1])}月${Number(p[2])}日` : d; };
           const sd = fmtLeaveDate(startDate);
@@ -3509,6 +3523,21 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
           const adjList = Array.isArray(state.salaryAdjustments) ? state.salaryAdjustments.slice() : [];
           adjList.unshift(salaryAdj);
           state = { ...state, salaryAdjustments: adjList };
+
+          // 双写：奖惩记录同步到 hrms_reward_punishment_records 表
+          try {
+            await pool.query(
+              `INSERT INTO hrms_reward_punishment_records (id, username, name, store, brand, type, category, points, amount, reason, source, approval_id, status, created_by)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'approval',$11,'active',$12)
+               ON CONFLICT (id) DO UPDATE SET
+                 status='active', amount=$9, reason=$10`,
+              [salaryAdj.id, targetUsername || applicantUser, targetName,
+               String(targetRec?.store || '').trim(), String(targetRec?.brand || '').trim(),
+               isReward ? 'reward' : 'punishment', rpType,
+               isReward ? Math.abs(amount || 0) : -Math.abs(amount || 0),
+               Math.abs(amount || 0), rpReason, updated.id, applicantUser]
+            );
+          } catch (e) { console.error('[reward_punishment_records] dual-write failed:', e?.message); }
 
           // Notify target person (the one being rewarded/punished)
           if (targetUsername) {
@@ -13638,6 +13667,17 @@ app.listen(PORT, HOST, async () => {
       console.error('[hrms] Migration 014 error (non-fatal):', e?.message);
     }
 
+    // 020-024: HRMS 全量字段 + 独立表迁移
+    for (const name of ['020_daily_reports_all_fields', '021_hrms_leave_records', '022_hrms_reward_punishment_records', '023_approval_requests_migration', '024_employees_table_migration']) {
+      try {
+        const mig = await import('fs').then(f => f.promises.readFile(new URL(`./migrations/${name}.sql`, import.meta.url), 'utf8'));
+        await pool.query(mig);
+        console.log(`[migration] ${name} applied`);
+      } catch (e) {
+        console.error(`[migration] ${name} error (non-fatal):`, e?.message);
+      }
+    }
+
     // 启动时权威重建：每次启动都从 daily_reports 表完整重建 hrms_state.dailyReports
     // 策略：DB 是唯一权威来源，state 里的条目只有在 DB 没有对应记录时才保留（防止丢失尚未落表的草稿）
     // 修复历史：raw row_to_json 写入导致 data.actual=0，pg date 时区偏移导致日期差1天
@@ -13837,6 +13877,120 @@ app.listen(PORT, HOST, async () => {
       console.log(`[startup] 员工信息同步：${syncCount} 条 → employees 表`);
     } catch (e) {
       console.error('[startup] 员工信息同步失败（非致命，不影响启动）:', e?.message);
+    }
+
+    // 启动时员工信息反向同步：employees DB → hrms_state.employees（防 state 丢失）
+    try {
+      const dbEmp = await pool.query(`SELECT id, username, name, role, store, department, position, status, gender, phone, email, join_date, birthday, salary, manager_username, id_card_number, bank_card, extra_json, created_at, updated_at FROM employees ORDER BY username`);
+      const dbEmpItems = dbEmp.rows.map(r => ({
+        id: r.id,
+        username: String(r.username || '').trim(),
+        name: String(r.name || '').trim(),
+        role: String(r.role || '').trim(),
+        store: String(r.store || '').trim(),
+        department: String(r.department || '').trim(),
+        position: String(r.position || '').trim(),
+        status: String(r.status || 'active').trim(),
+        gender: String(r.gender || '').trim(),
+        phone: String(r.phone || '').trim(),
+        email: String(r.email || '').trim(),
+        joinDate: String(r.join_date || '').trim(),
+        birthday: String(r.birthday || '').trim(),
+        salary: String(r.salary || '').trim(),
+        managerUsername: String(r.manager_username || '').trim(),
+        idCardNumber: String(r.id_card_number || '').trim(),
+        bankCard: String(r.bank_card || '').trim(),
+        createdAt: r.created_at ? String(r.created_at) : '',
+        updatedAt: r.updated_at ? String(r.updated_at) : '',
+        ...(r.extra_json && typeof r.extra_json === 'object' ? r.extra_json : {})
+      }));
+      if (dbEmpItems.length > 0) {
+        let stateEmp = (await getSharedState()) || {};
+        const existingUsernames = new Set((Array.isArray(stateEmp.employees) ? stateEmp.employees : []).map(e => String(e?.username || '').trim().toLowerCase()));
+        const newEmps = dbEmpItems.filter(e => e.username && !existingUsernames.has(e.username.toLowerCase()));
+        if (newEmps.length > 0) {
+          stateEmp = { ...stateEmp, employees: [...(Array.isArray(stateEmp.employees) ? stateEmp.employees : []), ...newEmps] };
+          await pool.query(`UPDATE hrms_state SET data = $2::jsonb, updated_at = NOW() WHERE key = $1`, ['default', JSON.stringify(stateEmp)]);
+          console.log(`[startup] 员工信息从 employees 表回灌：${newEmps.length} 条 → hrms_state.employees`);
+        }
+      }
+    } catch (e) {
+      console.error('[startup] 员工信息反向同步失败（非致命，不影响启动）:', e?.message);
+    }
+
+    // 启动时休假记录重建：hrms_leave_records DB → hrms_state.leaveRecords
+    try {
+      const dbLeave = await pool.query(`SELECT * FROM hrms_leave_records ORDER BY start_date DESC`);
+      const dbLeaveItems = dbLeave.rows.map(r => ({
+        id: String(r.id || ''),
+        applicant: String(r.username || '').trim(),
+        applicantName: String(r.name || '').trim(),
+        store: String(r.store || '').trim(),
+        brand: String(r.brand || '').trim(),
+        startDate: r.start_date ? String(r.start_date).slice(0, 10) : '',
+        endDate: r.end_date ? String(r.end_date).slice(0, 10) : '',
+        days: r.days != null ? Number(r.days) : '',
+        type: String(r.type || 'leave').trim(),
+        reason: String(r.reason || '').trim(),
+        createdAt: r.created_at ? String(r.created_at) : '',
+        status: String(r.status || 'approved').trim()
+      }));
+      const dbLeaveKeySet = new Set(dbLeaveItems.map(x => `${x.applicant}|${x.startDate}|${x.endDate}`));
+      let stateLeave = (await getSharedState()) || {};
+      const existingLeave = Array.isArray(stateLeave.leaveRecords) ? stateLeave.leaveRecords : [];
+      const stateOnlyLeave = existingLeave.filter(r => {
+        const k = `${String(r?.applicant || '').trim()}|${String(r?.startDate || '').trim()}|${String(r?.endDate || '').trim()}`;
+        return !dbLeaveKeySet.has(k);
+      });
+      const mergedLeave = [...dbLeaveItems, ...stateOnlyLeave];
+      if (mergedLeave.length !== existingLeave.length) {
+        stateLeave = { ...stateLeave, leaveRecords: mergedLeave };
+        await pool.query(`UPDATE hrms_state SET data = $2::jsonb, updated_at = NOW() WHERE key = $1`, ['default', JSON.stringify(stateLeave)]);
+      }
+      console.log(`[startup] 休假记录重建：DB ${dbLeaveItems.length} 条 + 草稿 ${stateOnlyLeave.length} 条 = 共 ${mergedLeave.length} 条`);
+    } catch (e) {
+      console.error('[startup] 休假记录重建失败（非致命，不影响启动）:', e?.message);
+    }
+
+    // 启动时奖惩记录重建：hrms_reward_punishment_records DB → hrms_state.salaryAdjustments
+    try {
+      const dbRP = await pool.query(`SELECT * FROM hrms_reward_punishment_records WHERE status = 'active' ORDER BY created_at DESC`);
+      const dbRPItems = dbRP.rows.map(r => ({
+        id: String(r.id || ''),
+        approvalId: String(r.approval_id || ''),
+        targetUsername: String(r.username || '').trim(),
+        targetName: String(r.name || '').trim(),
+        type: String(r.type === 'reward' ? '奖励' : '惩罚').trim(),
+        amount: Number(r.amount) || 0,
+        signedAmount: r.type === 'reward' ? Math.abs(Number(r.amount) || 0) : -Math.abs(Number(r.amount) || 0),
+        reason: String(r.reason || '').trim(),
+        result: '',
+        applicantUsername: String(r.created_by || '').trim(),
+        applicantName: String(r.created_by || '').trim(),
+        createdAt: r.created_at ? String(r.created_at) : '',
+        status: 'approved'
+      }));
+      const dbRPKeySet = new Set(dbRPItems.map(x => x.id));
+      let stateRP = (await getSharedState()) || {};
+      const existingRP = Array.isArray(stateRP.salaryAdjustments) ? stateRP.salaryAdjustments : [];
+      const stateOnlyRP = existingRP.filter(r => r?.id && !dbRPKeySet.has(r.id));
+      const mergedRP = [...dbRPItems, ...stateOnlyRP];
+      if (mergedRP.length !== existingRP.length) {
+        stateRP = { ...stateRP, salaryAdjustments: mergedRP };
+        await pool.query(`UPDATE hrms_state SET data = $2::jsonb, updated_at = NOW() WHERE key = $1`, ['default', JSON.stringify(stateRP)]);
+      }
+      console.log(`[startup] 奖惩记录重建：DB ${dbRPItems.length} 条 + 孤立 ${stateOnlyRP.length} 条 = 共 ${mergedRP.length} 条`);
+    } catch (e) {
+      console.error('[startup] 奖惩记录重建失败（非致命，不影响启动）:', e?.message);
+    }
+
+    // 启动时审批记录重建：approval_requests DB 已是权威，无需回灌 state（审批本身就是独立表）
+    // 但确认表存在
+    try {
+      const arCheck = await pool.query(`SELECT COUNT(*) as cnt FROM approval_requests`);
+      console.log(`[startup] 审批记录表：${arCheck.rows[0]?.cnt || 0} 条`);
+    } catch (e) {
+      console.error('[startup] 审批记录表检查失败（非致命，不影响启动）:', e?.message);
     }
 
     await dedupeGlobalSocialMediaPointRules();
