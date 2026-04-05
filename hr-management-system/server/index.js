@@ -5125,13 +5125,12 @@ async function dualWriteStateToDB(state) {
       );
     }
 
-    // 4. notifications → hrms_user_notifications 表（绩效扣分等）
+    // 4. notifications → hrms_user_notifications 表（绩效扣分、工作态度等全部通知）
     const notifArr = Array.isArray(state.notifications) ? state.notifications : [];
     for (const n of notifArr) {
-      const nType = String(n?.type || '').trim();
-      if (!nType.includes('performance') && !nType.includes('deduction') && !nType.includes('reward_punishment')) continue;
       const target = String(n?.targetUsername || n?.to || '').trim();
       if (!target) continue;
+      const nType = String(n?.type || 'system_notice').trim();
       await pool.query(
         `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta, created_at)
          VALUES ($1,$2,$3,$4,$5,$6)
@@ -13700,6 +13699,20 @@ app.listen(PORT, HOST, async () => {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_file_access_logs_created_at ON file_access_logs(created_at DESC)`).catch(() => {});
     await ensureDataGovernanceTables();
     await ensureAgentTables();
+    // Runtime migration: 公司通知表（V2 Agent 写入，HRMS 前端读取，确保表存在）
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hrms_user_notifications (
+        id BIGSERIAL PRIMARY KEY,
+        target_username TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'performance_deduction',
+        meta JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `).catch(e => console.warn('[migration] hrms_user_notifications table:', e?.message));
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_hrms_notif_user_created ON hrms_user_notifications (target_username, created_at DESC)`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_hrms_notif_task_id ON hrms_user_notifications ((meta->>'task_id'))`).catch(() => {});
     // Runtime migration: dedup unique index on agent_messages(record_id, content_type)
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_messages_record_content_uniq ON agent_messages (record_id, content_type) WHERE record_id IS NOT NULL AND record_id != ''`).catch(e => console.warn('[migration] dedup index:', e?.message));
     assertCriticalFunctions();
@@ -14095,6 +14108,35 @@ app.listen(PORT, HOST, async () => {
       console.log(`[startup] 审批记录表：${arCheck.rows[0]?.cnt || 0} 条`);
     } catch (e) {
       console.error('[startup] 审批记录表检查失败（非致命，不影响启动）:', e?.message);
+    }
+
+    // 启动时公司通知重建：hrms_user_notifications DB → hrms_state.notifications
+    // V2 Agent 直接写 DB，HRMS 前端从 state 读取，需要回灌
+    try {
+      const dbNotif = await pool.query(`SELECT * FROM hrms_user_notifications ORDER BY created_at DESC LIMIT 500`);
+      const dbNotifItems = dbNotif.rows.map(r => ({
+        id: String(r.id || ''),
+        targetUsername: String(r.target_username || '').trim(),
+        title: String(r.title || '').trim(),
+        message: String(r.message || '').trim(),
+        type: String(r.type || 'performance_deduction').trim(),
+        meta: r.meta && typeof r.meta === 'object' ? r.meta : {},
+        createdAt: r.created_at ? String(r.created_at) : ''
+      }));
+      if (dbNotifItems.length > 0) {
+        let stateNotif = (await getSharedState()) || {};
+        const existingNotifs = Array.isArray(stateNotif.notifications) ? stateNotif.notifications : [];
+        const dbNotifIds = new Set(dbNotifItems.map(n => n.id));
+        const stateOnlyNotifs = existingNotifs.filter(n => n?.id && !dbNotifIds.has(n.id));
+        const mergedNotifs = [...dbNotifItems, ...stateOnlyNotifs];
+        if (mergedNotifs.length !== existingNotifs.length) {
+          stateNotif = { ...stateNotif, notifications: mergedNotifs };
+          await pool.query(`UPDATE hrms_state SET data = $2::jsonb, updated_at = NOW() WHERE key = $1`, ['default', JSON.stringify(stateNotif)]);
+        }
+        console.log(`[startup] 公司通知重建：DB ${dbNotifItems.length} 条 + 孤立 ${stateOnlyNotifs.length} 条 = 共 ${mergedNotifs.length} 条`);
+      }
+    } catch (e) {
+      console.error('[startup] 公司通知重建失败（非致命，不影响启动）:', e?.message);
     }
 
     // ── 历史数据回填（state → DB，一次性补缺） ──
