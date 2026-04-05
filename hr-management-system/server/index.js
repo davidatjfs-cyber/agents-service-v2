@@ -14112,11 +14112,12 @@ app.listen(PORT, HOST, async () => {
 
     // 启动时公司通知重建：hrms_user_notifications DB → hrms_state.notifications
     // V2 Agent 直接写 DB，HRMS 前端从 state 读取，需要回灌
+    // 注意：前端按 targetUser 字段过滤，必须使用 targetUser 而非 targetUsername
     try {
       const dbNotif = await pool.query(`SELECT * FROM hrms_user_notifications ORDER BY created_at DESC LIMIT 500`);
       const dbNotifItems = dbNotif.rows.map(r => ({
         id: String(r.id || ''),
-        targetUsername: String(r.target_username || '').trim(),
+        targetUser: String(r.target_username || '').trim(),
         title: String(r.title || '').trim(),
         message: String(r.message || '').trim(),
         type: String(r.type || 'performance_deduction').trim(),

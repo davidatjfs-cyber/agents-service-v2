@@ -23771,7 +23771,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             } catch (e) { return ''; }
         }
 
-        function renderProfileNotifications() {
+        async function renderProfileNotifications() {
             const box = document.getElementById('profile-notifications');
             const empty = document.getElementById('profile-notifications-empty');
             const pulseEl = document.getElementById('profile-notif-pulse');
@@ -23780,6 +23780,27 @@ ${knowledgeContent.slice(0, 30000)}`;
             if (!box || !empty || !currentUser) return;
             const data = HRMS_STORE.ensure();
             const myUsername = String(currentUser.username || currentUser.id || '').trim().toLowerCase();
+
+            // 从 API 获取 DB 中的公司通知（V2 Agent 直接写入 hrms_user_notifications 表）
+            let dbNotifs = [];
+            try {
+                const token = localStorage.getItem('hrms_token') || '';
+                const r = await fetch('/api/hrms-notifications/me?limit=100', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (r.ok) {
+                    const j = await r.json();
+                    dbNotifs = (j.items || []).map(n => ({
+                        id: String(n.id || ''),
+                        targetUser: myUsername,
+                        title: String(n.title || '公司通知'),
+                        message: String(n.message || ''),
+                        type: String(n.type || ''),
+                        createdAt: String(n.created_at || ''),
+                        meta: n.meta || {}
+                    }));
+                }
+            } catch (e) { /* ignore */ }
 
             // Merge system notifications (targeted to this user) + announcements
             // Filter out approval flow notifications (_request type) to avoid spamming 公司通知
@@ -23792,6 +23813,21 @@ ${knowledgeContent.slice(0, 30000)}`;
                     return true;
                 })
                 .map(n => ({ title: n.title || '系统通知', content: n.message || '', createdAt: n.createdAt || '', level: 'system', _src: 'notification', _id: n.id || '' }));
+
+            // DB 通知（从 hrms_user_notifications 表来）
+            const dbSysNotifs = dbNotifs
+                .filter(n => {
+                    if (!n) return false;
+                    const nType = String(n.type || '').trim();
+                    if (nType.endsWith('_request')) return false;
+                    return true;
+                })
+                .map(n => ({ title: n.title || '公司通知', content: n.message || '', createdAt: n.createdAt || '', level: 'system', _src: 'db_notification', _id: 'db-' + n.id }));
+
+            // 去重：跳过已在 localStorage 中存在的（按 content+createdAt 匹配）
+            const localKeys = new Set(sysNotifs.map(n => n.content + '|' + n.createdAt));
+            const uniqueDbNotifs = dbSysNotifs.filter(n => !localKeys.has(n.content + '|' + n.createdAt));
+
             const anns = (Array.isArray(data.announcements) ? data.announcements : [])
                 .filter(a => {
                     if (!a) return false;
@@ -23803,7 +23839,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                     return false;
                 })
                 .map(a => ({ ...a, _src: 'announcement', _id: a.id || '' }));
-            const visible = sysNotifs.concat(anns);
+            const visible = uniqueDbNotifs.concat(sysNotifs).concat(anns);
             visible.sort((a, b) => String(b?.createdAt || '').localeCompare(String(a?.createdAt || '')));
 
             const todayDate = new Date().toISOString().slice(0, 10);
