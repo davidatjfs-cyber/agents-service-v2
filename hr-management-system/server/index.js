@@ -6252,19 +6252,18 @@ function dailyReportItemFromPgRow(row) {
     ? (row.submitted_at instanceof Date ? row.submitted_at.toISOString() : String(row.submitted_at))
     : null;
 
-  // 解析 JSONB 字段
-  let segments = {};
-  try { segments = row.segments ? JSON.parse(row.segments) : {}; } catch (e) {}
-  let categories = {};
-  try { categories = row.categories ? JSON.parse(row.categories) : {}; } catch (e) {}
-  let deliveryDetail = {};
-  try { deliveryDetail = row.delivery_detail ? JSON.parse(row.delivery_detail) : {}; } catch (e) {}
-  let staff = {};
-  try { staff = row.staff ? JSON.parse(row.staff) : {}; } catch (e) {}
-  let scheduleNextDay = {};
-  try { scheduleNextDay = row.schedule_next_day ? JSON.parse(row.schedule_next_day) : {}; } catch (e) {}
-  let photos = [];
-  try { photos = row.photos ? JSON.parse(row.photos) : []; } catch (e) {}
+  // 解析 JSONB 字段（PostgreSQL JSONB 返回 JS 对象，不需要 JSON.parse）
+  const parseJsonb = (val, fallback) => {
+    if (val === null || val === undefined) return fallback;
+    if (typeof val === 'string') { try { return JSON.parse(val); } catch (e) { return fallback; } }
+    return val; // 已经是对象/数组
+  };
+  const segments = parseJsonb(row.segments, {});
+  const categories = parseJsonb(row.categories, {});
+  const deliveryDetail = parseJsonb(row.delivery_detail, {});
+  const staff = parseJsonb(row.staff, {});
+  const scheduleNextDay = parseJsonb(row.schedule_next_day, {});
+  const photos = parseJsonb(row.photos, []);
 
   // 外卖明细：优先用 delivery_detail，其次用聚合值
   const eleme = deliveryDetail?.eleme || { revenue: 0, actual: 0, orders: 0, targetRevenue: 0 };
@@ -13796,7 +13795,8 @@ app.listen(PORT, HOST, async () => {
     }
 
     // 启动时权威重建：每次启动都从 daily_reports 表完整重建 hrms_state.dailyReports
-    // 策略：DB 是唯一权威来源，state 里的条目只有在 DB 没有对应记录时才保留（防止丢失尚未落表的草稿）
+    // 策略：DB 是基础字段（营收/订单等）的权威来源；但明细字段（segments/categories/staff/photos/schedule_next_day/weather/discount/bad_reviews）
+    //       DB 从未写入过，必须从 state 保留，否则每次重启明细数据全部丢失。
     // 修复历史：raw row_to_json 写入导致 data.actual=0，pg date 时区偏移导致日期差1天
     try {
       const pgAll = await pool.query(`
@@ -13814,16 +13814,38 @@ app.listen(PORT, HOST, async () => {
       const dbItems = pgAll.rows.map(row => dailyReportItemFromPgRow(row));
       const dbKeySet = new Set(dbItems.map(x => `${x.date}|${x.store}`));
 
-      // Keep state-only entries (draft reports not yet in DB), replace all DB-backed ones
       const state0 = (await getSharedState()) || {};
       const existingArr = Array.isArray(state0.dailyReports) ? state0.dailyReports : [];
+
+      // 明细字段列表（DB 从未写入，必须从 state 保留）
+      const DETAIL_FIELDS = ['segments', 'categories', 'staff', 'scheduleNextDay', 'photos', 'weather', 'discount', 'badReviews'];
+
+      // 合并策略：DB 基础字段 + state 明细字段
+      const merged = dbItems.map(dbItem => {
+        const k = `${dbItem.date}|${dbItem.store}`;
+        const stateItem = existingArr.find(s => `${String(s?.date || '').slice(0, 10)}|${String(s?.store || '').trim()}` === k);
+        if (!stateItem?.data) return dbItem;
+        // 从 state 补充明细字段（仅当 DB 为空时）
+        const mergedData = { ...dbItem.data };
+        for (const f of DETAIL_FIELDS) {
+          const dbVal = dbItem.data[f];
+          const stVal = stateItem.data[f];
+          const dbEmpty = dbVal === undefined || dbVal === null || (typeof dbVal === 'object' && Object.keys(dbVal).length === 0) || (Array.isArray(dbVal) && dbVal.length === 0);
+          const stHas = stVal !== undefined && stVal !== null && (typeof stVal !== 'object' || Object.keys(stVal).length > 0) && (!Array.isArray(stVal) || stVal.length > 0);
+          if (dbEmpty && stHas) {
+            mergedData[f] = stVal;
+          }
+        }
+        return { ...dbItem, data: mergedData };
+      });
+
+      // 保留 state 里的草稿（DB 没有对应记录的条目）
       const stateOnlyItems = existingArr.filter(r => {
         const k = `${String(r?.date || '').slice(0, 10)}|${String(r?.store || '').trim()}`;
         return !dbKeySet.has(k);
       });
 
-      // Merge: DB items first (authoritative), then any state-only drafts
-      const merged = [...dbItems, ...stateOnlyItems];
+      const finalMerged = [...merged, ...stateOnlyItems];
       const client2 = await pool.connect();
       try {
         await client2.query('BEGIN');
@@ -13831,13 +13853,13 @@ app.listen(PORT, HOST, async () => {
         const curData = cur.rows[0]?.data || {};
         await client2.query(
           `UPDATE hrms_state SET data=$2::jsonb, updated_at=NOW() WHERE key=$1`,
-          ['default', JSON.stringify({ ...curData, dailyReports: merged })]
+          ['default', JSON.stringify({ ...curData, dailyReports: finalMerged })]
         );
         await client2.query('COMMIT');
       } finally {
         client2.release();
       }
-      console.log(`[startup] 日报权威重建：DB ${dbItems.length} 条 + 草稿 ${stateOnlyItems.length} 条 = 共 ${merged.length} 条`);
+      console.log(`[startup] 日报权威重建：DB ${dbItems.length} 条 + 草稿 ${stateOnlyItems.length} 条 = 共 ${finalMerged.length} 条`);
     } catch (e) {
       console.error('[startup] 日报权威重建失败（非致命，不影响启动）:', e?.message);
     }
