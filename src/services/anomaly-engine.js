@@ -112,8 +112,6 @@ export async function checkLaborEfficiency(store) {
 }
 
 // ─── 3. 充值异常 ───
-// ⚠️ daily_reports 目前无 recharge_count/recharge_amount 字段
-// 需要在营业日报中新增充值数据输入，或从飞书多维表格获取
 export async function checkRechargeZero(store) {
   // 先检查字段是否存在
   try {

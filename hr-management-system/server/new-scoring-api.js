@@ -272,7 +272,12 @@ export function registerNewScoringRoutes(app) {
   // 更新营业日报
   app.post('/api/scoring/daily-reports', async (req, res) => {
     try {
-      const { store, brand, date, actual_revenue, actual_margin, dianping_rating, new_wechat_members, wechat_month_total } = req.body;
+      const { store, brand, date, actual_revenue, actual_margin, dianping_rating, new_wechat_members, wechat_month_total,
+        pre_discount_revenue, total_discount, dine_orders, dine_revenue, dine_traffic, efficiency, labor_total,
+        gross_profit, budget, budget_rate, delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews,
+        private_room_uses, operational_anomaly_note, recharge_count, recharge_amount,
+        weather, segments, discount_dine, discount_delivery, categories, delivery_detail,
+        bad_reviews_dianping, staff, schedule_next_day, photos } = req.body;
       
       if (!store || !brand || !date) {
         return res.status(400).json({ 
@@ -282,8 +287,15 @@ export function registerNewScoringRoutes(app) {
       }
       
       await pool().query(`
-        INSERT INTO daily_reports (store, brand, date, actual_revenue, actual_margin, dianping_rating, new_wechat_members, wechat_month_total, submitted, submitted_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, NOW())
+        INSERT INTO daily_reports (store, brand, date, actual_revenue, actual_margin, dianping_rating, new_wechat_members, wechat_month_total, submitted, submitted_at,
+          pre_discount_revenue, total_discount, dine_orders, dine_revenue, dine_traffic, efficiency, labor_total, gross_profit, budget, budget_rate,
+          delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses, operational_anomaly_note,
+          recharge_count, recharge_amount,
+          weather, segments, discount_dine, discount_delivery, categories, delivery_detail, bad_reviews_dianping, staff, schedule_next_day, photos)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, NOW(),
+          $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+          $19, $20, $21, $22, $23, $24, $25, $26,
+          $27, $28, $29, $30, $31, $32, $33, $34, $35)
         ON CONFLICT (store, date)
         DO UPDATE SET 
           actual_revenue = EXCLUDED.actual_revenue,
@@ -291,8 +303,45 @@ export function registerNewScoringRoutes(app) {
           dianping_rating = EXCLUDED.dianping_rating,
           new_wechat_members = EXCLUDED.new_wechat_members,
           wechat_month_total = EXCLUDED.wechat_month_total,
+          pre_discount_revenue = EXCLUDED.pre_discount_revenue,
+          total_discount = EXCLUDED.total_discount,
+          dine_orders = EXCLUDED.dine_orders,
+          dine_revenue = EXCLUDED.dine_revenue,
+          dine_traffic = EXCLUDED.dine_traffic,
+          efficiency = EXCLUDED.efficiency,
+          labor_total = EXCLUDED.labor_total,
+          gross_profit = EXCLUDED.gross_profit,
+          budget = EXCLUDED.budget,
+          budget_rate = EXCLUDED.budget_rate,
+          delivery_actual = EXCLUDED.delivery_actual,
+          delivery_orders = EXCLUDED.delivery_orders,
+          delivery_pre_revenue = EXCLUDED.delivery_pre_revenue,
+          delivery_bad_reviews = EXCLUDED.delivery_bad_reviews,
+          private_room_uses = EXCLUDED.private_room_uses,
+          operational_anomaly_note = EXCLUDED.operational_anomaly_note,
+          recharge_count = EXCLUDED.recharge_count,
+          recharge_amount = EXCLUDED.recharge_amount,
+          weather = EXCLUDED.weather,
+          segments = EXCLUDED.segments,
+          discount_dine = EXCLUDED.discount_dine,
+          discount_delivery = EXCLUDED.discount_delivery,
+          categories = EXCLUDED.categories,
+          delivery_detail = EXCLUDED.delivery_detail,
+          bad_reviews_dianping = EXCLUDED.bad_reviews_dianping,
+          staff = EXCLUDED.staff,
+          schedule_next_day = EXCLUDED.schedule_next_day,
+          photos = EXCLUDED.photos,
           updated_at = NOW()
-      `, [store, brand, date, actual_revenue, actual_margin, dianping_rating, new_wechat_members || 0, wechat_month_total || 0]);
+      `, [store, brand, date, actual_revenue, actual_margin, dianping_rating, new_wechat_members || 0, wechat_month_total || 0,
+        pre_discount_revenue || 0, total_discount || 0, dine_orders || 0, dine_revenue || 0, dine_traffic || 0,
+        efficiency || 0, labor_total || 0, gross_profit || 0, budget || 0, budget_rate || 0,
+        delivery_actual || 0, delivery_orders || 0, delivery_pre_revenue || 0, delivery_bad_reviews || 0,
+        private_room_uses || 0, operational_anomaly_note || null,
+        recharge_count || 0, recharge_amount || 0,
+        weather || null, segments ? JSON.stringify(segments) : null, discount_dine || 0, discount_delivery || 0,
+        categories ? JSON.stringify(categories) : null, delivery_detail ? JSON.stringify(delivery_detail) : null,
+        bad_reviews_dianping || 0, staff ? JSON.stringify(staff) : null, schedule_next_day ? JSON.stringify(schedule_next_day) : null,
+        photos ? JSON.stringify(photos) : null]);
       
       res.json({
         success: true,

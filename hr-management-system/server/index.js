@@ -6119,6 +6119,28 @@ function dailyReportItemFromPgRow(row) {
   const submittedAt = row.submitted_at
     ? (row.submitted_at instanceof Date ? row.submitted_at.toISOString() : String(row.submitted_at))
     : null;
+
+  // 解析 JSONB 字段
+  let segments = {};
+  try { segments = row.segments ? JSON.parse(row.segments) : {}; } catch (e) {}
+  let categories = {};
+  try { categories = row.categories ? JSON.parse(row.categories) : {}; } catch (e) {}
+  let deliveryDetail = {};
+  try { deliveryDetail = row.delivery_detail ? JSON.parse(row.delivery_detail) : {}; } catch (e) {}
+  let staff = {};
+  try { staff = row.staff ? JSON.parse(row.staff) : {}; } catch (e) {}
+  let scheduleNextDay = {};
+  try { scheduleNextDay = row.schedule_next_day ? JSON.parse(row.schedule_next_day) : {}; } catch (e) {}
+  let photos = [];
+  try { photos = row.photos ? JSON.parse(row.photos) : []; } catch (e) {}
+
+  // 外卖明细：优先用 delivery_detail，其次用聚合值
+  const eleme = deliveryDetail?.eleme || { revenue: 0, actual: 0, orders: 0, targetRevenue: 0 };
+  const meituan = deliveryDetail?.meituan || { revenue: delPre, actual: delAct, orders: delOrd, targetRevenue: 0 };
+
+  // 差评明细
+  const badReviewsDianping = Math.floor(Number(row.bad_reviews_dianping) || 0);
+
   const data = {
     brand: String(row.brand || '').trim(),
     actual: Number(row.actual_revenue) || 0,
@@ -6127,23 +6149,38 @@ function dailyReportItemFromPgRow(row) {
     new_wechat_members: Math.floor(Number(row.new_wechat_members) || 0),
     wechat_month_total: Math.floor(Number(row.wechat_month_total) || 0),
     gross: pre,
-    discount: { total: disc },
+    weather: String(row.weather || '').trim() || undefined,
+    discount: {
+      total: disc,
+      dine: Number(row.discount_dine) || 0,
+      delivery: Number(row.discount_delivery) || 0
+    },
     dine: {
       orders: Math.floor(Number(row.dine_orders) || 0),
       revenue: Number(row.dine_revenue) || 0,
       traffic: Math.floor(Number(row.dine_traffic) || 0)
     },
+    segments,
+    categories,
+    delivery: { eleme, meituan },
+    badReviews: {
+      dianping: badReviewsDianping,
+      meituan: Math.floor(Number(row.delivery_bad_reviews) || 0),
+      eleme: 0
+    },
     efficiency: Number(row.efficiency) || 0,
     laborTotal: Number(row.labor_total) || 0,
     private_room_uses: Math.floor(Number(row.private_room_uses) || 0),
     operational_anomaly_note: String(row.operational_anomaly_note || '').trim(),
-    delivery: {
-      eleme: { revenue: 0, actual: 0, orders: 0 },
-      meituan: { revenue: delPre, actual: delAct, orders: delOrd }
-    },
-    badReviews: { meituan: badRev, eleme: 0 },
     budget: Number(row.budget) || 0,
-    budgetRate: Number(row.budget_rate) || 0
+    budgetRate: Number(row.budget_rate) || 0,
+    recharge: {
+      count: Math.floor(Number(row.recharge_count) || 0),
+      amount: Number(row.recharge_amount) || 0
+    },
+    staff,
+    scheduleNextDay,
+    photos
   };
   return {
     id: randomUUID(),
@@ -6246,7 +6283,10 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
                  dine_orders, dine_revenue, dine_traffic, efficiency, labor_total,
                  actual_margin, gross_profit, dianping_rating, new_wechat_members, wechat_month_total,
                  private_room_uses, operational_anomaly_note, delivery_pre_revenue, delivery_actual,
-                 delivery_orders, delivery_bad_reviews, budget, budget_rate, submitted, submitted_at, updated_at
+                 delivery_orders, delivery_bad_reviews, budget, budget_rate, submitted, submitted_at, updated_at,
+                 recharge_count, recharge_amount,
+                 weather, segments, discount_dine, discount_delivery, categories, delivery_detail,
+                 bad_reviews_dianping, staff, schedule_next_day, photos
           FROM daily_reports
           WHERE date >= $1::date AND date <= $2::date`;
         if (store) {
@@ -6417,14 +6457,28 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
         const rechargeCount = Math.max(0, Math.floor(Number(payload?.recharge?.count) || 0));
         const rechargeAmount = Number(payload?.recharge?.amount) || 0;
 
+        // 全量字段提取
+        const weather = String(payload?.weather || '').trim() || null;
+        const segments = payload?.segments ? JSON.stringify(payload.segments) : null;
+        const discountDine = Number(payload?.discount?.dine) || 0;
+        const discountDelivery = Number(payload?.discount?.delivery) || 0;
+        const categories = payload?.categories ? JSON.stringify(payload.categories) : null;
+        const deliveryDetail = payload?.delivery ? JSON.stringify(payload.delivery) : null;
+        const badReviewsDianping = Math.floor(Number(payload?.badReviews?.dianping) || 0);
+        const staff = payload?.staff ? JSON.stringify(payload.staff) : null;
+        const scheduleNextDay = payload?.scheduleNextDay ? JSON.stringify(payload.scheduleNextDay) : null;
+        const photos = payload?.photos ? JSON.stringify(payload.photos) : null;
+
         await pool.query(`
           INSERT INTO daily_reports (store, brand, date, actual_revenue, actual_margin, dianping_rating, new_wechat_members, wechat_month_total, submitted, submitted_at,
             pre_discount_revenue, total_discount, dine_orders, dine_revenue, dine_traffic, efficiency, labor_total, gross_profit, budget, budget_rate,
             delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses, operational_anomaly_note,
-            recharge_count, recharge_amount)
+            recharge_count, recharge_amount,
+            weather, segments, discount_dine, discount_delivery, categories, delivery_detail, bad_reviews_dianping, staff, schedule_next_day, photos)
           VALUES ($1, $2, $3, $4, $5, $6, $7, 0, true, NOW(),
             $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-            $18, $19, $20, $21, $22, $23, $24, $25)
+            $18, $19, $20, $21, $22, $23, $24, $25,
+            $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
           ON CONFLICT (store, date)
           DO UPDATE SET 
             actual_revenue = EXCLUDED.actual_revenue,
@@ -6449,6 +6503,16 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
             operational_anomaly_note = EXCLUDED.operational_anomaly_note,
             recharge_count = EXCLUDED.recharge_count,
             recharge_amount = EXCLUDED.recharge_amount,
+            weather = EXCLUDED.weather,
+            segments = EXCLUDED.segments,
+            discount_dine = EXCLUDED.discount_dine,
+            discount_delivery = EXCLUDED.discount_delivery,
+            categories = EXCLUDED.categories,
+            delivery_detail = EXCLUDED.delivery_detail,
+            bad_reviews_dianping = EXCLUDED.bad_reviews_dianping,
+            staff = EXCLUDED.staff,
+            schedule_next_day = EXCLUDED.schedule_next_day,
+            photos = EXCLUDED.photos,
             updated_at = NOW()
         `, [
           store, brand, date, 
@@ -6461,7 +6525,8 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
           deliveryActual, deliveryOrders, deliveryPreRevenue, deliveryBadReviews,
           privateRoomUses,
           operationalAnomalyNote || null,
-          rechargeCount, rechargeAmount
+          rechargeCount, rechargeAmount,
+          weather, segments, discountDine, discountDelivery, categories, deliveryDetail, badReviewsDianping, staff, scheduleNextDay, photos
         ]);
         // 重新计算本月累计并写回
         const monthStart = date.slice(0, 7) + '-01';
@@ -6518,14 +6583,28 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
         const rechargeCount = Math.max(0, Math.floor(Number(payload?.recharge?.count) || 0));
         const rechargeAmount = Number(payload?.recharge?.amount) || 0;
 
+        // 全量字段提取
+        const weather = String(payload?.weather || '').trim() || null;
+        const segments = payload?.segments ? JSON.stringify(payload.segments) : null;
+        const discountDine = Number(payload?.discount?.dine) || 0;
+        const discountDelivery = Number(payload?.discount?.delivery) || 0;
+        const categories = payload?.categories ? JSON.stringify(payload.categories) : null;
+        const deliveryDetail = payload?.delivery ? JSON.stringify(payload.delivery) : null;
+        const badReviewsDianping = Math.floor(Number(payload?.badReviews?.dianping) || 0);
+        const staff = payload?.staff ? JSON.stringify(payload.staff) : null;
+        const scheduleNextDay = payload?.scheduleNextDay ? JSON.stringify(payload.scheduleNextDay) : null;
+        const photos = payload?.photos ? JSON.stringify(payload.photos) : null;
+
         await pool.query(`
           INSERT INTO daily_reports (store, brand, date, actual_revenue, actual_margin, dianping_rating, new_wechat_members, wechat_month_total, submitted, submitted_at,
             pre_discount_revenue, total_discount, dine_orders, dine_revenue, dine_traffic, efficiency, labor_total, gross_profit, budget, budget_rate,
             delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses, operational_anomaly_note,
-            recharge_count, recharge_amount)
+            recharge_count, recharge_amount,
+            weather, segments, discount_dine, discount_delivery, categories, delivery_detail, bad_reviews_dianping, staff, schedule_next_day, photos)
           VALUES ($1, $2, $3, $4, $5, $6, $7, 0, true, NOW(),
             $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-            $18, $19, $20, $21, $22, $23, $24, $25)
+            $18, $19, $20, $21, $22, $23, $24, $25,
+            $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
           ON CONFLICT (store, date)
           DO UPDATE SET
             actual_revenue = EXCLUDED.actual_revenue,
@@ -6550,6 +6629,16 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
             operational_anomaly_note = EXCLUDED.operational_anomaly_note,
             recharge_count = EXCLUDED.recharge_count,
             recharge_amount = EXCLUDED.recharge_amount,
+            weather = EXCLUDED.weather,
+            segments = EXCLUDED.segments,
+            discount_dine = EXCLUDED.discount_dine,
+            discount_delivery = EXCLUDED.discount_delivery,
+            categories = EXCLUDED.categories,
+            delivery_detail = EXCLUDED.delivery_detail,
+            bad_reviews_dianping = EXCLUDED.bad_reviews_dianping,
+            staff = EXCLUDED.staff,
+            schedule_next_day = EXCLUDED.schedule_next_day,
+            photos = EXCLUDED.photos,
             updated_at = NOW()
         `, [
           store,
@@ -6564,7 +6653,8 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
           deliveryActual, deliveryOrders, deliveryPreRevenue, deliveryBadReviews,
           privateRoomUses,
           operationalAnomalyNote || null,
-          rechargeCount, rechargeAmount
+          rechargeCount, rechargeAmount,
+          weather, segments, discountDine, discountDelivery, categories, deliveryDetail, badReviewsDianping, staff, scheduleNextDay, photos
         ]);
       } catch (e) { console.error('[daily_report_insert]', e.message); }
 
@@ -13557,7 +13647,10 @@ app.listen(PORT, HOST, async () => {
                dine_orders, dine_revenue, dine_traffic, efficiency, labor_total,
                actual_margin, gross_profit, dianping_rating, new_wechat_members, wechat_month_total,
                private_room_uses, operational_anomaly_note, delivery_pre_revenue, delivery_actual,
-               delivery_orders, delivery_bad_reviews, budget, budget_rate, submitted, submitted_at, updated_at
+               delivery_orders, delivery_bad_reviews, budget, budget_rate, submitted, submitted_at, updated_at,
+               recharge_count, recharge_amount,
+               weather, segments, discount_dine, discount_delivery, categories, delivery_detail,
+               bad_reviews_dianping, staff, schedule_next_day, photos
         FROM daily_reports
         ORDER BY date DESC
       `);
