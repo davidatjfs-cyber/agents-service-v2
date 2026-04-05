@@ -6414,14 +6414,17 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
         const deliveryPreRevenue = deliveryElemeRev + deliveryMeituanRev;
         const deliveryBadReviews = Math.floor(Number(payload?.badReviews?.meituan || 0)) + Math.floor(Number(payload?.badReviews?.eleme || 0));
         const privateRoomUses = Math.max(0, Math.floor(Number(payload?.private_room_uses) || 0));
+        const rechargeCount = Math.max(0, Math.floor(Number(payload?.recharge?.count) || 0));
+        const rechargeAmount = Number(payload?.recharge?.amount) || 0;
 
         await pool.query(`
           INSERT INTO daily_reports (store, brand, date, actual_revenue, actual_margin, dianping_rating, new_wechat_members, wechat_month_total, submitted, submitted_at,
             pre_discount_revenue, total_discount, dine_orders, dine_revenue, dine_traffic, efficiency, labor_total, gross_profit, budget, budget_rate,
-            delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses, operational_anomaly_note)
+            delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses, operational_anomaly_note,
+            recharge_count, recharge_amount)
           VALUES ($1, $2, $3, $4, $5, $6, $7, 0, true, NOW(),
             $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-            $18, $19, $20, $21, $22, $23)
+            $18, $19, $20, $21, $22, $23, $24, $25)
           ON CONFLICT (store, date)
           DO UPDATE SET 
             actual_revenue = EXCLUDED.actual_revenue,
@@ -6444,6 +6447,8 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
             delivery_bad_reviews = EXCLUDED.delivery_bad_reviews,
             private_room_uses = EXCLUDED.private_room_uses,
             operational_anomaly_note = EXCLUDED.operational_anomaly_note,
+            recharge_count = EXCLUDED.recharge_count,
+            recharge_amount = EXCLUDED.recharge_amount,
             updated_at = NOW()
         `, [
           store, brand, date, 
@@ -6455,7 +6460,8 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
           efficiencyVal, laborTotalVal, grossProfit, budgetVal, budgetRateVal,
           deliveryActual, deliveryOrders, deliveryPreRevenue, deliveryBadReviews,
           privateRoomUses,
-          operationalAnomalyNote || null
+          operationalAnomalyNote || null,
+          rechargeCount, rechargeAmount
         ]);
         // 重新计算本月累计并写回
         const monthStart = date.slice(0, 7) + '-01';
@@ -6509,14 +6515,17 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
         const deliveryPreRevenue = Number(payload?.delivery?.eleme?.revenue || 0) + Number(payload?.delivery?.meituan?.revenue || 0);
         const deliveryBadReviews = Math.floor(Number(payload?.badReviews?.meituan || 0)) + Math.floor(Number(payload?.badReviews?.eleme || 0));
         const privateRoomUses = Math.max(0, Math.floor(Number(payload?.private_room_uses) || 0));
+        const rechargeCount = Math.max(0, Math.floor(Number(payload?.recharge?.count) || 0));
+        const rechargeAmount = Number(payload?.recharge?.amount) || 0;
 
         await pool.query(`
           INSERT INTO daily_reports (store, brand, date, actual_revenue, actual_margin, dianping_rating, new_wechat_members, wechat_month_total, submitted, submitted_at,
             pre_discount_revenue, total_discount, dine_orders, dine_revenue, dine_traffic, efficiency, labor_total, gross_profit, budget, budget_rate,
-            delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses, operational_anomaly_note)
+            delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses, operational_anomaly_note,
+            recharge_count, recharge_amount)
           VALUES ($1, $2, $3, $4, $5, $6, $7, 0, true, NOW(),
             $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-            $18, $19, $20, $21, $22, $23)
+            $18, $19, $20, $21, $22, $23, $24, $25)
           ON CONFLICT (store, date)
           DO UPDATE SET
             actual_revenue = EXCLUDED.actual_revenue,
@@ -6539,6 +6548,8 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
             delivery_bad_reviews = EXCLUDED.delivery_bad_reviews,
             private_room_uses = EXCLUDED.private_room_uses,
             operational_anomaly_note = EXCLUDED.operational_anomaly_note,
+            recharge_count = EXCLUDED.recharge_count,
+            recharge_amount = EXCLUDED.recharge_amount,
             updated_at = NOW()
         `, [
           store,
@@ -6552,7 +6563,8 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
           efficiencyVal, laborTotalVal, grossProfit, budgetVal, budgetRateVal,
           deliveryActual, deliveryOrders, deliveryPreRevenue, deliveryBadReviews,
           privateRoomUses,
-          operationalAnomalyNote || null
+          operationalAnomalyNote || null,
+          rechargeCount, rechargeAmount
         ]);
       } catch (e) { console.error('[daily_report_insert]', e.message); }
 
