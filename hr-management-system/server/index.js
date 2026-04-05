@@ -13993,6 +13993,71 @@ app.listen(PORT, HOST, async () => {
       console.error('[startup] 审批记录表检查失败（非致命，不影响启动）:', e?.message);
     }
 
+    // ── 历史数据回填（state → DB，一次性补缺） ──
+
+    // 回填：hrms_state.leaveRecords → hrms_leave_records
+    try {
+      const stateLR = (await getSharedState()) || {};
+      const lrList = Array.isArray(stateLR.leaveRecords) ? stateLR.leaveRecords : [];
+      if (lrList.length > 0) {
+        const existingIds = await pool.query(`SELECT id::text FROM hrms_leave_records`);
+        const existingSet = new Set(existingIds.rows.map(r => r.id));
+        let backfillCount = 0;
+        for (const lr of lrList) {
+          const rid = String(lr?.id || '').trim();
+          if (!rid || existingSet.has(rid)) continue;
+          const startDate = String(lr?.startDate || '').trim();
+          const endDate = String(lr?.endDate || '').trim();
+          if (!startDate || !endDate) continue;
+          await pool.query(
+            `INSERT INTO hrms_leave_records (id, username, name, store, brand, start_date, end_date, days, type, reason, status, submitted_by, created_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'approved',$11,$12)
+             ON CONFLICT (id) DO NOTHING`,
+            [rid, String(lr?.applicant || '').trim(), String(lr?.applicantName || lr?.name || '').trim(),
+             String(lr?.store || '').trim(), String(lr?.brand || '').trim(),
+             startDate, endDate, lr?.days != null && lr?.days !== '' ? Number(lr.days) : 0,
+             String(lr?.type || 'leave').trim(), String(lr?.reason || '').trim(),
+             String(lr?.createdAt || '').trim() || hrmsNowISO(), String(lr?.createdAt || '').trim() || hrmsNowISO()]
+          );
+          backfillCount++;
+        }
+        if (backfillCount > 0) console.log(`[startup] 休假记录回填：${backfillCount} 条 state → hrms_leave_records`);
+      }
+    } catch (e) {
+      console.error('[startup] 休假记录回填失败（非致命）:', e?.message);
+    }
+
+    // 回填：hrms_state.salaryAdjustments → hrms_reward_punishment_records
+    try {
+      const stateSA = (await getSharedState()) || {};
+      const saList = Array.isArray(stateSA.salaryAdjustments) ? stateSA.salaryAdjustments : [];
+      if (saList.length > 0) {
+        const existingIds = await pool.query(`SELECT id::text FROM hrms_reward_punishment_records`);
+        const existingSet = new Set(existingIds.rows.map(r => r.id));
+        let backfillCount = 0;
+        for (const sa of saList) {
+          const rid = String(sa?.id || '').trim();
+          if (!rid || existingSet.has(rid)) continue;
+          const rpType = String(sa?.type || '').trim();
+          const isReward = rpType === '奖励' || rpType === 'reward';
+          await pool.query(
+            `INSERT INTO hrms_reward_punishment_records (id, username, name, store, brand, type, category, amount, reason, source, approval_id, status, created_by, created_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'approval',$10,'active',$11,$12)
+             ON CONFLICT (id) DO NOTHING`,
+            [rid, String(sa?.targetUsername || '').trim(), String(sa?.targetName || '').trim(),
+             '', '', isReward ? 'reward' : 'punishment', rpType,
+             Math.abs(Number(sa?.amount) || 0), String(sa?.reason || '').trim(),
+             String(sa?.approvalId || ''), String(sa?.applicantUsername || '').trim(),
+             String(sa?.createdAt || '').trim() || hrmsNowISO()]
+          );
+          backfillCount++;
+        }
+        if (backfillCount > 0) console.log(`[startup] 奖惩记录回填：${backfillCount} 条 state → hrms_reward_punishment_records`);
+      }
+    } catch (e) {
+      console.error('[startup] 奖惩记录回填失败（非致命）:', e?.message);
+    }
+
     await dedupeGlobalSocialMediaPointRules();
     await ensureGlobalSocialMediaPointRule();
 
