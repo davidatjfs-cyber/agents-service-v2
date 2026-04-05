@@ -4971,6 +4971,8 @@ async function saveSharedState(nextData) {
     ['default', JSON.stringify(nextData || {})]
   );
   schedulePayrollDomainSync();
+  // 全量双写：每次保存 state 时自动同步所有模块到独立 DB 表
+  await dualWriteStateToDB(nextData || {});
 }
 
 /**
@@ -5040,6 +5042,108 @@ async function mergeSharedStateFields(patches, arrayIdFields = {}) {
     return;
   }
   throw new Error('mergeSharedStateFields: max retries exceeded');
+}
+
+/** 全量双写：每次保存 state 时自动同步所有模块到独立 DB 表 */
+async function dualWriteStateToDB(state) {
+  if (!state || typeof state !== 'object') return;
+  try {
+    // 1. employees → employees 表
+    const empArr = Array.isArray(state.employees) ? state.employees : [];
+    for (const emp of empArr) {
+      const username = String(emp?.username || '').trim();
+      if (!username) continue;
+      const { id, name, role, store, department, position, status, gender, phone, email,
+              joinDate, birthday, salary, password, managerUsername, idCardNumber, bankCard,
+              createdAt, updatedAt, ...rest } = emp;
+      await pool.query(
+        `INSERT INTO employees (id, username, name, role, store, department, position, status,
+           gender, phone, email, join_date, birthday, salary, password_hash, manager_username,
+           id_card_number, bank_card, extra_json, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+         ON CONFLICT (username) DO UPDATE SET
+           name=EXCLUDED.name, role=EXCLUDED.role, store=EXCLUDED.store,
+           department=EXCLUDED.department, position=EXCLUDED.position, status=EXCLUDED.status,
+           gender=EXCLUDED.gender, phone=EXCLUDED.phone, email=EXCLUDED.email,
+           join_date=EXCLUDED.join_date, birthday=EXCLUDED.birthday, salary=EXCLUDED.salary,
+           manager_username=EXCLUDED.manager_username, id_card_number=EXCLUDED.id_card_number,
+           bank_card=EXCLUDED.bank_card, extra_json=EXCLUDED.extra_json, updated_at=NOW()`,
+        [String(id || username), username,
+         String(name || ''), String(role || ''), String(store || ''), String(department || ''),
+         String(position || ''), String(status || 'active'), String(gender || ''),
+         String(phone || ''), String(email || ''), String(joinDate || ''), String(birthday || ''),
+         String(salary || ''), String(password || ''), String(managerUsername || ''),
+         String(idCardNumber || ''), String(bankCard || ''), JSON.stringify(rest),
+         createdAt ? new Date(createdAt).toISOString() : new Date().toISOString(),
+         new Date().toISOString()]
+      );
+    }
+
+    // 2. leaveRecords → hrms_leave_records 表
+    const lrArr = Array.isArray(state.leaveRecords) ? state.leaveRecords : [];
+    for (const lr of lrArr) {
+      const rid = String(lr?.id || '').trim();
+      if (!rid) continue;
+      const startDate = String(lr?.startDate || '').trim();
+      const endDate = String(lr?.endDate || '').trim();
+      if (!startDate || !endDate) continue;
+      await pool.query(
+        `INSERT INTO hrms_leave_records (id, username, name, store, brand, start_date, end_date, days, type, reason, status, submitted_by, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         ON CONFLICT (id) DO UPDATE SET
+           username=EXCLUDED.username, name=EXCLUDED.name, store=EXCLUDED.store,
+           start_date=EXCLUDED.start_date, end_date=EXCLUDED.end_date, days=EXCLUDED.days,
+           type=EXCLUDED.type, reason=EXCLUDED.reason, status=EXCLUDED.status, updated_at=NOW()`,
+        [rid, String(lr?.applicant || '').trim(), String(lr?.applicantName || lr?.name || '').trim(),
+         String(lr?.store || '').trim(), String(lr?.brand || '').trim(),
+         startDate, endDate, lr?.days != null && lr?.days !== '' ? Number(lr.days) : 0,
+         String(lr?.type || 'leave').trim(), String(lr?.reason || '').trim(),
+         String(lr?.status || 'pending').trim(), String(lr?.createdAt || '').trim() || hrmsNowISO(),
+         String(lr?.createdAt || '').trim() || hrmsNowISO()]
+      );
+    }
+
+    // 3. salaryAdjustments → hrms_reward_punishment_records 表
+    const saArr = Array.isArray(state.salaryAdjustments) ? state.salaryAdjustments : [];
+    for (const sa of saArr) {
+      const rid = String(sa?.id || '').trim();
+      if (!rid) continue;
+      const rpType = String(sa?.type || '').trim();
+      const isReward = rpType === '奖励' || rpType === 'reward';
+      await pool.query(
+        `INSERT INTO hrms_reward_punishment_records (id, username, name, store, brand, type, category, amount, reason, source, approval_id, status, created_by, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'approval',$10,$11,$12,$13)
+         ON CONFLICT (id) DO UPDATE SET
+           username=EXCLUDED.username, name=EXCLUDED.name, type=EXCLUDED.type,
+           amount=EXCLUDED.amount, reason=EXCLUDED.reason, status=EXCLUDED.status, updated_at=NOW()`,
+        [rid, String(sa?.targetUsername || '').trim(), String(sa?.targetName || '').trim(),
+         '', '', isReward ? 'reward' : 'punishment', rpType,
+         Math.abs(Number(sa?.amount) || 0), String(sa?.reason || '').trim(),
+         String(sa?.approvalId || ''), String(sa?.status || 'active').trim(),
+         String(sa?.applicantUsername || '').trim(),
+         String(sa?.createdAt || '').trim() || hrmsNowISO()]
+      );
+    }
+
+    // 4. notifications → hrms_user_notifications 表（绩效扣分等）
+    const notifArr = Array.isArray(state.notifications) ? state.notifications : [];
+    for (const n of notifArr) {
+      const nType = String(n?.type || '').trim();
+      if (!nType.includes('performance') && !nType.includes('deduction') && !nType.includes('reward_punishment')) continue;
+      const target = String(n?.targetUsername || n?.to || '').trim();
+      if (!target) continue;
+      await pool.query(
+        `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6)
+         ON CONFLICT DO NOTHING`,
+        [target, String(n?.title || '').trim(), String(n?.message || '').trim(),
+         nType, JSON.stringify(n?.meta || n?.data || {}),
+         n?.createdAt ? new Date(n.createdAt).toISOString() : hrmsNowISO()]
+      );
+    }
+  } catch (e) {
+    console.error('[dualWriteStateToDB] error (non-fatal):', e?.message);
+  }
 }
 
 /** 薪资域 JSON 是否视为「空」（用于 state ↔ hrms_payroll_domain 互备回灌） */
