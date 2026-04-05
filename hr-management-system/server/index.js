@@ -14058,6 +14058,57 @@ app.listen(PORT, HOST, async () => {
       console.error('[startup] 奖惩记录回填失败（非致命）:', e?.message);
     }
 
+    // 回填：hrms_state.dailyReports → daily_reports 表（补充缺失的明细字段）
+    try {
+      const stateDR = (await getSharedState()) || {};
+      const drList = Array.isArray(stateDR.dailyReports) ? stateDR.dailyReports : [];
+      if (drList.length > 0) {
+        let backfillCount = 0;
+        for (const dr of drList) {
+          const d = dr?.data;
+          if (!d) continue;
+          const store = String(dr?.store || '').trim();
+          const date = String(dr?.date || '').trim().slice(0, 10);
+          if (!store || !date) continue;
+
+          const segments = d?.segments ? JSON.stringify(d.segments) : null;
+          const categories = d?.categories ? JSON.stringify(d.categories) : null;
+          const deliveryDetail = d?.delivery ? JSON.stringify(d.delivery) : null;
+          const staff = d?.staff ? JSON.stringify(d.staff) : null;
+          const scheduleNextDay = d?.scheduleNextDay ? JSON.stringify(d.scheduleNextDay) : null;
+          const photos = d?.photos ? JSON.stringify(d.photos) : null;
+          const weather = String(d?.weather || '').trim() || null;
+          const discountDine = Number(d?.discount?.dine) || 0;
+          const discountDelivery = Number(d?.discount?.delivery) || 0;
+          const badReviewsDianping = Math.floor(Number(d?.badReviews?.dianping) || 0);
+
+          const hasDetail = segments || categories || deliveryDetail || staff || scheduleNextDay || photos || weather || discountDine || discountDelivery;
+          if (!hasDetail) continue;
+
+          await pool.query(
+            `UPDATE daily_reports SET
+               segments = COALESCE($3, segments),
+               categories = COALESCE($4, categories),
+               delivery_detail = COALESCE($5, delivery_detail),
+               staff = COALESCE($6, staff),
+               schedule_next_day = COALESCE($7, schedule_next_day),
+               photos = COALESCE($8, photos),
+               weather = COALESCE($9, weather),
+               discount_dine = COALESCE($10, discount_dine),
+               discount_delivery = COALESCE($11, discount_delivery),
+               bad_reviews_dianping = COALESCE($12, bad_reviews_dianping),
+               updated_at = NOW()
+             WHERE store = $1 AND date = $2::date`,
+            [store, date, segments, categories, deliveryDetail, staff, scheduleNextDay, photos, weather, discountDine, discountDelivery, badReviewsDianping]
+          );
+          backfillCount++;
+        }
+        if (backfillCount > 0) console.log(`[startup] 营业日报明细回填：${backfillCount} 条 state → daily_reports`);
+      }
+    } catch (e) {
+      console.error('[startup] 营业日报明细回填失败（非致命）:', e?.message);
+    }
+
     await dedupeGlobalSocialMediaPointRules();
     await ensureGlobalSocialMediaPointRule();
 
