@@ -6541,8 +6541,10 @@ export function sanitizePerformanceZhText(text) {
     return text;
   }
   let t = text;
-  t = t.replace(/📊\s*绩效考核通知/g, '📊 绩效考核日报');
-  t = t.replace(/(^|[\n\u200b])绩效考核通知/g, '$1绩效考核日报');
+  t = t.replace(/📊\s*绩效考核通知/g, '📊 绩效考核周报');
+  t = t.replace(/(^|[\n\u200b])绩效考核通知/g, '$1绩效考核周报');
+  t = t.replace(/📊\s*绩效考核日报/g, '📊 绩效考核周报');
+  t = t.replace(/(^|[\n\u200b])绩效考核日报/g, '$1绩效考核周报');
   t = t.replace(/📋\s*模型[：:]\s*`?new_model_monthly`?/gi, '📋 评分类型：月度自动评分');
   t = t.replace(/📋\s*模型[：:]\s*`?new_model`?/gi, '📋 评分类型：人力资源综合模型');
   t = t.replace(/\*\*📋\s*模型\*\*\s*[：:]\s*`?new_model_monthly`?/gi, '**📋 评分类型**：月度自动评分');
@@ -10368,7 +10370,7 @@ async function pushIssuesToFeishu() {
 async function pushScoresToFeishu() {
   try {
     const r = await pool().query(
-      `SELECT * FROM agent_scores WHERE feishu_notified = FALSE ORDER BY created_at DESC LIMIT 20`
+      `SELECT * FROM agent_scores WHERE feishu_notified = FALSE AND created_at >= NOW() - INTERVAL '7 days' ORDER BY created_at DESC LIMIT 20`
     );
     if (!r.rows?.length) return 0;
 
@@ -10480,7 +10482,7 @@ async function pushScoresToFeishu() {
       if (bd.execution_rating != null && String(bd.execution_rating).trim() !== '') dimLines.push(`• 执行力：${String(bd.execution_rating).trim()}级`);
       const dimText = dimLines.length ? dimLines.join('\n') : '• 暂无维度评级';
 
-      const msgText = `📊 绩效考核日报\n\n${fu.name || score.username}，你好！以下是你在${score.store}（${score.brand}）的绩效考核日报（与月度总结区分：本条对应系统刚写入的一条评分记录）。\n\n📋 岗位：${roleLabel}\n🗓️ ${periodLabel}${modelLine}\n\n📊 本期总分：**${score.total_score} 分**（满分100）\n\n评分维度：\n${dimText}\n\n扣分明细：\n${deductionText}\n\n${summaryZh ? '说明：' + summaryZh + '\n\n' : ''}如有异议，请回复「申诉」并说明原因。`;
+      const msgText = `📊 绩效考核周报\n\n${fu.name || score.username}，你好！以下是你在${score.store}（${score.brand}）的绩效考核周报（与月度总结区分：本条对应系统刚写入的一条评分记录）。\n\n📋 岗位：${roleLabel}\n🗓️ ${periodLabel}${modelLine}\n\n📊 本期总分：**${score.total_score} 分**（满分100）\n\n评分维度：\n${dimText}\n\n扣分明细：\n${deductionText}\n\n${summaryZh ? '说明：' + summaryZh + '\n\n' : ''}如有异议，请回复「申诉」并说明原因。`;
       const msg = prefixWithAgentName('chief_evaluator', msgText);
 
       const scoreNum = Number(score.total_score || 0);
@@ -10489,7 +10491,7 @@ async function pushScoresToFeishu() {
 
       const card = {
         header: {
-          title: { tag: 'plain_text', content: '📊 绩效考核日报' },
+          title: { tag: 'plain_text', content: '📊 绩效考核周报' },
           template: cardTemplate
         },
         elements: [

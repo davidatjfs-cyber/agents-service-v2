@@ -232,23 +232,23 @@ export async function calculateEmployeeScore(store, username, role, period) {
     // 满分100：异常加分/扣分计算结果可能会超出100，这里做上限保护，避免前端/文案出现“满分100却打到110”的困惑
     const totalScore = Math.min(100, Math.max(0, baseScore + exceptionBonus - exceptionDeduction));
     
-    // 2. 执行力评级（数据不足时返回NULL）
-    let executionRating = null;
+    // 2. 执行力评级（数据不足时返回默认 C）
+    let executionRating = 'C';
     try {
-      executionRating = await calculateExecutionRating(store, username, role, period);
-    } catch (e) { console.warn('[employee_score] execution rating error:', e?.message); }
+      executionRating = await calculateExecutionRating(store, username, role, period) || 'C';
+    } catch (e) { console.warn('[employee_score] execution rating error:', e?.message); executionRating = 'C'; }
     
-    // 3. 工作态度评级（数据不足时返回NULL）
-    let attitudeRating = null;
+    // 3. 工作态度评级（数据不足时返回默认 D）
+    let attitudeRating = 'D';
     try {
-      attitudeRating = await calculateAttitudeRating(username, period);
-    } catch (e) { console.warn('[employee_score] attitude rating error:', e?.message); }
+      attitudeRating = await calculateAttitudeRating(username, period) || 'D';
+    } catch (e) { console.warn('[employee_score] attitude rating error:', e?.message); attitudeRating = 'D'; }
     
-    // 4. 工作能力评级（数据不足时返回NULL）
-    let abilityRating = null;
+    // 4. 工作能力评级（数据不足时返回默认 C）
+    let abilityRating = 'C';
     try {
-      abilityRating = await calculateAbilityRating(store, username, role, period);
-    } catch (e) { console.warn('[employee_score] ability rating error:', e?.message); }
+      abilityRating = await calculateAbilityRating(store, username, role, period) || 'C';
+    } catch (e) { console.warn('[employee_score] ability rating error:', e?.message); abilityRating = 'C'; }
     
     // 5. 保存结果
     try {
@@ -272,12 +272,12 @@ export async function calculateEmployeeScore(store, username, role, period) {
     
   } catch (error) {
     console.error('[employee_score] 计算失败:', error);
-    // 返回NULL评级表示数据不足
+    // 返回默认评级
     return {
       total_score: 100,
-      execution_rating: null,
-      attitude_rating: null,
-      ability_rating: null
+      execution_rating: 'C',
+      attitude_rating: 'D',
+      ability_rating: 'C'
     };
   }
 }
