@@ -204,13 +204,21 @@ function buildScheduledCard({ store, label, desc, taskId, timeNow, replyExtra })
  * 向所有匹配门店+角色的用户发卡片/文本。
  * 返回 { count: number, msgIds: string[] } — msgIds 供调用方写入 master_tasks.feishu_msg_ids。
  */
-async function pingUsersForStores(stores, roles, cardOrText) {
+async function pingUsersForStores(stores, roles, cardOrText, assigneeUsername) {
   const roleList = Array.isArray(roles) && roles.length ? roles : ['store_manager'];
   let r;
   try {
-    r = await query(
-      `SELECT open_id, store, role FROM feishu_users WHERE registered = true AND open_id IS NOT NULL`
-    );
+    // 优先按 assigneeUsername 精确匹配，避免同 store+role 多人重复发送
+    if (assigneeUsername) {
+      r = await query(
+        `SELECT open_id, store, role FROM feishu_users WHERE registered = true AND open_id IS NOT NULL AND username = $1`,
+        [assigneeUsername]
+      );
+    } else {
+      r = await query(
+        `SELECT open_id, store, role FROM feishu_users WHERE registered = true AND open_id IS NOT NULL`
+      );
+    }
   } catch (e) {
     logger.warn({ err: e?.message }, 'daily-inspection: feishu_users query failed');
     return { count: 0, msgIds: [] };
@@ -289,22 +297,37 @@ export async function executeDailyInspectionItem(item) {
         replyExtra
       });
       card._fallback = `【${label}】${store} · ${timeNow}\nBI检测完成 · ${alertN ? `新触发${alertN}条异常` : '无新异常'}`;
-      const pingResult = await pingUsersForStores([store], roles, card);
-      const sentMsgIds = pingResult.msgIds || [];
 
-      // 写入 master_tasks，使巡检卡的回复可被精准追踪
+      // 先确定责任人，再只给该责任人发消息，避免同 store+role 多人重复发送
+      const roleList = Array.isArray(roles) && roles.length ? roles : ['store_manager'];
+      const storeVariants = collectStoreLookupVariants(store);
+      const staffR = await query(
+        `SELECT username, role, open_id FROM feishu_users
+         WHERE registered = true AND role = ANY($1::text[]) AND trim(store) = ANY($2::text[])
+         LIMIT 1`,
+        [roleList, storeVariants.length ? storeVariants : [store]]
+      ).catch(() => ({ rows: [] }));
+      const assigneeUsername = staffR.rows?.[0]?.username || '';
+      const assigneeRole = staffR.rows?.[0]?.role || roleList[0] || 'store_manager';
+      const assigneeOpenId = staffR.rows?.[0]?.open_id || '';
+
+      const sentMsgIds = [];
+      const pingedOpenIds = [];
+      if (assigneeOpenId) {
+        const isCard = card && typeof card === 'object';
+        if (isCard) {
+          const res = await sendCard(assigneeOpenId, card).catch(() => ({ ok: false }));
+          const mid = res?.data?.message_id || res?.data?.data?.message_id;
+          if (mid) sentMsgIds.push(mid);
+          if (!res.ok) await sendText(assigneeOpenId, String(card._fallback || '定时任务提醒'), 'open_id').catch(() => {});
+        } else {
+          await sendText(assigneeOpenId, card, 'open_id').catch(() => {});
+        }
+        pingedOpenIds.push(assigneeOpenId);
+      }
+
+      // 写入 master_tasks
       try {
-        const roleList = Array.isArray(roles) && roles.length ? roles : ['store_manager'];
-        const storeVariants = collectStoreLookupVariants(store);
-        const staffR = await query(
-          `SELECT username, role FROM feishu_users
-           WHERE registered = true AND role = ANY($1::text[]) AND trim(store) = ANY($2::text[])
-           LIMIT 1`,
-          [roleList, storeVariants.length ? storeVariants : [store]]
-        ).catch(() => ({ rows: [] }));
-        const assigneeUsername = staffR.rows?.[0]?.username || '';
-        const assigneeRole = staffR.rows?.[0]?.role || roleList[0] || 'store_manager';
-
         await query(
           `INSERT INTO master_tasks
              (task_id, status, source, category, store, assignee_username, assignee_role,
@@ -320,7 +343,7 @@ export async function executeDailyInspectionItem(item) {
               taskType: type,
               label,
               alertN,
-              assignee_open_ids: pingResult.pingedOpenIds || []
+              assignee_open_ids: pingedOpenIds
             }),
             JSON.stringify(sentMsgIds)
           ]
@@ -339,23 +362,37 @@ export async function executeDailyInspectionItem(item) {
     const taskId = `SCHED-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
     const card = buildScheduledCard({ store, label, desc: desc || '请按要求完成并反馈', taskId, timeNow, replyExtra });
     card._fallback = `【${label}】${store}\n${desc || '定时任务提醒，请按要求完成并反馈。'}\n时间：${timeNow}\n任务ID：${taskId}`;
-    const pingResult = await pingUsersForStores([store], roles, card);
-    const sentMsgIds = pingResult.msgIds || [];
 
-    // 写入 master_tasks，供后续"直接回复"精确落库（与随机抽检同机制）
+    // 先确定责任人，再只给该责任人发消息
+    const roleList = Array.isArray(roles) && roles.length ? roles : ['store_manager'];
+    const storeVariants = collectStoreLookupVariants(store);
+    const staffR = await query(
+      `SELECT username, role, open_id FROM feishu_users
+       WHERE registered = true AND role = ANY($1::text[]) AND trim(store) = ANY($2::text[])
+       LIMIT 1`,
+      [roleList, storeVariants.length ? storeVariants : [store]]
+    ).catch(() => ({ rows: [] }));
+    const assigneeUsername = staffR.rows?.[0]?.username || '';
+    const assigneeRole = staffR.rows?.[0]?.role || roleList[0] || 'store_manager';
+    const assigneeOpenId = staffR.rows?.[0]?.open_id || '';
+
+    const sentMsgIds = [];
+    const pingedOpenIds = [];
+    if (assigneeOpenId) {
+      const isCard = card && typeof card === 'object';
+      if (isCard) {
+        const res = await sendCard(assigneeOpenId, card).catch(() => ({ ok: false }));
+        const mid = res?.data?.message_id || res?.data?.data?.message_id;
+        if (mid) sentMsgIds.push(mid);
+        if (!res.ok) await sendText(assigneeOpenId, String(card._fallback || '定时任务提醒'), 'open_id').catch(() => {});
+      } else {
+        await sendText(assigneeOpenId, card, 'open_id').catch(() => {});
+      }
+      pingedOpenIds.push(assigneeOpenId);
+    }
+
+    // 写入 master_tasks
     try {
-      // 先查 assignee_username / role（取第一个匹配的人）
-      const roleList = Array.isArray(roles) && roles.length ? roles : ['store_manager'];
-      const storeVariants = collectStoreLookupVariants(store);
-      const staffR = await query(
-        `SELECT username, role FROM feishu_users
-         WHERE registered = true AND role = ANY($1::text[]) AND trim(store) = ANY($2::text[])
-         LIMIT 1`,
-        [roleList, storeVariants.length ? storeVariants : [store]]
-      ).catch(() => ({ rows: [] }));
-      const assigneeUsername = staffR.rows?.[0]?.username || '';
-      const assigneeRole = staffR.rows?.[0]?.role || roleList[0] || 'store_manager';
-
       await query(
         `INSERT INTO master_tasks
            (task_id, status, source, category, store, assignee_username, assignee_role,
@@ -375,7 +412,7 @@ export async function executeDailyInspectionItem(item) {
             taskType: type,
             label,
             desc,
-            assignee_open_ids: pingResult.pingedOpenIds || []
+            assignee_open_ids: pingedOpenIds
           }),
           JSON.stringify(sentMsgIds)
         ]
