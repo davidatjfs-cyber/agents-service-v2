@@ -60,11 +60,19 @@ function resolutionCodeForChaseAttitude(source) {
  * 非 BI 任务卡：催办未闭环 → 仅工作态度备案
  */
 async function recordStandardChaseAttitudeOnly(task) {
+  // 防御性校验：必须催办满3次才备案
+  const rc = parseInt(task.remind_count || 0, 10);
+  if (rc < 3) {
+    logger.warn({ taskId: task.task_id, remind_count: rc }, 'task-reminder: remind_count < 3, skip filing');
+    return false;
+  }
+
   const code = resolutionCodeForChaseAttitude(task.source);
   try {
     await query(
       `UPDATE master_tasks SET
          hr_performance_recorded = TRUE,
+         status = 'hr_filed',
          resolution_code = $2,
          updated_at = NOW()
        WHERE task_id = $1`,
@@ -99,10 +107,18 @@ async function recordStandardChaseAttitudeOnly(task) {
  * BI 异常任务卡：催办未闭环 → 仅工作态度备案；绩效扣分仅来自 BI 异常触发链路（anomaly_rollups_v2）
  */
 async function recordBiChaseAttitudeOnly(task) {
+  // 防御性校验：必须催办满3次才备案
+  const rc = parseInt(task.remind_count || 0, 10);
+  if (rc < 3) {
+    logger.warn({ taskId: task.task_id, remind_count: rc }, 'task-reminder: BI remind_count < 3, skip filing');
+    return false;
+  }
+
   try {
     await query(
       `UPDATE master_tasks SET
          hr_performance_recorded = TRUE,
+         status = 'hr_filed',
          resolution_code = $2,
          updated_at = NOW()
        WHERE task_id = $1`,

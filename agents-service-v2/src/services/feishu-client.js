@@ -1293,6 +1293,7 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
           await query(
             `UPDATE master_tasks SET
                hr_performance_recorded = true,
+               status = 'hr_filed',
                resolution_code = 'hr_attitude_review_fail_3x',
                updated_at = NOW()
              WHERE task_id = $1`,
