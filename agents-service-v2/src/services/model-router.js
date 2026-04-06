@@ -1,7 +1,7 @@
 /**
  * 按意图/复杂度/模式选择 LLM（与 master-planner / message-pipeline 对齐）
  * - workflow / analysis / action：一律 DeepSeek API
- * - 仅「简单问答」intent=query 且 complexity=low：本地 Ollama（qwen2:7b）
+ * - 仅「简单问答」intent=query 且 complexity=low：本地 Ollama（gemma4:26b）
  * - query 但 medium/high（如培训顾问、隐含多步）：仍走 DeepSeek，避免本地模型能力不足
  */
 export function selectModel({ intent, complexity, mode }) {
@@ -11,7 +11,7 @@ export function selectModel({ intent, complexity, mode }) {
   }
   const c = String(complexity || 'low').toLowerCase();
   if (intent === 'query') {
-    if (c === 'low') return 'qwen2:7b';
+    if (c === 'low') return 'gemma4:26b';
     return 'deepseek-chat';
   }
   if (intent === 'analysis') {
