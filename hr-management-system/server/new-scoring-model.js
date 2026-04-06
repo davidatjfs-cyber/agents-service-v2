@@ -686,7 +686,7 @@ async function calculateExceptionBonus(username, period) {
 // 异常扣分规则：按类别+严重度+频率计算
 // frequency: daily=每天最多扣1次, weekly=每周最多扣1次, monthly=每月最多扣1次
 const DEDUCTION_RULES = {
-  '实收营收异常':     { high: 40, medium: 20, low: 0, frequency: 'monthly' },
+  '实收营收异常':     { high: 10, medium: 5,  low: 0, frequency: 'monthly' },
   '人效值异常':       { high: 20, medium: 10, low: 0, frequency: 'monthly' },
   '充值异常':         { high: 2,  medium: 1,  low: 0, frequency: 'daily' },
   '桌访异常':         { high: 10, medium: 5,  low: 0, frequency: 'weekly' },

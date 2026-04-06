@@ -1,5 +1,5 @@
 const RULES = {
-  revenue_anomaly: { medium: 20, high: 40, role: 'store_manager' },
+  revenue_anomaly: { medium: 5, high: 10, role: 'store_manager' },
   efficiency_anomaly: { medium: 10, high: 20, roles: ['store_manager', 'store_production_manager'] },
   recharge_anomaly: { medium: 2, high: 4, role: 'store_manager' },
   // 桌访产品异常：偏厨房端（出品经理）

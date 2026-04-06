@@ -503,8 +503,8 @@ function shanghaiLastDayOfMonth() {
 }
 
 export function startRhythmScheduler() {
-  // 周日 22:00 — 周度 BI 异常检测（revenue_achievement/labor_efficiency/table_visit/bad_review 等）
-  cron.schedule('0 22 * * 0', async () => {
+  // 周一 08:00 — 周度 BI 异常检测（revenue_achievement/labor_efficiency/table_visit/bad_review 等）
+  cron.schedule('0 8 * * 1', async () => {
     try { await runAnomalyChecksForStores('weekly'); } catch (e) { logger.error({ err: e?.message }, 'weekly anomaly check cron failed'); }
   }, { timezone: 'Asia/Shanghai' });
 
@@ -520,20 +520,17 @@ export function startRhythmScheduler() {
     try { await monthlyEvaluation(); } catch (e) { logger.error({ err: e }, 'Cron: monthly evaluation failed'); }
   }, { timezone: 'Asia/Shanghai' });
 
-  // 每日 22:00 充值异常检测（daily 频率，仅 recharge_zero）
-  cron.schedule('0 22 * * *', async () => {
-    try { await runAnomalyChecksForStores('daily'); } catch (e) { logger.error({ err: e?.message }, '充值异常日检 22:00 failed'); }
+  // 每日 08:00 充值异常检测（daily 频率，仅 recharge_zero）
+  cron.schedule('0 8 * * *', async () => {
+    try { await runAnomalyChecksForStores('daily'); } catch (e) { logger.error({ err: e?.message }, '充值异常日检 08:00 failed'); }
   }, { timezone: 'Asia/Shanghai' });
 
-  // 每月最后一天 22:00 — 月度实收营收达成检测（revenue_achievement_monthly）
-  cron.schedule('0 22 28-31 * *', async () => {
+  // 每月1日 08:00 — 月度实收营收达成检测（revenue_achievement_monthly）
+  cron.schedule('0 8 1 * *', async () => {
     try {
-      const todaySh = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
-      const lastDay = shanghaiLastDayOfMonth();
-      if (todaySh !== lastDay) return;
       await runAnomalyChecksForStores('monthly');
-    } catch (e) { logger.error({ err: e?.message }, '月末月度实收营收检测 22:00 failed'); }
+    } catch (e) { logger.error({ err: e?.message }, '月度实收营收检测 08:00 failed'); }
   }, { timezone: 'Asia/Shanghai' });
 
-  logger.info('✅ HQ Rhythm Scheduler started — 周度BI(周日22:00)+周报(周一10:00)+月评(每月1日10:00)+充值日检(22:00)+月末月收(最后一天22:00)');
+  logger.info('✅ HQ Rhythm Scheduler started — 周度BI(周一08:00)+周报(周一10:00)+月评(每月1日10:00)+充值日检(08:00)+月末月收(每月1日08:00)');
 }
