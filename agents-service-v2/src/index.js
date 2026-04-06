@@ -897,8 +897,8 @@ async function start() {
       }
     }, { timezone: 'Asia/Shanghai' });
     logger.info('Monthly anomaly item bonus scheduled at 06:15 on 1st (Asia/Shanghai)');
-    // 总实收毛利率：每月10号 08:00 单独检测（与业务「每月10号前同步」对齐；月末跑的是月度实收营收，毛利率固定10号）
-    cron.schedule('0 8 10 * *', async () => {
+    // 总实收毛利率：每月9号 24:00（即10号00:00）检测上月数据，确保10号01:00月度绩效计算时已有毛利率异常数据
+    cron.schedule('0 0 10 * *', async () => {
       try {
         const stores = await getActiveStores();
         logger.info({ n: stores.length }, 'gross_margin monthly check on 10th (Asia/Shanghai)');
@@ -934,7 +934,7 @@ async function start() {
         logger.error({ err: e?.message }, 'gross_margin 10th check failed');
       }
     }, { timezone: 'Asia/Shanghai' });
-    logger.info('Gross margin monthly check scheduled at 08:00 on 10th (Asia/Shanghai)');
+    logger.info('Gross margin monthly check scheduled at 00:00 on 10th (Asia/Shanghai)');
     // 随机抽检存在启动时序问题（DB 配置缓存可能尚未就绪），这里做一次“空定时器重试”，保证生产常驻运行
     startRandomInspections()
       .catch(e => logger.warn({ err: e?.message }, 'random-inspection start failed'))
