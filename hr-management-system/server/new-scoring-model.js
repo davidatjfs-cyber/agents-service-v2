@@ -729,12 +729,6 @@ async function calculateExceptionDeduction(username, period) {
 
   return totalDeduction;
 }
-    }
-    totalDeduction = fallbackDeduction;
-  }
-
-  return totalDeduction;
-}
 
 // 获取企微会员每月新增数量（洪潮店长执行力评级用）
 async function getMonthlyNewWechatMembers(store, period) {
