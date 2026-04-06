@@ -5125,10 +5125,11 @@ async function dualWriteStateToDB(state) {
       );
     }
 
-    // 4. notifications → hrms_user_notifications 表（绩效扣分、工作态度等全部通知）
+    // 4. notifications → hrms_user_notifications 表（绩效扣分、工作态度、排班通知等全部通知）
     const notifArr = Array.isArray(state.notifications) ? state.notifications : [];
     for (const n of notifArr) {
-      const target = String(n?.targetUsername || n?.to || '').trim();
+      // makeNotif 使用 targetUser 字段，兼容旧的 targetUsername/to
+      const target = String(n?.targetUser || n?.targetUsername || n?.to || '').trim();
       if (!target) continue;
       const nType = String(n?.type || 'system_notice').trim();
       await pool.query(
