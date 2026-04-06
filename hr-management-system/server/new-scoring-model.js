@@ -729,27 +729,6 @@ async function calculateExceptionDeduction(username, period) {
 
   return totalDeduction;
 }
-
-  // 兜底：agent_issues 没有数据时，从周度 anomaly_rollups_v2 汇总扣分，避免“整月无扣分”失真
-  if (totalDeduction <= 0) {
-    const { startDate, endDate } = periodDateRange(period);
-    const weekly = await pool().query(
-      `SELECT deductions
-       FROM agent_scores
-       WHERE lower(username) = lower($1)
-         AND score_model = 'anomaly_rollups_v2'
-         AND period LIKE 'week_%'
-         AND substring(period from 6 for 10)::date >= $2::date
-         AND substring(period from 6 for 10)::date <= $3::date`,
-      [username, startDate, endDate]
-    );
-    let fallbackDeduction = 0;
-    for (const row of weekly.rows || []) {
-      const arr = parseJsonArrayMaybe(row.deductions);
-      for (const d of arr) {
-        const pts = Number(d?.points || 0);
-        if (Number.isFinite(pts) && pts > 0) fallbackDeduction += pts;
-      }
     }
     totalDeduction = fallbackDeduction;
   }
