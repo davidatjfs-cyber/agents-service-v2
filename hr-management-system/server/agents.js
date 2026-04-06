@@ -10775,7 +10775,7 @@ export function startAgentScheduler() {
     } catch(e){ console.error('[scheduler] weekly audit err:', e?.message); }
   };
 
-  // Weekly evaluation (Monday 9am) + push scores
+  // Weekly evaluation (Monday 9am) — 仅计算评分，不再推送飞书（由 V2 Agent 统一推送）
   const evalTick = async () => {
     try {
       const now = new Date();
@@ -10784,10 +10784,7 @@ export function startAgentScheduler() {
         const period = `${now.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
         const result = await runChiefEvaluator(period);
         console.log(`[scheduler] Chief Evaluator: ${result.evaluated} staff for ${period}`);
-
-        // Push scores to Feishu
-        const pushed = await pushScoresToFeishu();
-        if (pushed > 0) console.log(`[scheduler] Pushed ${pushed} scores to Feishu`);
+        // 不再推送飞书，由 V2 Agent 的 periodic-scoring.js 统一推送
       }
     } catch (e) {
       console.error('[scheduler] eval tick error:', e?.message);

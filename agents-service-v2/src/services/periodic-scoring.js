@@ -477,13 +477,35 @@ export async function sendWeeklyPerformanceFeishu(periodMonday, options = {}) {
               })
               .join('\n')
           : '本周无异常扣分项。';
+
+      // 从 HRMS new_model 获取维度评级（门店级别/工作能力/工作态度/执行力）
+      let dimensionRatings = null;
+      try {
+        const ratingR = await query(
+          `SELECT breakdown FROM agent_scores
+           WHERE username = $1 AND store = $2 AND score_model = 'new_model'
+           ORDER BY updated_at DESC LIMIT 1`,
+          [row.username, row.store]
+        );
+        if (ratingR.rows?.[0]?.breakdown) {
+          const bd = ratingR.rows[0].breakdown;
+          dimensionRatings = {
+            store_rating: bd.store_rating,
+            ability_rating: bd.ability_rating,
+            attitude_rating: bd.attitude_rating,
+            execution_rating: bd.execution_rating
+          };
+        }
+      } catch (e) { /* ignore */ }
+
       const card = buildPerformanceSummaryCard({
-        title: '📊 上周绩效（异常汇总）',
+        title: '📊 绩效考核周报',
         store: row.store,
         periodLabel,
         totalScore: row.total_score,
         role: roleLabelZh(row.role),
-        detailMd
+        detailMd,
+        dimensionRatings
       });
       if (oid) {
         let r = await sendCard(oid, card);

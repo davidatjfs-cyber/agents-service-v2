@@ -511,23 +511,36 @@ export function buildPerformanceSummaryCard({
   totalScore,
   role,
   detailMd,
-  managementDigest = false
+  managementDigest = false,
+  dimensionRatings = null
 }) {
   const scoreBlock = managementDigest
     ? `**口径说明**：下列为各岗位 **上周异常触发汇总后的周度扣分得分**（与人力资源「执行力/态度/能力」月度模型分无关，避免混看）。`
     : `**周度异常汇总得分**：**${totalScore}** 分（满分 100，按异常规则扣减后）`;
+  
+  let ratingBlock = '';
+  if (dimensionRatings && typeof dimensionRatings === 'object') {
+    const lines = [];
+    if (dimensionRatings.store_rating) lines.push(`• 门店级别：${dimensionRatings.store_rating}级`);
+    if (dimensionRatings.ability_rating) lines.push(`• 工作能力：${dimensionRatings.ability_rating}级`);
+    if (dimensionRatings.attitude_rating) lines.push(`• 工作态度：${dimensionRatings.attitude_rating}级`);
+    if (dimensionRatings.execution_rating) lines.push(`• 执行力：${dimensionRatings.execution_rating}级`);
+    if (lines.length) ratingBlock = `\n**核心评级（A-D）**\n${lines.join('\n')}`;
+  }
+  
   return {
     header: { title: { tag: 'plain_text', content: title || '📊 绩效周度汇总' }, template: 'blue' },
     elements: [
       { tag: 'div', text: { tag: 'lark_md', content: `**门店**：${store || '-'}\n**周期**：${periodLabel}\n**岗位**：${role || '-'}\n${scoreBlock}` } },
       { tag: 'hr' },
-      { tag: 'div', text: { tag: 'lark_md', content: detailMd || '（无扣分项）' } },
+      ...(ratingBlock ? [{ tag: 'div', text: { tag: 'lark_md', content: ratingBlock } }] : []),
+      { tag: 'div', text: { tag: 'lark_md', content: `**扣分明细**\n${detailMd || '本周无异常扣分项。'}` } },
       {
         tag: 'note',
         elements: [
           {
             tag: 'plain_text',
-            content: '数据来自上周各门店异常触发记录汇总；月度执行力/态度/能力请在人力资源档案中查看（每月 1 日更新）。'
+            content: '数据来自上周各门店异常触发记录汇总；核心评级来自人力资源综合模型。'
           }
         ]
       }
