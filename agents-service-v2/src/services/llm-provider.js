@@ -227,21 +227,128 @@ export async function callLLM(messages, options = {}) {
   return callOpenAICompatibleChain(messages, options, primaryModel);
 }
 
+/** 本地 Ollama 图片识别（gemma4:26b 支持 vision），失败时回退到外部 API */
+async function callOllamaVision(messages, options = {}) {
+  const base = String(process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
+  const model = String(process.env.OLLAMA_OPERATIONS_MODEL || process.env.OLLAMA_CHAT_MODEL || 'qwen2:7b').trim();
+  const temp = Number(options.temperature ?? 0.2);
+  const maxTok = Number(options.max_tokens ?? 1500);
+  const start = Date.now();
+  try {
+    const res = await fetch(`${base}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        stream: false,
+        messages,
+        options: { temperature: temp, num_predict: maxTok }
+      })
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`Ollama HTTP ${res.status}: ${t.slice(0, 200)}`);
+    }
+    const data = await res.json();
+    const content = String(data?.message?.content || '').trim();
+    const rt = Date.now() - start;
+    _metrics.totalCalls++;
+    _metrics.avgResponseTime = (_metrics.avgResponseTime * (_metrics.totalCalls - 1) + rt) / _metrics.totalCalls;
+    return {
+      ok: true,
+      content,
+      message: { role: 'assistant', content },
+      raw: data,
+      responseTime: rt,
+      actualModel: model,
+      provider: 'ollama'
+    };
+  } catch (e) {
+    logger.warn({ err: e?.message, base, model }, 'callOllamaVision failed');
+    return { ok: false, error: e?.message || 'ollama_vision_failed', content: '' };
+  }
+}
+
+/**
+ * 图片识别 — 优先使用本地 Ollama（gemma4:26b 支持 vision），失败时回退到外部 API
+ * @param {string|Array} imageUrl — 支持 base64 data URL、URL、或 {type, image_url} 数组
+ * @param {string} prompt — 图片分析提示词
+ */
 export async function callVisionLLM(imageUrl, prompt) {
+  const content = [];
+  if (Array.isArray(imageUrl)) {
+    for (const i of imageUrl) {
+      if (i?.type === 'text') content.push({ type: 'text', text: String(i.text) });
+      else if (i?.type === 'image' && i.image_url) content.push({ type: 'image_url', image_url: { url: String(i.image_url) } });
+      else if (i?.type === 'image_url') {
+        const u = typeof i.image_url === 'string' ? i.image_url : i.image_url?.url;
+        if (u) content.push({ type: 'image_url', image_url: { url: u } });
+      }
+    }
+  } else {
+    const p = String(imageUrl || '').trim();
+    if (p) content.push({ type: 'image_url', image_url: { url: p } });
+    if (prompt) content.push({ type: 'text', text: String(prompt) });
+  }
+  if (!content.length) return { ok: false, error: 'invalid_input', content: '' };
+
+  // 优先尝试本地 Ollama vision
+  const ollamaMessages = content.map(c => {
+    if (c.type === 'image_url') {
+      const url = c.image_url.url;
+      if (url.startsWith('data:')) {
+        const base64 = url.split(',')[1];
+        return { role: 'user', content: prompt || '', images: [base64] };
+      }
+      // URL 类型需要下载转为 base64
+      return { role: 'user', content: prompt || '', images: [url] };
+    }
+    return { role: 'user', content: c.text || '' };
+  });
+
+  const ollamaResult = await callOllamaVision(ollamaMessages, { temperature: 0.2, max_tokens: 1500 });
+  if (ollamaResult.ok && ollamaResult.content) return ollamaResult;
+
+  // 回退到外部 API
   if (!isExternalEnabled()) {
     return { ok: false, error: 'external_disabled', content: '' };
   }
-  const model=PROVIDERS.doubao.defaultModel;
-  const cfg=getClientConfig(model); if(!cfg.apiKey)return{ok:false,error:'no_api_key',content:''};
-  const content=[];
-  if(Array.isArray(imageUrl)){for(const i of imageUrl){if(i?.type==='text')content.push({type:'text',text:String(i.text)});else if(i?.type==='image'&&i.image_url)content.push({type:'image_url',image_url:{url:String(i.image_url)}});else if(i?.type==='image_url'){const u=typeof i.image_url==='string'?i.image_url:i.image_url?.url;if(u)content.push({type:'image_url',image_url:{url:u}});}}}
-  else{const p=String(imageUrl||'').trim();if(p)content.push({type:'image_url',image_url:{url:p}});if(prompt)content.push({type:'text',text:String(prompt)});}
-  if(!content.length)return{ok:false,error:'invalid_input',content:''};
-  try{
-    const resp=await axios.post(`${cfg.baseUrl}/chat/completions`,{model:cfg.model,messages:[{role:'user',content}],temperature:0.2,max_tokens:1500},{headers:{'Authorization':`Bearer ${cfg.apiKey}`,'Content-Type':'application/json'},timeout:90000});
-    trackCost(cfg.provider,cfg.model,Number(resp.data?.usage?.total_tokens||0));
-    return{ok:true,content:resp.data?.choices?.[0]?.message?.content||'',raw:resp.data};
-  }catch(e){logger.error({err:e?.message},'Vision LLM error');return{ok:false,error:e?.message||'vision_failed',content:''};}
+  const model = PROVIDERS.doubao.defaultModel;
+  const cfg = getClientConfig(model);
+  if (!cfg.apiKey) return { ok: false, error: 'no_api_key', content: '' };
+
+  const openaiContent = [];
+  if (Array.isArray(imageUrl)) {
+    for (const i of imageUrl) {
+      if (i?.type === 'text') openaiContent.push({ type: 'text', text: String(i.text) });
+      else if (i?.type === 'image' && i.image_url) openaiContent.push({ type: 'image_url', image_url: { url: String(i.image_url) } });
+      else if (i?.type === 'image_url') {
+        const u = typeof i.image_url === 'string' ? i.image_url : i.image_url?.url;
+        if (u) openaiContent.push({ type: 'image_url', image_url: { url: u } });
+      }
+    }
+  } else {
+    const p = String(imageUrl || '').trim();
+    if (p) openaiContent.push({ type: 'image_url', image_url: { url: p } });
+    if (prompt) openaiContent.push({ type: 'text', text: String(prompt) });
+  }
+
+  try {
+    const resp = await axios.post(`${cfg.baseUrl}/chat/completions`, {
+      model: cfg.model,
+      messages: [{ role: 'user', content: openaiContent }],
+      temperature: 0.2,
+      max_tokens: 1500
+    }, {
+      headers: { 'Authorization': `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' },
+      timeout: 90000
+    });
+    trackCost(cfg.provider, cfg.model, Number(resp.data?.usage?.total_tokens || 0));
+    return { ok: true, content: resp.data?.choices?.[0]?.message?.content || '', raw: resp.data };
+  } catch (e) {
+    logger.error({ err: e?.message }, 'Vision LLM error');
+    return { ok: false, error: e?.message || 'vision_failed', content: '' };
+  }
 }
 
 export async function verifyLLMHealth() {
