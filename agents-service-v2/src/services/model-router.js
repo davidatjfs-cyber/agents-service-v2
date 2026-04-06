@@ -4,6 +4,8 @@
  * - 仅「简单问答」intent=query 且 complexity=low：本地 Ollama（qwen2:7b）
  * - query 但 medium/high（如培训顾问、隐含多步）：仍走 DeepSeek，避免本地模型能力不足
  */
+const LOCAL_MODEL = process.env.OLLAMA_OPERATIONS_MODEL || 'qwen2:7b';
+
 export function selectModel({ intent, complexity, mode }) {
   const m = String(mode || 'single');
   if (m === 'workflow') {
@@ -11,7 +13,7 @@ export function selectModel({ intent, complexity, mode }) {
   }
   const c = String(complexity || 'low').toLowerCase();
   if (intent === 'query') {
-    if (c === 'low') return 'qwen2:7b';
+    if (c === 'low') return LOCAL_MODEL;
     return 'deepseek-chat';
   }
   if (intent === 'analysis') {

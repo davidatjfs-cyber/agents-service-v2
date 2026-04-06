@@ -1,7 +1,7 @@
 /**
  * AI 营运诊断（第一阶段）
  * 只做分析+建议，不修改业务、不执行操作。
- * 数据来源：HRMS 营业日报(daily_reports) + 飞书(桌访/差评)，本地 Ollama qwen2:7b。
+ * 数据来源：HRMS 营业日报(daily_reports) + 飞书(桌访/差评)，本地 Ollama gemma4:26b。
  */
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
