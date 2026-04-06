@@ -78,10 +78,10 @@ function normalizeRouterContext(ctx) {
   };
 }
 
-/** 本地 Ollama（如 gemma4:26b），不依赖 DashScope；失败时由上层回退到 API */
+/** 本地 Ollama（如 qwen2:7b），不依赖 DashScope；失败时由上层回退到 API */
 async function callOllamaLLM(messages, options = {}) {
   const base = String(process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
-  const model = String(process.env.OLLAMA_CHAT_MODEL || process.env.OLLAMA_OPERATIONS_MODEL || 'gemma4:26b').trim();
+  const model = String(process.env.OLLAMA_CHAT_MODEL || process.env.OLLAMA_OPERATIONS_MODEL || 'qwen2:7b').trim();
   const temp = Number(options.temperature ?? 0.2);
   const maxTok = Number(options.max_tokens ?? 1500);
   const start = Date.now();
@@ -208,15 +208,15 @@ export async function callLLM(messages, options = {}) {
   const routerCtx = normalizeRouterContext(options.context);
   const routedModel = routerCtx ? selectModel(routerCtx) : null;
 
-  if (!hasTools && routedModel === 'gemma4:26b') {
+  if (!hasTools && routedModel === 'qwen2:7b') {
     const o = await callOllamaLLM(messages, options);
     if (o.ok && o.content) return o;
-    logger.warn({ err: o.error }, 'Ollama (gemma4:26b) failed, falling back to API LLM');
+    logger.warn({ err: o.error }, 'Ollama (qwen2:7b) failed, falling back to API LLM');
   }
 
   let primaryModel = options.model;
   if (!primaryModel) {
-    if (!routerCtx || routedModel === 'gemma4:26b') {
+    if (!routerCtx || routedModel === 'qwen2:7b') {
       primaryModel = PROVIDERS.deepseek.defaultModel;
     } else {
       primaryModel = routedModel || PROVIDERS.deepseek.defaultModel;
