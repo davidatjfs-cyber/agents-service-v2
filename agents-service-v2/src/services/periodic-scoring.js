@@ -132,22 +132,36 @@ async function recordDeductionNotifications({ username, store, role, periodMonda
 
 /**
  * anomaly_key → scoring-model 的 category（周度汇总专用）
- * ⚠️ 注意：gross_margin 和 revenue_achievement_monthly 是月度规则，
- *    仅在每月10号由 checkGrossMargin 落库一次，周度查询已在 SQL 层排除，
- *    此 Map 也不含这两个 key，防止未来被误加进来导致每周重复扣分。
+ *
+ * 扣分频率规则：
+ * - 周度扣分（weekly/daily）：充值异常、桌访异常、产品差评、服务差评、包房异常、成本异常
+ * - 月度扣分（monthly）：实收营收异常、人效值异常、桌访占比异常、毛利率异常
+ *   月度规则在周度仅记录提醒跟踪，不扣分。扣分由 HRMS 月评分系统每月执行1次。
  */
 const ANOMALY_TO_CATEGORY = {
+  // 周度扣分规则（weekly/daily frequency）
+  recharge_zero: 'recharge_anomaly',
+  table_visit_product: 'table_visit_anomaly',
+  bad_review_product: 'product_review',
+  bad_review_service: 'service_review',
+  hongchao_jiuguang_private_room: 'private_room_anomaly',
+  dish_unit_product: 'margin_anomaly',
+  cost_spike: 'margin_anomaly',
+  // 月度扣分规则（monthly frequency）— 周度仅提醒，不扣分
   revenue_achievement: 'revenue_anomaly',
   labor_efficiency: 'efficiency_anomaly',
-  table_visit_product: 'table_visit_anomaly',
-  // table_visit_ratio 的 BI notifyTarget=店长，因此扣分也应落到 store_manager
   table_visit_ratio: 'table_visit_ratio_anomaly',
-  hongchao_jiuguang_private_room: 'private_room_anomaly',
-  // gross_margin / revenue_achievement_monthly 为月度规则，不参与自然周汇总
-  /** 菜品优化/单位产品类触发 → 按毛利线由出品经理担责 */
-  dish_unit_product: 'margin_anomaly',
-  cost_spike: 'margin_anomaly'
+  gross_margin: 'margin_anomaly'
 };
+
+/** 月度扣分规则 — 周度汇总时跳过扣分，仅记录提醒 */
+const MONTHLY_DEDUCTION_KEYS = new Set([
+  'revenue_achievement',
+  'labor_efficiency',
+  'table_visit_ratio',
+  'gross_margin',
+  'revenue_achievement_monthly'
+]);
 
 const SKIP_WORST_FOR_KEYS = new Set([
   'recharge_zero',
@@ -253,8 +267,7 @@ export async function scoreStoreForPeriod(store, periodMonday) {
      WHERE store = $1
        AND trigger_date >= $2::date
        AND trigger_date <= $3::date
-       AND COALESCE(status, 'open') = 'open'
-       AND anomaly_key NOT IN ('gross_margin', 'revenue_achievement_monthly')`,
+       AND COALESCE(status, 'open') = 'open'`,
     [store, effectiveStart, endStr]
   );
 
@@ -262,9 +275,15 @@ export async function scoreStoreForPeriod(store, periodMonday) {
   let badProductPts = 0;
   let badServicePts = 0;
   const worst = new Map();
+  const monthlyReminders = []; // 月度扣分规则：周度仅记录提醒，不扣分
 
   for (const row of r.rows || []) {
     const key = row.anomaly_key;
+    // 月度扣分规则：跳过扣分，仅记录提醒（由 HRMS 月评分系统每月扣1次）
+    if (MONTHLY_DEDUCTION_KEYS.has(key)) {
+      monthlyReminders.push({ anomaly_key: key, severity: row.severity, trigger_date: row.trigger_date });
+      continue;
+    }
     if (key === 'recharge_zero') {
       const tv = parseTriggerValue(row);
       const pts = Number(tv.penalty_points != null ? tv.penalty_points : row.severity === 'high' ? 4 : 2);
@@ -296,9 +315,6 @@ export async function scoreStoreForPeriod(store, periodMonday) {
 
   for (const role of ['store_manager', 'store_production_manager']) {
     let { total: baseTotal, details: baseDetails } = calcDeductions(anomalies, role);
-    const laborFix = mergeLaborEfficiencyIfMissing(baseTotal, baseDetails, role, r.rows || []);
-    baseTotal = laborFix.baseTotal;
-    baseDetails = laborFix.baseDetails;
     let extra = 0;
     const extraDetails = [];
     if (role === 'store_manager') {

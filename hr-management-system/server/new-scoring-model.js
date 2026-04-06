@@ -727,6 +727,9 @@ async function calculateExceptionDeduction(username, period) {
     totalDeduction += actualTriggers * pointsPerTrigger;
   }
 
+  return totalDeduction;
+}
+
   // 兜底：agent_issues 没有数据时，从周度 anomaly_rollups_v2 汇总扣分，避免“整月无扣分”失真
   if (totalDeduction <= 0) {
     const { startDate, endDate } = periodDateRange(period);
