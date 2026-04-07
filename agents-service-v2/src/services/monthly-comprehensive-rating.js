@@ -250,24 +250,35 @@ async function getMajixianManagerExecutionRating(store, period) {
 
 /**
  * 出品经理工作能力（月度）
- * 数据源：monthly_margins 表
+ * 数据源：monthly_margins (实际) + anomaly-rules.js (目标)
+ * 毛利率目标从BI异常触发条件中获取：洪潮69%，马己仙64%
  */
 async function getPMAbilityRating(store, period) {
-  const result = await query(
-    `SELECT actual_margin, target_margin 
-     FROM monthly_margins 
-     WHERE store ILIKE $1 AND period = $2
+  const storeMapping = {
+    '洪潮大宁久光店': '洪潮久光店',
+    '马己仙上海音乐广场店': '马己仙大宁店'
+  };
+  const storeInData = storeMapping[store] || store;
+
+  // 实际毛利率（从 monthly_margins）
+  const actualResult = await query(
+    `SELECT actual_margin FROM monthly_margins 
+     WHERE store = $1 AND period = $2
      LIMIT 1`,
-    [`%${store}%`, period]
+    [storeInData, period]
   );
 
-  if (!result.rows.length || !result.rows[0].actual_margin || !result.rows[0].target_margin) {
-    return { rating: 'C', value: null, detail: { reason: '无毛利率数据' } };
+  const actual = Number(actualResult.rows[0]?.actual_margin || null);
+
+  // 目标毛利率（从BI异常触发条件：洪潮69%，马己仙64%）
+  const brandLower = store.includes('洪潮') ? '洪潮' : store.includes('马己仙') ? '马己仙' : null;
+  const targetMargin = brandLower === '洪潮' ? 69 : brandLower === '马己仙' ? 64 : null;
+
+  if (!actual || !targetMargin) {
+    return { rating: 'C', value: null, detail: { reason: '无毛利率数据', actual, target: targetMargin, store: storeInData, period, brand: brandLower } };
   }
 
-  const actual = Number(result.rows[0].actual_margin);
-  const target = Number(result.rows[0].target_margin);
-  const diff = actual - target;
+  const diff = actual - targetMargin;
 
   let rating;
   if (diff >= 1.01) rating = 'A';
@@ -275,7 +286,7 @@ async function getPMAbilityRating(store, period) {
   else if (diff >= -2.0 && diff <= -1.01) rating = 'C';
   else rating = 'D';
 
-  return { rating, value: diff, detail: { actual_margin: actual, target_margin: target, diff } };
+  return { rating, value: diff, detail: { actual_margin: actual, target_margin: targetMargin, diff } };
 }
 
 /**
