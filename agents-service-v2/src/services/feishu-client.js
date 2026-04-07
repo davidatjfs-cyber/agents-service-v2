@@ -1311,13 +1311,15 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
                updated_at = NOW()
              WHERE task_id = $1`,
             [taskId]
-          ).catch(() => {});
+          );
           logger.info({ taskId, store: task.store }, 'Task reply review: 3x fail → attitude record (no score deduction)');
           await sendCompanyNoticeToAssignees(
             task,
             `因任务回复连续三次审核不合格，已记入工作态度备案（影响月度工作态度评级；不计周度绩效分/agent_scores）。\n门店：${task.store}\n任务ID：${taskId}\n标题：${String(task.title || '').slice(0, 280)}`
           ).catch((e) => logger.warn({ err: e?.message, taskId }, 'review penalty: company notice failed'));
-        } catch (_) {}
+        } catch (e) {
+          logger.error({ taskId, store: task.store, err: e?.message }, 'Task reply review: 3x fail → DB update FAILED');
+        }
       }
     }
 

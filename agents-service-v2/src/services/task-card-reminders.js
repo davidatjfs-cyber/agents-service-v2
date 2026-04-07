@@ -60,7 +60,6 @@ function resolutionCodeForChaseAttitude(source) {
  * 非 BI 任务卡：催办未闭环 → 仅工作态度备案
  */
 async function recordStandardChaseAttitudeOnly(task) {
-  // 防御性校验：必须催办满3次才备案
   const rc = parseInt(task.remind_count || 0, 10);
   if (rc < 3) {
     logger.warn({ taskId: task.task_id, remind_count: rc }, 'task-reminder: remind_count < 3, skip filing');
@@ -78,8 +77,10 @@ async function recordStandardChaseAttitudeOnly(task) {
        WHERE task_id = $1`,
       [task.task_id, code]
     );
-  } catch (_e) {
-    /* ignore */
+    logger.info({ taskId: task.task_id, source: task.source, code }, 'task-reminder: chase → attitude filed (DB updated)');
+  } catch (e) {
+    logger.error({ taskId: task.task_id, source: task.source, code, err: e?.message }, 'task-reminder: DB update FAILED, status not set to hr_filed');
+    return false;
   }
 
   const hq = await query(`SELECT config_value FROM agent_v2_configs WHERE config_key = 'push_config' LIMIT 1`).catch(() => ({
@@ -107,7 +108,6 @@ async function recordStandardChaseAttitudeOnly(task) {
  * BI 异常任务卡：催办未闭环 → 仅工作态度备案；绩效扣分仅来自 BI 异常触发链路（anomaly_rollups_v2）
  */
 async function recordBiChaseAttitudeOnly(task) {
-  // 防御性校验：必须催办满3次才备案
   const rc = parseInt(task.remind_count || 0, 10);
   if (rc < 3) {
     logger.warn({ taskId: task.task_id, remind_count: rc }, 'task-reminder: BI remind_count < 3, skip filing');
@@ -124,8 +124,10 @@ async function recordBiChaseAttitudeOnly(task) {
        WHERE task_id = $1`,
       [task.task_id, 'hr_attitude_bi_chase']
     );
-  } catch (_e) {
-    /* ignore */
+    logger.info({ taskId: task.task_id, source: task.source }, 'task-reminder: BI chase → attitude filed (DB updated)');
+  } catch (e) {
+    logger.error({ taskId: task.task_id, source: task.source, err: e?.message }, 'task-reminder: BI DB update FAILED, status not set to hr_filed');
+    return false;
   }
 
   const hq = await query(`SELECT config_value FROM agent_v2_configs WHERE config_key = 'push_config' LIMIT 1`).catch(() => ({
