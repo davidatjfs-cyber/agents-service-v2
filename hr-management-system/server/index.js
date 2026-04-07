@@ -10898,7 +10898,7 @@ app.put('/api/points/rules/:id', authRequired, async (req, res) => {
       updatedBy: username,
       updatedAt: hrmsNowISO()
     };
-    if (!String(merged?.store || '').trim()) return res.status(400).json({ error: 'missing_store' });
+    // store 可为空：与 GET /api/points/rules 一致，表示全部门店通用（如系统统一「抖音/小红书/大众点评」事项）
     if (!String(merged?.itemName || '').trim()) return res.status(400).json({ error: 'missing_item_name' });
     if (safeNumber(merged?.points) == null || safeNumber(merged?.points) <= 0) return res.status(400).json({ error: 'invalid_points' });
     if (isTripleSocialMediaPointRuleItem(merged)) {
