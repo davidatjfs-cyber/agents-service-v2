@@ -110,7 +110,14 @@ async function callOllamaLLM(messages, options = {}) {
       throw new Error(`Ollama HTTP ${res.status}: ${t.slice(0, 200)}`);
     }
     const data = await res.json();
-    const content = String(data?.message?.content || '').trim();
+    // gemma4:26b 可能将内容放在 thinking 字段而非 content 字段
+    let content = String(data?.message?.content || '').trim();
+    if (!content && data?.message?.thinking) {
+      content = String(data.message.thinking).trim();
+    }
+    if (!content && data?.response) {
+      content = String(data.response).trim();
+    }
     const rt = Date.now() - start;
     _metrics.totalCalls++;
     _metrics.avgResponseTime = (_metrics.avgResponseTime * (_metrics.totalCalls - 1) + rt) / _metrics.totalCalls;
@@ -271,7 +278,14 @@ async function callOllamaVision(messages, options = {}) {
       throw new Error(`Ollama HTTP ${res.status}: ${t.slice(0, 200)}`);
     }
     const data = await res.json();
-    const content = String(data?.message?.content || '').trim();
+    // gemma4:26b 可能将内容放在 thinking 字段而非 content 字段
+    let content = String(data?.message?.content || '').trim();
+    if (!content && data?.message?.thinking) {
+      content = String(data.message.thinking).trim();
+    }
+    if (!content && data?.response) {
+      content = String(data.response).trim();
+    }
     const rt = Date.now() - start;
     _metrics.totalCalls++;
     _metrics.avgResponseTime = (_metrics.avgResponseTime * (_metrics.totalCalls - 1) + rt) / _metrics.totalCalls;
