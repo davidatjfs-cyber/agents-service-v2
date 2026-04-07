@@ -3270,14 +3270,18 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
             }
           }
 
-          await saveSharedState(state);
+          // 原子合并，避免 saveSharedState 全量写回与并发请求互相覆盖
+          await mergeSharedStateFields(
+            { employees: state.employees, users: state.users },
+            { employees: 'username', users: 'username' }
+          );
         }
 
         // Intermediate step: notify next approver for offboarding
         if (String(updated.status || '') === 'pending' && nextAssignee && tp === 'offboarding') {
           const msg = `${applicantName} 提交了离职申请，需要您审批。`;
-          state = addStateNotification(state, makeNotif(nextAssignee, '离职申请待审批', msg, { type: 'offboarding_request', approvalId: updated.id }));
-          await saveSharedState(state);
+          const notif = makeNotif(nextAssignee, '离职申请待审批', msg, { type: 'offboarding_request', approvalId: updated.id });
+          await mergeSharedStateFields({ notifications: [notif] }, { notifications: 'id' });
         }
       }
     } catch (e) {}
@@ -3369,10 +3373,13 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
           // Notify applicant + direct supervisor (正式晋升通过)
           const msg = `${applicantName}，恭喜，你的晋升已经审批通过。`;
           const recipients = uniqUsernames([applicantUser, applicantManager].filter(Boolean));
-          for (const u of recipients) {
-            state = addStateNotification(state, makeNotif(u, '晋升申请已通过', msg, { type: 'promotion_result', approvalId: updated.id }));
-          }
-          await saveSharedState(state);
+          const notifs = recipients.map(u => makeNotif(u, '晋升申请已通过', msg, { type: 'promotion_result', approvalId: updated.id }));
+
+          // 原子合并，避免 saveSharedState 全量写回与并发请求互相覆盖
+          await mergeSharedStateFields(
+            { employees: state.employees, salaryChangeHistory: state.salaryChangeHistory, notifications: notifs },
+            { employees: 'username', notifications: 'id' }
+          );
         }
 
         if (finalApproved && stage === 'qualification') {
@@ -4989,7 +4996,7 @@ async function mergeSharedStateFields(patches, arrayIdFields = {}) {
 
   // Build postgres jsonb merge: do it in a single UPDATE that reads fresh state atomically
   // We use a loop with retries and optimistic-locking via updated_at to prevent lost-writes.
-  const MAX_RETRY = 5;
+  const MAX_RETRY = 10;
   for (let attempt = 0; attempt < MAX_RETRY; attempt++) {
     const r = await pool.query('SELECT data, updated_at FROM hrms_state WHERE key = $1 FOR UPDATE', ['default']);
     const row = r.rows?.[0];
@@ -5142,7 +5149,10 @@ async function dualWriteStateToDB(state) {
       );
     }
   } catch (e) {
-    console.error('[dualWriteStateToDB] error (non-fatal):', e?.message);
+    // 双写失败告警：虽然不影响 hrms_state 保存，但会导致 DB 表与 state 不一致
+    // 重启时会自动从 DB 表重建 state，所以双写失败可能导致数据丢失
+    console.error('[dualWriteStateToDB] ⚠️ 双写失败！DB 表与 hrms_state 可能不一致，重启后可能丢失数据:', e?.message);
+    console.error('[dualWriteStateToDB] 失败堆栈:', e?.stack || 'no stack');
   }
 }
 
@@ -6860,7 +6870,14 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
       notifyShift(schedule?.afternoonStaff, '午班', 'afternoon');
     }
 
-    await saveSharedState(nextState);
+    // 原子合并 dailyReports + notifications，避免 saveSharedState 全量写回与并发请求互相覆盖
+    // dailyReports 以 store+date 为去重 key
+    const drPatches = Array.isArray(nextState.dailyReports) ? nextState.dailyReports : [];
+    const notifPatches = Array.isArray(nextState.notifications) ? nextState.notifications : [];
+    await mergeSharedStateFields(
+      { dailyReports: drPatches, notifications: notifPatches },
+      { dailyReports: ['store', 'date'], notifications: 'id' }
+    );
     return res.json({ item });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
@@ -6882,7 +6899,11 @@ app.delete('/api/daily-reports', authRequired, async (req, res) => {
     const state0 = (await getSharedState()) || {};
     const list = Array.isArray(state0.dailyReports) ? state0.dailyReports.slice() : [];
     const next = list.filter(r => !(String(r?.store || '').trim() === store && String(r?.date || '').trim() === date));
-    await saveSharedState({ ...state0, dailyReports: next });
+    // 原子合并 dailyReports，避免 saveSharedState 全量写回与并发请求互相覆盖
+    await mergeSharedStateFields(
+      { dailyReports: next },
+      { dailyReports: ['store', 'date'] }
+    );
     return res.json({ ok: true });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
