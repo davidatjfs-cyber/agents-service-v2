@@ -18615,6 +18615,11 @@ ${knowledgeContent.slice(0, 30000)}`;
             }
         }
 
+        function isTripleSocialPointRuleName(name) {
+            const n = String(name || '');
+            return n.includes('抖音') && n.includes('小红书') && n.includes('大众点评');
+        }
+
         async function addPointRuleItem() {
             if (!isAdminUser()) return;
             const store = String(document.getElementById('points-rule-store')?.value || '').trim();
@@ -18623,15 +18628,59 @@ ${knowledgeContent.slice(0, 30000)}`;
             if (!store) return showNotification('请选择门店', 'warning');
             if (!itemName) return showNotification('请填写事项名称', 'warning');
             if (!Number.isFinite(points) || points <= 0) return showNotification('积分必须大于0', 'warning');
-            try {
-                await HRMS_API.createPointRule({ store, itemName, points, enabled: true });
+
+            const clearPointRuleForm = () => {
                 const itemEl = document.getElementById('points-rule-item');
                 const ptsEl = document.getElementById('points-rule-points');
                 if (itemEl) itemEl.value = '';
                 if (ptsEl) ptsEl.value = '';
+            };
+
+            const tryUpdateExistingTripleSocial = async () => {
+                const resp = await HRMS_API.getPointRules({ store });
+                const items = Array.isArray(resp?.items) ? resp.items : [];
+                const existing = items.find((r) => isTripleSocialPointRuleName(r?.itemName));
+                if (!existing?.id) return false;
+                const cur = Number(existing.points) || 0;
+                if (cur === points) {
+                    showNotification('该宣传类积分事项已存在且分值相同，无需重复新增', 'warning');
+                    return true;
+                }
+                const ok = window.confirm(
+                    `已存在「抖音 / 小红书 / 大众点评」类宣传积分事项（当前 ${cur} 分）。\n\n是否将分值改为 ${points} 分？\n（不会新增第二条规则）`
+                );
+                if (!ok) return true;
+                await HRMS_API.updatePointRule(String(existing.id), { points, enabled: true });
+                clearPointRuleForm();
+                showNotification('积分分值已更新', 'success');
+                await loadPointRulesSettings();
+                return true;
+            };
+
+            if (isTripleSocialPointRuleName(itemName)) {
+                try {
+                    if (await tryUpdateExistingTripleSocial()) return;
+                } catch (e) {
+                    showNotification('检查或更新已有规则失败：' + String(e?.message || e), 'error');
+                    return;
+                }
+            }
+
+            try {
+                await HRMS_API.createPointRule({ store, itemName, points, enabled: true });
+                clearPointRuleForm();
                 showNotification('积分事项已新增', 'success');
                 await loadPointRulesSettings();
             } catch (e) {
+                const code = String(e?.data?.error || '').trim();
+                if (code === 'duplicate_triple_social_rule') {
+                    try {
+                        if (await tryUpdateExistingTripleSocial()) return;
+                    } catch (e2) {
+                        showNotification('更新失败：' + String(e2?.message || e2), 'error');
+                        return;
+                    }
+                }
                 showNotification('新增失败：' + String(e?.message || e), 'error');
             }
         }
