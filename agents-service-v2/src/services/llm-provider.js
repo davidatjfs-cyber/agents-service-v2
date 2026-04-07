@@ -86,6 +86,7 @@ async function callOllamaLLM(messages, options = {}) {
   const maxTok = Number(options.max_tokens ?? 1500);
   const start = Date.now();
   try {
+    logger.info({ base, model, purpose: options.purpose || 'unknown' }, 'callOllamaLLM calling');
     const res = await fetch(`${base}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
