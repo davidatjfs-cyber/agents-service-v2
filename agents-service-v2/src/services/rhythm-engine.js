@@ -596,68 +596,80 @@ function buildAttendanceDataText(allStoresData, today) {
   for (const sd of allStoresData) {
     text += `【${sd.store}】\n`;
 
-    // 考勤
-    const totalStaff = sd.allStaff.length;
     const dr = sd.dailyReport;
-    const laborHours = dr ? parseFloat(dr.labor_total) || 0 : 0;
-    const attendanceRate = totalStaff > 0 && laborHours > 0 ? Math.round((laborHours / totalStaff) * 100) : 0;
+    if (!dr) {
+      text += `一、考勤：暂无数据\n`;
+      text += `二、人效：暂无数据\n`;
+      text += `三、明日排班：暂无数据\n\n`;
+      continue;
+    }
+
+    // 门店总人数 = daily_reports.staff 数组长度（员工管理里的实际人数）
+    const staffData = typeof dr.staff === 'string' ? JSON.parse(dr.staff) : (dr.staff || []);
+    const totalStaff = staffData.length;
+    const laborHours = parseFloat(dr.labor_total) || 0;
+    // 出勤人数 = labor_total（假设每人1天=1人，半天=0.5人）
+    const attendanceCount = Math.round(laborHours);
+    const attendanceRate = totalStaff > 0 ? Math.round((attendanceCount / totalStaff) * 100) : 0;
 
     text += `一、考勤\n`;
     text += `门店总人数：${totalStaff}人\n`;
-    text += `实际出勤：${laborHours}工时\n`;
+    text += `实际出勤：${attendanceCount}人（${laborHours}工时）\n`;
     text += `出勤率：${attendanceRate}%\n`;
 
-    // 今日休息
+    // 今日休息人员（从 staff 中找岗位信息）
     const restNames = [];
     if (sd.todayLeave.length) {
       for (const lv of sd.todayLeave) {
-        const emp = sd.allStaff.find(e => e.username === lv.username);
-        const roleName = emp ? roleZh(emp.role) : '—';
-        restNames.push(`${lv.name}（${roleName}，${leaveTypeZh(lv.type)}）`);
+        const emp = staffData.find(e => e.user === lv.username || e.name === lv.name);
+        const roleName = emp ? '员工' : '—';
+        const typeLabel = { annual: '年假', sick: '病假', personal: '事假' }[lv.type] || '休假';
+        restNames.push(`${lv.name}（${roleName}，${typeLabel}）`);
       }
     }
     text += `今日休息：${restNames.length ? restNames.join('、') : '无'}\n\n`;
 
     // 人效
-    if (dr) {
-      const preRev = parseFloat(dr.pre_discount_revenue) || 0;
-      const actualRev = parseFloat(dr.actual_revenue) || 0;
-      const eff = parseFloat(dr.efficiency) || 0;
-      const segments = typeof dr.segments === 'string' ? JSON.parse(dr.segments) : (dr.segments || {});
-      const noonRev = parseFloat(segments.noon) || 0;
-      const nightRev = parseFloat(segments.night) || 0;
+    const preRev = parseFloat(dr.pre_discount_revenue) || 0;
+    const actualRev = parseFloat(dr.actual_revenue) || 0;
+    const eff = parseFloat(dr.efficiency) || 0;
+    const segments = typeof dr.segments === 'string' ? JSON.parse(dr.segments) : (dr.segments || {});
+    const noonRev = parseFloat(segments.noon) || 0;
+    const nightRev = parseFloat(segments.night) || 0;
+    const afternoonRev = parseFloat(segments.afternoon) || 0;
 
-      // 午市工时 ≈ labor_total * (noonRev / preRev)，晚市同理
-      const noonRatio = preRev > 0 ? noonRev / preRev : 0.5;
-      const nightRatio = preRev > 0 ? nightRev / preRev : 0.5;
-      const noonHours = Math.round(laborHours * noonRatio * 10) / 10;
-      const nightHours = Math.round(laborHours * nightRatio * 10) / 10;
-      const noonEff = noonHours > 0 ? Math.round(noonRev / noonHours) : 0;
-      const nightEff = nightHours > 0 ? Math.round(nightRev / nightHours) : 0;
+    // 午市工时 ≈ labor_total * (noonRev / preRev)，晚市同理
+    const noonRatio = preRev > 0 ? noonRev / preRev : 0.5;
+    const nightRatio = preRev > 0 ? (nightRev + afternoonRev) / preRev : 0.5;
+    const noonHours = Math.round(laborHours * noonRatio * 10) / 10;
+    const nightHours = Math.round(laborHours * nightRatio * 10) / 10;
+    const noonEff = noonHours > 0 ? Math.round(noonRev / noonHours) : 0;
+    const nightEff = nightHours > 0 ? Math.round((nightRev + afternoonRev) / nightHours) : 0;
 
-      text += `二、人效\n`;
-      text += `全天人效：¥${Math.round(eff).toLocaleString()}/人（实收¥${Math.round(actualRev).toLocaleString()} / ${laborHours}工时）\n`;
-      text += `午市人效：¥${noonEff.toLocaleString()}/工时（午市折前¥${Math.round(noonRev).toLocaleString()} / ${noonHours}工时）\n`;
-      text += `晚市人效：¥${nightEff.toLocaleString()}/工时（晚市折前¥${Math.round(nightRev).toLocaleString()} / ${nightHours}工时）\n\n`;
+    text += `二、人效\n`;
+    text += `全天人效：¥${Math.round(eff).toLocaleString()}/人（实收¥${Math.round(actualRev).toLocaleString()} / ${laborHours}工时）\n`;
+    text += `午市人效：¥${noonEff.toLocaleString()}/工时（午市折前¥${Math.round(noonRev).toLocaleString()} / ${noonHours}工时）\n`;
+    text += `晚市人效：¥${nightEff.toLocaleString()}/工时（晚市折前¥${Math.round(nightRev + afternoonRev).toLocaleString()} / ${nightHours}工时）\n\n`;
 
-      // 明日排班
-      const sched = typeof dr.schedule_next_day === 'string' ? JSON.parse(dr.schedule_next_day) : (dr.schedule_next_day || {});
-      const tomorrowStaff = sched.staff || [];
-      const tomorrowHeadcount = tomorrowStaff.reduce((sum, s) => sum + (parseFloat(s.days) || 1), 0);
-      const tomorrowEst = parseFloat(sched.tomorrowGrossEstimate) || 0;
-      const tomorrowEff = tomorrowHeadcount > 0 && tomorrowEst > 0 ? Math.round(tomorrowEst / tomorrowHeadcount) : 0;
+    // 明日排班
+    const sched = typeof dr.schedule_next_day === 'string' ? JSON.parse(dr.schedule_next_day) : (dr.schedule_next_day || {});
+    const tomorrowStaff = sched.staff || [];
+    const tomorrowHeadcount = tomorrowStaff.reduce((sum, s) => sum + (parseFloat(s.days) || 1), 0);
+    const tomorrowEst = parseFloat(sched.tomorrowGrossEstimate) || 0;
+    const tomorrowEff = tomorrowHeadcount > 0 && tomorrowEst > 0 ? Math.round(tomorrowEst / tomorrowHeadcount) : 0;
 
-      text += `三、明日排班\n`;
-      text += `预计营业额：¥${tomorrowEst.toLocaleString()}\n`;
-      text += `排班人数：${tomorrowHeadcount}人（`;
-      const schedNames = tomorrowStaff.map(s => `${s.name}${s.days < 1 ? `(${s.days}天)` : ''}`);
-      text += schedNames.join('、');
-      text += `）\n`;
-      text += `预计人效：¥${tomorrowEff.toLocaleString()}/人\n`;
-    } else {
-      text += `二、人效：暂无数据\n\n`;
-      text += `三、明日排班：暂无数据\n`;
-    }
+    // 前后堂排班
+    const frontStaff = sched.frontStaff || [];
+    const kitchenStaff = sched.kitchenStaff || [];
+    const morningStaff = sched.morningStaff || [];
+    const afternoonStaff = sched.afternoonStaff || [];
+
+    text += `三、明日排班\n`;
+    text += `预计营业额：¥${tomorrowEst.toLocaleString()}\n`;
+    text += `排班人数：${tomorrowHeadcount}人（前厅${frontStaff.length}人，后厨${kitchenStaff.length}人）\n`;
+    text += `早班：${morningStaff.length}人（${morningStaff.map(s => s.name).join('、')}）\n`;
+    text += `晚班：${afternoonStaff.length}人（${afternoonStaff.map(s => s.name).join('、')}）\n`;
+    text += `预计人效：¥${tomorrowEff.toLocaleString()}/人\n`;
     text += '\n';
   }
 
@@ -667,18 +679,36 @@ function buildAttendanceDataText(allStoresData, today) {
 async function generateAttendanceReportWithLLM(dataText, today) {
   try {
     const { callLLM } = await import('./llm-provider.js');
-    const prompt = `你是年年有喜餐饮集团的HR考勤分析助手。请根据以下数据，生成一份简洁专业的考勤日报。
+    const prompt = `你是年年有喜餐饮集团的HR考勤分析助手。请根据以下数据，生成一份格式整齐、简洁专业的考勤日报。
 
 要求：
 1. 开头用一句话总结今日整体考勤情况
-2. 按门店分块，每块严格包含以下三部分：
-   一、考勤（门店人数、实际出勤、出勤率、今日休息人员及岗位）
-   二、人效（全天人效、午市人效、晚市人效）
-   三、明日排班（预计营业额、排班人数、预计人效）
-3. 最后给出排班建议和方法（分析人效趋势、排班是否合理、如何优化）
+2. 按门店分块，每块严格包含以下三部分，格式必须整齐对齐：
+   ┌─ **门店名**
+   │ 一、考勤
+   │   门店总人数：X人
+   │   实际出勤：X人（X工时）
+   │   出勤率：X%
+   │   今日休息：XXX（岗位，类型）
+   │ 二、人效
+   │   全天人效：¥X/人（实收¥X / X工时）
+   │   午市人效：¥X/工时（午市折前¥X / X工时）
+   │   晚市人效：¥X/工时（晚市折前¥X / X工时）
+   │ 三、明日排班
+   │   预计营业额：¥X
+   │   排班人数：X人（前厅X人，后厨X人）
+   │   早班：X人（XXX、XXX）
+   │   晚班：X人（XXX、XXX）
+   │   预计人效：¥X/人
+3. 最后给出排班建议和方法（至少3条具体可执行的建议），包括：
+   - 人效趋势分析（对比品牌标准：洪潮1200元/人，马己仙1500元/人）
+   - 排班优化建议（如何根据营业额预测调整人数）
+   - 高峰期人手安排建议
+   - 员工休息日安排建议
+   - 如何提升人效的具体方法
 4. 语气专业但亲切，适当使用emoji
-5. 总字数控制在600字以内
-6. 使用markdown格式，门店名用**加粗**，数据用简洁的列表形式
+5. 总字数控制在800字以内
+6. 使用markdown格式，数据用简洁的列表形式，每项单独一行，保持对齐
 
 数据：
 ${dataText}`;
@@ -719,57 +749,83 @@ async function fallbackAttendanceReport(allStoresData, today) {
 
   for (const sd of allStoresData) {
     lines.push('');
-    lines.push(`**${sd.store}**`);
+    lines.push(`┌─ **${sd.store}**`);
 
-    const totalStaff = sd.allStaff.length;
     const dr = sd.dailyReport;
-    const laborHours = dr ? parseFloat(dr.labor_total) || 0 : 0;
-    const attendanceRate = totalStaff > 0 && laborHours > 0 ? Math.round((laborHours / totalStaff) * 100) : 0;
+    if (!dr) {
+      lines.push(`│ 一、考勤：暂无数据`);
+      lines.push(`│ 二、人效：暂无数据`);
+      lines.push(`│ 三、明日排班：暂无数据`);
+      continue;
+    }
 
-    lines.push(`📍 门店${totalStaff}人 · 出勤${laborHours}工时 · 出勤率${attendanceRate}%`);
+    const staffData = typeof dr.staff === 'string' ? JSON.parse(dr.staff) : (dr.staff || []);
+    const totalStaff = staffData.length;
+    const laborHours = parseFloat(dr.labor_total) || 0;
+    const attendanceCount = Math.round(laborHours);
+    const attendanceRate = totalStaff > 0 ? Math.round((attendanceCount / totalStaff) * 100) : 0;
+
+    lines.push(`│ 一、考勤`);
+    lines.push(`│   门店总人数：${totalStaff}人`);
+    lines.push(`│   实际出勤：${attendanceCount}人（${laborHours}工时）`);
+    lines.push(`│   出勤率：${attendanceRate}%`);
 
     if (sd.todayLeave.length) {
       const restNames = sd.todayLeave.map(lv => {
-        const emp = sd.allStaff.find(e => e.username === lv.username);
-        const roleName = emp ? roleZh(emp.role) : '—';
-        return `${lv.name}（${roleName}）`;
+        const emp = staffData.find(e => e.user === lv.username || e.name === lv.name);
+        return `${lv.name}（${emp ? '员工' : '—'}）`;
       });
-      lines.push(`🏖️ 休息：${restNames.join('、')}`);
+      lines.push(`│   今日休息：${restNames.join('、')}`);
     } else {
-      lines.push(`🏖️ 休息：无`);
+      lines.push(`│   今日休息：无`);
     }
 
-    if (dr) {
-      const eff = parseFloat(dr.efficiency) || 0;
-      const actualRev = parseFloat(dr.actual_revenue) || 0;
-      const preRev = parseFloat(dr.pre_discount_revenue) || 0;
-      const segments = typeof dr.segments === 'string' ? JSON.parse(dr.segments) : (dr.segments || {});
-      const noonRev = parseFloat(segments.noon) || 0;
-      const nightRev = parseFloat(segments.night) || 0;
-      const noonRatio = preRev > 0 ? noonRev / preRev : 0.5;
-      const nightRatio = preRev > 0 ? nightRev / preRev : 0.5;
-      const noonHours = Math.round(laborHours * noonRatio * 10) / 10;
-      const nightHours = Math.round(laborHours * nightRatio * 10) / 10;
-      const noonEff = noonHours > 0 ? Math.round(noonRev / noonHours) : 0;
-      const nightEff = nightHours > 0 ? Math.round(nightRev / nightHours) : 0;
+    const eff = parseFloat(dr.efficiency) || 0;
+    const actualRev = parseFloat(dr.actual_revenue) || 0;
+    const preRev = parseFloat(dr.pre_discount_revenue) || 0;
+    const segments = typeof dr.segments === 'string' ? JSON.parse(dr.segments) : (dr.segments || {});
+    const noonRev = parseFloat(segments.noon) || 0;
+    const nightRev = parseFloat(segments.night) || 0;
+    const afternoonRev = parseFloat(segments.afternoon) || 0;
+    const noonRatio = preRev > 0 ? noonRev / preRev : 0.5;
+    const nightRatio = preRev > 0 ? (nightRev + afternoonRev) / preRev : 0.5;
+    const noonHours = Math.round(laborHours * noonRatio * 10) / 10;
+    const nightHours = Math.round(laborHours * nightRatio * 10) / 10;
+    const noonEff = noonHours > 0 ? Math.round(noonRev / noonHours) : 0;
+    const nightEff = nightHours > 0 ? Math.round((nightRev + afternoonRev) / nightHours) : 0;
 
-      lines.push(`💰 全天¥${Math.round(eff).toLocaleString()}/人 · 午市¥${noonEff.toLocaleString()}/工时 · 晚市¥${nightEff.toLocaleString()}/工时`);
+    lines.push(`│ 二、人效`);
+    lines.push(`│   全天人效：¥${Math.round(eff).toLocaleString()}/人（实收¥${Math.round(actualRev).toLocaleString()} / ${laborHours}工时）`);
+    lines.push(`│   午市人效：¥${noonEff.toLocaleString()}/工时（午市折前¥${Math.round(noonRev).toLocaleString()} / ${noonHours}工时）`);
+    lines.push(`│   晚市人效：¥${nightEff.toLocaleString()}/工时（晚市折前¥${Math.round(nightRev + afternoonRev).toLocaleString()} / ${nightHours}工时）`);
 
-      const sched = typeof dr.schedule_next_day === 'string' ? JSON.parse(dr.schedule_next_day) : (dr.schedule_next_day || {});
-      const tomorrowStaff = sched.staff || [];
-      const tomorrowHeadcount = tomorrowStaff.reduce((sum, s) => sum + (parseFloat(s.days) || 1), 0);
-      const tomorrowEst = parseFloat(sched.tomorrowGrossEstimate) || 0;
-      const tomorrowEff = tomorrowHeadcount > 0 && tomorrowEst > 0 ? Math.round(tomorrowEst / tomorrowHeadcount) : 0;
+    const sched = typeof dr.schedule_next_day === 'string' ? JSON.parse(dr.schedule_next_day) : (dr.schedule_next_day || {});
+    const tomorrowStaff = sched.staff || [];
+    const tomorrowHeadcount = tomorrowStaff.reduce((sum, s) => sum + (parseFloat(s.days) || 1), 0);
+    const tomorrowEst = parseFloat(sched.tomorrowGrossEstimate) || 0;
+    const tomorrowEff = tomorrowHeadcount > 0 && tomorrowEst > 0 ? Math.round(tomorrowEst / tomorrowHeadcount) : 0;
+    const frontStaff = sched.frontStaff || [];
+    const kitchenStaff = sched.kitchenStaff || [];
+    const morningStaff = sched.morningStaff || [];
+    const afternoonStaff = sched.afternoonStaff || [];
 
-      lines.push(`📅 明日预计¥${tomorrowEst.toLocaleString()} · 排班${tomorrowHeadcount}人 · 预计人效¥${tomorrowEff.toLocaleString()}/人`);
-    } else {
-      lines.push(`💰 暂无人效数据`);
-      lines.push(`📅 暂无排班数据`);
-    }
+    lines.push(`│ 三、明日排班`);
+    lines.push(`│   预计营业额：¥${tomorrowEst.toLocaleString()}`);
+    lines.push(`│   排班人数：${tomorrowHeadcount}人（前厅${frontStaff.length}人，后厨${kitchenStaff.length}人）`);
+    lines.push(`│   早班：${morningStaff.length}人（${morningStaff.map(s => s.name).join('、')}）`);
+    lines.push(`│   晚班：${afternoonStaff.length}人（${afternoonStaff.map(s => s.name).join('、')}）`);
+    lines.push(`│   预计人效：¥${tomorrowEff.toLocaleString()}/人`);
   }
 
+  const brand = '洪潮';
+  const threshold = 1200;
   lines.push('');
-  lines.push(`_排班建议：请根据人效趋势优化排班，确保高峰期人手充足_`);
+  lines.push(`📝 **排班建议**`);
+  lines.push(`1. 根据明日预计营业额调整排班人数，确保人效达标（${brand}标准¥${threshold}/人，马己仙¥1500/人）`);
+  lines.push(`2. 高峰期（午市11:00-14:00，晚市17:00-20:00）确保人手充足，前厅后厨配比1:1.5~1:2`);
+  lines.push(`3. 合理安排员工休息日，避免连续工作日过长，建议每周至少休息1天`);
+  lines.push(`4. 如预计人效低于标准，可适当减少非高峰期排班人数，或安排兼职/小时工`);
+  lines.push(`5. 关注员工技能交叉培训，提升人员调配灵活性`);
 
   const reportText = lines.join('\n');
   const { sendText } = await import('./feishu-client.js');
