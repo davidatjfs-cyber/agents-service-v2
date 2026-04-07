@@ -42,6 +42,8 @@ import { startDailyInspectionScheduler, runDailyInspectionsTick } from './servic
 import { startTaskCardReminderScheduler } from './services/task-card-reminders.js';
 import { sendMorningBriefing } from './services/morning-briefing.js';
 import { sendDailyTaskCompletionReport } from './services/daily-task-completion.js';
+import { runDailyExecutionRating } from './services/daily-execution-rating.js';
+import { runMonthlyComprehensiveRating } from './services/monthly-comprehensive-rating.js';
 import { getAIOperationsReport } from './services/ai-operations.js';
 import adminApi from './routes/admin-api.js';
 import {
@@ -401,6 +403,15 @@ app.post('/api/rhythm/monthly', authRequired, requireRole('admin', 'hq_manager')
 app.post('/api/rhythm/attendance', authRequired, requireRole('admin', 'hq_manager'), async (req, res) => {
   try {
     const result = await dailyAttendanceReport();
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/rhythm/task-completion', authRequired, requireRole('admin', 'hq_manager'), async (req, res) => {
+  try {
+    const result = await sendDailyTaskCompletionReport();
     res.json({ ok: true, result });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -876,6 +887,16 @@ async function start() {
     sendDailyTaskCompletionReport().catch(e => logger.warn({ err: e?.message }, 'daily task completion cron error'));
   }, { timezone: 'Asia/Shanghai' });
   logger.info('Daily task completion report cron scheduled at 08:00 Asia/Shanghai');
+  // 执行力日评：固定 08:00（Asia/Shanghai），检查昨日未达成项并发送通知
+  cron.schedule('0 8 * * *', () => {
+    runDailyExecutionRating().catch(e => logger.warn({ err: e?.message }, 'daily execution rating cron error'));
+  }, { timezone: 'Asia/Shanghai' });
+  logger.info('Daily execution rating cron scheduled at 08:00 Asia/Shanghai');
+  // 月度综合评级：每月10号 01:00（Asia/Shanghai），汇总绩效得分+执行力+工作态度+工作能力+门店级别
+  cron.schedule('0 1 10 * *', () => {
+    runMonthlyComprehensiveRating().catch(e => logger.warn({ err: e?.message }, 'monthly comprehensive rating cron error'));
+  }, { timezone: 'Asia/Shanghai' });
+  logger.info('Monthly comprehensive rating cron scheduled at 01:00 on 10th (Asia/Shanghai)');
   if (automations) {
     startRhythmScheduler();
     startKpiScheduler();
