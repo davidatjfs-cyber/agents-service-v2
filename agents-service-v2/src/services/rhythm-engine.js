@@ -588,14 +588,24 @@ function parseStoreData(sd) {
   if (!dr) return null;
 
   // staff 是 JSON 对象 {front:[...], kitchen:[...], restStaff:[...]}
+  // 按 user 字段去重（避免同一人出现在多个分类被重复统计）
   const staffObj = dr.staff || {};
-  const staffData = Array.isArray(staffObj)
-    ? staffObj
-    : [
-        ...(Array.isArray(staffObj.front) ? staffObj.front : []),
-        ...(Array.isArray(staffObj.kitchen) ? staffObj.kitchen : []),
-        ...(Array.isArray(staffObj.restStaff) ? staffObj.restStaff : []),
-      ];
+  const staffMap = new Map();
+  const addToMap = (arr) => {
+    if (Array.isArray(arr)) {
+      for (const s of arr) {
+        if (s?.user) staffMap.set(s.user, s);
+      }
+    }
+  };
+  if (Array.isArray(staffObj)) {
+    staffObj.forEach(s => { if (s?.user) staffMap.set(s.user, s); });
+  } else {
+    addToMap(staffObj.front);
+    addToMap(staffObj.kitchen);
+    addToMap(staffObj.restStaff);
+  }
+  const staffData = [...staffMap.values()];
   const totalStaff = staffData.length;
   const laborHours = parseFloat(dr.labor_total) || 0;
   const leaveUsernames = new Set(sd.todayLeave.map(lv => lv.username));
