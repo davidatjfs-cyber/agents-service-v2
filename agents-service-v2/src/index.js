@@ -41,6 +41,7 @@ import { runMonthlyAnomalyItemBonuses } from './services/monthly-anomaly-bonus.j
 import { startDailyInspectionScheduler, runDailyInspectionsTick } from './services/daily-inspection-scheduler.js';
 import { startTaskCardReminderScheduler } from './services/task-card-reminders.js';
 import { sendMorningBriefing } from './services/morning-briefing.js';
+import { sendDailyTaskCompletionReport } from './services/daily-task-completion.js';
 import { getAIOperationsReport } from './services/ai-operations.js';
 import adminApi from './routes/admin-api.js';
 import {
@@ -870,6 +871,11 @@ async function start() {
     sendMorningBriefing().catch(e => logger.warn({ err: e?.message }, 'morning briefing cron error'));
   }, { timezone: 'Asia/Shanghai' });
   logger.info('Morning briefing cron scheduled at 07:30 Asia/Shanghai (fixed)');
+  // 每日任务达成率：固定 08:00（Asia/Shanghai）
+  cron.schedule('0 8 * * *', () => {
+    sendDailyTaskCompletionReport().catch(e => logger.warn({ err: e?.message }, 'daily task completion cron error'));
+  }, { timezone: 'Asia/Shanghai' });
+  logger.info('Daily task completion report cron scheduled at 08:00 Asia/Shanghai');
   if (automations) {
     startRhythmScheduler();
     startKpiScheduler();
