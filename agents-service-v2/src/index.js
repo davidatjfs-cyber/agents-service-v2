@@ -10,7 +10,7 @@ import { checkDbHealth } from './utils/db.js';
 import { checkRedisHealth } from './utils/queue.js';
 import { startAnomalyQueueWorker, getAnomalyQueueStats } from './services/anomaly-queue.js';
 import { authRequired, requireRole } from './middleware/auth.js';
-import { startRhythmScheduler, morningStandup, patrol, endOfDay, weeklyReport, monthlyEvaluation } from './services/rhythm-engine.js';
+import { startRhythmScheduler, morningStandup, patrol, endOfDay, weeklyReport, monthlyEvaluation, dailyAttendanceReport } from './services/rhythm-engine.js';
 import { runAnomalyChecks, checkFoodSafetyFromMessage, runFoodSafetyDailyScan } from './services/anomaly-engine.js';
 import { calculateAllStoresKPI } from './services/kpi-calculator.js';
 import {
@@ -391,6 +391,15 @@ app.post('/api/rhythm/weekly', authRequired, requireRole('admin', 'hq_manager'),
 app.post('/api/rhythm/monthly', authRequired, requireRole('admin', 'hq_manager'), async (req, res) => {
   try {
     const result = await monthlyEvaluation();
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/rhythm/attendance', authRequired, requireRole('admin', 'hq_manager'), async (req, res) => {
+  try {
+    const result = await dailyAttendanceReport();
     res.json({ ok: true, result });
   } catch (e) {
     res.status(500).json({ error: e.message });
