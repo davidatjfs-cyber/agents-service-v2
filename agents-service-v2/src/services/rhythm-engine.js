@@ -489,20 +489,7 @@ export async function dailyAttendanceReport() {
   for (const store of stores) {
     const storeData = { store, checkins: [], allStaff: [], leaves: [], dailyReport: null };
 
-    // 打卡记录
-    const checkinR = await query(
-      `SELECT c.username, c.type, c.check_time, c.distance_meters, c.status,
-              fu.name, fu.role
-       FROM checkin_records c
-       LEFT JOIN feishu_users fu ON lower(fu.username) = lower(c.username) AND fu.registered = true
-       WHERE c.check_time::date = $1::date
-         AND c.store ILIKE '%' || $2 || '%'
-       ORDER BY c.username, c.check_time`,
-      [today, store]
-    );
-    storeData.checkins = checkinR.rows || [];
-
-    // 全部注册员工
+    // 全部注册员工（先查，用于打卡匹配）
     const allStaffR = await query(
       `SELECT username, name, role FROM feishu_users
        WHERE registered = true AND trim(store) ILIKE '%' || $1 || '%'
@@ -510,6 +497,23 @@ export async function dailyAttendanceReport() {
       [store]
     );
     storeData.allStaff = allStaffR.rows || [];
+
+    // 打卡记录（只查注册员工的）
+    const registeredUsernames = storeData.allStaff.map(e => String(e.username || '').toLowerCase());
+    if (registeredUsernames.length > 0) {
+      const checkinR = await query(
+        `SELECT c.username, c.type, c.check_time, c.distance_meters, c.status,
+                fu.name, fu.role
+         FROM checkin_records c
+         LEFT JOIN feishu_users fu ON lower(fu.username) = lower(c.username) AND fu.registered = true
+         WHERE c.check_time::date = $1::date
+           AND c.store ILIKE '%' || $2 || '%'
+           AND lower(c.username) = ANY($3::text[])
+         ORDER BY c.username, c.check_time`,
+        [today, store, registeredUsernames]
+      );
+      storeData.checkins = checkinR.rows || [];
+    }
 
     // 休假记录
     const leaveR = await query(
@@ -586,6 +590,22 @@ export async function dailyAttendanceReport() {
   return { ok: true, storeCount: stores.length };
 }
 
+function fmtCheckinTime(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+function fmtLeaveDate(d) {
+  if (!d) return '—';
+  const date = new Date(d);
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${mm}-${dd}`;
+}
+
 function buildAttendanceDataText(allStoresData, today) {
   const roleLabel = (r) => {
     const m = { admin:'管理员', hq_manager:'总部营运', store_manager:'店长', store_production_manager:'出品经理', store_employee:'员工', hr_manager:'HR', cashier:'出纳' };
@@ -608,7 +628,7 @@ function buildAttendanceDataText(allStoresData, today) {
       if (c.type === 'clock_in') {
         checkedIn.add(String(c.username || '').toLowerCase());
         const nm = String(c.name || c.username || '?');
-        const timeStr = String(c.check_time || '').slice(11, 16);
+        const timeStr = fmtCheckinTime(c.check_time);
         const dist = c.distance_meters ? `${Math.round(c.distance_meters)}m` : '';
         const mark = c.status === 'normal' ? '✅' : '⚠️';
         clockInLines.push(`${mark} ${nm}（${roleLabel(c.role)}）${timeStr}${dist ? ` ${dist}` : ''}`);
@@ -625,8 +645,8 @@ function buildAttendanceDataText(allStoresData, today) {
     // 休假
     if (sd.leaves.length) {
       const leaveLines = sd.leaves.map(lv => {
-        const sd2 = String(lv.start_date || '').slice(5);
-        const ed = String(lv.end_date || '').slice(5);
+        const sd2 = fmtLeaveDate(lv.start_date);
+        const ed = fmtLeaveDate(lv.end_date);
         return `${String(lv.name || lv.username || '?')}（${typeLabel(lv.type)} ${sd2}~${ed} ${lv.days}天）${lv.reason || ''}`;
       });
       text += `休假：${leaveLines.join('；')}\n`;
@@ -733,7 +753,7 @@ async function fallbackAttendanceReport(allStoresData, today) {
       if (c.type === 'clock_in') {
         checkedIn.add(String(c.username || '').toLowerCase());
         const nm = String(c.name || c.username || '?');
-        const timeStr = String(c.check_time || '').slice(11, 16);
+        const timeStr = fmtCheckinTime(c.check_time);
         const dist = c.distance_meters ? `${Math.round(c.distance_meters)}m` : '';
         const mark = c.status === 'normal' ? '✅' : '⚠️';
         clockInLines.push(`  ${mark} ${nm}（${roleLabel(c.role)}）${timeStr}${dist ? ` · ${dist}` : ''}`);
@@ -750,8 +770,8 @@ async function fallbackAttendanceReport(allStoresData, today) {
     if (sd.leaves.length) {
       lines.push(`🏖️ **休假**（${sd.leaves.length} 人）`);
       for (const lv of sd.leaves) {
-        const sd2 = String(lv.start_date || '').slice(5);
-        const ed = String(lv.end_date || '').slice(5);
+        const sd2 = fmtLeaveDate(lv.start_date);
+        const ed = fmtLeaveDate(lv.end_date);
         lines.push(`  ${String(lv.name || lv.username || '?')}（${typeLabel(lv.type)} ${sd2}~${ed}，${lv.days}天）${lv.reason ? ` · ${lv.reason}` : ''}`);
       }
     } else {
