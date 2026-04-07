@@ -589,16 +589,16 @@ function parseStoreData(sd) {
 
   // staff 是 JSON 对象 {front:[...], kitchen:[...], restStaff:[...]}
   // totalStaff 从 employees 表获取（HRMS官方人数）
-  // attendanceCount 从日报 front+kitchen 获取（days>=1 的全职人数，days=0.5 算半天不上班）
+  // attendanceCount 从日报 front+kitchen 合计天数（days=1算1人，days=0.5算0.5人）
   const staffObj = dr.staff || {};
   const staffData = Array.isArray(staffObj) ? staffObj : [];
   const totalStaff = staffData.length;
 
-  // 实际出勤 = 前厅(days>=1) + 后厨(days>=1)
-  const calcWorkCount = (arr) => (arr || []).filter(s => parseFloat(s?.days || 0) >= 1).length;
-  const frontWork = Array.isArray(staffObj.front) ? staffObj.front : [];
-  const kitchenWork = Array.isArray(staffObj.kitchen) ? staffObj.kitchen : [];
-  const attendanceCount = calcWorkCount(frontWork) + calcWorkCount(kitchenWork);
+  // 实际出勤 = 前厅天数之和 + 后厨天数之和
+  const calcWorkDays = (arr) => (arr || []).reduce((sum, s) => sum + (parseFloat(s?.days || 0) || 0), 0);
+  const frontArr = Array.isArray(staffObj.front) ? staffObj.front : [];
+  const kitchenArr = Array.isArray(staffObj.kitchen) ? staffObj.kitchen : [];
+  const attendanceCount = Math.round((calcWorkDays(frontArr) + calcWorkDays(kitchenArr)) * 10) / 10;
   const attendanceRate = totalStaff > 0 ? Math.round((attendanceCount / totalStaff) * 100) : 0;
   const laborHours = parseFloat(dr.labor_total) || 0;
 
@@ -686,7 +686,7 @@ function buildAttendanceCard(allStoresData, today) {
     // 考勤
     let attendText = `**一、考勤**\n`;
     attendText += `门店总人数：${d.totalStaff}人 ｜ 实际出勤：${d.attendanceCount}人（${d.laborHours}工时）\n`;
-    attendText += `出勤率：${d.attendanceRate}%\n`;
+    attendText += `出勤率：${d.attendanceRate}%（${d.attendanceCount}/${d.totalStaff}）\n`;
     attendText += `今日休息：${d.restNames}`;
     elements.push({
       tag: 'div',
@@ -769,7 +769,7 @@ function buildStoreCard(sd, today) {
 
     let attendText = `**一、考勤**\n`;
     attendText += `门店总人数：${d.totalStaff}人 ｜ 实际出勤：${d.attendanceCount}人（${d.laborHours}工时）\n`;
-    attendText += `出勤率：${d.attendanceRate}%\n`;
+    attendText += `出勤率：${d.attendanceRate}%（${d.attendanceCount}/${d.totalStaff}）\n`;
     attendText += `今日休息：${d.restNames}`;
     elements.push({ tag: 'div', text: { tag: 'lark_md', content: attendText } });
 
