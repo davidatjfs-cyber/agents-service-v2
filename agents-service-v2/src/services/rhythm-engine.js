@@ -588,33 +588,38 @@ function parseStoreData(sd) {
   if (!dr) return null;
 
   // staff 是 JSON 对象 {front:[...], kitchen:[...], restStaff:[...]}
-  // 按 user 字段去重（避免同一人出现在多个分类被重复统计）
+  // totalStaff 从 employees 表获取（HRMS官方人数）
+  // attendanceCount 从日报 front+kitchen 获取（days>=1 的全职人数，days=0.5 算半天不上班）
   const staffObj = dr.staff || {};
-  const staffMap = new Map();
-  const addToMap = (arr) => {
-    if (Array.isArray(arr)) {
-      for (const s of arr) {
-        if (s?.user) staffMap.set(s.user, s);
-      }
-    }
-  };
-  if (Array.isArray(staffObj)) {
-    staffObj.forEach(s => { if (s?.user) staffMap.set(s.user, s); });
-  } else {
-    addToMap(staffObj.front);
-    addToMap(staffObj.kitchen);
-    addToMap(staffObj.restStaff);
-  }
-  const staffData = [...staffMap.values()];
+  const staffData = Array.isArray(staffObj) ? staffObj : [];
   const totalStaff = staffData.length;
-  const laborHours = parseFloat(dr.labor_total) || 0;
-  const leaveUsernames = new Set(sd.todayLeave.map(lv => lv.username));
-  const attendanceCount = staffData.filter(s => !leaveUsernames.has(s.user)).length;
+
+  // 实际出勤 = 前厅(days>=1) + 后厨(days>=1)
+  const calcWorkCount = (arr) => (arr || []).filter(s => parseFloat(s?.days || 0) >= 1).length;
+  const frontWork = Array.isArray(staffObj.front) ? staffObj.front : [];
+  const kitchenWork = Array.isArray(staffObj.kitchen) ? staffObj.kitchen : [];
+  const attendanceCount = calcWorkCount(frontWork) + calcWorkCount(kitchenWork);
   const attendanceRate = totalStaff > 0 ? Math.round((attendanceCount / totalStaff) * 100) : 0;
+  const laborHours = parseFloat(dr.labor_total) || 0;
 
   const preRev = parseFloat(dr.pre_discount_revenue) || 0;
   const actualRev = parseFloat(dr.actual_revenue) || 0;
   const eff = parseFloat(dr.efficiency) || 0;
+  // 构建员工姓名映射（从所有分类去重）
+  const allStaffMap = new Map();
+  const addToNameMap = (arr) => {
+    if (Array.isArray(arr)) {
+      for (const s of arr) {
+        if (s?.user) allStaffMap.set(s.user, s);
+      }
+    }
+  };
+  if (!Array.isArray(staffObj)) {
+    addToNameMap(staffObj.front);
+    addToNameMap(staffObj.kitchen);
+    addToNameMap(staffObj.restStaff);
+  }
+
   const segmentsRaw = dr.segments || {};
   const seg = typeof segmentsRaw === 'string' ? JSON.parse(segmentsRaw) : segmentsRaw;
   const noonRev = parseFloat(seg.noon) || 0;
@@ -638,7 +643,7 @@ function parseStoreData(sd) {
   const afternoonStaff = sched.afternoonStaff || [];
 
   const restNames = sd.todayLeave.map(lv => {
-    const emp = staffData.find(e => e.user === lv.username || e.name === lv.name);
+    const emp = allStaffMap.get(lv.username);
     const typeLabel = leaveTypeZh(lv.type);
     return `${lv.name}（${emp ? '员工' : '—'}，${typeLabel}）`;
   });
