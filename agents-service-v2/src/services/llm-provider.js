@@ -5,7 +5,7 @@
 import axios from 'axios';
 import { logger } from '../utils/logger.js';
 import { isExternalEnabled } from '../utils/safety.js';
-import { selectModel } from './model-router.js';
+import { selectModel, markOllamaOk, markOllamaFail, getOllamaHealthStatus, isOllamaHealthy } from './model-router.js';
 
 const PROVIDERS = {
   deepseek: {
@@ -81,7 +81,7 @@ function normalizeRouterContext(ctx) {
 /** 本地 Ollama（如 gemma4:26b），不依赖外部API；失败时由上层回退到 API */
 async function callOllamaLLM(messages, options = {}) {
   const base = String(process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
-  const model = String(process.env.OLLAMA_OPERATIONS_MODEL || process.env.OLLAMA_CHAT_MODEL || 'qwen2:7b').trim();
+  const model = String(process.env.OLLAMA_OPERATIONS_MODEL || process.env.OLLAMA_CHAT_MODEL || 'gemma4:26b').trim();
   const temp = Number(options.temperature ?? 0.2);
   const maxTok = Number(options.max_tokens ?? 1500);
   const start = Date.now();
@@ -106,6 +106,7 @@ async function callOllamaLLM(messages, options = {}) {
     const rt = Date.now() - start;
     _metrics.totalCalls++;
     _metrics.avgResponseTime = (_metrics.avgResponseTime * (_metrics.totalCalls - 1) + rt) / _metrics.totalCalls;
+    markOllamaOk();
     return {
       ok: true,
       content,
@@ -116,6 +117,7 @@ async function callOllamaLLM(messages, options = {}) {
       provider: 'ollama'
     };
   } catch (e) {
+    markOllamaFail();
     logger.warn({ err: e?.message, base, model }, 'callOllamaLLM failed');
     return { ok: false, error: e?.message || 'ollama_failed', content: '' };
   }
@@ -208,17 +210,21 @@ export async function callLLM(messages, options = {}) {
   const hasTools = !!(options.tools?.length);
   const routerCtx = normalizeRouterContext(options.context);
   const routedModel = routerCtx ? selectModel(routerCtx) : null;
-  const localModel = process.env.OLLAMA_OPERATIONS_MODEL || 'qwen2:7b';
+  const localModel = process.env.OLLAMA_OPERATIONS_MODEL || 'gemma4:26b';
 
+  // 如果路由到本地模型，优先尝试 Ollama
   if (!hasTools && routedModel === localModel) {
     const o = await callOllamaLLM(messages, options);
     if (o.ok && o.content) return o;
-    logger.warn({ err: o.error }, `Ollama (${localModel}) failed, falling back to API LLM`);
+    // 本地失败，记录警告并继续走 API 兜底
+    logger.warn({ err: o.error, fallbackTo: 'deepseek-chat' }, `Ollama (${localModel}) 失败，自动降级到 API`);
   }
 
+  // 确定主模型（优先使用路由结果，其次 API 默认）
   let primaryModel = options.model;
   if (!primaryModel) {
     if (!routerCtx || routedModel === localModel) {
+      // 本地失败或不适用，走 API 兜底
       primaryModel = PROVIDERS.deepseek.defaultModel;
     } else {
       primaryModel = routedModel || PROVIDERS.deepseek.defaultModel;
@@ -231,7 +237,7 @@ export async function callLLM(messages, options = {}) {
 /** 本地 Ollama 图片识别（gemma4:26b 支持 vision），失败时回退到外部 API */
 async function callOllamaVision(messages, options = {}) {
   const base = String(process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
-  const model = String(process.env.OLLAMA_OPERATIONS_MODEL || process.env.OLLAMA_CHAT_MODEL || 'qwen2:7b').trim();
+  const model = String(process.env.OLLAMA_OPERATIONS_MODEL || process.env.OLLAMA_CHAT_MODEL || 'gemma4:26b').trim();
   const temp = Number(options.temperature ?? 0.2);
   const maxTok = Number(options.max_tokens ?? 1500);
   const start = Date.now();
@@ -255,6 +261,7 @@ async function callOllamaVision(messages, options = {}) {
     const rt = Date.now() - start;
     _metrics.totalCalls++;
     _metrics.avgResponseTime = (_metrics.avgResponseTime * (_metrics.totalCalls - 1) + rt) / _metrics.totalCalls;
+    markOllamaOk();
     return {
       ok: true,
       content,
@@ -265,6 +272,7 @@ async function callOllamaVision(messages, options = {}) {
       provider: 'ollama'
     };
   } catch (e) {
+    markOllamaFail();
     logger.warn({ err: e?.message, base, model }, 'callOllamaVision failed');
     return { ok: false, error: e?.message || 'ollama_vision_failed', content: '' };
   }
@@ -354,6 +362,28 @@ export async function callVisionLLM(imageUrl, prompt) {
 
 export async function verifyLLMHealth() {
   const results=[];
+  // 检查 Ollama 本地模型
+  try {
+    const base = String(process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
+    const model = String(process.env.OLLAMA_OPERATIONS_MODEL || 'gemma4:26b').trim();
+    const r = await fetch(`${base}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, stream: false, messages: [{ role: 'user', content: 'OK' }], options: { num_predict: 5 } })
+    });
+    if (r.ok) {
+      const d = await r.json();
+      results.push({ name: 'ollama', model, ok: true, reply: (d?.message?.content || '').slice(0, 20) });
+      markOllamaOk();
+    } else {
+      results.push({ name: 'ollama', model, ok: false, error: `HTTP ${r.status}` });
+      markOllamaFail();
+    }
+  } catch (e) {
+    results.push({ name: 'ollama', model: process.env.OLLAMA_OPERATIONS_MODEL || 'gemma4:26b', ok: false, error: e?.message || 'connection_failed' });
+    markOllamaFail();
+  }
+  // 检查外部 API
   for(const[name,cfg] of Object.entries(PROVIDERS)){
     if(!cfg.apiKey){results.push({name,ok:false,error:'API_KEY未配置'});continue;}
     try{
@@ -367,7 +397,7 @@ export async function verifyLLMHealth() {
   }
   const allOk=results.every(r=>r.ok);
   logger.info({allOk,results:results.map(r=>`${r.ok?'✅':'❌'} ${r.name}`).join(', ')},'LLM health check');
-  return{allOk,results};
+  return{allOk,results,ollama:getOllamaHealthStatus()};
 }
 
 /**
