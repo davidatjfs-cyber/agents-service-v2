@@ -1,16 +1,30 @@
 # 🎯 Cursor 部署使用指南
 
-## 📋 两个独立仓库
+## 📋 仓库结构（重要：实际是一个仓库，不是两个）
 
-### 1. agents-service-v2
-- **仓库**: https://github.com/davidatjfs-cyber/agents-service-v2
-- **GitHub Actions**: `.github/workflows/safe-deployment.yml`
-- **部署脚本**: `scripts/deploy-safe.sh`
+### 实际仓库情况
+- **唯一仓库**: https://github.com/davidatjfs-cyber/agents-service-v2
+- **本地根目录**: `/Users/magainze/HRMS`（这是仓库根目录，不是 agents-service-v2 子目录）
+- **包含两个项目**:
+  - `agents-service-v2/` — Agents 服务
+  - `hr-management-system/` — HRMS 服务
+- **所有代码都推送到同一个仓库**: `agents-service-v2`
 
-### 2. hr-management-system  
-- **仓库**: https://github.com/davidatjfs-cyber/hr-management-system
-- **GitHub Actions**: `.github/workflows/hrms-safe-deployment.yml`
-- **部署脚本**: `scripts/deploy-hrms-safe.sh`
+### 目录结构
+```
+/Users/magainze/HRMS/                    ← 仓库根目录（git remote: agents-service-v2）
+├── agents-service-v2/                   ← Agents 服务代码
+├── hr-management-system/                ← HRMS 服务代码
+├── scripts/                             ← 部署脚本
+├── .github/workflows/                   ← GitHub Actions
+└── ...
+```
+
+### 拉取最新代码（每次开始前必须执行）
+```bash
+cd /Users/magainze/HRMS
+git pull origin main
+```
 
 ## 🚀 Cursor 部署规则
 
@@ -18,7 +32,7 @@
 
 #### 修改 agents-service-v2 后：
 ```bash
-cd /path/to/agents-service-v2
+cd /Users/magainze/HRMS
 git add .
 git commit -m "描述您的修改"
 git push origin main
@@ -34,7 +48,7 @@ git push origin main
 
 #### 修改 hr-management-system 后：
 ```bash
-cd /path/to/hrms-management-system
+cd /Users/magainze/HRMS
 git add .
 git commit -m "描述您的修改"  
 git push origin main
@@ -122,14 +136,14 @@ bash scripts/deploy-agents-ecs.sh
 
 ### agents-service-v2 手动部署：
 ```bash
-cd /path/to/agents-service-v2
-bash scripts/deploy-safe.sh
+cd /Users/magainze/HRMS
+bash scripts/deploy-agents-ecs.sh
 ```
 
 ### hr-management-system 手动部署：
 ```bash
-cd /path/to/hrms-management-system
-bash scripts/deploy-hrms-safe.sh
+cd /Users/magainze/HRMS
+bash scripts/deploy-hrms-server-ecs.sh
 ```
 
 ## 🆘 部署失败处理
@@ -158,18 +172,18 @@ ssh root@47.100.96.30 'pm2 status'
 ## 🎯 Cursor 核心规则
 
 ### 规则1: 每次修改后自动部署
-- ✅ 修改agents-service-v2: 推送到agents-service-v2仓库
-- ✅ 修改hr-management-system: 推送到hrms仓库
-- ✅ GitHub Actions自动执行安全部署
+- ✅ 所有修改都在 `/Users/magainze/HRMS` 目录下
+- ✅ 推送到 agents-service-v2 仓库（唯一仓库）
+- ✅ GitHub Actions 自动执行安全部署
 
 ### 规则2: 部署前必须检查
 - ✅ agents-service-v2: 前端文件检查、版本验证、路径验证
 - ✅ hr-management-system: 两个前端文件检查、后端文件验证
 
 ### 规则3: 失败自动处理
-- ✅ GitHub Actions检测失败立即回滚
+- ✅ GitHub Actions 检测失败立即回滚
 - ✅ 也可以手动执行回滚命令
-- ✅ 检查部署日志和PM2状态
+- ✅ 检查部署日志和 PM2 状态
 
 ## 📈 效果对比
 
