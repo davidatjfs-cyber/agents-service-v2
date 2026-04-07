@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hrms-pwa-v212';
+const CACHE_NAME = 'hrms-pwa-v217';
 const PRECACHE_URLS = [
   '/',
   '/index.html',

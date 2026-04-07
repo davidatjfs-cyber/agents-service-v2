@@ -864,10 +864,11 @@
         .notif-expand-area {
             max-height: 0;
             overflow: hidden;
-            transition: max-height 0.3s ease;
+            transition: max-height 0.35s ease;
         }
         .notif-expand-area.expanded {
-            max-height: 600px;
+            max-height: none;
+            overflow: visible;
         }
         .notif-more-btn {
             display: block;
@@ -875,6 +876,7 @@
             text-align: center;
             padding: 10px;
             margin-top: 4px;
+            margin-bottom: 12px;
             border-radius: 12px;
             border: 1px dashed rgba(200,215,230,0.15);
             background: transparent;
@@ -886,6 +888,28 @@
         }
         .notif-more-btn:active {
             background: rgba(255,255,255,0.04);
+        }
+        .profile-notifications-scroll {
+            max-height: min(46vh, 420px);
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
+            padding: 8px 4px 10px 2px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(2, 6, 23, 0.4);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+        .profile-notifications-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .profile-notifications-scroll::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.35);
+            border-radius: 10px;
+        }
+        #profile-notif-expand-footer {
+            margin-top: 6px;
         }
         .notif-full-msg.notif-msg-show {
             display: block !important;
@@ -8490,6 +8514,31 @@
                     <span id="profile-hometown" style="display:none;">--</span>
                 </div>
 
+                <!-- 公司通知：头像/姓名卡片下方，档案信息上方；标题固定，列表区内滚动 -->
+                <div id="profile-notif-section" style="margin-bottom: 16px; position: relative;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px; padding: 0 2px;">
+                        <div style="display:flex; align-items:center; gap: 10px;">
+                            <div style="position:relative; width:36px; height:36px; border-radius:12px; background:linear-gradient(135deg,rgba(250,204,21,0.22),rgba(245,158,11,0.12)); display:flex; align-items:center; justify-content:center; font-size:18px; box-shadow:0 4px 12px rgba(250,204,21,0.10);">
+                                <span>📢</span>
+                                <span id="profile-notif-pulse" style="display:none; position:absolute; top:-2px; right:-2px; width:10px; height:10px; border-radius:50%; background:#f59e0b; box-shadow:0 0 0 3px rgba(15,23,42,0.9); animation: notifPulse 2s infinite;"></span>
+                            </div>
+                            <div>
+                                <div style="font-weight:800; font-size:16px; letter-spacing:0.3px;">公司通知</div>
+                                <div id="profile-notif-subtitle" style="font-size:11px; color:rgba(200,215,230,0.55); margin-top:1px;">暂无新通知</div>
+                            </div>
+                        </div>
+                        <span id="profile-notif-count-badge" style="display:none; background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; font-size:11px; font-weight:800; padding:3px 10px; border-radius:12px; box-shadow:0 2px 8px rgba(245,158,11,0.3);"></span>
+                    </div>
+                    <div class="profile-notifications-scroll">
+                        <div id="profile-notifications" style="padding-bottom: 4px;"></div>
+                        <div id="profile-notifications-empty" style="display:none; text-align:center; padding:24px 16px;">
+                            <div style="font-size:32px; margin-bottom:8px; opacity:0.4;">🔕</div>
+                            <div style="font-size:13px; color:rgba(200,215,230,0.45); font-weight:500;">暂无通知</div>
+                        </div>
+                    </div>
+                    <div id="profile-notif-expand-footer"></div>
+                </div>
+
                 <!-- 绩效概览（与 /api/agent-scores/me 一致） -->
                 <div class="card" style="margin-bottom: 14px; padding: 18px 16px;">
                     <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
@@ -8585,30 +8634,6 @@
                             <button class="btn btn-secondary" style="margin-left:auto; padding: 4px 10px; font-size: 11px;" onclick="showPage('approvals')">查看全部</button>
                         </div>
                         <div id="profile-pending-approvals-list"><div style="font-size:12px; color:rgba(200,215,230,0.5); text-align:center; padding:8px;">暂无待审批</div></div>
-                    </div>
-                </div>
-
-                <!-- ═══════ 公司通知 · 重新设计 ═══════ -->
-                <div id="profile-notif-section" style="margin-bottom: 16px; position: relative;">
-                    <!-- 通知头部 -->
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px; padding: 0 2px;">
-                        <div style="display:flex; align-items:center; gap: 10px;">
-                            <div style="position:relative; width:36px; height:36px; border-radius:12px; background:linear-gradient(135deg,rgba(250,204,21,0.22),rgba(245,158,11,0.12)); display:flex; align-items:center; justify-content:center; font-size:18px; box-shadow:0 4px 12px rgba(250,204,21,0.10);">
-                                <span>📢</span>
-                                <span id="profile-notif-pulse" style="display:none; position:absolute; top:-2px; right:-2px; width:10px; height:10px; border-radius:50%; background:#f59e0b; box-shadow:0 0 0 3px rgba(15,23,42,0.9); animation: notifPulse 2s infinite;"></span>
-                            </div>
-                            <div>
-                                <div style="font-weight:800; font-size:16px; letter-spacing:0.3px;">公司通知</div>
-                                <div id="profile-notif-subtitle" style="font-size:11px; color:rgba(200,215,230,0.55); margin-top:1px;">暂无新通知</div>
-                            </div>
-                        </div>
-                        <span id="profile-notif-count-badge" style="display:none; background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; font-size:11px; font-weight:800; padding:3px 10px; border-radius:12px; box-shadow:0 2px 8px rgba(245,158,11,0.3);"></span>
-                    </div>
-                    <!-- 通知列表 -->
-                    <div id="profile-notifications"></div>
-                    <div id="profile-notifications-empty" style="display:none; text-align:center; padding:24px 16px;">
-                        <div style="font-size:32px; margin-bottom:8px; opacity:0.4;">🔕</div>
-                        <div style="font-size:13px; color:rgba(200,215,230,0.45); font-weight:500;">暂无通知</div>
                     </div>
                 </div>
 
@@ -23848,6 +23873,8 @@ ${knowledgeContent.slice(0, 30000)}`;
             if (!visible.length) {
                 box.innerHTML = '';
                 empty.style.display = '';
+                const expandFooterEmpty = document.getElementById('profile-notif-expand-footer');
+                if (expandFooterEmpty) expandFooterEmpty.innerHTML = '';
                 if (pulseEl) pulseEl.style.display = 'none';
                 if (subtitleEl) subtitleEl.textContent = '暂无新通知';
                 if (countBadge) countBadge.style.display = 'none';
@@ -23930,13 +23957,18 @@ ${knowledgeContent.slice(0, 30000)}`;
                 `;
             };
 
+            const expandFooter = document.getElementById('profile-notif-expand-footer');
+            if (expandFooter) expandFooter.innerHTML = '';
+
             const topCards = visible.slice(0, COLLAPSE_LIMIT).map((a, i) => renderCard(a, i, i * 60)).join('');
             let html = topCards;
 
             if (visible.length > COLLAPSE_LIMIT) {
                 const moreCards = visible.slice(COLLAPSE_LIMIT).map((a, i) => renderCard(a, i + COLLAPSE_LIMIT, 0)).join('');
                 html += `<div id="profile-notif-more" class="notif-expand-area">${moreCards}</div>`;
-                html += `<button type="button" id="profile-notif-toggle" class="notif-more-btn" onclick="toggleProfileNotifications()">查看更多通知（${visible.length - COLLAPSE_LIMIT}条）▾</button>`;
+                if (expandFooter) {
+                    expandFooter.innerHTML = `<button type="button" id="profile-notif-toggle" class="notif-more-btn" onclick="toggleProfileNotifications()">查看更多通知（${visible.length - COLLAPSE_LIMIT}条）▾</button>`;
+                }
             }
             box.innerHTML = html;
         }
@@ -23949,6 +23981,8 @@ ${knowledgeContent.slice(0, 30000)}`;
             if (isExpanded) {
                 more.classList.remove('expanded');
                 btn.innerHTML = btn.getAttribute('data-more-text') || '查看更多通知 ▾';
+                const sc = document.querySelector('.profile-notifications-scroll');
+                if (sc) sc.scrollTop = 0;
             } else {
                 btn.setAttribute('data-more-text', btn.innerHTML);
                 more.classList.add('expanded');
