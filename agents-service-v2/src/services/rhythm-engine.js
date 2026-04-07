@@ -587,7 +587,15 @@ function parseStoreData(sd) {
   const dr = sd.dailyReport;
   if (!dr) return null;
 
-  const staffData = typeof dr.staff === 'string' ? JSON.parse(dr.staff) : (dr.staff || []);
+  // staff 是 JSON 对象 {front:[...], kitchen:[...], restStaff:[...]}
+  const staffObj = dr.staff || {};
+  const staffData = Array.isArray(staffObj)
+    ? staffObj
+    : [
+        ...(Array.isArray(staffObj.front) ? staffObj.front : []),
+        ...(Array.isArray(staffObj.kitchen) ? staffObj.kitchen : []),
+        ...(Array.isArray(staffObj.restStaff) ? staffObj.restStaff : []),
+      ];
   const totalStaff = staffData.length;
   const laborHours = parseFloat(dr.labor_total) || 0;
   const leaveUsernames = new Set(sd.todayLeave.map(lv => lv.username));
@@ -597,10 +605,11 @@ function parseStoreData(sd) {
   const preRev = parseFloat(dr.pre_discount_revenue) || 0;
   const actualRev = parseFloat(dr.actual_revenue) || 0;
   const eff = parseFloat(dr.efficiency) || 0;
-  const segments = typeof dr.segments === 'string' ? JSON.parse(dr.segments) : (dr.segments || {});
-  const noonRev = parseFloat(segments.noon) || 0;
-  const nightRev = parseFloat(segments.night) || 0;
-  const afternoonRev = parseFloat(segments.afternoon) || 0;
+  const segmentsRaw = dr.segments || {};
+  const seg = typeof segmentsRaw === 'string' ? JSON.parse(segmentsRaw) : segmentsRaw;
+  const noonRev = parseFloat(seg.noon) || 0;
+  const nightRev = parseFloat(seg.night) || 0;
+  const afternoonRev = parseFloat(seg.afternoon) || 0;
   const noonRatio = preRev > 0 ? noonRev / preRev : 0.5;
   const nightRatio = preRev > 0 ? (nightRev + afternoonRev) / preRev : 0.5;
   const noonHours = Math.round(laborHours * noonRatio * 10) / 10;
@@ -858,10 +867,10 @@ export function startRhythmScheduler() {
     } catch (e) { logger.error({ err: e?.message }, '月度实收营收检测 08:00 failed'); }
   }, { timezone: 'Asia/Shanghai' });
 
-  // 每日 22:00 — 考勤日报（打卡+休假+人效排班建议）
-  cron.schedule('0 22 * * *', async () => {
+  // 每日 22:15 — 考勤日报（打卡+休假+人效排班建议）
+  cron.schedule('15 22 * * *', async () => {
     try { await dailyAttendanceReport(); } catch (e) { logger.error({ err: e?.message }, 'daily attendance report 22:00 failed'); }
   }, { timezone: 'Asia/Shanghai' });
 
-  logger.info('✅ HQ Rhythm Scheduler started — 周度BI(周一08:00)+周报(周一10:00)+月评(每月1日10:00)+充值日检(08:00)+月末月收(每月1日08:00)+考勤日报(每日22:00)');
+  logger.info('✅ HQ Rhythm Scheduler started — 周度BI(周一08:00)+周报(周一10:00)+月评(每月1日10:00)+充值日检(08:00)+月末月收(每月1日08:00)+考勤日报(每日22:15)');
 }
