@@ -418,6 +418,46 @@ app.post('/api/rhythm/task-completion', authRequired, requireRole('admin', 'hq_m
   }
 });
 
+app.post('/api/rhythm/execution-rating', authRequired, requireRole('admin', 'hq_manager'), async (req, res) => {
+  try {
+    const date = req.body.date || null;
+    const result = await runDailyExecutionRating(date);
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/rhythm/monthly-rating', authRequired, requireRole('admin', 'hq_manager'), async (req, res) => {
+  try {
+    const period = req.body.period || null;
+    const result = await runMonthlyComprehensiveRating(period);
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/rhythm/execution-rating', authRequired, requireRole('admin', 'hq_manager'), async (req, res) => {
+  try {
+    const date = req.body.date || null;
+    const result = await runDailyExecutionRating(date);
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/rhythm/monthly-rating', authRequired, requireRole('admin', 'hq_manager'), async (req, res) => {
+  try {
+    const period = req.body.period || null;
+    const result = await runMonthlyComprehensiveRating(period);
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── Random Inspection API ───
 app.get('/api/inspection/status', authRequired, (req, res) => {
   res.json(getRandomInspectionStatus());
