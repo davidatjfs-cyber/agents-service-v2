@@ -2279,7 +2279,8 @@ async function buildPendingTasksReply(q, ctx) {
         `SELECT task_id, title, status, assignee_username, assignee_role, source, category, timeout_at, dispatched_at, created_at
          FROM master_tasks
          WHERE store ILIKE ANY($1::text[])
-           AND status NOT IN ('closed','settled','resolved','cancelled')
+           AND status NOT IN ('closed','settled','resolved','cancelled','hr_filed')
+           AND dispatched_at >= CURRENT_DATE - INTERVAL '30 days'
          ORDER BY dispatched_at DESC NULLS LAST, created_at DESC
          LIMIT 30`,
         [pats]
@@ -2289,7 +2290,8 @@ async function buildPendingTasksReply(q, ctx) {
         `SELECT task_id, title, status, assignee_username, assignee_role, source, category, timeout_at, dispatched_at, created_at
          FROM master_tasks
          WHERE store ILIKE ANY($1::text[])
-           AND status NOT IN ('closed','settled','resolved','cancelled')
+           AND status NOT IN ('closed','settled','resolved','cancelled','hr_filed')
+           AND dispatched_at >= CURRENT_DATE - INTERVAL '30 days'
            AND (
              (COALESCE(TRIM(assignee_username),'') <> '' AND LOWER(assignee_username) = LOWER($2))
              OR (COALESCE(TRIM(assignee_username),'') = '' AND $3 <> '' AND assignee_role = $3)

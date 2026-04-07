@@ -288,8 +288,9 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
       `SELECT COUNT(*)::int AS c FROM master_tasks
        WHERE store ILIKE ANY($1::text[])
          AND source = ANY($2::text[]) AND status = ANY($3::text[])
-         AND NOT ((timezone('Asia/Shanghai', COALESCE(dispatched_at, created_at)))::date = $4::date)`,
-      [storePats, BRIEFING_YESTERDAY_OPEN_SOURCES, BRIEFING_OPEN_STATUSES, yesterday]
+         AND NOT ((timezone('Asia/Shanghai', COALESCE(dispatched_at, created_at)))::date = $4::date)
+         AND COALESCE(hr_performance_recorded, false) = false
+         AND dispatched_at >= CURRENT_DATE - INTERVAL '30 days'`
     );
     const backlogTotal = parseInt(backlogCntR.rows[0]?.c || 0, 10);
 
@@ -303,6 +304,8 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
            WHERE store ILIKE ANY($1::text[])
              AND source = ANY($2::text[]) AND status = ANY($3::text[])
              AND NOT ((timezone('Asia/Shanghai', COALESCE(dispatched_at, created_at)))::date = $4::date)
+             AND COALESCE(hr_performance_recorded, false) = false
+             AND dispatched_at >= CURRENT_DATE - INTERVAL '30 days'
            ORDER BY timeout_at ASC NULLS LAST, updated_at DESC NULLS LAST
            LIMIT 8`,
           [storePats, BRIEFING_YESTERDAY_OPEN_SOURCES, BRIEFING_OPEN_STATUSES, yesterday]

@@ -172,7 +172,8 @@ export async function processTaskCardReminders() {
      FROM master_tasks
        WHERE status = 'pending_response'
        AND source IN ('random_inspection','scheduled_inspection','bi_anomaly','auto_collab','data_auditor')
-       AND (COALESCE(hr_performance_recorded, false) = false)`
+       AND (COALESCE(hr_performance_recorded, false) = false)
+       AND dispatched_at >= CURRENT_DATE - INTERVAL '30 days'`
   );
   const tasks = r2.rows || [];
   const now = Date.now();
