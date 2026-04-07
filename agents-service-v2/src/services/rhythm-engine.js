@@ -608,8 +608,10 @@ function buildAttendanceDataText(allStoresData, today) {
     const staffData = typeof dr.staff === 'string' ? JSON.parse(dr.staff) : (dr.staff || []);
     const totalStaff = staffData.length;
     const laborHours = parseFloat(dr.labor_total) || 0;
-    // 出勤人数 = labor_total（假设每人1天=1人，半天=0.5人）
-    const attendanceCount = Math.round(laborHours);
+
+    // 实际出勤人数 = staff 中排除今日休假人员
+    const leaveUsernames = new Set(sd.todayLeave.map(lv => lv.username));
+    const attendanceCount = staffData.filter(s => !leaveUsernames.has(s.user)).length;
     const attendanceRate = totalStaff > 0 ? Math.round((attendanceCount / totalStaff) * 100) : 0;
 
     text += `一、考勤\n`;
@@ -679,7 +681,7 @@ function buildAttendanceDataText(allStoresData, today) {
 async function generateAttendanceReportWithLLM(dataText, today) {
   try {
     const { callLLM } = await import('./llm-provider.js');
-    const prompt = `你是年年有喜餐饮集团的HR考勤分析助手。请根据以下数据，生成一份格式整齐、简洁专业的考勤日报。
+    const prompt = `你是年年有喜HR考勤分析助手。请根据以下数据，生成一份格式整齐、简洁专业的考勤日报。
 
 要求：
 1. 开头用一句话总结今日整体考勤情况
@@ -762,7 +764,10 @@ async function fallbackAttendanceReport(allStoresData, today) {
     const staffData = typeof dr.staff === 'string' ? JSON.parse(dr.staff) : (dr.staff || []);
     const totalStaff = staffData.length;
     const laborHours = parseFloat(dr.labor_total) || 0;
-    const attendanceCount = Math.round(laborHours);
+
+    // 实际出勤人数 = staff 中排除今日休假人员
+    const leaveUsernames = new Set(sd.todayLeave.map(lv => lv.username));
+    const attendanceCount = staffData.filter(s => !leaveUsernames.has(s.user)).length;
     const attendanceRate = totalStaff > 0 ? Math.round((attendanceCount / totalStaff) * 100) : 0;
 
     lines.push(`│ 一、考勤`);
