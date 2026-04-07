@@ -589,16 +589,17 @@ function parseStoreData(sd) {
 
   // staff 是 JSON 对象 {front:[...], kitchen:[...], restStaff:[...]}
   // totalStaff 从 employees 表获取（HRMS官方人数）
-  // attendanceCount 从日报 front+kitchen 合计天数（days=1算1人，days=0.5算0.5人）
+  // attendanceCount = 前厅全职人数(days=1) + 后厨全职人数(days=1)
+  // days=1 表示实际上班，days=0.5 表示半天休息
   const staffObj = dr.staff || {};
   const staffData = Array.isArray(staffObj) ? staffObj : [];
   const totalStaff = staffData.length;
 
-  // 实际出勤 = 前厅天数之和 + 后厨天数之和
-  const calcWorkDays = (arr) => (arr || []).reduce((sum, s) => sum + (parseFloat(s?.days || 0) || 0), 0);
+  // 实际出勤 = 前厅全职人数 + 后厨全职人数（days=1才算上班）
   const frontArr = Array.isArray(staffObj.front) ? staffObj.front : [];
   const kitchenArr = Array.isArray(staffObj.kitchen) ? staffObj.kitchen : [];
-  const attendanceCount = Math.round((calcWorkDays(frontArr) + calcWorkDays(kitchenArr)) * 10) / 10;
+  const calcFullCount = (arr) => (arr || []).filter(s => parseFloat(s?.days || 0) >= 1).length;
+  const attendanceCount = calcFullCount(frontArr) + calcFullCount(kitchenArr);
   const attendanceRate = totalStaff > 0 ? Math.round((attendanceCount / totalStaff) * 100) : 0;
   const laborHours = parseFloat(dr.labor_total) || 0;
 
