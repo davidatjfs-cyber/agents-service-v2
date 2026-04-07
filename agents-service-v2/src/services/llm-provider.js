@@ -87,6 +87,11 @@ async function callOllamaLLM(messages, options = {}) {
   const start = Date.now();
   try {
     logger.info({ base, model, purpose: options.purpose || 'unknown' }, 'callOllamaLLM calling');
+
+    // Ollama 使用 AbortController 设置超时，gem4:26b 生成 1500 tokens 可能需要 30-60 秒
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 分钟超时
+
     const res = await fetch(`${base}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -95,8 +100,11 @@ async function callOllamaLLM(messages, options = {}) {
         stream: false,
         messages,
         options: { temperature: temp, num_predict: maxTok }
-      })
+      }),
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
+
     if (!res.ok) {
       const t = await res.text();
       throw new Error(`Ollama HTTP ${res.status}: ${t.slice(0, 200)}`);
@@ -242,6 +250,9 @@ async function callOllamaVision(messages, options = {}) {
   const maxTok = Number(options.max_tokens ?? 1500);
   const start = Date.now();
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 分钟超时
+
     const res = await fetch(`${base}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -250,8 +261,11 @@ async function callOllamaVision(messages, options = {}) {
         stream: false,
         messages,
         options: { temperature: temp, num_predict: maxTok }
-      })
+      }),
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
+
     if (!res.ok) {
       const t = await res.text();
       throw new Error(`Ollama HTTP ${res.status}: ${t.slice(0, 200)}`);
