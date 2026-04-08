@@ -123,6 +123,8 @@ function buildRetryJobs(flags) {
       key: 'morning_briefing',
       slotMinuteOfDay: 7 * 60 + 30,
       graceMin: 45,
+      /** 仅早间窗口内补偿：避免 7:30 主任务抛错后，小时级 sweep 在下午/晚上把晨报误发给仍未成功的接收人 */
+      sweepEndMinuteOfDay: 10 * 60 + 30,
       maxAttempts: 4,
       match: () => true,
       run: async () => {
@@ -379,6 +381,7 @@ export async function sweepCronRetries(getFlags) {
       if (j.weekdayOnly != null && weekday !== j.weekdayOnly) continue;
       if (j.dayOfMonthOnly != null && dom !== j.dayOfMonthOnly) continue;
       if (minuteOfDay < j.slotMinuteOfDay + j.graceMin) continue;
+      if (j.sweepEndMinuteOfDay != null && minuteOfDay > j.sweepEndMinuteOfDay) continue;
       if (await hasSuccessToday(j.key, ymd)) continue;
       const n = await countRunsToday(j.key, ymd);
       if (n >= j.maxAttempts) continue;

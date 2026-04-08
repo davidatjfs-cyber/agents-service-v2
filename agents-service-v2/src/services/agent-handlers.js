@@ -215,6 +215,33 @@ async function adminAgentPromptPrefix(agentId) {
   }
 }
 
+/** data_auditor：去掉模型偶发的英文思维链/元信息，只保留中文分析正文 */
+function zhOnlyDataAuditorNarrative(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return s;
+  const cut = s.search(/【问题分析】/);
+  if (cut >= 0) return s.slice(cut).trim();
+  const cut2 = s.search(/【行动建议】/);
+  if (cut2 >= 0) return s.slice(cut2).trim();
+  const lines = s.split(/\r?\n/);
+  const out = [];
+  let keep = false;
+  for (const line of lines) {
+    const t = line.trim();
+    if (!keep) {
+      if (!t) continue;
+      if (/^(role|input data|constraints|user question|logic|analysis)\s*:/i.test(t)) continue;
+      if (/^#{1,6}\s*(role|input|constraint|user question)/i.test(t)) continue;
+      if (/[\u4e00-\u9fff]/.test(t) || /^【/.test(t)) keep = true;
+      if (keep) out.push(line);
+    } else {
+      out.push(line);
+    }
+  }
+  const joined = out.join('\n').trim();
+  return joined || s;
+}
+
 // ── 决策日志工具（永久存档 + 主动引用）────────────────────────────
 async function logDecision({ store, brand = '', decisionType = 'action_plan', title, content, agent = '', sourceTaskId = '', createdBy = '' }) {
   try {
@@ -1414,6 +1441,10 @@ async function handleDataAuditor(text, ctx) {
           const ar = await callLLM([
             { role: 'system', content: advPrefix + `你是一名有15年经验的餐饮连锁运营顾问。根据下方真实营业数据，用专业视角分析经营变化原因，并给出具体可执行的改善建议。
 
+【语言与版式（强制）】
+- 全文必须为简体中文：标题、列表、说明均用中文；禁止输出英文段落或中英混排整段说明。
+- 禁止输出思考过程、角色设定复述、「Role:」「Input Data」「Constraints」「User Question」等英文元标签或结构化英文提纲。
+
 输出格式（严格遵守，禁止输出 JSON 或代码块）：
 
 【问题分析】
@@ -1432,7 +1463,7 @@ async function handleDataAuditor(text, ctx) {
             { role: 'user', content: `${monthSummary}\n\n用户问题：${text}` }
           ], { temperature: 0.35, max_tokens: 700, purpose: 'data_auditor', ...(ctx.llmContext ? { context: ctx.llmContext } : {}) });
           if (ar.content && ar.content.trim()) {
-            actionItemsText = ar.content.trim();
+            actionItemsText = zhOnlyDataAuditorNarrative(ar.content.trim());
             fullResponse = monthSummary + '\n\n' + actionItemsText;
           }
         } catch (e) { /* LLM 失败，仅返回数据摘要 */ }
@@ -1813,6 +1844,8 @@ ${forceAnalysisBlock}
 只根据下方数据库内容回复，禁止编造、臆测或自由发挥。无数据时必须写"暂无此数据"。
 ${businessHint}
 
+【语言】必须使用简体中文作答；禁止英文段落、禁止输出 Role/Input/Constraints 等英文元信息或思维链。
+
 【输出约束（必须严格按以下模版，与V1一致）】
 1. 第一行引导句：根据[时间范围](具体日期)数据,[门店]的[经营情况/桌访情况/差评情况等]如下:
 2. 每条数据单独一行，格式为：- **指标名**: 值。若下方有[桌访反馈总结]，必须包含反馈总结要点（满意/不满意条数、主要产品/服务不满意项）。
@@ -1826,10 +1859,12 @@ ${metricExperienceAppendix}
     { role: 'system', content: sysPrompt },
     { role: 'user', content: text }
   ], { temperature: 0.1, max_tokens: 800, purpose: 'data_auditor', ...(ctx.llmContext ? { context: ctx.llmContext } : {}) });
-  saveMemory('data_auditor', store, (r.content||'').slice(0,500), {query:text.slice(0,200)}).catch(()=>{});
+  const rawAns = String(r.content || '').trim();
+  const cleanedAns = rawAns ? (zhOnlyDataAuditorNarrative(rawAns) || rawAns) : '';
+  saveMemory('data_auditor', store, cleanedAns.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
   // V1 格式：报告类型标题（由 pipeline 拼成 小年：📊 标题 (门店 · 时间)）
   const reportTitle = inferDataAuditorReportTitle(text, ctx);
-  return { agent: 'data_auditor', response: r.content || FACTUAL_BLOCKED, data: ds, store, timeRange: tr, timeLabel, reportTitle, dataBacked: ds !== '\n[no data found]\n' };
+  return { agent: 'data_auditor', response: cleanedAns || FACTUAL_BLOCKED, data: ds, store, timeRange: tr, timeLabel, reportTitle, dataBacked: ds !== '\n[no data found]\n' };
 }
 
 function inferDataAuditorReportTitle(text, ctx) {

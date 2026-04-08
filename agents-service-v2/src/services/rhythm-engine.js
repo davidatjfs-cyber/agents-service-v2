@@ -479,6 +479,27 @@ export async function monthlyEvaluation() {
   return summary;
 }
 
+/** HRMS `employees` 表：门店在编人数（与考勤日报「门店总人数」对齐；营业日报 staff JSON 结构多变不可依赖） */
+async function fetchHrmsHeadcountForStore(store) {
+  const s = String(store || '').trim();
+  if (!s) return 0;
+  try {
+    const r = await query(
+      `SELECT COUNT(DISTINCT username)::int AS c FROM employees
+       WHERE TRIM(COALESCE(store, '')) ILIKE '%' || $1 || '%'
+         AND (status IS NULL OR TRIM(LOWER(status)) NOT IN (
+           'inactive','resigned','离职','已离职','leaved','dimission','terminated',
+           'quit','dismissed','离开'
+         ))`,
+      [s]
+    );
+    return Number(r.rows?.[0]?.c || 0);
+  } catch (e) {
+    logger.warn({ err: e?.message, store: s }, 'fetchHrmsHeadcountForStore failed');
+    return 0;
+  }
+}
+
 // ─── 22:00 考勤日报 — 考勤 + 人效 + 排班建议（飞书卡片推送） ───
 export async function dailyAttendanceReport() {
   logger.info('📋 Running daily attendance report');
@@ -488,7 +509,7 @@ export async function dailyAttendanceReport() {
 
   const allStoresData = [];
   for (const store of stores) {
-    const sd = { store, allStaff: [], todayLeave: [], dailyReport: null };
+    const sd = { store, allStaff: [], todayLeave: [], dailyReport: null, hrmsEmployeeCount: 0 };
 
     // 全部注册员工
     const allStaffR = await query(
@@ -498,6 +519,7 @@ export async function dailyAttendanceReport() {
       [store]
     );
     sd.allStaff = allStaffR.rows || [];
+    sd.hrmsEmployeeCount = await fetchHrmsHeadcountForStore(store);
 
     // 今日休假
     const leaveR = await query(
@@ -615,17 +637,33 @@ function leaveTypeZh(t) {
   return m[t] || '休假';
 }
 
+/** 从营业日报 staff 结构估算在岗人数（object：front/kitchen/restStaff 去重 user） */
+function countStaffUsersFromDailyReport(staffObj) {
+  if (!staffObj) return 0;
+  if (Array.isArray(staffObj)) return staffObj.length;
+  if (typeof staffObj !== 'object') return 0;
+  const set = new Set();
+  for (const key of ['front', 'kitchen', 'restStaff']) {
+    const arr = Array.isArray(staffObj[key]) ? staffObj[key] : [];
+    for (const s of arr) {
+      if (s?.user) set.add(String(s.user).trim().toLowerCase());
+    }
+  }
+  return set.size;
+}
+
 /** 构建单门店数据对象（供卡片使用） */
 function parseStoreData(sd) {
   const dr = sd.dailyReport;
   if (!dr) return null;
 
-  // staff 是 JSON 对象 {front:[...], kitchen:[...], restStaff:[...]}
-  // totalStaff 从 employees 表获取（HRMS官方人数）
-  // 实际出勤 = front(全天+半天×0.5) + kitchen(全天+半天×0.5)
+  // staff 多为 JSON 对象 {front,kitchen,restStaff}；总人数以 HRMS employees 为准，其次日报去重，最后飞书注册人数
   const staffObj = dr.staff || {};
-  const staffData = Array.isArray(staffObj) ? staffObj : [];
-  const totalStaff = staffData.length;
+  const fromDailyDistinct = countStaffUsersFromDailyReport(staffObj);
+  const feishuRegistered = Array.isArray(sd.allStaff) ? sd.allStaff.length : 0;
+  const hrmsN = Number(sd.hrmsEmployeeCount || 0);
+  const totalStaff =
+    hrmsN > 0 ? hrmsN : (fromDailyDistinct > 0 ? fromDailyDistinct : feishuRegistered);
 
   const frontArr = Array.isArray(staffObj.front) ? staffObj.front : [];
   const kitchenArr = Array.isArray(staffObj.kitchen) ? staffObj.kitchen : [];
