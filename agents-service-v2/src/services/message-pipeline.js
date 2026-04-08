@@ -7,7 +7,7 @@ import { detectMetricFromQuestion } from './analysis-intent.js';
 import { detectIntent } from './intent-classifier.js';
 import { extractTimeRangeFromText } from './data-executor.js';
 import { analyzeMetricTree } from './analysis-engine.js';
-import { sendText, replyMsg, getFeishuUserName, getHrmsEmployeeName, getHrmsEmployeeByFeishuOpenId, isHrmsEmployeeActive } from './feishu-client.js';
+import { sendText, replyMsg, getFeishuUserName, getHrmsEmployeeName, getHrmsEmployeeByFeishuOpenId, isHrmsEmployeeActive, bindFeishuUserToEmployee } from './feishu-client.js';
 import { query } from '../utils/db.js';
 import { checkIdempotency, saveIdempotency } from '../middleware/idempotency.js';
 
@@ -255,10 +255,29 @@ export async function processMessage(ev) {
     if (!hrmsEmp) {
       // 未绑定HRMS：如果feishu_users有注册记录则放行（用feishu_users数据），否则提示绑定
       if (!user) {
-        const bindPrompt = '小年：您尚未绑定员工信息，请联系管理员完成绑定后再使用。';
-        const d = await sendReplyWithFallback(ev, bindPrompt, 'not_bound');
-        if (!d.ok) logger.error({ traceId }, 'not_bound: deliver failed');
-        return { ok: false, reason: 'not_bound', ms: Date.now() - t0, deliverOk: d.ok };
+        // 检查是否是用户回复的用户名（尝试自助绑定）
+        const text = ev.text?.trim() || '';
+        const usernamePattern = /^[A-Za-z0-9]{4,20}$/;
+        if (usernamePattern.test(text)) {
+          logger.info({ userId: ev.userId, inputUsername: text }, 'Attempting self-service binding');
+          const bindResult = await bindFeishuUserToEmployee(ev.userId, text);
+          if (bindResult.ok) {
+            hrmsEmp = bindResult.user;
+            await sendReplyWithFallback(ev, `✅ 绑定成功！${hrmsEmp.name || text}，你好！\n\n我是HRMS智能助理小年，可以帮你查询数据、审核图片、查看绩效等。\n\n请问有什么可以帮您？`, 'bind_success');
+            logger.info({ userId: ev.userId, username: text }, 'Self-service binding succeeded');
+          } else {
+            const bindFailed = bindResult.error === 'employee_not_found'
+              ? `未找到员工账号 "${text}"，请确认用户名是否正确后重新输入。`
+              : `绑定失败：${bindResult.error}，请重新输入您的HRMS用户名。`;
+            await sendReplyWithFallback(ev, `小年：${bindFailed}`, 'bind_failed');
+            return { ok: false, reason: 'bind_failed', ms: Date.now() - t0, deliverOk: true };
+          }
+        } else {
+          const bindPrompt = '小年：您尚未绑定员工信息。请直接回复您的HRMS用户名（如：NNYXYF26）即可完成自助绑定。';
+          const d = await sendReplyWithFallback(ev, bindPrompt, 'not_bound');
+          if (!d.ok) logger.error({ traceId }, 'not_bound: deliver failed');
+          return { ok: false, reason: 'not_bound', ms: Date.now() - t0, deliverOk: d.ok };
+        }
       }
       logger.info({ userId: ev.userId, username: user?.username }, 'User in feishu_users but not HRMS, allowing');
     } else if (!isHrmsEmployeeActive(hrmsEmp)) {

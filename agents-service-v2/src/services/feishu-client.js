@@ -406,6 +406,45 @@ export async function lookupUserByUsername(username) {
   try { const r = await query('SELECT * FROM feishu_users WHERE lower(username) = lower($1) AND registered = TRUE ORDER BY updated_at DESC LIMIT 1', [username]); return r.rows?.[0] || null; } catch (e) { return null; }
 }
 
+/** 自助绑定飞书用户到HRMS员工账号 */
+export async function bindFeishuUserToEmployee(openId, username) {
+  if (!openId || !username) return { ok: false, error: 'missing_params' };
+  try {
+    const r = await query(
+      `SELECT data FROM hrms_state WHERE key = $1 LIMIT 1`,
+      ['default']
+    );
+    const data = r.rows?.[0]?.data;
+    if (!data || typeof data !== 'object') return { ok: false, error: 'hrms_state_not_found' };
+    const employees = Array.isArray(data.employees) ? data.employees : [];
+    const emp = employees.find(
+      e => String(e?.username || '').trim().toLowerCase() === String(username).trim().toLowerCase()
+    );
+    if (!emp) return { ok: false, error: 'employee_not_found' };
+    
+    const name = String(emp.name || '').trim();
+    const store = String(emp.store || '').trim();
+    const role = String(emp.role || '').trim();
+    
+    await query(
+      `INSERT INTO feishu_users (open_id, username, name, store, role, registered, updated_at)
+       VALUES ($1, $2, $3, $4, $5, TRUE, NOW())
+       ON CONFLICT (open_id) DO UPDATE SET
+         username = EXCLUDED.username,
+         name = EXCLUDED.name,
+         store = EXCLUDED.store,
+         role = EXCLUDED.role,
+         registered = TRUE,
+         updated_at = NOW()`,
+      [openId, username, name, store, role]
+    );
+    return { ok: true, user: emp };
+  } catch (e) {
+    logger.warn({ err: e?.message, openId, username }, 'bindFeishuUserToEmployee failed');
+    return { ok: false, error: e?.message };
+  }
+}
+
 export async function pushAnomalyAlert(store, anomalyKey, severity, detail, taskId) {
   const emoji = severity === 'high' ? '🚨' : '⚠️';
   const users = await query('SELECT open_id FROM feishu_users WHERE store = $1 AND role IN (\'store_manager\',\'admin\',\'hq_manager\') AND registered = TRUE', [store]);
