@@ -46,7 +46,9 @@ if [[ -f '.env.production' ]]; then
   grep -q '^ENABLE_DB_WRITE=' '.env.production' 2>/dev/null || echo 'ENABLE_DB_WRITE=true' >> '.env.production'
 fi
 ensure_kv .env PORT 3101
+ensure_kv .env CONFIRM_PRODUCTION true
 [[ -f .env.production ]] && ensure_kv .env.production PORT 3101 || true
+[[ -f .env.production ]] && ensure_kv .env.production CONFIRM_PRODUCTION true || true
 (npm ci --omit=dev 2>/dev/null || npm install --omit=dev)
 node scripts/apply-analysis-sop-sql.mjs
 node scripts/apply-strategy-rules-sql.mjs

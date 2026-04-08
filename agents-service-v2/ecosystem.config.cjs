@@ -14,7 +14,9 @@ module.exports = {
       max_memory_restart: '600M',
       env: {
         NODE_ENV: 'production',
-        PORT: '3101'
+        PORT: '3101',
+        /** 与 src/utils/safety.js 一致：生产启动必须显式确认，否则进程 exit(2) */
+        CONFIRM_PRODUCTION: 'true'
       }
     }
   ]

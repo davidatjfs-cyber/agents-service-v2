@@ -854,8 +854,8 @@ function shanghaiLastDayOfMonth() {
 }
 
 export function startRhythmScheduler() {
-  // 周一 08:00 — 周度 BI 异常检测（revenue_achievement/labor_efficiency/table_visit/bad_review 等）
-  cron.schedule('0 8 * * 1', async () => {
+  // 周一 05:00 — 周度 BI 异常检测（revenue_achievement/labor_efficiency/table_visit/bad_review 等）
+  cron.schedule('0 5 * * 1', async () => {
     try { await runAnomalyChecksForStores('weekly'); } catch (e) { logger.error({ err: e?.message }, 'weekly anomaly check cron failed'); }
   }, { timezone: 'Asia/Shanghai' });
 
@@ -888,5 +888,5 @@ export function startRhythmScheduler() {
     try { await dailyAttendanceReport(); } catch (e) { logger.error({ err: e?.message }, 'daily attendance report 22:00 failed'); }
   }, { timezone: 'Asia/Shanghai' });
 
-  logger.info('✅ HQ Rhythm Scheduler started — 周度BI(周一08:00)+周报(周一10:00)+月评(每月1日10:00)+充值日检(08:00)+月末月收(每月1日08:00)+考勤日报(每日22:15)');
+  logger.info('✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+周报(周一10:00)+月评(每月1日10:00)+充值日检(每日08:00)+月末月收(每月1日08:00)+考勤日报(每日22:15)');
 }

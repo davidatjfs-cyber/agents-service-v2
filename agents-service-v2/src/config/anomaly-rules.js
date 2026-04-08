@@ -42,7 +42,7 @@ export const ANOMALY_RULES = [
       optional: ['数据截图']
     },
     autoActions: ['trigger', 'remind', 'follow_up', 'pdca_generate'],
-    notes: '每周一08:00触发，统计上一完整自然周'
+    notes: '每周一05:00触发（rhythm-engine），统计上一完整自然周'
   },
 
   // ─── 1b. 实收营收异常（月度）───

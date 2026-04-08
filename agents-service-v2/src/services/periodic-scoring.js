@@ -704,7 +704,7 @@ export async function runWeeklyStoreScoring() {
 
 export function startPeriodicScoringScheduler() {
   cron.schedule(
-    '0 5 * * 1',
+    '0 8 * * 1',
     async () => {
       try {
         await runWeeklyStoreScoring();
@@ -714,5 +714,5 @@ export function startPeriodicScoringScheduler() {
     },
     { timezone: 'Asia/Shanghai' }
   );
-  logger.info('Periodic scoring scheduler started (每周一 05:00 Asia/Shanghai，含飞书卡片与 HRMS 扣分通知)');
+  logger.info('Periodic scoring scheduler started (每周一 08:00 Asia/Shanghai，含飞书卡片与 HRMS 扣分通知)');
 }

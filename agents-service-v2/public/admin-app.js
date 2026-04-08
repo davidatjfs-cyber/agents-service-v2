@@ -1097,7 +1097,7 @@ function viewPerformance() {
   w.appendChild(el('h2', { className: 'text-lg font-bold text-gray-900 mb-4' }, '绩效考核标准设置 (全部可自定义)'));
   w.appendChild(card('周度自动评分（写入 agent_scores / HRMS 同源库）', (() => {
     const d = el('div', { className: 'text-sm text-gray-600 space-y-3' });
-    d.appendChild(el('p', {}, '系统按「上周」的 anomaly_triggers 汇总扣分，写入各店店长、出品经理在 feishu_users 中的账号；若未绑定则写入占位账号。默认每周一 02:15 执行（需 ENABLE_AUTOMATIONS 或 ENABLE_WEEKLY_SCORING_CRON）。'));
+    d.appendChild(el('p', {}, '系统按「上周」的 anomaly_triggers 汇总扣分，写入各店店长、出品经理在 feishu_users 中的账号；若未绑定则写入占位账号。默认每周一 08:00（上海）执行（需 ENABLE_AUTOMATIONS 或 ENABLE_WEEKLY_SCORING_CRON）。'));
     d.appendChild(btn('立即执行周度评分', async () => {
       try {
         const r = await POST('/api/scoring/run-weekly', {});
