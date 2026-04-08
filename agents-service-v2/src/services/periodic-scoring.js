@@ -12,6 +12,7 @@ import { calcDeductions } from './scoring-model.js';
 import { getBrandForStore } from './config-service.js';
 import { sendCard, sendText, buildPerformanceSummaryCard, buildBiDeductionCard } from './feishu-client.js';
 import { ensureHrmsUserNotificationsTable } from '../utils/hrms-user-notifications.js';
+import { runWithCronLog } from '../utils/cron-run-monitor.js';
 import {
   shanghaiLastCompletedWeekBounds,
   shanghaiWeekMonSunContaining,
@@ -640,15 +641,17 @@ export async function runWeeklyStoreScoring() {
 
 export function startPeriodicScoringScheduler() {
   cron.schedule(
-    '0 8 * * 1',
+    '25 8 * * 1',
     async () => {
       try {
-        await runWeeklyStoreScoring();
+        await runWithCronLog('weekly_store_scoring', async () => {
+          await runWeeklyStoreScoring();
+        });
       } catch (e) {
         logger.error({ err: e?.message }, 'Weekly scoring cron failed');
       }
     },
     { timezone: 'Asia/Shanghai' }
   );
-  logger.info('Periodic scoring scheduler started (每周一 08:00 Asia/Shanghai，含飞书卡片与 HRMS 扣分通知)');
+  logger.info('Periodic scoring scheduler started (每周一 08:25 Asia/Shanghai，含飞书卡片与 HRMS 扣分通知)');
 }

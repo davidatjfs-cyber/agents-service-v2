@@ -1,6 +1,6 @@
 /**
  * monthly-comprehensive-rating.js
- * 每月10号凌晨01:00（上海时区）执行月度综合评级
+ * 每月10号凌晨01:18（上海时区）执行月度综合评级（与 KPI 01:03、加分 00:30 错开）
  * 
  * 功能：
  * 1. 绩效得分统计（上月 anomaly_rollups_v2 汇总）
@@ -544,7 +544,7 @@ function buildAbilityMonthlyFilingCard(r, period) {
   const roleLabel = roleLabelZh(r.role);
   const ar = r.ability_rating || '—';
   const ratingColor =
-    ar === 'B' ? 'blue' : ar === 'C' ? 'orange' : ar === 'D' ? 'red' : 'blue';
+    ar === 'A' ? 'green' : ar === 'B' ? 'blue' : ar === 'C' ? 'orange' : ar === 'D' ? 'red' : 'blue';
   const detailMd = formatAbilityDetailMarkdown(r);
 
   const content = `**备案类型**：工作能力月评
@@ -578,9 +578,9 @@ ${detailMd}`;
   };
 }
 
-function buildAbilityMonthlyAdminSummaryCard(failed, period) {
-  let md = `**统计月**：${period}\n**备案人数**：${failed.length}\n\n**备案明细**\n`;
-  for (const r of failed) {
+function buildAbilityMonthlyAdminSummaryCard(allResults, period) {
+  let md = `**统计月**：${period}\n**备案人数**：${allResults.length}（全员留痕）\n\n**备案明细**\n`;
+  for (const r of allResults) {
     const roleLabel = roleLabelZh(r.role);
     md += `\n• **${r.store}** · ${roleLabel} ${r.name || r.username}：**${r.ability_rating}** 级`;
   }
@@ -594,23 +594,22 @@ function buildAbilityMonthlyAdminSummaryCard(failed, period) {
       { tag: 'div', text: { tag: 'lark_md', content: md } },
       {
         tag: 'note',
-        elements: [{ tag: 'plain_text', content: '仅列出工作能力未达 A 级人员（与执行力日评备案逻辑一致）' }]
+        elements: [{ tag: 'plain_text', content: '全员工作能力月评备案（含 A 级）· 与月度综合评级同批触发' }]
       }
     ]
   };
 }
 
 async function sendAbilityMonthlyFiling(results, period) {
-  const failed = results.filter((r) => r.ability_rating && r.ability_rating !== 'A');
-  if (!failed.length) {
-    logger.info({ period }, 'ability monthly filing: all A, skip individual备案');
+  if (!results.length) {
+    logger.info({ period }, 'ability monthly filing: no staff');
     return 0;
   }
 
   await ensureHrmsUserNotificationsTable();
   let sent = 0;
 
-  for (const r of failed) {
+  for (const r of results) {
     const card = buildAbilityMonthlyFilingCard(r, period);
     const roleLabel = roleLabelZh(r.role);
     const detailText = formatAbilityDetailMarkdown(r).replace(/\*\*/g, '');
@@ -653,7 +652,7 @@ async function sendAbilityMonthlyFiling(results, period) {
      WHERE registered = true AND open_id IS NOT NULL
        AND role IN ('admin', 'hq_manager')`
   );
-  const summaryCard = buildAbilityMonthlyAdminSummaryCard(failed, period);
+  const summaryCard = buildAbilityMonthlyAdminSummaryCard(results, period);
   for (const rec of adminRecipients.rows || []) {
     try {
       await sendCard(rec.open_id, summaryCard, 'open_id');
@@ -663,7 +662,7 @@ async function sendAbilityMonthlyFiling(results, period) {
     }
   }
 
-  logger.info({ period, filingCount: failed.length }, 'ability monthly filing done');
+  logger.info({ period, filingCount: results.length }, 'ability monthly filing done');
   return sent;
 }
 
@@ -752,7 +751,7 @@ function buildMonthlyRatingCard(r, period) {
     },
     elements: [
       { tag: 'div', text: { tag: 'lark_md', content } },
-      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：周度异常汇总 + 每日执行力 + 月度毛利率/点评 · 每月10号01:00自动生成' }] }
+      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：周度异常汇总 + 每日执行力 + 月度毛利率/点评 · 每月10号01:18自动生成' }] }
     ]
   };
 }
@@ -788,7 +787,7 @@ ${lines.join('\n')}`;
     },
     elements: [
       { tag: 'div', text: { tag: 'lark_md', content } },
-      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：周度异常汇总 + 每日执行力 + 月度毛利率/点评 · 每月10号01:00自动生成' }] }
+      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：周度异常汇总 + 每日执行力 + 月度毛利率/点评 · 每月10号01:18自动生成' }] }
     ]
   };
 }

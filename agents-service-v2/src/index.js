@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import cron from 'node-cron';
 import { logger } from './utils/logger.js';
+import { runWithCronLog, startCronRetrySweeper } from './utils/cron-run-monitor.js';
 import { checkDbHealth } from './utils/db.js';
 import { checkRedisHealth } from './utils/queue.js';
 import { startAnomalyQueueWorker, getAnomalyQueueStats } from './services/anomaly-queue.js';
@@ -862,15 +863,17 @@ app.get('/api/stores-brands', authRequired, async (req, res) => {
 
 // ─── KPI daily cron (凌晨1:00 计算昨日KPI) ───
 function startKpiScheduler() {
-  cron.schedule('0 1 * * *', async () => {
+  cron.schedule('3 1 * * *', async () => {
     try {
       logger.info('📊 Running daily KPI calculation');
-      await calculateAllStoresKPI('yesterday');
+      await runWithCronLog('kpi_yesterday', async () => {
+        await calculateAllStoresKPI('yesterday');
+      });
     } catch (e) {
       logger.error({ err: e }, 'Daily KPI calculation failed');
     }
   }, { timezone: 'Asia/Shanghai' });
-  logger.info('✅ KPI Scheduler started (每日01:00计算)');
+  logger.info('✅ KPI Scheduler started (每日01:03计算，错开整点)');
 }
 
 // ─── Startup ───
@@ -897,6 +900,10 @@ async function start() {
   }).catch(() => {});
 
   const automations = isAutomationsEnabled();
+  startCronRetrySweeper(() => ({
+    automations: isAutomationsEnabled(),
+    weeklyScoring: isWeeklyScoringCronEnabled()
+  }));
   if (isDailyInspectionCronEnabled()) {
     startDailyInspectionScheduler();
     logger.info('Daily inspection cron enabled');
@@ -919,28 +926,38 @@ async function start() {
   }
   // 每日晨报：固定 07:30（Asia/Shanghai），业务约定勿改时刻/时区
   cron.schedule('30 7 * * *', () => {
-    sendMorningBriefing().catch(e => logger.warn({ err: e?.message }, 'morning briefing cron error'));
+    runWithCronLog('morning_briefing', () => sendMorningBriefing()).catch((e) =>
+      logger.warn({ err: e?.message }, 'morning briefing cron error')
+    );
   }, { timezone: 'Asia/Shanghai' });
   logger.info('Morning briefing cron scheduled at 07:30 Asia/Shanghai (fixed)');
   // 每日任务达成率：固定 08:20（Asia/Shanghai），与食安扫描 08:15 错开
   cron.schedule('20 8 * * *', () => {
-    sendDailyTaskCompletionReport().catch(e => logger.warn({ err: e?.message }, 'daily task completion cron error'));
+    runWithCronLog('daily_task_completion_report', () => sendDailyTaskCompletionReport()).catch((e) =>
+      logger.warn({ err: e?.message }, 'daily task completion cron error')
+    );
   }, { timezone: 'Asia/Shanghai' });
   logger.info('Daily task completion report cron scheduled at 08:20 Asia/Shanghai');
-  // 执行力日评：固定 08:00（Asia/Shanghai），检查昨日未达成项并发送通知
-  cron.schedule('0 8 * * *', () => {
-    runDailyExecutionRating().catch(e => logger.warn({ err: e?.message }, 'daily execution rating cron error'));
+  // 执行力日评：08:02（Asia/Shanghai），与 08:15 食安、08:20 达成率错开
+  cron.schedule('2 8 * * *', () => {
+    runWithCronLog('daily_execution_rating', () => runDailyExecutionRating()).catch((e) =>
+      logger.warn({ err: e?.message }, 'daily execution rating cron error')
+    );
   }, { timezone: 'Asia/Shanghai' });
-  logger.info('Daily execution rating cron scheduled at 08:00 Asia/Shanghai');
-  // 月度综合评级：每月10号 01:00（Asia/Shanghai），汇总绩效得分+执行力+工作态度+工作能力+门店级别
-  cron.schedule('0 1 10 * *', () => {
-    runMonthlyComprehensiveRating().catch(e => logger.warn({ err: e?.message }, 'monthly comprehensive rating cron error'));
+  logger.info('Daily execution rating cron scheduled at 08:02 Asia/Shanghai');
+  // 月度综合评级：每月10号 01:18（Asia/Shanghai），晚于 01:03 KPI、00:30 加分
+  cron.schedule('18 1 10 * *', () => {
+    runWithCronLog('monthly_comprehensive_rating', async () => {
+      await runMonthlyComprehensiveRating();
+    }).catch((e) => logger.warn({ err: e?.message }, 'monthly comprehensive rating cron error'));
   }, { timezone: 'Asia/Shanghai' });
-  logger.info('Monthly comprehensive rating cron scheduled at 01:00 on 10th (Asia/Shanghai)');
-  // 上月异常项未触发加分：与综合评级同一套 agent_scores 库，独立于 ENABLE_AUTOMATIONS（10日 00:30 早于下方 01:00）
+  logger.info('Monthly comprehensive rating cron scheduled at 01:18 on 10th (Asia/Shanghai)');
+  // 上月异常项未触发加分：10日 00:30
   cron.schedule('30 0 10 * *', async () => {
     try {
-      await runMonthlyAnomalyItemBonuses();
+      await runWithCronLog('monthly_anomaly_item_bonus', async () => {
+        await runMonthlyAnomalyItemBonuses();
+      });
     } catch (e) {
       logger.error({ err: e?.message }, 'monthly anomaly item bonus cron');
     }
@@ -951,29 +968,33 @@ async function start() {
     startKpiScheduler();
     startEscalationScheduler();
     startBitablePolling(120000);
-    // 实际毛利率表：每日 05:00（上海）全量拉取（与 bitable 轮询共用 skipDedup 表逻辑）
-    cron.schedule('0 5 * * *', async () => {
+    // 实际毛利率表：每日 05:16（上海）拉取飞书表数据（非「毛利率异常」月检；与 05:00 周度BI、05:08 日频BI 错开）
+    cron.schedule('16 5 * * *', async () => {
       try {
         const featureFlags = await getConfig('feature_flags').catch(() => null) || {};
         if (featureFlags.bitable_polling === false) return;
-        logger.info('actual_gross_margin: 05:00 scheduled sync (Asia/Shanghai)');
-        await pollBitableTable('actual_gross_margin');
+        logger.info('actual_gross_margin: 05:16 scheduled sync (Asia/Shanghai)');
+        await runWithCronLog('bitable_actual_gross_margin', async () => {
+          await pollBitableTable('actual_gross_margin');
+        });
       } catch (e) {
-        logger.error({ err: e?.message }, 'actual_gross_margin 05:00 sync failed');
+        logger.error({ err: e?.message }, 'actual_gross_margin sync failed');
       }
     }, { timezone: 'Asia/Shanghai' });
-    logger.info('actual_gross_margin cron scheduled at 05:00 Asia/Shanghai');
+    logger.info('actual_gross_margin cron scheduled at 05:16 Asia/Shanghai');
     // 食安：每日扫描昨日桌访+差评文本（08:15）
     cron.schedule('15 8 * * *', async () => {
       try {
         const stores = await getActiveStores();
-        await runFoodSafetyDailyScan(stores);
+        await runWithCronLog('food_safety_daily_scan', async () => {
+          await runFoodSafetyDailyScan(stores);
+        });
       } catch (e) {
         logger.warn({ err: e?.message }, 'food_safety daily scan cron');
       }
     }, { timezone: 'Asia/Shanghai' });
     logger.info('Food safety data scan scheduled at 08:15 Asia/Shanghai');
-    // 总实收毛利率：每月9号 24:00（即10号00:00）检测上月数据，确保10号01:00月度绩效计算时已有毛利率异常数据
+    // 总实收毛利率：每月10号00:00检测上月数据，确保10号01:18月度综合评级前已落库
     cron.schedule('0 0 10 * *', async () => {
       try {
         const stores = await getActiveStores();

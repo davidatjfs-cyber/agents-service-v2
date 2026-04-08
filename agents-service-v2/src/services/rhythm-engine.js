@@ -11,6 +11,7 @@
 import cron from 'node-cron';
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
+import { runWithCronLog } from '../utils/cron-run-monitor.js';
 import { runAnomalyChecks } from './anomaly-engine.js';
 import { pushRhythmReport } from './feishu-client.js';
 import { buildTableVisitKpiMarkdownSection } from './deterministic-replies.js';
@@ -830,7 +831,7 @@ function roleLabelZh(role) {
 
 // ─── 启动Cron调度（读取配置，尊重 enabled 开关） ───
 // 产品约定（2026-03）：总部节律仅保留 **周报、月评**；晨检/午晚巡/日终暂不注册 cron（函数仍保留供手工 API 触发）。
-async function runAnomalyChecksForStores(frequency) {
+export async function runAnomalyChecksForStores(frequency) {
   const storesR = await query(
     `SELECT DISTINCT store FROM daily_reports WHERE date >= CURRENT_DATE - 30 AND store IS NOT NULL`
   );
@@ -854,39 +855,75 @@ function shanghaiLastDayOfMonth() {
 }
 
 export function startRhythmScheduler() {
-  // 周一 05:00 — 周度 BI 异常检测（revenue_achievement/labor_efficiency/table_visit/bad_review 等）
+  // 周一 05:00 — 周度 BI（与日频 05:08、bitable 05:16 错开）
   cron.schedule('0 5 * * 1', async () => {
-    try { await runAnomalyChecksForStores('weekly'); } catch (e) { logger.error({ err: e?.message }, 'weekly anomaly check cron failed'); }
-  }, { timezone: 'Asia/Shanghai' });
-
-  // 周一 10:00 周报（发送飞书汇总卡片，不重复触发异常检测）
-  cron.schedule('0 10 * * 1', async () => {
-    if (!await isRhythmTaskEnabled('weekly')) { logger.info('Cron: weekly report SKIPPED (disabled in config)'); return; }
-    try { await weeklyReport(); } catch (e) { logger.error({ err: e }, 'Cron: weekly report failed'); }
-  }, { timezone: 'Asia/Shanghai' });
-
-  // 每月1日 10:00 月度评估
-  cron.schedule('0 10 1 * *', async () => {
-    if (!await isRhythmTaskEnabled('monthly')) { logger.info('Cron: monthly evaluation SKIPPED (disabled in config)'); return; }
-    try { await monthlyEvaluation(); } catch (e) { logger.error({ err: e }, 'Cron: monthly evaluation failed'); }
-  }, { timezone: 'Asia/Shanghai' });
-
-  // 每日 05:00 日频 BI 检测（静态规则含 recharge_zero；DB 中 frequency=daily 且与 canonical 一致者同跑）
-  cron.schedule('0 5 * * *', async () => {
-    try { await runAnomalyChecksForStores('daily'); } catch (e) { logger.error({ err: e?.message }, '日频 BI 检测 05:00 failed'); }
-  }, { timezone: 'Asia/Shanghai' });
-
-  // 每月1日 08:00 — 月度实收营收达成检测（revenue_achievement_monthly）
-  cron.schedule('0 8 1 * *', async () => {
     try {
-      await runAnomalyChecksForStores('monthly');
-    } catch (e) { logger.error({ err: e?.message }, '月度实收营收检测 08:00 failed'); }
+      await runWithCronLog('weekly_bi_anomaly', async () => {
+        await runAnomalyChecksForStores('weekly');
+      });
+    } catch (e) {
+      logger.error({ err: e?.message }, 'weekly anomaly check cron failed');
+    }
+  }, { timezone: 'Asia/Shanghai' });
+
+  // 周一 10:06 周报（与每月1日 10:18 月评估错开）
+  cron.schedule('6 10 * * 1', async () => {
+    if (!await isRhythmTaskEnabled('weekly')) { logger.info('Cron: weekly report SKIPPED (disabled in config)'); return; }
+    try {
+      await runWithCronLog('rhythm_weekly_report', async () => {
+        await weeklyReport();
+      });
+    } catch (e) {
+      logger.error({ err: e }, 'Cron: weekly report failed');
+    }
+  }, { timezone: 'Asia/Shanghai' });
+
+  // 每月1日 10:18 月度评估
+  cron.schedule('18 10 1 * *', async () => {
+    if (!await isRhythmTaskEnabled('monthly')) { logger.info('Cron: monthly evaluation SKIPPED (disabled in config)'); return; }
+    try {
+      await runWithCronLog('rhythm_monthly_evaluation', async () => {
+        await monthlyEvaluation();
+      });
+    } catch (e) {
+      logger.error({ err: e }, 'Cron: monthly evaluation failed');
+    }
+  }, { timezone: 'Asia/Shanghai' });
+
+  // 每日 05:08 日频 BI（与周一 05:00 周度、05:16 bitable 错开）
+  cron.schedule('8 5 * * *', async () => {
+    try {
+      await runWithCronLog('daily_bi_anomaly', async () => {
+        await runAnomalyChecksForStores('daily');
+      });
+    } catch (e) {
+      logger.error({ err: e?.message }, '日频 BI 检测 failed');
+    }
+  }, { timezone: 'Asia/Shanghai' });
+
+  // 每月1日 08:12 — 月度实收营收（与 08:02 执行力等错开）
+  cron.schedule('12 8 1 * *', async () => {
+    try {
+      await runWithCronLog('monthly_revenue_anomaly', async () => {
+        await runAnomalyChecksForStores('monthly');
+      });
+    } catch (e) {
+      logger.error({ err: e?.message }, '月度实收营收检测 failed');
+    }
   }, { timezone: 'Asia/Shanghai' });
 
   // 每日 22:15 — 考勤日报（打卡+休假+人效排班建议）
   cron.schedule('15 22 * * *', async () => {
-    try { await dailyAttendanceReport(); } catch (e) { logger.error({ err: e?.message }, 'daily attendance report 22:00 failed'); }
+    try {
+      await runWithCronLog('daily_attendance_report', async () => {
+        await dailyAttendanceReport();
+      });
+    } catch (e) {
+      logger.error({ err: e?.message }, 'daily attendance report failed');
+    }
   }, { timezone: 'Asia/Shanghai' });
 
-  logger.info('✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+周报(周一10:00)+月评(每月1日10:00)+日频BI(每日05:00)+月末月收(每月1日08:00)+考勤日报(每日22:15)');
+  logger.info(
+    '✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+日频BI(每日05:08)+月收(每月1日08:12)+周报(周一10:06)+月评(每月1日10:18)+考勤(每日22:15)'
+  );
 }
