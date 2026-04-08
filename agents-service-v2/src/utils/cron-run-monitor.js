@@ -226,6 +226,71 @@ function buildRetryJobs(flags) {
       }
     },
     {
+      key: 'monthly_gross_margin_check',
+      slotMinuteOfDay: 0,
+      graceMin: 90,
+      maxAttempts: 4,
+      dayOfMonthOnly: 10,
+      match: () => auto,
+      run: async () => {
+        const cfg = await import('../services/config-service.js');
+        const stores = await cfg.getActiveStores();
+        for (const store of stores) {
+          try {
+            const ae = await import('../services/anomaly-engine.js');
+            const result = await ae.checkGrossMargin(store);
+            if (!result.triggered) continue;
+            const brand = await cfg.getBrandForStore(store).catch(() => null);
+            const db = await import('./db.js');
+            const { shanghaiPrevCalendarMonthBounds } = await import('./anomaly-week-bounds.js');
+            const triggerDate = shanghaiPrevCalendarMonthBounds().last;
+            const dupFinal = await db.query(
+              `SELECT 1 FROM anomaly_triggers
+               WHERE anomaly_key = 'gross_margin' AND store = $1 AND trigger_date = $2::date
+                 AND COALESCE(status, '') NOT IN ('pending_data', 'superseded')
+               LIMIT 1`,
+              [store, triggerDate]
+            );
+            if (dupFinal.rows?.length) continue;
+            await db.query(
+              `INSERT INTO anomaly_triggers
+                 (anomaly_key, store, brand, severity, trigger_date, trigger_value, threshold_value, assigned_role, notify_target_role)
+               VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9)`,
+              [
+                'gross_margin',
+                store,
+                brand || null,
+                result.severity,
+                triggerDate,
+                JSON.stringify(result.value),
+                JSON.stringify(result.threshold),
+                'store_production_manager',
+                'kitchen_manager'
+              ]
+            );
+            const q = await import('../services/anomaly-queue.js');
+            await q.enqueueNotifyJob({
+              store,
+              brand,
+              ruleKey: 'gross_margin',
+              severity: result.severity,
+              detail: result.detail,
+              value: result.value
+            });
+            await q.enqueueCollabJob({
+              ruleKey: 'gross_margin',
+              store,
+              severity: result.severity,
+              detail: result.detail,
+              value: result.value
+            });
+          } catch (e) {
+            logger.error({ err: e?.message, store }, 'cron-retry gross margin monthly check failed');
+          }
+        }
+      }
+    },
+    {
       key: 'monthly_comprehensive_rating',
       slotMinuteOfDay: 1 * 60 + 18,
       graceMin: 120,

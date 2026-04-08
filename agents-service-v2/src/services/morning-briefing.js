@@ -16,6 +16,8 @@ import { expandAgentStoreLabels } from '../config/store-mapping.js';
 
 const FMT_MONEY = (n) => `¥${Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 0 })}`;
 const FMT_PCT   = (n) => `${(Number(n || 0) * 100).toFixed(1)}%`;
+const BRIEFING_SEND_TABLE = 'agent_v2_morning_briefing_sends';
+const BRIEFING_RETRY_MAX = 3;
 
 /** 晨报 SQL：与日报/任务库门店别名对齐（洪潮久光 ↔ 洪潮大宁久光等） */
 function briefingStoreSqlPatterns(store) {
@@ -179,6 +181,70 @@ async function getBriefingRecipients() {
   } catch (e) {
     logger.warn({ err: e?.message }, 'getBriefingRecipients failed');
     return [];
+  }
+}
+
+function getShanghaiYmd() {
+  return new Date().toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
+}
+
+function recipientScope(user) {
+  return user.role === 'admin' || user.role === 'hq_manager' ? '__all_stores__' : String(user.store || '').trim();
+}
+
+async function ensureBriefingSendTable() {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS ${BRIEFING_SEND_TABLE} (
+        id BIGSERIAL PRIMARY KEY,
+        run_ymd TEXT NOT NULL,
+        username TEXT NOT NULL,
+        scope TEXT NOT NULL,
+        ok BOOLEAN NOT NULL DEFAULT false,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(run_ymd, username, scope)
+      )`);
+    await query(
+      `CREATE INDEX IF NOT EXISTS idx_${BRIEFING_SEND_TABLE}_ymd_ok ON ${BRIEFING_SEND_TABLE} (run_ymd, ok, updated_at DESC)`
+    );
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'ensureBriefingSendTable failed');
+  }
+}
+
+async function hasBriefingSuccess(runYmd, username, scope) {
+  try {
+    const r = await query(
+      `SELECT 1 FROM ${BRIEFING_SEND_TABLE}
+       WHERE run_ymd = $1 AND username = $2 AND scope = $3 AND ok = true
+       LIMIT 1`,
+      [runYmd, String(username || '').trim(), String(scope || '').trim()]
+    );
+    return !!(r.rows || []).length;
+  } catch (e) {
+    logger.warn({ err: e?.message, runYmd, username, scope }, 'hasBriefingSuccess failed');
+    return false;
+  }
+}
+
+async function recordBriefingAttempt(runYmd, username, scope, ok, errMsg = '') {
+  try {
+    await query(
+      `INSERT INTO ${BRIEFING_SEND_TABLE} (run_ymd, username, scope, ok, attempts, last_error, updated_at)
+       VALUES ($1, $2, $3, $4, 1, $5, NOW())
+       ON CONFLICT (run_ymd, username, scope)
+       DO UPDATE SET
+         ok = ${BRIEFING_SEND_TABLE}.ok OR EXCLUDED.ok,
+         attempts = ${BRIEFING_SEND_TABLE}.attempts + 1,
+         last_error = CASE WHEN EXCLUDED.ok THEN NULL ELSE EXCLUDED.last_error END,
+         updated_at = NOW()`,
+      [runYmd, String(username || '').trim(), String(scope || '').trim(), !!ok, errMsg || null]
+    );
+  } catch (e) {
+    logger.warn({ err: e?.message, runYmd, username, scope }, 'recordBriefingAttempt failed');
   }
 }
 
@@ -478,11 +544,14 @@ async function sendMorningBriefingToUser(user, storeContent, store) {
     const result = await sendCard(user.open_id, card);
     if (result?.ok === false) {
       logger.warn({ user: user.username, store, error: result.error, data: result.data }, 'morning briefing send FAILED (Feishu API error)');
+      return { ok: false, error: String(result.error || result.data?.msg || 'feishu_send_failed') };
     } else {
       logger.info({ user: user.username, store, openId: user.open_id }, 'morning briefing sent OK');
+      return { ok: true };
     }
   } catch (e) {
     logger.warn({ err: e?.message, user: user.username }, 'morning briefing send exception');
+    return { ok: false, error: String(e?.message || 'send_exception') };
   }
 }
 
@@ -497,14 +566,24 @@ export async function sendMorningBriefing() {
     logger.warn('no briefing recipients found');
     return;
   }
+  await ensureBriefingSendTable();
+  const runYmd = getShanghaiYmd();
 
   // 按门店归组（总部管理员接收所有门店摘要；排除「总部」等非经营门店，避免无意义整块）
   const stores = [...new Set(recipients.filter(u => u.store).map(u => u.store))].filter(
     (s) => !isBriefingExcludedStore(s)
   );
+  let failedRecipients = 0;
 
   for (const user of recipients) {
     try {
+      const scope = recipientScope(user);
+      if (await hasBriefingSuccess(runYmd, user.username, scope)) {
+        logger.info({ runYmd, user: user.username, scope }, 'morning briefing skip: already sent OK');
+        continue;
+      }
+      let payload = null;
+      let storeLabel = '';
       if (user.role === 'admin' || user.role === 'hq_manager') {
         // 总部：仅拼接各实体门店，不包含管理部门「总部」假门店
         const allParts = [];
@@ -513,7 +592,8 @@ export async function sendMorningBriefing() {
           if (content) allParts.push(`**【${s}】**\n${content}`);
         }
         if (allParts.length) {
-          await sendMorningBriefingToUser(user, allParts.join('\n\n---\n\n'), '全门店汇总');
+          payload = allParts.join('\n\n---\n\n');
+          storeLabel = '全门店汇总';
         }
       } else if (user.store) {
         // 门店负责人/出品经理：只看本门店
@@ -521,13 +601,35 @@ export async function sendMorningBriefing() {
           recipientName: user.name || user.username || ''
         });
         if (content) {
-          await sendMorningBriefingToUser(user, content, user.store);
+          payload = content;
+          storeLabel = user.store;
         }
       }
+      if (!payload) continue;
+      let ok = false;
+      let lastErr = '';
+      for (let i = 1; i <= BRIEFING_RETRY_MAX; i++) {
+        const r = await sendMorningBriefingToUser(user, payload, storeLabel);
+        ok = !!r?.ok;
+        lastErr = r?.error || '';
+        await recordBriefingAttempt(runYmd, user.username, scope, ok, lastErr);
+        if (ok) break;
+        if (i < BRIEFING_RETRY_MAX) {
+          await new Promise((resolve) => setTimeout(resolve, 1200));
+        }
+      }
+      if (!ok) {
+        failedRecipients += 1;
+        logger.warn({ runYmd, user: user.username, scope, error: lastErr }, 'morning briefing recipient failed after retries');
+      }
     } catch (e) {
+      failedRecipients += 1;
       logger.warn({ err: e?.message, user: user.username }, 'briefing user error');
     }
   }
 
+  if (failedRecipients > 0) {
+    throw new Error(`morning briefing partial failure: ${failedRecipients} recipient(s) failed`);
+  }
   logger.info({ stores: stores.length, users: recipients.length }, 'morning briefing done');
 }

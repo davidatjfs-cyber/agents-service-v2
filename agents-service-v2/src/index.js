@@ -1005,36 +1005,38 @@ async function start() {
     // 总实收毛利率：每月10号00:00检测上月数据，确保10号01:18月度综合评级前已落库
     cron.schedule('0 0 10 * *', async () => {
       try {
-        const stores = await getActiveStores();
-        logger.info({ n: stores.length }, 'gross_margin monthly check on 10th (Asia/Shanghai)');
-        // 仅跑 gross_margin，不跑 revenue_achievement_monthly（已在月末最后一天22:00处理）
-        for (const store of stores) {
-          try {
-            const { checkGrossMargin } = await import('./services/anomaly-engine.js');
-            const result = await checkGrossMargin(store);
-            if (result.triggered) {
-              const brand = await getBrandForStore(store).catch(() => null);
-              const { query: dbQuery } = await import('./utils/db.js');
-              const triggerDate = shanghaiPrevCalendarMonthBounds().last;
-              const dupFinal = await dbQuery(
-                `SELECT 1 FROM anomaly_triggers WHERE anomaly_key = 'gross_margin' AND store = $1 AND trigger_date = $2::date AND COALESCE(status, '') NOT IN ('pending_data', 'superseded') LIMIT 1`,
-                [store, triggerDate]
-              );
-              if (!dupFinal.rows?.length) {
-                await dbQuery(
-                  `INSERT INTO anomaly_triggers (anomaly_key, store, brand, severity, trigger_date, trigger_value, threshold_value, assigned_role, notify_target_role) VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9)`,
-                  ['gross_margin', store, brand || null, result.severity, triggerDate, JSON.stringify(result.value), JSON.stringify(result.threshold), 'store_production_manager', 'kitchen_manager']
+        await runWithCronLog('monthly_gross_margin_check', async () => {
+          const stores = await getActiveStores();
+          logger.info({ n: stores.length }, 'gross_margin monthly check on 10th (Asia/Shanghai)');
+          // 仅跑 gross_margin，不跑 revenue_achievement_monthly（已在月末最后一天22:00处理）
+          for (const store of stores) {
+            try {
+              const { checkGrossMargin } = await import('./services/anomaly-engine.js');
+              const result = await checkGrossMargin(store);
+              if (result.triggered) {
+                const brand = await getBrandForStore(store).catch(() => null);
+                const { query: dbQuery } = await import('./utils/db.js');
+                const triggerDate = shanghaiPrevCalendarMonthBounds().last;
+                const dupFinal = await dbQuery(
+                  `SELECT 1 FROM anomaly_triggers WHERE anomaly_key = 'gross_margin' AND store = $1 AND trigger_date = $2::date AND COALESCE(status, '') NOT IN ('pending_data', 'superseded') LIMIT 1`,
+                  [store, triggerDate]
                 );
-                const { enqueueNotifyJob, enqueueCollabJob } = await import('./services/anomaly-queue.js');
-                enqueueNotifyJob({ store, brand, ruleKey: 'gross_margin', severity: result.severity, detail: result.detail, value: result.value }).catch(() => {});
-                enqueueCollabJob({ ruleKey: 'gross_margin', store, severity: result.severity, detail: result.detail, value: result.value }).catch(() => {});
-                logger.warn({ anomaly: 'gross_margin', store, severity: result.severity }, 'Gross margin anomaly triggered (10th)');
+                if (!dupFinal.rows?.length) {
+                  await dbQuery(
+                    `INSERT INTO anomaly_triggers (anomaly_key, store, brand, severity, trigger_date, trigger_value, threshold_value, assigned_role, notify_target_role) VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9)`,
+                    ['gross_margin', store, brand || null, result.severity, triggerDate, JSON.stringify(result.value), JSON.stringify(result.threshold), 'store_production_manager', 'kitchen_manager']
+                  );
+                  const { enqueueNotifyJob, enqueueCollabJob } = await import('./services/anomaly-queue.js');
+                  enqueueNotifyJob({ store, brand, ruleKey: 'gross_margin', severity: result.severity, detail: result.detail, value: result.value }).catch(() => {});
+                  enqueueCollabJob({ ruleKey: 'gross_margin', store, severity: result.severity, detail: result.detail, value: result.value }).catch(() => {});
+                  logger.warn({ anomaly: 'gross_margin', store, severity: result.severity }, 'Gross margin anomaly triggered (10th)');
+                }
               }
+            } catch (e) {
+              logger.error({ err: e?.message, store }, 'gross_margin 10th check failed');
             }
-          } catch (e) {
-            logger.error({ err: e?.message, store }, 'gross_margin 10th check failed');
           }
-        }
+        });
       } catch (e) {
         logger.error({ err: e?.message }, 'gross_margin 10th check failed');
       }
