@@ -10,6 +10,8 @@ import { analyzeMetricTree } from './analysis-engine.js';
 import { sendText, replyMsg, getFeishuUserName, getHrmsEmployeeName, getHrmsEmployeeByFeishuOpenId, isHrmsEmployeeActive, bindFeishuUserToEmployee } from './feishu-client.js';
 import { query } from '../utils/db.js';
 import { checkIdempotency, saveIdempotency } from '../middleware/idempotency.js';
+import sessionMiddleware from './agent-session/session-middleware.js';
+const { checkAndRestoreSession: checkSession, enhancePromptWithSession } = sessionMiddleware.default || sessionMiddleware;
 
 const DATA_AGENTS = new Set(['data_auditor','ops_supervisor','chief_evaluator','appeal']);
 const HQ_ROLES = new Set(['admin','hq_manager']);
@@ -240,6 +242,54 @@ export async function processMessage(ev) {
   try {
     const user = await resolveUser(ev.userId);
     logger.info({ traceId, user: user?.username, store: user?.store, role: user?.role }, 'resolved user');
+
+    // ── Agent Session 检查：恢复已有会话，跳过 intent/router ──
+    const existingSession = await checkSession(user?.username || ev.userId);
+    if (existingSession) {
+      logger.info({ traceId, sessionId: existingSession.session_id, agent: existingSession.agent }, '[Session] Restored existing session');
+
+      const ctx = {
+        user,
+        store: user?.store,
+        username: user?.username,
+        role: user?.role,
+        session: existingSession,
+        isFollowUp: true,
+        source: ev,
+      };
+
+      // 直接调用会话中的 Agent，不走 intent/router
+      try {
+        let agentResult;
+
+        // 如果是营销策划，支持 ask/final 格式
+        if (existingSession.agent === 'marketing_planner') {
+          // 增强提示词，包含会话上下文
+          const originalText = ev.text;
+          // 这里需要修改 dispatchToAgent 的逻辑，暂时使用原有逻辑
+          agentResult = await dispatchToAgent(existingSession.agent, originalText, ctx);
+        } else {
+          agentResult = await dispatchToAgent(existingSession.agent, ev.text, ctx);
+        }
+
+        const ms = Date.now() - t0;
+        logger.info({ traceId, sessionId: existingSession.session_id, ms }, '[Session] Follow-up completed');
+
+        // 发送回复
+        const d = await sendReplyWithFallback(ev, agentResult.response, 'session_followup');
+        return {
+          ok: d.ok,
+          route: existingSession.agent,
+          sessionId: existingSession.session_id,
+          ms,
+          deliverOk: d.ok,
+        };
+      } catch (err) {
+        logger.error({ traceId, err: err?.message }, '[Session] Follow-up error');
+        // 出错时关闭会话，继续正常流程
+        await (await import('./agent-session/session-service.js')).closeSession(existingSession.session_id, 'error');
+      }
+    }
 
     // ── 检查员工是否在职：若未绑定或已离职/禁用，禁止使用 ──
     let hrmsEmp = null;

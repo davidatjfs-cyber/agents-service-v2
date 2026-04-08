@@ -2343,9 +2343,17 @@ async function handleMarketingPlanner(text, ctx) {
 
   if (!mktData) mktData = '暂无门店营收数据';
 
+  // 会话支持：如果有现有会话，增强提示词
+  const sessionPrompt = ctx.isFollowUp && ctx.session
+    ? `\n\n【会话上下文】\n这是第 ${ctx.session.question_round || 1} 轮对话。`
+    + (ctx.session.context ? `\n${JSON.stringify(ctx.session.context)}` : '')
+    + (ctx.session.pending_question ? `\n【待处理问题】${ctx.session.pending_question}` : '')
+    : '';
+
   const sysPrompt =
     (await adminAgentPromptPrefix('marketing_planner')) +
     `你是餐饮连锁的营销策划负责人。当前时间：${NOW_CN()}。门店：${store || '未指定'}${brand ? `（${brand}）` : ''}。
+${sessionPrompt}
 
 【真实业务数据】（仅供你引用数字，禁止整段照抄成「营收分析」报表）
 ${mktData}
@@ -2355,7 +2363,12 @@ ${mktData}
 - 禁止：只写两条空泛「经营建议」就结束
 - 必须：输出可执行的活动级方案（有名称、时间、负责人、指标）
 
-【必须包含以下结构】
+【多轮对话规则】
+- 如果信息不足，最多问1个关键问题，输出：{"type":"ask","question":"问题内容"}
+- 最多连续问3轮，信息充分后输出完整方案
+- 输出完整方案时：{"type":"final","answer":"方案内容"}
+
+【必须包含以下结构（final 输出时）】
 1. 【数据结论（≤5句）】概括近7天/本月趋势与外卖占比，必须引用上方真实数字
 2. 【本期营销目标】1-3条可量化目标（如：外卖实收提升X%、企微会员转化、点评维护等）
 3. 【活动清单】至少 3 条独立活动，每条固定格式：
@@ -2364,7 +2377,8 @@ ${mktData}
 5. 【复盘与下一步】活动上线后如何周度复盘
 
 【输出约束】
-- 纯中文自然语言，禁止 JSON、代码块
+- ask/final 响应必须为 JSON 格式
+- final 回答使用纯中文自然语言，禁止代码块
 - 语气专业、可交给门店直接执行`;
 
   const r = await callLLM([
@@ -2372,7 +2386,52 @@ ${mktData}
     { role: 'user', content: text }
   ], { temperature: 0.4, max_tokens: 1600, purpose: 'marketing_planner', ...(ctx.llmContext ? { context: ctx.llmContext } : {}) });
 
-  const responseText = stripJsonFromResponse(r.content || '请提供门店信息以制定营销方案。');
+  const rawContent = r.content || '请提供门店信息以制定营销方案。';
+
+  // 检查是否为 ask/final 格式的 JSON 响应
+  try {
+    // 尝试提取 JSON（可能包裹在代码块中）
+    const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      // ask 响应：需要继续提问
+      if (parsed.type === 'ask' && parsed.question) {
+        saveMemory('marketing_planner', store, `Asked: ${parsed.question}`, { query: text.slice(0, 200) }).catch(() => {});
+        return {
+          agent: 'marketing_planner',
+          response: parsed.question,
+          store,
+          data: mktData,
+          reportTitle: '营销方案询问',
+          dataBacked: true,
+          responseType: 'ask',
+          question: parsed.question,
+        };
+      }
+
+      // final 响应：完整方案
+      if (parsed.type === 'final' && parsed.answer) {
+        const answerText = stripJsonFromResponse(parsed.answer);
+        saveMemory('marketing_planner', store, answerText.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
+        return {
+          agent: 'marketing_planner',
+          response: answerText,
+          store,
+          data: mktData,
+          reportTitle: '营销活动计划',
+          dataBacked: true,
+          responseType: 'final',
+        };
+      }
+    }
+  } catch (e) {
+    // JSON 解析失败，按普通文本处理
+    console.log('[MarketingPlanner] JSON parse failed, using plain text');
+  }
+
+  // 普通文本响应（兼容旧逻辑）
+  const responseText = stripJsonFromResponse(rawContent);
   saveMemory('marketing_planner', store, responseText.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
   return { agent: 'marketing_planner', response: responseText, store, data: mktData, reportTitle: '营销活动计划', dataBacked: true };
 }
@@ -2692,6 +2751,61 @@ async function handleAcceptActionPlan(text, ctx) {
 }
 
 const HANDLERS={data_auditor:handleDataAuditor,ops_supervisor:handleOpsSupervisor,chief_evaluator:handleChiefEvaluator,train_advisor:handleTrainAdvisor,appeal:handleAppeal,marketing_planner:handleMarketingPlanner,marketing_executor:handleMarketingExecutor,procurement_advisor:handleProcurementAdvisor,marketing:handleMarketingPlanner,food_quality:handleOpsSupervisor,master:handleMaster,accept_action_plan:handleAcceptActionPlan};
+
+/**
+ * 处理 Proactive 触发
+ * 根据异常类型分发给对应的 Agent 进行分析
+ * @param {Object} ctx - 触发上下文
+ * @param {string} ctx.type - 异常类型
+ * @param {string} ctx.store - 门店名称
+ * @param {string} ctx.severity - 严重程度
+ * @param {Object} ctx.data - 异常数据
+ */
+export async function handleTrigger(ctx) {
+  const { type, store, severity, data } = ctx;
+
+  console.log(`[Proactive Trigger] Type: ${type}, Store: ${store}, Severity: ${severity}`);
+
+  try {
+    // 根据异常类型串行调用对应的 Agent
+    if (type === 'revenue_drop' || type === 'revenue') {
+      // 营收异常：分发给数据审计、运营督导、营销策划
+      await dispatchToAgent('data_auditor', `分析营收下降 - ${store}`, ctx);
+      await dispatchToAgent('ops_supervisor', `检查运营问题 - ${store}`, ctx);
+      await dispatchToAgent('marketing_planner', `制定提升方案 - ${store}`, ctx);
+
+    } else if (type === 'bad_review_spike' || type === 'bad_review_service' || type === 'bad_review_product') {
+      // 差评异常：分发给食安质检、运营督导
+      await dispatchToAgent('food_quality', `分析差评问题 - ${store}`, ctx);
+      await dispatchToAgent('ops_supervisor', `检查服务问题 - ${store}`, ctx);
+
+    } else if (type === 'gross_margin') {
+      // 毛利率异常：分发给数据审计、采购顾问
+      await dispatchToAgent('data_auditor', `分析毛利率异常 - ${store}`, ctx);
+      await dispatchToAgent('procurement_advisor', `检查采购成本 - ${store}`, ctx);
+
+    } else if (type === 'labor') {
+      // 人工成本异常：分发给运营督导、数据审计
+      await dispatchToAgent('ops_supervisor', `分析人工成本 - ${store}`, ctx);
+      await dispatchToAgent('data_auditor', `检查人工数据 - ${store}`, ctx);
+
+    } else if (type === 'traffic') {
+      // 客流异常：分发给营销策划、运营督导
+      await dispatchToAgent('marketing_planner', `分析客流下降 - ${store}`, ctx);
+      await dispatchToAgent('ops_supervisor', `检查运营状况 - ${store}`, ctx);
+
+    } else {
+      // 其他异常：默认分发给数据审计
+      await dispatchToAgent('data_auditor', `分析异常: ${type} - ${store}`, ctx);
+    }
+
+    console.log(`[Proactive Trigger] Completed: ${type} at ${store}`);
+
+  } catch (err) {
+    console.error(`[Proactive Trigger] Error: ${err.message}`);
+    // 不抛出错误，避免阻塞主流程
+  }
+}
 export async function dispatchToAgent(route,text,ctx={}) {
   const h = HANDLERS[route] || HANDLERS.master;
   const t0 = Date.now();

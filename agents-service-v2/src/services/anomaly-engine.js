@@ -1011,6 +1011,15 @@ export async function runAnomalyChecks(frequency, stores) {
       }
     }
   }
+
+  // Proactive 桥接：将异常传递给 proactive 模块处理
+  try {
+    const { handleAnomalies } = await import('./proactive-v2/anomaly-bridge.js');
+    await handleAnomalies(results.filter(r => r.triggered));
+  } catch (err) {
+    logger.error({ err: err?.message }, '[Proactive] anomaly bridge error');
+  }
+
   return results;
 }
 
