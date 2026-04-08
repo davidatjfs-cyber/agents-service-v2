@@ -154,6 +154,32 @@ if ! echo "$BACKUP_RESULT" | grep -q "数据库备份成功"; then
         error_exit "数据库备份未成功（可设置 ALLOW_NO_DB_BACKUP=true 强制继续）"
     fi
 fi
+
+# 严格校验：最近10分钟内必须有非空（默认>=100MB）的数据库备份文件
+MIN_DB_BACKUP_MB="${MIN_DB_BACKUP_MB:-100}"
+DB_CHECK_CMD="f=$(find /opt/deploy-backups/database -maxdepth 1 -type f -name 'hrms_*.sql' -mmin -10 -print | sort | tail -1); if [ -n "$f" ] && [ -s "$f" ]; then sz=$(stat -c %s "$f"); echo "$f $sz"; fi"
+DB_CHECK_OUT=$(ssh "$ECS_HOST" "$DB_CHECK_CMD" 2>/dev/null || true)
+if [ -z "$DB_CHECK_OUT" ]; then
+    if [ "$ALLOW_NO_DB_BACKUP" = "true" ]; then
+        log "⚠️ 未找到最近10分钟有效数据库备份文件，但 ALLOW_NO_DB_BACKUP=true，继续部署"
+    else
+        error_exit "未找到最近10分钟有效数据库备份文件（/opt/deploy-backups/database/hrms_*.sql）"
+    fi
+else
+    DB_FILE=$(echo "$DB_CHECK_OUT" | awk '{print $1}')
+    DB_SIZE_BYTES=$(echo "$DB_CHECK_OUT" | awk '{print $2}')
+    DB_MIN_BYTES=$((MIN_DB_BACKUP_MB * 1024 * 1024))
+    if [ "${DB_SIZE_BYTES:-0}" -lt "$DB_MIN_BYTES" ]; then
+        if [ "$ALLOW_NO_DB_BACKUP" = "true" ]; then
+            log "⚠️ 备份文件过小（$DB_FILE, ${DB_SIZE_BYTES}B < ${DB_MIN_BYTES}B），但 ALLOW_NO_DB_BACKUP=true，继续部署"
+        else
+            error_exit "数据库备份文件过小（$DB_FILE, ${DB_SIZE_BYTES}B < ${DB_MIN_BYTES}B）"
+        fi
+    else
+        log "✅ 数据库备份文件校验通过: $DB_FILE (${DB_SIZE_BYTES} bytes)"
+    fi
+fi
+
 log "✅ 部署前备份完成"
 
 # ============================================================
