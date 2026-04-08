@@ -172,10 +172,13 @@ function evaluateMajixianManager(meeting) {
  */
 async function recordExecutionFiling({ store, username, role, date, rating, missing, detail }) {
   try {
+    const dedupeKey = `execution_rating_${store}_${date}_${username}`;
+    const scheduleKey = `daily_execution_rating_${store}`;
+
     await query(
-      `INSERT INTO ops_tasks 
-       (store, task_type, title, status, assignee_username, assignee_role, source, created_at, biz_date, detail)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8::date, $9::jsonb)`,
+      `INSERT INTO ops_tasks
+       (store, task_type, title, status, assignee_username, assignee_role, source, created_at, biz_date, evidence_urls, dedupe_key, schedule_key, due_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8::date, $9::jsonb, $10, $11, NOW())`,
       [
         store,
         'execution_rating_daily',
@@ -185,7 +188,9 @@ async function recordExecutionFiling({ store, username, role, date, rating, miss
         role,
         'execution_rating',
         date,
-        { rating, missing, detail, filed_at: new Date().toISOString() }
+        { rating, missing, detail, filed_at: new Date().toISOString() },
+        dedupeKey,
+        scheduleKey
       ]
     );
     logger.info({ store, username, role, date, rating, missing }, 'execution rating filed');
@@ -199,37 +204,27 @@ async function recordExecutionFiling({ store, username, role, date, rating, miss
 // ─────────────────────────────────────────────
 
 /**
- * 构建执行力日评飞书卡片
+ * 构建执行力备案飞书卡片
  */
-function buildExecutionRatingCard({ store, username, name, role, date, rating, missing, detail }) {
+function buildFilingCard({ store, username, name, role, rating, missing }, date) {
   const roleLabel = role === 'store_manager' ? '店长' : '出品经理';
-  const ratingColor = rating === 'A' ? 'green' : rating === 'B' ? 'blue' : rating === 'C' ? 'orange' : 'red';
-  
+  const ratingColor = rating === 'B' ? 'blue' : rating === 'C' ? 'orange' : 'red';
+
   let missingMd = '';
   if (missing && missing.length > 0) {
     missingMd = `\n**未达标项目**\n${missing.map(m => `❌ ${m}`).join('\n')}`;
   }
 
-  let detailMd = '';
-  if (detail) {
-    const lines = [];
-    if (detail.opening !== undefined) lines.push(`开档报告：${detail.opening ? '✅ 已提交' : '❌ 未提交'}`);
-    if (detail.closing !== undefined) lines.push(`收档报告：${detail.closing ? '✅ 已提交' : '❌ 未提交'}`);
-    if (detail.material !== undefined) lines.push(`原料收货：${detail.material ? '✅ 已提交' : '❌ 未提交'}`);
-    if (detail.wechatMembers !== undefined) lines.push(`企微会员新增：${detail.wechatMembers}人`);
-    if (detail.meetingScore !== undefined) lines.push(`例会得分：${detail.meetingScore}分 ${detail.qualified ? '✅ 合格' : '❌ 不合格'}`);
-    if (lines.length) detailMd = `\n**详细数据**\n${lines.join('\n')}`;
-  }
-
-  const content = `**门店**：${store}
+  const content = `**备案类型**：工作执行力评级
+**门店**：${store}
 **岗位**：${roleLabel} · ${name || username}
 **日期**：${date}
-**执行力评级**：${rating}级${missingMd}${detailMd}`;
+**评级**：${rating}级${missingMd}`;
 
   return {
     config: { wide_screen_mode: true },
     header: {
-      title: { tag: 'plain_text', content: `📋 执行力日评 · ${date}` },
+      title: { tag: 'plain_text', content: `📋 工作执行力评级备案 · ${date}` },
       template: ratingColor
     },
     elements: [
@@ -240,7 +235,7 @@ function buildExecutionRatingCard({ store, username, name, role, date, rating, m
 }
 
 /**
- * 构建汇总卡片（管理员/总部营运）
+ * 发送执行力备案通知
  */
 function buildSummaryCard(results, date) {
   const failedResults = results.filter(r => r.rating !== 'A');
@@ -275,44 +270,113 @@ function buildSummaryCard(results, date) {
 }
 
 /**
- * 发送执行力日评通知
+ * 构建执行力备案汇总卡片（管理员/总部营运）
+ */
+function buildAdminFilingCard(results, date) {
+  const failedResults = results.filter(r => r.rating !== 'A');
+
+  let md = `**日期**：${date}\n**备案人数**：${failedResults.length}\n`;
+
+  if (failedResults.length > 0) {
+    md += `\n**备案明细**\n`;
+    for (const r of failedResults) {
+      const roleLabel = r.role === 'store_manager' ? '店长' : '出品经理';
+      const missing = r.missing && r.missing.length > 0 ? `（${r.missing.join('/')}）` : '';
+      md += `\n• ${r.store} · ${roleLabel} ${r.name || r.username}：${r.rating}级 ${missing}`;
+    }
+  } else {
+    md += `\n✅ 全部达标，无需备案`;
+  }
+
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: `📋 工作执行力评级备案汇总 · ${date}` },
+      template: 'blue'
+    },
+    elements: [
+      { tag: 'div', text: { tag: 'lark_md', content: md } },
+      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：开档/收档/原料收货报告 · 每日08:00自动检查' }] }
+    ]
+  };
+}
+  } else {
+    md += `\n✅ 全部达标，无需备案`;
+  }
+
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: `📋 执行力日评备案汇总 · ${date}` },
+      template: 'blue'
+    },
+    elements: [
+      { tag: 'div', text: { tag: 'lark_md', content: md } },
+      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：开档/收档/原料收货报告 · 每日08:00自动检查' }] }
+    ]
+  };
+}
+
+/**
+ * 发送执行力备案通知（飞书卡片 + HRMS公司通知）
  */
 async function sendExecutionRatingNotifications(results, date) {
   const failedResults = results.filter(r => r.rating !== 'A');
   let sentCount = 0;
 
-  // 1. 未达标个人通知
+  // 1. 发备案通知给未达标人员（飞书卡片 + HRMS通知）
   for (const r of failedResults) {
-    const card = buildExecutionRatingCard(r);
-    
-    // 发给本人
+    const card = buildFilingCard(r, date);
+    const roleLabel = r.role === 'store_manager' ? '店长' : '出品经理';
+    const missingText = r.missing && r.missing.length > 0 ? r.missing.join('/') : '';
+
+    // 飞书卡片
     if (r.open_id) {
       try {
         await sendCard(r.open_id, card, 'open_id');
         sentCount++;
-        logger.info({ recipient: r.username, store: r.store }, 'execution rating card sent to individual');
+        logger.info({ recipient: r.username, store: r.store }, 'execution filing card sent to individual');
       } catch (e) {
-        logger.warn({ err: e?.message, recipient: r.username }, 'execution rating card send failed');
+        logger.warn({ err: e?.message, recipient: r.username }, 'execution filing card send failed');
       }
+    }
+
+    // HRMS公司通知
+    try {
+      await query(
+        `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
+         VALUES ($1, $2, $3, $4, $5::jsonb)
+         ON CONFLICT (target_username, type, meta) DO NOTHING`,
+        [
+          r.username,
+          '工作执行力评级备案',
+          `您的工作执行力评级为${r.rating}级，未达标项目：${missingText || '无'}。\n门店：${r.store}\n岗位：${roleLabel} · ${r.name || r.username}\n日期：${date}`,
+          'execution_rating_daily',
+          JSON.stringify({ date, rating: r.rating, missing: r.missing, store: r.store, role: r.role })
+        ]
+      );
+      logger.info({ recipient: r.username, store: r.store }, 'execution filing hrms notification sent');
+    } catch (e) {
+      logger.warn({ err: e?.message, recipient: r.username }, 'execution filing hrms notification failed');
     }
   }
 
-  // 2. 汇总通知给管理员和总部营运
-  const adminRecipients = await query(
-    `SELECT open_id, username, role FROM feishu_users 
-     WHERE registered = true AND open_id IS NOT NULL AND open_id != ''
-     AND role IN ('admin', 'hq_manager')`
-  );
+  // 2. 发备案汇总通知给管理员和总部营运（一条汇总，包含所有未达标人员）
+  if (failedResults.length > 0) {
+    const adminRecipients = await query(
+      `SELECT open_id, username, role FROM feishu_users
+       WHERE registered = true AND open_id IS NOT NULL AND open_id != ''
+        AND role IN ('admin', 'hq_manager')`
+    );
 
-  if (adminRecipients.rows.length > 0) {
-    const summaryCard = buildSummaryCard(results, date);
+    const summaryCard = buildAdminFilingCard(results, date);
     for (const recipient of adminRecipients.rows) {
       try {
         await sendCard(recipient.open_id, summaryCard, 'open_id');
         sentCount++;
-        logger.info({ recipient: recipient.username, role: recipient.role }, 'execution summary card sent to admin');
+        logger.info({ recipient: recipient.username, role: recipient.role }, 'execution filing summary card sent to admin');
       } catch (e) {
-        logger.warn({ err: e?.message, recipient: recipient.username }, 'execution summary card send failed');
+        logger.warn({ err: e?.message, recipient: recipient.username }, 'execution filing summary card send failed to admin');
       }
     }
   }

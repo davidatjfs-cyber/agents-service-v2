@@ -10,6 +10,7 @@ import { sendCard, sendText } from './feishu-client.js';
 
 /** 任务类型 → 中文标签 */
 function taskTypeLabel(type) {
+  if (!type) return '其它';
   switch (type) {
     case 'opening_lunch': return '午市开档';
     case 'opening_dinner': return '晚市开档';
@@ -17,7 +18,12 @@ function taskTypeLabel(type) {
     case 'prep_dinner': return '晚市备货';
     case 'table_visit_tracking': return '桌访记录';
     case 'bad_review_followup': return '差评跟踪';
-    default: return type || '其它';
+    case 'patrol_am': return '上午巡检';
+    case 'patrol_pm': return '下午巡检';
+    case 'tasting': return '试味';
+    default:
+      if (type.startsWith('custom_')) return '试味';
+      return type;
   }
 }
 
@@ -26,6 +32,7 @@ function taskStatusZh(status) {
   switch (status) {
     case 'completed': return '已完成';
     case 'closed': return '已闭环';
+    case 'hr_filed': return '已备案';
     case 'overdue': return '已逾期';
     case 'open': return '待处理';
     case 'pending_response': return '待回复';
@@ -46,7 +53,7 @@ function roleLabelZh(role) {
 
 /** 判断是否已完成 */
 function isCompleted(status) {
-  return ['completed', 'closed'].includes(status);
+  return ['closed'].includes(status);
 }
 
 /** 判断是否洪潮店 */
@@ -58,22 +65,21 @@ function isHongchaoStore(store) {
 async function fetchYesterdayTasks(yesterday) {
   const sql = `
     SELECT 
-      ot.id,
-      ot.store,
-      ot.task_type,
-      ot.title,
-      ot.status,
-      ot.assignee_username,
-      ot.assignee_role,
-      ot.source,
-      ot.created_at,
-      ot.completed_at,
-      at.anomaly_key,
-      at.severity
-    FROM ops_tasks ot
-    LEFT JOIN anomaly_triggers at ON ot.id::text = at.task_id
-    WHERE ot.created_at >= $1::date AND ot.created_at < ($1::date + interval '1 day')
-    ORDER BY ot.store, ot.assignee_role, ot.assignee_username, ot.created_at
+      mt.id,
+      mt.store,
+      mt.category as task_type,
+      mt.title,
+      mt.status,
+      mt.assignee_username,
+      mt.assignee_role,
+      mt.source,
+      mt.created_at,
+      mt.closed_at as completed_at
+    FROM master_tasks mt
+    WHERE mt.created_at >= $1::date AND mt.created_at < ($1::date + interval '1 day')
+      AND mt.assignee_username IS NOT NULL
+      AND mt.assignee_username != ''
+    ORDER BY mt.store, mt.assignee_role, mt.assignee_username, mt.created_at
   `;
   const result = await query(sql, [yesterday]);
   return result.rows || [];
@@ -86,7 +92,7 @@ async function getUserNames(usernames) {
   
   const result = await query(
     `SELECT lower(username) AS lu,
-            COALESCE(NULLIF(TRIM(name), ''), NULLIF(TRIM(real_name), ''), username) AS display_name
+            COALESCE(NULLIF(TRIM(name), ''), username) AS display_name
      FROM feishu_users
      WHERE lower(username) = ANY($1::text[])`,
     [unique]
@@ -170,28 +176,15 @@ function buildStoreSection(store, tasks, nameMap) {
   
   const isHongchao = isHongchaoStore(store);
   
-  if (isHongchao) {
-    // 洪潮店：显示明细
-    for (const username of managerUsernames) {
-      const section = buildTaskDetailSection(tasks, username, nameMap);
-      if (section) md += `\n${section}\n`;
-    }
-    
-    for (const username of pmUsernames) {
-      const section = buildTaskDetailSection(tasks, username, nameMap);
-      if (section) md += `\n${section}\n`;
-    }
-  } else {
-    // 马己仙店：仅汇总
-    for (const username of managerUsernames) {
-      const section = buildSummarySection(tasks, username, nameMap);
-      if (section) md += `\n${section}\n`;
-    }
-    
-    for (const username of pmUsernames) {
-      const section = buildSummarySection(tasks, username, nameMap);
-      if (section) md += `\n${section}\n`;
-    }
+  // 所有门店都显示明细
+  for (const username of managerUsernames) {
+    const section = buildTaskDetailSection(tasks, username, nameMap);
+    if (section) md += `\n${section}\n`;
+  }
+  
+  for (const username of pmUsernames) {
+    const section = buildTaskDetailSection(tasks, username, nameMap);
+    if (section) md += `\n${section}\n`;
   }
   
   return md;
@@ -229,7 +222,7 @@ function buildHQCard(storeSections, yesterday) {
   
   elements.push({
     tag: 'note',
-    elements: [{ tag: 'plain_text', content: '数据来源：ops_tasks + anomaly_triggers · 每日08:00自动推送' }]
+    elements: [{ tag: 'plain_text', content: '数据来源：master_tasks（飞书卡片任务）· 每日08:50自动推送' }]
   });
   
   return {
@@ -260,7 +253,7 @@ function buildStoreCard(store, storeMd, yesterday) {
   elements.push({ tag: 'hr' });
   elements.push({
     tag: 'note',
-    elements: [{ tag: 'plain_text', content: '数据来源：ops_tasks + anomaly_triggers · 每日08:00自动推送' }]
+    elements: [{ tag: 'plain_text', content: '数据来源：master_tasks（飞书卡片任务）· 每日08:50自动推送' }]
   });
   
   return {
