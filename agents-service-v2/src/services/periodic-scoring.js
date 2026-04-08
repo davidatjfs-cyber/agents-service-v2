@@ -10,7 +10,7 @@ import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { calcDeductions } from './scoring-model.js';
 import { getBrandForStore } from './config-service.js';
-import { sendCard, sendText, buildPerformanceSummaryCard } from './feishu-client.js';
+import { sendCard, sendText, buildPerformanceSummaryCard, buildBiDeductionCard } from './feishu-client.js';
 import {
   shanghaiLastCompletedWeekBounds,
   shanghaiWeekMonSunContaining,
@@ -61,37 +61,6 @@ async function ensureHrmsNotifTable() {
   } catch (e) {
     logger.warn({ err: e?.message }, 'ensureHrmsNotifTable');
   }
-}
-
-/**
- * 构建 BI 异常情况扣分飞书卡片
- */
-function buildBiDeductionCard({ store, assigneeName, role, period, reason, keyZh, severity, points, currentScore, remainingScore }) {
-  const roleLabel = roleLabelZh(role);
-  const color = severity === '高' ? 'red' : 'orange';
-  
-  const content = `**备案类型**：BI异常情况扣分
-**门店**：${store}
-**岗位**：${roleLabel} · ${assigneeName}
-**周期**：${period}
-**异常类型**：${reason}（${keyZh}，严重度 ${severity}）
-
-**分数情况**
-• 现有分数：${currentScore} 分
-• 本次扣分：${points} 分
-• 剩余分数：${remainingScore} 分`;
-
-  return {
-    config: { wide_screen_mode: true },
-    header: {
-      title: { tag: 'plain_text', content: '📋 BI异常情况扣分' },
-      template: color
-    },
-    elements: [
-      { tag: 'div', text: { tag: 'lark_md', content } },
-      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：异常触发汇总（anomaly_triggers）· 周度自动计算' }] }
-    ]
-  };
 }
 
 /**

@@ -10,7 +10,8 @@ import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { ANOMALY_RULES } from '../config/anomaly-rules.js';
 import { getBrandForStore, getAnomalyRules } from './config-service.js';
-import { sendCard, sendText, buildAnomalyCard } from './feishu-client.js';
+import { sendCard, sendText, buildAnomalyCard, buildBiDeductionCard } from './feishu-client.js';
+import { getShanghaiYmdParts } from '../utils/anomaly-week-bounds.js';
 import { anomalyRuleLabelZh } from '../utils/anomaly-labels.js';
 import { planAndExecute } from './master-planner.js';
 
@@ -88,7 +89,9 @@ function plannerSyntheticQuestion(ruleKey) {
 
 async function pickUsersForStoreAndRoles(store, dbRoles) {
   const r = await query(
-    `SELECT open_id, username, role, store FROM feishu_users
+    `SELECT open_id, username, role, store,
+            COALESCE(NULLIF(TRIM(name), ''), username) AS display_name
+     FROM feishu_users
      WHERE registered = true AND open_id IS NOT NULL`
   );
   const rows = (r.rows || []).filter(
@@ -103,7 +106,9 @@ async function pickUsersForFoodSafety(store, dbRoles) {
   let hqRows = [];
   try {
     const r = await query(
-      `SELECT open_id, username, role, store FROM feishu_users
+      `SELECT open_id, username, role, store,
+              COALESCE(NULLIF(TRIM(name), ''), username) AS display_name
+       FROM feishu_users
        WHERE registered = true AND open_id IS NOT NULL AND role IN ('hq_manager','admin')`
     );
     hqRows = r.rows || [];
@@ -153,6 +158,25 @@ function extractMessageId(sendRes) {
   return d?.message_id || d?.data?.message_id || '';
 }
 
+/** 与周度扣分卡片一致：取 anomaly_rollups_v2 最新总分，无记录则 100 */
+async function fetchLatestAnomalyRollupScore(username) {
+  if (!username) return 100;
+  try {
+    const scoreRes = await query(
+      `SELECT total_score FROM agent_scores
+       WHERE username = $1 AND score_model = 'anomaly_rollups_v2'
+       ORDER BY updated_at DESC LIMIT 1`,
+      [username]
+    );
+    if (scoreRes.rows?.[0]?.total_score != null) {
+      return Math.max(0, Number(scoreRes.rows[0].total_score));
+    }
+  } catch (_e) {
+    /* ignore */
+  }
+  return 100;
+}
+
 /**
  * 在 anomaly_triggers 已落库之后调用：立刻通知 + 建任务 + Planner + OP 跟进文案
  */
@@ -182,15 +206,56 @@ export async function runBiAnomalyNotifyPipeline({
 
   // ── ① 立刻通知（卡片优先）──
   for (const u of users) {
-    const card = buildAnomalyCard(store, ruleKey, severity, initialDetail, taskId);
+    let card;
+    let rechargeCur = null;
+    let rechargePts = null;
+    let rechargeRem = null;
+    let sevZh = null;
+    if (ruleKey === 'recharge_zero') {
+      rechargePts = Number(value?.penalty_points ?? 0) || 0;
+      sevZh = severity === 'high' ? '高' : severity === 'medium' ? '中' : String(severity || '—');
+      const todayYmd = value?.dateToday || getShanghaiYmdParts().ymd;
+      const monthStart = value?.month_start || '';
+      const periodZh = monthStart
+        ? `本日 ${todayYmd}（即时；当月自 ${monthStart} 起累计，不跨月）`
+        : `本日 ${todayYmd}（即时触发）`;
+      rechargeCur = await fetchLatestAnomalyRollupScore(u.username);
+      rechargeRem = Math.max(0, rechargeCur - rechargePts);
+      const assigneeName = u.display_name || u.username || '—';
+      card = buildBiDeductionCard({
+        store,
+        assigneeName,
+        role: u.role,
+        period: periodZh,
+        reason: '充值异常',
+        keyZh: '充值异常',
+        severity: sevZh,
+        points: rechargePts,
+        currentScore: rechargeCur,
+        remainingScore: rechargeRem,
+        taskId,
+        dataSourceNote:
+          '数据来源：异常触发汇总（anomaly_triggers）· 即时触发；周度对账以周一汇总卡片为准'
+      });
+    } else {
+      card = buildAnomalyCard(store, ruleKey, severity, initialDetail, taskId);
+    }
     let r = await sendCard(u.open_id, card);
     if (!r?.ok) {
       const emoji = severity === 'high' ? '🚨' : '⚠️';
-      r = await sendText(
-        u.open_id,
-        `${emoji} 【BI异常｜立刻处理】${store}\n类型: ${typeZh}\n严重度: ${severity}\n任务ID: ${taskId}\n\n${initialDetail.slice(0, 1200)}`,
-        'open_id'
-      );
+      if (ruleKey === 'recharge_zero' && rechargeCur != null) {
+        r = await sendText(
+          u.open_id,
+          `${emoji} 【BI异常情况扣分·即时】${store}\n备案类型：BI异常情况扣分\n岗位：${u.role || '—'} · ${u.display_name || u.username}\n异常类型：充值异常（严重度 ${sevZh}）\n本次扣分：${rechargePts} 分 · 现有 ${rechargeCur} → 剩余 ${rechargeRem}\n任务ID：${taskId}\n\n${initialDetail.slice(0, 1000)}`,
+          'open_id'
+        );
+      } else {
+        r = await sendText(
+          u.open_id,
+          `${emoji} 【BI异常｜立刻处理】${store}\n类型: ${typeZh}\n严重度: ${severity}\n任务ID: ${taskId}\n\n${initialDetail.slice(0, 1200)}`,
+          'open_id'
+        );
+      }
     }
     const mid = extractMessageId(r);
     if (mid) msgIds.push(mid);

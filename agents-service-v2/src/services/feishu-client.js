@@ -465,6 +465,87 @@ export async function pushAnomalyAlert(store, anomalyKey, severity, detail, task
 }
 
 // ── Card Template Builders ──
+
+/** 飞书 BI 扣分类卡片：岗位中文（与周度 periodic-scoring 一致） */
+export function roleLabelZhForBiCard(role) {
+  if (role === 'store_manager') return '店长';
+  if (role === 'store_production_manager') return '出品经理';
+  if (role === 'hq_manager') return '总部营运';
+  if (role === 'admin') return '管理员';
+  return String(role || '—');
+}
+
+/**
+ * 周度 BI 异常扣分卡片；可选 taskId 时追加任务引用说明、「已查看」按钮与催办脚注（充值等即时触发与周度版式一致）。
+ */
+export function buildBiDeductionCard({
+  store,
+  assigneeName,
+  role,
+  period,
+  reason,
+  keyZh,
+  severity,
+  points,
+  currentScore,
+  remainingScore,
+  taskId = null,
+  dataSourceNote
+} = {}) {
+  const roleLabel = roleLabelZhForBiCard(role);
+  const color = severity === '高' ? 'red' : 'orange';
+  const defaultWeeklyNote = '数据来源：异常触发汇总（anomaly_triggers）· 周度自动计算';
+  const noteText = dataSourceNote != null ? dataSourceNote : defaultWeeklyNote;
+
+  const content = `**备案类型**：BI异常情况扣分
+**门店**：${store}
+**岗位**：${roleLabel} · ${assigneeName}
+**周期**：${period}
+**异常类型**：${reason}（${keyZh}，严重度 ${severity}）
+
+**分数情况**
+• 现有分数：${currentScore} 分
+• 本次扣分：${points} 分
+• 剩余分数：${remainingScore} 分`;
+
+  const taskHint = taskId
+    ? `\n\n📌 **任务ID**：\`${taskId}\`\n✅ 与定时任务、随机抽检相同：请**引用/回复本条卡片消息**（或在新消息里带上任务ID）直接发送整改措施，系统将自动记录并审核。`
+    : '';
+
+  const elements = [{ tag: 'div', text: { tag: 'lark_md', content: content + taskHint } }];
+
+  if (taskId) {
+    elements.push({ tag: 'hr' });
+    elements.push({
+      tag: 'action',
+      actions: [
+        {
+          tag: 'button',
+          text: { tag: 'plain_text', content: '✅ 已查看' },
+          type: 'primary',
+          value: JSON.stringify({ action: 'ack_anomaly', taskId })
+        }
+      ]
+    });
+    elements.push({
+      tag: 'note',
+      elements: [{ tag: 'plain_text', content: '⏰ 催办规则：下发后每间隔1小时提醒，共3次；仍未有效闭环将提交HR记入绩效' }]
+    });
+    elements.push({ tag: 'note', elements: [{ tag: 'plain_text', content: noteText }] });
+  } else {
+    elements.push({ tag: 'note', elements: [{ tag: 'plain_text', content: noteText }] });
+  }
+
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: '📋 BI异常情况扣分' },
+      template: color
+    },
+    elements
+  };
+}
+
 export function buildAnomalyCard(store, anomalyKey, severity, detail, taskId) {
   const typeZh = anomalyRuleLabelZh(anomalyKey);
   const sevColor = severity === 'high' ? 'red' : severity === 'medium' ? 'orange' : 'yellow';
