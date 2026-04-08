@@ -157,7 +157,7 @@ fi
 
 # 严格校验：最近10分钟内必须有非空（默认>=100MB）的数据库备份文件
 MIN_DB_BACKUP_MB="${MIN_DB_BACKUP_MB:-100}"
-DB_CHECK_CMD="f=$(find /opt/deploy-backups/database -maxdepth 1 -type f -name 'hrms_*.sql' -mmin -10 -print | sort | tail -1); if [ -n "$f" ] && [ -s "$f" ]; then sz=$(stat -c %s "$f"); echo "$f $sz"; fi"
+DB_CHECK_CMD='f=$(find /opt/deploy-backups/database -maxdepth 1 -type f -name "hrms_*.sql" -mmin -10 -print | sort | tail -1); if [ -n "$f" ] && [ -s "$f" ]; then sz=$(stat -c %s "$f" 2>/dev/null || stat -f %z "$f"); echo "$f $sz"; fi'
 DB_CHECK_OUT=$(ssh "$ECS_HOST" "$DB_CHECK_CMD" 2>/dev/null || true)
 if [ -z "$DB_CHECK_OUT" ]; then
     if [ "$ALLOW_NO_DB_BACKUP" = "true" ]; then
