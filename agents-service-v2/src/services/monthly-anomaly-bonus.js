@@ -4,7 +4,9 @@
  */
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
+import { ensureHrmsUserNotificationsTable } from '../utils/hrms-user-notifications.js';
 import { getBrandForStore } from './config-service.js';
+import { sendCard, buildBiBonusCard } from './feishu-client.js';
 
 function pad(n) {
   return String(n).padStart(2, '0');
@@ -68,6 +70,116 @@ async function hadTriggerInRange(store, keys, start, end) {
   return (r.rows || []).length > 0;
 }
 
+async function fetchLatestRollupScore(username) {
+  if (!username || String(username).startsWith('__periodic')) return 100;
+  try {
+    const scoreRes = await query(
+      `SELECT total_score FROM agent_scores
+       WHERE username = $1 AND score_model = 'anomaly_rollups_v2'
+       ORDER BY updated_at DESC LIMIT 1`,
+      [username]
+    );
+    if (scoreRes.rows?.[0]?.total_score != null) {
+      return Math.max(0, Number(scoreRes.rows[0].total_score));
+    }
+  } catch (_e) {
+    /* ignore */
+  }
+  return 100;
+}
+
+/** 飞书卡片（与扣分卡同版式）+ HRMS 公司通知 + 管理层抄送 */
+async function notifyBiMonthlyBonus({
+  username,
+  name,
+  store,
+  role,
+  label,
+  start,
+  end,
+  additions,
+  bonus,
+  recordedTotal
+}) {
+  await ensureHrmsUserNotificationsTable();
+
+  const rollupScore = await fetchLatestRollupScore(username);
+  const periodZh = `上月 ${label}（${start}～${end}）`;
+  const bonusLines = additions
+    .map((a) => `• **${a.label}**：+${a.points} 分（${a.reason}）`)
+    .join('\n');
+
+  const card = buildBiBonusCard({
+    store,
+    assigneeName: name || username,
+    role,
+    period: periodZh,
+    bonusLines,
+    rollupScore,
+    bonusPoints: bonus,
+    recordedTotal
+  });
+
+  const metaJson = JSON.stringify({
+    store,
+    role,
+    month: label,
+    bonus,
+    recorded_total: recordedTotal,
+    additions,
+    score_model: 'anomaly_item_monthly_bonus'
+  });
+  const msg = `上月（${label}）BI 异常未触发共 ${additions.length} 项，+${bonus} 分；备案写入总分 ${recordedTotal} 分（独立 score_model）。`;
+
+  try {
+    await query(
+      `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
+       VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      [username, 'BI异常未触发加分', msg, 'bi_anomaly_monthly_bonus', metaJson]
+    );
+  } catch (e) {
+    logger.warn({ err: e?.message, username }, 'monthly bonus hrms insert failed');
+  }
+
+  let assigneeOpenId = null;
+  try {
+    const fu = await query(
+      `SELECT open_id FROM feishu_users WHERE username = $1 AND registered = true AND open_id IS NOT NULL LIMIT 1`,
+      [username]
+    );
+    assigneeOpenId = fu.rows?.[0]?.open_id || null;
+  } catch (_e) {
+    /* ignore */
+  }
+
+  if (assigneeOpenId) {
+    try {
+      await sendCard(assigneeOpenId, card, 'open_id');
+    } catch (e) {
+      logger.warn({ err: e?.message, username }, 'monthly bonus feishu card failed');
+    }
+  }
+
+  let mgmtOpenIds = [];
+  try {
+    const mg = await query(
+      `SELECT DISTINCT open_id FROM feishu_users
+       WHERE role IN ('admin','hq_manager') AND registered = true AND open_id IS NOT NULL`
+    );
+    mgmtOpenIds = (mg.rows || []).map((r) => r.open_id).filter(Boolean);
+  } catch (_e) {
+    /* ignore */
+  }
+
+  for (const oid of mgmtOpenIds) {
+    try {
+      await sendCard(oid, card, 'open_id');
+    } catch (e) {
+      logger.warn({ err: e?.message, oid }, 'monthly bonus mgmt card failed');
+    }
+  }
+}
+
 /** @param {{ store: string, role: 'store_manager'|'store_production_manager', slots: { label: string, keys: string[] }[] }} p */
 async function applyBonusForUser(p) {
   const { start, end, label } = shanghaiPrevMonthBounds();
@@ -89,6 +201,8 @@ async function applyBonusForUser(p) {
   const period = `monthbonus_${label}`;
   const summary = `月度异常项未触发加分（${label}）：共 ${additions.length} 项，+${bonus} 分`;
 
+  const recordedTotal = Math.min(100 + bonus, 300);
+
   await query(
     `INSERT INTO agent_scores (
        brand, store, username, name, role, period, score_model,
@@ -107,12 +221,28 @@ async function applyBonusForUser(p) {
       name,
       role,
       period,
-      Math.min(100 + bonus, 300),
+      recordedTotal,
       JSON.stringify(additions),
       JSON.stringify({ items: additions, month: label }),
       summary
     ]
   );
+
+  if (!String(username).startsWith('__periodic')) {
+    await notifyBiMonthlyBonus({
+      username,
+      name,
+      store,
+      role,
+      label,
+      start,
+      end,
+      additions,
+      bonus,
+      recordedTotal
+    });
+  }
+
   return { store, role, bonus, items: additions.length };
 }
 

@@ -11,6 +11,7 @@ import { logger } from '../utils/logger.js';
 import { calcDeductions } from './scoring-model.js';
 import { getBrandForStore } from './config-service.js';
 import { sendCard, sendText, buildPerformanceSummaryCard, buildBiDeductionCard } from './feishu-client.js';
+import { ensureHrmsUserNotificationsTable } from '../utils/hrms-user-notifications.js';
 import {
   shanghaiLastCompletedWeekBounds,
   shanghaiWeekMonSunContaining,
@@ -45,30 +46,12 @@ const ANOMALY_KEY_ZH = {
   cost_spike: '成本波动异常'
 };
 
-async function ensureHrmsNotifTable() {
-  try {
-    await query(`
-      CREATE TABLE IF NOT EXISTS hrms_user_notifications (
-        id BIGSERIAL PRIMARY KEY,
-        target_username TEXT NOT NULL,
-        title TEXT NOT NULL,
-        message TEXT NOT NULL,
-        type TEXT NOT NULL DEFAULT 'performance_deduction',
-        meta JSONB DEFAULT '{}'::jsonb,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )`);
-    await query(`CREATE INDEX IF NOT EXISTS idx_hrms_notif_user_created ON hrms_user_notifications (target_username, created_at DESC)`);
-  } catch (e) {
-    logger.warn({ err: e?.message }, 'ensureHrmsNotifTable');
-  }
-}
-
 /**
  * 每条扣分写入 HRMS 档案「公司通知」数据源，同时发飞书即时消息给责任人 + admin/hq_manager 抄送
  */
 async function recordDeductionNotifications({ username, store, role, periodMonday, weekEndStr, details }) {
   if (!username || String(username).startsWith('__periodic')) return;
-  await ensureHrmsNotifTable();
+  await ensureHrmsUserNotificationsTable();
   const rangeZh = `${periodMonday}～${weekEndStr}`;
   
   // 查询责任人飞书 open_id

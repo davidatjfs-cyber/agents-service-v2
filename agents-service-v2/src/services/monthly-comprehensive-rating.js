@@ -13,6 +13,7 @@
  */
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
+import { ensureHrmsUserNotificationsTable } from '../utils/hrms-user-notifications.js';
 import { sendCard, sendText } from './feishu-client.js';
 
 // ─────────────────────────────────────────────
@@ -505,7 +506,10 @@ export async function runMonthlyComprehensiveRating(period) {
       }
     }
 
-    // 7. 发送飞书通知
+    // 7. 工作能力月评备案（未达 A：飞书 + HRMS，与执行力日评备案同思路）
+    await sendAbilityMonthlyFiling(results, period);
+
+    // 8. 发送飞书通知（月度综合评级卡）
     await sendMonthlyRatingNotifications(results, period);
 
     logger.info({ period, evaluated: results.length }, 'monthly comprehensive rating: completed');
@@ -518,7 +522,153 @@ export async function runMonthlyComprehensiveRating(period) {
 }
 
 // ─────────────────────────────────────────────
-// 8. 飞书通知
+// 8. 工作能力月评备案（飞书 + HRMS）
+// ─────────────────────────────────────────────
+
+function formatAbilityDetailMarkdown(r) {
+  const d = r.ability_detail || {};
+  if (r.role === 'store_production_manager') {
+    if (d.reason === '无毛利率数据') {
+      return `• ${d.reason || '无毛利率数据'}`;
+    }
+    const diff = d.diff != null && typeof d.diff === 'number' ? d.diff.toFixed(2) : d.diff;
+    return `• 实际毛利率 **${d.actual_margin}%** / 目标 **${d.target_margin}%**（差 ${diff}）`;
+  }
+  if (d.reason === '无点评星级数据') {
+    return `• ${d.reason || '无点评星级数据'}`;
+  }
+  return `• 大众点评星级 **${d.dianping_rating}**（营业日报日期 **${d.target_date}**）`;
+}
+
+function buildAbilityMonthlyFilingCard(r, period) {
+  const roleLabel = roleLabelZh(r.role);
+  const ar = r.ability_rating || '—';
+  const ratingColor =
+    ar === 'B' ? 'blue' : ar === 'C' ? 'orange' : ar === 'D' ? 'red' : 'blue';
+  const detailMd = formatAbilityDetailMarkdown(r);
+
+  const content = `**备案类型**：工作能力月评
+**门店**：${r.store}
+**岗位**：${roleLabel} · ${r.name || r.username}
+**统计月**：${period}（上月自然月）
+**工作能力评级**：**${ar}** 级
+
+**明细**
+${detailMd}`;
+
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: `📋 工作能力月评备案 · ${period}` },
+      template: ratingColor
+    },
+    elements: [
+      { tag: 'div', text: { tag: 'lark_md', content } },
+      {
+        tag: 'note',
+        elements: [
+          {
+            tag: 'plain_text',
+            content:
+              '数据来源：monthly_margins / daily_reports（店长取当月9号点评星级）· 与月度综合评级同批触发'
+          }
+        ]
+      }
+    ]
+  };
+}
+
+function buildAbilityMonthlyAdminSummaryCard(failed, period) {
+  let md = `**统计月**：${period}\n**备案人数**：${failed.length}\n\n**备案明细**\n`;
+  for (const r of failed) {
+    const roleLabel = roleLabelZh(r.role);
+    md += `\n• **${r.store}** · ${roleLabel} ${r.name || r.username}：**${r.ability_rating}** 级`;
+  }
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: `📋 工作能力月评备案汇总 · ${period}` },
+      template: 'blue'
+    },
+    elements: [
+      { tag: 'div', text: { tag: 'lark_md', content: md } },
+      {
+        tag: 'note',
+        elements: [{ tag: 'plain_text', content: '仅列出工作能力未达 A 级人员（与执行力日评备案逻辑一致）' }]
+      }
+    ]
+  };
+}
+
+async function sendAbilityMonthlyFiling(results, period) {
+  const failed = results.filter((r) => r.ability_rating && r.ability_rating !== 'A');
+  if (!failed.length) {
+    logger.info({ period }, 'ability monthly filing: all A, skip individual备案');
+    return 0;
+  }
+
+  await ensureHrmsUserNotificationsTable();
+  let sent = 0;
+
+  for (const r of failed) {
+    const card = buildAbilityMonthlyFilingCard(r, period);
+    const roleLabel = roleLabelZh(r.role);
+    const detailText = formatAbilityDetailMarkdown(r).replace(/\*\*/g, '');
+
+    if (r.open_id) {
+      try {
+        const res = await sendCard(r.open_id, card, 'open_id');
+        if (res?.ok) sent++;
+      } catch (e) {
+        logger.warn({ err: e?.message, u: r.username }, 'ability filing feishu failed');
+      }
+    }
+
+    try {
+      await query(
+        `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
+         VALUES ($1, $2, $3, $4, $5::jsonb)`,
+        [
+          r.username,
+          '工作能力月评备案',
+          `统计月 ${period}，工作能力评级为 ${r.ability_rating} 级。\n门店：${r.store}\n岗位：${roleLabel} · ${r.name || r.username}\n${detailText}`,
+          'ability_rating_monthly',
+          JSON.stringify({
+            period,
+            ability_rating: r.ability_rating,
+            ability_detail: r.ability_detail,
+            store: r.store,
+            role: r.role
+          })
+        ]
+      );
+      sent++;
+    } catch (e) {
+      logger.warn({ err: e?.message, u: r.username }, 'ability filing hrms failed');
+    }
+  }
+
+  const adminRecipients = await query(
+    `SELECT open_id, username FROM feishu_users
+     WHERE registered = true AND open_id IS NOT NULL
+       AND role IN ('admin', 'hq_manager')`
+  );
+  const summaryCard = buildAbilityMonthlyAdminSummaryCard(failed, period);
+  for (const rec of adminRecipients.rows || []) {
+    try {
+      await sendCard(rec.open_id, summaryCard, 'open_id');
+      sent++;
+    } catch (e) {
+      logger.warn({ err: e?.message, u: rec.username }, 'ability filing admin card failed');
+    }
+  }
+
+  logger.info({ period, filingCount: failed.length }, 'ability monthly filing done');
+  return sent;
+}
+
+// ─────────────────────────────────────────────
+// 9. 飞书通知（月度综合评级）
 // ─────────────────────────────────────────────
 
 async function sendMonthlyRatingNotifications(results, period) {

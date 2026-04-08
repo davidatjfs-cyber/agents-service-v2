@@ -222,7 +222,7 @@ function buildHQCard(storeSections, yesterday) {
   
   elements.push({
     tag: 'note',
-    elements: [{ tag: 'plain_text', content: '数据来源：master_tasks（飞书卡片任务）· 每日08:15自动推送' }]
+    elements: [{ tag: 'plain_text', content: '数据来源：master_tasks（飞书卡片任务）· 每日08:20自动推送' }]
   });
   
   return {
@@ -253,7 +253,7 @@ function buildStoreCard(store, storeMd, yesterday) {
   elements.push({ tag: 'hr' });
   elements.push({
     tag: 'note',
-    elements: [{ tag: 'plain_text', content: '数据来源：master_tasks（飞书卡片任务）· 每日08:15自动推送' }]
+    elements: [{ tag: 'plain_text', content: '数据来源：master_tasks（飞书卡片任务）· 每日08:20自动推送' }]
   });
   
   return {

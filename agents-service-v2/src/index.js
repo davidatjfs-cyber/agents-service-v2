@@ -922,11 +922,11 @@ async function start() {
     sendMorningBriefing().catch(e => logger.warn({ err: e?.message }, 'morning briefing cron error'));
   }, { timezone: 'Asia/Shanghai' });
   logger.info('Morning briefing cron scheduled at 07:30 Asia/Shanghai (fixed)');
-  // 每日任务达成率：固定 08:15（Asia/Shanghai）
-  cron.schedule('15 8 * * *', () => {
+  // 每日任务达成率：固定 08:20（Asia/Shanghai），与食安扫描 08:15 错开
+  cron.schedule('20 8 * * *', () => {
     sendDailyTaskCompletionReport().catch(e => logger.warn({ err: e?.message }, 'daily task completion cron error'));
   }, { timezone: 'Asia/Shanghai' });
-  logger.info('Daily task completion report cron scheduled at 08:15 Asia/Shanghai');
+  logger.info('Daily task completion report cron scheduled at 08:20 Asia/Shanghai');
   // 执行力日评：固定 08:00（Asia/Shanghai），检查昨日未达成项并发送通知
   cron.schedule('0 8 * * *', () => {
     runDailyExecutionRating().catch(e => logger.warn({ err: e?.message }, 'daily execution rating cron error'));

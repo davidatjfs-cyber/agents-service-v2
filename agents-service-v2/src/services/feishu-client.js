@@ -546,6 +546,51 @@ export function buildBiDeductionCard({
   };
 }
 
+/**
+ * 与 BI异常情况扣分 同版式：月度「异常未触发」加分备案（绿头）
+ */
+export function buildBiBonusCard({
+  store,
+  assigneeName,
+  role,
+  period,
+  bonusLines,
+  rollupScore,
+  bonusPoints,
+  recordedTotal,
+  dataSourceNote
+} = {}) {
+  const roleLabel = roleLabelZhForBiCard(role);
+  const noteText =
+    dataSourceNote ||
+    '数据来源：anomaly_triggers 上月命中情况 · anomaly_item_monthly_bonus · 每月10日00:30';
+
+  const content = `**备案类型**：BI异常未触发加分
+**门店**：${store}
+**岗位**：${roleLabel} · ${assigneeName}
+**周期**：${period}
+
+**加分项（上月对应异常未触发）**
+${bonusLines}
+
+**分数情况**
+• 周度绩效参考分：${rollupScore} 分（anomaly_rollups_v2 最新）
+• 本次加分：+${bonusPoints} 分
+• 备案写入总分：${recordedTotal} 分（独立 score_model，不与周度行合并）`;
+
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: '📋 BI异常未触发加分' },
+      template: 'green'
+    },
+    elements: [
+      { tag: 'div', text: { tag: 'lark_md', content } },
+      { tag: 'note', elements: [{ tag: 'plain_text', content: noteText }] }
+    ]
+  };
+}
+
 export function buildAnomalyCard(store, anomalyKey, severity, detail, taskId) {
   const typeZh = anomalyRuleLabelZh(anomalyKey);
   const sevColor = severity === 'high' ? 'red' : severity === 'medium' ? 'orange' : 'yellow';
