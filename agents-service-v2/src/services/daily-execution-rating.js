@@ -300,22 +300,6 @@ function buildAdminFilingCard(results, date) {
     ]
   };
 }
-  } else {
-    md += `\n✅ 全部达标，无需备案`;
-  }
-
-  return {
-    config: { wide_screen_mode: true },
-    header: {
-      title: { tag: 'plain_text', content: `📋 执行力日评备案汇总 · ${date}` },
-      template: 'blue'
-    },
-    elements: [
-      { tag: 'div', text: { tag: 'lark_md', content: md } },
-      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：开档/收档/原料收货报告 · 每日08:00自动检查' }] }
-    ]
-  };
-}
 
 /**
  * 发送执行力备案通知（飞书卡片 + HRMS公司通知）
