@@ -509,7 +509,7 @@ export async function dailyAttendanceReport() {
 
   const allStoresData = [];
   for (const store of stores) {
-    const sd = { store, allStaff: [], todayLeave: [], dailyReport: null, hrmsEmployeeCount: 0 };
+    const sd = { store, allStaff: [], dailyReport: null, hrmsEmployeeCount: 0 };
 
     // 全部注册员工
     const allStaffR = await query(
@@ -520,18 +520,6 @@ export async function dailyAttendanceReport() {
     );
     sd.allStaff = allStaffR.rows || [];
     sd.hrmsEmployeeCount = await fetchHrmsHeadcountForStore(store);
-
-    // 今日休假
-    const leaveR = await query(
-      `SELECT l.username, l.name, l.start_date, l.end_date, l.days, l.type, l.reason
-       FROM hrms_leave_records l
-       WHERE l.store ILIKE '%' || $1 || '%'
-         AND l.start_date <= $2::date AND l.end_date >= $2::date
-         AND l.status = 'approved'
-       ORDER BY l.start_date`,
-      [store, today]
-    );
-    sd.todayLeave = leaveR.rows || [];
 
     // 营业日报
     const drR = await query(
@@ -632,9 +620,59 @@ function roleZh(r) {
   return m[r] || r || '—';
 }
 
-function leaveTypeZh(t) {
-  const m = { annual:'年假', sick:'病假', personal:'事假' };
-  return m[t] || '休假';
+/**
+ * 与 HRMS 营业日报 `drSumStaff` 一致：每条上班/休息记录若 days 为有效正数则累加，否则按 **1**（全天）计。
+ * 半天在前端存为 0.5。
+ */
+function sumHrmsStaffPersonDays(arr) {
+  const list = Array.isArray(arr) ? arr : [];
+  let sum = 0;
+  for (const x of list) {
+    const d = Number(x?.days);
+    if (Number.isFinite(d) && d > 0) sum += d;
+    else sum += 1;
+  }
+  return Math.round(sum * 100) / 100;
+}
+
+/** 合并当日休息人员（与 HRMS `drMergeUniqueStaffLists(restStaff, frontRestStaff, kitchenRestStaff)` 同序去重） */
+function mergeDailyReportRestStaff(staffObj) {
+  const so = staffObj && typeof staffObj === 'object' && !Array.isArray(staffObj) ? staffObj : {};
+  const lists = [
+    Array.isArray(so.restStaff) ? so.restStaff : [],
+    Array.isArray(so.frontRestStaff) ? so.frontRestStaff : [],
+    Array.isArray(so.kitchenRestStaff) ? so.kitchenRestStaff : []
+  ];
+  const seen = new Set();
+  const out = [];
+  for (const arr of lists) {
+    for (const x of arr) {
+      const u = String(x?.user || x?.username || '').trim().toLowerCase();
+      const n = String(x?.name || '').trim();
+      const key = u || n.toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(x);
+    }
+  }
+  return out;
+}
+
+function restShiftLabel(days) {
+  const d = Number(days);
+  if (Number.isFinite(d) && d > 0 && d < 1) return '半天';
+  return '全天';
+}
+
+function formatDailyReportRestList(restMerged) {
+  if (!restMerged.length) return '无';
+  return restMerged
+    .map((x) => {
+      const name = String(x?.name || x?.user || x?.username || '').trim() || '—';
+      const label = restShiftLabel(x?.days);
+      return `${name}（休息${label}）`;
+    })
+    .join('、');
 }
 
 /** 从营业日报 staff 结构估算在岗人数（object：front/kitchen/restStaff 去重 user） */
@@ -667,30 +705,15 @@ function parseStoreData(sd) {
 
   const frontArr = Array.isArray(staffObj.front) ? staffObj.front : [];
   const kitchenArr = Array.isArray(staffObj.kitchen) ? staffObj.kitchen : [];
-  const calcDays = (arr) => (arr || []).reduce((sum, s) => sum + (parseFloat(s?.days || 0) || 0), 0);
-  const frontDays = calcDays(frontArr);
-  const kitchenDays = calcDays(kitchenArr);
-  const attendanceCount = Math.round((frontDays + kitchenDays) * 10) / 10;
+  const frontPersonDays = sumHrmsStaffPersonDays(frontArr);
+  const kitchenPersonDays = sumHrmsStaffPersonDays(kitchenArr);
+  const attendanceCount = Math.round((frontPersonDays + kitchenPersonDays) * 100) / 100;
   const attendanceRate = totalStaff > 0 ? Math.round((attendanceCount / totalStaff) * 100) : 0;
   const laborHours = parseFloat(dr.labor_total) || 0;
 
   const preRev = parseFloat(dr.pre_discount_revenue) || 0;
   const actualRev = parseFloat(dr.actual_revenue) || 0;
   const eff = parseFloat(dr.efficiency) || 0;
-  // 构建员工姓名映射（从所有分类去重）
-  const allStaffMap = new Map();
-  const addToNameMap = (arr) => {
-    if (Array.isArray(arr)) {
-      for (const s of arr) {
-        if (s?.user) allStaffMap.set(s.user, s);
-      }
-    }
-  };
-  if (!Array.isArray(staffObj)) {
-    addToNameMap(staffObj.front);
-    addToNameMap(staffObj.kitchen);
-    addToNameMap(staffObj.restStaff);
-  }
 
   const segmentsRaw = dr.segments || {};
   const seg = typeof segmentsRaw === 'string' ? JSON.parse(segmentsRaw) : segmentsRaw;
@@ -714,15 +737,16 @@ function parseStoreData(sd) {
   const morningStaff = sched.morningStaff || [];
   const afternoonStaff = sched.afternoonStaff || [];
 
-  const restNames = sd.todayLeave.map(lv => {
-    const emp = allStaffMap.get(lv.username);
-    const typeLabel = leaveTypeZh(lv.type);
-    return `${lv.name}（${emp ? '员工' : '—'}，${typeLabel}）`;
-  });
+  const restMerged = mergeDailyReportRestStaff(staffObj);
+  const restPersonDays = sumHrmsStaffPersonDays(restMerged);
+  const restNames = formatDailyReportRestList(restMerged);
 
   return {
     totalStaff, laborHours, attendanceCount, attendanceRate,
-    restNames: restNames.length ? restNames.join('、') : '无',
+    frontPersonDays,
+    kitchenPersonDays,
+    restPersonDays,
+    restNames,
     eff, actualRev, noonEff, nightEff,
     noonRev, nightRev: nightRev + afternoonRev, noonHours, nightHours,
     tomorrowEst, tomorrowHeadcount, tomorrowEff,
@@ -755,11 +779,11 @@ function buildAttendanceCard(allStoresData, today) {
       text: { tag: 'lark_md', content: `**${sd.store}**` }
     });
 
-    // 考勤
+    // 考勤（出勤/休息人数与 HRMS 营业日报「前厅+后厨上班」「当日休息」同一套 days 规则：缺省=1，半天=0.5）
     let attendText = `**一、考勤**\n`;
-    attendText += `门店总人数：${d.totalStaff}人 ｜ 实际出勤：${d.attendanceCount}人（${d.laborHours}工时）\n`;
+    attendText += `门店总人数：${d.totalStaff}人 ｜ 实际出勤：${d.attendanceCount}人（前厅${d.frontPersonDays}+后厨${d.kitchenPersonDays}）｜ ${d.laborHours}工时\n`;
     attendText += `出勤率：${d.attendanceRate}%（${d.attendanceCount}/${d.totalStaff}）\n`;
-    attendText += `今日休息：${d.restNames}`;
+    attendText += `当日休息：折合 **${d.restPersonDays}** 人｜${d.restNames}`;
     elements.push({
       tag: 'div',
       text: { tag: 'lark_md', content: attendText }
@@ -840,9 +864,9 @@ function buildStoreCard(sd, today) {
     });
 
     let attendText = `**一、考勤**\n`;
-    attendText += `门店总人数：${d.totalStaff}人 ｜ 实际出勤：${d.attendanceCount}人（${d.laborHours}工时）\n`;
+    attendText += `门店总人数：${d.totalStaff}人 ｜ 实际出勤：${d.attendanceCount}人（前厅${d.frontPersonDays}+后厨${d.kitchenPersonDays}）｜ ${d.laborHours}工时\n`;
     attendText += `出勤率：${d.attendanceRate}%（${d.attendanceCount}/${d.totalStaff}）\n`;
-    attendText += `今日休息：${d.restNames}`;
+    attendText += `当日休息：折合 **${d.restPersonDays}** 人｜${d.restNames}`;
     elements.push({ tag: 'div', text: { tag: 'lark_md', content: attendText } });
 
     let effText = `**二、人效**\n`;
