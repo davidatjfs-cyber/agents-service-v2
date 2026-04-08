@@ -922,11 +922,11 @@ async function start() {
     sendMorningBriefing().catch(e => logger.warn({ err: e?.message }, 'morning briefing cron error'));
   }, { timezone: 'Asia/Shanghai' });
   logger.info('Morning briefing cron scheduled at 07:30 Asia/Shanghai (fixed)');
-  // 每日任务达成率：固定 08:00（Asia/Shanghai）
-  cron.schedule('50 8 * * *', () => {
+  // 每日任务达成率：固定 08:15（Asia/Shanghai）
+  cron.schedule('15 8 * * *', () => {
     sendDailyTaskCompletionReport().catch(e => logger.warn({ err: e?.message }, 'daily task completion cron error'));
   }, { timezone: 'Asia/Shanghai' });
-  logger.info('Daily task completion report cron scheduled at 08:50 Asia/Shanghai');
+  logger.info('Daily task completion report cron scheduled at 08:15 Asia/Shanghai');
   // 执行力日评：固定 08:00（Asia/Shanghai），检查昨日未达成项并发送通知
   cron.schedule('0 8 * * *', () => {
     runDailyExecutionRating().catch(e => logger.warn({ err: e?.message }, 'daily execution rating cron error'));
@@ -937,6 +937,15 @@ async function start() {
     runMonthlyComprehensiveRating().catch(e => logger.warn({ err: e?.message }, 'monthly comprehensive rating cron error'));
   }, { timezone: 'Asia/Shanghai' });
   logger.info('Monthly comprehensive rating cron scheduled at 01:00 on 10th (Asia/Shanghai)');
+  // 上月异常项未触发加分：与综合评级同一套 agent_scores 库，独立于 ENABLE_AUTOMATIONS（10日 00:30 早于下方 01:00）
+  cron.schedule('30 0 10 * *', async () => {
+    try {
+      await runMonthlyAnomalyItemBonuses();
+    } catch (e) {
+      logger.error({ err: e?.message }, 'monthly anomaly item bonus cron');
+    }
+  }, { timezone: 'Asia/Shanghai' });
+  logger.info('Monthly anomaly item bonus scheduled at 00:30 on 10th (Asia/Shanghai)');
   if (automations) {
     startRhythmScheduler();
     startKpiScheduler();
@@ -964,15 +973,6 @@ async function start() {
       }
     }, { timezone: 'Asia/Shanghai' });
     logger.info('Food safety data scan scheduled at 08:15 Asia/Shanghai');
-    // 上月异常项未触发加分（每月1日 06:15）
-    cron.schedule('15 6 1 * *', async () => {
-      try {
-        await runMonthlyAnomalyItemBonuses();
-      } catch (e) {
-        logger.error({ err: e?.message }, 'monthly anomaly item bonus cron');
-      }
-    }, { timezone: 'Asia/Shanghai' });
-    logger.info('Monthly anomaly item bonus scheduled at 06:15 on 1st (Asia/Shanghai)');
     // 总实收毛利率：每月9号 24:00（即10号00:00）检测上月数据，确保10号01:00月度绩效计算时已有毛利率异常数据
     cron.schedule('0 0 10 * *', async () => {
       try {

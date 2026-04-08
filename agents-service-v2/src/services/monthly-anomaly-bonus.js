@@ -1,5 +1,6 @@
 /**
- * 上月「未触发」异常项：负责人每项 +10 分（写入 agent_scores，独立 period 避免与月度绩效行冲突）
+ * 上月「未触发」异常项：负责人每项 +10 分（写入 agent_scores，独立 period / score_model）
+ * 定时：每月 10 日 00:30（上海），早于 monthly-comprehensive-rating 的 01:00。
  */
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';

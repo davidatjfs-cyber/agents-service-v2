@@ -871,9 +871,9 @@ export function startRhythmScheduler() {
     try { await monthlyEvaluation(); } catch (e) { logger.error({ err: e }, 'Cron: monthly evaluation failed'); }
   }, { timezone: 'Asia/Shanghai' });
 
-  // 每日 08:00 充值异常检测（daily 频率，仅 recharge_zero）
-  cron.schedule('0 8 * * *', async () => {
-    try { await runAnomalyChecksForStores('daily'); } catch (e) { logger.error({ err: e?.message }, '充值异常日检 08:00 failed'); }
+  // 每日 05:00 日频 BI 检测（静态规则含 recharge_zero；DB 中 frequency=daily 且与 canonical 一致者同跑）
+  cron.schedule('0 5 * * *', async () => {
+    try { await runAnomalyChecksForStores('daily'); } catch (e) { logger.error({ err: e?.message }, '日频 BI 检测 05:00 failed'); }
   }, { timezone: 'Asia/Shanghai' });
 
   // 每月1日 08:00 — 月度实收营收达成检测（revenue_achievement_monthly）
@@ -888,5 +888,5 @@ export function startRhythmScheduler() {
     try { await dailyAttendanceReport(); } catch (e) { logger.error({ err: e?.message }, 'daily attendance report 22:00 failed'); }
   }, { timezone: 'Asia/Shanghai' });
 
-  logger.info('✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+周报(周一10:00)+月评(每月1日10:00)+充值日检(每日08:00)+月末月收(每月1日08:00)+考勤日报(每日22:15)');
+  logger.info('✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+周报(周一10:00)+月评(每月1日10:00)+日频BI(每日05:00)+月末月收(每月1日08:00)+考勤日报(每日22:15)');
 }
