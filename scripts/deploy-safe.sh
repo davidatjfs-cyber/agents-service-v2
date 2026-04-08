@@ -126,6 +126,12 @@ log "✅ 部署路径验证通过"
 # ============================================================
 log "📋 步骤3/8: 部署前备份 (防止数据丢失)..."
 
+# 3.0 先同步仓库中的备份脚本到 ECS，避免服务器脚本漂移
+log "📤 同步 deploy-backup.sh 到 ECS..."
+scp "$ROOT/scripts/deploy-backup.sh" "$ECS_HOST:/opt/scripts/deploy-backup.sh" >/dev/null 2>&1 || error_exit "同步 deploy-backup.sh 失败"
+ssh "$ECS_HOST" "chmod +x /opt/scripts/deploy-backup.sh" >/dev/null 2>&1 || error_exit "设置 deploy-backup.sh 可执行失败"
+log "✅ deploy-backup.sh 同步完成"
+
 ALLOW_NO_DB_BACKUP="${ALLOW_NO_DB_BACKUP:-false}"
 BACKUP_CMD="/opt/scripts/deploy-backup.sh"
 if [ "$ALLOW_NO_DB_BACKUP" = "true" ]; then
