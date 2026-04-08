@@ -126,11 +126,27 @@ log "✅ 部署路径验证通过"
 # ============================================================
 log "📋 步骤3/8: 部署前备份 (防止数据丢失)..."
 
-BACKUP_RESULT=$(ssh "$ECS_HOST" "/opt/scripts/deploy-backup.sh" 2>&1)
+ALLOW_NO_DB_BACKUP="${ALLOW_NO_DB_BACKUP:-false}"
+BACKUP_CMD="/opt/scripts/deploy-backup.sh"
+if [ "$ALLOW_NO_DB_BACKUP" = "true" ]; then
+  BACKUP_CMD="ALLOW_NO_DB_BACKUP=true /opt/scripts/deploy-backup.sh"
+fi
+
+if ! BACKUP_RESULT=$(ssh "$ECS_HOST" "$BACKUP_CMD" 2>&1); then
+    echo "$BACKUP_RESULT" | tee -a "$LOG_FILE"
+    error_exit "备份脚本执行失败（默认严格模式：数据库备份失败将中止部署）"
+fi
 echo "$BACKUP_RESULT" | tee -a "$LOG_FILE"
 
 if ! echo "$BACKUP_RESULT" | grep -q "备份流程完成"; then
     error_exit "备份失败！无法继续部署！"
+fi
+if ! echo "$BACKUP_RESULT" | grep -q "数据库备份成功"; then
+    if [ "$ALLOW_NO_DB_BACKUP" = "true" ]; then
+        log "⚠️ 数据库备份未成功，但 ALLOW_NO_DB_BACKUP=true，继续部署"
+    else
+        error_exit "数据库备份未成功（可设置 ALLOW_NO_DB_BACKUP=true 强制继续）"
+    fi
 fi
 log "✅ 部署前备份完成"
 
