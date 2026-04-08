@@ -60,28 +60,76 @@ async function ensureHrmsNotifTable() {
     await query(`CREATE INDEX IF NOT EXISTS idx_hrms_notif_user_created ON hrms_user_notifications (target_username, created_at DESC)`);
   } catch (e) {
     logger.warn({ err: e?.message }, 'ensureHrmsNotifTable');
-  }
 }
 
-/** 每条扣分写入 HRMS 档案「公司通知」数据源，同时发飞书即时消息给责任人 + admin/hq_manager 抄送 */
+/**
+ * 构建 BI 异常情况扣分飞书卡片
+ */
+function buildBiDeductionCard({ store, assigneeName, role, period, reason, keyZh, severity, points, currentScore, remainingScore }) {
+  const roleLabel = roleLabelZh(role);
+  const color = severity === '高' ? 'red' : 'orange';
+  
+  const content = `**备案类型**：BI异常情况扣分
+**门店**：${store}
+**岗位**：${roleLabel} · ${assigneeName}
+**周期**：${period}
+**异常类型**：${reason}（${keyZh}，严重度 ${severity}）
+
+**分数情况**
+• 现有分数：${currentScore} 分
+• 本次扣分：${points} 分
+• 剩余分数：${remainingScore} 分`;
+
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: '📋 BI异常情况扣分' },
+      template: color
+    },
+    elements: [
+      { tag: 'div', text: { tag: 'lark_md', content } },
+      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：异常触发汇总（anomaly_triggers）· 周度自动计算' }] }
+    ]
+  };
+}
+
+/**
+ * 每条扣分写入 HRMS 档案「公司通知」数据源，同时发飞书即时消息给责任人 + admin/hq_manager 抄送
+ */
 async function recordDeductionNotifications({ username, store, role, periodMonday, weekEndStr, details }) {
   if (!username || String(username).startsWith('__periodic')) return;
   await ensureHrmsNotifTable();
   const rangeZh = `${periodMonday}～${weekEndStr}`;
-
+  
   // 查询责任人飞书 open_id
   let assigneeOpenId = null;
   let assigneeName = username;
   try {
     const fu = await query(
-      `SELECT open_id, COALESCE(NULLIF(TRIM(name),''), username) AS name
+      `SELECT open_id, COALESCE(NULLIF(TRIM(name)),''), username) AS name
        FROM feishu_users WHERE username = $1 AND registered = true AND open_id IS NOT NULL LIMIT 1`,
       [username]
     );
     assigneeOpenId = fu.rows?.[0]?.open_id || null;
     assigneeName = fu.rows?.[0]?.name || username;
   } catch (_e) { /* ignore */ }
-
+  
+  // 查询当前剩余分数（从 agent_scores 中查询最新记录）
+  let currentScore = 100;
+  try {
+    const scoreRes = await query(
+      `SELECT total_score FROM agent_scores 
+       WHERE username = $1 AND score_model = 'anomaly_rollups_v2'
+       ORDER BY updated_at DESC LIMIT 1`,
+      [username]
+    );
+    if (scoreRes.rows?.[0]?.total_score) {
+      currentScore = Math.max(0, scoreRes.rows[0].total_score);
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message, username }, 'Failed to fetch current score, using default 100');
+  }
+  
   // 查询 admin+hq_manager 的飞书 open_id（管理层抄送）
   let mgmtOpenIds = [];
   try {
@@ -91,27 +139,70 @@ async function recordDeductionNotifications({ username, store, role, periodMonda
     );
     mgmtOpenIds = (mg.rows || []).map((r) => r.open_id).filter(Boolean);
   } catch (_e) { /* ignore */ }
-
+  
   for (const d of details || []) {
     const pts = Number(d.points || 0);
     if (!pts) continue;
     const reason = CAT_ZH[d.category] || d.category || '异常规则';
     const keyZh = ANOMALY_KEY_ZH[d.anomaly_key] || '相关规则';
     const sevZh = d.severity === 'high' ? '高' : d.severity === 'medium' ? '中' : String(d.severity || '-');
-    const roleLabelStr = roleLabelZh(role);
-    const msg = `${rangeZh} 因「${reason}」（${keyZh}，严重度 ${sevZh}），本周绩效扣 ${pts} 分。说明：周度汇总已写入绩效档案，如有异议请在飞书联系总部营运或回复「申诉」。`;
-    const metaJson = JSON.stringify({ store, role, anomaly_key: d.anomaly_key, category: d.category, points: pts, period_week_start: periodMonday });
-
-    // 写入责任人 HRMS 档案通知
+    const remainingScore = Math.max(0, currentScore - pts);
+    
+    // 构建卡片
+    const card = buildBiDeductionCard({
+      store,
+      assigneeName,
+      role,
+      period: rangeZh,
+      reason,
+      keyZh,
+      severity: sevZh,
+      points: pts,
+      currentScore,
+      remainingScore
+    });
+    
+    // 写入 HRMS 档案通知
+    const metaJson = JSON.stringify({ 
+      store, 
+      role, 
+      anomaly_key: d.anomaly_key, 
+      category: d.category, 
+      points: pts, 
+      current_score: currentScore, 
+      remaining_score: remainingScore,
+      period_week_start: periodMonday 
+    });
+    
     try {
       await query(
         `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
-         VALUES ($1, $2, $3, 'performance_deduction', $4::jsonb)`,
-        [username, '绩效扣分通知', msg, metaJson]
+         VALUES ($1, $2, $3, $4, $5::jsonb)`,
+        [username, 'BI异常情况扣分', `您的${rangeZh}绩效扣${pts}分，剩余${remainingScore}分。`, 'bi_deduction', metaJson]
       );
     } catch (e) {
       logger.warn({ err: e?.message, username }, 'recordDeductionNotifications insert failed');
     }
+    
+    // 发送飞书卡片给责任人
+    if (assigneeOpenId) {
+      try {
+        await sendCard(assigneeOpenId, card, 'open_id');
+      } catch (e) {
+        logger.warn({ err: e?.message, username }, 'bi deduction card send failed');
+      }
+    }
+    
+    // 管理层抄送：每人收一张卡片
+    for (const oid of mgmtOpenIds) {
+      try {
+        await sendCard(oid, card, 'open_id');
+      } catch (e) {
+        logger.warn({ err: e?.message, oid }, 'bi deduction card send failed');
+      }
+    }
+  }
+}
 
     // 发飞书给责任人
     if (assigneeOpenId) {
