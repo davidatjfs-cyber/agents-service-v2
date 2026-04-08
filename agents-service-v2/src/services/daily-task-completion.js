@@ -6,7 +6,8 @@
  */
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
-import { sendCard, sendText } from './feishu-client.js';
+import { sendCard } from './feishu-client.js';
+import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
 
 /** 任务类型 → 中文标签 */
 function taskTypeLabel(type) {
@@ -308,18 +309,33 @@ export async function sendDailyTaskCompletionReport() {
     const recipients = await getRecipients();
     
     let sentCount = 0;
+    let failedCount = 0;
+    const runYmd = getShanghaiYmd();
     
     // 发送 HQ 版本（admin + hq_manager 收到所有门店）
     const hqCard = buildHQCard(storeSections, yesterday);
     const hqRecipients = recipients.filter(r => ['admin', 'hq_manager'].includes(r.role));
     for (const recipient of hqRecipients) {
       try {
-        const cardRes = await sendCard(recipient.open_id, hqCard, 'open_id');
-        if (cardRes?.ok) {
+        const deliver = await sendReportToRecipient({
+          jobKey: 'daily_task_completion_report',
+          runYmd,
+          username: recipient.username || recipient.open_id,
+          scope: 'hq_summary',
+          sendFn: async () => {
+            const cardRes = await sendCard(recipient.open_id, hqCard, 'open_id');
+            return { ok: !!cardRes?.ok, error: cardRes?.error || '' };
+          }
+        });
+        if (deliver?.ok && !deliver?.skipped) {
           sentCount++;
           logger.info({ recipient: recipient.username, role: recipient.role }, 'HQ task completion card sent');
+        } else if (!deliver?.ok) {
+          failedCount++;
+          logger.warn({ recipient: recipient.username, role: recipient.role, err: deliver?.error }, 'HQ task completion card send failed after retries');
         }
       } catch (e) {
+        failedCount++;
         logger.warn({ err: e?.message, recipient: recipient.username }, 'HQ task completion card send failed');
       }
     }
@@ -339,17 +355,34 @@ export async function sendDailyTaskCompletionReport() {
       
       for (const recipient of storeRecipients) {
         try {
-          const cardRes = await sendCard(recipient.open_id, storeCard, 'open_id');
-          if (cardRes?.ok) {
+          const deliver = await sendReportToRecipient({
+            jobKey: 'daily_task_completion_report',
+            runYmd,
+            username: recipient.username || recipient.open_id,
+            scope: `store_${store}`,
+            sendFn: async () => {
+              const cardRes = await sendCard(recipient.open_id, storeCard, 'open_id');
+              return { ok: !!cardRes?.ok, error: cardRes?.error || '' };
+            }
+          });
+          if (deliver?.ok && !deliver?.skipped) {
             sentCount++;
             logger.info({ recipient: recipient.username, store }, 'store task completion card sent');
+          } else if (!deliver?.ok) {
+            failedCount++;
+            logger.warn({ recipient: recipient.username, store, err: deliver?.error }, 'store task completion card send failed after retries');
           }
         } catch (e) {
+          failedCount++;
           logger.warn({ err: e?.message, recipient: recipient.username, store }, 'store task completion card send failed');
         }
       }
     }
     
+    if (failedCount > 0) {
+      logger.warn({ yesterday, sent: sentCount, failed: failedCount }, 'daily task completion report: partial failure, will rely on cron retry');
+      throw new Error(`daily task completion report has ${failedCount} failed recipients`);
+    }
     logger.info({ yesterday, sent: sentCount }, 'daily task completion report: completed');
     return { sent: sentCount };
     

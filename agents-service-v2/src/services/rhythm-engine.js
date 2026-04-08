@@ -17,6 +17,7 @@ import { pushRhythmReport } from './feishu-client.js';
 import { buildTableVisitKpiMarkdownSection } from './deterministic-replies.js';
 import { checkCampaignProgress, evaluateCompletedCampaigns } from './agent-collaboration.js';
 import { getRhythmSchedule } from './config-service.js';
+import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
 
 // ─── 检查任务是否启用 ───
 async function isRhythmTaskEnabled(taskKey) {
@@ -529,6 +530,8 @@ export async function dailyAttendanceReport() {
 
   // 推送
   const { sendCard, sendText } = await import('./feishu-client.js');
+  const runYmd = getShanghaiYmd();
+  let failedCount = 0;
 
   // admin + hq_manager 收到所有门店
   const hq = await query(
@@ -536,9 +539,22 @@ export async function dailyAttendanceReport() {
      WHERE registered = true AND open_id IS NOT NULL AND role IN ('admin','hq_manager')`
   );
   for (const u of hq.rows || []) {
-    await sendCard(u.open_id, card, 'open_id').catch(e =>
-      logger.warn({ err: e?.message, username: u.username }, 'attendance card push to HQ failed')
-    );
+    const deliver = await sendReportToRecipient({
+      jobKey: 'daily_attendance_report',
+      runYmd,
+      username: u.username || u.open_id,
+      scope: 'hq_summary',
+      sendFn: async () => {
+        const res = await sendCard(u.open_id, card, 'open_id').catch(() => ({ ok: false }));
+        if (res?.ok) return { ok: true };
+        const textRes = await sendText(u.open_id, `📋 出勤日报 ${today}`, 'open_id').catch(() => ({ ok: false }));
+        return { ok: !!textRes?.ok, error: res?.error || textRes?.error || '' };
+      }
+    });
+    if (!deliver?.ok) {
+      failedCount++;
+      logger.warn({ username: u.username, err: deliver?.error }, 'attendance card push to HQ failed after retries');
+    }
   }
 
   // 店长 + 出品经理 收到自己门店（单独卡片）
@@ -553,13 +569,29 @@ export async function dailyAttendanceReport() {
     if (sms.rows?.length) {
       const storeCard = buildStoreCard(sd, today);
       for (const u of sms.rows) {
-        await sendCard(u.open_id, storeCard, 'open_id').catch(e =>
-          logger.warn({ err: e?.message, username: u.username }, 'attendance card push to store failed')
-        );
+        const deliver = await sendReportToRecipient({
+          jobKey: 'daily_attendance_report',
+          runYmd,
+          username: u.username || u.open_id,
+          scope: `store_${sd.store}`,
+          sendFn: async () => {
+            const res = await sendCard(u.open_id, storeCard, 'open_id').catch(() => ({ ok: false }));
+            if (res?.ok) return { ok: true };
+            const textRes = await sendText(u.open_id, `📋 ${sd.store} 出勤日报 ${today}`, 'open_id').catch(() => ({ ok: false }));
+            return { ok: !!textRes?.ok, error: res?.error || textRes?.error || '' };
+          }
+        });
+        if (!deliver?.ok) {
+          failedCount++;
+          logger.warn({ username: u.username, store: sd.store, err: deliver?.error }, 'attendance card push to store failed after retries');
+        }
       }
     }
   }
 
+  if (failedCount > 0) {
+    throw new Error(`daily attendance report has ${failedCount} failed recipients`);
+  }
   logger.info({ hqPush: hq.rows?.length || 0 }, 'daily attendance report pushed');
   await logRhythm('daily_attendance', 'success', { storeCount: stores.length });
   return { ok: true, storeCount: stores.length };

@@ -15,6 +15,7 @@ import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { ensureHrmsUserNotificationsTable } from '../utils/hrms-user-notifications.js';
 import { sendCard, sendText } from './feishu-client.js';
+import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
 
 // ─────────────────────────────────────────────
 // 1. 工具函数
@@ -608,6 +609,8 @@ async function sendAbilityMonthlyFiling(results, period) {
 
   await ensureHrmsUserNotificationsTable();
   let sent = 0;
+  let failed = 0;
+  const runYmd = getShanghaiYmd();
 
   for (const r of results) {
     const card = buildAbilityMonthlyFilingCard(r, period);
@@ -616,9 +619,20 @@ async function sendAbilityMonthlyFiling(results, period) {
 
     if (r.open_id) {
       try {
-        const res = await sendCard(r.open_id, card, 'open_id');
-        if (res?.ok) sent++;
+        const deliver = await sendReportToRecipient({
+          jobKey: 'monthly_comprehensive_rating',
+          runYmd,
+          username: r.username || r.open_id,
+          scope: 'ability_individual',
+          sendFn: async () => {
+            const res = await sendCard(r.open_id, card, 'open_id');
+            return { ok: !!res?.ok, error: res?.error || '' };
+          }
+        });
+        if (deliver?.ok && !deliver?.skipped) sent++;
+        if (!deliver?.ok) failed++;
       } catch (e) {
+        failed++;
         logger.warn({ err: e?.message, u: r.username }, 'ability filing feishu failed');
       }
     }
@@ -655,14 +669,26 @@ async function sendAbilityMonthlyFiling(results, period) {
   const summaryCard = buildAbilityMonthlyAdminSummaryCard(results, period);
   for (const rec of adminRecipients.rows || []) {
     try {
-      await sendCard(rec.open_id, summaryCard, 'open_id');
-      sent++;
+      const deliver = await sendReportToRecipient({
+        jobKey: 'monthly_comprehensive_rating',
+        runYmd,
+        username: rec.username || rec.open_id,
+        scope: 'ability_admin_summary',
+        sendFn: async () => {
+          const res = await sendCard(rec.open_id, summaryCard, 'open_id');
+          return { ok: !!res?.ok, error: res?.error || '' };
+        }
+      });
+      if (deliver?.ok && !deliver?.skipped) sent++;
+      if (!deliver?.ok) failed++;
     } catch (e) {
+      failed++;
       logger.warn({ err: e?.message, u: rec.username }, 'ability filing admin card failed');
     }
   }
 
   logger.info({ period, filingCount: results.length }, 'ability monthly filing done');
+  if (failed > 0) throw new Error(`ability monthly filing has ${failed} failed recipients`);
   return sent;
 }
 
@@ -672,21 +698,34 @@ async function sendAbilityMonthlyFiling(results, period) {
 
 async function sendMonthlyRatingNotifications(results, period) {
   let sentCount = 0;
+  let failedCount = 0;
+  const runYmd = getShanghaiYmd();
 
   // 1. 个人通知
   for (const r of results) {
     const card = buildMonthlyRatingCard(r, period);
     if (r.open_id) {
       try {
-        const res = await sendCard(r.open_id, card, 'open_id');
-        if (res?.ok) {
+        const deliver = await sendReportToRecipient({
+          jobKey: 'monthly_comprehensive_rating',
+          runYmd,
+          username: r.username || r.open_id,
+          scope: 'monthly_individual',
+          sendFn: async () => {
+            const res = await sendCard(r.open_id, card, 'open_id');
+            if (res?.ok) return { ok: true };
+            const textRes = await sendText(r.open_id, buildMonthlyRatingText(r, period), 'open_id');
+            return { ok: !!textRes?.ok, error: textRes?.error || res?.error || '' };
+          }
+        });
+        if (deliver?.ok && !deliver?.skipped) {
           sentCount++;
           logger.info({ recipient: r.username }, 'monthly rating card sent to individual');
-        } else {
-          await sendText(r.open_id, buildMonthlyRatingText(r, period), 'open_id');
-          sentCount++;
+        } else if (!deliver?.ok) {
+          failedCount++;
         }
       } catch (e) {
+        failedCount++;
         logger.warn({ err: e?.message, recipient: r.username }, 'monthly rating card send failed');
       }
     }
@@ -703,15 +742,26 @@ async function sendMonthlyRatingNotifications(results, period) {
     const summaryCard = buildMonthlySummaryCard(results, period);
     for (const recipient of adminRecipients.rows) {
       try {
-        const res = await sendCard(recipient.open_id, summaryCard, 'open_id');
-        if (res?.ok) {
+        const deliver = await sendReportToRecipient({
+          jobKey: 'monthly_comprehensive_rating',
+          runYmd,
+          username: recipient.username || recipient.open_id,
+          scope: 'monthly_admin_summary',
+          sendFn: async () => {
+            const res = await sendCard(recipient.open_id, summaryCard, 'open_id');
+            if (res?.ok) return { ok: true };
+            const textRes = await sendText(recipient.open_id, buildMonthlySummaryText(results, period), 'open_id');
+            return { ok: !!textRes?.ok, error: textRes?.error || res?.error || '' };
+          }
+        });
+        if (deliver?.ok && !deliver?.skipped) {
           sentCount++;
           logger.info({ recipient: recipient.username, role: recipient.role }, 'monthly summary card sent to admin');
-        } else {
-          await sendText(recipient.open_id, buildMonthlySummaryText(results, period), 'open_id');
-          sentCount++;
+        } else if (!deliver?.ok) {
+          failedCount++;
         }
       } catch (e) {
+        failedCount++;
         logger.warn({ err: e?.message, recipient: recipient.username }, 'monthly summary card send failed');
       }
     }
@@ -726,6 +776,9 @@ async function sendMonthlyRatingNotifications(results, period) {
     ).catch(() => {});
   }
 
+  if (failedCount > 0) {
+    throw new Error(`monthly comprehensive rating has ${failedCount} failed recipients`);
+  }
   return sentCount;
 }
 

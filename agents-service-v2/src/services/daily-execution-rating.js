@@ -11,7 +11,8 @@
  */
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
-import { sendCard, sendText } from './feishu-client.js';
+import { sendCard } from './feishu-client.js';
+import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
 
 // ─────────────────────────────────────────────
 // 1. 数据查询函数
@@ -307,6 +308,8 @@ function buildAdminFilingCard(results, date) {
 async function sendExecutionRatingNotifications(results, date) {
   const failedResults = results.filter(r => r.rating !== 'A');
   let sentCount = 0;
+  let failedCount = 0;
+  const runYmd = getShanghaiYmd();
 
   // 1. 发备案通知给未达标人员（飞书卡片 + HRMS通知）
   for (const r of failedResults) {
@@ -317,10 +320,25 @@ async function sendExecutionRatingNotifications(results, date) {
     // 飞书卡片
     if (r.open_id) {
       try {
-        await sendCard(r.open_id, card, 'open_id');
-        sentCount++;
-        logger.info({ recipient: r.username, store: r.store }, 'execution filing card sent to individual');
+        const deliver = await sendReportToRecipient({
+          jobKey: 'daily_execution_rating_report',
+          runYmd,
+          username: r.username || r.open_id,
+          scope: 'individual_filing',
+          sendFn: async () => {
+            const cardRes = await sendCard(r.open_id, card, 'open_id');
+            return { ok: !!cardRes?.ok, error: cardRes?.error || '' };
+          }
+        });
+        if (deliver?.ok && !deliver?.skipped) {
+          sentCount++;
+          logger.info({ recipient: r.username, store: r.store }, 'execution filing card sent to individual');
+        } else if (!deliver?.ok) {
+          failedCount++;
+          logger.warn({ recipient: r.username, store: r.store, err: deliver?.error }, 'execution filing card send failed after retries');
+        }
       } catch (e) {
+        failedCount++;
         logger.warn({ err: e?.message, recipient: r.username }, 'execution filing card send failed');
       }
     }
@@ -356,15 +374,33 @@ async function sendExecutionRatingNotifications(results, date) {
     const summaryCard = buildAdminFilingCard(results, date);
     for (const recipient of adminRecipients.rows) {
       try {
-        await sendCard(recipient.open_id, summaryCard, 'open_id');
-        sentCount++;
-        logger.info({ recipient: recipient.username, role: recipient.role }, 'execution filing summary card sent to admin');
+        const deliver = await sendReportToRecipient({
+          jobKey: 'daily_execution_rating_report',
+          runYmd,
+          username: recipient.username || recipient.open_id,
+          scope: 'admin_summary',
+          sendFn: async () => {
+            const cardRes = await sendCard(recipient.open_id, summaryCard, 'open_id');
+            return { ok: !!cardRes?.ok, error: cardRes?.error || '' };
+          }
+        });
+        if (deliver?.ok && !deliver?.skipped) {
+          sentCount++;
+          logger.info({ recipient: recipient.username, role: recipient.role }, 'execution filing summary card sent to admin');
+        } else if (!deliver?.ok) {
+          failedCount++;
+          logger.warn({ recipient: recipient.username, role: recipient.role, err: deliver?.error }, 'execution filing summary card send failed after retries');
+        }
       } catch (e) {
+        failedCount++;
         logger.warn({ err: e?.message, recipient: recipient.username }, 'execution filing summary card send failed to admin');
       }
     }
   }
 
+  if (failedCount > 0) {
+    throw new Error(`daily execution rating report has ${failedCount} failed recipients`);
+  }
   return sentCount;
 }
 
