@@ -568,7 +568,7 @@ ${agentSupplementBlock}
 
 （其中 `${jsonTemplate}` 与 8.1 中相同，为含 `summary` / `problems` / `analysis` / `actions` / `needs_task` / `needs_approval` 的 JSON 骨架。）
 
-## 9. `src/services/agent-handlers.js` — 各 Agent 内置 system 模板
+## 9. `agents-service-v2/src/services/agent-handlers.js` — 各 Agent 内置 system 模板
 
 以下均可能带有前缀：`【管理端 System Prompt】\n` + 管理端配置（若有）。
 

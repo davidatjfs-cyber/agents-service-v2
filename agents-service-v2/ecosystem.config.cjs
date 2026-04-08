@@ -16,7 +16,9 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: '3101',
         /** 与 src/utils/safety.js 一致：生产启动必须显式确认，否则进程 exit(2) */
-        CONFIRM_PRODUCTION: 'true'
+        CONFIRM_PRODUCTION: 'true',
+        /** 飞书事件/卡片回调默认关闭；生产须开启否则机器人与交互卡全无响应（index.js isWebhookEnabled） */
+        ENABLE_WEBHOOK: 'true'
       }
     }
   ]

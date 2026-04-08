@@ -30,18 +30,28 @@ export function enforceRuntimeSafetyOrExit({ serviceName }) {
 
   if (appEnv === 'development') {
     if (dbHost && !isLocalHost(dbHost)) {
-      console.error(`[safety] REFUSE_START: ${serviceName} in development with non-local DB host: ${dbHost}`);
+      console.error(
+        `[safety] REFUSE_START: ${serviceName} in development with non-local DB host: ${dbHost}\n` +
+          'Fix: set APP_ENV=production (or staging) and CONFIRM_PRODUCTION=true for remote DB, ' +
+          'or use localhost DB for local dev.'
+      );
       process.exit(2);
     }
     if (redisHost && !isLocalHost(redisHost)) {
-      console.error(`[safety] REFUSE_START: ${serviceName} in development with non-local Redis host: ${redisHost}`);
+      console.error(
+        `[safety] REFUSE_START: ${serviceName} in development with non-local Redis host: ${redisHost}\n` +
+          'Fix: same as DB — use production/staging env flags, or point REDIS_URL to localhost.'
+      );
       process.exit(2);
     }
   }
 
   if (appEnv === 'production') {
     if (process.env.CONFIRM_PRODUCTION !== 'true') {
-      console.error(`[safety] REFUSE_START: ${serviceName} APP_ENV=production without CONFIRM_PRODUCTION=true`);
+      console.error(
+        `[safety] REFUSE_START: ${serviceName} production requires CONFIRM_PRODUCTION=true (see ecosystem.config.cjs).\n` +
+          'Without it the process exits immediately — this is the most common reason agents-v2 "will not start".'
+      );
       process.exit(2);
     }
   }

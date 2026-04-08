@@ -21,37 +21,49 @@ function getQueue() {
 }
 
 export async function enqueueNotifyJob(payload) {
-  const q = getQueue();
   const traceId = payload?.traceId || `anomaly-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const job = await q.add(
-    'notify',
-    { ...payload, traceId },
-    {
+  const data = { ...payload, traceId };
+  try {
+    const q = getQueue();
+    const job = await q.add('notify', data, {
       attempts: 3,
       backoff: { type: 'exponential', delay: 60_000 },
       removeOnComplete: 500,
       removeOnFail: 1000
-    }
-  );
-  logger.info({ traceId, jobId: job.id, store: payload?.store, ruleKey: payload?.ruleKey }, 'anomaly notify job enqueued');
-  return { queued: true, traceId, jobId: job.id };
+    });
+    logger.info({ traceId, jobId: job.id, store: payload?.store, ruleKey: payload?.ruleKey }, 'anomaly notify job enqueued');
+    return { queued: true, traceId, jobId: job.id };
+  } catch (e) {
+    logger.error(
+      { err: e?.message, traceId, store: payload?.store, ruleKey: payload?.ruleKey },
+      'anomaly notify enqueue failed (Redis/queue); running pipeline inline'
+    );
+    await runBiAnomalyNotifyPipeline(data);
+    return { queued: false, inline: true, traceId };
+  }
 }
 
 export async function enqueueCollabJob(payload) {
-  const q = getQueue();
   const traceId = payload?.traceId || `collab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const job = await q.add(
-    'collab',
-    { ...payload, traceId },
-    {
+  const data = { ...payload, traceId };
+  try {
+    const q = getQueue();
+    const job = await q.add('collab', data, {
       attempts: 3,
       backoff: { type: 'exponential', delay: 30_000 },
       removeOnComplete: 500,
       removeOnFail: 1000
-    }
-  );
-  logger.info({ traceId, jobId: job.id, store: payload?.store, anomalyKey: payload?.ruleKey }, 'anomaly collab job enqueued');
-  return { queued: true, traceId, jobId: job.id };
+    });
+    logger.info({ traceId, jobId: job.id, store: payload?.store, anomalyKey: payload?.ruleKey }, 'anomaly collab job enqueued');
+    return { queued: true, traceId, jobId: job.id };
+  } catch (e) {
+    logger.error(
+      { err: e?.message, traceId, store: payload?.store, ruleKey: payload?.ruleKey },
+      'anomaly collab enqueue failed (Redis/queue); running collab inline'
+    );
+    await onAnomalyTriggered(data.ruleKey, data.store, data.severity, data.detail, data.value);
+    return { queued: false, inline: true, traceId };
+  }
 }
 
 export function startAnomalyQueueWorker() {

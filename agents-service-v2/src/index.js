@@ -49,6 +49,7 @@ import { getAIOperationsReport } from './services/ai-operations.js';
 import adminApi from './routes/admin-api.js';
 import {
   enforceRuntimeSafetyOrExit,
+  getAppEnv,
   isAutomationsEnabled,
   isDailyInspectionCronEnabled,
   isWeeklyScoringCronEnabled,
@@ -884,6 +885,13 @@ async function start() {
     process.exit(1);
   }
   logger.info('✅ Database connected');
+
+  const _bootEnv = getAppEnv();
+  if ((_bootEnv === 'production' || _bootEnv === 'staging') && !isWebhookEnabled()) {
+    logger.warn(
+      'Feishu webhook DISABLED (ENABLE_WEBHOOK!=true): POST /api/webhook/feishu* returns "回调未启用" — bot & card actions will not work. Set ENABLE_WEBHOOK=true in production .env / pm2 ecosystem.'
+    );
+  }
 
   const redis = await checkRedisHealth();
   if (redis) {
