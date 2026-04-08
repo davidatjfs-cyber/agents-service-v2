@@ -2607,32 +2607,41 @@ async function handleAcceptActionPlan(text, ctx) {
     const isProductionTask = /(出品|厨房|后厨|食材|菜品|出品经理)/.test(line);
     const assigneeRole = isProductionTask ? 'store_production_manager' : 'store_manager';
 
-    // 查找负责人
+    // 查找所有负责人（不使用 LIMIT 1）
     const staffR = await query(
-      `SELECT username, role FROM feishu_users WHERE registered = true AND store = $1 AND role = $2 LIMIT 1`,
+      `SELECT username, role FROM feishu_users WHERE registered = true AND store = $1 AND role = $2`,
       [store, assigneeRole]
     ).catch(() => ({ rows: [] }));
-    const assigneeUsername = staffR.rows?.[0]?.username || '';
 
-    await query(
-      `INSERT INTO master_tasks
-         (task_id, status, source, category, store, brand, assignee_username, assignee_role,
-          title, detail, source_data, feishu_msg_ids, dispatched_at, timeout_at, remind_count)
-       VALUES
-         ($1, 'pending_response', 'auto_collab', 'action_plan', $2, $3, $4, $5,
-          $6, $7, $8::jsonb, '[]'::jsonb, NOW(), $9, 0)
-       ON CONFLICT (task_id) DO NOTHING`,
-      [
-        taskId, store, brand, assigneeUsername, assigneeRole,
-        title,
-        `来源：经营分析行动计划\n原始建议：${line}\n创建时间：${nowStr}`,
-        JSON.stringify({ source: 'action_plan', originalLine: line }),
-        timeoutAt.toISOString()
-      ]
-    ).catch(() => {});
+    if (!staffR.rows?.length) {
+      logger.warn({ store, assigneeRole }, 'auto-collab: no staff found');
+      continue;
+    }
 
-    createdTasks.push({ taskId, title: line.slice(0, 50), role: assigneeRole });
-  }
+    // 给所有匹配的员工创建任务
+    for (const staff of staffR.rows) {
+      const assigneeUsername = staff.username || '';
+      const assigneeRoleValue = staff.role || assigneeRole;
+
+      await query(
+        `INSERT INTO master_tasks
+           (task_id, status, source, category, store, brand, assignee_username, assignee_role,
+            title, detail, source_data, feishu_msg_ids, dispatched_at, timeout_at, remind_count)
+         VALUES
+           ($1, 'pending_response', 'auto_collab', 'action_plan', $2, $3, $4, $5,
+            $6, $7, $8::jsonb, '[]'::jsonb, NOW(), $9, 0)
+         ON CONFLICT (task_id) DO NOTHING`,
+        [
+          taskId, store, brand, assigneeUsername, assigneeRoleValue,
+          title,
+          `来源：经营分析行动计划\n原始建议：${line}\n创建时间：${nowStr}`,
+          JSON.stringify({ source: 'action_plan', originalLine: line }),
+          timeoutAt.toISOString()
+        ]
+      ).catch(() => {});
+
+      createdTasks.push({ taskId, title: line.slice(0, 50), role: assigneeRoleValue, assigneeUsername });
+    }
 
   // 永久存档到决策日志
   const decisionTitle = `行动计划 ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }).slice(0, 10)}`;
@@ -2666,6 +2675,7 @@ async function handleAcceptActionPlan(text, ctx) {
 }
 
 const HANDLERS={data_auditor:handleDataAuditor,ops_supervisor:handleOpsSupervisor,chief_evaluator:handleChiefEvaluator,train_advisor:handleTrainAdvisor,appeal:handleAppeal,marketing_planner:handleMarketingPlanner,marketing_executor:handleMarketingExecutor,procurement_advisor:handleProcurementAdvisor,marketing:handleMarketingPlanner,food_quality:handleOpsSupervisor,master:handleMaster,accept_action_plan:handleAcceptActionPlan};
+;
 export async function dispatchToAgent(route,text,ctx={}) {
   const h = HANDLERS[route] || HANDLERS.master;
   const t0 = Date.now();
