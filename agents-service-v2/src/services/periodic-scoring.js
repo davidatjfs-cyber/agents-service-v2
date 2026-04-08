@@ -60,6 +60,7 @@ async function ensureHrmsNotifTable() {
     await query(`CREATE INDEX IF NOT EXISTS idx_hrms_notif_user_created ON hrms_user_notifications (target_username, created_at DESC)`);
   } catch (e) {
     logger.warn({ err: e?.message }, 'ensureHrmsNotifTable');
+  }
 }
 
 /**
@@ -106,7 +107,7 @@ async function recordDeductionNotifications({ username, store, role, periodMonda
   let assigneeName = username;
   try {
     const fu = await query(
-      `SELECT open_id, COALESCE(NULLIF(TRIM(name)),''), username) AS name
+      `SELECT open_id, COALESCE(NULLIF(TRIM(name), ''), username) AS name
        FROM feishu_users WHERE username = $1 AND registered = true AND open_id IS NOT NULL LIMIT 1`,
       [username]
     );
@@ -200,23 +201,6 @@ async function recordDeductionNotifications({ username, store, role, periodMonda
       } catch (e) {
         logger.warn({ err: e?.message, oid }, 'bi deduction card send failed');
       }
-    }
-  }
-}
-
-    // 发飞书给责任人
-    if (assigneeOpenId) {
-      sendText(assigneeOpenId, `【绩效扣分通知】\n${msg}`, 'open_id').catch((e) =>
-        logger.warn({ err: e?.message, username }, 'recordDeductionNotifications: feishu to assignee failed')
-      );
-    }
-
-    // 管理层抄送：admin + hq_manager 收到汇总提醒
-    const mgmtMsg = `【绩效扣分·管理层抄送】\n门店：${store}｜${roleLabelStr}：${assigneeName}\n${msg}`;
-    for (const oid of mgmtOpenIds) {
-      sendText(oid, mgmtMsg, 'open_id').catch((e) =>
-        logger.warn({ err: e?.message, oid }, 'recordDeductionNotifications: feishu to mgmt failed')
-      );
     }
   }
 }
