@@ -76,7 +76,9 @@ log "✅ 本地语法检查通过"
 # 1.5 记录当前版本信息
 log "📝 记录当前版本信息..."
 if [ -f "$AGENTS_DIR/src/reply-engine-version.js" ]; then
-    AGENTS_VERSION=$(grep -oP 'REPLY_ENGINE_BUILD = "\K[^"]+' "$AGENTS_DIR/src/reply-engine-version.js" || echo "unknown")
+    # 可移植提取（macOS BSD grep 无 -oP；源码可为单引号或双引号）
+    AGENTS_VERSION=$(sed -n "s/.*REPLY_ENGINE_BUILD *= *['\"]\\([^'\"]*\\)['\"].*/\\1/p" "$AGENTS_DIR/src/reply-engine-version.js" | head -1)
+    [ -z "$AGENTS_VERSION" ] && AGENTS_VERSION="unknown"
     log "agents版本: $AGENTS_VERSION"
 fi
 
@@ -190,11 +192,12 @@ if ! echo "$AGENTS_HEALTH" | grep -q '"ok":true'; then
 fi
 
 # 验证版本一致性（解决历史问题3）
-if [ -n "$AGENTS_VERSION" ]; then
-    if ! echo "$AGENTS_HEALTH" | grep -q "$AGENTS_VERSION"; then
+if [ -n "$AGENTS_VERSION" ] && [ "$AGENTS_VERSION" != "unknown" ]; then
+    HEALTH_ENGINE=$(echo "$AGENTS_HEALTH" | sed -n 's/.*"replyEngine":"\([^"]*\)".*/\1/p')
+    if [ "$HEALTH_ENGINE" != "$AGENTS_VERSION" ]; then
         log "⚠️ 警告: 部署版本不匹配！"
         log "预期版本: $AGENTS_VERSION"
-        log "实际版本: $(echo "$AGENTS_HEALTH" | grep -oP 'replyEngine":"\K[^"]+')"
+        log "实际版本: ${HEALTH_ENGINE:-（无法解析）}"
         error_exit "版本不一致，请检查部署的代码是否是最新版本！"
     fi
     log "✅ 版本一致性验证通过: $AGENTS_VERSION"
@@ -305,7 +308,8 @@ log "🏥 验证hrms-service部署结果..."
 HRMS_HEALTH=$(ssh "$ECS_HOST" "curl -sS -m 10 http://127.0.0.1:3000/api/health")
 echo "$HRMS_HEALTH" | tee -a "$LOG_FILE"
 
-if ! echo "$HRMS_HEALTH" | grep -q '"status":"ok"'; then
+# HRMS /api/health 现为 {"ok":true,...}，旧版可能为 "status":"ok"
+if ! echo "$HRMS_HEALTH" | grep -q '"ok":true' && ! echo "$HRMS_HEALTH" | grep -q '"status":"ok"'; then
     error_exit "hrms-service健康检查失败！"
 fi
 
@@ -348,7 +352,8 @@ FINAL_HRMS_HEALTH=$(ssh "$ECS_HOST" "curl -sS -m 10 http://127.0.0.1:3000/api/he
 echo "agents健康检查: $FINAL_AGENTS_HEALTH" | tee -a "$LOG_FILE"
 echo "hrms健康检查: $FINAL_HRMS_HEALTH" | tee -a "$LOG_FILE"
 
-if echo "$FINAL_AGENTS_HEALTH" | grep -q '"ok":true' && echo "$FINAL_HRMS_HEALTH" | grep -q '"status":"ok"'; then
+if echo "$FINAL_AGENTS_HEALTH" | grep -q '"ok":true' && \
+   { echo "$FINAL_HRMS_HEALTH" | grep -q '"ok":true' || echo "$FINAL_HRMS_HEALTH" | grep -q '"status":"ok"'; }; then
     log "✅ 所有服务健康检查通过"
 else
     error_exit "最终健康检查失败！请检查服务状态！"
