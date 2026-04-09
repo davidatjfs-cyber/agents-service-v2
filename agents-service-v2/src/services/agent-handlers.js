@@ -2450,6 +2450,11 @@ ${mktData}
 - 禁止：只写两条空泛「经营建议」就结束
 - 必须：输出可执行的活动级方案（有名称、时间、负责人、指标）
 
+【文笔与可执行度（对标优秀运营/咨询成稿）】
+- 每个活动写清：对谁（新客/老客/会员）、在什么场景（堂食/外卖/企微/社群）、做什么动作（话术+物料+触点）、如何衡量（7 日内的过程指标，不写「必火」类承诺）。
+- 充值/储值/锁客类必须给 1～2 条**具体机制**（档位示例、赠券规则、触达渠道、店员口播要点择一写细），禁止只写「加强会员运营」。
+- 小红书/抖音/点评若被用户点到，用短句写清「钩子 + 核心信息 + 互动设计」，避免公文套话。
+
 【多轮对话规则】
 - 如果信息不足，最多问1个关键问题，输出：{"type":"ask","question":"问题内容"}
 - 最多连续问3轮，信息充分后输出完整方案
@@ -2472,7 +2477,7 @@ ${mktData}
   const r = await callLLM([
     { role: 'system', content: sysPrompt },
     { role: 'user', content: text }
-  ], { temperature: 0.4, max_tokens: 1600, purpose: 'marketing_planner', ...(ctx.llmContext ? { context: ctx.llmContext } : {}) });
+  ], { temperature: 0.45, max_tokens: 2400, purpose: 'marketing_planner', ...(ctx.llmContext ? { context: ctx.llmContext } : {}) });
 
   const rawContent = r.content || '请提供门店信息以制定营销方案。';
 

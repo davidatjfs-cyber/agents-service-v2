@@ -1011,6 +1011,10 @@ export async function handleWebhookEvent(body) {
                  fu.role IN ('admin','hq_manager')
                  OR (COALESCE(fu.store,'') <> '' AND fu.store = mt.store)
                  OR lower(COALESCE(mt.assignee_username,'')) = lower(COALESCE(fu.username,''))
+                 OR (
+                   jsonb_typeof(COALESCE(mt.source_data->'assignee_open_ids', '[]'::jsonb)) = 'array'
+                   AND COALESCE(mt.source_data->'assignee_open_ids', '[]'::jsonb) @> jsonb_build_array($2::text)
+                 )
                )
              LIMIT 1`,
             [tid, openId]

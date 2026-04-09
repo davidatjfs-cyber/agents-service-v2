@@ -378,57 +378,64 @@ export async function executeDailyInspectionItem(item) {
       continue;
     }
 
-    // 给所有匹配的员工发任务
+    // 同店同角色多人（如两名出品经理）：共用一个 task_id，合并所有飞书 message_id，避免重复 INSERT 仅首人落库、他人回复无法命中 feishu_msg_ids
+    const allSentMsgIds = [];
+    const allPingedOpenIds = [];
+    const assigneeUsernames = [];
+
     for (const staff of staffR.rows) {
-      const assigneeUsername = staff.username || '';
-      const assigneeRole = staff.role || roleList[0] || 'store_manager';
-      const assigneeOpenId = staff.open_id || '';
+      const un = String(staff.username || '').trim();
+      if (un) assigneeUsernames.push(un);
+      const assigneeOpenId = String(staff.open_id || '').trim();
+      if (!assigneeOpenId) continue;
 
-      const sentMsgIds = [];
-      const pingedOpenIds = [];
-      if (assigneeOpenId) {
-        const isCard = card && typeof card === 'object';
-        if (isCard) {
-          const res = await sendCard(assigneeOpenId, card).catch(() => ({ ok: false }));
-          const mid = res?.data?.message_id || res?.data?.data?.message_id;
-          if (mid) sentMsgIds.push(mid);
-          if (!res.ok) await sendText(assigneeOpenId, String(card._fallback || '定时任务提醒'), 'open_id').catch(() => {});
-        } else {
-          await sendText(assigneeOpenId, card, 'open_id').catch(() => {});
-        }
-        pingedOpenIds.push(assigneeOpenId);
+      const isCard = card && typeof card === 'object';
+      if (isCard) {
+        const res = await sendCard(assigneeOpenId, card).catch(() => ({ ok: false }));
+        const mid = res?.data?.message_id || res?.data?.data?.message_id;
+        if (mid) allSentMsgIds.push(mid);
+        if (!res.ok) await sendText(assigneeOpenId, String(card._fallback || '定时任务提醒'), 'open_id').catch(() => {});
+      } else {
+        await sendText(assigneeOpenId, card, 'open_id').catch(() => {});
       }
+      allPingedOpenIds.push(assigneeOpenId);
+    }
 
-      // 写入 master_tasks
-      try {
-        await query(
-          `INSERT INTO master_tasks
-             (task_id, status, source, category, store, assignee_username, assignee_role,
-              title, detail, source_data, feishu_msg_ids, dispatched_at, timeout_at, remind_count)
-           VALUES
-             ($1, 'pending_response', 'scheduled_inspection', $2, $3, $4, $5,
-              $6, $7, $8::jsonb, $9::jsonb, NOW(), NOW() + INTERVAL '3 hours', 0)`,
-          [
-            taskId,
-            type,
-            store,
-            assigneeUsername,
-            assigneeRole,
-            `${store} · ${label}`,
-            `类型：${label}\n任务：${desc || '请按要求完成并反馈'}\n时间：${timeNow}`,
-            JSON.stringify({
-              taskType: type,
-              label,
-              desc,
-              assignee_open_ids: pingedOpenIds
-            }),
-            JSON.stringify(sentMsgIds)
-          ]
-        );
-        logger.info({ taskId, store, assigneeUsername, assigneeRole, msgIds: sentMsgIds.length }, 'daily-inspection: task saved to master_tasks');
-      } catch (e) {
-        logger.warn({ err: e?.message, taskId, store, assigneeUsername }, 'daily-inspection: master_tasks insert failed');
-      }
+    const primaryUsername = assigneeUsernames[0] || String(staffR.rows[0]?.username || '').trim() || '';
+    const primaryRole = staffR.rows[0]?.role || roleList[0] || 'store_manager';
+
+    try {
+      await query(
+        `INSERT INTO master_tasks
+           (task_id, status, source, category, store, assignee_username, assignee_role,
+            title, detail, source_data, feishu_msg_ids, dispatched_at, timeout_at, remind_count)
+         VALUES
+           ($1, 'pending_response', 'scheduled_inspection', $2, $3, $4, $5,
+            $6, $7, $8::jsonb, $9::jsonb, NOW(), NOW() + INTERVAL '3 hours', 0)`,
+        [
+          taskId,
+          type,
+          store,
+          primaryUsername,
+          primaryRole,
+          `${store} · ${label}`,
+          `类型：${label}\n任务：${desc || '请按要求完成并反馈'}\n时间：${timeNow}`,
+          JSON.stringify({
+            taskType: type,
+            label,
+            desc,
+            assignee_open_ids: allPingedOpenIds,
+            assignee_usernames: assigneeUsernames
+          }),
+          JSON.stringify(allSentMsgIds)
+        ]
+      );
+      logger.info(
+        { taskId, store, primaryUsername, primaryRole, msgIds: allSentMsgIds.length, assigneeN: staffR.rows.length },
+        'daily-inspection: task saved to master_tasks (merged assignees)'
+      );
+    } catch (e) {
+      logger.warn({ err: e?.message, taskId, store }, 'daily-inspection: master_tasks insert failed');
     }
 
     logger.info({ type, label, store, taskId, assigneeCount: staffR.rows.length }, 'daily-inspection: scheduled cards sent to all assignees');
