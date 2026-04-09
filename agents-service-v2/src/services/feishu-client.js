@@ -128,6 +128,11 @@ export async function sendCard(receiveId, card, idType = 'open_id') {
 
 export async function sendGroup(chatId, text) { return sendText(chatId, text, 'chat_id'); }
 
+/** 群聊发送交互卡片（receive_id 为群 chat_id，与 sendText(..., 'chat_id') 一致） */
+export async function sendGroupCard(chatId, card) {
+  return sendCard(chatId, card, 'chat_id');
+}
+
 /**
  * 绩效/扣分「公司通知」：与任务卡催办共用门店别名解析（洪潮/马己仙等）
  */
@@ -135,8 +140,36 @@ export async function lookupAssigneeOpenIds(task) {
   return resolveAssigneeOpenIdsForTask(task);
 }
 
+function buildDefaultCompanyNoticeInteractiveCard(noticeTitle, plainBody) {
+  const body = String(plainBody || '').trim();
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: `【${noticeTitle}】` },
+      template: 'blue'
+    },
+    elements: [
+      { tag: 'div', text: { tag: 'lark_md', content: body } },
+      {
+        tag: 'note',
+        elements: [{ tag: 'plain_text', content: '请妥善留存；如有异议请联系营运或 HR。' }]
+      }
+    ]
+  };
+}
+
+/** 与责任人卡片正文一致，仅标题改为「管理层抄送」（与产品约定：版式对齐责任人侧）。 */
+function cloneMgmtCcInteractiveCard(baseCard, noticeTitle) {
+  const card = JSON.parse(JSON.stringify(baseCard));
+  card.header = card.header || {};
+  card.header.title = { tag: 'plain_text', content: `【管理层抄送·${noticeTitle}】` };
+  if (card.header.template == null) card.header.template = 'blue';
+  return card;
+}
+
 /**
- * 向责任人发送【公司通知】：飞书交互卡片 + 文本各一条（卡片失败则仅文本），便于会话列表与富文本同时可见。
+ * 向责任人发送【公司通知】：默认一条交互卡片（lark_md 正文）；卡片失败时降级为文本。
+ * opts.card：可选，传入完整交互卡片（如工作态度备案专用卡片）；管理层抄送使用同结构卡片并加标题/门店/责任人前缀。
  */
 export async function sendCompanyNoticeToAssignees(task, body, opts = {}) {
   const text = String(body || '').trim();
@@ -191,29 +224,19 @@ export async function sendCompanyNoticeToAssignees(task, body, opts = {}) {
 
   let sentCards = 0;
   let sentTexts = 0;
+  let sentMgmtCards = 0;
   const plain = text.length > 3500 ? `${text.slice(0, 3497)}…` : text;
-  const card = {
-    config: { wide_screen_mode: true },
-    header: {
-      title: { tag: 'plain_text', content: `【${noticeTitle}】` },
-      template: 'blue'
-    },
-    elements: [
-      {
-        tag: 'div',
-        text: { tag: 'plain_text', content: plain }
-      },
-      {
-        tag: 'note',
-        elements: [{ tag: 'plain_text', content: '请妥善留存；如有异议请联系营运或 HR。' }]
-      }
-    ]
-  };
+  const assigneeInteractiveCard =
+    opts.card && typeof opts.card === 'object'
+      ? opts.card
+      : buildDefaultCompanyNoticeInteractiveCard(noticeTitle, plain);
   for (const oid of oids) {
-    const cardRes = await sendCard(oid, card, 'open_id');
+    const cardRes = await sendCard(oid, assigneeInteractiveCard, 'open_id');
     if (cardRes?.ok) sentCards += 1;
-    const txtRes = await sendText(oid, `【${noticeTitle}】\n${text}`, 'open_id');
-    if (txtRes?.ok) sentTexts += 1;
+    else {
+      const txtRes = await sendText(oid, `【${noticeTitle}】\n${text}`, 'open_id');
+      if (txtRes?.ok) sentTexts += 1;
+    }
   }
   if (!oids.length) {
     logger.warn({ taskId: task?.task_id, store: task?.store }, 'company notice: no assignee open_id');
@@ -242,14 +265,22 @@ export async function sendCompanyNoticeToAssignees(task, body, opts = {}) {
         : [];
       const assigneeNameStr = assigneeNameRows[0]?.name || task?.assignee_username || '责任人';
       const storeStr = task?.store || '';
-      const mgmtText = `【管理层抄送·${noticeTitle}】\n门店：${storeStr}｜责任人：${assigneeNameStr}\n${plain}`;
+      const mgmtTextFallback = `【管理层抄送·${noticeTitle}】\n门店：${storeStr}｜责任人：${assigneeNameStr}\n${plain}`;
       for (const mg of mgRows) {
         if (oids.includes(mg.open_id)) continue; // 管理员本人已是责任人则跳过重复
-        sendText(mg.open_id, mgmtText, 'open_id').catch((e) =>
-          logger.warn({ err: e?.message, oid: mg.open_id }, 'company notice: mgmt cc failed')
-        );
+        const mgCard = cloneMgmtCcInteractiveCard(assigneeInteractiveCard, noticeTitle);
+        const mRes = await sendCard(mg.open_id, mgCard, 'open_id');
+        if (mRes?.ok) sentMgmtCards += 1;
+        else {
+          await sendText(mg.open_id, mgmtTextFallback, 'open_id').catch((e) =>
+            logger.warn({ err: e?.message, oid: mg.open_id }, 'company notice: mgmt cc failed')
+          );
+        }
       }
-      logger.info({ mgmt: mgRows.length, taskId: task?.task_id }, 'company notice: mgmt cc sent');
+      logger.info(
+        { mgmt: mgRows.length, sentMgmtCards, taskId: task?.task_id },
+        'company notice: mgmt cc sent'
+      );
     }
   } catch (e) {
     logger.warn({ err: e?.message }, 'company notice: mgmt cc batch failed');

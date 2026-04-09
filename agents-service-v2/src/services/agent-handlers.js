@@ -2464,8 +2464,9 @@ ${mktData}
 5. 【复盘与下一步】活动上线后如何周度复盘
 
 【输出约束】
-- ask/final 响应必须为 JSON 格式
-- final 回答使用纯中文自然语言，禁止代码块
+- ask/final 响应必须为 JSON 格式（禁止 markdown 代码块包裹整段 JSON）
+- final 的 answer 必须是合法 JSON 字符串：换行在 JSON 里写 \\n（标准转义），解析后即正常换行；禁止在 answer 正文里直接打出可见的「反斜杠 + 字母 n」冒充换行
+- final 回答使用纯中文自然语言（除 JSON 语法外），禁止嵌套另一层 JSON 字符串当正文
 - 语气专业、可交给门店直接执行`;
 
   const r = await callLLM([
@@ -2475,50 +2476,60 @@ ${mktData}
 
   const rawContent = r.content || '请提供门店信息以制定营销方案。';
 
-  // 检查是否为 ask/final 格式的 JSON 响应
-  try {
-    // 尝试提取 JSON（可能包裹在代码块中）
-    const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-
-      // ask 响应：需要继续提问
-      if (parsed.type === 'ask' && parsed.question) {
-        saveMemory('marketing_planner', store, `Asked: ${parsed.question}`, { query: text.slice(0, 200) }).catch(() => {});
-        return {
-          agent: 'marketing_planner',
-          response: parsed.question,
-          store,
-          data: mktData,
-          reportTitle: '营销方案询问',
-          dataBacked: true,
-          responseType: 'ask',
-          question: parsed.question,
-        };
-      }
-
-      // final 响应：完整方案
-      if (parsed.type === 'final' && parsed.answer) {
-        const answerText = stripJsonFromResponse(parsed.answer);
-        saveMemory('marketing_planner', store, answerText.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
-        return {
-          agent: 'marketing_planner',
-          response: answerText,
-          store,
-          data: mktData,
-          reportTitle: '营销活动计划',
-          dataBacked: true,
-          responseType: 'final',
-        };
+  // 检查是否为 ask/final 格式的 JSON 响应（避免贪婪正则误吞多段 JSON）
+  let parsedMarketing = null;
+  const rawTrim = String(rawContent || '').trim();
+  const unfenced = rawTrim.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/m, '').trim();
+  for (const candidate of [unfenced, rawTrim]) {
+    if (!candidate) continue;
+    try {
+      parsedMarketing = JSON.parse(candidate);
+      break;
+    } catch (_) {
+      const blob = extractFirstBalancedJsonObject(candidate);
+      if (blob) {
+        try {
+          parsedMarketing = JSON.parse(blob);
+          break;
+        } catch (_) { /* continue */ }
       }
     }
-  } catch (e) {
-    // JSON 解析失败，按普通文本处理
-    console.log('[MarketingPlanner] JSON parse failed, using plain text');
+  }
+
+  if (parsedMarketing && typeof parsedMarketing === 'object') {
+    if (parsedMarketing.type === 'ask' && parsedMarketing.question) {
+      const q = decodeJsonStringEscapesForFeishu(String(parsedMarketing.question).trim());
+      saveMemory('marketing_planner', store, `Asked: ${q}`, { query: text.slice(0, 200) }).catch(() => {});
+      return {
+        agent: 'marketing_planner',
+        response: q,
+        store,
+        data: mktData,
+        reportTitle: '营销方案询问',
+        dataBacked: true,
+        responseType: 'ask',
+        question: q,
+      };
+    }
+    if (parsedMarketing.type === 'final' && parsedMarketing.answer != null && parsedMarketing.answer !== '') {
+      const answerText = decodeJsonStringEscapesForFeishu(
+        stripJsonFromResponse(String(parsedMarketing.answer).trim())
+      );
+      saveMemory('marketing_planner', store, answerText.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
+      return {
+        agent: 'marketing_planner',
+        response: answerText,
+        store,
+        data: mktData,
+        reportTitle: '营销活动计划',
+        dataBacked: true,
+        responseType: 'final',
+      };
+    }
   }
 
   // 普通文本响应（兼容旧逻辑）
-  const responseText = stripJsonFromResponse(rawContent);
+  const responseText = decodeJsonStringEscapesForFeishu(stripJsonFromResponse(rawContent));
   saveMemory('marketing_planner', store, responseText.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
   return { agent: 'marketing_planner', response: responseText, store, data: mktData, reportTitle: '营销活动计划', dataBacked: true };
 }
@@ -2691,6 +2702,49 @@ async function handleMaster(t, c) {
   saveMemory('master', store, (r.content||'').slice(0,500), {query:t.slice(0,200)}).catch(()=>{});
   return { agent: 'master', response: r.content || '您好，请描述您的需求。', store };
 }
+/** 从文本中提取第一个花括号平衡的 JSON 对象（忽略字符串内的括号）。 */
+function extractFirstBalancedJsonObject(s) {
+  const str = String(s || '');
+  const start = str.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < str.length; i++) {
+    const ch = str[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (inString) {
+      if (ch === '\\') escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === '{') depth += 1;
+    else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) return str.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+/** 模型偶发把 JSON 转义序列当字面量输出到字符串里，飞书上会显示成 \\n；解析后做一次还原。 */
+function decodeJsonStringEscapesForFeishu(s) {
+  if (s == null || typeof s !== 'string') return s;
+  return s
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, '\t')
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\');
+}
+
 /**
  * 从 LLM 响应中清除意外输出的 JSON 块，确保飞书消息只含自然语言。
  * 与 master-planner.js 的同名函数保持一致。

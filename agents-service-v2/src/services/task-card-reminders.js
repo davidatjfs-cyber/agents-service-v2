@@ -15,7 +15,7 @@ import cron from 'node-cron';
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { resolveAssigneeOpenIdsForTask } from '../utils/feishu-assignee-resolve.js';
-import { sendText, sendCard, sendGroup, sendCompanyNoticeToAssignees, lookupAssigneeOpenIds } from './feishu-client.js';
+import { sendText, sendCard, sendGroup, sendGroupCard, sendCompanyNoticeToAssignees } from './feishu-client.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -74,9 +74,7 @@ function buildAttitudeFilingCard(task, sourceType) {
     content += `\n**说明**：您的任务在多次系统催办后仍未有效闭环，已记入工作态度未完成备案（影响月度工作态度评级；不因催办扣绩效分）。`;
   }
 
-  content += `\n**门店**：${task.store}
-**任务ID**：${task.task_id}
-**标题**：${String(task.title || '').slice(0, 300)}`;
+  content += `\n**标题**：${String(task.title || '').slice(0, 300)}`;
 
   return {
     config: { wide_screen_mode: true },
@@ -87,6 +85,38 @@ function buildAttitudeFilingCard(task, sourceType) {
     elements: [
       { tag: 'div', text: { tag: 'lark_md', content } },
       { tag: 'note', elements: [{ tag: 'plain_text', content: '请妥善留存；如有异议请联系营运或 HR。' }] }
+    ]
+  };
+}
+
+/** 总部群通报：第三人称摘要，与私聊责任人卡片区分标题与口径 */
+function buildHqGroupAttitudeFilingCard(task, sourceType) {
+  const isBi = sourceType === 'bi';
+  const sourceLabel = isBi ? 'BI异常任务卡' : '标准任务卡';
+  const sourceCode = String(task.source || '—').trim() || '—';
+
+  let content = `**通报类型**：工作态度评级备案
+**门店**：${task.store}
+**任务ID**：${task.task_id}
+**任务来源**：${sourceLabel}（${sourceCode}）`;
+
+  if (isBi) {
+    content += `\n**情况说明**：该门店 BI 异常任务在多次催办后仍未有效闭环，系统已记入工作态度未完成备案。BI 绩效扣分仅按周度异常汇总规则执行；任务卡催办路径不另扣分。`;
+  } else {
+    content += `\n**情况说明**：该任务在多次系统催办后仍未有效闭环，已打标「工作态度未完成」备案（计入月度态度统计；不写入 agent_scores 扣分）。`;
+  }
+
+  content += `\n**标题**：${String(task.title || '').slice(0, 300)}`;
+
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: '📢 【总部群】工作态度评级备案' },
+      template: 'orange'
+    },
+    elements: [
+      { tag: 'div', text: { tag: 'lark_md', content } },
+      { tag: 'note', elements: [{ tag: 'plain_text', content: '营运与 HR 可据此跟进；门店与责任人已同步收到私聊卡片与公司通知。' }] }
     ]
   };
 }
@@ -117,20 +147,10 @@ async function recordStandardChaseAttitudeOnly(task) {
     return false;
   }
 
-  // 发送工作态度评级备案卡片
+  // HRMS 公司通知（与飞书卡片合一：避免同一事件连发多条重复卡片/文本）
   const card = buildAttitudeFilingCard(task, 'standard');
-  const oids = await lookupAssigneeOpenIds(task);
-  for (const oid of oids) {
-    try {
-      await sendCard(oid, card, 'open_id');
-    } catch (e) {
-      logger.warn({ err: e?.message, taskId: task.task_id }, 'attitude filing card send failed');
-    }
-  }
-
-  // HRMS公司通知
   const noticeText = `您的任务在多次系统催办后仍未有效闭环，已记入工作态度未完成备案（影响月度工作态度评级；不因催办扣绩效分）。\n门店：${task.store}\n任务ID：${task.task_id}\n来源：${task.source}\n标题：${String(task.title || '').slice(0, 300)}`;
-  await sendCompanyNoticeToAssignees(task, noticeText, { title: '工作态度评级备案', type: 'attitude_filing' }).catch((e) =>
+  await sendCompanyNoticeToAssignees(task, noticeText, { title: '工作态度评级备案', type: 'attitude_filing', card }).catch((e) =>
     logger.warn({ err: e?.message, taskId: task.task_id }, 'task-reminder: company notice (attitude) failed')
   );
 
@@ -140,10 +160,14 @@ async function recordStandardChaseAttitudeOnly(task) {
   }));
   const chatId = hq.rows?.[0]?.config_value?.hq_group_chat_id;
   if (chatId) {
-    await sendGroup(
-      chatId,
-      `【工作态度评级备案】门店 ${task.store} 任务 ${task.task_id}（${task.source}）三次催办后仍未有效闭环，已打标「工作态度未完成」备案（计入月度态度统计；不写入 agent_scores 扣分）。`
-    ).catch(() => {});
+    const hqCard = buildHqGroupAttitudeFilingCard(task, 'standard');
+    const gRes = await sendGroupCard(chatId, hqCard).catch(() => ({ ok: false }));
+    if (!gRes?.ok) {
+      await sendGroup(
+        chatId,
+        `【工作态度评级备案】门店 ${task.store} 任务 ${task.task_id}（${task.source}）三次催办后仍未有效闭环，已打标「工作态度未完成」备案（计入月度态度统计；不写入 agent_scores 扣分）。`
+      ).catch(() => {});
+    }
   }
 
   logger.info({ taskId: task.task_id, source: task.source }, 'task-reminder: chase → attitude only');
@@ -176,20 +200,9 @@ async function recordBiChaseAttitudeOnly(task) {
     return false;
   }
 
-  // 发送工作态度评级备案卡片
   const card = buildAttitudeFilingCard(task, 'bi');
-  const oids = await lookupAssigneeOpenIds(task);
-  for (const oid of oids) {
-    try {
-      await sendCard(oid, card, 'open_id');
-    } catch (e) {
-      logger.warn({ err: e?.message, taskId: task.task_id }, 'attitude filing card send failed');
-    }
-  }
-
-  // HRMS公司通知
   const noticeText = `您的 BI 异常任务在多次催办后仍未有效闭环，已记入工作态度未完成备案（影响月度工作态度评级）。\n若产生 BI 绩效扣分，仅按系统对各类 BI 异常的设定在周度「异常汇总」中体现；不因本条任务催办再扣固定分。\n门店：${task.store}\n任务ID：${task.task_id}\n标题：${String(task.title || '').slice(0, 300)}`;
-  await sendCompanyNoticeToAssignees(task, noticeText, { title: '工作态度评级备案', type: 'attitude_filing' }).catch((e) =>
+  await sendCompanyNoticeToAssignees(task, noticeText, { title: '工作态度评级备案', type: 'attitude_filing', card }).catch((e) =>
     logger.warn({ err: e?.message, taskId: task.task_id }, 'task-reminder: company notice (BI attitude) failed')
   );
 
@@ -199,11 +212,15 @@ async function recordBiChaseAttitudeOnly(task) {
   }));
   const chatId = hq.rows?.[0]?.config_value?.hq_group_chat_id;
   if (chatId) {
-    await sendGroup(
-      chatId,
-      `【工作态度评级备案】门店 ${task.store} 任务 ${task.task_id}（bi_anomaly）三次催办后仍未有效闭环：已打标「工作态度未完成」备案。` +
-        `BI 异常对应的绩效扣分仅按异常规则在周度汇总（anomaly_rollups_v2）计算；任务卡催办不另扣分。`
-    ).catch(() => {});
+    const hqCard = buildHqGroupAttitudeFilingCard(task, 'bi');
+    const gRes = await sendGroupCard(chatId, hqCard).catch(() => ({ ok: false }));
+    if (!gRes?.ok) {
+      await sendGroup(
+        chatId,
+        `【工作态度评级备案】门店 ${task.store} 任务 ${task.task_id}（bi_anomaly）三次催办后仍未有效闭环：已打标「工作态度未完成」备案。` +
+          `BI 异常对应的绩效扣分仅按异常规则在周度汇总（anomaly_rollups_v2）计算；任务卡催办不另扣分。`
+      ).catch(() => {});
+    }
   }
 
   logger.info({ taskId: task.task_id, source: task.source }, 'task-reminder: bi chase → attitude only');
