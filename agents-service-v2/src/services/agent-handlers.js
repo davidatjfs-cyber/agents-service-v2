@@ -252,33 +252,35 @@ function zhOnlyDataAuditorNarrative(raw) {
   return joined || s;
 }
 
-/** 模型仍输出大段英文时 latin>>han，需二次压成中文（否则 zhOnly 会原样返回英文） */
-function monthAdviceLooksMostlyEnglish(s) {
-  const body = String(s || '').replace(/[¥$€£%.,:;0-9_\-\s\n#*`【】]/g, '');
-  const lat = (body.match(/[a-zA-Z]/g) || []).length;
-  const han = (body.match(/[\u4e00-\u9fff]/g) || []).length;
-  if (/Problem\s+Analysis|Actionable\s+Advice|No empty words like|responsible person/i.test(s)) return true;
-  return lat > 100 && lat > han * 1.8;
+/** 检测输出是否含英文（任一条件满足即认为需要重写） */
+function containsSignificantEnglish(s) {
+  const body = String(s || '');
+  if (/Problem\s+Analysis|Actionable\s+Advice|No empty words like|responsible person|Delivery Ratio|Dine-in.*Revenue|User Role|Next Steps/i.test(body)) return true;
+  const totalChars = body.replace(/\s/g, '').length;
+  if (totalChars < 10) return false;
+  const latinChars = (body.match(/[a-zA-Z]/g) || []).length;
+  return latinChars / totalChars > 0.08;
 }
 
 async function coerceMonthComparisonAdviceToZh(text, llmContext) {
   const cleaned = zhOnlyDataAuditorNarrative(text);
-  if (!monthAdviceLooksMostlyEnglish(cleaned)) return cleaned;
+  if (!containsSignificantEnglish(cleaned)) return cleaned;
   try {
     const tr = await callLLM(
       [
         {
           role: 'system',
           content:
-            '你是中文运营编辑。把下文的经营分析**全文改写为简体中文**（保留 Markdown 编号列表、金额与百分比）。\n' +
-            '强制使用且仅使用这两个标题（单独成行）：【问题分析】 与 【行动建议】。禁止使用英文段落标题（如 Problem Analysis）。\n' +
-            '不要输出思考过程、英文约束复述或 “Role/Constraints” 等元信息。'
+            '你是简体中文编辑。将下面的分析文本**全部改写为简体中文**，保留所有金额数字和百分比。\n' +
+            '输出只能包含两段，标题格式固定为：\n【问题分析】\n【行动建议】\n' +
+            '每段下面用 1. 2. 3. 编号列出对应内容。\n' +
+            '严禁输出任何英文单词、英文标题或元信息说明。'
         },
-        { role: 'user', content: cleaned.slice(0, 6000) }
+        { role: 'user', content: cleaned.slice(0, 5000) }
       ],
       {
-        temperature: 0.15,
-        max_tokens: 900,
+        temperature: 0.1,
+        max_tokens: 800,
         purpose: 'data_auditor',
         ...(llmContext ? { context: llmContext } : {})
       }
@@ -286,7 +288,7 @@ async function coerceMonthComparisonAdviceToZh(text, llmContext) {
     const o = String(tr.content || '').trim();
     return o ? zhOnlyDataAuditorNarrative(o) : cleaned;
   } catch (e) {
-    logger.warn({ err: e?.message }, 'coerceMonthComparisonAdviceToZh failed');
+    logger.warn({ err: e?.message }, 'coerceMonthComparisonAdviceToZh rewrite failed');
     return cleaned;
   }
 }
@@ -1488,33 +1490,31 @@ async function handleDataAuditor(text, ctx) {
         try {
           const advPrefix = await adminAgentPromptPrefix('data_auditor');
           const ar = await callLLM([
-            { role: 'system', content: advPrefix + `你是一名有15年经验的餐饮连锁运营顾问。根据下方真实营业数据，用专业视角分析经营变化原因，并给出具体可执行的改善建议。
-
-【语言与版式（强制）】
-- 全文必须为简体中文：标题、列表、说明均用中文；禁止输出英文段落；禁止用英文作小节标题（勿写 Problem Analysis / Actionable Advice）。
-- 小节标题仅允许：【问题分析】、【行动建议】（全角括号）。
-- 禁止输出思考过程、角色设定复述、「Role:」「Input Data」「Constraints」「User Question」等英文元标签或结构化英文提纲。
-
-输出格式（严格遵守，禁止输出 JSON 或代码块）：
-
-【问题分析】
-1. [具体问题] — 数据依据：[引用具体数字]
-2. ...（2-3条）
-
-【行动建议】
-1. [负责人] 在 [时间] 内 [具体动作]，目标：[可量化指标]
-2. ...（3-5条）
-
-要求：
-- 禁止使用"优化""提升""加强"等空话，代之以具体动作
-- 每条建议须明确负责人（店长/出品经理/运营）和完成时间
-- 若外卖占比高，须单独分析外卖趋势
-- 若月内后半段回升，说明是短期波动还是结构性问题` },
-            { role: 'user', content: `${monthSummary}\n\n用户问题：${text}` }
-          ], { temperature: 0.35, max_tokens: 700, purpose: 'data_auditor', ...(ctx.llmContext ? { context: ctx.llmContext } : {}) });
+            {
+              role: 'system',
+              content:
+                advPrefix +
+                '你是中国餐饮连锁运营顾问，拥有15年实战经验。\n' +
+                '请根据用户提供的营业数据，用**纯简体中文**完成以下分析，不得出现任何英文单词或英文段落。\n\n' +
+                '输出必须严格按照下面两段格式，不得增减或改变标题：\n\n' +
+                '【问题分析】\n' +
+                '1. 第一个问题（附具体数字）\n' +
+                '2. 第二个问题（附具体数字）\n' +
+                '3. 第三个问题（可选）\n\n' +
+                '【行动建议】\n' +
+                '1. 负责人在X天内完成某动作，目标：可量化指标\n' +
+                '2. …\n' +
+                '3. …\n\n' +
+                '规则：\n' +
+                '- 禁止使用「优化」「提升」「加强」等空洞词汇，换成具体行动\n' +
+                '- 每条建议须注明负责人（店长/出品经理/运营）和完成时限\n' +
+                '- 若外卖收入占比超过20%，须单独分析外卖趋势\n' +
+                '- 禁止输出英文、JSON、代码块或任何非中文段落标题'
+            },
+            { role: 'user', content: `以下是营业数据摘要：\n\n${monthSummary}\n\n用户问题：${text}` }
+          ], { temperature: 0.2, max_tokens: 800, purpose: 'data_auditor', ...(ctx.llmContext ? { context: ctx.llmContext } : {}) });
           if (ar.content && ar.content.trim()) {
-            actionItemsText = zhOnlyDataAuditorNarrative(ar.content.trim());
-            actionItemsText = await coerceMonthComparisonAdviceToZh(actionItemsText, ctx.llmContext);
+            actionItemsText = await coerceMonthComparisonAdviceToZh(ar.content.trim(), ctx.llmContext);
             fullResponse = monthSummary + '\n\n' + actionItemsText;
           }
         } catch (e) { /* LLM 失败，仅返回数据摘要 */ }
