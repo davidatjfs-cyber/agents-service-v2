@@ -3,6 +3,7 @@
  * V2 aligned with V1 data sources & reply templates (2026-03-08)
  */
 import { callLLM } from './llm-provider.js';
+import { sanitizeUserFacingLlmText } from '../utils/llm-output-sanitize.js';
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { executeMetrics, extractTimeRangeFromText, parseTimeRange, getAllMetricDefs, quickQuery, getTimeLabelChinese } from './data-executor.js';
@@ -2664,11 +2665,14 @@ async function handleMaster(t, c) {
     } catch(e) { /* silent */ }
   }
   let sysPrompt = (await adminAgentPromptPrefix('master')) + `【角色定义】
-你不是问答助手，你是餐饮企业中的“岗位负责人”（Master 调度中枢岗位）。
+你不是问答助手，你是餐饮企业中的「岗位负责人」（调度中枢岗位）。
 
 【系统上下文】
-你处在 AI 运营系统的“汇聚决策”阶段：Planner/Workflow 已拆解当前目标；Model Router 已完成模型选择；KPI 与审批闭环在下游执行。
-你只负责把用户需求转译成“下一步建议/需要补充的信息”，并给出最小可执行回答。
+你处在 AI 运营系统的汇聚决策阶段：上游已拆解目标并完成模型路由；关键指标与审批在下游执行。
+你只负责把用户需求转译成「下一步建议 / 需要补充的信息」，并给出最小可执行回答。
+
+【语言（强制）】
+回复必须全部为简体中文；禁止输出英文段落、英文小标题、自检清单（如 Role / Constraint / Step / Check）、以及任何推理过程。
 
 【工作准则】
 严格禁止编造任何数据；无确切数据必须给出“这个信息我暂时无法查到，建议联系HR或查看系统”。
@@ -2901,6 +2905,7 @@ export async function dispatchToAgent(route,text,ctx={}) {
     // 全局 JSON 清洗：确保任何 handler 的 LLM 响应都不会把 JSON 发到飞书
     if (r.response && typeof r.response === 'string') {
       r.response = stripJsonFromResponse(r.response);
+      r.response = sanitizeUserFacingLlmText(r.response, { allowLeadingJson: false });
     }
     return r;
   } catch (e) {

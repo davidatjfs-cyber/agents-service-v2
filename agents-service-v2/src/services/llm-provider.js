@@ -5,6 +5,7 @@
 import axios from 'axios';
 import { logger } from '../utils/logger.js';
 import { isExternalEnabled } from '../utils/safety.js';
+import { stripEmbeddedReasoningTags } from '../utils/llm-output-sanitize.js';
 import { selectModel, markOllamaOk, markOllamaFail, getOllamaHealthStatus, isOllamaHealthy } from './model-router.js';
 
 const PROVIDERS = {
@@ -110,13 +111,10 @@ async function callOllamaLLM(messages, options = {}) {
       throw new Error(`Ollama HTTP ${res.status}: ${t.slice(0, 200)}`);
     }
     const data = await res.json();
-    // gemma4:26b 可能将内容放在 thinking 字段而非 content 字段
-    let content = String(data?.message?.content || '').trim();
-    if (!content && data?.message?.thinking) {
-      content = String(data.message.thinking).trim();
-    }
+    // 仅使用正式回复字段：thinking 为内部推理，禁止当作用户可见内容
+    let content = stripEmbeddedReasoningTags(String(data?.message?.content || '').trim());
     if (!content && data?.response) {
-      content = String(data.response).trim();
+      content = stripEmbeddedReasoningTags(String(data.response).trim());
     }
     const rt = Date.now() - start;
     _metrics.totalCalls++;
@@ -189,7 +187,7 @@ async function callOpenAICompatibleChain(messages, options, primaryModel) {
     if (resp) {
       markOk(cand.provider);
       const msg = resp.data?.choices?.[0]?.message || {};
-      const content = msg.content || '';
+      const content = stripEmbeddedReasoningTags(String(msg.content || '').trim());
       const rt = Date.now() - start;
       _metrics.avgResponseTime = (_metrics.avgResponseTime * (_metrics.totalCalls - 1) + rt) / _metrics.totalCalls;
       trackCost(cand.provider, cfg.model, Number(resp.data?.usage?.total_tokens || 0));
@@ -278,13 +276,9 @@ async function callOllamaVision(messages, options = {}) {
       throw new Error(`Ollama HTTP ${res.status}: ${t.slice(0, 200)}`);
     }
     const data = await res.json();
-    // gemma4:26b 可能将内容放在 thinking 字段而非 content 字段
-    let content = String(data?.message?.content || '').trim();
-    if (!content && data?.message?.thinking) {
-      content = String(data.message.thinking).trim();
-    }
+    let content = stripEmbeddedReasoningTags(String(data?.message?.content || '').trim());
     if (!content && data?.response) {
-      content = String(data.response).trim();
+      content = stripEmbeddedReasoningTags(String(data.response).trim());
     }
     const rt = Date.now() - start;
     _metrics.totalCalls++;

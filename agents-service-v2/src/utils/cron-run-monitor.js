@@ -13,6 +13,31 @@ import { logger } from './logger.js';
 
 const TABLE = 'agent_v2_cron_runs';
 
+/** 飞书告警展示用中文名（与 runWithCronLog 的 job_key 一一对应） */
+const CRON_JOB_LABEL_ZH = {
+  kpi_yesterday: '昨日 KPI 计算',
+  morning_briefing: '每日晨报推送',
+  daily_execution_rating: '执行力日评',
+  food_safety_daily_scan: '食安日扫',
+  daily_task_completion_report: '每日任务达成率报告',
+  daily_bi_anomaly: '日频 BI 异常检测',
+  bitable_actual_gross_margin: '飞书实际毛利率表同步',
+  weekly_bi_anomaly: '周频 BI 异常检测',
+  weekly_store_scoring: '周度门店评分',
+  monthly_anomaly_item_bonus: '月度异常项加分',
+  monthly_gross_margin_check: '月度毛利率检测',
+  monthly_comprehensive_rating: '月度综合评级',
+  rhythm_weekly_report: '总部周报节奏',
+  rhythm_monthly_evaluation: '总部月度评估节奏',
+  monthly_revenue_anomaly: '月度营收异常检测',
+  daily_attendance_report: '考勤日报'
+};
+
+function cronJobLabelZh(jobKey) {
+  const k = String(jobKey || '').trim();
+  return CRON_JOB_LABEL_ZH[k] || '定时任务';
+}
+
 export async function ensureCronRunTable() {
   try {
     await query(`
@@ -78,7 +103,7 @@ async function notifyAdminsOnFailure(jobKey, errorMsg) {
     );
     const { ymd, hour, minute } = getShanghaiNowClock();
     const timeStr = `${ymd} ${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`;
-    const text = `⚠️ 【定时任务失败告警】\n任务：${jobKey}\n时间：${timeStr}（上海）\n错误：${String(errorMsg || '未知错误').slice(0, 400)}\n\n请检查服务日志并确认是否需要手动补跑。`;
+    const text = `⚠️ 【定时任务失败告警】\n任务：${cronJobLabelZh(jobKey)}\n时间：${timeStr}（上海）\n错误：${String(errorMsg || '未知错误').slice(0, 400)}\n\n请检查服务日志并在必要时联系运维补跑。`;
     for (const row of (r.rows || [])) {
       sendText(row.open_id, text, 'open_id').catch(() => {});
     }
