@@ -20,8 +20,10 @@ async function proactiveTick(options = {}) {
   console.log('[Proactive] tick');
 
   try {
-    const { runAnomalyChecks } = await import('../anomaly-engine.js');
-    const { handleAnomalies } = await import('./anomaly-bridge.js');
+    const engine = await import('../anomaly-engine.js');
+    const runAnomalyChecks = engine.runAnomalyChecks;
+    const bridgeMod = await import('./anomaly-bridge.js');
+    const handleAnomalies = bridgeMod.default?.handleAnomalies ?? bridgeMod.handleAnomalies;
 
     const stores = options.stores || (await getActiveStores());
     const frequency = options.frequency || 'daily';
@@ -132,7 +134,9 @@ function getStatus() {
   return {
     enabled: config.enabled,
     useLLM: config.useLLM,
+    mockBridge: config.mockBridge,
     testMode: config.testMode,
+    proactiveLLMProvider: config.proactiveLLMProvider,
     isRunning,
     schedulerActive: intervalId !== null,
     intervalMs: config.intervalMs

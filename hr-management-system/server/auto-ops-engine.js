@@ -50,6 +50,18 @@ const REMINDER_HOURS = 2;    // 2小时未回复 → 催办
 const ESCALATE_HOURS = 4;    // 4小时未回复 → 升级上级
 const MAX_REMINDERS = 3;     // 最多催办3次
 
+/**
+ * 已由 agents-service-v2 `task-card-reminders.js` 统一催办（1h 间隔、3 次、小年·催办通知）。
+ * 本引擎若再跑会用 source_data.reminder_count，与库列 remind_count 脱节 → 重复发「催办提醒/自动催办」。
+ */
+const AGENTS_V2_REMINDER_SOURCES = new Set([
+  'random_inspection',
+  'scheduled_inspection',
+  'bi_anomaly',
+  'auto_collab',
+  'data_auditor'
+]);
+
 export async function inspectionClosedLoopTick() {
   let actions = 0;
 
@@ -58,7 +70,10 @@ export async function inspectionClosedLoopTick() {
     const r = await pool().query(
       `SELECT t.*, 
               EXTRACT(EPOCH FROM (NOW() - t.dispatched_at))/3600 as hours_waiting,
-              COALESCE((t.source_data->>'reminder_count')::int, 0) as reminder_count
+              GREATEST(
+                COALESCE(t.remind_count, 0),
+                COALESCE((t.source_data->>'reminder_count')::int, 0)
+              ) as auto_ops_reminder_seq
        FROM master_tasks t
        WHERE t.status = 'pending_response'
          AND t.dispatched_at < NOW() - INTERVAL '${REMINDER_HOURS} hours'
@@ -66,7 +81,12 @@ export async function inspectionClosedLoopTick() {
     );
 
     for (const task of (r.rows || [])) {
-      const reminderCount = parseInt(task.reminder_count || 0);
+      const src = String(task.source || '').trim();
+      if (AGENTS_V2_REMINDER_SOURCES.has(src)) {
+        continue;
+      }
+
+      const reminderCount = parseInt(task.auto_ops_reminder_seq ?? task.reminder_count || 0, 10);
       const hoursWaiting = parseFloat(task.hours_waiting || 0);
 
       // ── 升级: 超过4小时未回复 → 通知上级 ──

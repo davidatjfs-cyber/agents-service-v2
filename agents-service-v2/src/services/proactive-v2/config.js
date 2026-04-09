@@ -15,8 +15,19 @@ export default {
   /** PROACTIVE_USE_LLM=false 时 bridge 内跳过 LLM，直接按规则触发 */
   useLLM: envBool('PROACTIVE_USE_LLM', true),
 
-  /** 测试模式：bridge 不执行真实 trigger；单元测试 / 防污染生产 */
-  testMode: process.env.PROACTIVE_TEST_MODE === 'true' || process.env.NODE_ENV === 'test',
+  /**
+   * Bridge 全跳过（不派 agent）：仅 PROACTIVE_MOCK_BRIDGE 或 NODE_ENV=test。
+   * 与 PROACTIVE_TEST_MODE（LLM 决策桩 / anomaly-engine 桩）分离。
+   */
+  mockBridge: process.env.PROACTIVE_MOCK_BRIDGE === 'true' || process.env.NODE_ENV === 'test',
+
+  /** LLM 决策桩：不调用 DeepSeek/Ollama，直接返回固定决策 */
+  testMode: process.env.PROACTIVE_TEST_MODE === 'true',
+
+  /** Proactive 决策首选模型提供方：deepseek | ollama（仅影响第一跳，仍保留自动降级链） */
+  proactiveLLMProvider: String(process.env.PROACTIVE_LLM_PROVIDER || 'deepseek')
+    .trim()
+    .toLowerCase(),
 
   /** 详细 console 日志 */
   log: envBool('PROACTIVE_LOG', true),
@@ -28,8 +39,8 @@ export default {
   immediateFirstRun: envBool('PROACTIVE_IMMEDIATE_FIRST', true),
 
   llm: {
-    /** 默认 2s 防阻塞；慢模型可设 PROACTIVE_LLM_TIMEOUT_MS=60000 */
-    timeout: Math.max(500, Number(process.env.PROACTIVE_LLM_TIMEOUT_MS || 2000)),
+    /** Proactive 决策单次调用超时（DeepSeek / Ollama 各段）；慢模型可调大 */
+    timeout: Math.max(500, Number(process.env.PROACTIVE_LLM_TIMEOUT_MS || 4000)),
     revenueDropThreshold: 20,
     badReviewSpikeThreshold: 5
   },

@@ -80,7 +80,7 @@ function normalizeRouterContext(ctx) {
 }
 
 /** 本地 Ollama（如 gemma4:26b），不依赖外部API；失败时由上层回退到 API */
-async function callOllamaLLM(messages, options = {}) {
+export async function callOllamaLLM(messages, options = {}) {
   const base = String(process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
   const model = String(process.env.OLLAMA_OPERATIONS_MODEL || process.env.OLLAMA_CHAT_MODEL || 'gemma4:26b').trim();
   const temp = Number(options.temperature ?? 0.2);
@@ -133,6 +133,62 @@ async function callOllamaLLM(messages, options = {}) {
     markOllamaFail();
     logger.warn({ err: e?.message, base, model }, 'callOllamaLLM failed');
     return { ok: false, error: e?.message || 'ollama_failed', content: '' };
+  }
+}
+
+/**
+ * Proactive 专用：直连 DeepSeek Chat Completions（不经 model-router / 多厂商链），便于与 Gemma 决策路径分离。
+ * @param {string} prompt
+ * @param {{ timeoutMs?: number, temperature?: number, systemPrompt?: string }} [options]
+ * @returns {Promise<string>} assistant 文本
+ */
+export async function callDeepSeek(prompt, options = {}) {
+  /** Proactive 专用：仅校验 API Key，不要求 ENABLE_EXTERNAL（与 message-pipeline 等全局外呼开关解耦） */
+  const apiKey = process.env.DEEPSEEK_API_KEY || '';
+  if (!apiKey) {
+    throw new Error('DeepSeek API_KEY 未配置');
+  }
+  const baseUrl = String(process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, '');
+  const model =
+    String(process.env.PROACTIVE_DEEPSEEK_MODEL || process.env.DEEPSEEK_MODEL || 'deepseek-chat').trim();
+  const timeoutMs = Math.max(500, Number(options.timeoutMs ?? 60000));
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: 'system',
+            content:
+              options.systemPrompt ||
+              '你是一个餐饮经营分析AI，只返回JSON，不要输出 Markdown 或其它说明。'
+          },
+          { role: 'user', content: String(prompt ?? '') }
+        ],
+        temperature: Number(options.temperature ?? 0.2),
+        max_tokens: Number(options.max_tokens ?? 1024)
+      }),
+      signal: controller.signal
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = json?.error?.message || res.statusText || String(res.status);
+      throw new Error(msg);
+    }
+    const text = stripEmbeddedReasoningTags(String(json?.choices?.[0]?.message?.content || '').trim());
+    if (!text) {
+      throw new Error('deepseek_empty_content');
+    }
+    return text;
+  } finally {
+    clearTimeout(tid);
   }
 }
 

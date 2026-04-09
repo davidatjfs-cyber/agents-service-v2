@@ -85,6 +85,11 @@ export async function transitionTask(taskId, newStatus, agentName, payload = {})
     }
 
     logger.info({ taskId, from: current, to: newStatus, agent: agentName }, 'Task transitioned');
+    if (['closed', 'resolved', 'settled', 'completed'].includes(newStatus)) {
+      import('./proactive-v2/proactive-task-outcome-on-close.js')
+        .then((m) => m.scheduleProactiveOutcomeOnClose(taskId, { newStatus }))
+        .catch(() => {});
+    }
     return { ok: true, from: current, to: newStatus };
   } catch (e) {
     logger.error({ err: e?.message, taskId }, 'Transition failed');

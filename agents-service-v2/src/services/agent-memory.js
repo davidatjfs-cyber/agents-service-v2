@@ -88,6 +88,66 @@ export async function recallMemories(agentId, store, keywords = '', limit = 5) {
 /**
  * 获取某Agent对某门店的历史方案效果统计
  */
+/**
+ * 闭环后回写：与 saveOutcome 一致，入参贴近业务语义（action / outcome_score / store）。
+ */
+export async function saveProactiveActionOutcome({ action, outcome_score, store, outcome = 'evaluated', options = {} }) {
+  return saveOutcome(
+    'proactive_llm',
+    String(store || '').trim(),
+    String(action || '').slice(0, 2000),
+    outcome,
+    Number(outcome_score),
+    options
+  );
+}
+
+/** 取同店 proactive_llm 历史 outcome，供提示词高/低分降权 */
+export async function getProactiveLlmOutcomeHints(store, limit = 12) {
+  const s = String(store || '').trim();
+  if (!s) return { high: [], low: [], recent: [] };
+  try {
+    const r = await query(
+      `SELECT content, outcome_score, outcome, created_at
+       FROM agent_memory
+       WHERE agent_id = 'proactive_llm' AND store = $1 AND memory_type = 'outcome'
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [s, limit]
+    );
+    const rows = r.rows || [];
+    const high = rows.filter((x) => x.outcome_score != null && Number(x.outcome_score) >= 7);
+    const low = rows.filter((x) => x.outcome_score != null && Number(x.outcome_score) < 5);
+    return { high, low, recent: rows };
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'getProactiveLlmOutcomeHints failed');
+    return { high: [], low: [], recent: [] };
+  }
+}
+
+export async function formatProactiveLlmPromptHints(store) {
+  const { high, low } = await getProactiveLlmOutcomeHints(store, 14);
+  if (!high.length && !low.length) return '';
+  let block = '\n【同店历史方案反馈（proactive_llm，用于优先参考 / 低分降权）】\n';
+  if (high.length) {
+    block += '高评分（≥7）可优先参考类似可执行动作：\n';
+    block += high
+      .slice(0, 4)
+      .map((x) => `- [${x.outcome_score}分] ${String(x.content || '').slice(0, 160)}`)
+      .join('\n');
+    block += '\n';
+  }
+  if (low.length) {
+    block += '低评分（<5）应降权，避免重复同质建议，需换渠道/价格带或验证数据后再给动作：\n';
+    block += low
+      .slice(0, 4)
+      .map((x) => `- [${x.outcome_score}分] ${String(x.content || '').slice(0, 160)}`)
+      .join('\n');
+    block += '\n';
+  }
+  return block;
+}
+
 export async function getOutcomeStats(agentId, store) {
   try {
     const r = await query(

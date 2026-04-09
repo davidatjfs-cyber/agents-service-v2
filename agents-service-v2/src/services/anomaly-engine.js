@@ -856,6 +856,21 @@ const CHECK_FN_MAP = {
  * @param {string[]} stores - 门店列表
  */
 export async function runAnomalyChecks(frequency, stores, options = {}) {
+  /** Proactive 联调：不跑真实规则，仅返回一条桩数据（需命令行 PROACTIVE_TEST_MODE=true） */
+  if (process.env.PROACTIVE_TEST_MODE === 'true') {
+    return [
+      {
+        triggered: true,
+        type: 'revenue_drop',
+        rule: 'revenue_drop',
+        store: '测试门店',
+        severity: 'high',
+        value: 0.6,
+        name: 'PROACTIVE_TEST_MODE stub'
+      }
+    ];
+  }
+
   const allRules = await getAnomalyRules();
   if (!allRules) return [{ error: 'anomaly_rules config not found in DB' }];
 
@@ -1015,8 +1030,11 @@ export async function runAnomalyChecks(frequency, stores, options = {}) {
   // Proactive 桥接：由 proactive-runner 定时驱动时可 skip，避免与 runner 内 handleAnomalies 重复执行
   if (!options.skipProactiveBridge) {
     try {
-      const { handleAnomalies } = await import('./proactive-v2/anomaly-bridge.js');
-      await handleAnomalies(results.filter(r => r.triggered));
+      const bridgeMod = await import('./proactive-v2/anomaly-bridge.js');
+      const handleAnomalies = bridgeMod.default?.handleAnomalies ?? bridgeMod.handleAnomalies;
+      if (typeof handleAnomalies === 'function') {
+        await handleAnomalies(results.filter((r) => r.triggered));
+      }
     } catch (err) {
       logger.error({ err: err?.message }, '[Proactive] anomaly bridge error');
     }

@@ -1406,6 +1406,11 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
          WHERE task_id = $1`,
         [taskId, reason]
       ).catch(() => {});
+      setImmediate(() => {
+        import('./proactive-v2/proactive-task-outcome-on-close.js')
+          .then((m) => m.scheduleProactiveOutcomeOnClose(taskId, { newStatus: 'resolved' }))
+          .catch(() => {});
+      });
       if (replyMessageId) {
         replyMsg(replyMessageId, `✅ 审核通过，任务已闭环：${taskId}`).catch(() => {});
       }

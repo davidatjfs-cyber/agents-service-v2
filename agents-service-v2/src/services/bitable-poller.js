@@ -412,12 +412,20 @@ async function processTaskResponse(fields, recordId) {
   try {
     // Update master_tasks status if reply provided
     if (reply) {
+      const st = String(status || '').trim();
       await query(
         `UPDATE master_tasks SET status = CASE WHEN $1 = '已处理' THEN 'closed' WHEN $1 = '已回复' THEN 'pending_response' ELSE status END,
          closed_at = CASE WHEN $1 = '已处理' THEN NOW() ELSE closed_at END
          WHERE task_id = $2`,
         [status, taskId]
       );
+      if (st === '已处理') {
+        setImmediate(() => {
+          import('./proactive-v2/proactive-task-outcome-on-close.js')
+            .then((m) => m.scheduleProactiveOutcomeOnClose(taskId, { newStatus: 'closed' }))
+            .catch(() => {});
+        });
+      }
     }
     // Log the response
     await query(

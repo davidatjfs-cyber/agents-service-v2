@@ -8,6 +8,7 @@ const { shouldTrigger, recordTrigger } = triggerDedupe;
 import llmDecision from './llm-decision.js';
 const { decideWithLLM, fallbackDecision } = llmDecision;
 import { dispatchToAgent } from '../agent-handlers.js';
+import { acceptProactiveLlmActionPlan } from './proactive-llm-actions.js';
 
 function normalizeAnomaly(raw) {
   const rule = raw.rule || raw.type;
@@ -16,9 +17,9 @@ function normalizeAnomaly(raw) {
 }
 
 async function handleAnomalies(anomalies) {
-  if (config.testMode) {
-    console.log('[Proactive][TEST MODE] skip trigger');
-    return { processed: 0, triggered: 0, skipped: 0, testMode: true };
+  if (config.mockBridge) {
+    console.log('[Proactive][MOCK BRIDGE] skip trigger');
+    return { processed: 0, triggered: 0, skipped: 0, mockBridge: true };
   }
 
   if (!config.enabled) {
@@ -70,7 +71,7 @@ async function handleAnomalies(anomalies) {
           decision = fallbackDecision(anomaly);
         }
       } else {
-        decision = { triggered: true, reason: 'useLLM=false', priority: 'medium' };
+        decision = { triggered: true, reason: 'useLLM=false', priority: 'medium', actions: [] };
         console.log('[Proactive][Bridge] useLLM=false, default trigger');
       }
 
@@ -113,7 +114,8 @@ function buildContext(anomaly, decision) {
     data: {
       ...anomaly,
       llmReason: decision.reason,
-      llmPriority: decision.priority
+      llmPriority: decision.priority,
+      llmActions: Array.isArray(decision.actions) ? decision.actions : []
     }
   };
 }
@@ -122,6 +124,21 @@ async function handleTrigger(ctx) {
   const { type, store } = ctx;
 
   console.log(`[Proactive][Trigger] ${type} @ ${store}`);
+
+  const llmActions = ctx?.data?.llmActions;
+  if (Array.isArray(llmActions) && llmActions.length > 0) {
+    try {
+      const acceptRes = await acceptProactiveLlmActionPlan(ctx);
+      if (config.log) {
+        console.log('[Proactive][accept_action_plan] auto proactive_llm', {
+          created: acceptRes.count,
+          taskIds: (acceptRes.createdTasks || []).map((t) => t.taskId)
+        });
+      }
+    } catch (err) {
+      console.error('[Proactive][accept_action_plan] failed', err?.message || err);
+    }
+  }
 
   if (type === 'revenue_drop' || type === 'revenue') {
     await dispatchToAgent('data_auditor', `分析营收下降 - ${store}`, ctx);

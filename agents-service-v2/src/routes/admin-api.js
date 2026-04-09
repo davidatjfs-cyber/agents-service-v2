@@ -5,6 +5,7 @@ import { query } from '../utils/db.js';
 import { getBitableStatus, pollAllBitableTables } from '../services/bitable-poller.js';
 import { logger } from '../utils/logger.js';
 import { startRandomInspections } from '../services/random-inspection.js';
+import { scheduleProactiveOutcomeOnClose } from '../services/proactive-v2/proactive-task-outcome-on-close.js';
 
 const r = Router();
 const admin = [authRequired, requireRole('admin','hq_manager')];
@@ -84,6 +85,7 @@ r.post('/admin/task/:taskId/close', authRequired, requireRole(...CLOSE_TASK_ROLE
     if (!upd.rows?.length) {
       return res.status(404).json({ error: '任务不存在或已关闭' });
     }
+    scheduleProactiveOutcomeOnClose(upd.rows[0].task_id, { newStatus: 'closed' });
     return res.json({ ok: true, taskId: upd.rows[0].task_id });
   } catch (e) {
     return res.status(500).json({ error: e.message });
