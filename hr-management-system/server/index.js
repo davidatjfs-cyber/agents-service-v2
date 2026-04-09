@@ -3197,7 +3197,10 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
                startDate, endDate, days == null ? 0 : days, String(updated.payload?.type || 'leave').trim(),
                reason, updated.id, username, new Date(hrmsNowISO()), username]
             );
-          } catch (e) { console.error('[leave_records] dual-write failed:', e?.message); }
+          } catch (e) {
+            console.error('[leave_records] dual-write failed:', e?.message);
+            void notifyAdminsDualWriteFailure('hrms_leave_records（休假审批双写）', e);
+          }
 
           // Format dates as X月X日
           const fmtLeaveDate = (d) => { if (!d) return ''; const p = String(d).split('-'); return p.length >= 3 ? `${Number(p[1])}月${Number(p[2])}日` : d; };
@@ -3544,7 +3547,10 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
                isReward ? Math.abs(amount || 0) : -Math.abs(amount || 0),
                Math.abs(amount || 0), rpReason, updated.id, applicantUser]
             );
-          } catch (e) { console.error('[reward_punishment_records] dual-write failed:', e?.message); }
+          } catch (e) {
+            console.error('[reward_punishment_records] dual-write failed:', e?.message);
+            void notifyAdminsDualWriteFailure('hrms_reward_punishment_records（奖惩审批双写）', e);
+          }
 
           // Notify target person (the one being rewarded/punished)
           if (targetUsername) {
@@ -3678,6 +3684,7 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
               }
             } catch (e2) {
               console.error('[point_records] dual-write failed (non-fatal):', e2?.message);
+              void notifyAdminsDualWriteFailure('point_records（积分审批双写）', e2);
             }
           }
 
@@ -4211,9 +4218,10 @@ app.post('/api/checkin', authRequired, async (req, res) => {
       [username, storeName || null, type, lat, lng, distMeters, faceMatch, faceScore, photoUrl, status]
     );
     const inserted = r.rows[0];
-    upsertEmployeeAttendanceMirrorFromCheckinRow(inserted).catch((e) =>
-      console.error('[employee_attendance_records] dual-write failed (non-fatal):', e?.message)
-    );
+    upsertEmployeeAttendanceMirrorFromCheckinRow(inserted).catch((e) => {
+      console.error('[employee_attendance_records] dual-write failed (non-fatal):', e?.message);
+      void notifyAdminsDualWriteFailure('employee_attendance_records（打卡写入镜像）', e);
+    });
     return res.json({ ok: true, record: inserted });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
@@ -5051,6 +5059,31 @@ async function mergeSharedStateFields(patches, arrayIdFields = {}) {
   throw new Error('mergeSharedStateFields: max retries exceeded');
 }
 
+/** 双写失败时通知飞书 admin/hq_manager（与 agents cron-run-monitor 的 feishu_users 查询口径一致） */
+async function notifyAdminsDualWriteFailure(scopeLabel, err) {
+  try {
+    const r = await pool.query(
+      `SELECT open_id FROM feishu_users
+       WHERE registered = true AND open_id IS NOT NULL
+         AND role IN ('admin', 'hq_manager')
+       LIMIT 20`
+    );
+    const rows = r.rows || [];
+    if (!rows.length) {
+      console.warn('[dual-write] no admin/hq_manager open_id for Feishu alert:', scopeLabel);
+      return;
+    }
+    const reason = String(err?.message || err || 'unknown').slice(0, 500);
+    const timeStr = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' }).replace('T', ' ');
+    const msg = `【HRMS 双写失败告警】\n范围：${scopeLabel}\n原因：${reason}\n时间：${timeStr}（上海）\n请检查 hrms_state 与独立表一致性。`;
+    for (const row of rows) {
+      void sendLarkMessage(row.open_id, msg, { skipDedup: true }).catch(() => {});
+    }
+  } catch (e) {
+    console.error('[dual-write] notify admins failed:', e?.message);
+  }
+}
+
 /** 全量双写：每次保存 state 时自动同步所有模块到独立 DB 表 */
 async function dualWriteStateToDB(state) {
   if (!state || typeof state !== 'object') return;
@@ -5153,6 +5186,10 @@ async function dualWriteStateToDB(state) {
     // 重启时会自动从 DB 表重建 state，所以双写失败可能导致数据丢失
     console.error('[dualWriteStateToDB] ⚠️ 双写失败！DB 表与 hrms_state 可能不一致，重启后可能丢失数据:', e?.message);
     console.error('[dualWriteStateToDB] 失败堆栈:', e?.stack || 'no stack');
+    void notifyAdminsDualWriteFailure(
+      '全量双写（employees / hrms_leave_records / hrms_reward_punishment_records / hrms_user_notifications）',
+      e
+    );
   }
 }
 
@@ -5191,6 +5228,7 @@ function schedulePayrollDomainSync() {
       await upsertPayrollDomainFromState(s);
     } catch (e) {
       console.error('[hrms_payroll_domain] async sync failed (non-fatal):', e?.message);
+      void notifyAdminsDualWriteFailure('hrms_payroll_domain（异步薪资域双写）', e);
     }
   });
 }
@@ -11582,6 +11620,7 @@ app.put('/api/state', authRequired, async (req, res) => {
     );
     // Dual-write employees to independent table for disaster recovery
     setImmediate(async () => {
+      let alertedEmployeesDualWrite = false;
       try {
         const emps = Array.isArray(data.employees) ? data.employees : [];
         for (const emp of emps) {
@@ -11611,10 +11650,17 @@ app.put('/api/state', authRequired, async (req, res) => {
              String(idCardNumber || ''), String(bankCard || ''), JSON.stringify(rest),
              createdAt ? new Date(createdAt).toISOString() : new Date().toISOString(),
              new Date().toISOString()]
-          ).catch(e => console.error('[employees] dual-write error:', e?.message));
+          ).catch((e) => {
+            console.error('[employees] dual-write error:', e?.message);
+            if (!alertedEmployeesDualWrite) {
+              alertedEmployeesDualWrite = true;
+              void notifyAdminsDualWriteFailure('employees（PUT /api/state）', e);
+            }
+          });
         }
       } catch (e) {
         console.error('[employees] dual-write failed (non-fatal):', e?.message);
+        void notifyAdminsDualWriteFailure('employees（PUT /api/state 批处理）', e);
       }
     });
     setImmediate(async () => {
@@ -11622,6 +11668,7 @@ app.put('/api/state', authRequired, async (req, res) => {
         await upsertPayrollDomainFromState(data);
       } catch (e) {
         console.error('[hrms_payroll_domain] PUT /api/state sync failed (non-fatal):', e?.message);
+        void notifyAdminsDualWriteFailure('hrms_payroll_domain（PUT /api/state）', e);
       }
     });
     // 同步 feishu_users：更新在职员工的 role/store/name，注销已删除/离职员工
@@ -14775,9 +14822,10 @@ app.post('/api/checkin/:id/confirm', authRequired, async (req, res) => {
     );
     if (!r.rows?.length) return res.status(404).json({ error: 'not_found' });
     const updated = r.rows[0];
-    upsertEmployeeAttendanceMirrorFromCheckinRow(updated).catch((e) =>
-      console.error('[employee_attendance_records] confirm sync failed (non-fatal):', e?.message)
-    );
+    upsertEmployeeAttendanceMirrorFromCheckinRow(updated).catch((e) => {
+      console.error('[employee_attendance_records] confirm sync failed (non-fatal):', e?.message);
+      void notifyAdminsDualWriteFailure('employee_attendance_records（打卡确认同步镜像）', e);
+    });
     return res.json({ record: updated });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });

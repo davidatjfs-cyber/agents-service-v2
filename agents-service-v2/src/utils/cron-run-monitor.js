@@ -30,7 +30,10 @@ const CRON_JOB_LABEL_ZH = {
   rhythm_weekly_report: '总部周报节奏',
   rhythm_monthly_evaluation: '总部月度评估节奏',
   monthly_revenue_anomaly: '月度营收异常检测',
-  daily_attendance_report: '考勤日报'
+  daily_attendance_report: '考勤日报',
+  escalation_scan: '任务升级扫描',
+  task_card_reminders: '任务卡片催办',
+  daily_inspection_tick: '每日巡检调度（整轮）'
 };
 
 function cronJobLabelZh(jobKey) {
@@ -114,14 +117,28 @@ async function notifyAdminsOnFailure(jobKey, errorMsg) {
 
 /**
  * 主定时任务包装：
- *   - 成功：记录 ok=true
- *   - 失败：记录 ok=false + 立即向所有 admin/hq_manager 飞书告警
+ *   - 成功：默认记录 ok=true（高频任务可传 { recordSuccess: false } 省略成功行，仅失败入库 + 飞书）
+ *   - 失败：记录 ok=false + 立即向所有 admin/hq_manager 飞书告警（错误信息截断见 notifyAdminsOnFailure）
+ *
+ * @param {string} jobKey
+ * @param {() => Promise<unknown>} fn
+ * @param {string | { source?: string, recordSuccess?: boolean }} [third]  source 或选项对象
  */
-export async function runWithCronLog(jobKey, fn, source = 'cron') {
+export async function runWithCronLog(jobKey, fn, third = 'cron') {
+  let source = 'cron';
+  let recordSuccess = true;
+  if (third != null && typeof third === 'object' && !Array.isArray(third)) {
+    source = String(third.source ?? 'cron');
+    if (third.recordSuccess === false) recordSuccess = false;
+  } else if (typeof third === 'string') {
+    source = third;
+  }
   const { ymd } = getShanghaiNowClock();
   try {
     await fn();
-    await insertRun(jobKey, ymd, true, null, source);
+    if (recordSuccess) {
+      await insertRun(jobKey, ymd, true, null, source);
+    }
   } catch (e) {
     const msg = String(e?.message || e);
     await insertRun(jobKey, ymd, false, msg, source).catch(() => {});

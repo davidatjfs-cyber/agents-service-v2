@@ -3,6 +3,7 @@
  * 此前仅前端落库，无任何后端 cron，导致自定义时间（如 15:51）永不触发。
  */
 import cron from 'node-cron';
+import { runWithCronLog } from '../utils/cron-run-monitor.js';
 import { logger } from '../utils/logger.js';
 import { query } from '../utils/db.js';
 import { getConfig } from './config-service.js';
@@ -495,7 +496,11 @@ export function startDailyInspectionScheduler() {
     '* * * * *',
     async () => {
       try {
-        await runDailyInspectionsTick({ force: false });
+        await runWithCronLog(
+          'daily_inspection_tick',
+          () => runDailyInspectionsTick({ force: false }),
+          { recordSuccess: false }
+        );
       } catch (e) {
         logger.error({ err: e?.message }, 'daily-inspection cron failed');
       }

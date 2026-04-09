@@ -14,6 +14,7 @@
 import cron from 'node-cron';
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
+import { runWithCronLog } from '../utils/cron-run-monitor.js';
 import { resolveAssigneeOpenIdsForTask } from '../utils/feishu-assignee-resolve.js';
 import { sendText, sendCard, sendGroup, sendGroupCard, sendCompanyNoticeToAssignees } from './feishu-client.js';
 
@@ -416,7 +417,7 @@ export function startTaskCardReminderScheduler() {
     '*/10 * * * *',
     async () => {
       try {
-        await processTaskCardReminders();
+        await runWithCronLog('task_card_reminders', () => processTaskCardReminders(), { recordSuccess: false });
       } catch (e) {
         logger.error({ err: e?.message }, 'task-card reminder cron failed');
       }

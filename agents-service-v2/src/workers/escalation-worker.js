@@ -3,16 +3,23 @@ import { logger } from '../utils/logger.js';
 import { scanEscalations } from '../services/task-state-machine.js';
 import { sendText } from '../services/feishu-client.js';
 import { query } from '../utils/db.js';
+import { runWithCronLog } from '../utils/cron-run-monitor.js';
 
 export function startEscalationScheduler() {
   cron.schedule('*/30 * * * *', async () => {
     try {
-      logger.info('Running escalation scan');
-      const r = await scanEscalations();
-      if (r.escalated > 0) {
-        logger.info({ escalated: r.escalated }, 'Tasks escalated');
-        await notifyEscalations(r.tasks || []);
-      }
+      await runWithCronLog(
+        'escalation_scan',
+        async () => {
+          logger.info('Running escalation scan');
+          const r = await scanEscalations();
+          if (r.escalated > 0) {
+            logger.info({ escalated: r.escalated }, 'Tasks escalated');
+            await notifyEscalations(r.tasks || []);
+          }
+        },
+        { recordSuccess: false }
+      );
     } catch (e) {
       logger.error({ err: e?.message }, 'Escalation scan failed');
     }
