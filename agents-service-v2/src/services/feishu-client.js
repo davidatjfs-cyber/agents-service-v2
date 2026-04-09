@@ -1003,7 +1003,7 @@ export async function handleWebhookEvent(body) {
             ? JSON.stringify([{ imageKey, messageId: msg?.message_id || '' }])
             : null;
 
-          // 食品安全 BI 异常：仅总部营运/管理员判罚（记录→扣分 / 不记录→结案），不走通用「内容质量」审核
+          // 食品安全 BI 异常：仅总部营运（hq_manager）判罚；管理员只读，不得进入 LLM 审核当判罚
           try {
             const { tryHandleFoodSafetyHqRuling } = await import('./food-safety-hq-ruling.js');
             const ruled = await tryHandleFoodSafetyHqRuling({
@@ -1013,6 +1013,9 @@ export async function handleWebhookEvent(body) {
               replyMsg: (t) => replyMsg(msg?.message_id || '', t)
             });
             if (ruled?.handled) {
+              const outcome = ruled.outcome || 'recorded';
+              const terminal = outcome === 'dismissed' || outcome === 'recorded';
+              const msgStatus = terminal ? 'resolved' : 'pending_response';
               const recordId = msg?.message_id ? String(msg.message_id) : '';
               if (recordId) {
                 await query(
@@ -1020,11 +1023,12 @@ export async function handleWebhookEvent(body) {
                    VALUES ('in','feishu','task_response', $1, $2::jsonb, $3)
                    ON CONFLICT DO NOTHING`,
                   [
-                    `任务回复(食安总部判罚): ${taskId}`,
+                    `任务回复(食安${outcome}): ${taskId}`,
                     JSON.stringify({
                       taskId,
                       reply: responseText,
-                      status: 'resolved',
+                      outcome,
+                      status: msgStatus,
                       recordId,
                       raw: { messageId: msg?.message_id || '', chatType }
                     }),
@@ -1033,10 +1037,31 @@ export async function handleWebhookEvent(body) {
                 ).catch(() => {});
               }
               logger.info(
-                { eventId, taskId, recordId, mode: 'food_safety_hq_ruling' },
+                { eventId, taskId, recordId, outcome, mode: 'food_safety_hq_ruling' },
                 'Feishu direct reply: food safety HQ ruling handled'
               );
-              return { ok: true, eventType, mode: 'food_safety_hq_ruling', taskId };
+              return { ok: true, eventType, mode: 'food_safety_hq_ruling', taskId, outcome };
+            }
+
+            const fsHit = await query(
+              `SELECT 1 FROM master_tasks WHERE task_id = $1 AND source = 'bi_anomaly' AND category = 'food_safety' LIMIT 1`,
+              [taskId]
+            ).catch(() => ({ rows: [] }));
+            if (fsHit.rows?.length && openId) {
+              const ur = await query(
+                `SELECT role FROM feishu_users WHERE open_id = $1 AND registered = true LIMIT 1`,
+                [openId]
+              ).catch(() => ({ rows: [] }));
+              if (String(ur.rows?.[0]?.role || '').trim() === 'admin') {
+                if (msg?.message_id) {
+                  await replyMsg(
+                    msg.message_id,
+                    `📋 食安异常任务 **${taskId}** 仅可由 **总部营运** 回复「记录/不记录」判罚；管理员为只读通知，无需回复本条。`
+                  ).catch(() => {});
+                }
+                logger.info({ eventId, taskId, openId }, 'Feishu: food_safety task reply ignored (admin read-only)');
+                return { ok: true, eventType, mode: 'food_safety_admin_readonly', taskId };
+              }
             }
           } catch (e) {
             logger.warn({ err: e?.message, taskId }, 'food_safety_hq_ruling branch failed');

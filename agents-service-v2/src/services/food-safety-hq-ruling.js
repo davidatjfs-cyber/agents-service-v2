@@ -1,11 +1,18 @@
 /**
- * 食品安全 BI 异常：判罚仅接受总部营运（hq_manager）或管理员（admin）飞书回复，与卡片接收方一致。
- * 流程：系统发卡片给店长、出品经理、总部营运、管理员 → 由总部营运（或管理员代）回复
- *  · 情况属实并指明责任（店长 / 出品经理 / 两人）→ 每人扣 FOOD_SAFETY_HQ_POINTS（20）写入当周 anomaly_rollups_v2
- *  · 情况不属实、不记录 → 结案 closing，不扣分
- * 门店侧整改说明仍走 feishu-client 通用审核，不经此路径。
+ * 食品安全 BI 异常（agents-service-v2 / Feishu 任务回复）
+ *
+ * 通知：卡片仍发店长、出品经理、总部营运、管理员（管理员仅知情，不参与判罚）。
+ * 判罚：仅总部营运（feishu_users.role = hq_manager）的回复会触发本模块；管理员回复不进入此处。
+ *
+ * 总部营运回复：
+ *  · 不记录 / 情况不属实 → 结案，关 anomaly_triggers，不写 agent_scores。
+ *  · 记录并指明店长 / 出品经理 / 双方 → 按岗位在「该门店」下解析 feishu_users：
+ *      每个命中用户各扣 FOOD_SAFETY_HQ_POINTS，写入 score_model=anomaly_rollups_v2、period=week_<本周一>，
+ *      与同表周度 BI 异常汇总同源，计入绩效展示链路；并发飞书扣分卡 + hrms_user_notifications（与周度 BI 扣分通知形式一致）。
+ *      若 HQ 只点「出品经理」而门店绑定多名出品，则每人各扣一次（岗位维度）；通常每岗一人则只扣责任人。
+ *
+ * 门店侧（店长/出品）回复整改说明：走 feishu-client reviewTaskReply；三次不合格 → HR 工作态度备案，不扣 agent_scores 绩效分。
  */
-const FOOD_SAFETY_HQ_POINTS = 20;
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { getBrandForStore } from './config-service.js';
@@ -15,6 +22,16 @@ import {
   addDaysYmdShanghai
 } from '../utils/anomaly-week-bounds.js';
 import { ensureHrmsUserNotificationsTable } from '../utils/hrms-user-notifications.js';
+
+const FOOD_SAFETY_HQ_POINTS = 20;
+
+const HQ_RULING_GUIDANCE_MSG = `⚠️ 无法识别判罚结论，请**直接按下面二选一**写清楚后重发：
+
+① **情况属实、要记入绩效**：写明责任岗位——**店长**、**出品经理**，或 **双方（两人）**；可附简短事由（系统将按岗位对该门店已绑定飞书账号各扣 ${FOOD_SAFETY_HQ_POINTS} 分，与同周 BI 异常绩效同源，并推送扣分通知）。
+
+② **情况不属实**：回复 **不记录** 或 **情况不属实**（将结案且不扣分）。
+
+管理员账号不参与判罚，请由 **总部营运** 回复。`;
 
 function storeKey(v) {
   return String(v || '')
@@ -303,14 +320,14 @@ async function closeLatestFoodSafetyTrigger(store) {
 
 /**
  * @param {{ taskId: string, responseText: string|null, openId: string|null, replyMsg: (t: string) => Promise<unknown> }} args
- * @returns {Promise<{ handled: boolean }>}
+ * @returns {Promise<{ handled: boolean, outcome?: 'guidance'|'dismissed'|'recorded'|'record_failed' }>}
  */
 export async function tryHandleFoodSafetyHqRuling({ taskId, responseText, openId, replyMsg }) {
   const reply = typeof replyMsg === 'function' ? replyMsg : async () => {};
   try {
     const fu = await fetchOpenUser(openId);
     const role = String(fu?.role || '').trim();
-    if (!['hq_manager', 'admin'].includes(role)) {
+    if (role !== 'hq_manager') {
       return { handled: false };
     }
 
@@ -332,13 +349,8 @@ export async function tryHandleFoodSafetyHqRuling({ taskId, responseText, openId
 
     const parsed = parseFoodSafetyHqRuling(responseText);
     if (parsed.kind === 'unknown') {
-      if (parsed.reason === 'need_target') {
-        await reply(
-          '⚠️ 食安判罚需写明责任岗位：请回复中注明 **店长**、**出品经理**，或 **双方**（两人），并表明「记录」属实；若核实不属实请回复 **不记录**。'
-        ).catch(() => {});
-        return { handled: true };
-      }
-      return { handled: false };
+      await reply(`${HQ_RULING_GUIDANCE_MSG}\n\n任务：**${taskId}**`).catch(() => {});
+      return { handled: true, outcome: 'guidance' };
     }
 
     const store = String(task.store || '').trim();
@@ -370,7 +382,7 @@ export async function tryHandleFoodSafetyHqRuling({ taskId, responseText, openId
       });
       await reply(`✅ 已按 **不记录** 结案，未扣分。任务：**${taskId}**`).catch(() => {});
       logger.info({ taskId, store, role: fu?.role }, 'Food safety HQ ruling: dismissed');
-      return { handled: true };
+      return { handled: true, outcome: 'dismissed' };
     }
 
     const targets = parsed.targets;
@@ -425,7 +437,7 @@ export async function tryHandleFoodSafetyHqRuling({ taskId, responseText, openId
       await reply(
         `⚠️ 未找到该门店对应岗位的飞书用户，无法扣分。请核对门店「${store}」是否已绑定店长/出品经理账号，或联系管理员维护 feishu_users。任务：**${taskId}**`
       ).catch(() => {});
-      return { handled: true };
+      return { handled: true, outcome: 'record_failed' };
     }
 
     await query(
@@ -450,14 +462,17 @@ export async function tryHandleFoodSafetyHqRuling({ taskId, responseText, openId
         .catch(() => {});
     });
 
+    const pts = FOOD_SAFETY_HQ_POINTS;
     const lines = applied.map((a) => {
       const rz = a.role === 'store_manager' ? '店长' : a.role === 'store_production_manager' ? '出品经理' : a.role;
-      return `· ${rz} ${a.username}：扣 20 分，剩余 ${a.remainingScore} 分`;
+      return `· ${rz} ${a.username}：扣 ${pts} 分，剩余 ${a.remainingScore} 分`;
     });
-    await reply(`✅ 食安 **记录** 已执行（各责任人扣 20 分）\n${lines.join('\n')}\n任务：**${taskId}**`).catch(() => {});
+    await reply(
+      `✅ 食安 **记录** 已执行（按岗位各扣 ${pts} 分，已写入当周绩效异常分并与 BI 异常同源）\n${lines.join('\n')}\n任务：**${taskId}**`
+    ).catch(() => {});
 
     logger.info({ taskId, store, applied }, 'Food safety HQ ruling: recorded deductions');
-    return { handled: true };
+    return { handled: true, outcome: 'recorded' };
   } catch (e) {
     logger.warn({ err: e?.message, taskId }, 'tryHandleFoodSafetyHqRuling failed');
     return { handled: false };

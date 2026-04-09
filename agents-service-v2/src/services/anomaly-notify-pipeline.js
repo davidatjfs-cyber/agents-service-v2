@@ -200,7 +200,10 @@ export async function runBiAnomalyNotifyPipeline({
   const detailCap = ruleKey === 'food_safety' ? 5200 : 1800;
   let initialDetail = String(detail || '').slice(0, detailCap);
   if (ruleKey === 'food_safety') {
-    initialDetail += `\n\n─── 总部营运处置 ───\n请在本任务回复 **「记录」**（属实并记入绩效，将按前厅/后厨责任扣20分/次）或 **「不记录」**（核实不属实）。`;
+    initialDetail +=
+      `\n\n─── 总部营运处置（仅 hq_manager 可判罚；管理员仅同步通知）───\n` +
+      `请由 **总部营运** 回复：**「记录」** 并写明责任（**店长** / **出品经理** / **双方**），系统将按岗位对该门店已绑定人员各扣 20 分，与同周 BI 异常绩效（anomaly_rollups_v2）同源并推送扣分通知；或回复 **「不记录」** / **情况不属实** 结案不扣分。\n` +
+      `店长/出品回复整改说明走系统审核；多次不合格备案工作态度，不扣本绩效分。`;
   }
   const msgIds = [];
 
