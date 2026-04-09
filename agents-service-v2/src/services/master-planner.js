@@ -14,6 +14,7 @@
 import { logger } from '../utils/logger.js';
 import { query } from '../utils/db.js';
 import { callLLM } from './llm-provider.js';
+import { sanitizeUserFacingLlmText } from '../utils/llm-output-sanitize.js';
 import { extractTimeRangeFromText, parseTimeRange, executeMetrics, getAllMetricDefs } from './data-executor.js';
 import { estimateCostAndProfitForStore } from './margin-from-sales.js';
 import { analyzeDailyBusiness } from './report-handler.js';
@@ -297,7 +298,7 @@ export async function planAndExecute(text, ctx, llmContextOverride) {
         ],
         { temperature: 0.3, max_tokens: 600, purpose: 'planner_schedule_approval', context: llmCtx }
       );
-      suggestionsText = stripJsonFromLLMResponse(String(r.content || '').trim());
+      suggestionsText = sanitizeUserFacingLlmText(stripJsonFromLLMResponse(String(r.content || '').trim()));
     } catch (e) {
       logger.warn({ err: e?.message }, 'planner operation llm failed, fallback');
     }
@@ -391,10 +392,10 @@ export async function planAndExecute(text, ctx, llmContextOverride) {
       ],
       { temperature: 0.3, max_tokens: 700, purpose: 'planner_business_suggestions', context: llmCtx }
     );
-    suggestionsText = stripJsonFromLLMResponse(String(r.content || '').trim());
-  } catch (e) {
-    logger.warn({ err: e?.message }, 'planner: llm suggestion failed, fallback');
-  }
+      suggestionsText = sanitizeUserFacingLlmText(stripJsonFromLLMResponse(String(r.content || '').trim()));
+    } catch (e) {
+      logger.warn({ err: e?.message }, 'planner: llm suggestion failed, fallback');
+    }
 
   if (!suggestionsText) {
     const acts = fallbackActions.slice(0, 2).map((a, i) => `${i + 1}. ${a}`);

@@ -2,6 +2,7 @@ import { logger } from '../utils/logger.js';
 import { routeMessage } from './message-router.js';
 import { dispatchToAgent } from './agent-handlers.js';
 import { planAndExecute } from './master-planner.js';
+import { sanitizeUserFacingLlmText } from '../utils/llm-output-sanitize.js';
 import { tryDeterministicReply } from './deterministic-replies.js';
 import { detectMetricFromQuestion } from './analysis-intent.js';
 import { detectIntent } from './intent-classifier.js';
@@ -276,6 +277,7 @@ export async function processMessage(ev) {
         logger.info({ traceId, sessionId: existingSession.session_id, ms }, '[Session] Follow-up completed');
 
         // 发送回复
+        agentResult.response = sanitizeUserFacingLlmText(String(agentResult.response || ''));
         const d = await sendReplyWithFallback(ev, agentResult.response, 'session_followup');
         return {
           ok: d.ok,
@@ -398,6 +400,7 @@ export async function processMessage(ev) {
         const plannerRes = await planAndExecute(ev.text, ctx);
         plannerPlanSnapshot = plannerRes?.plan ?? null;
         if (plannerRes?.agent === 'master_planner' && plannerRes.response) {
+          plannerRes.response = sanitizeUserFacingLlmText(plannerRes.response);
           const prefixedResponse = formatReplyV1(
             { agent: 'master_planner', response: plannerRes.response, store: plannerRes.store || store },
             store,
