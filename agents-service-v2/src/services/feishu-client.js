@@ -1389,6 +1389,11 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
 
     const t = String(responseText || '').trim();
     const MIN_TEXT = 20;
+    const src = String(task.source || '').trim();
+    const needsWhenWhereWhat =
+      src === 'scheduled_inspection' ||
+      src === 'random_inspection' ||
+      src === 'bi_anomaly';
     const isPlaceholder = /^(无|没有|ok|好的|收到|test|测试|了解|\d+)$/i.test(t);
     const textMeetsMin = t.length >= MIN_TEXT;
 
@@ -1449,35 +1454,44 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
     if (hasImages && !imageRelevant) {
       passed = false;
       reason = imageVisionReason || '附图未通过与任务内容一致性的校验';
-      feedback = `请上传**与本任务问题直接相关**的现场照片，并配合至少 ${MIN_TEXT} 字说明。`;
+      feedback = `请上传**与本任务问题直接相关**的现场照片，并配合至少 ${MIN_TEXT} 字说明（建议写明：时间+档口/位置+做了什么与结果）。`;
     } else if (isPlaceholder) {
       passed = false;
       reason = '回复仅为占位词，无实质内容';
-      feedback = `请针对本任务写明情况与处理（至少 ${MIN_TEXT} 字）。`;
+      feedback = `请针对本任务写明情况与处理（至少 ${MIN_TEXT} 字）。${needsWhenWhereWhat ? '须包含时间、地点（档口/区域）、事件与结果。' : ''}`;
     } else if (!textMeetsMin) {
       passed = false;
       reason = `回复未满 ${MIN_TEXT} 字`;
-      feedback = `请至少回复 **${MIN_TEXT} 字**，且内容与任务问题一致；有附图时附图也须与任务一致。`;
+      feedback = `请至少回复 **${MIN_TEXT} 字**，且内容与任务问题一致；有附图时附图也须与任务一致。${needsWhenWhereWhat ? '定时/抽检/BI类任务请写清时间+地点+事件。' : ''}`;
     } else {
       try {
         const imgNote = hasImages
           ? `\n（已附图：${imageRelevant ? '已与任务内容一致性校验通过' : '未通过'}${imageVisionReason ? ` — ${imageVisionReason}` : ''}）`
           : '\n（无图片）';
-        const prompt = `任务标题：${task.title || '未知'}\n任务类型：${task.source || '未知'}\n任务详情：${(task.detail || '').slice(0, 500)}\n\n负责人回复：\n${t.slice(0, 1000)}${imgNote}`;
+        const prompt = `任务标题：${task.title || '未知'}\n任务类型：${task.source || '未知'}\n门店：${String(task.store || '')}\n任务详情：${(task.detail || '').slice(0, 500)}\n\n负责人回复：\n${t.slice(0, 1000)}${imgNote}`;
+        const triadRule = needsWhenWhereWhat
+          ? `\n【本条须额外满足「时间+地点+事件」】来源为定时巡检/抽检/BI异常整改：文字中必须能识别出——①何时（具体时间或清晰时段，如「10:00」「午市开档前」）；②何地（档口/区域/工位等店内位置，如「烧味档口」）；③何事（做了什么、试了/查了何物、结果或与客诉/任务要求的对照）。三者缺一即判不通过。`
+          : '\n【本条】若任务明显属现场执行类，仍建议包含可核查的时间、位置与动作；若任务纯说明性且详情未要求现场要素，可不以三要素卡死。';
         const r = await callLLM([
           {
             role: 'system',
-            content: `你是任务回复审核员。规则：
-1. 负责人回复已满足 **≥${MIN_TEXT} 字**（由系统已校验）。
-2. **有附图时**：系统已判定附图与任务内容一致，你只需审核文字是否与任务相关、非敷衍套话。
-3. **无附图时**：审核文字是否**明确针对本任务**（与任务主题/问题一致），非泛泛而谈或跑题。
-4. 通过：与任务一致且有实质说明；不通过：跑题、套话、与任务无关。
+            content: `你是餐饮连锁总部「任务回复」审核员，按下列标准严格判断（已通过字数与占位词校验）。
 
-只输出 JSON：
-{"passed": true或false, "reason": "一句话", "feedback": "不通过时给建议，通过时空字符串"}`
+【已前置校验】字数≥${MIN_TEXT}；非「收到/好的」等占位；有附图且已附图时，图片与任务相关性已由系统校验。
+
+【审核标准】
+1) **主题相关**：回复必须针对本任务标题与详情中的要求/问题，不得跑题、不得仅用套话敷衍。
+2) **时间+地点+事件**（营运现场类）${triadRule}
+3) **不通过时的输出（强制）**：
+   - reason：一句话说明不合规核心（须点名：缺时间/缺地点/缺事件/跑题/过泛等）。
+   - feedback：用 2～5 行中文，**必须**包含：①列出不满足的标准条款编号（对应上面 1 或 2）；②说明**达标时应写到什么程度**；③给**一句贴合本任务的改写示例**（完整一句，如「今日10:00在烧味档口对烧鹅、烧鸭试味，咸淡与标准比对……结合近期桌访客诉……」）。不得只写「请补充」而不指出缺什么。
+4) 通过：同时满足相关性与（若适用）三要素；passed=true 时 feedback 必须为空字符串。
+
+只输出 JSON，勿 markdown：
+{"passed":true或false,"reason":"...","feedback":"..."}`
           },
           { role: 'user', content: prompt }
-        ], { temperature: 0.12, max_tokens: 220, purpose: 'routing' });
+        ], { temperature: 0.12, max_tokens: 520, purpose: 'routing' });
         const raw = String(r.content || '').trim().replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
         const parsed = JSON.parse(raw);
         passed = !!parsed.passed;
@@ -1539,6 +1553,22 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
               content: `**审核结论**：${reason}\n\n**需要补充的内容**：\n${feedback || '请提供更详细的处理记录，包括实际情况描述、处理措施、现场照片（如适用）。'}`
             }
           },
+          ...(needsWhenWhereWhat
+            ? [
+                {
+                  tag: 'div',
+                  text: {
+                    tag: 'lark_md',
+                    content:
+                      '**审核参照（定时/抽检/BI 异常类）**\n' +
+                      `1. 不少于 **${MIN_TEXT}** 字且非敷衍\n` +
+                      '2. 内容须**紧扣本任务标题与详情**\n' +
+                      '3. 须写清 **时间**（时点或时段）+ **地点**（档口/区域/工位）+ **事件**（做了什么、试了/查了何物、结果或与客诉的对照）\n' +
+                      '不通过时上方会指出具体缺哪一项，并给出示例句式。'
+                  }
+                }
+              ]
+            : []),
           { tag: 'hr' },
           {
             tag: 'div',
