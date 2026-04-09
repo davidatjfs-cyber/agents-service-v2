@@ -202,6 +202,11 @@ function bitableDate(v, fb) {
   return toD(s) || toD(fb);
 }
 
+/** 飞书单元格日期 → 上海时区 YYYY-MM-DD（与聊天/晨报原料收货口径一致）；供执行力日评等复用 */
+export function resolveBitableBusinessYmd(fieldVal, createdAt) {
+  return bitableDate(fieldVal, createdAt);
+}
+
 export function ext(val) {
   if (!val) return '';
   if (typeof val === 'string') return val.trim();

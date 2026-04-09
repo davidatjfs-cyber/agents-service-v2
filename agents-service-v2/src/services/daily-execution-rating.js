@@ -5,7 +5,7 @@
  * 未达标项：记录HR备案 + 发送公司通知 + 飞书卡片通知
  * 
  * 数据源：
- * - 出品经理：agent_messages (opening_report, closing_report, material_report)
+ * - 出品经理：开档/收档 agent_messages（按表内业务日期）；原料收货 feishu_generic_records（与聊天口径一致）
  * - 洪潮店长：daily_reports (new_wechat_members)
  * - 马己仙店长：feishu_generic_records (meeting_reports)
  */
@@ -13,54 +13,17 @@ import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { sendCard } from './feishu-client.js';
 import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
+import { getPMReportStatusByBizDate } from './pm-execution-report-coverage.js';
 
 // ─────────────────────────────────────────────
 // 1. 数据查询函数
 // ─────────────────────────────────────────────
 
 /**
- * 获取出品经理昨日报告提交情况
- * @param {string} store - 门店名（如"洪潮大宁久光店"）
- * @param {string} brand - 品牌（如"洪潮"）
- * @param {string} date - 日期 YYYY-MM-DD
- * @returns {Promise<{opening: boolean, closing: boolean, material: boolean}>}
+ * 获取出品经理某日报告是否已提交（按飞书表「日期」业务日，而非入库 created_at，避免跨日同步误判）
  */
 async function getPMReportStatus(store, brand, date) {
-  // 门店名映射
-  const storeMapping = {
-    '洪潮大宁久光店': '洪潮久光店',
-    '马己仙上海音乐广场店': '马己仙大宁店'
-  };
-  const storeInData = storeMapping[store] || store;
-
-  const [opening, closing, material] = await Promise.all([
-    // 开档报告
-    query(
-      `SELECT COUNT(*)::int as cnt FROM agent_messages 
-       WHERE content_type = 'opening_report' 
-         AND (agent_data->'fields'->>'store') = $1 
-         AND created_at::date = $2::date`,
-      [storeInData, date]
-    ).then(r => r.rows[0].cnt > 0),
-    // 收档报告
-    query(
-      `SELECT COUNT(*)::int as cnt FROM agent_messages 
-       WHERE content_type = 'closing_report' 
-         AND (agent_data->'fields'->>'store') = $1 
-         AND created_at::date = $2::date`,
-      [storeInData, date]
-    ).then(r => r.rows[0].cnt > 0),
-    // 原料收货日报（按品牌）
-    query(
-      `SELECT COUNT(*)::int as cnt FROM agent_messages 
-       WHERE content_type = 'material_report' 
-         AND (agent_data->>'brand') = $1 
-         AND created_at::date = $2::date`,
-      [brand.toLowerCase(), date]
-    ).then(r => r.rows[0].cnt > 0)
-  ]);
-
-  return { opening, closing, material };
+  return getPMReportStatusByBizDate(store, brand, date);
 }
 
 /**

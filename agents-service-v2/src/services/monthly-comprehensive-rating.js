@@ -16,6 +16,11 @@ import { logger } from '../utils/logger.js';
 import { ensureHrmsUserNotificationsTable } from '../utils/hrms-user-notifications.js';
 import { sendCard, sendText } from './feishu-client.js';
 import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
+import {
+  countDistinctOpeningBizDays,
+  countDistinctClosingBizDays,
+  countDistinctMaterialBizDays
+} from './pm-execution-report-coverage.js';
 
 // ─────────────────────────────────────────────
 // 1. 工具函数
@@ -115,44 +120,22 @@ async function getAttitudeRating(username, period) {
 
 /**
  * 出品经理执行力（月度）
- * 数据源：agent_messages (opening_report, closing_report, material_report)
+ * 数据源：开档/收档 agent_messages + 原料 feishu_generic_records；均按表内业务日期统计（与执行力日评/聊天一致）
  */
 async function getPMExecutionRating(store, brand, period) {
   const [year, month] = period.split('-');
   const startDate = `${year}-${month}-01`;
   const endDate = `${year}-${month}-31`;
 
-  const storeMapping = {
-    '洪潮大宁久光店': '洪潮久光店',
-    '马己仙上海音乐广场店': '马己仙大宁店'
-  };
-  const storeInData = storeMapping[store] || store;
-
   const daysInMonth = getDaysInMonth(period);
   const expectedTotal = daysInMonth * 3;
 
+  const brandZh = String(brand || '').includes('马己') ? '马己仙' : String(brand || '').includes('洪') ? '洪潮' : brand;
+
   const [openingCount, closingCount, materialCount] = await Promise.all([
-    query(
-      `SELECT COUNT(DISTINCT created_at::date)::int as cnt FROM agent_messages 
-       WHERE content_type = 'opening_report' 
-         AND (agent_data->'fields'->>'store') = $1 
-         AND created_at >= $2::date AND created_at <= $3::date`,
-      [storeInData, startDate, endDate]
-    ).then(r => r.rows[0]?.cnt || 0),
-    query(
-      `SELECT COUNT(DISTINCT created_at::date)::int as cnt FROM agent_messages 
-       WHERE content_type = 'closing_report' 
-         AND (agent_data->'fields'->>'store') = $1 
-         AND created_at >= $2::date AND created_at <= $3::date`,
-      [storeInData, startDate, endDate]
-    ).then(r => r.rows[0]?.cnt || 0),
-    query(
-      `SELECT COUNT(DISTINCT created_at::date)::int as cnt FROM agent_messages 
-       WHERE content_type = 'material_report' 
-         AND (agent_data->>'brand') = $1 
-         AND created_at >= $2::date AND created_at <= $3::date`,
-      [brand.toLowerCase(), startDate, endDate]
-    ).then(r => r.rows[0]?.cnt || 0)
+    countDistinctOpeningBizDays(store, startDate, endDate),
+    countDistinctClosingBizDays(store, startDate, endDate),
+    countDistinctMaterialBizDays(store, brandZh, startDate, endDate)
   ]);
 
   const totalSubmitted = openingCount + closingCount + materialCount;
