@@ -86,7 +86,10 @@ export async function inspectionClosedLoopTick() {
         continue;
       }
 
-      const reminderCount = parseInt(task.auto_ops_reminder_seq ?? task.reminder_count || 0, 10);
+      const reminderCount = Math.max(
+        0,
+        parseInt(String(task.auto_ops_reminder_seq ?? task.reminder_count ?? 0), 10) || 0
+      );
       const hoursWaiting = parseFloat(task.hours_waiting || 0);
 
       // ── 升级: 超过4小时未回复 → 通知上级 ──

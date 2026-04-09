@@ -9,9 +9,8 @@
 #
 name: Deploy agents-service-v2 to ECS
 
+# 自动部署已关闭，仅手动 Run workflow
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -27,7 +26,7 @@ jobs:
 
   deploy:
     needs: verify
-    if: success()
+    if: success() && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

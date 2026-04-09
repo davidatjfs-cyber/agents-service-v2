@@ -1,7 +1,7 @@
 # agents-service-v2 · 安全部署（与 Cursor 规则、手动脚本一致）
 #
-# 流程：修改 agents-service-v2 → git add / commit / push origin main → 本 workflow 在 GitHub 上执行部署。
-# 手动等价：cd agents-service-v2 && bash scripts/deploy-safe.sh
+# 自动部署已关闭：仅可在 GitHub Actions 里手动「Run workflow」触发。
+# 本地手动：cd agents-service-v2 && bash scripts/deploy-safe.sh
 # 回滚：ssh root@47.100.96.30 '/opt/scripts/deploy-rollback.sh'
 #
 # Secrets: ECS_SSH_PRIVATE_KEY（必填）；可选 ECS_HOST（默认 root@47.100.96.30）
@@ -16,11 +16,6 @@
 name: safe-deployment
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'agents-service-v2/**'
-      - '.github/workflows/safe-deployment.yml'
   workflow_dispatch:
     inputs:
       deploy_ecs:
@@ -43,10 +38,8 @@ jobs:
     needs: verify
     if: >-
       needs.verify.result == 'success' &&
-      (
-        github.event_name == 'push' ||
-        (github.event_name == 'workflow_dispatch' && inputs.deploy_ecs == true)
-      )
+      github.event_name == 'workflow_dispatch' &&
+      inputs.deploy_ecs == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

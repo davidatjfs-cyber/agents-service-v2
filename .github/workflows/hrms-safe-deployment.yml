@@ -1,7 +1,7 @@
 # hr-management-system · 安全部署（与 Cursor 规则、手动脚本一致）
 #
-# 流程：修改 hr-management-system 或根目录 deploy 脚本 → push main → 本 workflow 部署 ECS。
-# 手动等价：cd hr-management-system && bash scripts/deploy-hrms-safe.sh
+# 自动部署已关闭：仅可在 GitHub Actions 里手动「Run workflow」触发。
+# 本地手动：cd hr-management-system && bash scripts/deploy-hrms-safe.sh
 # 根目录一键：bash scripts/deploy-hrms-server-ecs.sh（仅服务端）+ scripts/deploy-hrms-frontend.sh（前端）
 # 回滚：ssh root@47.100.96.30 '/opt/scripts/deploy-rollback.sh'
 #
@@ -13,13 +13,6 @@
 name: hrms-safe-deployment
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'hr-management-system/**'
-      - 'scripts/deploy-hrms-server-ecs.sh'
-      - 'scripts/deploy-hrms-frontend.sh'
-      - '.github/workflows/hrms-safe-deployment.yml'
   workflow_dispatch:
     inputs:
       deploy_ecs:
@@ -53,10 +46,8 @@ jobs:
     needs: verify
     if: >-
       needs.verify.result == 'success' &&
-      (
-        github.event_name == 'push' ||
-        (github.event_name == 'workflow_dispatch' && inputs.deploy_ecs == true)
-      )
+      github.event_name == 'workflow_dispatch' &&
+      inputs.deploy_ecs == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

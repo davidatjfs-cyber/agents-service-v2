@@ -78,10 +78,20 @@ if ss -tlnp 2>/dev/null | grep -q ':3000 '; then
   sleep 2
 fi
 pm2 start ecosystem.config.cjs --update-env
-sleep 4
-echo "--- /api/health ---"
-curl -sS -m 15 http://127.0.0.1:3000/api/health | head -c 500
+echo "--- wait for HRMS listen on 3000 ---"
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  if curl -sS -m 2 http://127.0.0.1:3000/api/health >/tmp/hrms_h.txt 2>/dev/null; then
+    echo "--- /api/health (ok after ${i}s) ---"
+    head -c 500 /tmp/hrms_h.txt
+    echo
+    exit 0
+  fi
+  sleep 2
+done
+echo "::error::HRMS /api/health 未就绪（10 次重试），请 pm2 logs hrms-service"
+curl -sS -m 5 http://127.0.0.1:3000/api/health | head -c 500 || true
 echo
+exit 1
 EOS
 )
 
