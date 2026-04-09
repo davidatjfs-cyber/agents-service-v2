@@ -42,8 +42,25 @@ async function handleAnomalies(anomalies) {
     try {
       stats.processed++;
 
+      // 规范化 anomaly：anomaly-engine 使用 rule，proactive-v2 使用 type
+      const normalized = {
+        type: anomaly.type || anomaly.rule,
+        store: anomaly.store,
+        severity: anomaly.severity,
+        value: anomaly.value,
+      };
+
+      // 检查必需字段
+      if (!normalized.type || !normalized.store) {
+        if (config.log) {
+          console.log(`[Proactive][Bridge] Missing type/store, skipping:`, normalized);
+        }
+        stats.skipped++;
+        continue;
+      }
+
       // 1. 去重判断
-      const shouldTriggerFlag = await shouldTrigger(anomaly);
+      const shouldTriggerFlag = await shouldTrigger(normalized);
       if (!shouldTriggerFlag) {
         stats.skipped++;
         continue;
@@ -53,11 +70,11 @@ async function handleAnomalies(anomalies) {
       let decision;
       if (config.useLLM) {
         try {
-          decision = await decideWithLLM(anomaly);
+          decision = await decideWithLLM(normalized);
         } catch (err) {
           console.error('[Proactive][Bridge] LLM decision error:', err.message);
           // LLM 出错，使用 fallback（已内置）
-          decision = await decideWithLLM(anomaly);
+          decision = await decideWithLLM(normalized);
         }
       } else {
         // 不使用 LLM，直接触发
@@ -67,9 +84,9 @@ async function handleAnomalies(anomalies) {
       // 3. 如果需要触发
       if (decision.triggered) {
         try {
-          const ctx = buildContext(anomaly, decision);
+          const ctx = buildContext(normalized, decision);
           await handleTrigger(ctx);
-          await recordTrigger(anomaly);
+          await recordTrigger(normalized);
           stats.triggered++;
         } catch (err) {
           console.error('[Proactive][Bridge] Handle trigger error:', err.message);
@@ -78,7 +95,7 @@ async function handleAnomalies(anomalies) {
       } else {
         stats.skipped++;
         if (config.log) {
-          console.log(`[Proactive][Bridge] Skipped: ${anomaly.store}/${anomaly.type} - ${decision.reason}`);
+          console.log(`[Proactive][Bridge] Skipped: ${normalized.store}/${normalized.type} - ${decision.reason}`);
         }
       }
 

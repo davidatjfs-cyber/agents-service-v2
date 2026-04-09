@@ -16,8 +16,8 @@ export default {
 
   // LLM 配置
   llm: {
-    // 超时时间（毫秒）
-    timeout: 3000,
+    // 超时时间（毫秒）- gemma4:26b 需要更长时间
+    timeout: 60000,
 
     // Fallback 规则：营收下降阈值（百分比）
     revenueDropThreshold: 20,
@@ -35,7 +35,12 @@ export default {
   // LLM 提供商配置（可扩展支持 Ollama、HTTP 等）
   llmProvider: {
     type: 'ollama', // 'ollama' | 'http'
-    endpoint: process.env.OLLAMA_ENDPOINT || 'http://localhost:11434/api/generate',
-    model: process.env.LLM_MODEL || 'gemma:7b',
+    endpoint: process.env.OLLAMA_BASE_URL 
+      ? `${process.env.OLLAMA_BASE_URL}/api/generate`
+      : process.env.OLLAMA_ENDPOINT 
+        || 'http://localhost:11434/api/generate',
+    model: process.env.OLLAMA_OPERATIONS_MODEL 
+      || process.env.LLM_MODEL 
+      || 'gemma4:26b',
   },
 };

@@ -24,7 +24,7 @@ async function decideWithLLM(anomaly) {
     const llmResponse = await callLLM(prompt);
 
     // 解析响应
-    const result = parseLLMResponse(llmResponse);
+    const result = parseLLMResponse(llmResponse, anomaly);
 
     const elapsed = Date.now() - startTime;
     if (config.log) {
@@ -118,7 +118,7 @@ async function callLLM(prompt) {
 /**
  * 解析 LLM 响应
  */
-function parseLLMResponse(response) {
+function parseLLMResponse(response, anomaly) {
   try {
     // 尝试直接解析 JSON
     const parsed = JSON.parse(response);
@@ -143,8 +143,18 @@ function parseLLMResponse(response) {
       }
     }
 
-    // 解析失败，返回保守结果
-    console.warn('[Proactive][LLM] Parse failed, using fallback');
+    // 解析失败，记录原始响应用于调试
+    console.warn('[Proactive][LLM] Parse failed, raw response:', response.substring(0, 200));
+    
+    // LLM 解析失败时，使用 fallback 规则判断
+    // 如果 fallback 也无法判断，则保守触发（避免漏掉重要异常）
+    const fallbackResult = fallbackDecision(anomaly);
+    if (fallbackResult.triggered) {
+      return fallbackResult;
+    }
+    
+    // fallback 也返回不触发，但记录以便人工排查
+    console.warn('[Proactive][LLM] Fallback returned no-trigger, will skip:', anomaly.type);
     return {
       triggered: false,
       reason: 'LLM响应解析失败',
@@ -157,11 +167,11 @@ function parseLLMResponse(response) {
  * Fallback 决策规则
  */
 function fallbackDecision(anomaly) {
-  const { type, value } = anomaly;
+  const { type, value, severity } = anomaly;
   const { revenueDropThreshold, badReviewSpikeThreshold } = config.llm;
 
   // 规则1: 营收下降 >20%
-  if (type === 'revenue_drop') {
+  if (type === 'revenue_drop' || type === 'revenue') {
     const dropPercent = extractPercentage(value);
     if (dropPercent !== null && dropPercent > revenueDropThreshold) {
       return {
@@ -173,7 +183,7 @@ function fallbackDecision(anomaly) {
   }
 
   // 规则2: 差评激增
-  if (type === 'bad_review_spike') {
+  if (type === 'bad_review_spike' || type === 'bad_review_service' || type === 'bad_review_product') {
     const count = extractCount(value);
     if (count !== null && count >= badReviewSpikeThreshold) {
       return {
@@ -182,6 +192,60 @@ function fallbackDecision(anomaly) {
         priority: 'high',
       };
     }
+  }
+
+  // 规则3: 毛利率异常
+  if (type === 'gross_margin') {
+    return {
+      triggered: true,
+      reason: '毛利率异常需分析',
+      priority: 'high',
+    };
+  }
+
+  // 规则4: 人工成本异常
+  if (type === 'labor' || type === 'labor_cost') {
+    return {
+      triggered: true,
+      reason: '人工成本异常',
+      priority: 'medium',
+    };
+  }
+
+  // 规则5: 客流异常
+  if (type === 'traffic' || type === 'customer_flow') {
+    return {
+      triggered: true,
+      reason: '客流异常需分析',
+      priority: 'medium',
+    };
+  }
+
+  // 规则6: 充值异常
+  if (type === 'recharge_zero' || type === 'recharge') {
+    return {
+      triggered: true,
+      reason: '充值数据异常',
+      priority: 'medium',
+    };
+  }
+
+  // 规则7: 高严重程度异常直接触发
+  if (severity === 'high' || severity === 'critical') {
+    return {
+      triggered: true,
+      reason: `严重程度${severity}直接触发`,
+      priority: 'high',
+    };
+  }
+
+  // 规则8: 有 value 数据的异常默认触发（保守策略）
+  if (value !== undefined && value !== null) {
+    return {
+      triggered: true,
+      reason: '检测到异常数据',
+      priority: 'medium',
+    };
   }
 
   // 默认：不触发
