@@ -6,6 +6,13 @@
 #
 # Secrets: ECS_SSH_PRIVATE_KEY（必填）；可选 ECS_HOST（默认 root@47.100.96.30）
 # 仓库（若拆仓独立发布）：https://github.com/davidatjfs-cyber/agents-service-v2
+#
+# ── 若「从未自动部署」，请逐项核对 ──
+# 1) 本文件必须在「Git 根目录」.github/workflows/ 下（子目录 agents-service-v2/.github/ 不会被 GitHub 执行）。
+# 2) GitHub → Settings → Secrets and variables → Actions → 已添加 ECS_SSH_PRIVATE_KEY。
+# 3) Actions 未被禁用；push 命中 paths（agents-service-v2/**）或用手动 workflow_dispatch。
+# 4) 若仓库根目录只有 agents-service-v2 且无外层 HRMS，用 agents-service-v2/.github/workflows/deploy-ecs.yml
+#    并把其内容挪到仓库根 .github/workflows/（或单独拆仓后保留该路径）。
 name: safe-deployment
 
 on:

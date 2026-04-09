@@ -1,0 +1,54 @@
+# 当本仓库的「根目录就是 agents-service-v2」时使用本文件（无外层 HRMS 目录）。
+# 若你的 Git 根目录是 HRMS 且子目录为 agents-service-v2，请用仓库根目录的
+# .github/workflows/safe-deployment.yml（paths: agents-service-v2/**）。
+#
+# GitHub → Settings → Secrets and variables → Actions 必填：
+#   ECS_SSH_PRIVATE_KEY  （ECS 部署私钥全文，含 BEGIN/END）
+# 可选：
+#   ECS_HOST             默认 root@47.100.96.30
+#
+name: Deploy agents-service-v2 to ECS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify
+        run: bash scripts/verify-agents-local.sh
+
+  deploy:
+    needs: verify
+    if: success()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: SSH deploy
+        env:
+          ECS_SSH_PRIVATE_KEY: ${{ secrets.ECS_SSH_PRIVATE_KEY }}
+          ECS_HOST: ${{ secrets.ECS_HOST }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ECS_SSH_PRIVATE_KEY:-}" ]; then
+            echo "::error::请在仓库 Secrets 中配置 ECS_SSH_PRIVATE_KEY"
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$ECS_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          HOSTPORT="${ECS_HOST:-root@47.100.96.30}"
+          H="${HOSTPORT##*@}"
+          ssh-keyscan -H "$H" 2>/dev/null >> ~/.ssh/known_hosts || true
+          export ECS_HOST="$HOSTPORT"
+          bash scripts/deploy-safe.sh
