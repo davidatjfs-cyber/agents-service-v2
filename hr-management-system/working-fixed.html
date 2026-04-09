@@ -11099,7 +11099,9 @@
                         const u = new URL(v, loc || undefined);
                         const port = String(u.port || '').trim();
                         const locPort = String(window.location?.port || '').trim();
-                        if (port === '3000' && locPort !== '3000') {
+                        // 生产由 Nginx 同源 /api 反代到 127.0.0.1:3000；误存直连 :3000/:3100/:3101 会 404/502
+                        const badApiPorts = new Set(['3000', '3100', '3101']);
+                        if (badApiPorts.has(port) && port !== locPort) {
                             try { if (loc) localStorage.setItem('HRMS_API_BASE_URL', loc); } catch (e) {}
                             return loc;
                         }
@@ -11134,6 +11136,18 @@
                 const t = String(token || '');
                 localStorage.setItem('HRMS_API_TOKEN', t);
                 localStorage.setItem('hrms_token', t);
+                try {
+                    const v = String(localStorage.getItem('HRMS_API_BASE_URL') || '').trim();
+                    if (!v) return;
+                    const loc = String(window.location?.origin || '').trim();
+                    if (!loc) return;
+                    const u = new URL(v, loc);
+                    const port = String(u.port || '').trim();
+                    const locPort = String(window.location?.port || '').trim();
+                    if (new Set(['3000', '3100', '3101']).has(port) && port !== locPort) {
+                        localStorage.removeItem('HRMS_API_BASE_URL');
+                    }
+                } catch (e) { /* ignore */ }
             },
             clearToken() {
                 localStorage.removeItem('HRMS_API_TOKEN');
@@ -16859,7 +16873,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
         }
 
         async function loadDataCenterDashboard() {
-            const hdr = { 'Authorization': 'Bearer ' + localStorage.getItem('token') };
+            const hdr = { 'Authorization': 'Bearer ' + (HRMS_API.token ? HRMS_API.token() : '') };
             // Fetch health + dashboard + bitable-sync in parallel
             const [healthRes, dashRes, syncRes] = await Promise.allSettled([
                 fetch('/api/health', { headers: hdr }).then(r => r.json()).catch(() => null),
@@ -24072,7 +24086,6 @@ ${knowledgeContent.slice(0, 30000)}`;
             const authToken = String(
                 localStorage.getItem('HRMS_API_TOKEN') ||
                 localStorage.getItem('hrms_token') ||
-                localStorage.getItem('token') ||
                 ''
             ).trim();
             
@@ -24132,7 +24145,6 @@ ${knowledgeContent.slice(0, 30000)}`;
             const authToken = String(
                 localStorage.getItem('HRMS_API_TOKEN') ||
                 localStorage.getItem('hrms_token') ||
-                localStorage.getItem('token') ||
                 ''
             ).trim();
             
@@ -24190,7 +24202,6 @@ ${knowledgeContent.slice(0, 30000)}`;
                 const authToken = String(
                     localStorage.getItem('HRMS_API_TOKEN') ||
                     localStorage.getItem('hrms_token') ||
-                    localStorage.getItem('token') ||
                     ''
                 ).trim();
                 const response = await fetch(`/api/feishu/sync-status?status=${encodeURIComponent(statusFilter)}&limit=20`, {
@@ -36070,7 +36081,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 });
 
                 const res = await fetch(`/api/files?${params}`, {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                    headers: { 'Authorization': `Bearer ${(localStorage.getItem('HRMS_API_TOKEN') || localStorage.getItem('hrms_token') || '')}` }
                 });
 
                 if (!res.ok) throw new Error('获取文件列表失败');
@@ -36202,7 +36213,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             try {
                 isSearchMode = true;
                 const res = await fetch(`/api/files/search?q=${encodeURIComponent(query)}`, {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                    headers: { 'Authorization': `Bearer ${(localStorage.getItem('HRMS_API_TOKEN') || localStorage.getItem('hrms_token') || '')}` }
                 });
 
                 if (!res.ok) throw new Error('搜索失败');
@@ -36238,7 +36249,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 const res = await fetch('/api/files/batch-download', {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                        'Authorization': `Bearer ${(localStorage.getItem('HRMS_API_TOKEN') || localStorage.getItem('hrms_token') || '')}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ file_ids: Array.from(selectedFiles) })
@@ -36299,7 +36310,7 @@ ${knowledgeContent.slice(0, 30000)}`;
         async function downloadFile(fileId, fileName) {
             try {
                 const res = await fetch(`/api/files/${fileId}/download`, {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                    headers: { 'Authorization': `Bearer ${(localStorage.getItem('HRMS_API_TOKEN') || localStorage.getItem('hrms_token') || '')}` }
                 });
 
                 if (!res.ok) throw new Error('下载失败');
@@ -36327,7 +36338,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 const res = await fetch(`/api/files/${fileId}/validate`, {
                     method: 'POST',
                     headers: { 
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                        'Authorization': `Bearer ${(localStorage.getItem('HRMS_API_TOKEN') || localStorage.getItem('hrms_token') || '')}`,
                         'Content-Type': 'application/json'
                     }
                 });
@@ -36349,7 +36360,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             try {
                 const res = await fetch(`/api/files/${fileId}`, {
                     method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                    headers: { 'Authorization': `Bearer ${(localStorage.getItem('HRMS_API_TOKEN') || localStorage.getItem('hrms_token') || '')}` }
                 });
 
                 if (!res.ok) throw new Error('删除失败');
@@ -36440,7 +36451,7 @@ ${knowledgeContent.slice(0, 30000)}`;
 
                 const res = await fetch('/api/files/upload', {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                    headers: { 'Authorization': `Bearer ${(localStorage.getItem('HRMS_API_TOKEN') || localStorage.getItem('hrms_token') || '')}` },
                     body: formData
                 });
 

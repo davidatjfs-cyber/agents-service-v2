@@ -3,3 +3,9 @@ ECS Nginx 与 PM2 端口约定
 - Agents: /agents-admin/ /agents-api/ /api/webhook/feishu -> 127.0.0.1:3101
 若 /api/ 指向 3100 会导致 502（登录失败）。
 nginx 修改前备份: hrms.bak-port agents-v2.bak-port2
+
+── 登录成功但随后页面/接口 502 ──
+1) 在 ECS 上执行: curl -sS -m 5 http://127.0.0.1:3000/api/health
+   若失败则 pm2 status / pm2 logs hrms-service（Node 未起或崩溃）。
+2) grep proxy_pass /etc/nginx/sites-enabled/hrms，确认 location /api/ 的 upstream 为 127.0.0.1:3000，不是 3100/3101。
+3) 浏览器控制台 Application → Local Storage：删除 HRMS_API_BASE_URL（若曾填过带 :3000/:3100/:3101 的地址），强制刷新；或部署含 v220 SW 的前端后硬刷新一次。

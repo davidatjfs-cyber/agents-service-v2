@@ -12115,8 +12115,13 @@ const LOCAL_TEST_ACCOUNTS = [
 async function storeSessionNonce(uname, nonce) {
   const key = String(uname || '').trim().toLowerCase();
   if (!key) return;
+  let client;
   try {
-    await pool.query(
+    client = await pool.connect();
+    // configureDbSessionSafety 在 ENABLE_DB_WRITE!=true 时会把连接设为只读；
+    // 会话 nonce 必须写入，否则新 token 与库中旧 sn 不一致 → 立刻 401（表现为无法登录）。
+    await client.query('SET default_transaction_read_only = OFF');
+    await client.query(
       `insert into user_sessions (username, session_nonce, updated_at)
        values ($1, $2, now())
        on conflict (username) do update set session_nonce = $2, updated_at = now()`,
@@ -12124,6 +12129,12 @@ async function storeSessionNonce(uname, nonce) {
     );
   } catch (e) {
     console.error('storeSessionNonce failed:', e?.message || e);
+  } finally {
+    try {
+      if (client) client.release();
+    } catch (_e) {
+      /* ignore */
+    }
   }
 }
 
@@ -12134,12 +12145,11 @@ async function handleLogin(req, res) {
 
   const sn = randomUUID().replace(/-/g, '').slice(0, 16);
 
-  // Try database first if configured
-  const missing = requireEnv();
-  if (!missing.length) {
+  // 数据库账号校验：仅依赖 DATABASE_URL；JWT_SECRET 仅在签发 token 时必需（勿与 requireEnv 绑死，否则缺 JWT 时整段 DB 校验被跳过 → 全员 401）
+  if (DATABASE_URL) {
     try {
       const r = await pool.query(
-        'select id, username, password_hash, real_name, role, is_active from users where username = $1 limit 1',
+        'select id, username, password_hash, real_name, role, is_active from users where lower(username) = lower($1) limit 1',
         [username]
       );
       const u = r.rows?.[0];
@@ -12147,6 +12157,12 @@ async function handleLogin(req, res) {
         if (u.is_active === false) return res.status(403).json({ error: 'user_inactive' });
         const ok = await bcrypt.compare(password, String(u.password_hash || ''));
         if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
+        if (!JWT_SECRET) {
+          return res.status(500).json({
+            error: 'server_config_error',
+            message: 'JWT_SECRET 未配置，无法签发登录令牌'
+          });
+        }
 
         // Sync role from shared-state (authoritative source for role edits made in frontend)
         let finalRole = normalizeRoleForJwt(u.role);

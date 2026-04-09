@@ -10028,7 +10028,8 @@
                         const u = new URL(v, loc || undefined);
                         const port = String(u.port || '').trim();
                         const locPort = String(window.location?.port || '').trim();
-                        if (port === '3000' && locPort !== '3000') {
+                        const badApiPorts = new Set(['3000', '3100', '3101']);
+                        if (badApiPorts.has(port) && port !== locPort) {
                             try { if (loc) localStorage.setItem('HRMS_API_BASE_URL', loc); } catch (e) {}
                             return loc;
                         }
@@ -10063,6 +10064,18 @@
                 const t = String(token || '');
                 localStorage.setItem('HRMS_API_TOKEN', t);
                 localStorage.setItem('hrms_token', t);
+                try {
+                    const v = String(localStorage.getItem('HRMS_API_BASE_URL') || '').trim();
+                    if (!v) return;
+                    const loc = String(window.location?.origin || '').trim();
+                    if (!loc) return;
+                    const u = new URL(v, loc);
+                    const port = String(u.port || '').trim();
+                    const locPort = String(window.location?.port || '').trim();
+                    if (new Set(['3000', '3100', '3101']).has(port) && port !== locPort) {
+                        localStorage.removeItem('HRMS_API_BASE_URL');
+                    }
+                } catch (e) { /* ignore */ }
             },
             clearToken() {
                 localStorage.removeItem('HRMS_API_TOKEN');

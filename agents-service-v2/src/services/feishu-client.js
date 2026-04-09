@@ -1003,6 +1003,45 @@ export async function handleWebhookEvent(body) {
             ? JSON.stringify([{ imageKey, messageId: msg?.message_id || '' }])
             : null;
 
+          // 食品安全 BI 异常：仅总部营运/管理员判罚（记录→扣分 / 不记录→结案），不走通用「内容质量」审核
+          try {
+            const { tryHandleFoodSafetyHqRuling } = await import('./food-safety-hq-ruling.js');
+            const ruled = await tryHandleFoodSafetyHqRuling({
+              taskId,
+              responseText,
+              openId: openId || null,
+              replyMsg: (t) => replyMsg(msg?.message_id || '', t)
+            });
+            if (ruled?.handled) {
+              const recordId = msg?.message_id ? String(msg.message_id) : '';
+              if (recordId) {
+                await query(
+                  `INSERT INTO agent_messages (direction, channel, content_type, content, agent_data, record_id)
+                   VALUES ('in','feishu','task_response', $1, $2::jsonb, $3)
+                   ON CONFLICT DO NOTHING`,
+                  [
+                    `任务回复(食安总部判罚): ${taskId}`,
+                    JSON.stringify({
+                      taskId,
+                      reply: responseText,
+                      status: 'resolved',
+                      recordId,
+                      raw: { messageId: msg?.message_id || '', chatType }
+                    }),
+                    recordId
+                  ]
+                ).catch(() => {});
+              }
+              logger.info(
+                { eventId, taskId, recordId, mode: 'food_safety_hq_ruling' },
+                'Feishu direct reply: food safety HQ ruling handled'
+              );
+              return { ok: true, eventType, mode: 'food_safety_hq_ruling', taskId };
+            }
+          } catch (e) {
+            logger.warn({ err: e?.message, taskId }, 'food_safety_hq_ruling branch failed');
+          }
+
           await query(
             `UPDATE master_tasks
              SET status = 'pending_review',
