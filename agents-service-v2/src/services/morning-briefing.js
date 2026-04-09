@@ -13,6 +13,7 @@ import {
 } from './deterministic-replies.js';
 import { anomalyRuleLabelZh } from '../utils/anomaly-labels.js';
 import { expandAgentStoreLabels } from '../config/store-mapping.js';
+import { getShanghaiNowClock } from '../utils/cron-run-monitor.js';
 
 const FMT_MONEY = (n) => `¥${Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 0 })}`;
 const FMT_PCT   = (n) => `${(Number(n || 0) * 100).toFixed(1)}%`;
@@ -555,9 +556,22 @@ async function sendMorningBriefingToUser(user, storeContent, store) {
   }
 }
 
-// 主入口：发送所有门店的晨报
-export async function sendMorningBriefing() {
-  logger.info('morning briefing starting...');
+/** 与主 cron 07:30、sweep 补偿（至 10:30）对齐；非此窗口的调用一律忽略，避免误触发（如异常时刻的补偿任务）。手动发报：options.force=true 或 POST /api/briefing/send-now */
+export async function sendMorningBriefing(options = {}) {
+  const force = !!options.force;
+  if (!force) {
+    const { minuteOfDay } = getShanghaiNowClock();
+    const winStart = 7 * 60 + 25;
+    const winEnd = 10 * 60 + 35;
+    if (minuteOfDay < winStart || minuteOfDay > winEnd) {
+      logger.warn(
+        { minuteOfDay, winStart, winEnd },
+        'morning briefing skipped: outside Shanghai window 07:25–10:35 (use force or admin send-now)'
+      );
+      return;
+    }
+  }
+  logger.info({ force }, 'morning briefing starting...');
   try {
     await query(`ALTER TABLE master_tasks ADD COLUMN IF NOT EXISTS hr_performance_recorded BOOLEAN DEFAULT FALSE`);
   } catch (e) { /* ignore */ }

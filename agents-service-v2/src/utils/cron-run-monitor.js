@@ -9,6 +9,10 @@ import { logger } from './logger.js';
 
 const TABLE = 'agent_v2_cron_runs';
 
+/** 兜底 sweep 仅在「计划点+宽限」之后的有限分钟内执行，避免进程全天每到 :22 反复补跑（用户体感「定时全乱」） */
+const DEFAULT_SWEEP_WINDOW_MIN = 180;
+const END_OF_SHANGHAI_DAY_MIN = 24 * 60 - 1;
+
 export async function ensureCronRunTable() {
   try {
     await query(`
@@ -112,6 +116,7 @@ function buildRetryJobs(flags) {
       key: 'kpi_yesterday',
       slotMinuteOfDay: 1 * 60 + 3,
       graceMin: 45,
+      sweepWindowMin: 240,
       maxAttempts: 4,
       match: () => auto,
       run: async () => {
@@ -170,6 +175,7 @@ function buildRetryJobs(flags) {
       key: 'daily_bi_anomaly',
       slotMinuteOfDay: 5 * 60 + 8,
       graceMin: 60,
+      sweepWindowMin: 240,
       maxAttempts: 4,
       match: () => auto,
       run: async () => {
@@ -195,6 +201,7 @@ function buildRetryJobs(flags) {
       key: 'weekly_bi_anomaly',
       slotMinuteOfDay: 5 * 60 + 0,
       graceMin: 120,
+      sweepWindowMin: 360,
       maxAttempts: 4,
       weekdayOnly: 1,
       match: () => auto,
@@ -207,6 +214,7 @@ function buildRetryJobs(flags) {
       key: 'weekly_store_scoring',
       slotMinuteOfDay: 8 * 60 + 25,
       graceMin: 120,
+      sweepWindowMin: 360,
       maxAttempts: 4,
       weekdayOnly: 1,
       match: () => weeklyScoring,
@@ -219,6 +227,7 @@ function buildRetryJobs(flags) {
       key: 'monthly_anomaly_item_bonus',
       slotMinuteOfDay: 0 * 60 + 30,
       graceMin: 90,
+      sweepWindowMin: 720,
       maxAttempts: 4,
       dayOfMonthOnly: 10,
       match: () => true,
@@ -231,6 +240,7 @@ function buildRetryJobs(flags) {
       key: 'monthly_gross_margin_check',
       slotMinuteOfDay: 0,
       graceMin: 90,
+      sweepWindowMin: 720,
       maxAttempts: 4,
       dayOfMonthOnly: 10,
       match: () => auto,
@@ -296,6 +306,7 @@ function buildRetryJobs(flags) {
       key: 'monthly_comprehensive_rating',
       slotMinuteOfDay: 1 * 60 + 18,
       graceMin: 120,
+      sweepWindowMin: 720,
       maxAttempts: 4,
       dayOfMonthOnly: 10,
       match: () => true,
@@ -308,6 +319,7 @@ function buildRetryJobs(flags) {
       key: 'rhythm_weekly_report',
       slotMinuteOfDay: 10 * 60 + 6,
       graceMin: 90,
+      sweepWindowMin: 360,
       maxAttempts: 3,
       weekdayOnly: 1,
       match: () => auto,
@@ -325,6 +337,7 @@ function buildRetryJobs(flags) {
       key: 'rhythm_monthly_evaluation',
       slotMinuteOfDay: 10 * 60 + 18,
       graceMin: 90,
+      sweepWindowMin: 360,
       maxAttempts: 3,
       dayOfMonthOnly: 1,
       match: () => auto,
@@ -342,6 +355,7 @@ function buildRetryJobs(flags) {
       key: 'monthly_revenue_anomaly',
       slotMinuteOfDay: 8 * 60 + 12,
       graceMin: 90,
+      sweepWindowMin: 480,
       maxAttempts: 4,
       dayOfMonthOnly: 1,
       match: () => auto,
@@ -354,6 +368,7 @@ function buildRetryJobs(flags) {
       key: 'daily_attendance_report',
       slotMinuteOfDay: 22 * 60 + 15,
       graceMin: 60,
+      sweepWindowMin: 150,
       maxAttempts: 4,
       match: () => auto,
       run: async () => {
@@ -380,8 +395,12 @@ export async function sweepCronRetries(getFlags) {
       if (!j.match()) continue;
       if (j.weekdayOnly != null && weekday !== j.weekdayOnly) continue;
       if (j.dayOfMonthOnly != null && dom !== j.dayOfMonthOnly) continue;
-      if (minuteOfDay < j.slotMinuteOfDay + j.graceMin) continue;
-      if (j.sweepEndMinuteOfDay != null && minuteOfDay > j.sweepEndMinuteOfDay) continue;
+      const earliestMd = j.slotMinuteOfDay + j.graceMin;
+      if (minuteOfDay < earliestMd) continue;
+      const win = j.sweepWindowMin ?? DEFAULT_SWEEP_WINDOW_MIN;
+      let latestMd = Math.min(earliestMd + win, END_OF_SHANGHAI_DAY_MIN);
+      if (j.sweepEndMinuteOfDay != null) latestMd = Math.min(latestMd, j.sweepEndMinuteOfDay);
+      if (minuteOfDay > latestMd) continue;
       if (await hasSuccessToday(j.key, ymd)) continue;
       const n = await countRunsToday(j.key, ymd);
       if (n >= j.maxAttempts) continue;

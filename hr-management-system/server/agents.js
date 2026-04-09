@@ -7265,36 +7265,9 @@ export async function runDataAuditor(checkMode = 'daily') {
     }
     }
 
-    // 2) 人效值异常：daily=仅昨日营业日；weekly=滚动窗口内逐日（店长 + 出品经理各一条闭环）
-    const efficiencyThresholds = {
-      medium: getStoreThreshold(storeName, 'efficiencyMedium', 1100),
-      high: getStoreThreshold(storeName, 'efficiencyHigh', 1000)
-    };
-
-    if (enableDailyReports) for (const report of reportsSorted) {
-      const data = report?.data || {};
-      const reportDate = toDateOnly(report?.date);
-      if (!reportDate) continue;
-      const gross = toNum(data?.gross, 0);
-      const laborTotal = toNum(data?.laborTotal, 0);
-      const efficiency = toNum(data?.efficiency, laborTotal > 0 ? (gross / laborTotal) : 0);
-      if (!(efficiency > 0)) continue;
-
-      let severity = '';
-      if (efficiency < efficiencyThresholds.high) severity = 'high';
-      else if (efficiency < efficiencyThresholds.medium) severity = 'medium';
-      if (!severity) continue;
-
-      for (const audRole of ['store_manager', 'store_production_manager']) {
-        issues.push({
-          agent: 'data_auditor', brand, store: storeName, category: '人效值异常',
-          severity,
-          title: `${storeName} ${reportDate} 人效偏低（${efficiency.toFixed(0)}）`,
-          detail: `品牌阈值：medium < ${efficiencyThresholds.medium}，high < ${efficiencyThresholds.high}。当前人效 ${efficiency.toFixed(0)}。`,
-          data: { date: reportDate, efficiency: Number(efficiency.toFixed(2)), _auditee_role: audRole }
-        });
-      }
-    }
+    // 2) 人效值异常：不在此逐日/逐条生成。业务约定为周评，由 agents-service-v2 周度 BI（labor_efficiency）
+    //    写 anomaly_triggers → 通知与 master_tasks（source=bi_anomaly，店长+出品经理各一条）。
+    //    若在此再跑日频会与 00:00 后「昨日」窗口重复派单，且 master 派单曾忽略 _auditee_role 导致双任务同派店长。
 
     // 3) 充值异常 - daily only
     const rechargeHighDays = Math.max(2, getStoreThreshold(storeName, 'rechargeStreakHighDays', 2));

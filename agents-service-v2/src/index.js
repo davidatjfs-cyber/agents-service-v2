@@ -784,7 +784,7 @@ app.post('/api/scoring/backfill-range', authRequired, requireRole('admin', 'hq_m
 // 手动触发晨报（await 完成后再响应，便于验收格式/飞书是否送达）
 app.post('/api/briefing/send-now', authRequired, requireRole('admin', 'hq_manager'), async (req, res) => {
   try {
-    await sendMorningBriefing();
+    await sendMorningBriefing({ force: true });
     res.json({ ok: true, message: '晨报已发送完成，请查收飞书' });
   } catch (e) {
     logger.error({ err: e?.message }, 'manual briefing failed');

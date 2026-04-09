@@ -219,10 +219,20 @@ async function adminAgentPromptPrefix(agentId) {
 function zhOnlyDataAuditorNarrative(raw) {
   const s = String(raw || '').trim();
   if (!s) return s;
-  const cut = s.search(/【问题分析】/);
+  const cut = s.search(
+    /【问题分析】|^\s*\*?\*?问题分析\*?\*?\s*[:：]?/m
+  );
   if (cut >= 0) return s.slice(cut).trim();
-  const cut2 = s.search(/【行动建议】/);
+  const cutEn = s.search(
+    /(?:^|\n)\s*\*?\*?(?:Problem\s+Analysis|Key\s+Issues)\*?\*?\s*[:\s]*/i
+  );
+  if (cutEn >= 0) return s.slice(cutEn).trim();
+  const cut2 = s.search(/【行动建议】|^\s*\*?\*?行动建议\*?\*?\s*[:：]?/m);
   if (cut2 >= 0) return s.slice(cut2).trim();
+  const cutEn2 = s.search(
+    /(?:^|\n)\s*\*?\*?(?:Actionable\s+Advice|Recommended\s+Actions|Action\s+Plan)\*?\*?\s*[:\s]*/i
+  );
+  if (cutEn2 >= 0) return s.slice(cutEn2).trim();
   const lines = s.split(/\r?\n/);
   const out = [];
   let keep = false;
@@ -240,6 +250,45 @@ function zhOnlyDataAuditorNarrative(raw) {
   }
   const joined = out.join('\n').trim();
   return joined || s;
+}
+
+/** 模型仍输出大段英文时 latin>>han，需二次压成中文（否则 zhOnly 会原样返回英文） */
+function monthAdviceLooksMostlyEnglish(s) {
+  const body = String(s || '').replace(/[¥$€£%.,:;0-9_\-\s\n#*`【】]/g, '');
+  const lat = (body.match(/[a-zA-Z]/g) || []).length;
+  const han = (body.match(/[\u4e00-\u9fff]/g) || []).length;
+  if (/Problem\s+Analysis|Actionable\s+Advice|No empty words like|responsible person/i.test(s)) return true;
+  return lat > 100 && lat > han * 1.8;
+}
+
+async function coerceMonthComparisonAdviceToZh(text, llmContext) {
+  const cleaned = zhOnlyDataAuditorNarrative(text);
+  if (!monthAdviceLooksMostlyEnglish(cleaned)) return cleaned;
+  try {
+    const tr = await callLLM(
+      [
+        {
+          role: 'system',
+          content:
+            '你是中文运营编辑。把下文的经营分析**全文改写为简体中文**（保留 Markdown 编号列表、金额与百分比）。\n' +
+            '强制使用且仅使用这两个标题（单独成行）：【问题分析】 与 【行动建议】。禁止使用英文段落标题（如 Problem Analysis）。\n' +
+            '不要输出思考过程、英文约束复述或 “Role/Constraints” 等元信息。'
+        },
+        { role: 'user', content: cleaned.slice(0, 6000) }
+      ],
+      {
+        temperature: 0.15,
+        max_tokens: 900,
+        purpose: 'data_auditor',
+        ...(llmContext ? { context: llmContext } : {})
+      }
+    );
+    const o = String(tr.content || '').trim();
+    return o ? zhOnlyDataAuditorNarrative(o) : cleaned;
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'coerceMonthComparisonAdviceToZh failed');
+    return cleaned;
+  }
 }
 
 // ── 决策日志工具（永久存档 + 主动引用）────────────────────────────
@@ -1442,7 +1491,8 @@ async function handleDataAuditor(text, ctx) {
             { role: 'system', content: advPrefix + `你是一名有15年经验的餐饮连锁运营顾问。根据下方真实营业数据，用专业视角分析经营变化原因，并给出具体可执行的改善建议。
 
 【语言与版式（强制）】
-- 全文必须为简体中文：标题、列表、说明均用中文；禁止输出英文段落或中英混排整段说明。
+- 全文必须为简体中文：标题、列表、说明均用中文；禁止输出英文段落；禁止用英文作小节标题（勿写 Problem Analysis / Actionable Advice）。
+- 小节标题仅允许：【问题分析】、【行动建议】（全角括号）。
 - 禁止输出思考过程、角色设定复述、「Role:」「Input Data」「Constraints」「User Question」等英文元标签或结构化英文提纲。
 
 输出格式（严格遵守，禁止输出 JSON 或代码块）：
@@ -1464,6 +1514,7 @@ async function handleDataAuditor(text, ctx) {
           ], { temperature: 0.35, max_tokens: 700, purpose: 'data_auditor', ...(ctx.llmContext ? { context: ctx.llmContext } : {}) });
           if (ar.content && ar.content.trim()) {
             actionItemsText = zhOnlyDataAuditorNarrative(ar.content.trim());
+            actionItemsText = await coerceMonthComparisonAdviceToZh(actionItemsText, ctx.llmContext);
             fullResponse = monthSummary + '\n\n' + actionItemsText;
           }
         } catch (e) { /* LLM 失败，仅返回数据摘要 */ }

@@ -422,10 +422,23 @@ async function createTask({ source, sourceRef, category, severity, store, brand,
 // 4. Responsibility Resolver
 // ─────────────────────────────────────────────
 
+function normalizeTaskSourceData(sourceData) {
+  if (!sourceData) return {};
+  if (typeof sourceData === 'string') {
+    try {
+      return JSON.parse(sourceData);
+    } catch (_e) {
+      return {};
+    }
+  }
+  return sourceData;
+}
+
 // 根据异常类型和门店找到责任人
-async function resolveAssignee(category, store, existingAssignee) {
+async function resolveAssignee(category, store, existingAssignee, sourceData) {
   const state = await getSharedState();
   const normalizedStore = normalizeStoreKey(store);
+  const sd = normalizeTaskSourceData(sourceData);
   
   const all = [
     ...(Array.isArray(state?.employees) ? state.employees : []),
@@ -453,7 +466,11 @@ async function resolveAssignee(category, store, existingAssignee) {
   }
 
   const roleMap = await getCategoryAssigneeRoleMap();
-  const targetRole = roleMap[category] || 'store_manager';
+  let targetRole = roleMap[category] || 'store_manager';
+  const auditeeRole = String(sd?._auditee_role || '').trim();
+  if (category === '人效值异常' && ['store_manager', 'store_production_manager'].includes(auditeeRole)) {
+    targetRole = auditeeRole;
+  }
   const storeMembers = all.filter(u => normalizeStoreKey(u?.store) === normalizedStore);
 
   // 先按目标角色找
@@ -613,7 +630,7 @@ async function masterDispatcher() {
     let dispatched = 0;
     for (const task of r.rows) {
       // 解析责任人 (优先使用已有的 assignee_username)
-      const assignee = await resolveAssignee(task.category, task.store, task.assignee_username);
+      const assignee = await resolveAssignee(task.category, task.store, task.assignee_username, task.source_data);
       if (!assignee) {
         console.warn(`[master] No assignee found for ${task.task_id} (${task.category}, ${task.store})`);
         continue;
