@@ -1,46 +1,49 @@
 /**
- * Proactive Configuration
- *
- * 控制主动检测模块的行为
+ * Proactive Configuration — 全部可通过环境变量开关，默认与历史行为兼容
  */
 
+function envBool(name, defaultTrue = true) {
+  const v = process.env[name];
+  if (v === undefined || v === '') return defaultTrue;
+  return !/^(0|false|no|off)$/i.test(String(v).trim());
+}
+
 export default {
-  // 是否启用 proactive 功能
-  enabled: true,
+  /** PROACTIVE_ENABLED=false 时关闭调度与 runOnce 内逻辑 */
+  enabled: envBool('PROACTIVE_ENABLED', true),
 
-  // 是否使用 LLM 进行决策判断
-  useLLM: true,
+  /** PROACTIVE_USE_LLM=false 时 bridge 内跳过 LLM，直接按规则触发 */
+  useLLM: envBool('PROACTIVE_USE_LLM', true),
 
-  // 是否记录详细日志
-  log: true,
+  /** 测试模式：bridge 不执行真实 trigger；单元测试 / 防污染生产 */
+  testMode: process.env.PROACTIVE_TEST_MODE === 'true' || process.env.NODE_ENV === 'test',
 
-  // LLM 配置
+  /** 详细 console 日志 */
+  log: envBool('PROACTIVE_LOG', true),
+
+  /** 定时周期（毫秒），默认 5 分钟 */
+  intervalMs: Math.max(60000, Number(process.env.PROACTIVE_INTERVAL_MS || 300000)),
+
+  /** 启动后是否立即跑一轮 */
+  immediateFirstRun: envBool('PROACTIVE_IMMEDIATE_FIRST', true),
+
   llm: {
-    // 超时时间（毫秒）- gemma4:26b 需要更长时间
-    timeout: 60000,
-
-    // Fallback 规则：营收下降阈值（百分比）
+    /** 默认 2s 防阻塞；慢模型可设 PROACTIVE_LLM_TIMEOUT_MS=60000 */
+    timeout: Math.max(500, Number(process.env.PROACTIVE_LLM_TIMEOUT_MS || 2000)),
     revenueDropThreshold: 20,
-
-    // Fallback 规则：差评激增阈值
-    badReviewSpikeThreshold: 5,
+    badReviewSpikeThreshold: 5
   },
 
-  // 去重规则
   dedupe: {
-    // 同一门店同一异常类型在指定分钟内不重复触发
-    windowMinutes: 10,
+    windowMinutes: Math.max(1, Number(process.env.PROACTIVE_DEDUPE_WINDOW_MIN || 10))
   },
 
-  // LLM 提供商配置（可扩展支持 Ollama、HTTP 等）
   llmProvider: {
-    type: 'ollama', // 'ollama' | 'http'
-    endpoint: process.env.OLLAMA_BASE_URL 
-      ? `${process.env.OLLAMA_BASE_URL}/api/generate`
-      : process.env.OLLAMA_ENDPOINT 
-        || 'http://localhost:11434/api/generate',
-    model: process.env.OLLAMA_OPERATIONS_MODEL 
-      || process.env.LLM_MODEL 
-      || 'gemma4:26b',
-  },
+    type: 'ollama',
+    endpoint: process.env.OLLAMA_BASE_URL
+      ? `${String(process.env.OLLAMA_BASE_URL).replace(/\/$/, '')}/api/generate`
+      : process.env.OLLAMA_ENDPOINT || 'http://localhost:11434/api/generate',
+    model:
+      process.env.OLLAMA_OPERATIONS_MODEL || process.env.LLM_MODEL || 'gemma4:26b'
+  }
 };

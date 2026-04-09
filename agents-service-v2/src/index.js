@@ -1045,6 +1045,11 @@ async function start() {
   await new Promise((resolve) => {
     const server = app.listen(PORT, () => {
       logger.info({ port: PORT }, `🚀 agents-service-v2 running on port ${PORT}`);
+      void import('./services/proactive-v2/proactive-runner.js')
+        .then((m) => {
+          m.startProactive?.();
+        })
+        .catch((e) => logger.warn({ err: e?.message }, 'proactive runner start failed'));
       resolve();
     });
     server.on('error', async (err) => {
@@ -1057,6 +1062,11 @@ async function start() {
           // Retry once
           const server2 = app.listen(PORT, () => {
             logger.info({ port: PORT }, `🚀 agents-service-v2 running on port ${PORT} (after eviction)`);
+            import('./services/proactive-v2/proactive-runner.js')
+              .then((m) => {
+                m.startProactive?.();
+              })
+              .catch((e) => logger.warn({ err: e?.message }, 'proactive runner start failed'));
             resolve();
           });
           server2.on('error', (err2) => {

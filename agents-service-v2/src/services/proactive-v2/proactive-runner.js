@@ -1,136 +1,149 @@
 /**
- * Proactive Runner
- *
- * 主动检测模块的调度器
- * 负责定期检查异常并触发分析
+ * Proactive Runner — 定时 anomaly → LLM → trigger → agent
+ * 顶部不静态 import anomaly-engine / anomaly-bridge，避免与 anomaly-engine 动态 import bridge 形成环。
  */
 
 import config from './config.js';
-import anomalyBridge from './anomaly-bridge.js';
-const { handleAnomalies } = anomalyBridge;
-import { runAnomalyChecks } from '../anomaly-engine.js';
 import { query } from '../../utils/db.js';
 
+let intervalId = null;
+let isRunning = false;
+
 async function getActiveStores() {
-  const r = await query(`SELECT DISTINCT store FROM daily_reports WHERE date >= CURRENT_DATE - 30 AND store IS NOT NULL`);
-  return r.rows.map(r => r.store);
+  const r = await query(
+    `SELECT DISTINCT store FROM daily_reports WHERE date >= CURRENT_DATE - 30 AND store IS NOT NULL`
+  );
+  return (r.rows || []).map((row) => row.store).filter(Boolean);
 }
 
-let isRunning = false;
-let intervalId = null;
+async function proactiveTick(options = {}) {
+  console.log('[Proactive] tick');
+
+  try {
+    const { runAnomalyChecks } = await import('../anomaly-engine.js');
+    const { handleAnomalies } = await import('./anomaly-bridge.js');
+
+    const stores = options.stores || (await getActiveStores());
+    const frequency = options.frequency || 'daily';
+
+    const anomalies = await runAnomalyChecks(frequency, stores, { skipProactiveBridge: true });
+
+    const triggered = (anomalies || []).filter(
+      (a) => a.triggered && !a.error && !a.skipped
+    );
+
+    console.log('[Proactive] anomalies:', triggered.length);
+
+    if (triggered.length > 0) {
+      console.log('[Proactive] calling handleAnomalies (LLM / trigger pipeline)...');
+      const result = await handleAnomalies(triggered);
+      console.log('[Proactive] handleAnomalies done', result);
+      return result;
+    }
+  } catch (err) {
+    console.error('[Proactive] error', err?.message || err);
+    throw err;
+  }
+  return { processed: 0, triggered: 0 };
+}
 
 /**
- * 执行一次 proactive 检查
- * @param {Object} options - 配置选项
- * @param {string} options.frequency - 'daily' | 'weekly'
- * @param {string[]} options.stores - 指定门店列表
- * @returns {Promise<Object>} 检查结果
+ * 手动单轮（可指定门店 / 频率）；与定时 tick 同源逻辑
  */
-async function runOnce(options = {}) {
+export async function runOnce(options = {}) {
   if (!config.enabled) {
-    console.log('[Proactive][Runner] Disabled, skipping');
+    console.log('[Proactive] disabled — runOnce skip');
     return { enabled: false };
   }
 
   if (isRunning) {
-    console.log('[Proactive][Runner] Already running, skipping');
+    console.log('[Proactive] already running, skip');
     return { running: true };
   }
 
   isRunning = true;
-  const startTime = Date.now();
+  const t0 = Date.now();
 
   try {
-    console.log('[Proactive][Runner] Starting proactive check...');
-
-    // 获取要检查的门店
-    const stores = options.stores || await getActiveStores();
-
-    // 运行异常检测
-    const anomalies = await runAnomalyChecks(options.frequency || 'daily', stores);
-
-    // 处理异常（通过 bridge）
-    const result = await handleAnomalies(anomalies);
-
-    const elapsed = Date.now() - startTime;
-    console.log(`[Proactive][Runner] Completed in ${elapsed}ms`, result);
-
-    return {
-      success: true,
-      ...result,
-      elapsed,
-      frequency: options.frequency || 'daily',
-    };
-
+    console.log('[Proactive] runOnce start');
+    const result = await proactiveTick(options);
+    return { success: true, ...result, elapsed: Date.now() - t0 };
   } catch (err) {
-    console.error('[Proactive][Runner] Error:', err.message);
-    return {
-      success: false,
-      error: err.message,
-    };
+    console.error('[Proactive] error', err?.message || err);
+    return { success: false, error: err?.message || String(err) };
   } finally {
     isRunning = false;
   }
 }
 
-/**
- * 启动定时检查
- * @param {number} intervalMinutes - 检查间隔（分钟）
- */
-function startScheduler(intervalMinutes = 60) {
-  if (!config.enabled) {
-    console.log('[Proactive][Runner] Disabled, not starting scheduler');
-    return;
-  }
-
-  if (intervalId) {
-    console.log('[Proactive][Runner] Scheduler already running');
-    return;
-  }
-
-  const intervalMs = intervalMinutes * 60 * 1000;
-
-  console.log(`[Proactive][Runner] Starting scheduler (every ${intervalMinutes}min)`);
-
-  // 立即执行一次
-  runOnce().catch(err => {
-    console.error('[Proactive][Runner] Initial run error:', err.message);
-  });
-
-  // 定时执行
-  intervalId = setInterval(() => {
-    runOnce().catch(err => {
-      console.error('[Proactive][Runner] Scheduled run error:', err.message);
-    });
-  }, intervalMs);
-}
-
-/**
- * 停止定时检查
- */
-function stopScheduler() {
+export function stopProactive() {
   if (intervalId) {
     clearInterval(intervalId);
     intervalId = null;
-    console.log('[Proactive][Runner] Scheduler stopped');
+    console.log('[Proactive] scheduler stopped');
   }
 }
 
 /**
- * 获取运行状态
+ * 服务启动后调用：默认定时 5 分钟（PROACTIVE_INTERVAL_MS）
  */
+export function startProactive() {
+  if (!config.enabled) {
+    console.log('[Proactive] disabled');
+    return;
+  }
+
+  if (intervalId) {
+    console.log('[Proactive] scheduler already active');
+    return;
+  }
+
+  console.log('[Proactive] starting... intervalMs=', config.intervalMs);
+
+  if (config.immediateFirstRun) {
+    proactiveTick({}).catch((e) => console.error('[Proactive] initial tick error', e?.message));
+  }
+
+  intervalId = setInterval(() => {
+    proactiveTick({}).catch((e) => console.error('[Proactive] error', e?.message));
+  }, config.intervalMs);
+}
+
+/**
+ * @deprecated 使用 startProactive；按「分钟」指定间隔（会停掉已有 scheduler 再起）
+ */
+function startScheduler(intervalMinutes = 5) {
+  stopProactive();
+  if (!config.enabled) {
+    console.log('[Proactive] disabled, not starting scheduler');
+    return;
+  }
+  const ms = Math.max(60000, intervalMinutes * 60 * 1000);
+  console.log(`[Proactive] startScheduler (compat) every ${intervalMinutes} min`);
+  if (config.immediateFirstRun) {
+    proactiveTick({}).catch((e) => console.error('[Proactive] initial tick error', e?.message));
+  }
+  intervalId = setInterval(() => {
+    proactiveTick({}).catch((e) => console.error('[Proactive] error', e?.message));
+  }, ms);
+}
+
 function getStatus() {
   return {
     enabled: config.enabled,
     useLLM: config.useLLM,
+    testMode: config.testMode,
     isRunning,
     schedulerActive: intervalId !== null,
+    intervalMs: config.intervalMs
   };
 }
 
 export default {
   runOnce,
+  startProactive,
   startScheduler,
-  stopScheduler,
-  getStatus,
+  stopProactive,
+  stopScheduler: stopProactive,
+  getStatus
 };

@@ -1,64 +1,64 @@
 /**
- * LLM Decision Engine
- *
- * 使用本地 LLM (Ollama) 判断是否需要触发主动分析
+ * LLM Decision — 动态 import llm-provider，短超时 + 安全 JSON 解析
  */
 
 import config from './config.js';
 
-/**
- * 使用 LLM 判断是否需要触发
- * @param {Object} anomaly - 异常对象
- * @returns {Promise<Object>} { triggered, reason, priority }
- */
-async function decideWithLLM(anomaly) {
-  const startTime = Date.now();
-
+export function safeParseJSON(text) {
+  const raw = String(text ?? '').trim();
+  if (!raw) return null;
   try {
-    const { type, store, severity, value } = anomaly;
-
-    // 构建 prompt
-    const prompt = buildPrompt(anomaly);
-
-    // 调用 LLM
-    const llmResponse = await callLLM(prompt);
-
-    // 解析响应
-    const result = parseLLMResponse(llmResponse, anomaly);
-
-    const elapsed = Date.now() - startTime;
-    if (config.log) {
-      console.log(`[Proactive][LLM] Decision: ${store}/${type} -> triggered=${result.triggered} (${elapsed}ms)`);
+    return JSON.parse(raw);
+  } catch {
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (match) {
+      try {
+        return JSON.parse(match[0]);
+      } catch (e2) {
+        console.error('[Proactive][LLM] JSON extract failed', match[0].slice(0, 200));
+      }
     }
-
-    return result;
-
-  } catch (err) {
-    console.error('[Proactive][LLM] Error:', err.message);
-
-    // Fallback 规则
-    return fallbackDecision(anomaly);
+    return null;
   }
 }
 
-/**
- * 构建 prompt
- */
-function buildPrompt(anomaly) {
-  const { type, store, severity, value } = anomaly;
-
-  let valueDesc = '';
-  if (value) {
-    if (typeof value === 'object') {
-      valueDesc = JSON.stringify(value);
-    } else {
-      valueDesc = String(value);
+async function callLLMForAnomaly(prompt) {
+  const { callLLM } = await import('../llm-provider.js');
+  const out = await callLLM(
+    [
+      {
+        role: 'system',
+        content:
+          '你是餐饮经营分析决策助手。只根据用户给出的异常摘要输出 JSON，不要输出任何其它文字或 Markdown。'
+      },
+      { role: 'user', content: prompt }
+    ],
+    {
+      temperature: 0.1,
+      max_tokens: 400,
+      purpose: 'proactive_anomaly_decision',
+      context: { intent: 'query', complexity: 'low', mode: 'single' }
     }
+  );
+
+  const content = typeof out?.content === 'string' ? out.content : String(out?.content || '');
+  if (!content && !out?.ok) {
+    throw new Error(out?.error || 'llm_empty');
+  }
+  return content;
+}
+
+function buildPrompt(anomaly) {
+  const type = anomaly.type || anomaly.rule || 'unknown';
+  const store = anomaly.store || '';
+  const severity = anomaly.severity || '';
+  let valueDesc = '';
+  const value = anomaly.value;
+  if (value != null) {
+    valueDesc = typeof value === 'object' ? JSON.stringify(value) : String(value);
   }
 
-  return `你是餐饮经营分析专家。
-
-请判断以下异常是否需要触发主动分析。
+  return `你是餐饮经营分析专家。请判断以下异常是否需要触发主动分析（通知、任务、Agent 协作）。
 
 输入信息：
 - 异常类型: ${type}
@@ -66,217 +66,158 @@ function buildPrompt(anomaly) {
 - 严重程度: ${severity}
 - 指标数据: ${valueDesc}
 
-判断规则：
-1. 营收下降超过20% → 必须触发
-2. 差评激增 → 必须触发
-3. 毛利率异常波动 → 需要触发
-4. 人工成本异常 → 需要触发
-5. 客流大幅下降 → 需要触发
+判断参考：
+- 营收明显下降、差评激增、毛利率异常、食安、人效/客流明显异常 → 倾向触发
+- 已标记为重复/待数据类可倾向不触发（由系统已过滤大部分）
 
-请输出 JSON 格式：
+⚠️ 只返回 JSON，不要解释：
+
 {
-  "triggered": true/false,
-  "reason": "判断理由（简短）",
-  "priority": "low|medium|high"
-}`;
+  "triggered": true,
+  "reason": "...",
+  "priority": "high"
 }
 
-/**
- * 调用本地 LLM (Ollama)
- */
-async function callLLM(prompt) {
-  const { llmProvider, llm } = config;
+priority 取值仅限: low | medium | high`;
+}
 
-  if (llmProvider.type === 'ollama') {
-    const response = await fetch(llmProvider.endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: llmProvider.model,
-        prompt: prompt,
-        stream: false,
-        format: 'json',
-      }),
-    });
+export async function decideWithLLM(anomaly) {
+  if (config.testMode) {
+    console.log('[Proactive][LLM] testMode — skip real LLM');
+    return {
+      triggered: true,
+      reason: 'test mode',
+      priority: 'high'
+    };
+  }
 
-    if (!response.ok) {
-      throw new Error(`LLM API error: ${response.status}`);
+  const prompt = buildPrompt(anomaly);
+  const timeoutMs = config.llm.timeout || 2000;
+
+  try {
+    const raw = await Promise.race([
+      callLLMForAnomaly(prompt),
+      new Promise((resolve) => setTimeout(() => resolve('timeout'), timeoutMs))
+    ]);
+
+    console.log('[Proactive][LLM] RAW', String(raw).slice(0, 500));
+
+    if (raw === 'timeout') {
+      console.warn('[Proactive][LLM] timeout fallback');
+      return fallbackDecision(anomaly);
     }
 
-    const data = await response.json();
-    return data.response;
-  } else if (llmProvider.type === 'http') {
-    // 可扩展其他 HTTP 接口
-    throw new Error('HTTP provider not implemented');
-  } else {
-    throw new Error(`Unknown LLM provider: ${llmProvider.type}`);
-  }
-}
+    const parsed = safeParseJSON(raw);
 
-/**
- * 解析 LLM 响应
- */
-function parseLLMResponse(response, anomaly) {
-  try {
-    // 尝试直接解析 JSON
-    const parsed = JSON.parse(response);
+    console.log('[Proactive][LLM] PARSED', parsed);
+
+    if (!parsed || typeof parsed.triggered !== 'boolean') {
+      console.warn('[Proactive][LLM] invalid output fallback');
+      return fallbackDecision(anomaly);
+    }
+
     return {
-      triggered: Boolean(parsed.triggered),
-      reason: parsed.reason || '',
-      priority: parsed.priority || 'medium',
+      triggered: parsed.triggered === true,
+      reason: parsed.reason || 'no reason',
+      priority: ['low', 'medium', 'high'].includes(String(parsed.priority))
+        ? parsed.priority
+        : 'medium'
     };
   } catch (err) {
-    // 尝试提取 JSON 部分
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return {
-          triggered: Boolean(parsed.triggered),
-          reason: parsed.reason || '',
-          priority: parsed.priority || 'medium',
-        };
-      } catch (e) {
-        // 继续尝试 fallback
-      }
-    }
-
-    // 解析失败，记录原始响应用于调试
-    console.warn('[Proactive][LLM] Parse failed, raw response:', response.substring(0, 200));
-    
-    // LLM 解析失败时，使用 fallback 规则判断
-    // 如果 fallback 也无法判断，则保守触发（避免漏掉重要异常）
-    const fallbackResult = fallbackDecision(anomaly);
-    if (fallbackResult.triggered) {
-      return fallbackResult;
-    }
-    
-    // fallback 也返回不触发，但记录以便人工排查
-    console.warn('[Proactive][LLM] Fallback returned no-trigger, will skip:', anomaly.type);
-    return {
-      triggered: false,
-      reason: 'LLM响应解析失败',
-      priority: 'low',
-    };
+    console.error('[Proactive][LLM] error', err?.message || err);
+    return fallbackDecision(anomaly);
   }
 }
 
-/**
- * Fallback 决策规则
- */
-function fallbackDecision(anomaly) {
-  const { type, value, severity } = anomaly;
+export function fallbackDecision(anomaly) {
+  const type = anomaly.type || anomaly.rule || '';
   const { revenueDropThreshold, badReviewSpikeThreshold } = config.llm;
+  const sev = String(anomaly.severity || '').toLowerCase();
+  const value = anomaly.value;
 
-  // 规则1: 营收下降 >20%
+  if (['high', 'critical', '严重'].some((x) => sev.includes(x))) {
+    return {
+      triggered: true,
+      reason: '严重程度较高（规则兜底）',
+      priority: 'high'
+    };
+  }
+
   if (type === 'revenue_drop' || type === 'revenue') {
     const dropPercent = extractPercentage(value);
     if (dropPercent !== null && dropPercent > revenueDropThreshold) {
       return {
         triggered: true,
         reason: `营收下降${dropPercent}%超过阈值`,
-        priority: 'high',
+        priority: 'high'
       };
     }
   }
 
-  // 规则2: 差评激增
-  if (type === 'bad_review_spike' || type === 'bad_review_service' || type === 'bad_review_product') {
+  if (
+    type === 'bad_review_spike' ||
+    type === 'bad_review_service' ||
+    type === 'bad_review_product' ||
+    type === 'bad_review'
+  ) {
     const count = extractCount(value);
     if (count !== null && count >= badReviewSpikeThreshold) {
       return {
         triggered: true,
         reason: `差评${count}条超过阈值`,
-        priority: 'high',
+        priority: 'high'
       };
     }
   }
 
-  // 规则3: 毛利率异常
   if (type === 'gross_margin') {
-    return {
-      triggered: true,
-      reason: '毛利率异常需分析',
-      priority: 'high',
-    };
+    return { triggered: true, reason: '毛利率异常需分析', priority: 'high' };
   }
 
-  // 规则4: 人工成本异常
-  if (type === 'labor' || type === 'labor_cost') {
-    return {
-      triggered: true,
-      reason: '人工成本异常',
-      priority: 'medium',
-    };
+  if (type === 'labor' || type === 'labor_cost' || type === 'labor_efficiency') {
+    return { triggered: true, reason: '人工/人效异常', priority: 'medium' };
   }
 
-  // 规则5: 客流异常
   if (type === 'traffic' || type === 'customer_flow') {
-    return {
-      triggered: true,
-      reason: '客流异常需分析',
-      priority: 'medium',
-    };
+    return { triggered: true, reason: '客流异常需分析', priority: 'medium' };
   }
 
-  // 规则6: 充值异常
   if (type === 'recharge_zero' || type === 'recharge') {
+    return { triggered: true, reason: '充值数据异常', priority: 'medium' };
+  }
+
+  const seriousRules =
+    /revenue_achievement|food_safety|table_visit|recharge_zero/i;
+  if (type && seriousRules.test(type) && anomaly.triggered) {
     return {
       triggered: true,
-      reason: '充值数据异常',
-      priority: 'medium',
+      reason: '业务规则命中（兜底）',
+      priority: 'medium'
     };
   }
 
-  // 规则7: 高严重程度异常直接触发
-  if (severity === 'high' || severity === 'critical') {
-    return {
-      triggered: true,
-      reason: `严重程度${severity}直接触发`,
-      priority: 'high',
-    };
-  }
-
-  // 规则8: 有 value 数据的异常默认触发（保守策略）
-  if (value !== undefined && value !== null) {
-    return {
-      triggered: true,
-      reason: '检测到异常数据',
-      priority: 'medium',
-    };
-  }
-
-  // 默认：不触发
   return {
     triggered: false,
     reason: '未达到触发条件',
-    priority: 'low',
+    priority: 'low'
   };
 }
 
-/**
- * 从值中提取百分比
- */
 function extractPercentage(value) {
   if (typeof value === 'number') return value;
-  if (typeof value === 'object') {
-    if (value.drop_percent) return value.drop_percent;
-    if (value.percent) return value.percent;
+  if (typeof value === 'object' && value) {
+    if (value.drop_percent != null) return Number(value.drop_percent);
+    if (value.percent != null) return Number(value.percent);
   }
   const match = String(value).match(/(\d+(?:\.\d+)?)\s*%/);
   return match ? parseFloat(match[1]) : null;
 }
 
-/**
- * 从值中提取数量
- */
 function extractCount(value) {
   if (typeof value === 'number') return value;
-  if (typeof value === 'object') {
-    if (value.count) return value.count;
-    if (value.review_count) return value.review_count;
+  if (typeof value === 'object' && value) {
+    if (value.count != null) return Number(value.count);
+    if (value.review_count != null) return Number(value.review_count);
   }
   const match = String(value).match(/(\d+)/);
   return match ? parseInt(match[1], 10) : null;
@@ -284,4 +225,6 @@ function extractCount(value) {
 
 export default {
   decideWithLLM,
+  fallbackDecision,
+  safeParseJSON
 };
