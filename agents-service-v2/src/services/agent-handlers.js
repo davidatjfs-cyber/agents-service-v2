@@ -8,7 +8,13 @@ import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { executeMetrics, extractTimeRangeFromText, parseTimeRange, getAllMetricDefs, quickQuery, getTimeLabelChinese } from './data-executor.js';
 import { saveMemory, recallMemories, getOutcomeStats } from './agent-memory.js';
-import { writeWikiKnowledge, buildExperienceBlock, extractStructuredData, recordOutcome } from './knowledge/index.js';
+import {
+  writeWikiKnowledge,
+  buildExperienceBlock,
+  extractStructuredData,
+  recordOutcome,
+  getStrategyStats
+} from './knowledge/index.js';
 import { evaluateOutcome } from './knowledge/outcome-evaluator.js';
 import { saveMemory as saveMemPalaceMemory, recallMemory as recallMemPalaceMemory } from './memory-adapter.js';
 import { decideStrategy } from './marketing-strategy-engine.js';
@@ -1412,29 +1418,105 @@ export function detectDecisionMode(text = '') {
   return 'decision';
 }
 
-/** 已注入 Wiki 但模型未输出四段结构时，用历史经验摘要生成合规回答（不编造数字） */
+/** 从注入的 ds 中解析「当前最优策略」及首条统计行的 weightedScore / 成功率 / 趋势 */
+function parseStrategyHeadFromDs(ds) {
+  const s = String(ds || '');
+  const opt = s.match(/当前最优策略：\s*([^\n]+)/);
+  const action = opt ? opt[1].trim() : '';
+  const wsM = s.match(/weightedScore\s+([0-9.]+)/);
+  const pctM = s.match(/成功率\s+(\d+)%/);
+  const trM = s.match(/趋势\s+([^\s｜）\n]+)/);
+  return {
+    action: action || '先完成营业数据补录与凭据核对',
+    ws: wsM ? wsM[1] : '0.50',
+    sr: pctM ? pctM[1] : '0',
+    tr: trM ? trM[1] : 'stable'
+  };
+}
+
+function stripReportStyleEnding(response) {
+  let s = String(response || '').trim();
+  s = s.replace(/(需要持续观察|建议关注|可以进一步分析)[。．…\s]*$/g, '').trim();
+  return s;
+}
+
+function trimMultiSuggestions(response) {
+  const keywords = ['另外', '此外', '同时', '也可以'];
+  let earliest = -1;
+  const str = String(response);
+  for (const k of keywords) {
+    const i = str.indexOf(k);
+    if (i !== -1 && (earliest === -1 || i < earliest)) earliest = i;
+  }
+  if (earliest === -1) return str;
+  return str.slice(0, earliest).trim();
+}
+
+/** decision 模式：单一可执行动作 + 去多建议连接词 + 去报表式结尾；缺「今日重点动作」时用策略统计兜底 */
+async function coerceDecisionExecutionOutput(response, mode, store, text) {
+  if (mode !== 'decision') return stripReportStyleEnding(String(response || '').trim());
+  let out = stripReportStyleEnding(String(response || '').trim());
+  if (!out.includes('今日重点动作')) {
+    let stats = [];
+    if (store) {
+      try {
+        stats = await getStrategyStats({ store, problem: String(text || '').slice(0, 120) });
+      } catch (_) {}
+    }
+    const best = stats[0];
+    const ws =
+      best?.weightedScore != null && !Number.isNaN(Number(best.weightedScore))
+        ? Number(best.weightedScore).toFixed(2)
+        : '0.50';
+    const pct = Math.round((best?.successRate ?? 0) * 100);
+    const trend = best?.trend != null ? String(best.trend) : 'stable';
+    const act = best?.action != null ? String(best.action).trim() : '先完成营业数据补录与凭据核对';
+    const why = best
+      ? '引用经验：本条为策略统计中 policyScore／weightedScore 与趋势综合排序首位。'
+      : '引用经验：暂无足够策略样本；优先补齐数据与地面动作，再量化比较。';
+    out = `【核心问题】\n当前存在关键运营问题\n\n【今日重点动作】\n${act}\n（weightedScore ${ws}｜成功率 ${pct}%｜趋势 ${trend}）\n\n【为什么是这个动作】\n${why}\n\n【执行要求】\n店长今日内必须完成执行并记录结果，便于系统更新 outcome。`;
+  }
+  out = trimMultiSuggestions(out);
+  out = stripReportStyleEnding(out);
+  return out;
+}
+
+function extractDataAuditorOutcomeFields(response, mode) {
+  const r = String(response || '');
+  if (mode === 'decision' && /【今日重点动作】/.test(r)) {
+    const probM = r.match(/【核心问题】\s*([\s\S]*?)(?=\n【今日重点动作】|$)/);
+    const actM = r.match(/【今日重点动作】\s*([\s\S]*?)(?=\n【为什么是这个动作】|$)/);
+    const causeM = r.match(/【为什么是这个动作】\s*([\s\S]*?)(?=\n【执行要求】|$)/);
+    const problem = probM ? probM[1].trim().slice(0, 500) : '';
+    const action = actM ? actM[1].trim().slice(0, 500) : '';
+    const cause = causeM ? causeM[1].trim().slice(0, 500) : '';
+    return {
+      problem: problem || r.slice(0, 200).slice(0, 500),
+      cause,
+      action: action || cause.slice(0, 500)
+    };
+  }
+  return extractStructuredData(r);
+}
+
+/** 已注入 Wiki 但模型未输出执行化结构时，用历史经验 + 策略统计生成合规回答（不编造数字） */
 function buildWikiComplianceFallback(ds, text, store) {
   const m = String(ds || '').match(/- 结论：[^\n]+/);
   const quote = m ? m[0].replace(/^- 结论：/, '').trim().slice(0, 200) : '系统提供的历史经验摘要。';
   const core = /下降|下滑|变差/.test(String(text || ''))
     ? '营业额下滑的主因在当前会话中无法仅凭数据库确认（缺凭证）'
     : '核心问题需结合门店数据进一步确认（当前缺凭证）';
-  let strategyLine =
-    '先完成数据与凭据核对；再结合历史经验中关于效率与客流的要点制定行动计划。';
-  if (String(ds).includes('【策略效果统计】')) {
-    strategyLine =
-      '根据【策略效果统计】中的「最优策略」候选、成功率与 score 排序，优先落实综合 score/成功率最高的方案；执行后请回填 outcome 以更新 score 与成功率；在未拿到新营业数据前先完成 HRMS 凭据核对。';
-  }
+  const st = parseStrategyHeadFromDs(ds);
+  const hasStats = String(ds).includes('【策略效果统计】');
+  const whyStats = hasStats
+    ? `引用经验：${quote}。策略统计上「${st.action}」的 weightedScore 为 ${st.ws}、成功率 ${st.sr}%、趋势 ${st.tr}，policyScore 排序为首，故作为唯一执行项。`
+    : `引用经验：${quote}。当前策略样本不足，优先完成凭据与日报补录，再据实迭代。`;
 
   return (
-    `【引用经验】\n` +
-    `${quote}\n\n` +
-    `【核心问题】\n` +
-    `${core}\n\n` +
-    `【原因分析】\n` +
-    `当前无法从数据库拉取营业凭证；请在 HRMS 登录并核对「${store || '门店'}」数据后再提问。无数字时不臆造指标。\n\n` +
-    `【策略】\n` +
-    `${strategyLine}`
+    `【核心问题】\n${core}\n\n` +
+    `【今日重点动作】\n${st.action}\n（weightedScore ${st.ws}｜成功率 ${st.sr}%｜趋势 ${st.tr}）\n\n` +
+    `【为什么是这个动作】\n${whyStats}\n\n` +
+    `【执行要求】\n店长须于今日营业结束前落实上述动作，并在系统记录执行结果；门店「${store || '门店'}」负责人对验收留痕负责。`
   );
 }
 
@@ -1961,9 +2043,10 @@ async function handleDataAuditor(text, ctx) {
     mode === 'decision' && ds.includes('历史经验（必须引用）')
       ? `
 【Wiki 输出优先】
-当下文「数据库与上下文」含「历史经验（必须引用）」时，你必须忽略本节「输出约束」中第1–4点的 V1 逐条格式，改为严格输出四段：
-【引用经验】→【核心问题】（仅一条）→【原因分析】→【策略】。
-无营业数字时仍须写满四段；【原因分析】中说明数据缺口即可；禁止省略【引用经验】或【核心问题】。
+当下文含「历史经验（必须引用）」时，你必须忽略本节「输出约束」中第1–4点的 V1 逐条格式，改为严格输出且仅输出四段：
+【核心问题】→【今日重点动作】→【为什么是这个动作】→【执行要求】。
+【为什么是这个动作】首句须含「引用经验」四字；若已有【策略效果统计】，须结合 policyScore／weightedScore、成功率、趋势说明为何只选这一条。
+禁止并列多条建议；禁止「同时 / 此外 / 另外 / 也可以」；禁止以「需要持续观察」「建议关注」「可以进一步分析」结尾。
 `
       : '';
 
@@ -2000,7 +2083,7 @@ ${metricExperienceAppendix}
 `;
   const userContent =
     mode === 'decision' && ds.includes('历史经验（必须引用）')
-      ? `${text}\n\n（系统硬性要求：即使下方数据库摘要为空或你无法取数，也必须输出四段：【引用经验】【核心问题】【原因分析】【策略】；【引用经验】须逐字或概括引用上文历史经验中至少一条；【核心问题】只写一条；【原因分析】须说明缺数原因，禁止仅用一句「无法获取凭证」结束全文。）`
+      ? `${text}\n\n（系统硬性要求：即使下方数据库摘要为空或你无法取数，也必须输出四段：【核心问题】【今日重点动作】【为什么是这个动作】【执行要求】；【为什么是这个动作】首句须含「引用经验」；【今日重点动作】只能写一个可执行动作，并附 weightedScore 或 score、成功率、趋势；【执行要求】须写明谁做、何时完成。）`
       : text;
   const r = await callLLM(
     [
@@ -2014,10 +2097,11 @@ ${metricExperienceAppendix}
   if (
     mode === 'decision' &&
     ds.includes('历史经验（必须引用）') &&
-    !/【引用经验】/.test(String(cleanedAns || ''))
+    !/【今日重点动作】/.test(String(cleanedAns || ''))
   ) {
     cleanedAns = buildWikiComplianceFallback(ds, text, store);
   }
+  cleanedAns = await coerceDecisionExecutionOutput(cleanedAns, mode, store, text);
   saveMemory('data_auditor', store, cleanedAns.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
   try {
     await writeWikiKnowledge({
@@ -2027,7 +2111,7 @@ ${metricExperienceAppendix}
       response: cleanedAns,
       data: ds
     });
-    const structured = extractStructuredData(cleanedAns);
+    const structured = extractDataAuditorOutcomeFields(cleanedAns, mode);
     let outcome = { result: 'unknown', score: 0.5 };
     try {
       outcome = evaluateOutcome({
