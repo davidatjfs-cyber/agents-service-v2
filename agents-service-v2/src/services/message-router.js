@@ -26,7 +26,12 @@ const KEYWORD_RULES = [
   { route: 'chief_evaluator', rx: /(绩效|评分|考核|奖金|离职|入职|转正|调岗|请假|社保|档案|薪资|工资)/i, score: 2 },
   { route: 'train_advisor', rx: /(sop|标准|流程|培训|课件|带教|退款|赔付)/i, score: 2 },
   { route: 'marketing_planner', rx: /(营销方案|推广方案|新品方案|活动策划|行动方案|营销活动计划|营销计划|提升.*方案|方案.*提升|如何提升|怎么提升|营销建议|促销活动|会员活动|拉新|引流|制定.*营销|营销.*制定)/i, score: 4 },
-  { route: 'marketing_executor', rx: /(营销执行|活动进度|活动效果|ROI|活动跟踪|预算消耗|营销报告|活动数据|执行情况|当前活动|活动.*情况)/i, score: 4 },
+  // 含「执行了哪些 / 哪些策略 / 效果如何」等常见问法，避免仅依赖 LLM 路由漏进 marketing_executor
+  {
+    route: 'marketing_executor',
+    rx: /(营销执行|活动进度|活动效果|ROI|活动跟踪|预算消耗|营销报告|活动数据|执行情况|当前活动|活动.*情况|执行了哪些|哪些策略|策略.*效果|效果如何|执行.*策略)/i,
+    score: 4
+  },
   { route: 'food_quality', rx: /(食品安全|食材.*过期|温度.*异常|卫生.*不合格|出品.*质量|菜品.*投诉)/i, score: 3 },
 ];
 

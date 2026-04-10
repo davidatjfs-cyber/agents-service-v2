@@ -3056,6 +3056,7 @@ ${execData}
     reportTitle: '营销执行报告',
     dataBacked: true
   };
+  console.log('🚀 [BEFORE MERGE RETURN]');
   return await mergeReportWithDataAuditorDecision(baseReturn, text, ctx);
 }
 // ── 8. Procurement Advisor (采购建议) ──
@@ -3417,16 +3418,26 @@ export async function dispatchToAgent(route,text,ctx={}) {
  * @param {string} text
  * @param {Record<string, unknown>} ctx
  */
+/** 验证完成后改为 false，仅当用户句中含 执行|效果|策略|报告 时合并 data_auditor */
+const MERGE_DECISION_ALWAYS_FOR_MARKETING_REPORT = true;
+
 async function mergeReportWithDataAuditorDecision(originalReturn, text, ctx) {
+  console.log('🔥 [MERGE ENTER]', {
+    text,
+    hasFromReport: ctx?.__fromReport
+  });
   if (!originalReturn || typeof originalReturn !== 'object') return originalReturn;
   if (ctx?.__fromReport) return originalReturn;
   const t = String(text || '');
-  if (!/执行|效果|策略|报告/.test(t)) return originalReturn;
+  const keywordHit = /执行|效果|策略|报告/.test(t);
+  if (!MERGE_DECISION_ALWAYS_FOR_MARKETING_REPORT && !keywordHit) return originalReturn;
   const reportText = String(originalReturn.response || '').trim();
   if (!reportText) return originalReturn;
   try {
     const childCtx = { ...(ctx || {}), __fromReport: true };
+    console.log('🚀 [CALL DATA AUDITOR]', t);
     const decision = await dispatchToAgent('data_auditor', t, childCtx);
+    console.log('✅ [DATA AUDITOR RESULT]', decision?.response?.slice(0, 100));
     const decisionBody = String(decision?.response || '').trim();
     if (!decisionBody) return originalReturn;
     const mergedResponse = `${reportText}\n\n⸻\n\n【决策补充】\n\n${decisionBody}`;
