@@ -11076,6 +11076,8 @@ export function registerAgentRoutes(app, authRequired) {
       return res.status(403).json({ error: 'forbidden' });
     }
     const shToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
+    const actPick = String(req.query?.activityDate || '').trim();
+    const summaryYmd = /^\d{4}-\d{2}-\d{2}$/.test(actPick) ? actPick : shToday;
     const p = pool();
     try {
       const [
@@ -11107,22 +11109,22 @@ export function registerAgentRoutes(app, authRequired) {
           .query(
             `SELECT COUNT(*)::int AS c FROM agent_task_logs
              WHERE (created_at AT TIME ZONE 'Asia/Shanghai')::date = $1::date`,
-            [shToday]
+            [summaryYmd]
           )
           .catch(() => ({ rows: [{ c: 0 }] })),
         p
-          .query(`SELECT COUNT(*)::int AS c FROM rhythm_logs WHERE execution_date = $1::date`, [shToday]).catch(() => ({
+          .query(`SELECT COUNT(*)::int AS c FROM rhythm_logs WHERE execution_date = $1::date`, [summaryYmd]).catch(() => ({
             rows: [{ c: 0 }]
           })),
         p
-          .query(`SELECT COUNT(*)::int AS c FROM anomaly_triggers WHERE trigger_date = $1::date`, [shToday]).catch(() => ({
+          .query(`SELECT COUNT(*)::int AS c FROM anomaly_triggers WHERE trigger_date = $1::date`, [summaryYmd]).catch(() => ({
             rows: [{ c: 0 }]
           })),
         p
           .query(
             `SELECT COUNT(*)::int AS c FROM agent_admin_alert_log
              WHERE DATE(timezone('Asia/Shanghai', sent_at)) = $1::date`,
-            [shToday]
+            [summaryYmd]
           )
           .catch(() => ({ rows: [{ c: 0 }] })),
         p
@@ -11138,6 +11140,7 @@ export function registerAgentRoutes(app, authRequired) {
 
       return res.json({
         shanghaiDate: shToday,
+        activitySummaryDate: summaryYmd,
         dualWrite: {
           summary:
             'HRMS 在审批与全量保存时双写到独立表（员工、休假、奖惩、积分、考勤、薪资域等）。失败会向管理群飞书告警；请关注下方「管理告警」。',

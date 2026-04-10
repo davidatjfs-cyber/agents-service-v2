@@ -26,6 +26,18 @@ rsync -avz -e ssh \
   --exclude 'dist' \
   "${ROOT}/" "${ECS_HOST}:${REMOTE_DIR}/"
 
+REPO_ROOT="$(cd "${ROOT}/.." && pwd)"
+MP_LOCAL="${REPO_ROOT}/mempalace"
+if [[ -d "${MP_LOCAL}" && -f "${MP_LOCAL}/package.json" ]]; then
+  echo ">>> rsync mempalace -> ${ECS_HOST}:/opt/mempalace/"
+  rsync -avz -e ssh \
+    --exclude 'node_modules' \
+    --exclude '.git' \
+    "${MP_LOCAL}/" "${ECS_HOST}:/opt/mempalace/"
+else
+  echo ">>> skip mempalace rsync (not found: ${MP_LOCAL})"
+fi
+
 # 合并为一次 SSH：固定 PORT=3101（ecosystem.config.cjs），删 pm2 后再起；仅当 3101 仍被占才 fuser
 echo ">>> remote: npm install + pm2 ecosystem (3101) + health"
 ssh -o ConnectTimeout=60 "${ECS_HOST}" bash -s <<EOS
@@ -56,6 +68,28 @@ node scripts/apply-strategy-rules-tags-sql.mjs
 node scripts/apply-agent-experience-context-sql.mjs
 node scripts/apply-anomaly-rules-v2.mjs
 node scripts/apply-private-room-column.mjs
+
+# MemPalace：与 agents 同机 HTTP 记忆服务（营销策划 recall）；未同步 /opt/mempalace 时跳过
+if [[ -f /opt/mempalace/package.json ]]; then
+  cd /opt/mempalace
+  (npm ci --omit=dev 2>/dev/null || npm install --omit=dev)
+  pm2 delete mempalace-http 2>/dev/null || true
+  sleep 1
+  fuser -k 3001/tcp 2>/dev/null || true
+  sleep 1
+  PORT=3001 pm2 start src/server.js --name mempalace-http --update-env
+  sleep 2
+  cd "${REMOTE_DIR}"
+  ensure_kv .env MEMPALACE_URL http://127.0.0.1:3001
+  [[ -f .env.production ]] && ensure_kv .env.production MEMPALACE_URL http://127.0.0.1:3001 || true
+  ensure_kv .env ENABLE_MEMPALACE true
+  [[ -f .env.production ]] && ensure_kv .env.production ENABLE_MEMPALACE true || true
+  echo ">>> MemPalace PM2: mempalace-http (PORT=3001) + ENABLE_MEMPALACE=true"
+else
+  cd "${REMOTE_DIR}"
+  echo ">>> MemPalace: /opt/mempalace 不存在，跳过（agents 仍可用，记忆注入关闭直至部署 mempalace）"
+fi
+
 # 彻底清理：先 PM2 delete，再杀所有孤儿 node 进程，最后释放端口
 pm2 delete agents-service-v2 2>/dev/null || true
 sleep 1

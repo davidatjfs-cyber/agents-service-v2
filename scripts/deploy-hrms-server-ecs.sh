@@ -64,6 +64,9 @@ ensure_lark_from_feishu .env
 [[ -f .env.production ]] && ensure_lark_from_feishu .env.production || true
 ensure_kv .env PORT 3000
 [[ -f .env.production ]] && ensure_kv .env.production PORT 3000 || true
+# 数据中心健康条合并 agents-service /health（MemPalace、Wiki 等）
+ensure_kv .env AGENTS_SERVICE_HEALTH_URL http://127.0.0.1:3101/health
+[[ -f .env.production ]] && ensure_kv .env.production AGENTS_SERVICE_HEALTH_URL http://127.0.0.1:3101/health || true
 # 彻底清理：先 PM2 delete，再杀所有孤儿 node 进程，最后释放端口
 pm2 delete hrms-service 2>/dev/null || true
 sleep 1

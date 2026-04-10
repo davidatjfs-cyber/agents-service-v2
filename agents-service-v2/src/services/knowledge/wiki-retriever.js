@@ -4,6 +4,21 @@ import path from 'path';
 /**
  * 从 knowledge/wiki 目录按门店名粗匹配 + 简单字符重合打分检索片段
  */
+/** 运维/健康检查：本地 knowledge/wiki 目录可读且可枚举 */
+export function probeWikiKnowledgeHealth() {
+  const dir = path.join(process.cwd(), 'knowledge', 'wiki');
+  try {
+    if (!fs.existsSync(dir)) {
+      return { dirExists: false, mdCount: 0, ok: false, dir };
+    }
+    const files = fs.readdirSync(dir);
+    const md = files.filter((f) => f.endsWith('.md'));
+    return { dirExists: true, mdCount: md.length, ok: true, dir };
+  } catch (e) {
+    return { dirExists: false, mdCount: 0, ok: false, dir, error: String(e?.message || e) };
+  }
+}
+
 export async function retrieveWikiKnowledge({ store, query, limit = 3 }) {
   const dir = path.join(process.cwd(), 'knowledge', 'wiki');
   if (!fs.existsSync(dir)) return [];

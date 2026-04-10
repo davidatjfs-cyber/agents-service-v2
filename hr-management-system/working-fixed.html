@@ -8539,7 +8539,14 @@
                                 <div style="font-size:13px;font-weight:600;color:#e2e8f0;letter-spacing:.04em;">Agent 活动内容</div>
                                 <div style="font-size:10px;color:#64748b;margin-top:4px;line-height:1.55;max-width:560px;"><strong>异常触发</strong>：引擎判定命中后写入库的<strong>一条记录</strong>（含业务触发日、严重度、状态）；不是「待办队列」，也<strong>不等于</strong>飞书任务是否结案。<strong>充值异常</strong>：每条记录的<strong>触发日</strong>=被判定的那<strong>一个营业日</strong>的日报（引擎用上海「昨日」避免未关账误报）。例如触发日为 <strong>4/10</strong> 表示判定的是 <strong>4/10</strong> 当天日报充值为 0；<strong>4/9 有充值与这一条无关</strong>。绩效分：充值落库后会<strong>当日重算</strong>当周 <code style="font-size:9px;">anomaly_rollups_v2</code>，周一仍会全量重算（幂等）。飞书 <strong>BI 任务结案</strong>后，系统会把对应触发记录标为 <code style="font-size:9px;">closed</code>（新逻辑；历史未带日期的任务结案不会回溯）。<strong>食品安全</strong>：<strong>实时</strong>命中；总部营运「记录」后按岗<strong>各扣 20 分</strong>，不并入周度 BI 汇总扣分模型。下方表格：异常触发（<code style="font-size:9px;">anomaly_triggers</code>）、节奏引擎（<code style="font-size:9px;">rhythm_logs</code>）、调度任务（<code style="font-size:9px;">master_tasks</code>）、任务日志（<code style="font-size:9px;">agent_task_logs</code>）。</div>
                             </div>
-                            <div id="dc-activity-date" style="font-size:11px;color:#64748b;white-space:nowrap;">—</div>
+                            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+                                <div id="dc-activity-date" style="font-size:11px;color:#64748b;text-align:right;line-height:1.4;">—</div>
+                                <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end;">
+                                    <label for="dc-activity-date-input" style="font-size:10px;color:#64748b;">汇总/明细日期</label>
+                                    <input id="dc-activity-date-input" type="date" style="padding:4px 8px;border-radius:8px;border:1px solid rgba(148,163,184,0.25);background:rgba(2,6,23,0.55);color:#e2e8f0;font-size:11px;" />
+                                    <button type="button" class="btn btn-secondary" style="font-size:11px;padding:5px 12px;" onclick="loadDataCenterDashboard()">加载</button>
+                                </div>
+                            </div>
                         </div>
                         <div id="dc-activity-body" style="padding:14px 18px;font-size:12px;color:#94a3b8;line-height:1.6;">加载中…</div>
                         <div id="dc-activity-detail" style="border-top:1px solid rgba(148,163,184,0.08);padding:12px 14px 16px;font-size:11px;color:#94a3b8;max-height:420px;overflow-y:auto;"></div>
@@ -8547,7 +8554,7 @@
                     <section style="border-radius:14px;background:rgba(15,23,42,0.45);border:1px solid rgba(148,163,184,0.1);overflow:hidden;">
                         <div style="padding:14px 18px;border-bottom:1px solid rgba(148,163,184,0.08);">
                             <div style="font-size:13px;font-weight:600;color:#e2e8f0;letter-spacing:.04em;">个人绩效分由来</div>
-                            <div style="font-size:11px;color:#64748b;margin-top:4px;">查询 agent_scores 各模型行摘要、扣分 JSON、公司通知（BI 扣分等）；支持按<strong>姓名</strong>或飞书账号，重名时需改用账号。</div>
+                            <div style="font-size:11px;color:#64748b;margin-top:4px;">展示已写入 <strong>agent_scores</strong> 的绩效行（周度 BI 汇总、月度模型、食安总部判罚等）及 <strong>公司通知</strong>。扣分明细已尽量中文化；在<strong>本页停留</strong>时每约 <strong>45 秒</strong>自动刷新摘要与健康条，且会<strong>重复查询</strong>您上次成功解析的账号，便于第一时间看到新写入的分数。支持按<strong>姓名</strong>或飞书账号查询，重名时请改用账号。</div>
                         </div>
                         <div style="padding:12px 18px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-bottom:1px solid rgba(148,163,184,0.06);">
                             <input id="dc-prov-username" type="text" placeholder="姓名或飞书账号" style="flex:1;min-width:160px;padding:8px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.2);background:rgba(2,6,23,0.5);color:#e2e8f0;font-size:12px;" />
@@ -13905,8 +13912,31 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             updateMobileNavigationVisibility();
         }
         
+        /** 数据中心页：定时刷新活动摘要与健康，便于第一时间看到绩效写入与系统状态 */
+        var __dcDashRefreshTimer = null;
+        var __dcProvWatchUser = null;
+        function stopDcDashboardAutoRefresh() {
+            if (__dcDashRefreshTimer) {
+                clearInterval(__dcDashRefreshTimer);
+                __dcDashRefreshTimer = null;
+            }
+        }
+        function startDcDashboardAutoRefresh() {
+            stopDcDashboardAutoRefresh();
+            __dcDashRefreshTimer = setInterval(function () {
+                try {
+                    if (typeof currentPage === 'string' && currentPage !== 'agents') return;
+                    if (typeof loadDataCenterDashboard === 'function') loadDataCenterDashboard();
+                    if (__dcProvWatchUser && typeof loadDcScoreProvenance === 'function') {
+                        loadDcScoreProvenance(__dcProvWatchUser);
+                    }
+                } catch (e) {}
+            }, 45000);
+        }
+
         // 显示页面
         function showPage(pageName) {
+            stopDcDashboardAutoRefresh();
             console.log('切换到页面:', pageName);
             updateDebug('当前页面: ' + pageName);
 
@@ -14066,6 +14096,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             }
             try { refreshUnreadBadges(); } catch (e) {}
             closeMobileSidebar();
+            if (pageName === 'agents') startDcDashboardAutoRefresh();
         }
 
         function toggleMobileSidebar() {
@@ -16850,12 +16881,17 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             const hdr = { 'Authorization': 'Bearer ' + (HRMS_API.token ? HRMS_API.token() : '') };
             const role = String(currentUser?.role || '').trim();
             const canBrief = ['admin', 'hq_manager', 'hr_manager'].includes(role);
+            const shDefault = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+            const dateInp = document.getElementById('dc-activity-date-input');
+            if (dateInp && !dateInp.value) dateInp.value = shDefault;
+            const picked = dateInp && dateInp.value && /^\d{4}-\d{2}-\d{2}$/.test(dateInp.value) ? dateInp.value : shDefault;
+            const briefUrl = '/api/agents/data-center-brief' + (canBrief ? ('?activityDate=' + encodeURIComponent(picked)) : '');
             const fetches = [
                 fetch('/api/health', { headers: hdr }).then(r => r.json()).catch(() => null),
                 fetch('/api/agents/dashboard', { headers: hdr }).then(r => r.json()).catch(() => null),
                 fetch('/api/agents/bitable-sync', { headers: hdr }).then(r => r.json()).catch(() => null)
             ];
-            if (canBrief) fetches.push(fetch('/api/agents/data-center-brief', { headers: hdr }).then(r => r.json()).catch(() => null));
+            if (canBrief) fetches.push(fetch(briefUrl, { headers: hdr }).then(r => r.json()).catch(() => null));
             const results = await Promise.allSettled(fetches);
             const health = results[0].status === 'fulfilled' ? results[0].value : null;
             const _dashRaw = results[1].status === 'fulfilled' ? results[1].value : null;
@@ -16867,21 +16903,45 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             const hBar = document.getElementById('dc-health-bar');
             if (hBar && health) {
                 const ag = health.agents || {};
+                const as = health.agentsService || null;
                 const dbOk = health.database === true || health.database === 'ok';
                 const schedOk = ag.schedulerRunning === true;
                 const llmOk = ag.llmHealthy === true;
                 const dot = (ok) => `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ok ? '#22c55e' : '#ef4444'};margin-right:4px;"></span>`;
+                let extra = '';
+                if (as && typeof as === 'object') {
+                    const mp = as.mempalace;
+                    const wk = as.wikiKnowledge;
+                    if (mp && typeof mp === 'object') {
+                        const mpOk = mp.reachable === true;
+                        const mpHint = mp.enabled ? '已启用' : '未启用';
+                        extra += `${dot(mpOk)}<span title="${escapeHtml(String(mp.baseUrl || ''))}">MemPalace</span><span style="color:#64748b;margin-right:10px;">(${mpHint})</span>`;
+                    }
+                    if (wk && typeof wk === 'object') {
+                        const wkOk = wk.ok === true;
+                        const wkN = wk.mdCount != null ? String(wk.mdCount) : '?';
+                        extra += `${dot(wkOk)}<span title="knowledge/wiki">Wiki</span><span style="color:#64748b;margin-right:10px;">(${wkN}篇)</span>`;
+                    }
+                }
                 hBar.innerHTML = `
                     ${dot(dbOk)}<span>数据库</span>
                     ${dot(schedOk)}<span>调度器</span>
                     ${dot(llmOk)}<span>LLM</span>
-                    <span style="margin-left:auto;color:#475569;font-size:11px;">${new Date().toLocaleTimeString('zh-CN')}</span>
+                    ${extra}
+                    <span style="margin-left:auto;color:#475569;font-size:11px;">${new Date().toLocaleTimeString('zh-CN')} · 45s自动刷新</span>
                 `;
             }
 
             const actDateEl = document.getElementById('dc-activity-date');
             const actBody = document.getElementById('dc-activity-body');
-            if (actDateEl) actDateEl.textContent = brief?.shanghaiDate ? '上海日期 ' + brief.shanghaiDate : '—';
+            if (actDateEl) {
+                const sumD = brief?.activitySummaryDate || picked;
+                if (brief?.shanghaiDate) {
+                    actDateEl.textContent = '今日上海 ' + brief.shanghaiDate + ' · 活动汇总/明细 ' + sumD + (sumD !== brief.shanghaiDate ? '（历史）' : '');
+                } else {
+                    actDateEl.textContent = '—';
+                }
+            }
             if (actBody) {
                 if (!canBrief) {
                     actBody.innerHTML = '<span style="color:#64748b;">当前角色仅展示公开健康状态；完整活动摘要需管理员 / 总部营运 / HR。</span>';
@@ -16896,7 +16956,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                             <div><span style="color:#64748b;">异常触发</span> <strong style="color:#e2e8f0;">${a.anomalyTriggers ?? 0}</strong></div>
                             <div><span style="color:#64748b;">今日管理告警</span> <strong style="color:#e2e8f0;">${a.adminAlerts ?? 0}</strong></div>
                         </div>
-                        <div style="color:#64748b;font-size:11px;">口径与 Agent 控制台「Agent 活动」一致（按上海日汇总）。</div>`;
+                        <div style="color:#64748b;font-size:11px;">口径与 Agent 控制台「Agent 活动」一致（按所选日期的上海日历日汇总）。</div>`;
                 }
             }
 
@@ -16905,8 +16965,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 if (!canBrief) {
                     actDetail.innerHTML = '';
                 } else {
-                    const d0 = brief?.shanghaiDate || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
-                    actDetail.innerHTML = '<div style="color:#64748b;padding:4px 0;">加载当日明细…</div>';
+                    const d0 = brief?.activitySummaryDate || picked;
+                    actDetail.innerHTML = '<div style="color:#64748b;padding:4px 0;">加载 ' + escapeHtml(d0) + ' 明细…</div>';
                     try {
                         const dr = await fetch('/api/agents/activity-detail?date=' + encodeURIComponent(d0), { headers: hdr });
                         const dj = await dr.json();
@@ -17116,6 +17176,127 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             );
         }
 
+        /** 数据中心·绩效扣分 JSON → 中文展示（与 agents 周汇总/食安判罚字段对齐） */
+        function dcScoreModelLabelZh(model) {
+            const m = {
+                anomaly_rollups_v2: '周度BI异常汇总',
+                new_model_monthly: '月度绩效（新模型）',
+                new_model: '绩效模型（新）',
+                anomaly_item_monthly_bonus: '月度未触发异常加分'
+            };
+            const k = String(model || '').trim();
+            return m[k] || k;
+        }
+        function dcDeductionCategoryZh(cat) {
+            const map = {
+                revenue_anomaly: '营收/实收异常',
+                efficiency_anomaly: '人效异常',
+                recharge_anomaly: '充值异常',
+                table_visit_anomaly: '桌访相关异常',
+                table_visit_ratio_anomaly: '桌访占比异常',
+                margin_anomaly: '毛利异常',
+                product_review: '产品差评异常',
+                service_review: '服务差评异常',
+                private_room_anomaly: '包房使用异常',
+                food_safety: '食品安全（含总部判罚）'
+            };
+            const c = String(cat || '').trim();
+            return map[c] || c;
+        }
+        function dcDeductionAnomalyKeyZh(key) {
+            const map = {
+                revenue_achievement: '实收营收异常',
+                labor_efficiency: '人效值异常',
+                recharge_zero: '充值异常',
+                table_visit_product: '桌访产品异常',
+                table_visit_ratio: '桌访占比异常',
+                gross_margin: '总实收毛利率异常',
+                bad_review_product: '差评产品异常',
+                bad_review_service: '差评服务异常',
+                hongchao_jiuguang_private_room: '洪潮久光包房使用异常',
+                food_safety: '食品安全异常'
+            };
+            const k = String(key || '').trim();
+            return map[k] || k;
+        }
+        function dcDeductionSeverityZh(sev) {
+            const s = String(sev || '').trim().toLowerCase();
+            if (s === 'high') return '高';
+            if (s === 'medium') return '中';
+            if (s === 'low') return '低';
+            if (s === 'mixed') return '混合';
+            return sev || '—';
+        }
+        function dcDeductionExtraZh(obj) {
+            const parts = [];
+            if (obj.task_id) parts.push('关联任务 ' + String(obj.task_id));
+            const src = String(obj.source || '').trim();
+            if (src === 'hq_ruling') parts.push('来源：总部判罚');
+            else if (src) parts.push('来源：' + src);
+            return parts.length ? parts.join(' · ') : '';
+        }
+        function formatDcDeductionsPreview(raw) {
+            const t = String(raw || '').trim();
+            if (!t) return '';
+            let parsed;
+            try {
+                parsed = JSON.parse(t);
+            } catch (_e) {
+                return (
+                    '<pre style="margin:6px 0 0;font-size:9px;color:#64748b;white-space:pre-wrap;word-break:break-word;max-height:140px;overflow:auto;">' +
+                    _dcEsc(t) +
+                    '</pre>'
+                );
+            }
+            const items = Array.isArray(parsed) ? parsed : parsed && typeof parsed === 'object' ? [parsed] : [];
+            if (!items.length) {
+                return (
+                    '<pre style="margin:6px 0 0;font-size:9px;color:#64748b;white-space:pre-wrap;word-break:break-word;max-height:140px;overflow:auto;">' +
+                    _dcEsc(t) +
+                    '</pre>'
+                );
+            }
+            return (
+                '<div style="margin:6px 0 0;font-size:10px;color:#94a3b8;line-height:1.45;">' +
+                items
+                    .map((obj) => {
+                        if (!obj || typeof obj !== 'object') {
+                            return (
+                                '<div style="margin-top:4px;padding:6px;border-radius:6px;background:rgba(30,41,59,0.35);">' +
+                                _dcEsc(JSON.stringify(obj)) +
+                                '</div>'
+                            );
+                        }
+                        const pts = obj.points != null ? '<span style="color:#fbbf24;">扣 ' + escapeHtml(String(obj.points)) + ' 分</span>' : '';
+                        const cat = escapeHtml(dcDeductionCategoryZh(obj.category));
+                        const rule = escapeHtml(dcDeductionAnomalyKeyZh(obj.anomaly_key));
+                        const sev = escapeHtml(dcDeductionSeverityZh(obj.severity));
+                        const extra = dcDeductionExtraZh(obj);
+                        const note = obj.detail_note ? _dcEsc(String(obj.detail_note).slice(0, 280)) : '';
+                        return (
+                            '<div style="margin-top:6px;padding:8px;border-radius:8px;background:rgba(30,41,59,0.45);border-left:3px solid rgba(96,165,250,0.45);">' +
+                            '<div>' +
+                            pts +
+                            (pts ? ' · ' : '') +
+                            '<span style="color:#e2e8f0;">' +
+                            cat +
+                            '</span> · <span style="color:#64748b;">规则 ' +
+                            rule +
+                            '</span> · <span style="color:#64748b;">严重度 ' +
+                            sev +
+                            '</span></div>' +
+                            (extra
+                                ? '<div style="margin-top:4px;font-size:9px;color:#64748b;">' + escapeHtml(extra) + '</div>'
+                                : '') +
+                            (note ? '<div style="margin-top:4px;font-size:9px;color:#94a3b8;">' + note + '</div>' : '') +
+                            '</div>'
+                        );
+                    })
+                    .join('') +
+                '</div>'
+            );
+        }
+
         async function loadDcScoreProvenance(pickUsername) {
             const hdr = { Authorization: 'Bearer ' + (HRMS_API.token ? HRMS_API.token() : '') };
             const inp = document.getElementById('dc-prov-username');
@@ -17124,6 +17305,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             if (pickUsername) inp.value = String(pickUsername);
             const u = String(inp.value || '').trim();
             if (!u) {
+                __dcProvWatchUser = null;
                 out.innerHTML = '<span style="color:#fbbf24;">请输入姓名或飞书账号</span>';
                 return;
             }
@@ -17145,9 +17327,11 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         escapeHtml(String(j.message || '多名匹配，请点选账号')) +
                         '</div>' +
                         btns;
+                    __dcProvWatchUser = null;
                     return;
                 }
                 if (j.error) {
+                    __dcProvWatchUser = null;
                     out.innerHTML =
                         '<span style="color:#ef4444;">' +
                         escapeHtml(String(j.message || j.error)) +
@@ -17162,11 +17346,12 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         : '';
                 const scores = (j.scores || [])
                     .map((s) => {
+                        const modelZh = escapeHtml(dcScoreModelLabelZh(s.score_model));
                         return `<div style="margin-bottom:10px;padding:8px;border-radius:8px;background:rgba(2,6,23,0.35);border:1px solid rgba(148,163,184,0.1);">
-                        <div style="color:#cbd5e1;font-weight:600;">${escapeHtml(s.score_model || '')} · ${escapeHtml(s.period || '')}</div>
+                        <div style="color:#cbd5e1;font-weight:600;">${modelZh} · ${escapeHtml(s.period || '')}</div>
                         <div style="color:#60a5fa;margin-top:2px;">总分 <strong>${escapeHtml(String(s.total_score != null ? s.total_score : '—'))}</strong>${s.store ? ' · ' + escapeHtml(s.store) : ''}</div>
                         ${s.summary ? `<div style="margin-top:4px;color:#94a3b8;">${_dcEsc(s.summary)}</div>` : ''}
-                        ${s.deductions_preview ? `<pre style="margin:6px 0 0;font-size:9px;color:#64748b;white-space:pre-wrap;word-break:break-word;max-height:140px;overflow:auto;">${_dcEsc(s.deductions_preview)}</pre>` : ''}
+                        ${s.deductions_preview ? formatDcDeductionsPreview(s.deductions_preview) : ''}
                         <div style="font-size:9px;color:#475569;margin-top:2px;">${_dcEsc(String(s.updated_at || ''))}</div>
                     </div>`;
                     })
@@ -17182,11 +17367,13 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     .join('');
                 out.innerHTML =
                     head +
-                    '<div style="color:#94a3b8;font-weight:600;margin-bottom:6px;">agent_scores</div>' +
+                    '<div style="color:#94a3b8;font-weight:600;margin-bottom:6px;">绩效分记录（agent_scores）</div>' +
                     (scores || '<div style="color:#475569;">无记录</div>') +
-                    '<div style="color:#94a3b8;font-weight:600;margin:14px 0 6px;">公司通知 / 备案</div>' +
+                    '<div style="color:#94a3b8;font-weight:600;margin:14px 0 6px;">公司通知 / 备案（hrms_user_notifications）</div>' +
                     (notes || '<div style="color:#475569;">无记录</div>');
+                __dcProvWatchUser = String(j.username || '').trim() || null;
             } catch (e) {
+                __dcProvWatchUser = null;
                 out.innerHTML = '<span style="color:#ef4444;">加载失败</span>';
             }
         }

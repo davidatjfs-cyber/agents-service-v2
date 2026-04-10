@@ -132,6 +132,20 @@ app.get('/admin.html', (req, res) => res.sendFile(_adminHtml));
 app.get('/health', async (req, res) => {
   const db = await checkDbHealth();
   const redis = await checkRedisHealth();
+  let mempalace = { reachable: false, error: 'not_probed' };
+  let wikiKnowledge = { ok: false, error: 'not_probed' };
+  try {
+    const { probeMemPalaceHealth } = await import('./services/memory-adapter.js');
+    mempalace = await probeMemPalaceHealth();
+  } catch (e) {
+    mempalace = { reachable: false, error: String(e?.message || e) };
+  }
+  try {
+    const { probeWikiKnowledgeHealth } = await import('./services/knowledge/wiki-retriever.js');
+    wikiKnowledge = probeWikiKnowledgeHealth();
+  } catch (e) {
+    wikiKnowledge = { ok: false, error: String(e?.message || e) };
+  }
   res.json({
     ok: db,
     service: 'agents-service-v2',
@@ -149,7 +163,11 @@ app.get('/health', async (req, res) => {
       String(process.env.ENABLE_DB_READ_ONLY || '').toLowerCase() !== 'true' &&
       process.env.ENABLE_DB_WRITE !== 'false',
     uptime: process.uptime(),
-    now: new Date().toISOString()
+    now: new Date().toISOString(),
+    /** 营销策划长期记忆（ENABLE_MEMPALACE=true 时参与 recall）；服务未起时 strategy 仍可跑，仅无记忆注入 */
+    mempalace,
+    /** 本地 Markdown 经验库（knowledge/wiki），供 experience-builder 检索 */
+    wikiKnowledge
   });
 });
 

@@ -11900,6 +11900,21 @@ app.get('/api/agents/bitable-sync', authRequired, async (req, res) => {
   }
 });
 
+/** 与 agents-service-v2 /health 对齐；生产在 .env 设置 AGENTS_SERVICE_HEALTH_URL=http://127.0.0.1:3101/health */
+async function fetchAgentsServiceHealthSnapshot() {
+  const raw = String(process.env.AGENTS_SERVICE_HEALTH_URL || '').trim();
+  if (!raw) return null;
+  try {
+    const r = await axios.get(raw, { timeout: 4500, validateStatus: () => true });
+    if (r.status !== 200 || r.data == null) {
+      return { ok: false, httpStatus: r.status, error: 'agents health non-200 or empty' };
+    }
+    return r.data;
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
 app.get('/api/health', async (req, res) => {
   const missing = requireEnv();
   if (missing.length) {
@@ -11912,7 +11927,22 @@ app.get('/api/health', async (req, res) => {
     const uploads = ensureUploadsDir();
     let agentHealth = {};
     try { agentHealth = getAgentHealthStatus(); } catch (e) {}
-    return res.json({ ok: true, database: true, now: hrmsNowISO(), storage: { ossConfigured, cosConfigured }, uploads, agents: agentHealth });
+    let agentsService = null;
+    try {
+      agentsService = await fetchAgentsServiceHealthSnapshot();
+    } catch (e) {
+      agentsService = { ok: false, error: String(e?.message || e) };
+    }
+    const payload = {
+      ok: true,
+      database: true,
+      now: hrmsNowISO(),
+      storage: { ossConfigured, cosConfigured },
+      uploads,
+      agents: agentHealth
+    };
+    if (agentsService != null) payload.agentsService = agentsService;
+    return res.json(payload);
   } catch (e) {
     return res.status(500).json({ ok: false, error: String(e?.message || e) });
   }

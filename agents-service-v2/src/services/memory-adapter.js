@@ -67,6 +67,36 @@ export async function saveMemory(opts) {
  * @param {{ agent: string, store: string, query?: string, limit?: number }} opts
  * @returns {Promise<Array<{ content: string, score: number }>>}
  */
+/** 运维/健康检查：MemPalace HTTP 是否可达（与 ENABLE_MEMPALACE 是否开启无关） */
+export async function probeMemPalaceHealth() {
+  const enabled = process.env.ENABLE_MEMPALACE === 'true';
+  const fromEnv = !!String(process.env.MEMPALACE_URL || '').trim();
+  const baseUrl = resolveBaseUrl();
+  try {
+    const res = await http().get('/health');
+    const body = res.data;
+    const ok =
+      res.status >= 200 &&
+      res.status < 300 &&
+      (body?.ok === true || body?.status === 'healthy');
+    return {
+      enabled,
+      configured: fromEnv,
+      baseUrl,
+      reachable: ok,
+      httpStatus: res.status
+    };
+  } catch (e) {
+    return {
+      enabled,
+      configured: fromEnv,
+      baseUrl,
+      reachable: false,
+      error: String(e?.message || e)
+    };
+  }
+}
+
 export async function recallMemory(opts) {
   try {
     const wing = String(opts?.store ?? '');

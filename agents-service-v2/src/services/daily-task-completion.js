@@ -62,8 +62,8 @@ function isHongchaoStore(store) {
   return String(store || '').includes('洪潮');
 }
 
-/** 获取昨日任务数据 */
-async function fetchYesterdayTasks(yesterday) {
+/** 获取「业务日」= 上海日历日 created_at 落在当天的任务（与数据中心、巡检口径一致） */
+async function fetchYesterdayTasks(yesterdayYmd) {
   const sql = `
     SELECT 
       mt.id,
@@ -77,12 +77,12 @@ async function fetchYesterdayTasks(yesterday) {
       mt.created_at,
       mt.closed_at as completed_at
     FROM master_tasks mt
-    WHERE mt.created_at >= $1::date AND mt.created_at < ($1::date + interval '1 day')
+    WHERE (mt.created_at AT TIME ZONE 'Asia/Shanghai')::date = $1::date
       AND mt.assignee_username IS NOT NULL
-      AND mt.assignee_username != ''
+      AND trim(mt.assignee_username) <> ''
     ORDER BY mt.store, mt.assignee_role, mt.assignee_username, mt.created_at
   `;
-  const result = await query(sql, [yesterday]);
+  const result = await query(sql, [yesterdayYmd]);
   return result.rows || [];
 }
 
@@ -307,14 +307,15 @@ export async function sendDailyTaskCompletionReport() {
     
     // 获取接收人
     const recipients = await getRecipients();
-    
+    const hqRecipients = recipients.filter((r) => ['admin', 'hq_manager'].includes(r.role));
+
     let sentCount = 0;
     let failedCount = 0;
+    let skippedCount = 0;
     const runYmd = getShanghaiYmd();
     
     // 发送 HQ 版本（admin + hq_manager 收到所有门店）
     const hqCard = buildHQCard(storeSections, yesterday);
-    const hqRecipients = recipients.filter(r => ['admin', 'hq_manager'].includes(r.role));
     for (const recipient of hqRecipients) {
       try {
         const deliver = await sendReportToRecipient({
@@ -327,6 +328,7 @@ export async function sendDailyTaskCompletionReport() {
             return { ok: !!cardRes?.ok, error: cardRes?.error || '' };
           }
         });
+        if (deliver?.ok && deliver?.skipped) skippedCount++;
         if (deliver?.ok && !deliver?.skipped) {
           sentCount++;
           logger.info({ recipient: recipient.username, role: recipient.role }, 'HQ task completion card sent');
@@ -340,51 +342,77 @@ export async function sendDailyTaskCompletionReport() {
       }
     }
     
-    // 发送门店版本（店长/出品经理只收到自己门店）
+    // 门店版：按「昨日在该店有任务」的店长/出品飞书账号投递（不依赖 feishu_users.store 是否填写，避免门店字段为空时全员收不到）
+    const storeSentOpen = new Set();
     for (const [store, storeTasks] of storeMap) {
       const storeMd = buildStoreSection(store, storeTasks, nameMap);
       const storeCard = buildStoreCard(store, storeMd, yesterday);
-      
-      const storeRecipients = recipients.filter(
-        r => r.role === 'store_manager' || r.role === 'store_production_manager'
-      ).filter(r => {
-        // 模糊匹配门店名
-        const rStore = String(r.store || '').trim();
-        return rStore === store || rStore.includes(store) || store.includes(rStore);
-      });
-      
-      for (const recipient of storeRecipients) {
+
+      const assigneeKeys = [
+        ...new Set(
+          storeTasks
+            .map((t) => String(t.assignee_username || '').trim().toLowerCase())
+            .filter(Boolean)
+        )
+      ];
+      if (!assigneeKeys.length) continue;
+
+      const fuR = await query(
+        `SELECT username, open_id, role
+         FROM feishu_users
+         WHERE registered = true
+           AND open_id IS NOT NULL
+           AND trim(open_id) <> ''
+           AND role IN ('store_manager', 'store_production_manager')
+           AND lower(trim(username)) = ANY($1::text[])`,
+        [assigneeKeys]
+      );
+      const fuRows = fuR.rows || [];
+
+      for (const row of fuRows) {
+        const un = String(row.username || '').trim().toLowerCase();
+        if (!assigneeKeys.includes(un)) continue;
+        const oid = String(row.open_id || '').trim();
+        if (!oid || storeSentOpen.has(`${oid}::${store}`)) continue;
+        storeSentOpen.add(`${oid}::${store}`);
         try {
           const deliver = await sendReportToRecipient({
             jobKey: 'daily_task_completion_report',
             runYmd,
-            username: recipient.username || recipient.open_id,
-            scope: `store_${store}`,
+            username: row.username || oid,
+            scope: `store_${store}_${un}`,
             sendFn: async () => {
-              const cardRes = await sendCard(recipient.open_id, storeCard, 'open_id');
+              const cardRes = await sendCard(oid, storeCard, 'open_id');
               return { ok: !!cardRes?.ok, error: cardRes?.error || '' };
             }
           });
+          if (deliver?.ok && deliver?.skipped) skippedCount++;
           if (deliver?.ok && !deliver?.skipped) {
             sentCount++;
-            logger.info({ recipient: recipient.username, store }, 'store task completion card sent');
+            logger.info({ recipient: row.username, store }, 'store task completion card sent');
           } else if (!deliver?.ok) {
             failedCount++;
-            logger.warn({ recipient: recipient.username, store, err: deliver?.error }, 'store task completion card send failed after retries');
+            logger.warn({ recipient: row.username, store, err: deliver?.error }, 'store task completion card send failed after retries');
           }
         } catch (e) {
           failedCount++;
-          logger.warn({ err: e?.message, recipient: recipient.username, store }, 'store task completion card send failed');
+          logger.warn({ err: e?.message, recipient: row.username, store }, 'store task completion card send failed');
         }
       }
     }
-    
+
     if (failedCount > 0) {
       logger.warn({ yesterday, sent: sentCount, failed: failedCount }, 'daily task completion report: partial failure, will rely on cron retry');
       throw new Error(`daily task completion report has ${failedCount} failed recipients`);
     }
-    logger.info({ yesterday, sent: sentCount }, 'daily task completion report: completed');
-    return { sent: sentCount };
+    if (tasks.length > 0 && sentCount === 0 && skippedCount === 0) {
+      const err =
+        `daily task completion: 有昨日任务但 0 条成功发出（HQ 配置人数=${hqRecipients.length}；请检查 feishu_users：admin/hq_manager/店长/出品须 registered 且 open_id 有效）`;
+      logger.error({ yesterday, hq: hqRecipients.length, assigneeIssue: true }, err);
+      throw new Error(err);
+    }
+    logger.info({ yesterday, sent: sentCount, skipped: skippedCount }, 'daily task completion report: completed');
+    return { sent: sentCount, skipped: skippedCount, yesterday };
     
   } catch (e) {
     logger.error({ err: e?.message }, 'daily task completion report: failed');
