@@ -8,6 +8,8 @@ import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { executeMetrics, extractTimeRangeFromText, parseTimeRange, getAllMetricDefs, quickQuery, getTimeLabelChinese } from './data-executor.js';
 import { saveMemory, recallMemories, getOutcomeStats } from './agent-memory.js';
+import { writeWikiKnowledge, buildExperienceBlock, extractStructuredData, recordOutcome } from './knowledge/index.js';
+import { evaluateOutcome } from './knowledge/outcome-evaluator.js';
 import { saveMemory as saveMemPalaceMemory, recallMemory as recallMemPalaceMemory } from './memory-adapter.js';
 import { decideStrategy } from './marketing-strategy-engine.js';
 import { generateProcurementAdvice } from './procurement-agent.js';
@@ -223,6 +225,8 @@ async function adminAgentPromptPrefix(agentId) {
 function zhOnlyDataAuditorNarrative(raw) {
   const s = String(raw || '').trim();
   if (!s) return s;
+  const wikiCut = s.search(/【引用经验】/);
+  if (wikiCut >= 0) return s.slice(wikiCut).trim();
   const cut = s.search(
     /【问题分析】|^\s*\*?\*?问题分析\*?\*?\s*[:：]?/m
   );
@@ -1382,6 +1386,32 @@ async function buildDeterministicRevenueReply(store, start, end, periodLabel) {
   }
 }
 
+/** 已注入 Wiki 但模型未输出四段结构时，用历史经验摘要生成合规回答（不编造数字） */
+function buildWikiComplianceFallback(ds, text, store) {
+  const m = String(ds || '').match(/- 结论：[^\n]+/);
+  const quote = m ? m[0].replace(/^- 结论：/, '').trim().slice(0, 200) : '系统提供的历史经验摘要。';
+  const core = /下降|下滑|变差/.test(String(text || ''))
+    ? '营业额下滑的主因在当前会话中无法仅凭数据库确认（缺凭证）'
+    : '核心问题需结合门店数据进一步确认（当前缺凭证）';
+  let strategyLine =
+    '先完成数据与凭据核对；再结合历史经验中关于效率与客流的要点制定行动计划。';
+  if (String(ds).includes('【策略效果统计】')) {
+    strategyLine =
+      '根据【策略效果统计】中的「最优策略」候选、成功率与 score 排序，优先落实综合 score/成功率最高的方案；执行后请回填 outcome 以更新 score 与成功率；在未拿到新营业数据前先完成 HRMS 凭据核对。';
+  }
+
+  return (
+    `【引用经验】\n` +
+    `${quote}\n\n` +
+    `【核心问题】\n` +
+    `${core}\n\n` +
+    `【原因分析】\n` +
+    `当前无法从数据库拉取营业凭证；请在 HRMS 登录并核对「${store || '门店'}」数据后再提问。无数字时不臆造指标。\n\n` +
+    `【策略】\n` +
+    `${strategyLine}`
+  );
+}
+
 // ── 1. Data Auditor (对标V1: BI工具+营收汇总+销售排行+差评排行) ──
 async function handleDataAuditor(text, ctx) {
   const store = await pickStoreFromQuestionText(text, ctx.store || '');
@@ -1404,6 +1434,31 @@ async function handleDataAuditor(text, ctx) {
     const salesBody = await buildSalesRawAnalysis(store, salesStart, salesEnd, bizFilter);
     if (salesBody) {
       saveMemory('data_auditor', store, salesBody.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
+      try {
+        await writeWikiKnowledge({
+          agent: 'data_auditor',
+          store,
+          query: text,
+          response: salesBody,
+          data: salesBody
+        });
+        const structured = extractStructuredData(salesBody);
+        let outcome = { result: 'unknown', score: 0.5 };
+        try {
+          outcome = evaluateOutcome({
+            beforeData: ctx.metricAnalysis?.before,
+            afterData: ctx.metricAnalysis?.after,
+            metricAnalysis: ctx.metricAnalysis || null
+          });
+        } catch (e) { /* silent */ }
+        await recordOutcome({
+          store,
+          problem: structured.problem,
+          action: structured.action,
+          result: outcome.result,
+          score: outcome.score
+        });
+      } catch (e) { /* silent */ }
       return {
         agent: 'data_auditor',
         response: salesBody,
@@ -1800,10 +1855,18 @@ async function handleDataAuditor(text, ctx) {
   if (!ds) ds = '\n[no data found]\n';
   // P2: 记忆回调
   try { const mem = await recallMemories('data_auditor', store, '', 3); if (mem.length) ds += '\n[历史分析]\n' + mem.map(m => m.content.slice(0,80)).join('\n'); } catch(e) {}
+  try {
+    const expBlock = await buildExperienceBlock({ agent: 'data_auditor', store, query: text });
+    if (expBlock) {
+      ds += `\n\n${expBlock}\n`;
+      console.log('[WIKI RETRIEVE]');
+    }
+  } catch (e) { /* silent */ }
   const businessHint = isBusinessOverview
     ? '\n重要：用户问的是整体生意/经营情况，请以营收、达成率、毛利、客流为主作答；若仅有桌访等单项数据或无营收日报，需先说明「暂无该时段营业日报数据」再简述已有数据，不要只回复桌访。\n'
     : '';
   let metricExperienceAppendix = '';
+  let metricSnapshotForOutcome = null;
   if (store) {
     let metricAnalysisForSop = null;
     try {
@@ -1847,6 +1910,7 @@ async function handleDataAuditor(text, ctx) {
     } catch (e) {
       logger.warn({ err: e?.message }, 'data_auditor experience hint skipped');
     }
+    metricSnapshotForOutcome = metricAnalysisForSop;
   }
   const forceAnalysisBlock =
     ctx?.forceAnalysis
@@ -1857,6 +1921,16 @@ async function handleDataAuditor(text, ctx) {
 1）先结合下方「指标拆解 / root_causes」分析可能原因（无数据则说明数据缺口）；
 2）再输出可执行建议。
 禁止只输出营业日报式数字罗列而不做归因与建议。
+`
+      : '';
+
+  const wikiStructuredOutput =
+    ds.includes('历史经验（必须引用）')
+      ? `
+【Wiki 输出优先】
+当下文「数据库与上下文」含「历史经验（必须引用）」时，你必须忽略本节「输出约束」中第1–4点的 V1 逐条格式，改为严格输出四段：
+【引用经验】→【核心问题】（仅一条）→【原因分析】→【策略】。
+无营业数字时仍须写满四段；【原因分析】中说明数据缺口即可；禁止省略【引用经验】或【核心问题】。
 `
       : '';
 
@@ -1886,17 +1960,53 @@ ${businessHint}
 2. 每条数据单独一行，格式为：- **指标名**: 值。若下方有[桌访反馈总结]，必须包含反馈总结要点（满意/不满意条数、主要产品/服务不满意项）。
 3. 最后一段必须以 **总结** 或 **分析说明** 或 **简要分析** 开头，紧跟一句总结语。
 4. 禁止编造数字，无数据时写"暂无此数据"或"昨日无营业数据"。回复不超400字。
+${wikiStructuredOutput}
 ${ds}
 ${metricExperienceAppendix}
 
 `;
-  const r = await callLLM([
-    { role: 'system', content: sysPrompt },
-    { role: 'user', content: text }
-  ], { temperature: 0.1, max_tokens: 800, purpose: 'data_auditor', ...(ctx.llmContext ? { context: ctx.llmContext } : {}) });
+  const userContent =
+    ds.includes('历史经验（必须引用）')
+      ? `${text}\n\n（系统硬性要求：即使下方数据库摘要为空或你无法取数，也必须输出四段：【引用经验】【核心问题】【原因分析】【策略】；【引用经验】须逐字或概括引用上文历史经验中至少一条；【核心问题】只写一条；【原因分析】须说明缺数原因，禁止仅用一句「无法获取凭证」结束全文。）`
+      : text;
+  const r = await callLLM(
+    [
+      { role: 'system', content: sysPrompt },
+      { role: 'user', content: userContent }
+    ],
+    { temperature: 0.1, max_tokens: 1200, purpose: 'data_auditor', ...(ctx.llmContext ? { context: ctx.llmContext } : {}) }
+  );
   const rawAns = String(r.content || '').trim();
-  const cleanedAns = rawAns ? (zhOnlyDataAuditorNarrative(rawAns) || rawAns) : '';
+  let cleanedAns = rawAns ? (zhOnlyDataAuditorNarrative(rawAns) || rawAns) : '';
+  if (ds.includes('历史经验（必须引用）') && !/【引用经验】/.test(String(cleanedAns || ''))) {
+    cleanedAns = buildWikiComplianceFallback(ds, text, store);
+  }
   saveMemory('data_auditor', store, cleanedAns.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
+  try {
+    await writeWikiKnowledge({
+      agent: 'data_auditor',
+      store,
+      query: text,
+      response: cleanedAns,
+      data: ds
+    });
+    const structured = extractStructuredData(cleanedAns);
+    let outcome = { result: 'unknown', score: 0.5 };
+    try {
+      outcome = evaluateOutcome({
+        beforeData: ctx.metricAnalysis?.before,
+        afterData: ctx.metricAnalysis?.after,
+        metricAnalysis: ctx.metricAnalysis || metricSnapshotForOutcome
+      });
+    } catch (e) { /* silent */ }
+    await recordOutcome({
+      store,
+      problem: structured.problem,
+      action: structured.action,
+      result: outcome.result,
+      score: outcome.score
+    });
+  } catch (e) { /* silent */ }
   // V1 格式：报告类型标题（由 pipeline 拼成 小年：📊 标题 (门店 · 时间)）
   const reportTitle = inferDataAuditorReportTitle(text, ctx);
   return { agent: 'data_auditor', response: cleanedAns || FACTUAL_BLOCKED, data: ds, store, timeRange: tr, timeLabel, reportTitle, dataBacked: ds !== '\n[no data found]\n' };

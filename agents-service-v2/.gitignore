@@ -1,1 +1,4 @@
 node_modules
+
+# 本地 outcome / wiki 运行时数据（勿提交；仅根下 knowledge，不含 src/services/knowledge）
+/knowledge/
