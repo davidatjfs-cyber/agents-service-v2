@@ -21,6 +21,11 @@ import {
   countDistinctClosingBizDays,
   countDistinctMaterialBizDays
 } from './pm-execution-report-coverage.js';
+import {
+  isMajixianStore,
+  sortFeishuScoringRows,
+  resolveMajixianProductionManagersForScoring
+} from '../utils/scoring-assignee.js';
 
 // ─────────────────────────────────────────────
 // 1. 工具函数
@@ -367,6 +372,96 @@ async function getStoreRating(store, period) {
   return { rating, achievement_rate: achievementRate, actual_revenue: actualRevenue, target_revenue: targetRevenue };
 }
 
+/**
+ * 月度综合评级人选：禁止 DISTINCT ON + username 排序误选马己仙「测试/nnyxcs35」账号；
+ * 马己仙出品经理与周度绩效一致，走 resolveMajixianProductionManagersForScoring（黎永荣 NNYXLYR04 优先）。
+ */
+async function loadMonthlyComprehensiveStaff() {
+  const r = await query(
+    `SELECT fu.username,
+            COALESCE(NULLIF(TRIM(fu.name), ''), fu.username) AS name,
+            fu.role,
+            TRIM(fu.store) AS store,
+            fu.open_id,
+            CASE
+              WHEN fu.store ILIKE '%洪潮%' THEN '洪潮'
+              WHEN fu.store ILIKE '%马己仙%' THEN '马己仙'
+              ELSE '未知'
+            END AS brand
+     FROM feishu_users fu
+     WHERE fu.registered = true
+       AND fu.role IN ('store_manager', 'store_production_manager')
+       AND TRIM(COALESCE(fu.store, '')) <> ''
+       AND LOWER(TRIM(fu.username)) <> 'nnyxcs35'
+       AND fu.username NOT ILIKE '%测试%'
+       AND COALESCE(TRIM(fu.name), '') NOT ILIKE '%测试%'`
+  );
+
+  const rows = (r.rows || []).filter((row) => {
+    const nm = String(row.name || '');
+    if (nm.includes('测试')) return false;
+    return true;
+  });
+
+  const byStore = new Map();
+  for (const row of rows) {
+    const st = String(row.store || '').trim();
+    if (!st) continue;
+    if (!byStore.has(st)) byStore.set(st, { managers: [], pms: [] });
+    const b = byStore.get(st);
+    if (row.role === 'store_manager') b.managers.push(row);
+    else if (row.role === 'store_production_manager') b.pms.push(row);
+  }
+
+  const staff = [];
+  for (const [store, { managers, pms }] of byStore) {
+    const sortedSm = sortFeishuScoringRows(store, 'store_manager', managers);
+    if (sortedSm[0]) {
+      const x = sortedSm[0];
+      staff.push({
+        username: x.username,
+        name: x.name,
+        role: 'store_manager',
+        store: x.store,
+        open_id: x.open_id,
+        brand: x.brand
+      });
+    }
+
+    const brandMj = pms[0]?.brand || managers[0]?.brand || (isMajixianStore(store) ? '马己仙' : '未知');
+
+    if (isMajixianStore(store)) {
+      const pmList = await resolveMajixianProductionManagersForScoring(store);
+      for (const pm of pmList) {
+        const row = rows.find((x) => String(x.username || '').toLowerCase() === String(pm.username || '').toLowerCase());
+        staff.push({
+          username: pm.username,
+          name: pm.name || row?.name || pm.username,
+          role: 'store_production_manager',
+          store,
+          open_id: row?.open_id ?? null,
+          brand: brandMj
+        });
+      }
+    } else {
+      const sortedPm = sortFeishuScoringRows(store, 'store_production_manager', pms);
+      if (sortedPm[0]) {
+        const x = sortedPm[0];
+        staff.push({
+          username: x.username,
+          name: x.name,
+          role: 'store_production_manager',
+          store: x.store,
+          open_id: x.open_id,
+          brand: x.brand
+        });
+      }
+    }
+  }
+
+  return staff;
+}
+
 // ─────────────────────────────────────────────
 // 7. 主函数：月度综合评级
 // ─────────────────────────────────────────────
@@ -376,25 +471,7 @@ export async function runMonthlyComprehensiveRating(period) {
     period = period || getPrevMonthPeriod();
     logger.info({ period }, 'monthly comprehensive rating: starting');
 
-    // 获取所有需要评级的员工
-    const staffResult = await query(
-      `SELECT DISTINCT ON (fu.store, fu.role) 
-              fu.username, fu.name, fu.role, fu.store, fu.open_id,
-              CASE 
-                WHEN fu.store ILIKE '%洪潮%' THEN '洪潮'
-                WHEN fu.store ILIKE '%马己仙%' THEN '马己仙'
-                ELSE '未知'
-              END as brand
-       FROM feishu_users fu
-       WHERE fu.registered = true 
-         AND fu.role IN ('store_manager', 'store_production_manager')
-         AND fu.store IS NOT NULL AND fu.store != ''
-         AND fu.username NOT LIKE '%测试%'
-         AND fu.username != 'NNYXCS35'
-       ORDER BY fu.store, fu.role, fu.username`
-    );
-
-    const staff = staffResult.rows || [];
+    const staff = await loadMonthlyComprehensiveStaff();
     if (!staff.length) {
       logger.warn('monthly comprehensive rating: no staff found');
       return { period, evaluated: 0, results: [] };

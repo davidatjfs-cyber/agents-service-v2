@@ -100,6 +100,38 @@ function normalizeStoreKey(s) {
     .replace(/\s+/g, '');
 }
 
+/**
+ * 月度关账写入 agent_scores：排除测试/误绑账号；马己仙每店仅保留一名出品经理（黎永荣 NNYXLYR04 优先），
+ * 与 agents-service 月度综合评级、周度 scoring-assignee 口径一致。
+ */
+function filterUsersForMonthlyPerformanceClose(rows) {
+  const filtered = (rows || []).filter((u) => {
+    const un = String(u.username || '').trim();
+    const nm = String(u.name || '').trim();
+    if (!un) return false;
+    if (un.toLowerCase() === 'nnyxcs35') return false;
+    if (nm.includes('测试') || un.includes('测试')) return false;
+    return true;
+  });
+
+  const majixianPmByStore = new Map();
+  const rest = [];
+  for (const u of filtered) {
+    const st = String(u.store || '');
+    if (u.role === 'store_production_manager' && /马己仙/.test(st)) {
+      const k = normalizeStoreKey(u.store);
+      const un = String(u.username || '').trim().toLowerCase();
+      const nm = String(u.name || '').trim();
+      const rank = un === 'nnyxlyr04' ? 0 : nm.includes('黎永荣') ? 1 : 50;
+      const prev = majixianPmByStore.get(k);
+      if (!prev || rank < prev.rank) majixianPmByStore.set(k, { rank, u });
+    } else {
+      rest.push(u);
+    }
+  }
+  return [...rest, ...[...majixianPmByStore.values()].map((x) => x.u)];
+}
+
 function bizChannel(biz) {
   const x = String(biz || '').toLowerCase();
   if (x.includes('take') || x.includes('外卖') || x === 'waimai') return '外卖';
@@ -152,8 +184,9 @@ export async function runMonthlyPerformanceClose() {
        AND role IN ('store_manager', 'store_production_manager')
        AND TRIM(COALESCE(store, '')) <> ''`
   );
+  const eligible = filterUsersForMonthlyPerformanceClose(users.rows || []);
   const seen = new Set();
-  for (const u of users.rows || []) {
+  for (const u of eligible) {
     const store = u.store;
     const k = normalizeStoreKey(store);
     if (seen.has(k)) continue;
@@ -162,7 +195,7 @@ export async function runMonthlyPerformanceClose() {
     await calculateStoreRating(store, brand, period);
   }
 
-  for (const u of users.rows || []) {
+  for (const u of eligible) {
     const store = u.store;
     const brand = inferBrandFromStoreName(store);
     const es = await calculateEmployeeScore(store, u.username, u.role, period);
@@ -232,7 +265,7 @@ export async function runMonthlyPerformanceClose() {
       console.error('[perf-jobs] upsert agent_scores monthly failed:', u.username, e?.message);
     }
   }
-  console.log('[perf-jobs] monthly close done', period, 'users', (users.rows || []).length);
+  console.log('[perf-jobs] monthly close done', period, 'eligible_users', eligible.length);
   return { period, users: (users.rows || []).length };
 }
 

@@ -5067,6 +5067,7 @@ async function mergeSharedStateFields(patches, arrayIdFields = {}) {
  * - hrms_leave_records / hrms_reward_punishment_records / point_records（审批流双写）
  * - employee_attendance_records（打卡写入、打卡确认同步镜像）
  * - employees（PUT /api/state 单条与批处理）
+ * - daily_reports（营业日报：hrms_state 与 PostgreSQL 表同步失败时告警，避免 BI/绩效读库缺数）
  */
 async function notifyAdminsDualWriteFailure(scopeLabel, err) {
   try {
@@ -6747,7 +6748,10 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
           weather, segments, discountDine, discountDelivery, categories, deliveryDetail, badReviewsDianping, staff, scheduleNextDay, photos
         ]);
         await recalcWechatMonthTotalsForStoreMonth(pool, store, date);
-      } catch (e) { console.error('[daily_report_update]', e.message); }
+      } catch (e) {
+        console.error('[daily_report_update]', e.message);
+        void notifyAdminsDualWriteFailure(`daily_reports（营业日报 PG 同步·更新 ${store} ${date}）`, e);
+      }
 
       if (wantSubmit || submittedAt) {
         item.submittedAt = nextSubmittedAt;
@@ -6866,11 +6870,17 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
           rechargeCount, rechargeAmount,
           weather, segments, discountDine, discountDelivery, categories, deliveryDetail, badReviewsDianping, staff, scheduleNextDay, photos
         ]);
-      } catch (e) { console.error('[daily_report_insert]', e.message); }
+      } catch (e) {
+        console.error('[daily_report_insert]', e.message);
+        void notifyAdminsDualWriteFailure(`daily_reports（营业日报 PG 同步·新建 ${store} ${date}）`, e);
+      }
 
       try {
         await recalcWechatMonthTotalsForStoreMonth(pool, store, date);
-      } catch (e) { console.error('[daily_report_insert_month]', e.message); }
+      } catch (e) {
+        console.error('[daily_report_insert_month]', e.message);
+        void notifyAdminsDualWriteFailure(`daily_reports（企微月累计重算 ${store} ${date}）`, e);
+      }
 
       shouldNotifySchedule = !!wantSubmit;
       list.unshift(item);
