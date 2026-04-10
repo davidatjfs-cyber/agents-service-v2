@@ -6,6 +6,7 @@
 import axios from 'axios';
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
+import { notifyAdminsDataIssue } from './admin-data-alert.js';
 import { getConfig } from './config-service.js';
 import { parseFeishuRatioOrPercentString } from '../utils/feishu-percent.js';
 
@@ -358,6 +359,36 @@ async function processRecord(configKey, type, record, brand) {
       const brandZh = brand === 'majixian' ? '马己仙' : brand === 'hongchao' ? '洪潮' : brand || '';
       const storeCell = extractText(fields['门店']) || extractText(fields['所属门店']);
       const dateCell = extractText(fields['日期'] ?? fields['收货日期']);
+      const rawStoreField = fields['门店'] ?? fields['所属门店'];
+      const rawDateField = fields['日期'] ?? fields['收货日期'];
+      if (feishuCellPresent(rawStoreField) && !String(storeCell || '').trim()) {
+        void notifyAdminsDataIssue({
+          alertType: 'bitable_material_store_parse_empty',
+          title: '原料轮询：飞书有门店单元格但解析为空',
+          lines: [
+            `configKey: ${configKey}`,
+            `recordId: ${recordId}`,
+            `brand: ${brandZh || brand || '—'}`,
+            '请检查 extractText 是否支持该字段类型（人员、查找、公式等）。'
+          ],
+          dedupeKey: `bitable_mat_store_${recordId}`,
+          dedupeHours: 72
+        }).catch(() => {});
+      }
+      if (feishuCellPresent(rawDateField) && !String(dateCell || '').trim()) {
+        void notifyAdminsDataIssue({
+          alertType: 'bitable_material_date_parse_empty',
+          title: '原料轮询：飞书有日期单元格但解析为空',
+          lines: [
+            `configKey: ${configKey}`,
+            `recordId: ${recordId}`,
+            `brand: ${brandZh || brand || '—'}`,
+            '常见原因：日期列为特殊类型，需在 extractText 中单独处理。'
+          ],
+          dedupeKey: `bitable_mat_date_${recordId}`,
+          dedupeHours: 72
+        }).catch(() => {});
+      }
       await upsertMsg('material_report', `${brandZh || brand || ''}原料收货日报`, {
         type: 'material_report',
         recordId,
@@ -460,6 +491,15 @@ async function processTaskResponse(fields, recordId) {
 }
 
 // ── Extract text from Bitable complex field values ──
+/** 飞书单元格是否有「非空」原始值（与 extractText 结果无关，用于发现解析失败） */
+function feishuCellPresent(val) {
+  if (val == null) return false;
+  if (typeof val === 'string') return val.trim().length > 0;
+  if (typeof val === 'number') return Number.isFinite(val);
+  if (Array.isArray(val)) return val.length > 0;
+  return typeof val === 'object';
+}
+
 function extractText(val) {
   if (!val) return '';
   if (typeof val === 'string') return val;

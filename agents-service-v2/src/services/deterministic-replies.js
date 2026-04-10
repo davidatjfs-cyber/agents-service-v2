@@ -11,6 +11,7 @@ import {
   normalizeAgentMaterialBrand,
   resolveAgentCanonicalStore
 } from '../config/store-mapping.js';
+import { notifyAdminsDataIssue } from './admin-data-alert.js';
 import { detectAnalysisIntent } from './analysis-intent.js';
 import { parseFeishuRatioOrPercentString, formatPercentDisplay } from '../utils/feishu-percent.js';
 
@@ -402,6 +403,32 @@ function materialBrandOkForStoreChat(agentData, displayStore) {
   if (/马己仙/.test(st)) return nb === '马己仙';
   if (/洪潮/.test(st)) return nb === '洪潮';
   return true;
+}
+
+/** 与 buildMaterialReportReply 飞书兜底同口径，用于「agent 合并 0 条但飞书表有数」告警 */
+async function countFeishuMaterialRowsMatchingStoreRange(displayStore, startYmd, endYmd) {
+  const s = String(displayStore || '').trim();
+  const lo = String(startYmd || '').trim();
+  const hi = String(endYmd || '').trim();
+  if (!s || !lo || !hi) return 0;
+  try {
+    const r = await query(
+      `SELECT fields, created_at FROM feishu_generic_records
+       WHERE config_key LIKE 'material_%'
+       ORDER BY updated_at DESC
+       LIMIT 3000`
+    );
+    let n = 0;
+    for (const row of r.rows || []) {
+      const f = row.fields && typeof row.fields === 'object' ? row.fields : {};
+      if (!storeMatchesRowWithAliases(s, f['所属门店'] || f['门店'])) continue;
+      const d = bitableDate(f['收货日期'] || f['日期'], row.created_at);
+      if (d && inRange(d, lo, hi)) n++;
+    }
+    return n;
+  } catch {
+    return 0;
+  }
 }
 
 function materialRowHasAnomalyUnified(f) {
@@ -1490,6 +1517,25 @@ async function buildMaterialReportReply(store, text) {
   const p = resolveDateRange(q, 7);
   try {
     let rows = await queryMaterialReportRowsFromAgentMessages(s, p.start, p.end);
+    if (!rows.length && p.start === p.end) {
+      const feishuHit = await countFeishuMaterialRowsMatchingStoreRange(s, p.start, p.end);
+      if (feishuHit > 0) {
+        void notifyAdminsDataIssue({
+          alertType: 'material_agent_feishu_divergence',
+          title: '原料：agent_messages 合并查询为 0，但 feishu_generic 同口径有数据',
+          lines: [
+            `门店（会话/上下文）：${s}`,
+            `业务日：${p.start}`,
+            `feishu_generic（material_%，近 3000 条扫描）命中：${feishuHit} 条`,
+            `agent_messages（含 LEFT JOIN feishu_generic）：0 条`,
+            '影响：执行力日评/月评若只信 agent 链路会与「飞书表」不一致。',
+            '建议：查 record_id 对齐、brand(majixian)、轮询字段映射、JOIN 条件。'
+          ],
+          dedupeKey: `material_div_${s}_${p.start}`,
+          dedupeHours: 4
+        }).catch(() => {});
+      }
+    }
     if (!rows.length) {
       const r = await query(
         `SELECT fields, created_at FROM feishu_generic_records
