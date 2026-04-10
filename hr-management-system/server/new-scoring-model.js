@@ -4,7 +4,7 @@
  * 月度口径（与 agents-service `monthly-comprehensive-rating` 对齐）：
  * - 绩效分 total_score：`agent_scores` / `anomaly_rollups_v2` 当月各自然周 `total_score` 算术平均（BI 异常触发后的周汇总）。
  * - 工作态度：`master_tasks` 且 `hr_performance_recorded = true` 的备案未完成（distinct task_id）。
- * - 工作执行力：出品 = 开档/收档 `agent_messages` + 原料 `feishu_generic_records` 按业务日汇总；洪潮店长 = 日报企微新增；马己仙店长 = 飞书 `meeting_reports` 同步记录（与执行力日评/月度综合同源）。
+ * - 工作执行力：除洪潮店长（企微新增 = HRMS 营业日报当月汇总）外，均只读 `agent_messages`（开档/收档/原料/例会均由飞书轮询写入该表，口径统一）。
  * - 工作能力：出品 = `monthly_margins` 实收毛利率 vs 目标；店长 = 营业日报 **每月 9 日** `dianping_rating`（与 agents 店长能力一致）。
  */
 
@@ -14,7 +14,8 @@ import { safeExecute, safeErrorLog } from './utils/error-handler.js';
 import {
   countDistinctClosingBizDays,
   countDistinctMaterialBizDays,
-  countDistinctOpeningBizDays
+  countDistinctOpeningBizDays,
+  getMajixianMeetingExecutionStatsFromAgentMessages
 } from './lib/pm-execution-for-scoring.js';
 import {
   dailyReportIlikePatterns,
@@ -348,35 +349,6 @@ export async function calculateEmployeeScore(store, username, role, period) {
   }
 }
 
-/** 马己仙店长执行力：飞书同步 `meeting_reports`（与 agents `getMajixianManagerExecutionRating` 同源） */
-async function getMajixianMeetingExecutionStatsFromFeishu(period) {
-  const [year, month] = String(period || '').split('-');
-  if (!year || !month) return { totalMeetings: 0, unqualifiedMeetings: 0, qualifiedMeetings: 0 };
-  const startDate = `${year}-${month}-01`;
-  const endDate = `${year}-${month}-${String(getDaysInPeriod(period)).padStart(2, '0')}`;
-  const result = await pool().query(
-    `SELECT COUNT(*)::int AS total_meetings,
-            COUNT(*) FILTER (WHERE (fields->>'得分')::int >= 7) AS qualified_meetings,
-            COUNT(*) FILTER (
-              WHERE (fields->>'得分')::int < 7
-                OR (fields->>'得分')::int IS NULL
-                OR TRIM(COALESCE(fields->>'得分', '')) = ''
-                OR (fields->>'得分') = '0'
-            ) AS unqualified_meetings
-     FROM feishu_generic_records
-     WHERE config_key = 'meeting_reports'
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date`,
-    [startDate, endDate]
-  );
-  const row = result.rows?.[0] || {};
-  return {
-    totalMeetings: Number(row.total_meetings || 0),
-    qualifiedMeetings: Number(row.qualified_meetings || 0),
-    unqualifiedMeetings: Number(row.unqualified_meetings || 0)
-  };
-}
-
 // ─────────────────────────────────────────────
 // 5. 执行力评级计算
 // ─────────────────────────────────────────────
@@ -384,7 +356,7 @@ export async function calculateExecutionRating(store, username, role, period) {
   try {
     const cfg = await getRuntimeEmployeeRatingConfig();
     if (role === 'store_production_manager') {
-      // 出品经理：与月度综合一致 — agent_messages（开/收档）+ feishu_generic_records（原料），按业务日
+      // 出品经理：agent_messages（开档/收档/原料），按业务日
       const [year, month] = period.split('-');
       const startDate = `${year}-${month}-01`;
       const endDate = `${year}-${month}-${String(getDaysInPeriod(period)).padStart(2, '0')}`;
@@ -423,8 +395,10 @@ export async function calculateExecutionRating(store, username, role, period) {
         else if (newMembers >= Number(t.C_min_new_members)) return 'C';
         else return 'D';
       } else {
-        // 马己仙店长：飞书多维「例会」同步表 meeting_reports（与 agents 月度综合一致）
-        const mx = await getMajixianMeetingExecutionStatsFromFeishu(period);
+        const [y2, m2] = period.split('-');
+        const ms = `${y2}-${m2}-01`;
+        const me = `${y2}-${m2}-${String(getDaysInPeriod(period)).padStart(2, '0')}`;
+        const mx = await getMajixianMeetingExecutionStatsFromAgentMessages(store, ms, me);
         const expectedDays = getDaysInPeriod(period);
         const totalMissing = Math.max(0, expectedDays - mx.totalMeetings);
         const lowScoreCount = mx.unqualifiedMeetings;

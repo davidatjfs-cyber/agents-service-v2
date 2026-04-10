@@ -7,13 +7,13 @@
  * 数据源：
  * - 出品经理：开档/收档 agent_messages（按表内业务日期）；原料收货 feishu_generic_records（与聊天口径一致）
  * - 洪潮店长：daily_reports (new_wechat_members)
- * - 马己仙店长：feishu_generic_records (meeting_reports)
+ * - 马己仙店长：agent_messages (meeting_report，飞书例会同步写入)
  */
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { sendCard } from './feishu-client.js';
 import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
-import { getPMReportStatusByBizDate } from './pm-execution-report-coverage.js';
+import { getPMReportStatusByBizDate, getMajixianMeetingDayEval } from './pm-execution-report-coverage.js';
 import { sortFeishuScoringRows } from '../utils/scoring-assignee.js';
 
 // ─────────────────────────────────────────────
@@ -44,38 +44,14 @@ async function getHongchaoWechatMonthToDate(store, date) {
 }
 
 /**
- * 获取马己仙店长昨日例会报告
- * @param {string} store - 门店名
- * @param {string} date - 日期 YYYY-MM-DD
- * @returns {Promise<{submitted: boolean, score: number|null, qualified: boolean}>}
+ * 获取马己仙店长某日例会（agent_messages.meeting_report）
  */
 async function getMajixianMeetingReport(store, date) {
-  // 马己仙门店名映射
-  const storeMapping = {
-    '马己仙上海音乐广场店': '马己仙大宁店'
-  };
-  const storeInData = storeMapping[store] || store;
-
-  const result = await query(
-    `SELECT fields->>'得分' as score,
-            fields->>'所属门店' as meeting_store
-     FROM feishu_generic_records 
-     WHERE config_key = 'meeting_reports'
-       AND created_at::date = $1::date
-     ORDER BY created_at DESC
-     LIMIT 1`,
-    [date]
-  );
-
-  if (!result.rows.length) {
-    return { submitted: false, score: null, qualified: false };
-  }
-
-  const score = Number(result.rows[0]?.score || 0);
+  const ev = await getMajixianMeetingDayEval(store, date);
   return {
-    submitted: true,
-    score,
-    qualified: score >= 7
+    submitted: ev.submitted,
+    score: ev.score,
+    qualified: ev.qualified
   };
 }
 
@@ -149,11 +125,15 @@ function evaluateMajixianManager(meeting) {
   if (meeting.qualified) {
     return { rating: 'A', score: meeting.score, qualified: true };
   }
+  const miss =
+    meeting.score == null || !Number.isFinite(Number(meeting.score))
+      ? '例会已提交但无有效得分'
+      : `例会不合格（得分${meeting.score}分，低于7分合格线）`;
   return {
     rating: 'D',
     score: meeting.score,
     qualified: false,
-    missing: `例会不合格（得分${meeting.score}分，低于7分合格线）`
+    missing: miss
   };
 }
 

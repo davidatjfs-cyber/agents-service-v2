@@ -19,7 +19,8 @@ import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
 import {
   countDistinctOpeningBizDays,
   countDistinctClosingBizDays,
-  countDistinctMaterialBizDays
+  countDistinctMaterialBizDays,
+  getMajixianMeetingExecutionStatsForStore
 } from './pm-execution-report-coverage.js';
 import {
   isMajixianStore,
@@ -241,25 +242,16 @@ async function getHongchaoManagerExecutionRating(store, period) {
 
 /**
  * 马己仙店长执行力（月度）
- * 数据源：feishu_generic_records (meeting_reports)
+ * 数据源：agent_messages.meeting_report（飞书例会表经 bitable 轮询写入，与出品/开收档同源）
  */
 async function getMajixianManagerExecutionRating(store, period) {
   const [year, month] = period.split('-');
   const startDate = `${year}-${month}-01`;
-  const endDate = `${year}-${month}-31`;
+  const endDate = `${year}-${month}-${String(getDaysInMonth(period)).padStart(2, '0')}`;
 
-  const result = await query(
-    `SELECT COUNT(*)::int as total_meetings,
-            COUNT(*) FILTER (WHERE (fields->>'得分')::int >= 7) as qualified_meetings,
-            COUNT(*) FILTER (WHERE (fields->>'得分')::int < 7 OR (fields->>'得分')::int IS NULL OR (fields->>'得分') = '0') as unqualified_meetings
-     FROM feishu_generic_records 
-     WHERE config_key = 'meeting_reports'
-       AND created_at >= $1::date AND created_at <= $2::date`,
-    [startDate, endDate]
-  );
-
-  const totalMeetings = Number(result.rows[0]?.total_meetings || 0);
-  const unqualifiedMeetings = Number(result.rows[0]?.unqualified_meetings || 0);
+  const stats = await getMajixianMeetingExecutionStatsForStore(store, startDate, endDate);
+  const totalMeetings = stats.totalMeetings;
+  const unqualifiedMeetings = stats.unqualifiedMeetings;
   const daysInMonth = getDaysInMonth(period);
   const missingCount = Math.max(0, daysInMonth - totalMeetings);
 
@@ -274,7 +266,7 @@ async function getMajixianManagerExecutionRating(store, period) {
     value: missingCount,
     detail: {
       total_meetings: totalMeetings,
-      qualified_meetings: result.rows[0]?.qualified_meetings || 0,
+      qualified_meetings: stats.qualifiedMeetings,
       unqualified_meetings: unqualifiedMeetings,
       missing_days: missingCount
     }

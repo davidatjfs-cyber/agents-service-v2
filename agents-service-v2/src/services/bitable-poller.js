@@ -341,10 +341,17 @@ async function processRecord(configKey, type, record, brand) {
     case 'meeting_report':
       await upsertMsg('meeting_report', '例会报告', {
         type: 'meeting_report', recordId,
-        fields: { store: extractText(fields['门店']), date: extractText(fields['日期']),
-                  meeting_type: extractText(fields['会议类型']), organizer: extractText(fields['组织人']),
-                  participants: extractText(fields['参会人员']), topics: extractText(fields['会议议题']),
-                  decisions: extractText(fields['决议事项']), action_items: extractText(fields['行动项']) }
+        fields: {
+          store: extractText(fields['门店']),
+          date: extractText(fields['日期']),
+          meeting_score: extractText(fields['得分'] || fields['评分'] || fields['例会得分'] || ''),
+          meeting_type: extractText(fields['会议类型']),
+          organizer: extractText(fields['组织人']),
+          participants: extractText(fields['参会人员']),
+          topics: extractText(fields['会议议题']),
+          decisions: extractText(fields['决议事项']),
+          action_items: extractText(fields['行动项'])
+        }
       });
       break;
     case 'material_report':

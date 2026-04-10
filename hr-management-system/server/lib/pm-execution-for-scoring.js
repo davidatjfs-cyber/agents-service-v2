@@ -1,6 +1,6 @@
 /**
- * 出品经理开档/收档/原料收货 — 按业务日统计（与 agents-service `pm-execution-report-coverage.js` 同源）。
- * HRMS 月度「执行力」与月度综合、执行力日评共用同一数据层（agent_messages + feishu_generic_records）。
+ * 出品经理开档/收档/原料收货、马己仙例会 — 按业务日统计，数据仅来自 `agent_messages`（与 agents `pm-execution-report-coverage.js` 同源）。
+ * 洪潮店长企微仍用营业日报，不在此文件。
  */
 import { pool } from '../utils/database.js';
 import { expandAgentStoreLabels } from '../v2-store-alignment.js';
@@ -116,10 +116,16 @@ function storeMatchesRow(displayStore, rowStoreRaw) {
   return labels.some((lab) => sameStore(rowStore, lab));
 }
 
-function materialConfigKeyForBrand(brandZh) {
-  if (brandZh === '洪潮') return 'material_hongchao';
-  if (brandZh === '马己仙') return 'material_majixian';
-  return '';
+function materialBrandMatches(agentData, brandZh) {
+  const b = String(agentData?.brand || '').trim();
+  if (!b) return true;
+  return b === brandZh;
+}
+
+function parseMeetingScore(fields) {
+  const raw = fields?.meeting_score ?? fields?.score ?? fields?.得分;
+  const n = Number(String(raw ?? '').trim());
+  return Number.isFinite(n) ? n : null;
 }
 
 function collectDistinctBizDays(rows, displayStore, fieldDateKeys, startYmd, endYmd) {
@@ -164,21 +170,46 @@ export async function countDistinctClosingBizDays(displayStore, startYmd, endYmd
 }
 
 export async function countDistinctMaterialBizDays(displayStore, brandZh, startYmd, endYmd) {
-  const key = materialConfigKeyForBrand(brandZh);
-  if (!key) return 0;
   const r = await pool().query(
-    `SELECT fields, created_at FROM feishu_generic_records
-     WHERE config_key = $1
-     ORDER BY updated_at DESC
-     LIMIT 15000`,
-    [key]
+    `SELECT agent_data, created_at FROM agent_messages
+     WHERE content_type = 'material_report'
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date - 2
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date + 2`,
+    [startYmd, endYmd]
   );
   const days = new Set();
   for (const row of r.rows || []) {
-    const f = row.fields && typeof row.fields === 'object' ? row.fields : {};
-    if (!storeMatchesRow(displayStore, f['门店'] || f['所属门店'])) continue;
-    const biz = resolveBitableBusinessYmd(f['收货日期'] || f['日期'], row.created_at);
+    const ad = row.agent_data && typeof row.agent_data === 'object' ? row.agent_data : {};
+    if (!materialBrandMatches(ad, brandZh)) continue;
+    const fields = ad.fields || {};
+    if (!storeMatchesRow(displayStore, fields.store)) continue;
+    const biz = resolveBitableBusinessYmd(fields.date, row.created_at);
     if (biz && biz >= startYmd && biz <= endYmd) days.add(biz);
   }
   return days.size;
+}
+
+/** 马己仙店长月度执行力：例会条数（agent_messages.meeting_report，与 agents 侧一致） */
+export async function getMajixianMeetingExecutionStatsFromAgentMessages(displayStore, startYmd, endYmd) {
+  const r = await pool().query(
+    `SELECT agent_data, created_at FROM agent_messages
+     WHERE content_type = 'meeting_report'
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date - 2
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date + 2`,
+    [startYmd, endYmd]
+  );
+  let totalMeetings = 0;
+  let qualifiedMeetings = 0;
+  let unqualifiedMeetings = 0;
+  for (const row of r.rows || []) {
+    const fields = row.agent_data?.fields || {};
+    if (!storeMatchesRow(displayStore, fields.store)) continue;
+    const biz = resolveBitableBusinessYmd(fields.date, row.created_at);
+    if (!biz || biz < startYmd || biz > endYmd) continue;
+    totalMeetings++;
+    const sc = parseMeetingScore(fields);
+    if (sc != null && sc >= 7) qualifiedMeetings++;
+    else unqualifiedMeetings++;
+  }
+  return { totalMeetings, qualifiedMeetings, unqualifiedMeetings };
 }
