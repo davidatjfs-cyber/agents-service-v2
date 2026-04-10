@@ -6,6 +6,12 @@ import { query } from '../utils/db.js';
 import { expandAgentStoreLabels } from '../config/store-mapping.js';
 import { sameStore, ext, resolveBitableBusinessYmd } from './deterministic-replies.js';
 
+/** 按业务日判定时，created_at 扫描窗口：避免飞书晚同步（入库晚于业务日数日）被 SQL 提前过滤掉 */
+const CREATED_AT_PAD_BEFORE_SINGLE_DAY = 45;
+const CREATED_AT_PAD_AFTER_SINGLE_DAY = 14;
+const CREATED_AT_PAD_BEFORE_MONTH = 45;
+const CREATED_AT_PAD_AFTER_MONTH = 45;
+
 function storeMatchesRow(displayStore, rowStoreRaw) {
   const rowStore = ext(rowStoreRaw);
   if (!rowStore) return false;
@@ -32,8 +38,9 @@ export async function pmHasOpeningReportBizDate(displayStore, dateYmd) {
   const r = await query(
     `SELECT agent_data, created_at FROM agent_messages
      WHERE content_type = 'opening_report'
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date BETWEEN ($1::date - 2) AND ($1::date + 2)`,
-    [dateYmd]
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= ($1::date - $2::int)
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($1::date + $3::int)`,
+    [dateYmd, CREATED_AT_PAD_BEFORE_SINGLE_DAY, CREATED_AT_PAD_AFTER_SINGLE_DAY]
   );
   for (const row of r.rows || []) {
     const fields = row.agent_data?.fields || {};
@@ -51,8 +58,9 @@ export async function pmHasClosingReportBizDate(displayStore, dateYmd) {
   const r = await query(
     `SELECT agent_data, created_at FROM agent_messages
      WHERE content_type = 'closing_report'
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date BETWEEN ($1::date - 2) AND ($1::date + 2)`,
-    [dateYmd]
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= ($1::date - $2::int)
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($1::date + $3::int)`,
+    [dateYmd, CREATED_AT_PAD_BEFORE_SINGLE_DAY, CREATED_AT_PAD_AFTER_SINGLE_DAY]
   );
   for (const row of r.rows || []) {
     const fields = row.agent_data?.fields || {};
@@ -70,8 +78,9 @@ export async function pmHasMaterialReportBizDate(displayStore, brandZh, dateYmd)
   const r = await query(
     `SELECT agent_data, created_at FROM agent_messages
      WHERE content_type = 'material_report'
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date BETWEEN ($1::date - 2) AND ($1::date + 2)`,
-    [dateYmd]
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= ($1::date - $2::int)
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($1::date + $3::int)`,
+    [dateYmd, CREATED_AT_PAD_BEFORE_SINGLE_DAY, CREATED_AT_PAD_AFTER_SINGLE_DAY]
   );
   for (const row of r.rows || []) {
     const ad = row.agent_data && typeof row.agent_data === 'object' ? row.agent_data : {};
@@ -119,9 +128,9 @@ export async function countDistinctOpeningBizDays(displayStore, startYmd, endYmd
   const r = await query(
     `SELECT agent_data, created_at FROM agent_messages
      WHERE content_type = 'opening_report'
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date - 2
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date + 2`,
-    [startYmd, endYmd]
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= ($1::date - $3::int)
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($2::date + $4::int)`,
+    [startYmd, endYmd, CREATED_AT_PAD_BEFORE_MONTH, CREATED_AT_PAD_AFTER_MONTH]
   );
   return collectDistinctBizDays(r.rows, displayStore, ['date'], startYmd, endYmd);
 }
@@ -130,9 +139,9 @@ export async function countDistinctClosingBizDays(displayStore, startYmd, endYmd
   const r = await query(
     `SELECT agent_data, created_at FROM agent_messages
      WHERE content_type = 'closing_report'
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date - 2
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date + 2`,
-    [startYmd, endYmd]
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= ($1::date - $3::int)
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($2::date + $4::int)`,
+    [startYmd, endYmd, CREATED_AT_PAD_BEFORE_MONTH, CREATED_AT_PAD_AFTER_MONTH]
   );
   return collectDistinctBizDays(r.rows, displayStore, ['date'], startYmd, endYmd);
 }
@@ -141,9 +150,9 @@ export async function countDistinctMaterialBizDays(displayStore, brandZh, startY
   const r = await query(
     `SELECT agent_data, created_at FROM agent_messages
      WHERE content_type = 'material_report'
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date - 2
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date + 2`,
-    [startYmd, endYmd]
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= ($1::date - $3::int)
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($2::date + $4::int)`,
+    [startYmd, endYmd, CREATED_AT_PAD_BEFORE_MONTH, CREATED_AT_PAD_AFTER_MONTH]
   );
   const days = new Set();
   for (const row of r.rows || []) {
@@ -164,9 +173,9 @@ export async function getMajixianMeetingExecutionStatsForStore(displayStore, sta
   const r = await query(
     `SELECT agent_data, created_at FROM agent_messages
      WHERE content_type = 'meeting_report'
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date - 2
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date + 2`,
-    [startYmd, endYmd]
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= ($1::date - $3::int)
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($2::date + $4::int)`,
+    [startYmd, endYmd, CREATED_AT_PAD_BEFORE_MONTH, CREATED_AT_PAD_AFTER_MONTH]
   );
   let totalMeetings = 0;
   let qualifiedMeetings = 0;
@@ -189,8 +198,9 @@ export async function getMajixianMeetingDayEval(displayStore, dateYmd) {
   const r = await query(
     `SELECT agent_data, created_at FROM agent_messages
      WHERE content_type = 'meeting_report'
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date BETWEEN ($1::date - 2) AND ($1::date + 2)`,
-    [dateYmd]
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= ($1::date - $2::int)
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($1::date + $3::int)`,
+    [dateYmd, CREATED_AT_PAD_BEFORE_SINGLE_DAY, CREATED_AT_PAD_AFTER_SINGLE_DAY]
   );
   let latestFields = null;
   let latestTs = 0;

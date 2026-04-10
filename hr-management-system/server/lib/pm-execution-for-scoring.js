@@ -5,6 +5,9 @@
 import { pool } from '../utils/database.js';
 import { expandAgentStoreLabels } from '../v2-store-alignment.js';
 
+const CREATED_AT_PAD_BEFORE_MONTH = 45;
+const CREATED_AT_PAD_AFTER_MONTH = 45;
+
 function fmt(d) {
   const dt = d instanceof Date ? d : new Date(d);
   if (isNaN(dt.getTime())) return '';
@@ -151,9 +154,9 @@ export async function countDistinctOpeningBizDays(displayStore, startYmd, endYmd
   const r = await pool().query(
     `SELECT agent_data, created_at FROM agent_messages
      WHERE content_type = 'opening_report'
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date - 2
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date + 2`,
-    [startYmd, endYmd]
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= ($1::date - $3::int)
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($2::date + $4::int)`,
+    [startYmd, endYmd, CREATED_AT_PAD_BEFORE_MONTH, CREATED_AT_PAD_AFTER_MONTH]
   );
   return collectDistinctBizDays(r.rows, displayStore, ['date'], startYmd, endYmd);
 }
@@ -162,9 +165,9 @@ export async function countDistinctClosingBizDays(displayStore, startYmd, endYmd
   const r = await pool().query(
     `SELECT agent_data, created_at FROM agent_messages
      WHERE content_type = 'closing_report'
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date - 2
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date + 2`,
-    [startYmd, endYmd]
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= ($1::date - $3::int)
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($2::date + $4::int)`,
+    [startYmd, endYmd, CREATED_AT_PAD_BEFORE_MONTH, CREATED_AT_PAD_AFTER_MONTH]
   );
   return collectDistinctBizDays(r.rows, displayStore, ['date'], startYmd, endYmd);
 }
@@ -173,9 +176,9 @@ export async function countDistinctMaterialBizDays(displayStore, brandZh, startY
   const r = await pool().query(
     `SELECT agent_data, created_at FROM agent_messages
      WHERE content_type = 'material_report'
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date - 2
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date + 2`,
-    [startYmd, endYmd]
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= ($1::date - $3::int)
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($2::date + $4::int)`,
+    [startYmd, endYmd, CREATED_AT_PAD_BEFORE_MONTH, CREATED_AT_PAD_AFTER_MONTH]
   );
   const days = new Set();
   for (const row of r.rows || []) {
@@ -194,9 +197,9 @@ export async function getMajixianMeetingExecutionStatsFromAgentMessages(displayS
   const r = await pool().query(
     `SELECT agent_data, created_at FROM agent_messages
      WHERE content_type = 'meeting_report'
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date - 2
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date + 2`,
-    [startYmd, endYmd]
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= ($1::date - $3::int)
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($2::date + $4::int)`,
+    [startYmd, endYmd, CREATED_AT_PAD_BEFORE_MONTH, CREATED_AT_PAD_AFTER_MONTH]
   );
   let totalMeetings = 0;
   let qualifiedMeetings = 0;
