@@ -8,6 +8,8 @@ import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { executeMetrics, extractTimeRangeFromText, parseTimeRange, getAllMetricDefs, quickQuery, getTimeLabelChinese } from './data-executor.js';
 import { saveMemory, recallMemories, getOutcomeStats } from './agent-memory.js';
+import { saveMemory as saveMemPalaceMemory, recallMemory as recallMemPalaceMemory } from './memory-adapter.js';
+import { decideStrategy } from './marketing-strategy-engine.js';
 import { generateProcurementAdvice } from './procurement-agent.js';
 import { getBrandForStore, getConfig } from './config-service.js';
 import { toFeishuStoreName, resolveAgentCanonicalStore } from '../config/store-mapping.js';
@@ -2371,64 +2373,239 @@ ${appealData}
   saveMemory('appeal', store, (r.content||'').slice(0,500), {query:text.slice(0,200)}).catch(()=>{});
   return { agent: 'appeal', response: r.content || '已记录，我们将在24小时内核实并回复。', data: appealData, store, appealRecorded: true };
 }
+function logStrategyAbTest(ctx, memories, strategyText, score) {
+  const ENABLE_MEM = process.env.ENABLE_MEMPALACE === 'true';
+  const logData = {
+    store: ctx.storeId,
+    input: ctx.input,
+    used_memory: ENABLE_MEM,
+    memory_count: memories.length,
+    strategy: strategyText,
+    score,
+    timestamp: Date.now()
+  };
+  console.log('[STRATEGY_AB_TEST]', JSON.stringify(logData));
+}
+
+/** marketing_planner：无数据或 LLM 失败时的稳定策略正文（禁止再使用「请提供门店信息…」兜底） */
+function generateFallbackStrategy(input) {
+  const q = String(input || '门店经营').trim();
+  return `针对问题「${q}」，提供通用运营策略：
+
+1. 提升客流：
+   • 推出限时套餐或引流活动
+   • 优化门店展示与招牌菜曝光
+
+2. 提升转化：
+   • 设计高性价比组合套餐
+   • 强化服务推荐能力
+
+3. 提升复购：
+   • 建立会员体系
+   • 设置优惠券或积分机制
+
+4. 优化体验：
+   • 检查出餐速度
+   • 优化高峰期人员安排
+
+（建议结合实际经营数据进一步优化）`;
+}
+
+/** LLM 无输出时：仅按引擎策略扩写为门店可读正文，不新增策略项 */
+function planTextFromEngineStrategies(engineStrategies, ctx) {
+  const q = String(ctx.input || '').trim() || '门店经营';
+  const rows = Array.isArray(engineStrategies) ? engineStrategies : [];
+  if (!rows.length) return generateFallbackStrategy(q);
+  const hasMem = rows.some((x) => x && x.source === 'memory');
+  const head = hasMem
+    ? '【营销活动计划｜规则引擎输出（含记忆命中项）】'
+    : '【营销活动计划｜规则引擎输出（通用项）】';
+  const body = rows.map((s, i) => {
+    const action = String(s?.action || '').trim();
+    const reason = String(s?.reason || '').trim();
+    const tag = s?.source === 'memory' ? '【记忆命中】' : '【通用】';
+    return `${i + 1}. ${tag}${action}\n   说明：${reason || '—'}\n   执行要点：围绕「${q}」设定时间窗口、负责人（店长/前厅/外卖）、7 日内过程指标（订单/到店/转化），避免空泛口号。`;
+  }).join('\n\n');
+  return `${head}\n\n${body}\n\n（本段由引擎策略骨架扩写；若大模型可用，可在此基础上润色为成稿。）`;
+}
+
+function ensureMarketingStrategyText(raw, ctx) {
+  const t = String(raw || '').trim();
+  if (!t || /请提供门店信息以制定营销方案/.test(t)) {
+    return generateFallbackStrategy(String(ctx.input || '').trim() || '门店经营');
+  }
+  return t;
+}
+
+function logMemoryDecision(resultText) {
+  const t = String(resultText || '');
+  const usedMemoryInDecision = t.includes('套餐') || t.includes('服务优化');
+  console.log('[MEMORY_DECISION]', { usedMemoryInDecision });
+}
+
+/** MemPalace：仅 strategy_agent（营销策划）路径使用；不替代 agent_memory */
+function scoreStrategyForMemPalace(kind, body) {
+  const t = String(body || '');
+  if (kind === 'ask') return { score: 0.35, hasOutcome: false };
+  if (t.length < 160) return { score: 0.55, hasOutcome: false };
+  let score = 0.66;
+  const hits = [
+    /活动/.test(t),
+    /目标|指标|营收|外卖/.test(t),
+    /负责|店长|前厅/.test(t),
+    t.length > 520
+  ].filter(Boolean).length;
+  score += hits * 0.04;
+  if (kind === 'final') score += 0.05;
+  score = Math.min(0.88, Math.round(score * 100) / 100);
+  const hasOutcome = kind === 'final' || (kind === 'text' && t.length >= 350 && hits >= 3);
+  return { score, hasOutcome };
+}
+
 // ── 6. Marketing Planner (营销策划) ──
 async function handleMarketingPlanner(text, ctx) {
+  const ENABLE_MEM = process.env.ENABLE_MEMPALACE === 'true';
   let mktData = '';
   const store = ctx.store || '';
   const brand = store ? await getBrandForStore(store).catch(() => null) : null;
+  const data = {};
 
-  try {
-    const rev = await query(
-      `SELECT date, actual_revenue, budget_rate, pre_discount_revenue,
+  const revSqlMid = `SELECT date, actual_revenue, target_revenue, dine_orders
+       FROM daily_reports WHERE store ILIKE $1 AND date >= CURRENT_DATE - 30
+       ORDER BY date DESC LIMIT 30`;
+  const revSqlFull = `SELECT date, actual_revenue, target_revenue,
               delivery_actual, dine_traffic, dine_orders, efficiency
        FROM daily_reports WHERE store ILIKE $1 AND date >= CURRENT_DATE - 30
-       ORDER BY date DESC LIMIT 30`, [`%${store}%`]);
-    if (rev.rows?.length) {
-      const avg = rev.rows.reduce((s, r) => s + (parseFloat(r.actual_revenue) || 0), 0) / rev.rows.length;
-      const avgRate = rev.rows.reduce((s, r) => s + (parseFloat(r.budget_rate) || 0), 0) / rev.rows.length;
-      mktData += `【近30天营收数据】日均营收:¥${Math.round(avg)} 平均达成率:${(avgRate * 100).toFixed(1)}%`;
-      const recent7 = rev.rows.slice(0, 7);
-      mktData += '\n近7天营收: ' + recent7.map(r => `${String(r.date||'').slice(5,10)}:¥${r.actual_revenue||0}`).join(', ');
-      const avgTraffic = rev.rows.reduce((s, r) => s + (parseFloat(r.dine_traffic) || 0), 0) / rev.rows.length;
-      const totalRev = rev.rows.reduce((s, r) => s + (parseFloat(r.actual_revenue) || 0), 0);
-      const delivRev = rev.rows.reduce((s, r) => s + (parseFloat(r.delivery_actual) || 0), 0);
-      mktData += `\n平均日客流:${Math.round(avgTraffic)}人 外卖占比:${totalRev > 0 ? (delivRev/totalRev*100).toFixed(1) : 0}%`;
+       ORDER BY date DESC LIMIT 30`;
+  const revSqlMin = `SELECT date, actual_revenue
+       FROM daily_reports WHERE store ILIKE $1 AND date >= CURRENT_DATE - 30
+       ORDER BY date DESC LIMIT 30`;
+
+  let revRows = [];
+  for (const sql of [revSqlMid, revSqlFull, revSqlMin]) {
+    try {
+      const rev = await query(sql, [`%${store}%`]);
+      revRows = rev.rows || [];
+      if (revRows.length) data.dailyReportDays = revRows.length;
+      break;
+    } catch (err) {
+      console.warn('[DB_ERROR]', err.message);
+      logger.warn({ err: err.message }, 'marketing_planner daily_reports');
     }
+  }
+
+  if (revRows.length) {
+    const avg = revRows.reduce((s, r) => s + (parseFloat(r.actual_revenue) || 0), 0) / revRows.length;
+    const rates = revRows
+      .map((r) => {
+        const tg = parseFloat(r.target_revenue);
+        const ac = parseFloat(r.actual_revenue);
+        if (tg > 0) return ac / tg;
+        return NaN;
+      })
+      .filter((x) => !Number.isNaN(x));
+    const avgRate = rates.length ? rates.reduce((s, x) => s + x, 0) / rates.length : 0;
+    mktData += `【近30天营收数据】日均营收:¥${Math.round(avg)} 平均目标达成率:${(avgRate * 100).toFixed(1)}%`;
+    const recent7 = revRows.slice(0, 7);
+    mktData += '\n近7天营收: ' + recent7.map((r) => `${String(r.date || '').slice(5, 10)}:¥${r.actual_revenue || 0}`).join(', ');
+    const avgTraffic = revRows.reduce((s, r) => s + (parseFloat(r.dine_traffic) || 0), 0) / revRows.length;
+    const totalRev = revRows.reduce((s, r) => s + (parseFloat(r.actual_revenue) || 0), 0);
+    const delivRev = revRows.reduce((s, r) => s + (parseFloat(r.delivery_actual) || 0), 0);
+    if (totalRev > 0 || avgTraffic > 0 || delivRev > 0) {
+      mktData += `\n平均日客流:${Math.round(avgTraffic)}人 外卖占比:${totalRev > 0 ? ((delivRev / totalRev) * 100).toFixed(1) : 0}%`;
+    }
+  }
+
+  try {
     const campaigns = await query(
       `SELECT title, status, start_date, end_date, target_metric, target_value, actual_value
        FROM marketing_campaigns WHERE (store ILIKE $1 OR store IS NULL)
-       ORDER BY start_date DESC LIMIT 5`, [`%${store}%`]);
+       ORDER BY start_date DESC LIMIT 5`,
+      [`%${store}%`]
+    );
     if (campaigns.rows?.length) {
-      mktData += '\n\n【近期营销活动记录】\n' + campaigns.rows.map(c => {
+      data.campaignRows = campaigns.rows.length;
+      mktData += '\n\n【近期营销活动记录】\n' + campaigns.rows.map((c) => {
         const prog = c.actual_value && c.target_value
-          ? ` 完成度:${((+c.actual_value / +c.target_value)*100).toFixed(0)}%` : '';
+          ? ` 完成度:${((+c.actual_value / +c.target_value) * 100).toFixed(0)}%` : '';
         const statusLabel = c.status === 'active' ? '进行中' : c.status === 'completed' ? '已完成' : '计划中';
         return `· [${statusLabel}] ${c.title} | ${FMT_DATE(c.start_date)}~${FMT_DATE(c.end_date)}${prog}`;
       }).join('\n');
-    } else { mktData += '\n\n【近期营销活动】暂无历史活动'; }
+    } else {
+      mktData += '\n\n【近期营销活动】暂无历史活动';
+    }
+  } catch (err) {
+    console.warn('[DB_ERROR]', err.message);
+    logger.warn({ err: err.message }, 'marketing_planner campaigns');
+    mktData += '\n\n【近期营销活动】读取失败，略过';
+  }
+
+  try {
     const reviews = await query(
       `SELECT anomaly_key, COUNT(*)::int as cnt FROM anomaly_triggers
        WHERE store ILIKE $1 AND anomaly_key IN ('product_review','service_review')
-       AND trigger_date >= CURRENT_DATE - 30 GROUP BY anomaly_key`, [`%${store}%`]);
+       AND trigger_date >= CURRENT_DATE - 30 GROUP BY anomaly_key`,
+      [`%${store}%`]
+    );
     if (reviews.rows?.length) {
-      mktData += '\n【近30天差评】' + reviews.rows.map(r =>
+      data.reviewBuckets = reviews.rows.length;
+      mktData += '\n【近30天差评】' + reviews.rows.map((r) =>
         `${r.anomaly_key === 'product_review' ? '产品' : '服务'}差评:${r.cnt}次`).join(', ');
     }
-    const nowSh = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' });
-    const curMo = nowSh.slice(0, 7);
-    const tgt = await query(`SELECT target_revenue FROM revenue_targets WHERE store ILIKE $1 AND period = $2 LIMIT 1`, [`%${store}%`, curMo]);
-    if (tgt.rows?.[0]) mktData += `\n【本月营收目标】¥${tgt.rows[0].target_revenue}`;
-  } catch (e) { logger.warn({ err: e?.message }, 'marketing_planner data'); }
+  } catch (err) {
+    console.warn('[DB_ERROR]', err.message);
+    logger.warn({ err: err.message }, 'marketing_planner reviews');
+  }
 
   try {
-    const memories = await recallMemories('marketing_planner', store, '', 3);
-    if (memories.length) {
-      mktData += '\n\n【历史方案记录】\n' + memories.map(m =>
-        `${String(m.created_at||'').slice(0,10)}: ${m.content.slice(0,120)}`).join('\n');
+    const nowSh = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' });
+    const curMo = nowSh.slice(0, 7);
+    const tgt = await query(
+      `SELECT target_revenue FROM revenue_targets WHERE store ILIKE $1 AND period = $2 LIMIT 1`,
+      [`%${store}%`, curMo]
+    );
+    if (tgt.rows?.[0]) {
+      data.monthlyTarget = true;
+      mktData += `\n【本月营收目标】¥${tgt.rows[0].target_revenue}`;
     }
-  } catch (e) {}
+  } catch (err) {
+    console.warn('[DB_ERROR]', err.message);
+    logger.warn({ err: err.message }, 'marketing_planner revenue_targets');
+  }
 
-  if (!mktData) mktData = '暂无门店营收数据';
+  try {
+    const interactionMemories = await recallMemories('marketing_planner', store, '', 3);
+    if (interactionMemories.length) {
+      mktData += '\n\n【历史方案记录】\n' + interactionMemories.map((m) =>
+        `${String(m.created_at || '').slice(0, 10)}: ${m.content.slice(0, 120)}`).join('\n');
+    }
+  } catch (err) {
+    console.warn('[DB_ERROR]', err.message);
+    logger.warn({ err: err.message }, 'marketing_planner recallMemories');
+  }
+
+  if (!mktData.trim()) {
+    mktData = '【弱数据模式】门店侧日报字段不可用或未拉取到数据。请仍输出可执行营销方案（含≥3条活动），禁止仅回答「无数据」或拒答。';
+  }
+
+  const hasData = data && Object.keys(data).length > 0;
+
+  const storeKey = String(ctx.storeId || ctx.store || store || '').trim();
+  let memPalaceRows = [];
+  if (ENABLE_MEM) {
+    memPalaceRows = await recallMemPalaceMemory({
+      agent: 'strategy_agent',
+      store: storeKey,
+      query: String(ctx.problem || ctx.input || text || '').trim(),
+      limit: 5
+    });
+  }
+  const engineMemories = ENABLE_MEM ? memPalaceRows : [];
+  const engineStrategies = decideStrategy({
+    input: String(ctx.input || text || ''),
+    memories: engineMemories
+  });
+  console.log('[ENGINE_STRATEGY]', engineStrategies);
 
   // 会话支持：如果有现有会话，增强提示词
   const sessionPrompt = ctx.isFollowUp && ctx.session
@@ -2439,47 +2616,41 @@ async function handleMarketingPlanner(text, ctx) {
 
   const sysPrompt =
     (await adminAgentPromptPrefix('marketing_planner')) +
-    `你是餐饮连锁的营销策划负责人。当前时间：${NOW_CN()}。门店：${store || '未指定'}${brand ? `（${brand}）` : ''}。
+    `你是餐饮运营专家，请将以下策略扩写为完整方案。
+
+当前时间：${NOW_CN()}。门店：${store || '未指定'}${brand ? `（${brand}）` : ''}。
 ${sessionPrompt}
 
-【真实业务数据】（仅供你引用数字，禁止整段照抄成「营收分析」报表）
+【门店数据摘要】（扩写时可引用其中数字，禁止整段抄成营收日报）
 ${mktData}
 
-【你交付的是「营销活动计划」，不是营收日报】
-- 禁止：把上方数据按「实收营业额、达成率、人效…」一条条罗列成报表式回复（那是 data_auditor 的工作）
-- 禁止：只写两条空泛「经营建议」就结束
-- 必须：输出可执行的活动级方案（有名称、时间、负责人、指标）
+策略列表（已由系统决策引擎生成，须保留各条 action 的核心措施，不得替换为无关策略）：
+${JSON.stringify(engineStrategies, null, 2)}
 
-【文笔与可执行度（对标优秀运营/咨询成稿）】
-- 每个活动写清：对谁（新客/老客/会员）、在什么场景（堂食/外卖/企微/社群）、做什么动作（话术+物料+触点）、如何衡量（7 日内的过程指标，不写「必火」类承诺）。
-- 充值/储值/锁客类必须给 1～2 条**具体机制**（档位示例、赠券规则、触达渠道、店员口播要点择一写细），禁止只写「加强会员运营」。
-- 小红书/抖音/点评若被用户点到，用短句写清「钩子 + 核心信息 + 互动设计」，避免公文套话。
+要求：
+1. 每条策略写成完整可执行方案（目标、动作、衡量、负责人/时间窗口等）
+2. 保留策略核心，不要改变策略内容（尤其 action 中的关键表述）
+3. 可以增加执行细节，但不能发明与上表无关的新策略
+4. 若关键信息不足，仅可输出：{"type":"ask","question":"..."}；否则输出完整中文正文（不要用 JSON 包裹全文方案）
+5. 语气专业、可交给门店直接执行`;
 
-【多轮对话规则】
-- 如果信息不足，最多问1个关键问题，输出：{"type":"ask","question":"问题内容"}
-- 最多连续问3轮，信息充分后输出完整方案
-- 输出完整方案时：{"type":"final","answer":"方案内容"}
-
-【必须包含以下结构（final 输出时）】
-1. 【数据结论（≤5句）】概括近7天/本月趋势与外卖占比，必须引用上方真实数字
-2. 【本期营销目标】1-3条可量化目标（如：外卖实收提升X%、企微会员转化、点评维护等）
-3. 【活动清单】至少 3 条独立活动，每条固定格式：
-   - 活动名称｜核心动作｜建议时间窗口｜负责人（店长/出品/前厅）｜预算量级（低/中/高）｜衡量指标
-4. 【外卖专项】若外卖占比较高或用户提到外卖，单列 2 条外卖平台动作（满减/套餐/曝光/复购）
-5. 【复盘与下一步】活动上线后如何周度复盘
-
-【输出约束】
-- ask/final 响应必须为 JSON 格式（禁止 markdown 代码块包裹整段 JSON）
-- final 的 answer 必须是合法 JSON 字符串：换行在 JSON 里写 \\n（标准转义），解析后即正常换行；禁止在 answer 正文里直接打出可见的「反斜杠 + 字母 n」冒充换行
-- final 回答使用纯中文自然语言（除 JSON 语法外），禁止嵌套另一层 JSON 字符串当正文
-- 语气专业、可交给门店直接执行`;
-
+  const plannerTemp = 0.42;
   const r = await callLLM([
     { role: 'system', content: sysPrompt },
     { role: 'user', content: text }
-  ], { temperature: 0.45, max_tokens: 2400, purpose: 'marketing_planner', ...(ctx.llmContext ? { context: ctx.llmContext } : {}) });
+  ], { temperature: plannerTemp, max_tokens: 2400, purpose: 'marketing_planner', ...(ctx.llmContext ? { context: ctx.llmContext } : {}) });
 
-  const rawContent = r.content || '请提供门店信息以制定营销方案。';
+  let rawContent = String(r.content || '').trim();
+  if (!rawContent) {
+    console.warn('[MARKETING_PLANNER]', 'LLM empty; using engine expansion for user-visible plan');
+    rawContent = planTextFromEngineStrategies(engineStrategies, ctx);
+  }
+
+  console.log('[STRATEGY_DEBUG]', {
+    hasData,
+    fallback: !hasData,
+    input: ctx.input
+  });
 
   // 检查是否为 ask/final 格式的 JSON 响应（避免贪婪正则误吞多段 JSON）
   let parsedMarketing = null;
@@ -2503,11 +2674,17 @@ ${mktData}
 
   if (parsedMarketing && typeof parsedMarketing === 'object') {
     if (parsedMarketing.type === 'ask' && parsedMarketing.question) {
-      const q = decodeJsonStringEscapesForFeishu(String(parsedMarketing.question).trim());
+      let q = decodeJsonStringEscapesForFeishu(String(parsedMarketing.question).trim());
+      q = ensureMarketingStrategyText(q, ctx);
+      const askScore = scoreStrategyForMemPalace('ask', q).score || 0.6;
+      logStrategyAbTest(ctx, memPalaceRows, q, askScore);
+      logMemoryDecision(q);
       saveMemory('marketing_planner', store, `Asked: ${q}`, { query: text.slice(0, 200) }).catch(() => {});
       return {
         agent: 'marketing_planner',
         response: q,
+        text: q,
+        score: askScore || 0.6,
         store,
         data: mktData,
         reportTitle: '营销方案询问',
@@ -2517,26 +2694,67 @@ ${mktData}
       };
     }
     if (parsedMarketing.type === 'final' && parsedMarketing.answer != null && parsedMarketing.answer !== '') {
-      const answerText = decodeJsonStringEscapesForFeishu(
+      let answerText = decodeJsonStringEscapesForFeishu(
         stripJsonFromResponse(String(parsedMarketing.answer).trim())
       );
-      saveMemory('marketing_planner', store, answerText.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
-      return {
-        agent: 'marketing_planner',
-        response: answerText,
-        store,
-        data: mktData,
-        reportTitle: '营销活动计划',
-        dataBacked: true,
-        responseType: 'final',
-      };
+      if (answerText) {
+        answerText = ensureMarketingStrategyText(answerText, ctx);
+        saveMemory('marketing_planner', store, answerText.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
+        const { score, hasOutcome } = scoreStrategyForMemPalace('final', answerText);
+        const outScore = score || 0.6;
+        logStrategyAbTest(ctx, memPalaceRows, answerText, outScore);
+        logMemoryDecision(answerText);
+        if (ENABLE_MEM && score >= 0.7 && hasOutcome) {
+          await saveMemPalaceMemory({
+            agent: 'strategy_agent',
+            store: storeKey,
+            type: 'strategy',
+            content: answerText.slice(0, 8000),
+            metadata: { score }
+          });
+        }
+        return {
+          agent: 'marketing_planner',
+          response: answerText,
+          text: answerText,
+          score: outScore,
+          store,
+          data: mktData,
+          reportTitle: '营销活动计划',
+          dataBacked: true,
+          responseType: 'final',
+        };
+      }
     }
   }
 
   // 普通文本响应（兼容旧逻辑）
-  const responseText = decodeJsonStringEscapesForFeishu(stripJsonFromResponse(rawContent));
+  let responseText = decodeJsonStringEscapesForFeishu(stripJsonFromResponse(rawContent));
+  responseText = ensureMarketingStrategyText(responseText, ctx);
   saveMemory('marketing_planner', store, responseText.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
-  return { agent: 'marketing_planner', response: responseText, store, data: mktData, reportTitle: '营销活动计划', dataBacked: true };
+  const { score: textScore, hasOutcome: textOutcome } = scoreStrategyForMemPalace('text', responseText);
+  const textOutScore = textScore || 0.6;
+  logStrategyAbTest(ctx, memPalaceRows, responseText, textOutScore);
+  logMemoryDecision(responseText);
+  if (ENABLE_MEM && textScore >= 0.7 && textOutcome) {
+    await saveMemPalaceMemory({
+      agent: 'strategy_agent',
+      store: storeKey,
+      type: 'strategy',
+      content: responseText.slice(0, 8000),
+      metadata: { score: textScore }
+    });
+  }
+  return {
+    agent: 'marketing_planner',
+    response: responseText,
+    text: responseText,
+    score: textOutScore,
+    store,
+    data: mktData,
+    reportTitle: '营销活动计划',
+    dataBacked: true,
+  };
 }
 // ── 7. Marketing Executor (营销执行) ──
 async function handleMarketingExecutor(text, ctx) {

@@ -1,0 +1,4 @@
+node_modules/
+.active-port
+.env
+*.log
