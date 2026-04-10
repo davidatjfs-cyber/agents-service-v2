@@ -199,6 +199,7 @@ export async function runBiAnomalyNotifyPipeline({
   /** 与 anomaly_triggers.trigger_date 对齐，供任务结案时回写触发记录状态 */
   const deriveBiTriggerDate = (rk, val) => {
     const v = val && typeof val === 'object' ? val : {};
+    if (v.evaluated_business_day) return String(v.evaluated_business_day).slice(0, 10);
     if (v.evaluationYmd) return String(v.evaluationYmd).slice(0, 10);
     if (v.weekEnd) return String(v.weekEnd).slice(0, 10);
     if (v.dateToday) return String(v.dateToday).slice(0, 10);

@@ -1,6 +1,11 @@
 /**
  * 周度门店评级：按 anomaly_triggers 聚合扣分，写入 agent_scores（店长 / 出品经理维度）。
  * score_model=anomaly_rollups_v2；扣分按异常类型/严重度/频次由 scoring-model.calcDeductions 等计算。
+ *
+ * **充值异常（recharge_zero）**：日频检测落库后 **立即** 调用 refreshWeeklyRollupAfterRechargeTrigger
+ * 重算当周 anomaly_rollups_v2（与周一全量任务同一公式）；店长 **当天即可在绩效分看到更新**，周一任务再次全量跑仍幂等。
+ * 汇总时计入 status 为 open/closed 的触发（排除 superseded、pending_data），避免飞书结案后误从扣分里消失。
+ *
  * 实收营收 / 人效 / 桌访占比 / 毛利率 等为月度扣分项：周度任务只汇总「周频/日频」规则，不因上述 triggers 在周行扣分（飞书任务仍可周提醒）。
  * 任务卡催办链路不向 agent_scores 写入扣分，仅打工作态度标；与本周度 BI 汇总独立。
  * 同步：HRMS 公司通知栏 hrms_user_notifications + 飞书周度卡片（本人 + 管理员/总部营运汇总）
@@ -440,8 +445,21 @@ function computeRoleRollupFromRows(rows, role) {
   return { totalScore, details, totalDeducted: total };
 }
 
+/**
+ * 充值异常日检落库后：立即按当前自然周重算该店 anomaly_rollups_v2（与周一全量任务同一公式，幂等）。
+ * 不重复发「周度扣分」飞书/HRMS 通知（即时卡已在 notify 链路发过）。
+ */
+export async function refreshWeeklyRollupAfterRechargeTrigger(store, evaluationYmd) {
+  const ymd = String(evaluationYmd || '').slice(0, 10);
+  if (!store || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return;
+  const { weekStart } = shanghaiWeekMonSunContaining(ymd);
+  await scoreStoreForPeriod(store, weekStart, { skipFeishuDeductionNotify: true });
+  logger.info({ store, evaluationYmd: ymd, weekStart }, 'recharge: refreshed anomaly_rollups_v2 after daily trigger');
+}
+
 /** 按门店 × 周期写入 agent_scores（period=week_周一 或 跨月拆分为 week_周一__YYYYMM，score_model=anomaly_rollups_v2） */
-export async function scoreStoreForPeriod(store, periodMonday) {
+export async function scoreStoreForPeriod(store, periodMonday, options = {}) {
+  const skipFeishuDeductionNotify = options.skipFeishuDeductionNotify === true;
   const endStr = addDaysYmdShanghai(periodMonday, 6);
   const brand = (await getBrandForStore(store).catch(() => null)) || '未知';
   const segments = splitWeekByCalendarMonths(periodMonday, endStr);
@@ -465,7 +483,7 @@ export async function scoreStoreForPeriod(store, periodMonday) {
        WHERE store = $1
          AND trigger_date >= $2::date
          AND trigger_date <= $3::date
-         AND COALESCE(status, 'open') = 'open'`,
+         AND COALESCE(status, 'open') NOT IN ('superseded', 'pending_data')`,
       [store, seg.start, seg.end]
     );
 
@@ -516,16 +534,18 @@ export async function scoreStoreForPeriod(store, periodMonday) {
               summaryZh
             ]
           );
-          await recordDeductionNotifications({
-            username,
-            store,
-            role,
-            periodMonday,
-            weekEndStr: endStr,
-            rangeStart: seg.start,
-            rangeEnd: seg.end,
-            details
-          });
+          if (!skipFeishuDeductionNotify) {
+            await recordDeductionNotifications({
+              username,
+              store,
+              role,
+              periodMonday,
+              weekEndStr: endStr,
+              rangeStart: seg.start,
+              rangeEnd: seg.end,
+              details
+            });
+          }
         } catch (e) {
           logger.warn({ err: e?.message, store, role, username }, 'periodic-scoring upsert failed');
         }

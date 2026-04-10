@@ -293,12 +293,17 @@ export async function checkRechargeZero(store) {
       triggered: true,
       severity,
       value: {
+        /** 被判定「有无充值」的营业日 = 上海「昨日」，与 trigger_date 一致；不是任务运行当日 */
+        evaluated_business_day: evalSh,
         evaluationYmd: evalSh,
+        /** @deprecated 易误解为「今天」；请用 evaluated_business_day */
         dateToday: evalSh,
+        run_calendar_ymd: todaySh,
         runCalendarYmd: todaySh,
         consecutive_zero_days: streak,
         penalty_points,
         month_start: monthStart,
+        evaluated_day_recharge: { count: evalR.cnt, amount: evalR.amt },
         today: { count: evalR.cnt, amount: evalR.amt }
       },
       threshold: { medium: '2分（连续第1天无充值）', high: '4分（连续第2天起无充值）' },
@@ -1039,6 +1044,17 @@ export async function runAnomalyChecks(frequency, stores, options = {}) {
                  AND status = 'pending_data'`,
               [ruleKey, store, triggerDate]
             ).catch(() => {});
+          }
+          if (ruleKey === 'recharge_zero') {
+            try {
+              const { refreshWeeklyRollupAfterRechargeTrigger } = await import('./periodic-scoring.js');
+              await refreshWeeklyRollupAfterRechargeTrigger(store, triggerDate);
+            } catch (e) {
+              logger.warn(
+                { err: e?.message, store, triggerDate },
+                'recharge_zero: refreshWeeklyRollupAfterRechargeTrigger failed'
+              );
+            }
           }
           logger.warn({ anomaly: ruleKey, store, severity: result.severity, detail: result.detail }, 'Anomaly triggered');
 
