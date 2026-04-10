@@ -11,6 +11,7 @@
  */
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
+import { notifyAdminsDataIssue } from './admin-data-alert.js';
 import { sendCard } from './feishu-client.js';
 import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
 import { getPMReportStatusByBizDate, getMajixianMeetingDayEval } from './pm-execution-report-coverage.js';
@@ -427,6 +428,18 @@ async function sendExecutionRatingNotifications(results, date) {
       { failedCount, sentCount, date },
       'daily execution rating: partial Feishu delivery failure (备案与 ops_tasks 仍可能已成功，不因个别收件人失败而整任务报错)'
     );
+    void notifyAdminsDataIssue({
+      alertType: 'execution_rating_feishu_partial_fail',
+      priority: 'B',
+      title: '执行力日评：飞书卡片部分发送失败（备案与公司通知可能已写入）',
+      lines: [
+        `业务日期：${date}`,
+        `失败次数：${failedCount}（含个人备案卡片或管理员汇总卡片）`,
+        '请检查：表「feishu_users」中是否已配置飞书 open_id；飞书接口是否限流；网络是否异常。若仅缺少 open_id，责任人可能收不到飞书卡片，但 HRMS 公司通知一般仍会写入。'
+      ],
+      dedupeKey: `exec_rate_feishu_fail_${date}`,
+      dedupeHours: 6
+    }).catch(() => {});
   }
   return sentCount;
 }

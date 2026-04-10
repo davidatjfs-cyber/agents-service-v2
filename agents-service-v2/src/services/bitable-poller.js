@@ -81,7 +81,7 @@ const BITABLE_CONFIGS = {
     type: 'material_report',
     brand: 'majixian',
     pollingInterval: 300000,
-    sortField: '["日期 DESC"]'
+    sortField: '["收货日期 DESC"]'
   },
   'material_hongchao': {
     appId: process.env.BITABLE_MATERIAL_HC_APP_ID || 'cli_a9fc0d13c838dcd6',
@@ -92,7 +92,7 @@ const BITABLE_CONFIGS = {
     type: 'material_report',
     brand: 'hongchao',
     pollingInterval: 300000,
-    sortField: '["日期 DESC"]'
+    sortField: '["收货日期 DESC"]'
   },
   'loss_report': {
     appId: process.env.BITABLE_LOSS_APP_ID || 'cli_a9fc0d13c838dcd6',
@@ -364,12 +364,13 @@ async function processRecord(configKey, type, record, brand) {
       if (feishuCellPresent(rawStoreField) && !String(storeCell || '').trim()) {
         void notifyAdminsDataIssue({
           alertType: 'bitable_material_store_parse_empty',
-          title: '原料轮询：飞书有门店单元格但解析为空',
+          priority: 'C',
+          title: '原料表轮询：飞书门店列有内容但解析后为空',
           lines: [
-            `configKey: ${configKey}`,
-            `recordId: ${recordId}`,
-            `brand: ${brandZh || brand || '—'}`,
-            '请检查 extractText 是否支持该字段类型（人员、查找、公式等）。'
+            `同步配置键：${configKey}`,
+            `飞书记录 ID：${recordId}`,
+            `品牌：${brandZh || brand || '—'}`,
+            '说明：多维表里该列有格子内容，但程序读出的门店名称为空。常见原因为列类型是人员、查找引用、公式等，需在解析逻辑里单独兼容。'
           ],
           dedupeKey: `bitable_mat_store_${recordId}`,
           dedupeHours: 72
@@ -378,12 +379,13 @@ async function processRecord(configKey, type, record, brand) {
       if (feishuCellPresent(rawDateField) && !String(dateCell || '').trim()) {
         void notifyAdminsDataIssue({
           alertType: 'bitable_material_date_parse_empty',
-          title: '原料轮询：飞书有日期单元格但解析为空',
+          priority: 'C',
+          title: '原料表轮询：飞书日期列有内容但解析后为空',
           lines: [
-            `configKey: ${configKey}`,
-            `recordId: ${recordId}`,
-            `brand: ${brandZh || brand || '—'}`,
-            '常见原因：日期列为特殊类型，需在 extractText 中单独处理。'
+            `同步配置键：${configKey}`,
+            `飞书记录 ID：${recordId}`,
+            `品牌：${brandZh || brand || '—'}`,
+            '说明：日期列可能是特殊类型，程序未能读出业务日期，需在解析逻辑里单独处理。'
           ],
           dedupeKey: `bitable_mat_date_${recordId}`,
           dedupeHours: 72

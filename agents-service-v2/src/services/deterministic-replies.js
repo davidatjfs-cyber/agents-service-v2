@@ -17,6 +17,9 @@ import { parseFeishuRatioOrPercentString, formatPercentDisplay } from '../utils/
 
 const TABLE_VISIT_TABLE_ID = process.env.BITABLE_TABLE_VISIT_TABLE_ID || 'tblpx5Efqc6eHo3L';
 
+/** 原料类飞书兜底扫描上限（config_key LIKE material_%）；避免行数增长后漏扫 */
+const FEISHU_MATERIAL_SCAN_LIMIT = 8000;
+
 // ── Helpers ───────────────────────────────────────────
 
 function fmt(d) {
@@ -416,7 +419,7 @@ async function countFeishuMaterialRowsMatchingStoreRange(displayStore, startYmd,
       `SELECT fields, created_at FROM feishu_generic_records
        WHERE config_key LIKE 'material_%'
        ORDER BY updated_at DESC
-       LIMIT 3000`
+       LIMIT ${FEISHU_MATERIAL_SCAN_LIMIT}`
     );
     let n = 0;
     for (const row of r.rows || []) {
@@ -503,7 +506,7 @@ export async function buildMaterialReportReplyForDateRange(store, startYmd, endY
         `SELECT fields, created_at FROM feishu_generic_records
          WHERE config_key LIKE 'material_%'
          ORDER BY updated_at DESC
-         LIMIT 3000`
+         LIMIT ${FEISHU_MATERIAL_SCAN_LIMIT}`
       );
       rows = (r.rows || [])
         .map((row) => ({
@@ -1522,14 +1525,15 @@ async function buildMaterialReportReply(store, text) {
       if (feishuHit > 0) {
         void notifyAdminsDataIssue({
           alertType: 'material_agent_feishu_divergence',
-          title: '原料：agent_messages 合并查询为 0，但 feishu_generic 同口径有数据',
+          priority: 'C',
+          title: '原料数据不一致：助手合并为 0 条，飞书同步库同条件有条目',
           lines: [
-            `门店（会话/上下文）：${s}`,
-            `业务日：${p.start}`,
-            `feishu_generic（material_%，近 3000 条扫描）命中：${feishuHit} 条`,
-            `agent_messages（含 LEFT JOIN feishu_generic）：0 条`,
-            '影响：执行力日评/月评若只信 agent 链路会与「飞书表」不一致。',
-            '建议：查 record_id 对齐、brand(majixian)、轮询字段映射、JOIN 条件。'
+            `门店：${s}`,
+            `业务日期：${p.start}`,
+            `飞书同步表（原料类配置，在最近 ${FEISHU_MATERIAL_SCAN_LIMIT} 条扫描范围内）：命中 ${feishuHit} 条`,
+            `助手消息表 agent_messages（已关联飞书同步表）：0 条`,
+            '影响：执行力日评若主要依赖助手表，会与飞书在线表口径不一致。',
+            '建议：核对飞书记录 ID、品牌（马己仙/洪潮）、轮询字段与表关联条件。'
           ],
           dedupeKey: `material_div_${s}_${p.start}`,
           dedupeHours: 4
@@ -1541,7 +1545,7 @@ async function buildMaterialReportReply(store, text) {
         `SELECT fields, created_at FROM feishu_generic_records
          WHERE config_key LIKE 'material_%'
          ORDER BY updated_at DESC
-         LIMIT 3000`
+         LIMIT ${FEISHU_MATERIAL_SCAN_LIMIT}`
       );
       rows = (r.rows || [])
         .map((row) => ({
@@ -1555,7 +1559,11 @@ async function buildMaterialReportReply(store, text) {
         });
     }
     if (!rows.length) {
-      return `${p.label}原料收货日报（${s}）：0条记录。该时间段暂无原料收货数据入库（已查 agent_messages 与飞书同步表）。`;
+      const hint =
+        p.start === p.end
+          ? '若飞书在线表格已有该行但此处为 0，多为「当前服务连接的 Base/表」未同步到 Postgres（编号在库中不连续时也常见）；请核对 BITABLE_MATERIAL_* 与轮询日志。'
+          : '';
+      return `${p.label}原料收货日报（${s}）：0条记录。该时间段暂无原料收货数据入库（已查 agent_messages 与飞书同步表 feishu_generic_records）。${hint ? `\n${hint}` : ''}`;
     }
     const hasIssue = rows.filter((x) => materialRowHasAnomalyUnified(x.f));
     const matTop = new Map();
@@ -1894,7 +1902,7 @@ export async function buildMaterialBriefingBlock(store, ymd) {
         `SELECT fields, created_at FROM feishu_generic_records
          WHERE config_key LIKE 'material_%'
          ORDER BY updated_at DESC
-         LIMIT 3000`
+         LIMIT ${FEISHU_MATERIAL_SCAN_LIMIT}`
       );
       rows = filterFeishuRowsByStoreAndDate(
         r.rows || [],
