@@ -382,6 +382,35 @@ async function transitionTask(taskId, newStatus, agentName, data = {}) {
 
     await pool().query(`UPDATE master_tasks SET ${sets.join(', ')} WHERE task_id = $1`, params);
 
+    // BI 异常：飞书任务结案后，将对应 anomaly_triggers 从 open 标为 closed（与列表展示一致；食安走总部单独判罚不归此路径）
+    if (['closed', 'resolved', 'settled', 'completed'].includes(newStatus) && String(task.source || '').trim() === 'bi_anomaly') {
+      try {
+        const sdRaw = task.source_data;
+        const sd =
+          sdRaw && typeof sdRaw === 'object' && !Array.isArray(sdRaw)
+            ? sdRaw
+            : (() => {
+                try {
+                  return JSON.parse(String(sdRaw || '{}'));
+                } catch {
+                  return {};
+                }
+              })();
+        const ak = String(sd.anomaly_key || task.category || '').trim();
+        const td = String(sd.bi_trigger_date || '').slice(0, 10);
+        if (ak && ak !== 'food_safety' && /^\d{4}-\d{2}-\d{2}$/.test(td)) {
+          await pool().query(
+            `UPDATE anomaly_triggers SET status = 'closed', updated_at = NOW()
+             WHERE anomaly_key = $1 AND store = $2 AND trigger_date = $3::date
+               AND COALESCE(status, 'open') IN ('open', 'pending_data')`,
+            [ak, task.store, td]
+          );
+        }
+      } catch (e) {
+        console.warn('[master] sync anomaly_triggers on bi_anomaly close:', e?.message || e);
+      }
+    }
+
     // 记录事件
     await emitEvent(taskId, `status_${newStatus}`, agentName, STATUS_FLOW[newStatus]?.agent || null, currentStatus, newStatus, data);
 

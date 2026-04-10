@@ -43,7 +43,7 @@ export async function generateProcurementAdvice(store) {
     const an = await query(
       `SELECT anomaly_key, severity FROM anomaly_triggers
        WHERE store ILIKE $1 AND created_at >= CURRENT_DATE - 7
-       AND anomaly_key IN ('gross_margin', 'cost_spike')
+       AND anomaly_key IN ('gross_margin')
        ORDER BY created_at DESC LIMIT 5`, [`%${store}%`]
     );
     anomalies = an.rows || [];

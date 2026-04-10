@@ -10390,9 +10390,7 @@ async function pushScoresToFeishu() {
         bad_review_product: '差评产品异常',
         bad_review_service: '差评服务异常',
         hongchao_jiuguang_private_room: '洪潮久光包房使用异常',
-        food_safety: '食品安全异常',
-        dish_unit_product: '菜品优化（单位产品）异常',
-        cost_spike: '成本波动异常'
+        food_safety: '食品安全异常'
       };
       const SCORE_MODEL_ZH = {
         anomaly_rollups_v2: '周度异常汇总',

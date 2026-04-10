@@ -8537,7 +8537,7 @@
                         <div style="padding:14px 18px;border-bottom:1px solid rgba(148,163,184,0.08);display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
                             <div>
                                 <div style="font-size:13px;font-weight:600;color:#e2e8f0;letter-spacing:.04em;">Agent 活动内容</div>
-                                <div style="font-size:10px;color:#64748b;margin-top:4px;line-height:1.5;max-width:520px;">下方四块分别对应：异常触发（<code style="font-size:9px;">anomaly_triggers</code>）、节奏引擎定时任务（<code style="font-size:9px;">rhythm_logs</code>）、调度待办（<code style="font-size:9px;">master_tasks</code>）、任务执行日志（<code style="font-size:9px;">agent_task_logs</code>）。</div>
+                                <div style="font-size:10px;color:#64748b;margin-top:4px;line-height:1.55;max-width:560px;"><strong>异常触发</strong>：引擎判定命中后写入库的<strong>一条记录</strong>（含业务触发日、严重度、状态）；不是「待办队列」，也<strong>不等于</strong>飞书任务是否结案。<strong>充值异常</strong>按上海<strong>「昨日」</strong>营业日报判定当日是否无充值；与「昨天有没有充值」对齐的是<strong>触发日</strong>列（见该行 <code style="font-size:9px;">trigger_date</code>），不是任务创建时刻。飞书 <strong>BI 任务结案</strong>后，系统会把对应触发记录标为 <code style="font-size:9px;">closed</code>（新逻辑；历史未带日期的任务结案不会回溯）。<strong>食品安全</strong>：<strong>实时</strong>命中；总部营运「记录」后按岗<strong>各扣 20 分</strong>，不并入周度 BI 汇总扣分模型。下方表格：异常触发（<code style="font-size:9px;">anomaly_triggers</code>）、节奏引擎（<code style="font-size:9px;">rhythm_logs</code>）、调度任务（<code style="font-size:9px;">master_tasks</code>）、任务日志（<code style="font-size:9px;">agent_task_logs</code>）。</div>
                             </div>
                             <div id="dc-activity-date" style="font-size:11px;color:#64748b;white-space:nowrap;">—</div>
                         </div>
@@ -17028,8 +17028,32 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
         }
 
         function renderDcActivityDetailHtml(dj) {
+            const ANOM_KEY_ZH = {
+                revenue_achievement: '实收营收异常',
+                revenue_achievement_monthly: '月度实收营收异常',
+                labor_efficiency: '人效值异常',
+                recharge_zero: '充值异常',
+                table_visit_product: '桌访产品异常',
+                table_visit_ratio: '桌访占比异常',
+                gross_margin: '总实收毛利率异常',
+                bad_review_product: '差评产品异常',
+                bad_review_service: '差评服务异常',
+                hongchao_jiuguang_private_room: '洪潮久光包房使用',
+                food_safety: '食品安全异常'
+            };
+            const SEV_ZH = { high: '高', medium: '中', low: '低' };
+            const TRIG_STATUS_ZH = {
+                open: '待结案',
+                closed: '已闭环',
+                pending_data: '待数据',
+                superseded: '已替代',
+                resolved: '已处理'
+            };
             const cellStr = (r, c) => {
-                const v = r[c.key];
+                let v = r[c.key];
+                if (c.map === 'anomaly_key') v = ANOM_KEY_ZH[String(v || '').trim()] || v;
+                if (c.map === 'severity') v = SEV_ZH[String(v || '').toLowerCase()] || v;
+                if (c.map === 'trig_status') v = TRIG_STATUS_ZH[String(v || '').toLowerCase()] || v;
                 if (c.fmt === 'sh') {
                     const t = _dcFmtTime(v);
                     return t || '—';
@@ -17053,7 +17077,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             };
             const legend =
                 '<div style="font-size:10px;color:#64748b;line-height:1.55;margin-bottom:12px;border-left:2px solid rgba(99,102,241,0.35);padding-left:8px;">' +
-                '<strong>列说明：</strong>带「沪」的时间列为 Asia/Shanghai 本地显示；调度任务含派发/创建/结案时间；异常触发含业务触发日与落库时间。' +
+                '<strong>列说明：</strong>「触发日」= 业务统计日（充值=判定营业日上海昨日）；「落库」= 写入数据库时刻。充值为<strong>日检</strong>；写入绩效扣分在<strong>周一周汇总</strong>按自然周累加。状态 <code style="font-size:9px;">open</code> 表示触发记录未结案；与飞书任务状态可能短暂不一致，任务 <code style="font-size:9px;">closed</code> 后会同步关闭对应触发（新任务）。' +
                 '</div>';
             return (
                 legend +
@@ -17066,11 +17090,11 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 ]) +
                 sec('异常触发', dj.anomalyTriggers, [
                     { label: '门店', key: 'store' },
-                    { label: '类型', key: 'anomaly_key' },
-                    { label: '级别', key: 'severity' },
+                    { label: '类型', key: 'anomaly_key', map: 'anomaly_key' },
+                    { label: '级别', key: 'severity', map: 'severity' },
                     { label: '触发日', key: 'trigger_date' },
                     { label: '落库(沪)', key: 'created_at', fmt: 'sh' },
-                    { label: '状态', key: 'status' }
+                    { label: '状态', key: 'status', map: 'trig_status' }
                 ]) +
                 sec('节奏引擎', dj.rhythmLogs, [
                     { label: '类型', key: 'rhythm_type' },

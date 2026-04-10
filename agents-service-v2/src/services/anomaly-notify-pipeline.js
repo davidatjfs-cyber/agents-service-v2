@@ -196,6 +196,16 @@ export async function runBiAnomalyNotifyPipeline({
 
   const taskId = `ANO-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
 
+  /** 与 anomaly_triggers.trigger_date 对齐，供任务结案时回写触发记录状态 */
+  const deriveBiTriggerDate = (rk, val) => {
+    const v = val && typeof val === 'object' ? val : {};
+    if (v.evaluationYmd) return String(v.evaluationYmd).slice(0, 10);
+    if (v.weekEnd) return String(v.weekEnd).slice(0, 10);
+    if (v.dateToday) return String(v.dateToday).slice(0, 10);
+    return null;
+  };
+  const biTriggerDate = deriveBiTriggerDate(ruleKey, value);
+
   const typeZh = anomalyRuleLabelZh(ruleKey);
   const title = `${store} · BI异常 · ${typeZh}`;
   const detailCap = ruleKey === 'food_safety' ? 5200 : 1800;
@@ -240,7 +250,7 @@ export async function runBiAnomalyNotifyPipeline({
         remainingScore: rechargeRem,
         taskId,
         dataSourceNote:
-          '数据来源：异常触发汇总（anomaly_triggers）· 即时触发；周度对账以周一汇总卡片为准'
+          '数据来源：日频检测写入 anomaly_triggers（判定营业日为上海「昨日」）；绩效扣分在周一「周度门店评分」中按自然周内各日 penalty 累加后写入 anomaly_rollups_v2。'
       });
     } else {
       card = buildAnomalyCard(store, ruleKey, severity, initialDetail, taskId);
@@ -286,6 +296,7 @@ export async function runBiAnomalyNotifyPipeline({
   const sourceDataBase = {
     anomaly_key: ruleKey,
     anomaly_frequency: anomalyFrequency,
+    bi_trigger_date: biTriggerDate,
     value: value || {},
     pipeline: 'v2',
     assignee_open_ids: users.map((u) => u.open_id).filter(Boolean)

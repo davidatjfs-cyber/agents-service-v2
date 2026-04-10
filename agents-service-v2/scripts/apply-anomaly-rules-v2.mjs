@@ -174,6 +174,31 @@ const PATCH = {
     evidence: ['调查与整改'],
     auto_actions: ['红色通道'],
     human_required: ['总部营运记录/不记录']
+  },
+  /** 未正式启用：显式关闭，避免周汇总误读 margin_anomaly */
+  dish_unit_product: {
+    name: '菜品优化（单位产品）异常（未启用）',
+    enabled: false,
+    frequency: 'weekly',
+    data_source: 'n/a',
+    threshold: {},
+    assign_to: 'store_manager',
+    notify_target_role: 'store_manager',
+    evidence: [],
+    auto_actions: [],
+    human_required: []
+  },
+  cost_spike: {
+    name: '成本波动异常（未启用）',
+    enabled: false,
+    frequency: 'weekly',
+    data_source: 'n/a',
+    threshold: {},
+    assign_to: 'store_manager',
+    notify_target_role: 'store_manager',
+    evidence: [],
+    auto_actions: [],
+    human_required: []
   }
 };
 

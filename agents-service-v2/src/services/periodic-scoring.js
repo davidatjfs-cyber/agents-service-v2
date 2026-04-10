@@ -48,8 +48,6 @@ const ANOMALY_KEY_ZH = {
   bad_review_service: '差评服务异常',
   hongchao_jiuguang_private_room: '洪潮久光包房使用异常',
   food_safety: '食品安全异常',
-  dish_unit_product: '菜品优化（单位产品）异常',
-  cost_spike: '成本波动异常'
 };
 
 /**
@@ -180,19 +178,17 @@ async function recordDeductionNotifications({
  * anomaly_key → scoring-model 的 category（周度汇总专用）
  *
  * 扣分频率规则：
- * - 周度扣分（weekly/daily）：充值异常、桌访异常、产品差评、服务差评、包房异常（中/高 5/10）、成本异常
- * - 月度扣分（monthly）：实收营收异常、人效值异常、桌访占比异常、毛利率异常
- *   月度规则在周度仅记录提醒跟踪，不扣分。扣分由 HRMS 月评分系统每月执行1次。
+ * - 充值异常：**日频**检测并写入 anomaly_triggers；**周一「周度门店评分」**按自然周内各日 penalty_points **累加**后写入 anomaly_rollups_v2（勿将整条链描述为「周频才检测」）。
+ * - 桌访/差评/包房等：按各规则频率检测；周汇总任务写入 anomaly_rollups_v2（其中月度键仅提醒、不扣分）。
+ * - 月度扣分（monthly）：实收营收、人效、桌访占比、毛利率 — 周汇总不扣，由月评分/月任务执行。
  */
 const ANOMALY_TO_CATEGORY = {
-  // 周度扣分规则（weekly/daily frequency）
+  // 周汇总中参与 scoring-model 的 anomaly_key（不含已下线的 dish_unit_product / cost_spike）
   recharge_zero: 'recharge_anomaly',
   table_visit_product: 'table_visit_anomaly',
   bad_review_product: 'product_review',
   bad_review_service: 'service_review',
   hongchao_jiuguang_private_room: 'private_room_anomaly',
-  dish_unit_product: 'margin_anomaly',
-  cost_spike: 'margin_anomaly',
   // 月度扣分规则（monthly frequency）— 周度仅提醒，不扣分
   revenue_achievement: 'revenue_anomaly',
   labor_efficiency: 'efficiency_anomaly',
