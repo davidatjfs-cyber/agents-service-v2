@@ -310,7 +310,7 @@ async function sendExecutionRatingNotifications(results, date) {
     const roleLabel = r.role === 'store_manager' ? '店长' : '出品经理';
     const missingText = r.missing && r.missing.length > 0 ? r.missing.join('/') : '';
 
-    // 飞书卡片
+    // 飞书卡片（无 open_id 则无法发飞书，但 HRMS 公司通知仍应写入）
     if (r.open_id) {
       try {
         const deliver = await sendReportToRecipient({
@@ -334,23 +334,44 @@ async function sendExecutionRatingNotifications(results, date) {
         failedCount++;
         logger.warn({ err: e?.message, recipient: r.username }, 'execution filing card send failed');
       }
+    } else {
+      logger.warn({ recipient: r.username, store: r.store }, 'execution filing: feishu_users.open_id empty, skip individual Feishu card');
     }
 
-    // HRMS公司通知
+    // HRMS 公司通知（表上无 (target_username,type,meta) 唯一约束，禁止使用 ON CONFLICT — 否则会整句失败且静默丢通知）
     try {
-      await query(
-        `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
-         VALUES ($1, $2, $3, $4, $5::jsonb)
-         ON CONFLICT (target_username, type, meta) DO NOTHING`,
-        [
-          r.username,
-          '工作执行力评级备案',
-          `您的工作执行力评级为${r.rating}级，未达标项目：${missingText || '无'}。\n门店：${r.store}\n岗位：${roleLabel} · ${r.name || r.username}\n日期：${date}`,
-          'execution_rating_daily',
-          JSON.stringify({ date, rating: r.rating, missing: r.missing, store: r.store, role: r.role })
-        ]
+      const metaPayload = JSON.stringify({
+        date,
+        rating: r.rating,
+        missing: r.missing,
+        store: r.store,
+        role: r.role
+      });
+      const dup = await query(
+        `SELECT 1 FROM hrms_user_notifications
+         WHERE lower(trim(target_username)) = lower(trim($1))
+           AND type = 'execution_rating_daily'
+           AND (meta->>'date') = $2
+           AND (meta->>'store') = $3
+         LIMIT 1`,
+        [r.username, date, String(r.store || '')]
       );
-      logger.info({ recipient: r.username, store: r.store }, 'execution filing hrms notification sent');
+      if (!dup.rows?.length) {
+        await query(
+          `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
+           VALUES ($1, $2, $3, $4, $5::jsonb)`,
+          [
+            r.username,
+            '工作执行力评级备案',
+            `您的工作执行力评级为${r.rating}级，未达标项目：${missingText || '无'}。\n门店：${r.store}\n岗位：${roleLabel} · ${r.name || r.username}\n日期：${date}`,
+            'execution_rating_daily',
+            metaPayload
+          ]
+        );
+        logger.info({ recipient: r.username, store: r.store }, 'execution filing hrms notification inserted');
+      } else {
+        logger.info({ recipient: r.username, store: r.store, date }, 'execution filing hrms notification deduped');
+      }
     } catch (e) {
       logger.warn({ err: e?.message, recipient: r.username }, 'execution filing hrms notification failed');
     }
