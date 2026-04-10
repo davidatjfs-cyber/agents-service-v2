@@ -8,7 +8,16 @@ import { detectMetricFromQuestion } from './analysis-intent.js';
 import { detectIntent } from './intent-classifier.js';
 import { extractTimeRangeFromText } from './data-executor.js';
 import { analyzeMetricTree } from './analysis-engine.js';
-import { sendText, replyMsg, getFeishuUserName, getHrmsEmployeeName, getHrmsEmployeeByFeishuOpenId, isHrmsEmployeeActive, bindFeishuUserToEmployee } from './feishu-client.js';
+import {
+  sendText,
+  replyMsg,
+  getFeishuUserName,
+  getHrmsEmployeeName,
+  getHrmsEmployeeByFeishuOpenId,
+  isHrmsEmployeeActive,
+  bindFeishuUserToEmployee,
+  feishuOpenIdIsMajixianPmObserver
+} from './feishu-client.js';
 import { query } from '../utils/db.js';
 import { checkIdempotency, saveIdempotency } from '../middleware/idempotency.js';
 import sessionMiddleware from './agent-session/session-middleware.js';
@@ -220,8 +229,10 @@ export async function processMessage(ev) {
   const traceId = ev.eventId || ev.messageId || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   // ── 检查待回复任务状态（在幂等检查之后，业务路由之前）──
+  // 马己仙出品观察账号 nnyxcs35：不将对话内容关联到任务整改（主责黎永荣处理）
   if (ev.userId) {
-    const pendingTaskId = await checkAndProcessPendingReply(ev.userId, ev.text, ev.messageId);
+    const skipTaskReply = await feishuOpenIdIsMajixianPmObserver(ev.userId);
+    const pendingTaskId = skipTaskReply ? null : await checkAndProcessPendingReply(ev.userId, ev.text, ev.messageId);
     if (pendingTaskId) {
       return { ok: true, route: 'task_reply', taskId: pendingTaskId };
     }

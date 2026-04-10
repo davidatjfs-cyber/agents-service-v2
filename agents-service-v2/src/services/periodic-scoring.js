@@ -18,7 +18,11 @@ import {
   shanghaiWeekMonSunContaining,
   addDaysYmdShanghai
 } from '../utils/anomaly-week-bounds.js';
-import { sortFeishuScoringRows, resolveMajixianProductionManagersForScoring } from '../utils/scoring-assignee.js';
+import {
+  sortFeishuScoringRows,
+  resolveMajixianProductionManagersForScoring,
+  majixianPmNewModelLookupUsername
+} from '../utils/scoring-assignee.js';
 
 const CAT_ZH = {
   revenue_anomaly: '营收/实收异常',
@@ -569,11 +573,12 @@ export async function sendWeeklyPerformanceFeishu(periodMonday, options = {}) {
       // 从 HRMS new_model 获取维度评级（门店级别/工作能力/工作态度/执行力）
       let dimensionRatings = null;
       try {
+        const dimUser = majixianPmNewModelLookupUsername(row.username, row.store);
         const ratingR = await query(
           `SELECT breakdown FROM agent_scores
            WHERE username = $1 AND store = $2 AND score_model = 'new_model'
            ORDER BY updated_at DESC LIMIT 1`,
-          [row.username, row.store]
+          [dimUser, row.store]
         );
         if (ratingR.rows?.[0]?.breakdown) {
           const bd = ratingR.rows[0].breakdown;

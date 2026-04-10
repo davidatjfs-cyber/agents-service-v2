@@ -24,8 +24,47 @@ import {
 import {
   isMajixianStore,
   sortFeishuScoringRows,
-  resolveMajixianProductionManagersForScoring
+  resolveMajixianProductionManagersForScoring,
+  isMajixianPmObserverUsername
 } from '../utils/scoring-assignee.js';
+import { expandAgentStoreLabels } from '../config/store-mapping.js';
+
+const MONTHLY_RATING_PENDING = '待定';
+
+/** 单店汇总：仅用规范名+飞书别名，避免 `%洪潮%` 把多店企微加总进一家 */
+function aggregateIlikePatternsForStoreName(storeLabel) {
+  const labs = expandAgentStoreLabels(String(storeLabel || '').trim());
+  const uniq = [...new Set(labs.filter(Boolean))];
+  if (!uniq.length) return ['%'];
+  return uniq.map((lab) => `%${String(lab).replace(/%/g, '')}%`);
+}
+
+/** 月度综合里 nnyxcs35 不在主查询 rows 时补 open_id / 姓名 */
+async function fetchFeishuStaffRowForUsername(username) {
+  const u = String(username || '').trim();
+  if (!u) return null;
+  try {
+    const r = await query(
+      `SELECT fu.username,
+              COALESCE(NULLIF(TRIM(fu.name), ''), fu.username) AS name,
+              fu.role,
+              TRIM(fu.store) AS store,
+              fu.open_id,
+              CASE
+                WHEN fu.store ILIKE '%洪潮%' THEN '洪潮'
+                WHEN fu.store ILIKE '%马己仙%' THEN '马己仙'
+                ELSE '未知'
+              END AS brand
+       FROM feishu_users fu
+       WHERE fu.registered = true AND LOWER(TRIM(fu.username)) = LOWER($1)
+       LIMIT 1`,
+      [u]
+    );
+    return r.rows?.[0] || null;
+  } catch (_e) {
+    return null;
+  }
+}
 
 // ─────────────────────────────────────────────
 // 1. 工具函数
@@ -45,6 +84,8 @@ function fmtStoreLevelLabel(level) {
     case 'B': return 'B级';
     case 'C': return 'C级';
     case 'D': return 'D级';
+    case MONTHLY_RATING_PENDING:
+      return '待定';
     default: return '—';
   }
 }
@@ -75,7 +116,7 @@ async function getMonthlyPerformanceScore(username, period) {
     `SELECT COALESCE(SUM(total_score), 0) as total,
             COUNT(*) as week_count
      FROM agent_scores
-     WHERE username = $1
+     WHERE LOWER(TRIM(username)) = LOWER(TRIM($1))
        AND score_model = 'anomaly_rollups_v2'
        AND substring(period from 6 for 10)::date >= $2::date
        AND substring(period from 6 for 10)::date <= $3::date`,
@@ -93,6 +134,10 @@ async function getMonthlyPerformanceScore(username, period) {
 // 3. 工作态度评级
 // ─────────────────────────────────────────────
 
+/**
+ * 与 HRMS `new-scoring-model.getIncompleteTaskCount` 一致：仅以 **master_tasks** 且
+ * **hr_performance_recorded = true** 的备案为态度统计唯一来源（任务未完成经 HR 备案记入态度）。
+ */
 async function getAttitudeRating(username, period) {
   const [year, month] = period.split('-');
   const startDate = `${year}-${month}-01`;
@@ -101,13 +146,13 @@ async function getAttitudeRating(username, period) {
   const sources = ['random_inspection', 'scheduled_inspection', 'bi_anomaly', 'auto_collab', 'data_auditor'];
 
   const result = await query(
-    `SELECT COUNT(DISTINCT id)::int as incomplete_count
-     FROM ops_tasks
-     WHERE assignee_username = $1
+    `SELECT COUNT(DISTINCT task_id)::int AS incomplete_count
+     FROM master_tasks
+     WHERE LOWER(TRIM(COALESCE(assignee_username, ''))) = LOWER(TRIM($1))
        AND source = ANY($2::text[])
-       AND status IN ('pending_response', 'pending_review', 'pending_dispatch', 'dispatched', 'overdue')
-       AND created_at >= $3::date
-       AND created_at <= $4::date`,
+       AND COALESCE(hr_performance_recorded, false) = true
+       AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date >= $3::date
+       AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date <= $4::date`,
     [username, sources, startDate, endDate]
   );
 
@@ -174,11 +219,13 @@ async function getHongchaoManagerExecutionRating(store, period) {
   const startDate = `${year}-${month}-01`;
   const endDate = `${year}-${month}-31`;
 
+  const pats = aggregateIlikePatternsForStoreName(store);
   const result = await query(
     `SELECT COALESCE(SUM(new_wechat_members), 0) AS total
      FROM daily_reports
-     WHERE TRIM(store) = TRIM($1::text) AND date >= $2::date AND date <= $3::date`,
-    [store, startDate, endDate]
+     WHERE date >= $1::date AND date <= $2::date
+       AND store ILIKE ANY($3::text[])`,
+    [startDate, endDate, pats]
   );
 
   const totalMembers = Number(result.rows[0]?.total || 0);
@@ -245,27 +292,34 @@ async function getMajixianManagerExecutionRating(store, period) {
  */
 async function getPMAbilityRating(store, period) {
   const storeMapping = {
-    '洪潮大宁久光店': '洪潮久光店',
-    '马己仙上海音乐广场店': '马己仙大宁店'
+    洪潮大宁久光店: '洪潮久光店',
+    马己仙上海音乐广场店: '马己仙大宁店'
   };
   const storeInData = storeMapping[store] || store;
+  const storeCandidates = [...new Set([String(store || '').trim(), storeInData].filter(Boolean))];
 
-  // 实际毛利率（从 monthly_margins）
-  const actualResult = await query(
-    `SELECT actual_margin FROM monthly_margins 
-     WHERE store = $1 AND period = $2
-     LIMIT 1`,
-    [storeInData, period]
-  );
+  let actual = NaN;
+  for (const st of storeCandidates) {
+    const actualResult = await query(
+      `SELECT actual_margin FROM monthly_margins WHERE store = $1 AND period = $2 LIMIT 1`,
+      [st, period]
+    );
+    const v = Number(actualResult.rows[0]?.actual_margin);
+    if (Number.isFinite(v)) {
+      actual = v;
+      break;
+    }
+  }
 
-  const actual = Number(actualResult.rows[0]?.actual_margin || null);
-
-  // 目标毛利率（从BI异常触发条件：洪潮69%，马己仙64%）
   const brandLower = store.includes('洪潮') ? '洪潮' : store.includes('马己仙') ? '马己仙' : null;
   const targetMargin = brandLower === '洪潮' ? 69 : brandLower === '马己仙' ? 64 : null;
 
-  if (!actual || !targetMargin) {
-    return { rating: 'C', value: null, detail: { reason: '无毛利率数据', actual, target: targetMargin, store: storeInData, period, brand: brandLower } };
+  if (!Number.isFinite(actual) || targetMargin == null) {
+    return {
+      rating: MONTHLY_RATING_PENDING,
+      value: null,
+      detail: { reason: '无毛利率数据或无法推断目标', actual, target: targetMargin, store: storeInData, period, brand: brandLower }
+    };
   }
 
   const diff = actual - targetMargin;
@@ -288,15 +342,17 @@ async function getManagerAbilityRating(store, period, brand) {
   // 以9号那天的营业日报数据为准
   const targetDate = `${year}-${month}-09`;
 
+  const pats = aggregateIlikePatternsForStoreName(store);
   const result = await query(
-    `SELECT dianping_rating FROM daily_reports 
-     WHERE store ILIKE $1 AND date = $2::date AND dianping_rating IS NOT NULL
+    `SELECT dianping_rating FROM daily_reports
+     WHERE date = $1::date AND dianping_rating IS NOT NULL
+       AND store ILIKE ANY($2::text[])
      LIMIT 1`,
-    [`%${store}%`, targetDate]
+    [targetDate, pats]
   );
 
   if (!result.rows.length || !result.rows[0].dianping_rating) {
-    return { rating: 'C', value: null, detail: { reason: '无点评星级数据', target_date: targetDate } };
+    return { rating: MONTHLY_RATING_PENDING, value: null, detail: { reason: '无点评星级数据', target_date: targetDate } };
   }
 
   const rating = Number(result.rows[0].dianping_rating);
@@ -432,15 +488,31 @@ async function loadMonthlyComprehensiveStaff() {
 
     if (isMajixianStore(store)) {
       const pmList = await resolveMajixianProductionManagersForScoring(store);
+      const canonicalUsername = pmList[0]?.username;
       for (const pm of pmList) {
-        const row = rows.find((x) => String(x.username || '').toLowerCase() === String(pm.username || '').toLowerCase());
+        let row = rows.find(
+          (x) => String(x.username || '').toLowerCase() === String(pm.username || '').toLowerCase()
+        );
+        if (!row) {
+          const fx = await fetchFeishuStaffRowForUsername(pm.username);
+          if (fx) row = fx;
+        }
+        const isObs = isMajixianPmObserverUsername(pm.username);
+        const ratingSubjectUsername =
+          isObs &&
+          canonicalUsername &&
+          String(canonicalUsername).trim() &&
+          !isMajixianPmObserverUsername(canonicalUsername)
+            ? String(canonicalUsername).trim()
+            : String(pm.username || '').trim();
         staff.push({
           username: pm.username,
           name: pm.name || row?.name || pm.username,
           role: 'store_production_manager',
           store,
           open_id: row?.open_id ?? null,
-          brand: brandMj
+          brand: brandMj,
+          ratingSubjectUsername
         });
       }
     } else {
@@ -481,13 +553,14 @@ export async function runMonthlyComprehensiveRating(period) {
 
     for (const s of staff) {
       const { username, name, role, store, open_id, brand } = s;
+      const ratingU = String(s.ratingSubjectUsername || username || '').trim() || username;
 
       try {
-        // 1. 绩效得分
-        const performanceScore = await getMonthlyPerformanceScore(username, period);
+        // 1. 绩效得分（马己仙观察账号与黎永荣同一统计口径）
+        const performanceScore = await getMonthlyPerformanceScore(ratingU, period);
 
         // 2. 工作态度评级
-        const attitudeResult = await getAttitudeRating(username, period);
+        const attitudeResult = await getAttitudeRating(ratingU, period);
 
         // 3. 工作执行力评级
         let executionResult;
@@ -515,9 +588,9 @@ export async function runMonthlyComprehensiveRating(period) {
         // 6. 写入 agent_scores
         const breakdown = {
           store_rating: storeRatingResult.rating,
-          execution_rating: executionResult?.rating || 'C',
+          execution_rating: executionResult?.rating || MONTHLY_RATING_PENDING,
           attitude_rating: attitudeResult.rating,
-          ability_rating: abilityResult?.rating || 'C'
+          ability_rating: abilityResult?.rating || MONTHLY_RATING_PENDING
         };
 
         const executionData = executionResult?.detail || {};
@@ -551,9 +624,9 @@ export async function runMonthlyComprehensiveRating(period) {
         results.push({
           username, name, role, store, brand, open_id,
           performance_score: performanceScore,
-          execution_rating: executionResult?.rating || 'C',
+          execution_rating: executionResult?.rating || MONTHLY_RATING_PENDING,
           attitude_rating: attitudeResult.rating,
-          ability_rating: abilityResult?.rating || 'C',
+          ability_rating: abilityResult?.rating || MONTHLY_RATING_PENDING,
           store_rating: storeRatingResult.rating,
           execution_detail: executionData,
           attitude_detail: attitudeData,
@@ -589,7 +662,7 @@ export async function runMonthlyComprehensiveRating(period) {
 function formatAbilityDetailMarkdown(r) {
   const d = r.ability_detail || {};
   if (r.role === 'store_production_manager') {
-    if (d.reason === '无毛利率数据') {
+    if (d.reason && String(d.reason).includes('无毛利率')) {
       return `• ${d.reason || '无毛利率数据'}`;
     }
     const diff = d.diff != null && typeof d.diff === 'number' ? d.diff.toFixed(2) : d.diff;
@@ -605,7 +678,17 @@ function buildAbilityMonthlyFilingCard(r, period) {
   const roleLabel = roleLabelZh(r.role);
   const ar = r.ability_rating || '—';
   const ratingColor =
-    ar === 'A' ? 'green' : ar === 'B' ? 'blue' : ar === 'C' ? 'orange' : ar === 'D' ? 'red' : 'blue';
+    ar === 'A'
+      ? 'green'
+      : ar === 'B'
+        ? 'blue'
+        : ar === 'C'
+          ? 'orange'
+          : ar === 'D'
+            ? 'red'
+            : ar === MONTHLY_RATING_PENDING
+              ? 'blue'
+              : 'blue';
   const detailMd = formatAbilityDetailMarkdown(r);
 
   const content = `**备案类型**：工作能力月评

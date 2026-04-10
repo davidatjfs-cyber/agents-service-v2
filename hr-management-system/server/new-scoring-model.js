@@ -1,15 +1,26 @@
 /**
- * 新评分模型
- * 包含门店评级和员工评分
+ * 新评分模型 — 门店评级与员工评分
+ *
+ * 月度口径（与 agents-service `monthly-comprehensive-rating` 对齐）：
+ * - 绩效分 total_score：`agent_scores` / `anomaly_rollups_v2` 当月各自然周 `total_score` 算术平均（BI 异常触发后的周汇总）。
+ * - 工作态度：`master_tasks` 且 `hr_performance_recorded = true` 的备案未完成（distinct task_id）。
+ * - 工作执行力：出品 = 开档/收档 `agent_messages` + 原料 `feishu_generic_records` 按业务日汇总；洪潮店长 = 日报企微新增；马己仙店长 = 飞书 `meeting_reports` 同步记录（与执行力日评/月度综合同源）。
+ * - 工作能力：出品 = `monthly_margins` 实收毛利率 vs 目标；店长 = 营业日报 **每月 9 日** `dianping_rating`（与 agents 店长能力一致）。
  */
 
 import { pool } from './utils/database.js';
 import { inferBrandFromStoreName } from './agents.js';
 import { safeExecute, safeErrorLog } from './utils/error-handler.js';
 import {
+  countDistinctClosingBizDays,
+  countDistinctMaterialBizDays,
+  countDistinctOpeningBizDays
+} from './lib/pm-execution-for-scoring.js';
+import {
   dailyReportIlikePatterns,
   feishuStoreSearchPatterns,
-  resolveAgentCanonicalStore
+  resolveAgentCanonicalStore,
+  toFeishuStoreName
 } from './v2-store-alignment.js';
 
 /** 评分用门店匹配：合并日报口径 + 飞书/目标表常见简称（洪潮目标行常为「洪潮久光」等，仅 daily 模式会漏） */
@@ -17,6 +28,30 @@ function scoringStoreMatchPatterns(storeLabel) {
   const s = String(storeLabel || '').trim();
   if (!s) return ['%'];
   return [...new Set([...dailyReportIlikePatterns(s), ...feishuStoreSearchPatterns(s)])];
+}
+
+/**
+ * 员工绩效里「单表 store = 精确值」类查询：同时尝试 HR 规范店名与飞书/Bitable 简称（马己仙↔大宁、洪潮↔久光）。
+ * 洪潮、马己仙两店在代码层已覆盖；新店请在 v2-store-alignment.js 的 STORE_TO_FEISHU 补映射，或统一主数据店名。
+ */
+function scoringStoreExactKeys(storeLabel) {
+  const s = String(storeLabel || '').trim();
+  if (!s) return [];
+  const canon = resolveAgentCanonicalStore(s);
+  return [...new Set([s, canon, toFeishuStoreName(s), toFeishuStoreName(canon)].filter(Boolean))];
+}
+
+/** 数据不足以得出 A～D 时的等级（禁止用 C/D 当「假默认值」误导） */
+export const EMPLOYEE_RATING_PENDING = '待定';
+
+/**
+ * 单店汇总（企微新增、点评等）专用：仅规范名 + 飞书写法。
+ * `scoringStoreMatchPatterns` 中含 `%洪潮%` / `%马己仙%` 会把多店数据加进一家店 → 虚假高分。
+ */
+function scoringStoreAggregateIlikePatterns(storeLabel) {
+  const keys = scoringStoreExactKeys(storeLabel);
+  if (!keys.length) return ['%'];
+  return [...new Set(keys.map((k) => `%${String(k).replace(/%/g, '')}%`))];
 }
 
 // ─────────────────────────────────────────────
@@ -223,32 +258,64 @@ export async function calculateStoreRating(store, brand, period) {
 // ─────────────────────────────────────────────
 // 4. 员工评分计算函数
 // ─────────────────────────────────────────────
+
+/**
+ * 与 agents-service「月度综合」一致：上月各自然周 `anomaly_rollups_v2` 的 total_score 算术平均。
+ * BI 异常经 periodic-scoring 已体现在周行扣分与 total_score 中；此处不再用 agent_issues 加减分混算 total_score，避免双口径。
+ */
+async function getMonthlyAnomalyRollupAverageScore(username, period) {
+  const [year, month] = String(period || '').split('-');
+  if (!year || !month) return 100;
+  const startDate = `${year}-${month}-01`;
+  const endDate = `${year}-${month}-${String(getDaysInPeriod(period)).padStart(2, '0')}`;
+  const r = await pool().query(
+    `SELECT COALESCE(SUM(total_score), 0)::numeric AS total,
+            COUNT(*)::int AS week_count
+     FROM agent_scores
+     WHERE LOWER(TRIM(username)) = LOWER(TRIM($1))
+       AND score_model = 'anomaly_rollups_v2'
+       AND period LIKE 'week_%'
+       AND substring(period from 6 for 10)::date >= $2::date
+       AND substring(period from 6 for 10)::date <= $3::date`,
+    [username, startDate, endDate]
+  );
+  const total = Number(r.rows[0]?.total || 0);
+  const weekCount = Number(r.rows[0]?.week_count || 0);
+  return weekCount > 0 ? Math.round(total / weekCount) : 100;
+}
+
 export async function calculateEmployeeScore(store, username, role, period) {
   try {
-    // 1. 基础得分计算
     const baseScore = 100;
     const exceptionBonus = await calculateExceptionBonus(username, period);
     const exceptionDeduction = await calculateExceptionDeduction(username, period);
-    // 满分100：异常加分/扣分计算结果可能会超出100，这里做上限保护，避免前端/文案出现“满分100却打到110”的困惑
-    const totalScore = Math.min(100, Math.max(0, baseScore + exceptionBonus - exceptionDeduction));
-    
-    // 2. 执行力评级（数据不足时返回默认 C）
-    let executionRating = 'C';
+    const biMonthlyAvg = await getMonthlyAnomalyRollupAverageScore(username, period);
+    const totalScore = Math.min(100, Math.max(0, biMonthlyAvg));
+
+    // 2～4：缺数据或无法判断 → 待定（禁止再用 C/D 当默认值误导）
+    let executionRating = EMPLOYEE_RATING_PENDING;
     try {
-      executionRating = await calculateExecutionRating(store, username, role, period) || 'C';
-    } catch (e) { console.warn('[employee_score] execution rating error:', e?.message); executionRating = 'C'; }
-    
-    // 3. 工作态度评级（数据不足时返回默认 D）
-    let attitudeRating = 'D';
+      executionRating = (await calculateExecutionRating(store, username, role, period)) ?? EMPLOYEE_RATING_PENDING;
+    } catch (e) {
+      console.warn('[employee_score] execution rating error:', e?.message);
+      executionRating = EMPLOYEE_RATING_PENDING;
+    }
+
+    let attitudeRating = EMPLOYEE_RATING_PENDING;
     try {
-      attitudeRating = await calculateAttitudeRating(username, period) || 'D';
-    } catch (e) { console.warn('[employee_score] attitude rating error:', e?.message); attitudeRating = 'D'; }
-    
-    // 4. 工作能力评级（数据不足时返回默认 C）
-    let abilityRating = 'C';
+      attitudeRating = (await calculateAttitudeRating(username, period)) ?? EMPLOYEE_RATING_PENDING;
+    } catch (e) {
+      console.warn('[employee_score] attitude rating error:', e?.message);
+      attitudeRating = EMPLOYEE_RATING_PENDING;
+    }
+
+    let abilityRating = EMPLOYEE_RATING_PENDING;
     try {
-      abilityRating = await calculateAbilityRating(store, username, role, period) || 'C';
-    } catch (e) { console.warn('[employee_score] ability rating error:', e?.message); abilityRating = 'C'; }
+      abilityRating = (await calculateAbilityRating(store, username, role, period)) ?? EMPLOYEE_RATING_PENDING;
+    } catch (e) {
+      console.warn('[employee_score] ability rating error:', e?.message);
+      abilityRating = EMPLOYEE_RATING_PENDING;
+    }
     
     // 5. 保存结果
     try {
@@ -272,14 +339,42 @@ export async function calculateEmployeeScore(store, username, role, period) {
     
   } catch (error) {
     console.error('[employee_score] 计算失败:', error);
-    // 返回默认评级
     return {
       total_score: 100,
-      execution_rating: 'C',
-      attitude_rating: 'D',
-      ability_rating: 'C'
+      execution_rating: EMPLOYEE_RATING_PENDING,
+      attitude_rating: EMPLOYEE_RATING_PENDING,
+      ability_rating: EMPLOYEE_RATING_PENDING
     };
   }
+}
+
+/** 马己仙店长执行力：飞书同步 `meeting_reports`（与 agents `getMajixianManagerExecutionRating` 同源） */
+async function getMajixianMeetingExecutionStatsFromFeishu(period) {
+  const [year, month] = String(period || '').split('-');
+  if (!year || !month) return { totalMeetings: 0, unqualifiedMeetings: 0, qualifiedMeetings: 0 };
+  const startDate = `${year}-${month}-01`;
+  const endDate = `${year}-${month}-${String(getDaysInPeriod(period)).padStart(2, '0')}`;
+  const result = await pool().query(
+    `SELECT COUNT(*)::int AS total_meetings,
+            COUNT(*) FILTER (WHERE (fields->>'得分')::int >= 7) AS qualified_meetings,
+            COUNT(*) FILTER (
+              WHERE (fields->>'得分')::int < 7
+                OR (fields->>'得分')::int IS NULL
+                OR TRIM(COALESCE(fields->>'得分', '')) = ''
+                OR (fields->>'得分') = '0'
+            ) AS unqualified_meetings
+     FROM feishu_generic_records
+     WHERE config_key = 'meeting_reports'
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date`,
+    [startDate, endDate]
+  );
+  const row = result.rows?.[0] || {};
+  return {
+    totalMeetings: Number(row.total_meetings || 0),
+    qualifiedMeetings: Number(row.qualified_meetings || 0),
+    unqualifiedMeetings: Number(row.unqualified_meetings || 0)
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -289,15 +384,21 @@ export async function calculateExecutionRating(store, username, role, period) {
   try {
     const cfg = await getRuntimeEmployeeRatingConfig();
     if (role === 'store_production_manager') {
-      // 出品经理：检查3种申报报表的提交情况
-      const openingReports = await getKitchenReportsCount(store, period, 'opening');
-      const closingReports = await getKitchenReportsCount(store, period, 'closing');
-      const receivingReports = await getMaterialReceivingReportsCount(store, period);
-      
-      const expectedDays = getDaysInPeriod(period); // 30天或31天
-      const totalExpected = expectedDays * 3; // 每天3种报告
-      const totalSubmitted = openingReports + closingReports + receivingReports;
-      const totalMissing = totalExpected - totalSubmitted;
+      // 出品经理：与月度综合一致 — agent_messages（开/收档）+ feishu_generic_records（原料），按业务日
+      const [year, month] = period.split('-');
+      const startDate = `${year}-${month}-01`;
+      const endDate = `${year}-${month}-${String(getDaysInPeriod(period)).padStart(2, '0')}`;
+      const brandTag = inferBrandFromStoreName(store);
+      const brandZh = brandTag === '洪潮' ? '洪潮' : '马己仙';
+      const [openingCount, closingCount, materialCount] = await Promise.all([
+        countDistinctOpeningBizDays(store, startDate, endDate),
+        countDistinctClosingBizDays(store, startDate, endDate),
+        countDistinctMaterialBizDays(store, brandZh, startDate, endDate)
+      ]);
+      const expectedDays = getDaysInPeriod(period);
+      const totalExpected = expectedDays * 3;
+      const totalSubmitted = openingCount + closingCount + materialCount;
+      const totalMissing = Math.max(0, totalExpected - totalSubmitted);
       const t = cfg?.execution?.store_production_manager || DEFAULT_EMPLOYEE_RATING_CONFIG.execution.store_production_manager;
       
       // 根据缺提交次数确定评级
@@ -313,20 +414,21 @@ export async function calculateExecutionRating(store, username, role, period) {
       if (brand === '洪潮') {
         // 洪潮店长：企微会员每月新增数量
         const newMembers = await getMonthlyNewWechatMembers(store, period);
+        if (newMembers <= 0 && !(await hasDailyReportsForStoreAggregate(store, period))) {
+          return null;
+        }
         const t = cfg?.execution?.store_manager?.hongchao || DEFAULT_EMPLOYEE_RATING_CONFIG.execution.store_manager.hongchao;
         if (newMembers >= Number(t.A_min_new_members)) return 'A';
         else if (newMembers >= Number(t.B_min_new_members)) return 'B';
         else if (newMembers >= Number(t.C_min_new_members)) return 'C';
         else return 'D';
       } else {
-        // 马己仙店长：例会报告每天提交1次且得分>=7分
-        const meetingReports = await getStoreMeetingReports(store, period);
+        // 马己仙店长：飞书多维「例会」同步表 meeting_reports（与 agents 月度综合一致）
+        const mx = await getMajixianMeetingExecutionStatsFromFeishu(period);
         const expectedDays = getDaysInPeriod(period);
-        const submittedCount = meetingReports.filter(r => r.submitted).length;
-        const totalMissing = expectedDays - submittedCount;
+        const totalMissing = Math.max(0, expectedDays - mx.totalMeetings);
+        const lowScoreCount = mx.unqualifiedMeetings;
         const t = cfg?.execution?.store_manager?.majixian || DEFAULT_EMPLOYEE_RATING_CONFIG.execution.store_manager.majixian;
-        const lowScoreCount = meetingReports.filter(r => r.submitted && r.meeting_score < Number(t.low_score_threshold)).length;
-        
         if (totalMissing <= Number(t.A_max_missing) && lowScoreCount <= Number(t.A_max_low_score)) return 'A';
         else if (totalMissing <= Number(t.B_max_missing) && lowScoreCount <= Number(t.B_max_low_score)) return 'B';
         else if (totalMissing <= Number(t.C_max_missing) && lowScoreCount <= Number(t.C_max_low_score)) return 'C';
@@ -334,11 +436,11 @@ export async function calculateExecutionRating(store, username, role, period) {
       }
     }
     
-    return 'C'; // 默认评级
-    
+    return null;
+
   } catch (error) {
     console.error('[execution_rating] 计算失败:', error);
-    return 'C';
+    return null;
   }
 }
 
@@ -360,7 +462,7 @@ export async function calculateAttitudeRating(username, period) {
     
   } catch (error) {
     console.error('[attitude_rating] 计算失败:', error);
-    return 'D';
+    return null;
   }
 }
 
@@ -373,11 +475,13 @@ export async function calculateAbilityRating(store, username, role, period) {
     if (role === 'store_production_manager') {
       // 出品经理：基于毛利率
       const marginData = await getMarginData(store, period);
-      if (!marginData.actual_margin || !marginData.target_margin) {
-        return 'C'; // 默认评级
+      const actualM = Number(marginData.actual_margin);
+      const targetM = Number(marginData.target_margin);
+      if (!Number.isFinite(actualM) || !Number.isFinite(targetM)) {
+        return null;
       }
-      
-      const diff = marginData.actual_margin - marginData.target_margin;
+
+      const diff = actualM - targetM;
       const t = cfg?.ability?.store_production_manager || DEFAULT_EMPLOYEE_RATING_CONFIG.ability.store_production_manager;
       
       if (diff >= Number(t.A_min_diff)) return 'A';
@@ -391,11 +495,11 @@ export async function calculateAbilityRating(store, username, role, period) {
       const rating = await getMonthlyDianpingRating(store, period);
       const brand = inferBrandFromStoreName(store);
       
-      if (!rating) return 'C';
+      if (!rating) return null;
 
       const key = brand === '洪潮' ? 'hongchao' : 'majixian';
       const rules = cfg?.ability?.store_manager?.[key] || DEFAULT_EMPLOYEE_RATING_CONFIG.ability.store_manager[key];
-      if (!rules) return 'C';
+      if (!rules) return null;
       
       if (rating >= Number(rules.A_min_rating)) return 'A';
       else if (rating >= Number(rules.B_min_rating)) return 'B';
@@ -403,11 +507,11 @@ export async function calculateAbilityRating(store, username, role, period) {
       else return 'D';
     }
     
-    return 'C'; // 默认评级
-    
+    return null;
+
   } catch (error) {
     console.error('[ability_rating] 计算失败:', error);
-    return 'C';
+    return null;
   }
 }
 
@@ -440,7 +544,7 @@ async function getMonthlyActualRevenue(store, period) {
   const [year, month] = period.split('-');
   const startDate = `${year}-${month}-01`;
   const endDate = `${year}-${month}-31`;
-  const pats = scoringStoreMatchPatterns(store);
+  const pats = scoringStoreAggregateIlikePatterns(store);
 
   const result = await pool().query(`
     SELECT COALESCE(SUM(actual_revenue), 0) as total_revenue
@@ -454,7 +558,7 @@ async function getMonthlyActualRevenue(store, period) {
 
 // 获取月度目标营业额
 async function getMonthlyTargetRevenue(store, period) {
-  const pats = scoringStoreMatchPatterns(store);
+  const pats = scoringStoreAggregateIlikePatterns(store);
   const result = await pool().query(`
     SELECT target_revenue FROM revenue_targets 
     WHERE period = $1 AND store ILIKE ANY($2::text[])
@@ -530,12 +634,16 @@ async function getKitchenReportsCount(store, period, reportType) {
   const [year, month] = period.split('-');
   const startDate = `${year}-${month}-01`;
   const endDate = `${year}-${month}-31`;
-  
-  const result = await pool().query(`
-    SELECT COUNT(*) as count FROM kitchen_reports 
-    WHERE store = $1 AND report_date >= $2 AND report_date <= $3 AND report_type = $4
-  `, [store, startDate, endDate, reportType]);
-  
+  const keys = scoringStoreExactKeys(store);
+  if (!keys.length) return 0;
+
+  const result = await pool().query(
+    `SELECT COUNT(*)::int AS count FROM kitchen_reports
+     WHERE store = ANY($1::text[])
+       AND report_date >= $2::date AND report_date <= $3::date AND report_type = $4`,
+    [keys, startDate, endDate, reportType]
+  );
+
   return Number(result.rows[0]?.count || 0);
 }
 
@@ -544,12 +652,16 @@ async function getMaterialReceivingReportsCount(store, period) {
   const [year, month] = period.split('-');
   const startDate = `${year}-${month}-01`;
   const endDate = `${year}-${month}-31`;
-  
-  const result = await pool().query(`
-    SELECT COUNT(*) as count FROM material_receiving_reports 
-    WHERE store = $1 AND report_date >= $2 AND report_date <= $3
-  `, [store, startDate, endDate]);
-  
+  const keys = scoringStoreExactKeys(store);
+  if (!keys.length) return 0;
+
+  const result = await pool().query(
+    `SELECT COUNT(*)::int AS count FROM material_receiving_reports
+     WHERE store = ANY($1::text[])
+       AND report_date >= $2::date AND report_date <= $3::date`,
+    [keys, startDate, endDate]
+  );
+
   return Number(result.rows[0]?.count || 0);
 }
 
@@ -558,13 +670,17 @@ async function getStoreMeetingReports(store, period) {
   const [year, month] = period.split('-');
   const startDate = `${year}-${month}-01`;
   const endDate = `${year}-${month}-31`;
-  
-  const result = await pool().query(`
-    SELECT submitted, meeting_score FROM store_meeting_reports 
-    WHERE store = $1 AND meeting_date >= $2 AND meeting_date <= $3
-  `, [store, startDate, endDate]);
-  
-  return result.rows;
+  const keys = scoringStoreExactKeys(store);
+  if (!keys.length) return [];
+
+  const result = await pool().query(
+    `SELECT submitted, meeting_score FROM store_meeting_reports
+     WHERE store = ANY($1::text[])
+       AND meeting_date >= $2::date AND meeting_date <= $3::date`,
+    [keys, startDate, endDate]
+  );
+
+  return result.rows || [];
 }
 
 /**
@@ -597,31 +713,62 @@ async function getIncompleteTaskCount(username, period) {
   }
 }
 
-// 获取毛利率数据
+/**
+ * 出品经理工作能力用：读 monthly_margins 实际毛利率 + 目标。
+ * 根因修复（2026-04）：
+ * - 飞书/Bitable 写入的 store 常为「马己仙大宁店」，HRMS 员工表为「马己仙上海音乐广场店」，
+ *   原先 `WHERE m.store = $1` 精确匹配会查不到行 → actual 空 → 能力固定 C。
+ * - margin_targets 可能未维护某月行，LEFT JOIN 后 target_margin 为空 → 旧逻辑同样判缺省 → C。
+ * 与 agents-service `getPMAbilityRating` 口径对齐：别名多键尝试 + 无表目标时按品牌默认（马己仙 64 / 洪潮 69）。
+ */
 async function getMarginData(store, period) {
-  const result = await pool().query(`
-    SELECT actual_margin, target_margin 
-    FROM monthly_margins m
-    LEFT JOIN margin_targets t ON m.store = t.store AND m.period = t.period
-    WHERE m.store = $1 AND m.period = $2
-  `, [store, period]);
-  
-  return result.rows[0] || { actual_margin: null, target_margin: null };
+  const s = String(store || '').trim();
+  const canon = resolveAgentCanonicalStore(s);
+  const candidates = [...new Set([s, canon, toFeishuStoreName(s), toFeishuStoreName(canon)].filter(Boolean))];
+
+  for (const storeKey of candidates) {
+    const result = await pool().query(
+      `SELECT m.actual_margin, t.target_margin, m.brand
+       FROM monthly_margins m
+       LEFT JOIN margin_targets t ON m.store = t.store AND m.period = t.period
+       WHERE m.store = $1 AND m.period = $2
+       LIMIT 1`,
+      [storeKey, period]
+    );
+    const row = result.rows?.[0];
+    if (row == null || row.actual_margin == null) continue;
+
+    let targetMargin = row.target_margin;
+    if (targetMargin == null) {
+      const b = String(row.brand || '');
+      const inferred = inferBrandFromStoreName(canon || s);
+      if (b.includes('洪潮') || inferred === '洪潮') targetMargin = 69;
+      else if (b.includes('马己仙') || inferred === '马己仙') targetMargin = 64;
+    }
+
+    return {
+      actual_margin: row.actual_margin,
+      target_margin: targetMargin
+    };
+  }
+
+  return { actual_margin: null, target_margin: null };
 }
 
-// 获取大众点评星级
+// 获取大众点评星级：固定取当月 **9 日** 营业日报「今日点评星级」（与 agents `getManagerAbilityRating` 一致）
 async function getMonthlyDianpingRating(store, period) {
   const [year, month] = period.split('-');
-  // 获取该月最后一天
-  const lastDay = new Date(year, month, 0).getDate();
-  const lastDate = `${year}-${month}-${lastDay.toString().padStart(2, '0')}`;
-  
-  const result = await pool().query(`
-    SELECT dianping_rating FROM daily_reports 
-    WHERE store = $1 AND date = $2 AND dianping_rating IS NOT NULL
-    LIMIT 1
-  `, [store, lastDate]);
-  
+  const targetDate = `${year}-${month}-09`;
+  const pats = scoringStoreAggregateIlikePatterns(store);
+
+  const result = await pool().query(
+    `SELECT dianping_rating FROM daily_reports
+     WHERE date = $1::date AND dianping_rating IS NOT NULL
+       AND store ILIKE ANY($2::text[])
+     LIMIT 1`,
+    [targetDate, pats]
+  );
+
   return Number(result.rows[0]?.dianping_rating) || null;
 }
 
@@ -636,6 +783,40 @@ function periodDateRange(period) {
   const startDate = `${year}-${month}-01`;
   const endDate = `${year}-${month}-${String(getDaysInPeriod(period)).padStart(2, '0')}`;
   return { startDate, endDate };
+}
+
+/** 全库该月是否有厨房/收货同步数据（用于区分「未接表」与「真缺交」） */
+async function hasGlobalKitchenOrMaterialInPeriod(period) {
+  const { startDate, endDate } = periodDateRange(period);
+  const r = await pool().query(
+    `SELECT
+       (SELECT COUNT(*)::int FROM kitchen_reports WHERE report_date >= $1::date AND report_date <= $2::date) AS kc,
+       (SELECT COUNT(*)::int FROM material_receiving_reports WHERE report_date >= $1::date AND report_date <= $2::date) AS mc`,
+    [startDate, endDate]
+  );
+  const row = r.rows?.[0] || {};
+  return (Number(row.kc) || 0) > 0 || (Number(row.mc) || 0) > 0;
+}
+
+async function hasGlobalMeetingReportsInPeriod(period) {
+  const { startDate, endDate } = periodDateRange(period);
+  const r = await pool().query(
+    `SELECT COUNT(*)::int AS c FROM store_meeting_reports
+     WHERE meeting_date >= $1::date AND meeting_date <= $2::date`,
+    [startDate, endDate]
+  );
+  return (Number(r.rows[0]?.c) || 0) > 0;
+}
+
+async function hasDailyReportsForStoreAggregate(store, period) {
+  const { startDate, endDate } = periodDateRange(period);
+  const pats = scoringStoreAggregateIlikePatterns(store);
+  const r = await pool().query(
+    `SELECT COUNT(*)::int AS c FROM daily_reports
+     WHERE date >= $1::date AND date <= $2::date AND store ILIKE ANY($3::text[])`,
+    [startDate, endDate, pats]
+  );
+  return (Number(r.rows[0]?.c) || 0) > 0;
 }
 
 function parseJsonArrayMaybe(v) {
@@ -737,11 +918,14 @@ async function getMonthlyNewWechatMembers(store, period) {
   const endDate = `${year}-${month}-31`;
   
   try {
-    const result = await pool().query(`
-      SELECT COALESCE(SUM(new_wechat_members), 0) AS total
-      FROM daily_reports
-      WHERE TRIM(store) = TRIM($1::text) AND date >= $2::date AND date <= $3::date
-    `, [store, startDate, endDate]);
+    const pats = scoringStoreAggregateIlikePatterns(store);
+    const result = await pool().query(
+      `SELECT COALESCE(SUM(new_wechat_members), 0) AS total
+       FROM daily_reports
+       WHERE date >= $1::date AND date <= $2::date
+         AND store ILIKE ANY($3::text[])`,
+      [startDate, endDate, pats]
+    );
     
     return Number(result.rows[0]?.total || 0);
   } catch (e) {

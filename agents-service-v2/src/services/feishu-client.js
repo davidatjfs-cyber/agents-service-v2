@@ -7,6 +7,7 @@ import { anomalyRuleLabelZh } from '../utils/anomaly-labels.js';
 import { logger } from '../utils/logger.js';
 import { isMarketingPlanningIntent } from '../utils/marketing-intent.js';
 import { isExternalEnabled } from '../utils/safety.js';
+import { isMajixianPmObserverUsername } from '../utils/scoring-assignee.js';
 import { callLLM, callVisionLLM } from './llm-provider.js';
 
 /** ECS 偶发 resolv 异常导致 ENOTFOUND：可用 FEISHU_DNS_SERVERS=223.5.5.5,114.114.114.114 */
@@ -1261,6 +1262,21 @@ export async function handleWebhookEvent(body) {
   return { toast: { type: 'info', content: 'ok' } };
 }
 
+/** 马己仙出品观察账号：不参与任务类卡片操作与对话内任务整改关联 */
+export async function feishuOpenIdIsMajixianPmObserver(openId) {
+  const oid = String(openId || '').trim();
+  if (!oid) return false;
+  try {
+    const r = await query(
+      `SELECT LOWER(TRIM(username)) AS u FROM feishu_users WHERE open_id = $1 LIMIT 1`,
+      [oid]
+    );
+    return isMajixianPmObserverUsername(r.rows?.[0]?.u);
+  } catch (_e) {
+    return false;
+  }
+}
+
 // ── Card Action Callback Handler ──
 export async function handleCardAction(body) {
   const norm = body?.open_id !== undefined || body?.action !== undefined ? body : normalizeCardActionBody(body);
@@ -1281,7 +1297,16 @@ export async function handleCardAction(body) {
   const taskId = String(value.taskId || '').trim();
   logger.info({ openId, actionType, taskId }, 'Card action callback');
 
+  const blockObserverTaskActions = openId ? await feishuOpenIdIsMajixianPmObserver(openId) : false;
+  const observerTaskToast = {
+    toast: {
+      type: 'info',
+      content: '观察账号仅同步接收绩效与说明；任务操作与整改回复请使用黎永荣主账号。'
+    }
+  };
+
   if (actionType === 'ack_anomaly' && taskId) {
+    if (blockObserverTaskActions) return observerTaskToast;
     try {
       const { transitionTask } = await import('./task-state-machine.js');
       await transitionTask(taskId, 'viewed');
@@ -1289,6 +1314,7 @@ export async function handleCardAction(body) {
     } catch(e) { return { toast: { type: 'error', content: '操作失败: ' + (e?.message || '') } }; }
   }
   if (actionType === 'reply_anomaly' && taskId) {
+    if (blockObserverTaskActions) return observerTaskToast;
     // 立即响应避免超时；后台存储待回复状态并发送提示
     setImmediate(async () => {
       try {
@@ -1312,6 +1338,7 @@ export async function handleCardAction(body) {
     return { toast: { type: 'info', content: '请在对话中回复整改措施，系统将自动关联到该任务' } };
   }
   if (actionType === 'start_task' && taskId) {
+    if (blockObserverTaskActions) return observerTaskToast;
     try {
       const { transitionTask } = await import('./task-state-machine.js');
       await transitionTask(taskId, 'in_progress');
@@ -1328,6 +1355,7 @@ export async function handleCardAction(body) {
   }
 
   if (actionType === 'approve_task' && taskId) {
+    if (blockObserverTaskActions) return observerTaskToast;
     try {
       const { transitionTask } = await import('./task-state-machine.js');
       await transitionTask(taskId, 'pending_dispatch');
@@ -1336,6 +1364,7 @@ export async function handleCardAction(body) {
   }
 
   if (actionType === 'reject_task' && taskId) {
+    if (blockObserverTaskActions) return observerTaskToast;
     try {
       const { transitionTask } = await import('./task-state-machine.js');
       await transitionTask(taskId, 'rejected');
@@ -1390,10 +1419,9 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
     const t = String(responseText || '').trim();
     const MIN_TEXT = 20;
     const src = String(task.source || '').trim();
-    const needsWhenWhereWhat =
-      src === 'scheduled_inspection' ||
-      src === 'random_inspection' ||
-      src === 'bi_anomaly';
+    /** 不再对定时/抽检/BI 强制「时间+地点+事件」三要素；与任务详情一致即可（见 LLM 审核说明） */
+    const isScheduledOrInspectionOrBi =
+      src === 'scheduled_inspection' || src === 'random_inspection' || src === 'bi_anomaly';
     const isPlaceholder = /^(无|没有|ok|好的|收到|test|测试|了解|\d+)$/i.test(t);
     const textMeetsMin = t.length >= MIN_TEXT;
 
@@ -1454,38 +1482,32 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
     if (hasImages && !imageRelevant) {
       passed = false;
       reason = imageVisionReason || '附图未通过与任务内容一致性的校验';
-      feedback = `请上传**与本任务问题直接相关**的现场照片，并配合至少 ${MIN_TEXT} 字说明（建议写明：时间+档口/位置+做了什么与结果）。`;
+      feedback = `请上传**与本任务问题直接相关**的现场照片，并配合至少 ${MIN_TEXT} 字说明（须能看出在回应本任务要求）。`;
     } else if (isPlaceholder) {
       passed = false;
       reason = '回复仅为占位词，无实质内容';
-      feedback = `请针对本任务写明情况与处理（至少 ${MIN_TEXT} 字）。${needsWhenWhereWhat ? '须包含时间、地点（档口/区域）、事件与结果。' : ''}`;
+      feedback = `请针对本任务写明情况与处理（至少 ${MIN_TEXT} 字），内容与任务卡片要求一致。`;
     } else if (!textMeetsMin) {
       passed = false;
       reason = `回复未满 ${MIN_TEXT} 字`;
-      feedback = `请至少回复 **${MIN_TEXT} 字**，且内容与任务问题一致；有附图时附图也须与任务一致。${needsWhenWhereWhat ? '定时/抽检/BI类任务请写清时间+地点+事件。' : ''}`;
+      feedback = `请至少回复 **${MIN_TEXT} 字**，且内容与任务卡片要求一致；有附图时附图也须与任务一致。`;
     } else {
       try {
         const imgNote = hasImages
           ? `\n（已附图：${imageRelevant ? '已与任务内容一致性校验通过' : '未通过'}${imageVisionReason ? ` — ${imageVisionReason}` : ''}）`
           : '\n（无图片）';
         const prompt = `任务标题：${task.title || '未知'}\n任务类型：${task.source || '未知'}\n门店：${String(task.store || '')}\n任务详情：${(task.detail || '').slice(0, 500)}\n\n负责人回复：\n${t.slice(0, 1000)}${imgNote}`;
-        const triadRule = needsWhenWhereWhat
-          ? `\n【本条须额外满足「时间+地点+事件」】来源为定时巡检/抽检/BI异常整改：文字中必须能识别出——①何时（具体时间或清晰时段，如「10:00」「午市开档前」）；②何地（档口/区域/工位等店内位置，如「烧味档口」）；③何事（做了什么、试了/查了何物、结果或与客诉/任务要求的对照）。三者缺一即判不通过。`
-          : '\n【本条】若任务明显属现场执行类，仍建议包含可核查的时间、位置与动作；若任务纯说明性且详情未要求现场要素，可不以三要素卡死。';
         const r = await callLLM([
           {
             role: 'system',
-            content: `你是餐饮连锁总部「任务回复」审核员，按下列标准严格判断（已通过字数与占位词校验）。
+            content: `你是餐饮连锁总部「任务回复」审核员（已通过字数≥${MIN_TEXT}、占位词与附图一致性等前置校验）。
 
-【已前置校验】字数≥${MIN_TEXT}；非「收到/好的」等占位；有附图且已附图时，图片与任务相关性已由系统校验。
-
-【审核标准】
-1) **主题相关**：回复必须针对本任务标题与详情中的要求/问题，不得跑题、不得仅用套话敷衍。
-2) **时间+地点+事件**（营运现场类）${triadRule}
-3) **不通过时的输出（强制）**：
-   - reason：一句话说明不合规核心（须点名：缺时间/缺地点/缺事件/跑题/过泛等）。
-   - feedback：用 2～5 行中文，**必须**包含：①列出不满足的标准条款编号（对应上面 1 或 2）；②说明**达标时应写到什么程度**；③给**一句贴合本任务的改写示例**（完整一句，如「今日10:00在烧味档口对烧鹅、烧鸭试味，咸淡与标准比对……结合近期桌访客诉……」）。不得只写「请补充」而不指出缺什么。
-4) 通过：同时满足相关性与（若适用）三要素；passed=true 时 feedback 必须为空字符串。
+【审核原则 — 按优先级】
+1) **与任务卡片一致（最原则）**：回复须针对本任务「标题 + 详情」中的核心要求（问题点、整改项、抽检要点、试味范围等），不得明显跑题；允许用一段话概括，不要求逐条复述任务全文。
+2) **字数**：已由系统保证 ≥${MIN_TEXT} 字，你无需再以「字数不足」为由判不通过。
+3) **不强制格式**：不要求必须写出「具体时间点 + 店内精确位置 + 事件」三要素；若回复能看出在落实本任务关切（例如已做试味/检查/沟通/整改中的若干项），且与详情方向一致，应判 **通过**。
+4) **不通过**仅适用于：明显敷衍套话、与任务主题无关、或任务明确要求某关键动作但回复完全未触及该要点（须在 reason 中点名缺的是哪一条任务要求，不得笼统说「不够详细」）。
+5) 输出：passed=true 时 feedback 必须为空字符串；不通过时 reason 一句话，feedback 简短说明需补哪一点即可（禁止长篇模板折磨一线）。
 
 只输出 JSON，勿 markdown：
 {"passed":true或false,"reason":"...","feedback":"..."}`
@@ -1553,18 +1575,17 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
               content: `**审核结论**：${reason}\n\n**需要补充的内容**：\n${feedback || '请提供更详细的处理记录，包括实际情况描述、处理措施、现场照片（如适用）。'}`
             }
           },
-          ...(needsWhenWhereWhat
+          ...(isScheduledOrInspectionOrBi
             ? [
                 {
                   tag: 'div',
                   text: {
                     tag: 'lark_md',
                     content:
-                      '**审核参照（定时/抽检/BI 异常类）**\n' +
-                      `1. 不少于 **${MIN_TEXT}** 字且非敷衍\n` +
-                      '2. 内容须**紧扣本任务标题与详情**\n' +
-                      '3. 须写清 **时间**（时点或时段）+ **地点**（档口/区域/工位）+ **事件**（做了什么、试了/查了何物、结果或与客诉的对照）\n' +
-                      '不通过时上方会指出具体缺哪一项，并给出示例句式。'
+                      '**审核参照（定时/抽检/BI 等）**\n' +
+                      `1. 不少于 **${MIN_TEXT}** 字且非占位敷衍\n` +
+                      '2. 内容须**针对本任务标题与详情中的核心要求**\n' +
+                      '3. **不强制**「时间+地点+事件」格式；能看出在落实本任务关切且方向一致即可'
                   }
                 }
               ]

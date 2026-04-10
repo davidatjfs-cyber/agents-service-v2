@@ -6,6 +6,19 @@ import { query } from './db.js';
 
 const CANONICAL_MAJIXIAN_PM = { username: 'NNYXLYR04', displayName: '黎永荣' };
 
+/** 马己仙出品观察账号：接收与黎永荣相同的绩效推送，但不参与任务类飞书交互（见 message-pipeline / feishu-client） */
+export const MAJIXIAN_PM_OBSERVER_USERNAME = 'nnyxcs35';
+
+export function isMajixianPmObserverUsername(username) {
+  return String(username || '').trim().toLowerCase() === MAJIXIAN_PM_OBSERVER_USERNAME;
+}
+
+/** 周报卡片上从 new_model 取维度时：观察号行用黎永荣库里的 new_model */
+export function majixianPmNewModelLookupUsername(rowUsername, store) {
+  if (!isMajixianStore(store)) return rowUsername;
+  return isMajixianPmObserverUsername(rowUsername) ? CANONICAL_MAJIXIAN_PM.username : rowUsername;
+}
+
 export function isMajixianStore(store) {
   return /马己仙/.test(String(store || ''));
 }
@@ -49,7 +62,8 @@ async function fetchFeishuUserByUsername(username) {
 }
 
 /**
- * 马己仙门店出品经理：报告与 agent_scores 只认黎永荣（NNYXLYR04）；若库中仍有 nnyxcs35 绑定，不采用。
+ * 马己仙门店出品经理：主责为黎永荣（NNYXLYR04）；若存在 nnyxcs35 观察绑定，排在第二位，
+ * 周度/月度写入与飞书同步两份（观察行 name 为「黎永荣（观察同步）」便于报告与管理端识别）。
  */
 export async function resolveMajixianProductionManagersForScoring(store) {
   if (!isMajixianStore(store)) return [];
@@ -62,20 +76,46 @@ export async function resolveMajixianProductionManagersForScoring(store) {
       [store]
     );
     const sorted = sortFeishuScoringRows(store, 'store_production_manager', r.rows || []);
-    const first = sorted[0];
-    if (first && String(first.username || '').toLowerCase() !== 'nnyxcs35') {
-      const u = String(first.username || '').trim();
-      const name =
-        u.toUpperCase() === CANONICAL_MAJIXIAN_PM.username
-          ? CANONICAL_MAJIXIAN_PM.displayName
-          : String(first.disp || '').trim() || CANONICAL_MAJIXIAN_PM.displayName;
-      return [{ username: u, name }];
+
+    const pickNonObserverPrimary = () => {
+      const first = sorted[0];
+      if (first && !isMajixianPmObserverUsername(first.username)) {
+        const u = String(first.username || '').trim();
+        const name =
+          u.toUpperCase() === CANONICAL_MAJIXIAN_PM.username
+            ? CANONICAL_MAJIXIAN_PM.displayName
+            : String(first.disp || '').trim() || CANONICAL_MAJIXIAN_PM.displayName;
+        return { username: u, name };
+      }
+      return null;
+    };
+
+    let canon = pickNonObserverPrimary();
+    if (!canon) {
+      const fetched = await fetchFeishuUserByUsername(CANONICAL_MAJIXIAN_PM.username);
+      if (fetched) {
+        canon = { username: String(fetched.username).trim(), name: CANONICAL_MAJIXIAN_PM.displayName };
+      }
     }
-    const canon = await fetchFeishuUserByUsername(CANONICAL_MAJIXIAN_PM.username);
-    if (canon) {
-      return [{ username: canon.username, name: CANONICAL_MAJIXIAN_PM.displayName }];
+    if (!canon && sorted[0]) {
+      canon = {
+        username: String(sorted[0].username || '').trim(),
+        name: String(sorted[0].disp || sorted[0].username || '')
+      };
     }
-    if (first) return [{ username: String(first.username).trim(), name: String(first.disp || first.username) }];
+    if (!canon) {
+      return [{ username: '__periodic_kitchen__', name: '出品经理(周度自动·未绑定)' }];
+    }
+
+    const out = [canon];
+    const obs = sorted.find((row) => isMajixianPmObserverUsername(row.username));
+    if (obs && !isMajixianPmObserverUsername(canon.username)) {
+      out.push({
+        username: String(obs.username || '').trim(),
+        name: `${CANONICAL_MAJIXIAN_PM.displayName}（观察同步）`
+      });
+    }
+    return out;
   } catch (_e) {
     /* ignore */
   }

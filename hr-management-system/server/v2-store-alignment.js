@@ -2,6 +2,10 @@
  * 与 agents-service-v2 对齐：
  * - `daily_reports` / 内存日报：`anomaly-engine.js` 的 `dailyReportIlikePatterns`（expandAgentStoreLabels → %…%）
  * - 桌访/飞书多维表字段：`utils/store-sql-patterns.js` 的 `feishuStoreSearchPatterns`
+ *
+ * 店名双轨（HR 全称 vs 飞书简称）不必改全库：在此维护 STORE_TO_FEISHU，并保证
+ * HRMS `new-scoring-model` / agents `store-mapping` 等与之一致。新店若存在双名，
+ * 二选一作规范名写入员工主数据，另一写法补一行映射。
  */
 const STORE_TO_FEISHU = {
   洪潮大宁久光店: '洪潮久光店',

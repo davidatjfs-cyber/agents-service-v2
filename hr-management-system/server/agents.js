@@ -6558,10 +6558,13 @@ export function sanitizePerformanceZhText(text) {
   t = t.replace(/\bstore_rating\b\s*[:：]\s*null\b/gi, '门店级别：待评估');
   t = t.replace(/\bstore_rating\b\s*[:：]\s*'?(A|B|C|D)'?\s*分\b/gi, '门店级别：$1级');
   t = t.replace(/\bstore_rating\b\s*[:：]\s*'?(A|B|C|D)'?\b(?!级)/gi, '门店级别：$1级');
+  t = t.replace(/\bexecution_rating\b\s*[:：]\s*'?(待定)'?\s*分?\b/gi, '执行力：$1');
   t = t.replace(/\bexecution_rating\b\s*[:：]\s*'?(A|B|C|D)'?\s*分\b/gi, '执行力：$1级');
   t = t.replace(/\bexecution_rating\b\s*[:：]\s*'?(A|B|C|D)'?\b(?!级)/gi, '执行力：$1级');
+  t = t.replace(/\battitude_rating\b\s*[:：]\s*'?(待定)'?\s*分?\b/gi, '工作态度：$1');
   t = t.replace(/\battitude_rating\b\s*[:：]\s*'?(A|B|C|D)'?\s*分\b/gi, '工作态度：$1级');
   t = t.replace(/\battitude_rating\b\s*[:：]\s*'?(A|B|C|D)'?\b(?!级)/gi, '工作态度：$1级');
+  t = t.replace(/\bability_rating\b\s*[:：]\s*'?(待定)'?\s*分?\b/gi, '工作能力：$1');
   t = t.replace(/\bability_rating\b\s*[:：]\s*'?(A|B|C|D)'?\s*分\b/gi, '工作能力：$1级');
   t = t.replace(/\bability_rating\b\s*[:：]\s*'?(A|B|C|D)'?\b(?!级)/gi, '工作能力：$1级');
   t = t.replace(/^[ \t]*[•\-*]\s*store_rating\s*[:：]\s*null\s*$/gim, '• 门店级别：待评估');
