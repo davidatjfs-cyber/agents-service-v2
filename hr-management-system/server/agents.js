@@ -11157,6 +11157,114 @@ export function registerAgentRoutes(app, authRequired) {
     }
   });
 
+  /** 数据中心：当日 Agent 活动明细（与控制台 Agent 活动同源字段，只读） */
+  app.get('/api/agents/activity-detail', authRequired, async (req, res) => {
+    const role = String(req.user?.role || '').trim();
+    if (!['admin', 'hq_manager', 'hr_manager'].includes(role)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    const date = String(req.query?.date || '').trim() || new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
+    const p = pool();
+    try {
+      const [taskR, rhythmR, anomalyR, mtR] = await Promise.all([
+        p
+          .query(
+            `SELECT agent, store, username, latency_ms, has_evidence, evidence_violation, created_at
+             FROM agent_task_logs
+             WHERE (created_at AT TIME ZONE 'Asia/Shanghai')::date = $1::date
+             ORDER BY created_at DESC
+             LIMIT 80`,
+            [date]
+          )
+          .catch(() => ({ rows: [] })),
+        p
+          .query(
+            `SELECT rhythm_type, status, LEFT(COALESCE(result_summary,''), 200) AS result_summary,
+                    LEFT(COALESCE(error_message,''), 160) AS error_message, execution_time, created_at
+             FROM rhythm_logs
+             WHERE execution_date = $1::date
+             ORDER BY created_at DESC
+             LIMIT 40`,
+            [date]
+          )
+          .catch(() => ({ rows: [] })),
+        p
+          .query(
+            `SELECT store, anomaly_key, severity, trigger_date, LEFT(COALESCE(status,''), 20) AS status, created_at
+             FROM anomaly_triggers
+             WHERE trigger_date = $1::date
+             ORDER BY created_at DESC
+             LIMIT 60`,
+            [date]
+          )
+          .catch(() => ({ rows: [] })),
+        p
+          .query(
+            `SELECT task_id, title, store, severity, status, assignee_username AS agent,
+                    created_at, resolved_at
+             FROM master_tasks
+             WHERE created_at::date = $1::date
+                OR (resolved_at IS NOT NULL AND (resolved_at AT TIME ZONE 'Asia/Shanghai')::date = $1::date)
+             ORDER BY created_at DESC
+             LIMIT 50`,
+            [date]
+          )
+          .catch(() => ({ rows: [] }))
+      ]);
+      return res.json({
+        date,
+        taskLogs: taskR.rows || [],
+        rhythmLogs: rhythmR.rows || [],
+        anomalyTriggers: anomalyR.rows || [],
+        masterTasks: mtR.rows || []
+      });
+    } catch (e) {
+      return res.status(500).json({ error: String(e?.message || e) });
+    }
+  });
+
+  /** 数据中心：个人绩效分来源（agent_scores + 公司通知类扣分） */
+  app.get('/api/agents/score-provenance', authRequired, async (req, res) => {
+    const role = String(req.user?.role || '').trim();
+    if (!['admin', 'hq_manager', 'hr_manager'].includes(role)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    const u = String(req.query?.username || '').trim();
+    if (!u) return res.status(400).json({ error: 'username required' });
+    const lim = Math.max(1, Math.min(60, Number(req.query?.limit) || 30));
+    const p = pool();
+    try {
+      const scoresR = await p
+        .query(
+          `SELECT period, score_model, total_score, summary,
+                  LEFT(COALESCE(deductions::text, ''), 3500) AS deductions_preview,
+                  updated_at, store, role
+           FROM agent_scores
+           WHERE LOWER(TRIM(username)) = LOWER(TRIM($1))
+           ORDER BY updated_at DESC
+           LIMIT $2`,
+          [u, lim]
+        )
+        .catch(() => ({ rows: [] }));
+      let notif = { rows: [] };
+      try {
+        notif = await p.query(
+          `SELECT title, type, LEFT(message, 800) AS message_preview, created_at
+           FROM hrms_user_notifications
+           WHERE LOWER(TRIM(target_username)) = LOWER(TRIM($1))
+           ORDER BY created_at DESC
+           LIMIT $2`,
+          [u, lim]
+        );
+      } catch (_e) {
+        notif = { rows: [] };
+      }
+      return res.json({ username: u, scores: scoresR.rows || [], notifications: notif.rows || [] });
+    } catch (e) {
+      return res.status(500).json({ error: String(e?.message || e) });
+    }
+  });
+
   // ── Performance Monitoring API ──
   app.get('/api/agents/performance', authRequired, async (req, res) => {
     const role = String(req.user?.role || '').trim();

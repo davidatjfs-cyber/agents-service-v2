@@ -1407,7 +1407,7 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
   try {
     // 获取任务详情
     const tr = await query(
-      `SELECT task_id, title, detail, source, store, assignee_username, assignee_role,
+      `SELECT task_id, title, detail, source, category, store, assignee_username, assignee_role,
               COALESCE(review_count, 0) AS review_count
        FROM master_tasks WHERE task_id = $1 LIMIT 1`,
       [taskId]
@@ -1530,24 +1530,49 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
 
     // 更新审核结果到 master_tasks
     if (passed) {
-      // 审核通过须闭环：此前错误地仍为 pending_review，导致晨报/待办里永远「待处理」
-      await query(
-        `UPDATE master_tasks SET
-           review_passed = true, review_feedback = $2,
-           review_count = COALESCE(review_count, 0) + 1,
-           status = 'resolved',
-           resolved_at = COALESCE(resolved_at, NOW()),
-           updated_at = NOW()
-         WHERE task_id = $1`,
-        [taskId, reason]
-      ).catch(() => {});
-      setImmediate(() => {
-        import('./proactive-v2/proactive-task-outcome-on-close.js')
-          .then((m) => m.scheduleProactiveOutcomeOnClose(taskId, { newStatus: 'resolved' }))
-          .catch(() => {});
-      });
-      if (replyMessageId) {
-        replyMsg(replyMessageId, `✅ 审核通过，任务已闭环：${taskId}`).catch(() => {});
+      const cat = String(task.category || '').trim();
+      const isFoodSafetyBi = src === 'bi_anomaly' && cat === 'food_safety';
+
+      if (isFoodSafetyBi) {
+        /** 食安：店长/出品整改说明审核通过 ≠ 结案；须等 hq_manager「记录/不记录」才 resolved，否则会无扣分闭环 */
+        await query(
+          `UPDATE master_tasks SET
+             review_passed = true, review_feedback = $2,
+             review_count = COALESCE(review_count, 0) + 1,
+             status = 'pending_review',
+             updated_at = NOW()
+           WHERE task_id = $1`,
+          [
+            taskId,
+            `${reason ? reason + '；' : ''}门店整改说明已通过，**待总部营运**在本任务线程回复「记录」并写明店长/出品/双方，或「不记录」结案（未判罚前不扣绩效分）。`
+          ]
+        ).catch(() => {});
+        if (replyMessageId) {
+          replyMsg(
+            replyMessageId,
+            `✅ 整改说明审核已通过。**食安任务尚未结案**：请 **总部营运** 回复「记录+责任岗位」或「不记录」完成判罚（任务 ${taskId}）。`
+          ).catch(() => {});
+        }
+      } else {
+        // 审核通过须闭环：此前错误地仍为 pending_review，导致晨报/待办里永远「待处理」
+        await query(
+          `UPDATE master_tasks SET
+             review_passed = true, review_feedback = $2,
+             review_count = COALESCE(review_count, 0) + 1,
+             status = 'resolved',
+             resolved_at = COALESCE(resolved_at, NOW()),
+             updated_at = NOW()
+           WHERE task_id = $1`,
+          [taskId, reason]
+        ).catch(() => {});
+        setImmediate(() => {
+          import('./proactive-v2/proactive-task-outcome-on-close.js')
+            .then((m) => m.scheduleProactiveOutcomeOnClose(taskId, { newStatus: 'resolved' }))
+            .catch(() => {});
+        });
+        if (replyMessageId) {
+          replyMsg(replyMessageId, `✅ 审核通过，任务已闭环：${taskId}`).catch(() => {});
+        }
       }
       // 合格：不发额外消息，之前的"已收到"已足够
     } else {
