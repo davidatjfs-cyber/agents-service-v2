@@ -114,7 +114,8 @@ INSERT INTO agent_v2_configs (config_key, config_value, description, updated_by)
     "data_source": "feishu_generic_records.table_visit",
     "threshold": {
       "medium": {"same_product_complaints": 2},
-      "high": {"same_product_complaints": 4}
+      "high": {"same_product_complaints": 4},
+      "weekly_deduction_rule": "per_product_sum: each product >=4 complaints -> 10 pts; >=2 -> 5 pts (4-tier replaces 2-tier for same product); multiple products sum"
     },
     "assign_to": "kitchen_manager",
     "evidence": ["菜品照片", "整改方案"],

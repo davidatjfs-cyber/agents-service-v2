@@ -341,25 +341,54 @@ export async function checkTableVisitProduct(store) {
 
   if (productsAll.length === 0) return { triggered: false, detail: '本窗口无结构化「问题菜品」记录' };
 
-  const maxCnt = Math.max(...productsAll.map((p) => parseInt(p.cnt, 10)));
-  let severity = null;
-  if (maxCnt >= 4) severity = 'high';
-  else if (maxCnt >= 2) severity = 'medium';
+  /** 周度绩效扣分：按产品维度分别计分后相加（≥4次10分，≥2次5分；多产品分别触发则累加，如4个产品各≥2次共20分） */
+  const productsScored = [];
+  let deductionPointsTotal = 0;
+  for (const p of productsAll) {
+    const cnt = parseInt(p.cnt, 10) || 0;
+    let deduction_points = 0;
+    let tier = null;
+    if (cnt >= 4) {
+      deduction_points = 10;
+      tier = 'high';
+    } else if (cnt >= 2) {
+      deduction_points = 5;
+      tier = 'medium';
+    }
+    if (deduction_points > 0) {
+      deductionPointsTotal += deduction_points;
+      productsScored.push({
+        complaint: p.complaint,
+        cnt: p.cnt,
+        deduction_points,
+        tier
+      });
+    }
+  }
 
-  const productsTriggered = productsAll.filter((p) => parseInt(p.cnt, 10) >= 2);
+  if (productsScored.length === 0) return { triggered: false, detail: '本窗口无达扣分阈值的产品（单产品须≥2次不满意）' };
+
+  const hasHighTier = productsScored.some((x) => x.tier === 'high');
+  const severity = hasHighTier ? 'high' : 'medium';
+  const topNames = productsScored.slice(0, 4).map((x) => `${x.complaint}×${x.cnt}（-${x.deduction_points}）`);
+  const detail = `桌访产品：${productsScored.length} 个产品触发扣分，合计扣 ${deductionPointsTotal} 分（单产品≥4次10分、≥2次5分，按产品累计；自然周 ${startDate}~${endDate}）。${topNames.join('；')}${productsScored.length > 4 ? '…' : ''}`;
 
   return {
-    triggered: !!severity,
+    triggered: true,
     severity,
     value: {
-      products: productsTriggered.length ? productsTriggered : productsAll,
+      products: productsScored,
+      deduction_points_total: deductionPointsTotal,
       window: `${startDate}~${endDate}`,
       weekStart: startDate,
       weekEnd: endDate,
       dataSource: 'merged_table_visit_same_as_chat'
     },
-    threshold: { medium: '同产品>=2次', high: '同产品>=4次' },
-    detail: `${productsAll[0]?.complaint}被记录${maxCnt}次（自然周${startDate}~${endDate}，周周独立不跨周累计）`
+    threshold: {
+      medium: '单产品≥2次：该产品扣5分（多产品分别计）',
+      high: '单产品≥4次：该产品扣10分（与2次档不重复累计，取较高档）'
+    },
+    detail
   };
 }
 

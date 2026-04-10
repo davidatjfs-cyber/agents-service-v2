@@ -78,7 +78,8 @@ export async function getNotifyDbRoles(ruleKey) {
 
 function plannerSyntheticQuestion(ruleKey) {
   if (ruleKey === 'table_visit_ratio') return '为什么最近桌访占比偏低，应如何提升巡台与反馈收集';
-  if (ruleKey === 'table_visit_product') return '为什么桌访中多款产品被集中反馈不满意，应如何整改出品与培训';
+  if (ruleKey === 'table_visit_product')
+    return '桌访中多款产品被集中反馈不满意：请按产品逐一整改出品与培训；周度绩效按「每个触线产品」分别扣分（≥4次10分、≥2次5分，多产品累加），整改需覆盖所有触线菜品';
   if (ruleKey === 'gross_margin') return '为什么最近利润下降';
   if (['labor_efficiency', 'revenue_achievement', 'recharge_zero'].includes(ruleKey)) {
     return '为什么最近营收下降';

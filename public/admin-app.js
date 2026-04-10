@@ -805,7 +805,7 @@ function viewPerformance() {
     { cat: '总实收毛利率异常', role: 'store_production_manager', med: 20, high: 40, freq: 'monthly' },
     { cat: '产品差评异常', role: 'store_production_manager', med: 5, high: 10, freq: 'weekly' },
     { cat: '服务差评异常', role: 'store_manager', med: 5, high: 10, freq: 'weekly' },
-    { cat: '桌访产品异常', role: 'store_production_manager', med: 5, high: 10, freq: 'weekly' },
+    { cat: '桌访产品异常（多产品触线分别×5/10分累加）', role: 'store_production_manager', med: 5, high: 10, freq: 'weekly' },
   ];
   const savePerfCfg = async (key, val) => {
     const cur = { ...perfCfg }; cur[key] = val;

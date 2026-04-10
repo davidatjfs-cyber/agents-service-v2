@@ -98,7 +98,9 @@ async function recordDeductionNotifications({ username, store, role, periodMonda
   for (const d of details || []) {
     const pts = Number(d.points || 0);
     if (!pts) continue;
-    const reason = CAT_ZH[d.category] || d.category || '异常规则';
+    const reason =
+      (CAT_ZH[d.category] || d.category || '异常规则') +
+      (d.detail_note ? `\n${String(d.detail_note).slice(0, 400)}` : '');
     const keyZh = ANOMALY_KEY_ZH[d.anomaly_key] || '相关规则';
     const sevZh = d.severity === 'high' ? '高' : d.severity === 'medium' ? '中' : String(d.severity || '-');
     const remainingScore = Math.max(0, currentScore - pts);
@@ -196,6 +198,8 @@ const SKIP_WORST_FOR_KEYS = new Set([
   'recharge_zero',
   'bad_review_product',
   'bad_review_service',
+  /** 桌访产品：按产品维度累计扣分，见 mergeTableVisitProductWeekDeduction */
+  'table_visit_product',
   'revenue_achievement_monthly',
   /** 食安走单独闭环/记录流程，不并入通用周汇总扣分模型 */
   'food_safety'
@@ -255,6 +259,41 @@ function parseTriggerValue(row) {
 }
 
 /**
+ * 桌访产品异常：同一自然周内可能有多条 anomaly_triggers；按菜品名合并取最大次数后，
+ * 再按产品分别计分（≥4→10，≥2→5）并相加，与 anomaly-engine.checkTableVisitProduct 口径一致。
+ */
+function mergeTableVisitProductWeekDeduction(triggerRows) {
+  const byCanon = new Map();
+  for (const row of triggerRows || []) {
+    if (row.anomaly_key !== 'table_visit_product') continue;
+    const tv = parseTriggerValue(row);
+    const products = tv?.products;
+    if (!Array.isArray(products)) continue;
+    for (const p of products) {
+      const name = String(p.complaint || '').trim();
+      const cnt = parseInt(String(p.cnt ?? ''), 10) || 0;
+      if (!name) continue;
+      const canon = name.toLowerCase().replace(/\s+/g, '');
+      if (!canon) continue;
+      const prev = byCanon.get(canon);
+      if (!prev || cnt > prev.cnt) byCanon.set(canon, { complaint: name, cnt });
+    }
+  }
+  let totalPoints = 0;
+  const lines = [];
+  for (const { complaint, cnt } of byCanon.values()) {
+    let pts = 0;
+    if (cnt >= 4) pts = 10;
+    else if (cnt >= 2) pts = 5;
+    if (pts > 0) {
+      totalPoints += pts;
+      lines.push({ complaint, cnt, points: pts });
+    }
+  }
+  return { totalPoints, lines };
+}
+
+/**
  * 人效异常：周度汇总须同时落在店长与出品经理的 agent_scores（与 scoring-model efficiency_anomaly 双岗一致）。
  * 若 calcDeductions 因映射遗漏未写入 labor_efficiency 行，在此兜底补一条，避免只记店长、漏记出品。
  */
@@ -302,6 +341,8 @@ export async function scoreStoreForPeriod(store, periodMonday) {
        AND COALESCE(status, 'open') = 'open'`,
     [store, effectiveStart, endStr]
   );
+
+  const tableVisitProductMerged = mergeTableVisitProductWeekDeduction(r.rows || []);
 
   let rechargeSum = 0;
   let badProductPts = 0;
@@ -376,6 +417,21 @@ export async function scoreStoreForPeriod(store, periodMonday) {
         severity: 'custom',
         anomaly_key: 'bad_review_product',
         points: badProductPts
+      });
+    }
+    if (role === 'store_production_manager' && tableVisitProductMerged.totalPoints > 0) {
+      const tvp = tableVisitProductMerged.totalPoints;
+      extra += tvp;
+      const sev = tableVisitProductMerged.lines.some((l) => l.points >= 10) ? 'high' : 'medium';
+      const breakdown = tableVisitProductMerged.lines
+        .map((l) => `${l.complaint}×${l.cnt}→${l.points}分`)
+        .join('；');
+      extraDetails.push({
+        category: 'table_visit_anomaly',
+        severity: sev,
+        anomaly_key: 'table_visit_product',
+        points: tvp,
+        detail_note: `按产品累计：${breakdown}`
       });
     }
 

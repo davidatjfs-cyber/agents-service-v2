@@ -5059,7 +5059,15 @@ async function mergeSharedStateFields(patches, arrayIdFields = {}) {
   throw new Error('mergeSharedStateFields: max retries exceeded');
 }
 
-/** 双写失败时通知飞书 admin/hq_manager（与 agents cron-run-monitor 的 feishu_users 查询口径一致） */
+/**
+ * 双写失败时通知飞书 admin/hq_manager（与 agents cron-run-monitor 的 feishu_users 查询口径一致）。
+ * 当前已接入告警的范围（遗漏新增双写时请同步调用本函数）：
+ * - dualWriteStateToDB 全量块（employees / leave / reward_punishment / notifications）
+ * - hrms_payroll_domain（异步薪资域、PUT /api/state）
+ * - hrms_leave_records / hrms_reward_punishment_records / point_records（审批流双写）
+ * - employee_attendance_records（打卡写入、打卡确认同步镜像）
+ * - employees（PUT /api/state 单条与批处理）
+ */
 async function notifyAdminsDualWriteFailure(scopeLabel, err) {
   try {
     const r = await pool.query(

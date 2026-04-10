@@ -153,7 +153,8 @@ export const ANOMALY_RULES = [
         '产品不满意项',
         '不满意的主要原因是什么'
       ],
-      calc: '自然月内固定7日块（1–7、8–14…，上海日期），同一结构化菜品名>=2次；非 LLM 猜评'
+      calc:
+        '上海「上周一～上周日」窗口；按结构化菜品名统计次数。周度绩效扣分：每个触线产品单独计分——该周同一产品≥4次扣10分，≥2次扣5分（4次档不叠加5分）；多个产品分别触线则扣分相加（例：4个产品各≥2次→20分）。'
     },
     assignTo: { role: 'ops', title: '运营' },
     notifyTarget: { role: 'kitchen_manager', title: '出品经理' },
@@ -164,7 +165,8 @@ export const ANOMALY_RULES = [
       optional: ['操作视频']
     },
     autoActions: ['trigger', 'remind', 'follow_up', 'pdca_generate'],
-    notes: '与 deterministic-replies 桌访合并口径一致；窗口按上海日历落在当月第几个7日块'
+    notes:
+      '与 deterministic-replies 桌访合并口径一致；引擎与 periodic-scoring 周汇总均按「产品维度累计扣分」执行，勿按「全店只扣一档」理解。'
   },
 
   // ─── 5. 桌访占比异常 ───
