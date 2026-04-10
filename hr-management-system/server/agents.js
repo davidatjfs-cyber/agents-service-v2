@@ -11169,18 +11169,28 @@ export function registerAgentRoutes(app, authRequired) {
       const [taskR, rhythmR, anomalyR, mtR] = await Promise.all([
         p
           .query(
-            `SELECT agent, store, username, latency_ms, has_evidence, evidence_violation, created_at
-             FROM agent_task_logs
-             WHERE (created_at AT TIME ZONE 'Asia/Shanghai')::date = $1::date
-             ORDER BY created_at DESC
+            `SELECT t.agent, t.store, t.username,
+                    COALESCE(NULLIF(TRIM(fu.name), ''), NULLIF(TRIM(t.username), ''), '—') AS display_name,
+                    t.latency_ms, t.has_evidence, t.evidence_violation, t.created_at
+             FROM agent_task_logs t
+             LEFT JOIN LATERAL (
+               SELECT name FROM feishu_users
+               WHERE registered = true AND t.username IS NOT NULL
+                 AND LOWER(TRIM(username)) = LOWER(TRIM(t.username))
+               ORDER BY updated_at DESC NULLS LAST
+               LIMIT 1
+             ) fu ON true
+             WHERE (t.created_at AT TIME ZONE 'Asia/Shanghai')::date = $1::date
+             ORDER BY t.created_at DESC
              LIMIT 80`,
             [date]
           )
           .catch(() => ({ rows: [] })),
         p
           .query(
-            `SELECT rhythm_type, status, LEFT(COALESCE(result_summary,''), 200) AS result_summary,
-                    LEFT(COALESCE(error_message,''), 160) AS error_message, execution_time, created_at
+            `SELECT rhythm_type, status, execution_date,
+                    LEFT(COALESCE(result_summary::text, ''), 200) AS result_summary,
+                    LEFT(COALESCE(error_message, ''), 160) AS error_message, execution_time, created_at
              FROM rhythm_logs
              WHERE execution_date = $1::date
              ORDER BY created_at DESC
@@ -11200,12 +11210,21 @@ export function registerAgentRoutes(app, authRequired) {
           .catch(() => ({ rows: [] })),
         p
           .query(
-            `SELECT task_id, title, store, severity, status, assignee_username AS agent,
-                    created_at, resolved_at
-             FROM master_tasks
-             WHERE created_at::date = $1::date
-                OR (resolved_at IS NOT NULL AND (resolved_at AT TIME ZONE 'Asia/Shanghai')::date = $1::date)
-             ORDER BY created_at DESC
+            `SELECT m.task_id, m.title, m.store, m.severity, m.status,
+                    m.assignee_username,
+                    COALESCE(NULLIF(TRIM(fu.name), ''), m.assignee_username) AS assignee_name,
+                    m.dispatched_at, m.created_at, m.resolved_at
+             FROM master_tasks m
+             LEFT JOIN LATERAL (
+               SELECT name FROM feishu_users
+               WHERE registered = true AND m.assignee_username IS NOT NULL
+                 AND LOWER(TRIM(username)) = LOWER(TRIM(m.assignee_username))
+               ORDER BY updated_at DESC NULLS LAST
+               LIMIT 1
+             ) fu ON true
+             WHERE (timezone('Asia/Shanghai', COALESCE(m.dispatched_at, m.created_at)))::date = $1::date
+                OR (m.resolved_at IS NOT NULL AND (m.resolved_at AT TIME ZONE 'Asia/Shanghai')::date = $1::date)
+             ORDER BY m.created_at DESC
              LIMIT 50`,
             [date]
           )
@@ -11229,11 +11248,77 @@ export function registerAgentRoutes(app, authRequired) {
     if (!['admin', 'hq_manager', 'hr_manager'].includes(role)) {
       return res.status(403).json({ error: 'forbidden' });
     }
-    const u = String(req.query?.username || '').trim();
-    if (!u) return res.status(400).json({ error: 'username required' });
+    const raw = String(req.query?.q || req.query?.username || '').trim();
+    if (!raw) return res.status(400).json({ error: 'q or username required' });
     const lim = Math.max(1, Math.min(60, Number(req.query?.limit) || 30));
     const p = pool();
     try {
+      let resolvedUsername = null;
+      let resolvedName = null;
+      const byUser = await p
+        .query(
+          `SELECT username, COALESCE(NULLIF(TRIM(name), ''), username) AS disp
+           FROM feishu_users
+           WHERE registered = true AND LOWER(TRIM(username)) = LOWER(TRIM($1))
+           LIMIT 1`,
+          [raw]
+        )
+        .catch(() => ({ rows: [] }));
+      if (byUser.rows?.length) {
+        resolvedUsername = byUser.rows[0].username;
+        resolvedName = byUser.rows[0].disp;
+      } else {
+        const byExactName = await p
+          .query(
+            `SELECT username, COALESCE(NULLIF(TRIM(name), ''), username) AS disp
+             FROM feishu_users
+             WHERE registered = true AND TRIM(name) = $1
+             ORDER BY updated_at DESC NULLS LAST
+             LIMIT 8`,
+            [raw]
+          )
+          .catch(() => ({ rows: [] }));
+        if (byExactName.rows?.length === 1) {
+          resolvedUsername = byExactName.rows[0].username;
+          resolvedName = byExactName.rows[0].disp;
+        } else if (byExactName.rows?.length > 1) {
+          return res.status(409).json({
+            error: 'ambiguous_name',
+            message: '存在多名同姓名用户，请改用飞书账号或补全区分信息',
+            query: raw,
+            candidates: byExactName.rows.map((r) => ({ username: r.username, name: r.disp }))
+          });
+        } else {
+          const byLike = await p
+            .query(
+              `SELECT username, COALESCE(NULLIF(TRIM(name), ''), username) AS disp
+               FROM feishu_users
+               WHERE registered = true AND name ILIKE $1
+               ORDER BY updated_at DESC NULLS LAST
+               LIMIT 8`,
+              [`%${raw}%`]
+            )
+            .catch(() => ({ rows: [] }));
+          if (byLike.rows?.length === 1) {
+            resolvedUsername = byLike.rows[0].username;
+            resolvedName = byLike.rows[0].disp;
+          } else if (byLike.rows?.length > 1) {
+            return res.status(409).json({
+              error: 'ambiguous_match',
+              message: '匹配到多名用户，请缩小关键词或改用飞书账号',
+              query: raw,
+              candidates: byLike.rows.map((r) => ({ username: r.username, name: r.disp }))
+            });
+          } else {
+            return res.status(404).json({
+              error: 'not_found',
+              message: '未找到匹配的飞书用户（可试姓名全称或账号）',
+              query: raw
+            });
+          }
+        }
+      }
+
       const scoresR = await p
         .query(
           `SELECT period, score_model, total_score, summary,
@@ -11243,7 +11328,7 @@ export function registerAgentRoutes(app, authRequired) {
            WHERE LOWER(TRIM(username)) = LOWER(TRIM($1))
            ORDER BY updated_at DESC
            LIMIT $2`,
-          [u, lim]
+          [resolvedUsername, lim]
         )
         .catch(() => ({ rows: [] }));
       let notif = { rows: [] };
@@ -11254,12 +11339,18 @@ export function registerAgentRoutes(app, authRequired) {
            WHERE LOWER(TRIM(target_username)) = LOWER(TRIM($1))
            ORDER BY created_at DESC
            LIMIT $2`,
-          [u, lim]
+          [resolvedUsername, lim]
         );
       } catch (_e) {
         notif = { rows: [] };
       }
-      return res.json({ username: u, scores: scoresR.rows || [], notifications: notif.rows || [] });
+      return res.json({
+        query: raw,
+        username: resolvedUsername,
+        resolvedName,
+        scores: scoresR.rows || [],
+        notifications: notif.rows || []
+      });
     } catch (e) {
       return res.status(500).json({ error: String(e?.message || e) });
     }

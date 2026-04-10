@@ -8534,9 +8534,12 @@
                 </div>
                 <div style="display:flex;flex-direction:column;gap:20px;">
                     <section style="border-radius:14px;background:rgba(15,23,42,0.45);border:1px solid rgba(148,163,184,0.1);overflow:hidden;">
-                        <div style="padding:14px 18px;border-bottom:1px solid rgba(148,163,184,0.08);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-                            <div style="font-size:13px;font-weight:600;color:#e2e8f0;letter-spacing:.04em;">Agent 活动内容</div>
-                            <div id="dc-activity-date" style="font-size:11px;color:#64748b;">—</div>
+                        <div style="padding:14px 18px;border-bottom:1px solid rgba(148,163,184,0.08);display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+                            <div>
+                                <div style="font-size:13px;font-weight:600;color:#e2e8f0;letter-spacing:.04em;">Agent 活动内容</div>
+                                <div style="font-size:10px;color:#64748b;margin-top:4px;line-height:1.5;max-width:520px;">下方四块分别对应：异常触发（<code style="font-size:9px;">anomaly_triggers</code>）、节奏引擎定时任务（<code style="font-size:9px;">rhythm_logs</code>）、调度待办（<code style="font-size:9px;">master_tasks</code>）、任务执行日志（<code style="font-size:9px;">agent_task_logs</code>）。</div>
+                            </div>
+                            <div id="dc-activity-date" style="font-size:11px;color:#64748b;white-space:nowrap;">—</div>
                         </div>
                         <div id="dc-activity-body" style="padding:14px 18px;font-size:12px;color:#94a3b8;line-height:1.6;">加载中…</div>
                         <div id="dc-activity-detail" style="border-top:1px solid rgba(148,163,184,0.08);padding:12px 14px 16px;font-size:11px;color:#94a3b8;max-height:420px;overflow-y:auto;"></div>
@@ -8544,10 +8547,10 @@
                     <section style="border-radius:14px;background:rgba(15,23,42,0.45);border:1px solid rgba(148,163,184,0.1);overflow:hidden;">
                         <div style="padding:14px 18px;border-bottom:1px solid rgba(148,163,184,0.08);">
                             <div style="font-size:13px;font-weight:600;color:#e2e8f0;letter-spacing:.04em;">个人绩效分由来</div>
-                            <div style="font-size:11px;color:#64748b;margin-top:4px;">查询 agent_scores 各模型行摘要、扣分 JSON、公司通知（BI 扣分等）</div>
+                            <div style="font-size:11px;color:#64748b;margin-top:4px;">查询 agent_scores 各模型行摘要、扣分 JSON、公司通知（BI 扣分等）；支持按<strong>姓名</strong>或飞书账号，重名时需改用账号。</div>
                         </div>
                         <div style="padding:12px 18px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-bottom:1px solid rgba(148,163,184,0.06);">
-                            <input id="dc-prov-username" type="text" placeholder="飞书 username" style="flex:1;min-width:160px;padding:8px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.2);background:rgba(2,6,23,0.5);color:#e2e8f0;font-size:12px;" />
+                            <input id="dc-prov-username" type="text" placeholder="姓名或飞书账号" style="flex:1;min-width:160px;padding:8px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.2);background:rgba(2,6,23,0.5);color:#e2e8f0;font-size:12px;" />
                             <button type="button" class="btn btn-secondary" style="padding:8px 14px;font-size:12px;" onclick="loadDcScoreProvenance()">查询</button>
                         </div>
                         <div id="dc-prov-results" style="padding:12px 18px 16px;font-size:11px;color:#94a3b8;max-height:380px;overflow-y:auto;"></div>
@@ -17024,6 +17027,14 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
         }
 
         function renderDcActivityDetailHtml(dj) {
+            const cellStr = (r, c) => {
+                const v = r[c.key];
+                if (c.fmt === 'sh') {
+                    const t = _dcFmtTime(v);
+                    return t || '—';
+                }
+                return v != null && v !== '' ? String(v) : '—';
+            };
             const sec = (title, rows, cols) => {
                 if (!rows || !rows.length) {
                     return `<div style="margin-bottom:12px;"><div style="color:#94a3b8;font-weight:600;margin-bottom:4px;">${escapeHtml(title)}</div><div style="color:#475569;">暂无</div></div>`;
@@ -17032,33 +17043,39 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 const trs = rows
                     .map((r) => {
                         const tds = cols
-                            .map((c) => {
-                                const v = r[c.key];
-                                return `<td style="padding:4px 6px;vertical-align:top;word-break:break-word;">${_dcEsc(v != null ? String(v) : '')}</td>`;
-                            })
+                            .map((c) => `<td style="padding:4px 6px;vertical-align:top;word-break:break-word;">${_dcEsc(cellStr(r, c))}</td>`)
                             .join('');
                         return `<tr style="border-top:1px solid rgba(148,163,184,0.08);">${tds}</tr>`;
                     })
                     .join('');
                 return `<div style="margin-bottom:14px;"><div style="color:#94a3b8;font-weight:600;margin-bottom:6px;">${escapeHtml(title)}（${rows.length}）</div><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:10px;"><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table></div></div>`;
             };
+            const legend =
+                '<div style="font-size:10px;color:#64748b;line-height:1.55;margin-bottom:12px;border-left:2px solid rgba(99,102,241,0.35);padding-left:8px;">' +
+                '<strong>列说明：</strong>带「沪」的时间列为 Asia/Shanghai 本地显示；调度任务含派发/创建/结案时间；异常触发含业务触发日与落库时间。' +
+                '</div>';
             return (
+                legend +
                 sec('任务日志', dj.taskLogs, [
                     { label: 'Agent', key: 'agent' },
                     { label: '门店', key: 'store' },
-                    { label: '用户', key: 'username' },
+                    { label: '责任人', key: 'display_name' },
                     { label: 'ms', key: 'latency_ms' },
-                    { label: '时间', key: 'created_at' }
+                    { label: '时间(沪)', key: 'created_at', fmt: 'sh' }
                 ]) +
                 sec('异常触发', dj.anomalyTriggers, [
                     { label: '门店', key: 'store' },
                     { label: '类型', key: 'anomaly_key' },
                     { label: '级别', key: 'severity' },
+                    { label: '触发日', key: 'trigger_date' },
+                    { label: '落库(沪)', key: 'created_at', fmt: 'sh' },
                     { label: '状态', key: 'status' }
                 ]) +
                 sec('节奏引擎', dj.rhythmLogs, [
                     { label: '类型', key: 'rhythm_type' },
                     { label: '状态', key: 'status' },
+                    { label: '业务日', key: 'execution_date' },
+                    { label: '执行(沪)', key: 'created_at', fmt: 'sh' },
                     { label: '摘要', key: 'result_summary' }
                 ]) +
                 sec('调度任务', dj.masterTasks, [
@@ -17066,29 +17083,58 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     { label: '标题', key: 'title' },
                     { label: '门店', key: 'store' },
                     { label: '状态', key: 'status' },
-                    { label: '责任人', key: 'agent' }
+                    { label: '责任人', key: 'assignee_name' },
+                    { label: '派发(沪)', key: 'dispatched_at', fmt: 'sh' },
+                    { label: '创建(沪)', key: 'created_at', fmt: 'sh' },
+                    { label: '结案(沪)', key: 'resolved_at', fmt: 'sh' }
                 ])
             );
         }
 
-        async function loadDcScoreProvenance() {
+        async function loadDcScoreProvenance(pickUsername) {
             const hdr = { Authorization: 'Bearer ' + (HRMS_API.token ? HRMS_API.token() : '') };
             const inp = document.getElementById('dc-prov-username');
             const out = document.getElementById('dc-prov-results');
             if (!inp || !out) return;
+            if (pickUsername) inp.value = String(pickUsername);
             const u = String(inp.value || '').trim();
             if (!u) {
-                out.innerHTML = '<span style="color:#fbbf24;">请输入飞书 username</span>';
+                out.innerHTML = '<span style="color:#fbbf24;">请输入姓名或飞书账号</span>';
                 return;
             }
             out.innerHTML = '<span style="color:#64748b;">查询中…</span>';
             try {
-                const r = await fetch('/api/agents/score-provenance?username=' + encodeURIComponent(u) + '&limit=35', { headers: hdr });
+                const r = await fetch('/api/agents/score-provenance?q=' + encodeURIComponent(u) + '&limit=35', { headers: hdr });
                 const j = await r.json();
-                if (j.error) {
-                    out.innerHTML = '<span style="color:#ef4444;">' + escapeHtml(String(j.error)) + '</span>';
+                if (r.status === 409 && j.candidates && j.candidates.length) {
+                    const btns = j.candidates
+                        .map((c) => {
+                            const uj = JSON.stringify(String(c.username || ''));
+                            return `<button type="button" class="btn btn-secondary" style="margin:4px 6px 0 0;padding:4px 10px;font-size:11px;" onclick="loadDcScoreProvenance(${uj})">${escapeHtml(
+                                String(c.name || '')
+                            )} <span style="color:#64748b;">(${escapeHtml(String(c.username || ''))})</span></button>`;
+                        })
+                        .join('');
+                    out.innerHTML =
+                        '<div style="color:#fbbf24;margin-bottom:8px;">' +
+                        escapeHtml(String(j.message || '多名匹配，请点选账号')) +
+                        '</div>' +
+                        btns;
                     return;
                 }
+                if (j.error) {
+                    out.innerHTML =
+                        '<span style="color:#ef4444;">' +
+                        escapeHtml(String(j.message || j.error)) +
+                        '</span>';
+                    return;
+                }
+                const head =
+                    j.resolvedName || j.username
+                        ? `<div style="color:#94a3b8;margin-bottom:8px;">已解析：<strong style="color:#e2e8f0;">${escapeHtml(
+                              String(j.resolvedName || j.username || '')
+                          )}</strong> <span style="color:#64748b;">(${escapeHtml(String(j.username || ''))})</span></div>`
+                        : '';
                 const scores = (j.scores || [])
                     .map((s) => {
                         return `<div style="margin-bottom:10px;padding:8px;border-radius:8px;background:rgba(2,6,23,0.35);border:1px solid rgba(148,163,184,0.1);">
@@ -17110,6 +17156,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     )
                     .join('');
                 out.innerHTML =
+                    head +
                     '<div style="color:#94a3b8;font-weight:600;margin-bottom:6px;">agent_scores</div>' +
                     (scores || '<div style="color:#475569;">无记录</div>') +
                     '<div style="color:#94a3b8;font-weight:600;margin:14px 0 6px;">公司通知 / 备案</div>' +

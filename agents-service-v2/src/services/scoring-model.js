@@ -9,7 +9,7 @@ const RULES = {
   margin_anomaly: { medium: 20, high: 40, role: 'store_production_manager' },
   product_review: { medium: 5, high: 10, role: 'store_production_manager' },
   service_review: { medium: 5, high: 10, role: 'store_manager' },
-  private_room_anomaly: { medium: 10, high: 20, role: 'store_manager' }
+  private_room_anomaly: { medium: 5, high: 10, role: 'store_manager' }
 };
 
 function ruleAppliesToRole(r, role) {

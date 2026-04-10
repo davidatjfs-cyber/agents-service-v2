@@ -180,7 +180,7 @@ async function recordDeductionNotifications({
  * anomaly_key → scoring-model 的 category（周度汇总专用）
  *
  * 扣分频率规则：
- * - 周度扣分（weekly/daily）：充值异常、桌访异常、产品差评、服务差评、包房异常、成本异常
+ * - 周度扣分（weekly/daily）：充值异常、桌访异常、产品差评、服务差评、包房异常（中/高 5/10）、成本异常
  * - 月度扣分（monthly）：实收营收异常、人效值异常、桌访占比异常、毛利率异常
  *   月度规则在周度仅记录提醒跟踪，不扣分。扣分由 HRMS 月评分系统每月执行1次。
  */
