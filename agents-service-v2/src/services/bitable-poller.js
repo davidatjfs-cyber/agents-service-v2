@@ -354,16 +354,29 @@ async function processRecord(configKey, type, record, brand) {
         }
       });
       break;
-    case 'material_report':
-      await upsertMsg('material_report', `${brand || ''}原料收货日报`, {
-        type: 'material_report', recordId, brand: brand || '',
-        fields: { store: extractText(fields['门店']), date: extractText(fields['日期']),
-                  material_name: extractText(fields['原料名称']), supplier: extractText(fields['供应商']),
-                  quantity: extractText(fields['数量']), unit_price: extractText(fields['单价']),
-                  total_price: extractText(fields['总价']), quality_check: extractText(fields['质量检查']),
-                  receiver: extractText(fields['收货人']) }
+    case 'material_report': {
+      const brandZh = brand === 'majixian' ? '马己仙' : brand === 'hongchao' ? '洪潮' : brand || '';
+      const storeCell = extractText(fields['门店']) || extractText(fields['所属门店']);
+      const dateCell = extractText(fields['日期'] ?? fields['收货日期']);
+      await upsertMsg('material_report', `${brandZh || brand || ''}原料收货日报`, {
+        type: 'material_report',
+        recordId,
+        brand: brandZh || brand || '',
+        fields: {
+          store: storeCell,
+          date: dateCell,
+          material_name:
+            extractText(fields['原料名称']) || extractText(fields['品名']) || extractText(fields['物料名称']),
+          supplier: extractText(fields['供应商']),
+          quantity: extractText(fields['数量']),
+          unit_price: extractText(fields['单价']),
+          total_price: extractText(fields['总价']),
+          quality_check: extractText(fields['质量检查']),
+          receiver: extractText(fields['收货人'])
+        }
       });
       break;
+    }
     case 'loss_report':
       await upsertMsg('loss_report', '报损单', {
         type: 'loss_report', recordId,

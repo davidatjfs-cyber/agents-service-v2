@@ -270,6 +270,28 @@ export async function processMessage(ev) {
         source: ev,
       };
 
+      // 数据类问题（原料/开收档/桌访等）必须走 DB 确定性回复；否则活跃会话会误走 LLM 导致「0条」等错答
+      try {
+        const detSession = await tryDeterministicReply(ev.text, ctx);
+        if (detSession) {
+          const prefixed = '小年：' + detSession;
+          const dS = await sendReplyWithFallback(ev, prefixed, 'deterministic_session');
+          await logTaskResult({ agent: 'deterministic', store: ctx.store, data: detSession }, ctx, Date.now() - t0).catch(() => {});
+          return {
+            ok: dS.ok,
+            route: 'deterministic',
+            agent: 'deterministic',
+            ms: Date.now() - t0,
+            evidence: true,
+            traceId,
+            deliverChannel: dS.channel,
+            sessionBypass: true
+          };
+        }
+      } catch (e) {
+        logger.warn({ err: e?.message, traceId }, 'session: deterministic pre-check failed, continue to agent');
+      }
+
       // 直接调用会话中的 Agent，不走 intent/router
       try {
         let agentResult;
@@ -404,6 +426,43 @@ export async function processMessage(ev) {
       rt = { ...rt, route: 'marketing_planner' };
     }
 
+    // ── analysis：预取指标树；query 走后续 deterministic；strategy 跳过日报式确定性（营销侧自行处理） ──
+    if (pipelineIntent === 'analysis' && store) {
+      try {
+        const tr = extractTimeRangeFromText(ev.text);
+        const metricCode = detectMetricFromQuestion(ev.text) || 'revenue';
+        ctx.metricAnalysis = await analyzeMetricTree(metricCode, store, tr);
+      } catch (e) {
+        logger.warn({ err: e?.message }, 'pipeline: metric analysis prefetch skipped');
+      }
+    }
+
+    // ── 确定性回复先于 Planner：有 DB 凭证的问题不得被经营分析工作流抢先，避免错答/漏数 ──
+    if (pipelineIntent !== 'analysis' && pipelineIntent !== 'strategy') {
+      try {
+        const detReply = await tryDeterministicReply(ev.text, ctx);
+        if (detReply) {
+          const prefixed = '小年：' + detReply;
+          logger.info({ store, detReplyLen: detReply.length }, 'deterministic reply hit (before planner)');
+          const deliverDet = await sendReplyWithFallback(ev, prefixed, 'deterministic');
+          await logTaskResult({ agent: 'deterministic', store, data: detReply }, ctx, Date.now() - t0).catch(() => {});
+          const result = {
+            ok: deliverDet.ok,
+            route: 'deterministic',
+            agent: 'deterministic',
+            ms: Date.now() - t0,
+            evidence: true,
+            traceId,
+            deliverChannel: deliverDet.channel
+          };
+          if (deliverDet.ok && idemKey) await saveIdempotency(idemKey, result).catch(() => {});
+          return result;
+        }
+      } catch (detErr) {
+        logger.warn({ err: detErr?.message }, 'deterministic reply error, continue to planner');
+      }
+    }
+
     // ── Planner：query / unknown 保留；analysis / strategy 不抢答，交给指标分析或营销 Agent ──
     let plannerPlanSnapshot = null;
     if (pipelineIntent !== 'analysis' && pipelineIntent !== 'strategy') {
@@ -435,41 +494,6 @@ export async function processMessage(ev) {
       } catch (e) {
         logger.warn({ err: e?.message }, 'planner failed, fallback to original flow');
       }
-    }
-
-    // ── analysis：预取指标树；query 走后续 deterministic；strategy 跳过日报式确定性（营销侧自行处理） ──
-    if (pipelineIntent === 'analysis' && store) {
-      try {
-        const tr = extractTimeRangeFromText(ev.text);
-        const metricCode = detectMetricFromQuestion(ev.text) || 'revenue';
-        ctx.metricAnalysis = await analyzeMetricTree(metricCode, store, tr);
-      } catch (e) {
-        logger.warn({ err: e?.message }, 'pipeline: metric analysis prefetch skipped');
-      }
-    }
-
-    // ── 确定性回复优先：匹配V1格式，直接返回结构化数据，不走LLM ──
-    try {
-      const detReply = await tryDeterministicReply(ev.text, ctx);
-      if (detReply) {
-        const prefixed = '小年：' + detReply;
-        logger.info({ store, detReplyLen: detReply.length }, 'deterministic reply hit');
-        const deliverDet = await sendReplyWithFallback(ev, prefixed, 'deterministic');
-        await logTaskResult({ agent: 'deterministic', store, data: detReply }, ctx, Date.now() - t0).catch(() => {});
-        const result = {
-          ok: deliverDet.ok,
-          route: 'deterministic',
-          agent: 'deterministic',
-          ms: Date.now() - t0,
-          evidence: true,
-          traceId,
-          deliverChannel: deliverDet.channel
-        };
-        if (deliverDet.ok && idemKey) await saveIdempotency(idemKey, result).catch(() => {});
-        return result;
-      }
-    } catch (detErr) {
-      logger.warn({ err: detErr?.message }, 'deterministic reply error, falling back to LLM');
     }
 
     ctx.llmContext = mergePlannerLlmContext(plannerPlanSnapshot, rt.route, ev.text);

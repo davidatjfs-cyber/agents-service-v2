@@ -3,7 +3,7 @@
  * 洪潮店长企微仍用营业日报，不在此文件。
  */
 import { pool } from '../utils/database.js';
-import { expandAgentStoreLabels } from '../v2-store-alignment.js';
+import { expandAgentStoreLabels, normalizeAgentMaterialBrand } from '../v2-store-alignment.js';
 
 const CREATED_AT_PAD_BEFORE_MONTH = 45;
 const CREATED_AT_PAD_AFTER_MONTH = 45;
@@ -120,9 +120,9 @@ function storeMatchesRow(displayStore, rowStoreRaw) {
 }
 
 function materialBrandMatches(agentData, brandZh) {
-  const b = String(agentData?.brand || '').trim();
-  if (!b) return true;
-  return b === brandZh;
+  const nb = normalizeAgentMaterialBrand(agentData?.brand);
+  if (!nb) return true;
+  return nb === brandZh;
 }
 
 const KITCHEN_STATIONS_MAJIXIAN = Object.freeze(['煲仔', '水吧', '炒锅', '烧味', '砧板']);

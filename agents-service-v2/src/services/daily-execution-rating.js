@@ -162,7 +162,13 @@ async function recordExecutionFiling({ store, username, role, date, rating, miss
     await query(
       `INSERT INTO ops_tasks
        (store, task_type, title, status, assignee_username, assignee_role, source, created_at, biz_date, evidence_urls, dedupe_key, schedule_key, due_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8::date, $9::jsonb, $10, $11, NOW())`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8::date, $9::jsonb, $10, $11, NOW())
+       ON CONFLICT (dedupe_key) DO UPDATE SET
+         title = EXCLUDED.title,
+         status = EXCLUDED.status,
+         evidence_urls = EXCLUDED.evidence_urls,
+         biz_date = EXCLUDED.biz_date,
+         updated_at = NOW()`,
       [
         store,
         'execution_rating_daily',
@@ -177,7 +183,7 @@ async function recordExecutionFiling({ store, username, role, date, rating, miss
         scheduleKey
       ]
     );
-    logger.info({ store, username, role, date, rating, missing }, 'execution rating filed');
+    logger.info({ store, username, role, date, rating, missing }, 'execution rating filed (upsert)');
   } catch (e) {
     logger.error({ err: e?.message, store, username }, 'execution rating filing failed');
   }
@@ -417,7 +423,10 @@ async function sendExecutionRatingNotifications(results, date) {
   }
 
   if (failedCount > 0) {
-    throw new Error(`daily execution rating report has ${failedCount} failed recipients`);
+    logger.error(
+      { failedCount, sentCount, date },
+      'daily execution rating: partial Feishu delivery failure (备案与 ops_tasks 仍可能已成功，不因个别收件人失败而整任务报错)'
+    );
   }
   return sentCount;
 }

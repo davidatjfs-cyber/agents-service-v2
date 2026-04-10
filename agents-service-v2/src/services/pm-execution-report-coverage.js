@@ -3,7 +3,7 @@
  * 洪潮店长企微执行力不在此模块（见 daily_reports）。
  */
 import { query } from '../utils/db.js';
-import { expandAgentStoreLabels } from '../config/store-mapping.js';
+import { expandAgentStoreLabels, normalizeAgentMaterialBrand } from '../config/store-mapping.js';
 import { sameStore, ext, resolveBitableBusinessYmd } from './deterministic-replies.js';
 
 /** 按业务日判定时，created_at 扫描窗口：避免飞书晚同步（入库晚于业务日数日）被 SQL 提前过滤掉 */
@@ -20,9 +20,9 @@ function storeMatchesRow(displayStore, rowStoreRaw) {
 }
 
 function materialBrandMatches(agentData, brandZh) {
-  const b = String(agentData?.brand || '').trim();
-  if (!b) return true;
-  return b === brandZh;
+  const nb = normalizeAgentMaterialBrand(agentData?.brand);
+  if (!nb) return true;
+  return nb === brandZh;
 }
 
 function parseMeetingScore(fields) {

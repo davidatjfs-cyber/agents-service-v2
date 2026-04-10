@@ -6,7 +6,11 @@ import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { isMarketingPlanningIntent } from '../utils/marketing-intent.js';
 import { feishuStoreSearchPatterns } from '../utils/store-sql-patterns.js';
-import { expandAgentStoreLabels, resolveAgentCanonicalStore } from '../config/store-mapping.js';
+import {
+  expandAgentStoreLabels,
+  normalizeAgentMaterialBrand,
+  resolveAgentCanonicalStore
+} from '../config/store-mapping.js';
 import { detectAnalysisIntent } from './analysis-intent.js';
 import { parseFeishuRatioOrPercentString, formatPercentDisplay } from '../utils/feishu-percent.js';
 
@@ -392,11 +396,11 @@ function storeMatchesRowWithAliases(displayStore, rowStoreRaw) {
 }
 
 function materialBrandOkForStoreChat(agentData, displayStore) {
-  const b = String(agentData?.brand || '').trim();
-  if (!b) return true;
-  const s = String(displayStore || '');
-  if (/马己仙/.test(s)) return b === '马己仙';
-  if (/洪潮/.test(s)) return b === '洪潮';
+  const nb = normalizeAgentMaterialBrand(agentData?.brand);
+  if (!nb) return true;
+  const st = String(displayStore || '');
+  if (/马己仙/.test(st)) return nb === '马己仙';
+  if (/洪潮/.test(st)) return nb === '洪潮';
   return true;
 }
 
@@ -423,21 +427,36 @@ export async function queryMaterialReportRowsFromAgentMessages(displayStore, sta
   const caHi = ymdAddDaysMaterialQuery(hi, 45);
   try {
     const r = await query(
-      `SELECT agent_data, created_at FROM agent_messages
-       WHERE content_type = 'material_report'
-         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date
-         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date`,
+      `SELECT m.agent_data, m.created_at, m.record_id,
+              g.fields AS gfields
+       FROM agent_messages m
+       LEFT JOIN feishu_generic_records g
+         ON g.record_id = m.record_id AND g.config_key LIKE 'material_%'
+       WHERE m.content_type = 'material_report'
+         AND (m.created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date
+         AND (m.created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date`,
       [caLo, caHi]
     );
     const out = [];
     for (const row of r.rows || []) {
       const ad = row.agent_data && typeof row.agent_data === 'object' ? row.agent_data : {};
       if (!materialBrandOkForStoreChat(ad, s)) continue;
-      const fields = ad.fields || {};
-      if (!storeMatchesRowWithAliases(s, fields.store)) continue;
-      const biz = resolveBitableBusinessYmd(fields.date, row.created_at);
+      const gf = row.gfields && typeof row.gfields === 'object' ? row.gfields : {};
+      const base = ad.fields && typeof ad.fields === 'object' ? { ...ad.fields } : {};
+      if (!ext(base.store)) base.store = ext(gf['所属门店'] || gf['门店']);
+      if (!ext(base.date)) {
+        const raw = gf['收货日期'] ?? gf['日期'];
+        if (raw != null && raw !== '') {
+          base.date = typeof raw === 'number' ? String(raw) : ext(raw);
+        }
+      }
+      if (!ext(base.material_name)) {
+        base.material_name = ext(gf['原料名称'] || gf['品名'] || gf['物料名称']);
+      }
+      if (!storeMatchesRowWithAliases(s, base.store)) continue;
+      const biz = resolveBitableBusinessYmd(base.date, row.created_at);
       if (!biz || biz < lo || biz > hi) continue;
-      out.push({ f: fields, ca: row.created_at });
+      out.push({ f: base, ca: row.created_at });
     }
     return out;
   } catch (e) {
@@ -2539,7 +2558,9 @@ export async function tryDeterministicReply(text, ctx) {
   if (ctx?.forceStrategy === true) return '';
   // 营销/活动/方案类问题必须走 marketing_planner，禁止被「营收分析」确定性回复抢先返回
   if (isMarketingPlanningIntent(q)) return '';
-  const store = await pickStoreFromQuestionText(q, ctx.store || '');
+  const rawPick = await pickStoreFromQuestionText(q, ctx.store || '');
+  const store =
+    resolveAgentCanonicalStore(String(rawPick || '').trim()) || String(rawPick || '').trim();
   try {
     // Identity
     let reply = await buildIdentityReply(q, ctx);

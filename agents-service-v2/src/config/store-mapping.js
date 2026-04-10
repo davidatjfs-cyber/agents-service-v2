@@ -78,3 +78,13 @@ export function toDrStoreName(feishuName) {
 export function getAllStoreMappings() {
   return STORE_TO_FEISHU;
 }
+
+/** bitable 轮询写入的 brand 可能是 majixian/hongchao，与执行力/聊天侧 马己仙/洪潮 对齐 */
+export function normalizeAgentMaterialBrand(raw) {
+  const b = String(raw || '').trim();
+  const l = b.toLowerCase();
+  if (!b) return '';
+  if (l === 'majixian' || b === '马己仙') return '马己仙';
+  if (l === 'hongchao' || b === '洪潮') return '洪潮';
+  return b;
+}

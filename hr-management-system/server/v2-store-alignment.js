@@ -42,6 +42,16 @@ export function toFeishuStoreName(storeName) {
   return STORE_TO_FEISHU[storeName] || storeName;
 }
 
+/** 与 agents `store-mapping.normalizeAgentMaterialBrand` 一致 */
+export function normalizeAgentMaterialBrand(raw) {
+  const b = String(raw || '').trim();
+  const l = b.toLowerCase();
+  if (!b) return '';
+  if (l === 'majixian' || b === '马己仙') return '马己仙';
+  if (l === 'hongchao' || b === '洪潮') return '洪潮';
+  return b;
+}
+
 export function expandAgentStoreLabels(input) {
   const raw = String(input || '').trim();
   const canon = resolveAgentCanonicalStore(raw);
