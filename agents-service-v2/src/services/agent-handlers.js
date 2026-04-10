@@ -1386,6 +1386,32 @@ async function buildDeterministicRevenueReply(store, start, end, periodLabel) {
   }
 }
 
+/** Data：偏查询与事实；Decision：偏归因、策略与闭环 */
+export function detectDecisionMode(text = '') {
+  const t = String(text || '');
+  const decisionKeywords = [
+    '为什么',
+    '原因',
+    '怎么办',
+    '如何',
+    '策略',
+    '优化',
+    '提升',
+    '问题',
+    '下降',
+    '增长'
+  ];
+  const dataKeywords = ['多少', '数据', '营业额', '明细', '报表', '昨天', '今天', '本周'];
+
+  if (decisionKeywords.some((k) => t.includes(k))) {
+    return 'decision';
+  }
+  if (dataKeywords.some((k) => t.includes(k))) {
+    return 'data';
+  }
+  return 'decision';
+}
+
 /** 已注入 Wiki 但模型未输出四段结构时，用历史经验摘要生成合规回答（不编造数字） */
 function buildWikiComplianceFallback(ds, text, store) {
   const m = String(ds || '').match(/- 结论：[^\n]+/);
@@ -1414,6 +1440,9 @@ function buildWikiComplianceFallback(ds, text, store) {
 
 // ── 1. Data Auditor (对标V1: BI工具+营收汇总+销售排行+差评排行) ──
 async function handleDataAuditor(text, ctx) {
+  const mode = detectDecisionMode(text);
+  console.log('[MODE]', mode, text);
+
   const store = await pickStoreFromQuestionText(text, ctx.store || '');
   const brand = store ? await getBrandForStore(store).catch(() => null) : null;
   const tr = extractTimeRangeFromText(text);
@@ -1855,13 +1884,15 @@ async function handleDataAuditor(text, ctx) {
   if (!ds) ds = '\n[no data found]\n';
   // P2: 记忆回调
   try { const mem = await recallMemories('data_auditor', store, '', 3); if (mem.length) ds += '\n[历史分析]\n' + mem.map(m => m.content.slice(0,80)).join('\n'); } catch(e) {}
-  try {
-    const expBlock = await buildExperienceBlock({ agent: 'data_auditor', store, query: text });
-    if (expBlock) {
-      ds += `\n\n${expBlock}\n`;
-      console.log('[WIKI RETRIEVE]');
-    }
-  } catch (e) { /* silent */ }
+  if (mode === 'decision') {
+    try {
+      const expBlock = await buildExperienceBlock({ agent: 'data_auditor', store, query: text });
+      if (expBlock) {
+        ds += `\n\n${expBlock}\n`;
+        console.log('[WIKI RETRIEVE]');
+      }
+    } catch (e) { /* silent */ }
+  }
   const businessHint = isBusinessOverview
     ? '\n重要：用户问的是整体生意/经营情况，请以营收、达成率、毛利、客流为主作答；若仅有桌访等单项数据或无营收日报，需先说明「暂无该时段营业日报数据」再简述已有数据，不要只回复桌访。\n'
     : '';
@@ -1886,29 +1917,31 @@ async function handleDataAuditor(text, ctx) {
     } catch (e) {
       logger.warn({ err: e?.message }, 'data_auditor metric tree skipped');
     }
-    const detectedScenarioDa = detectScenario(text, metricAnalysisForSop);
-    const strategyCtxDa = buildStrategyContextFromQuestion(text, brand, detectedScenarioDa);
-    try {
-      const steps = detectedScenarioDa ? await getSOPByScenario(detectedScenarioDa) : null;
-      metricExperienceAppendix += formatSopPromptAppendix(steps);
-    } catch (e) {
-      logger.warn({ err: e?.message }, 'data_auditor sop skipped');
-    }
-    try {
-      const strategyBundle = await getStrategy(
-        detectedScenarioDa,
-        metricAnalysisForSop?.root_causes || [],
-        strategyCtxDa
-      );
-      metricExperienceAppendix += formatStrategyPromptAppendix(strategyBundle);
-    } catch (e) {
-      logger.warn({ err: e?.message }, 'data_auditor strategy skipped');
-    }
-    try {
-      const best = await getBestStrategy('revenue_drop');
-      metricExperienceAppendix += formatExperiencePromptBlock('revenue_drop', best);
-    } catch (e) {
-      logger.warn({ err: e?.message }, 'data_auditor experience hint skipped');
+    if (mode === 'decision') {
+      const detectedScenarioDa = detectScenario(text, metricAnalysisForSop);
+      const strategyCtxDa = buildStrategyContextFromQuestion(text, brand, detectedScenarioDa);
+      try {
+        const steps = detectedScenarioDa ? await getSOPByScenario(detectedScenarioDa) : null;
+        metricExperienceAppendix += formatSopPromptAppendix(steps);
+      } catch (e) {
+        logger.warn({ err: e?.message }, 'data_auditor sop skipped');
+      }
+      try {
+        const strategyBundle = await getStrategy(
+          detectedScenarioDa,
+          metricAnalysisForSop?.root_causes || [],
+          strategyCtxDa
+        );
+        metricExperienceAppendix += formatStrategyPromptAppendix(strategyBundle);
+      } catch (e) {
+        logger.warn({ err: e?.message }, 'data_auditor strategy skipped');
+      }
+      try {
+        const best = await getBestStrategy('revenue_drop');
+        metricExperienceAppendix += formatExperiencePromptBlock('revenue_drop', best);
+      } catch (e) {
+        logger.warn({ err: e?.message }, 'data_auditor experience hint skipped');
+      }
     }
     metricSnapshotForOutcome = metricAnalysisForSop;
   }
@@ -1925,7 +1958,7 @@ async function handleDataAuditor(text, ctx) {
       : '';
 
   const wikiStructuredOutput =
-    ds.includes('历史经验（必须引用）')
+    mode === 'decision' && ds.includes('历史经验（必须引用）')
       ? `
 【Wiki 输出优先】
 当下文「数据库与上下文」含「历史经验（必须引用）」时，你必须忽略本节「输出约束」中第1–4点的 V1 逐条格式，改为严格输出四段：
@@ -1966,7 +1999,7 @@ ${metricExperienceAppendix}
 
 `;
   const userContent =
-    ds.includes('历史经验（必须引用）')
+    mode === 'decision' && ds.includes('历史经验（必须引用）')
       ? `${text}\n\n（系统硬性要求：即使下方数据库摘要为空或你无法取数，也必须输出四段：【引用经验】【核心问题】【原因分析】【策略】；【引用经验】须逐字或概括引用上文历史经验中至少一条；【核心问题】只写一条；【原因分析】须说明缺数原因，禁止仅用一句「无法获取凭证」结束全文。）`
       : text;
   const r = await callLLM(
@@ -1978,7 +2011,11 @@ ${metricExperienceAppendix}
   );
   const rawAns = String(r.content || '').trim();
   let cleanedAns = rawAns ? (zhOnlyDataAuditorNarrative(rawAns) || rawAns) : '';
-  if (ds.includes('历史经验（必须引用）') && !/【引用经验】/.test(String(cleanedAns || ''))) {
+  if (
+    mode === 'decision' &&
+    ds.includes('历史经验（必须引用）') &&
+    !/【引用经验】/.test(String(cleanedAns || ''))
+  ) {
     cleanedAns = buildWikiComplianceFallback(ds, text, store);
   }
   saveMemory('data_auditor', store, cleanedAns.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
