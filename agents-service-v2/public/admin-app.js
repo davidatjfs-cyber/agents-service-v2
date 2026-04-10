@@ -29,10 +29,20 @@ async function api(m, p, b) {
 const G = p => api('GET', p), PUT = (p, b) => api('PUT', p, b), POST = (p, b) => api('POST', p, b), DEL = p => api('DELETE', p);
 function catchNonAuth(e) { if (e?.message === 'auth') throw e; return null; }
 
+/** 与后端 agent-activity 默认日期一致：上海日历当日 */
+function shanghaiTodayInputDate() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+}
+
 // ── State ──
 const AN = { master: 'Master调度中枢', data_auditor: '数据审计', ops_supervisor: '运营督导', chief_evaluator: '绩效考核', train_advisor: '培训顾问', appeal: '申诉处理', marketing_planner: '营销策划', marketing_executor: '营销执行', procurement_advisor: '采购建议' };
 let tab = 'dashboard';
-let S = { hl: {}, st: {}, fs: {}, agents: {}, rules: [], scores: {}, campaigns: [], templates: [], evalReport: {}, auditItems: [], cfgs: [], schedCfg: {}, anomalyCfg: {}, perfCfg: {}, ratingCfg: {}, kpiTargets: [], kbItems: [], memoryItems: [], featureFlags: {}, selectedAgent: 'data_auditor', activity: {}, activityDate: new Date().toISOString().slice(0,10), drillData: [], bitableStatus: {} };
+let S = { hl: {}, st: {}, fs: {}, agents: {}, rules: [], scores: {}, campaigns: [], templates: [], evalReport: {}, auditItems: [], cfgs: [], schedCfg: {}, anomalyCfg: {}, perfCfg: {}, ratingCfg: {}, kpiTargets: [], kbItems: [], memoryItems: [], featureFlags: {}, selectedAgent: 'data_auditor', activity: {}, activityDate: shanghaiTodayInputDate(), drillData: [], bitableStatus: {} };
 
 // ── DOM Helpers ──
 function $(id) { return document.getElementById(id); }
@@ -461,6 +471,7 @@ function viewDash() {
 function viewActivity() {
   const w = el('div');
   const A = S.activity || {};
+  const adm = A.adminAlerts || [];
 
   // Header with date picker
   const hdr = el('div', { className: 'flex flex-wrap justify-between items-center mb-6 gap-3' });
@@ -469,17 +480,44 @@ function viewActivity() {
   const dtInp = el('input', { id: 'actDate', type: 'date', className: 'border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 outline-none', value: S.activityDate });
   dateRow.appendChild(dtInp);
   dateRow.appendChild(btn('查询', async () => { S.activityDate = $('actDate').value; await load('activity'); render(); }, 'bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700 font-medium'));
-  dateRow.appendChild(btn('今天', async () => { S.activityDate = new Date().toISOString().slice(0,10); await load('activity'); render(); }, 'bg-gray-100 text-gray-700 text-sm px-3 py-2 rounded-lg hover:bg-gray-200 font-medium'));
+  dateRow.appendChild(btn('今天', async () => { S.activityDate = shanghaiTodayInputDate(); await load('activity'); render(); }, 'bg-gray-100 text-gray-700 text-sm px-3 py-2 rounded-lg hover:bg-gray-200 font-medium'));
   hdr.appendChild(dateRow);
   w.appendChild(hdr);
 
   // Summary stats
-  const sumRow = el('div', { className: 'grid grid-cols-2 md:grid-cols-4 gap-4 mb-6' });
+  const sumRow = el('div', { className: 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-6' });
   sumRow.appendChild(stat(A.totalInteractions || 0, '总交互次数', 'text-blue-600'));
-  sumRow.appendChild(stat(A.totalAnomalies || 0, '异常触发', (A.totalAnomalies || 0) > 0 ? 'text-red-600' : 'text-green-600'));
+  sumRow.appendChild(stat(A.totalAnomalies || 0, 'BI 异常触发', (A.totalAnomalies || 0) > 0 ? 'text-red-600' : 'text-green-600'));
   sumRow.appendChild(stat(A.totalRhythm || 0, '节奏执行', 'text-purple-600'));
-  sumRow.appendChild(stat(Object.keys(A.summary || {}).length, '活跃Agent数', 'text-indigo-600'));
+  sumRow.appendChild(stat(A.totalAdminAlerts || 0, '管理告警 A/B/C', (A.totalAdminAlerts || 0) > 0 ? 'text-amber-600' : 'text-gray-500'));
+  sumRow.appendChild(stat(Object.keys(A.summary || {}).length, '活跃 Agent 数', 'text-indigo-600'));
   w.appendChild(sumRow);
+
+  // A/B/C 数据告警（飞书已发出后落库，与 BI anomaly_triggers 并列可查）
+  if (adm.length > 0) {
+    const adCard = el('div', { className: 'bg-white rounded-xl shadow-sm border border-amber-100 p-6 mb-6 ring-1 ring-amber-50' });
+    adCard.appendChild(el('h3', { className: 'text-base font-semibold text-gray-800 mb-3 pb-2 border-b border-amber-100' }, '🔔 管理数据告警 A/B/C（' + adm.length + ' 条）'));
+    adCard.appendChild(el('p', { className: 'text-xs text-gray-500 mb-3' }, 'A=紧急 · B=绩效/流程 · C=准确性。与飞书管理员通知同源；去重后仅记录实际发出成功的条目。'));
+    const adTbl = el('table', { className: 'w-full text-sm' });
+    const ah = el('thead'); const ar = el('tr', { className: 'bg-amber-50/80' });
+    ['级别', '类型', '标题', '送达', '时间', '摘要'].forEach((h) => ar.appendChild(el('th', { className: 'p-2 text-left text-xs font-semibold text-gray-600' }, h)));
+    ah.appendChild(ar); adTbl.appendChild(ah);
+    const ab = el('tbody');
+    adm.forEach((row) => {
+      const pr = String(row.priority || 'B').toUpperCase();
+      const prCls = pr === 'A' ? 'bg-red-100 text-red-800' : pr === 'C' ? 'bg-yellow-100 text-yellow-800' : 'bg-orange-100 text-orange-800';
+      const tr = el('tr', { className: 'border-b border-gray-100 hover:bg-amber-50/40 align-top' });
+      tr.appendChild(el('td', { className: 'p-2' }, el('span', { className: 'text-xs px-2 py-0.5 rounded-full font-bold ' + prCls }, pr)));
+      tr.appendChild(el('td', { className: 'p-2 text-xs font-mono text-gray-600' }, row.alert_type || '-'));
+      tr.appendChild(el('td', { className: 'p-2 text-xs font-medium text-gray-900 max-w-[200px]' }, row.title || '-'));
+      tr.appendChild(el('td', { className: 'p-2 text-xs text-gray-600' }, (row.sent_count != null ? row.sent_count : '—') + '/' + (row.recipient_count != null ? row.recipient_count : '—')));
+      tr.appendChild(el('td', { className: 'p-2 text-xs whitespace-nowrap' }, fmtTime(row.sent_at)));
+      const prev = String(row.body_preview || '').slice(0, 220);
+      tr.appendChild(el('td', { className: 'p-2 text-xs text-gray-600 max-w-md', title: String(row.body_preview || '') }, prev + (prev.length >= 220 ? '…' : '')));
+      ab.appendChild(tr);
+    });
+    adTbl.appendChild(ab); adCard.appendChild(adTbl); w.appendChild(adCard);
+  }
 
   // Per-agent cards
   const summary = A.summary || {};
@@ -574,7 +612,9 @@ function viewActivity() {
     anomCard.appendChild(el('h3', { className: 'text-base font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100' }, '🚨 异常触发 (' + anomalies.length + ' 条)'));
     const anomTbl = el('table', { className: 'w-full text-sm' });
     const ath = el('thead'); const atr = el('tr', { className: 'bg-gray-50' });
-    ['门店','异常类型','严重度','描述','状态','时间'].forEach(h => atr.appendChild(el('th', { className: 'p-2 text-left text-xs font-semibold text-gray-600' }, h)));
+    ['门店', '异常类型', '严重度', '业务日', '描述', '状态', '入库时间'].forEach((h) =>
+      atr.appendChild(el('th', { className: 'p-2 text-left text-xs font-semibold text-gray-600' }, h))
+    );
     ath.appendChild(atr); anomTbl.appendChild(ath);
     const atb = el('tbody');
     anomalies.forEach(a => {
@@ -582,6 +622,7 @@ function viewActivity() {
       tr.appendChild(el('td', { className: 'p-2 text-xs font-medium' }, a.store || '-'));
       tr.appendChild(el('td', { className: 'p-2 text-xs' }, a.anomaly_key || '-'));
       tr.appendChild(el('td', { className: 'p-2' }, el('span', { className: 'text-xs px-2 py-0.5 rounded-full font-medium ' + (SEV_CLS[a.severity] || 'bg-gray-100') }, a.severity || '-')));
+      tr.appendChild(el('td', { className: 'p-2 text-xs font-mono whitespace-nowrap text-gray-700' }, a.trigger_date || '-'));
       {
         const descText = formatAnomalyTriggerDisplay(a);
         tr.appendChild(el('td', { className: 'p-2 text-xs max-w-md align-top', title: descText }, descText.length > 100 ? descText.slice(0, 97) + '…' : descText));
@@ -631,7 +672,7 @@ function viewActivity() {
     const ttb = el('tbody');
     tasks.forEach(t => {
       const tr = el('tr', { className: 'border-b border-gray-100 hover:bg-gray-50' });
-      tr.appendChild(el('td', { className: 'p-2 text-xs font-mono' }, (t.task_id||'').slice(0,8)));
+      tr.appendChild(el('td', { className: 'p-2 text-xs font-mono max-w-[120px] truncate', title: t.task_id || '' }, (t.task_id || '').slice(0, 14) + ((t.task_id || '').length > 14 ? '…' : '')));
       tr.appendChild(el('td', { className: 'p-2 text-xs font-medium' }, (t.title||'-').slice(0,30)));
       tr.appendChild(el('td', { className: 'p-2 text-xs' }, t.store || '-'));
       tr.appendChild(el('td', { className: 'p-2' }, el('span', { className: 'text-xs px-2 py-0.5 rounded-full font-medium ' + (SEV_CLS[t.severity] || 'bg-gray-100') }, t.severity || '-')));
@@ -659,7 +700,7 @@ function viewActivity() {
     w.appendChild(taskCard);
   }
 
-  if (!logs.length && !rhythms.length && !anomalies.length && !tasks.length && !collabs.length && !Object.keys(summary).length) {
+  if (!logs.length && !rhythms.length && !anomalies.length && !tasks.length && !collabs.length && !Object.keys(summary).length && !adm.length) {
     w.appendChild(card('', el('div', { className: 'text-center py-12' }, [
       el('div', { className: 'text-4xl mb-3' }, '📭'),
       el('p', { className: 'text-gray-500' }, S.activityDate + ' 暂无任何Agent活动记录'),
@@ -1816,12 +1857,14 @@ async function load(t) {
 // ═══════════════════════════════════════════════════════
 // TABS & ROUTER
 // ═══════════════════════════════════════════════════════
-const TABS = [
-  ['dashboard', '📊 仪表盘'], ['activity', '📋 Agent活动'], ['datasources', '📡 数据源'], ['agents', '🤖 Agent配置'], ['scheduled', '⏰ 定时任务'],
-  ['anomaly', '🚨 异常阈值'], ['performance', '📋 绩效考核'], ['marketing', '📢 营销管理'],
-  ['evaluation', '🔍 Agent评估'], ['knowledge', '📚 知识库'], ['memory', '🧠 记忆系统'],
-  ['flags', '🚩 功能开关'], ['configs', '⚙️ 系统配置'], ['audit', '📝 审计日志']
+const TAB_GROUPS = [
+  { subtitle: '概况', items: [['dashboard', '📊 仪表盘'], ['activity', '📋 Agent活动']] },
+  { subtitle: '数据与配置', items: [['datasources', '📡 数据源'], ['agents', '🤖 Agent配置'], ['scheduled', '⏰ 定时任务']] },
+  { subtitle: '规则与绩效', items: [['anomaly', '🚨 异常阈值'], ['performance', '📋 绩效考核']] },
+  { subtitle: '营销与评估', items: [['marketing', '📢 营销管理'], ['evaluation', '🔍 Agent评估']] },
+  { subtitle: '知识与系统', items: [['knowledge', '📚 知识库'], ['memory', '🧠 记忆'], ['flags', '🚩 开关'], ['configs', '⚙️ 配置'], ['audit', '📝 审计']] }
 ];
+const TABS = TAB_GROUPS.flatMap((g) => g.items);
 const VW = { dashboard: viewDash, activity: viewActivity, datasources: viewDataSources, agents: viewAgents, scheduled: viewScheduled, anomaly: viewAnomaly, performance: viewPerformance, marketing: viewMarketing, evaluation: viewEval, knowledge: viewKnowledge, memory: viewMemory, flags: viewFlags, configs: viewCfgs, audit: viewAudit };
 
 function render() {
@@ -1840,14 +1883,25 @@ function render() {
   hi.appendChild(btn('退出登录', () => { localStorage.removeItem('aat'); localStorage.removeItem('aau'); renderLogin(); }, 'text-sm text-gray-500 hover:text-red-500 bg-transparent'));
   hd.appendChild(hi); a.appendChild(hd);
 
-  // Nav tabs
-  const nv = el('nav', { className: 'bg-white border-b border-gray-100' });
-  const nvInner = el('div', { className: 'max-w-7xl mx-auto px-6 flex gap-1 overflow-x-auto' });
-  TABS.forEach(([k, l]) => {
-    const cls = 'px-4 py-3 text-sm cursor-pointer whitespace-nowrap transition-colors font-medium ' + (tab === k ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-t');
-    nvInner.appendChild(el('div', { className: cls, onclick: () => go(k) }, l));
+  // Nav：分组横滑 + 当前项高亮，减少「一排超长标签」带来的杂乱感
+  const nv = el('nav', { className: 'bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm' });
+  const nvOuter = el('div', { className: 'max-w-7xl mx-auto px-4 py-3 space-y-2' });
+  TAB_GROUPS.forEach((grp) => {
+    const row = el('div', { className: 'flex flex-wrap items-center gap-x-1 gap-y-1' });
+    row.appendChild(el('span', { className: 'text-[10px] font-bold uppercase tracking-wider text-gray-400 mr-1 sm:mr-2 shrink-0 w-full sm:w-20 sm:text-right' }, grp.subtitle));
+    const btnRow = el('div', { className: 'flex flex-wrap gap-1 flex-1 min-w-0' });
+    grp.items.forEach(([k, l]) => {
+      const on = tab === k;
+      const cls =
+        'px-3 py-1.5 text-xs sm:text-sm cursor-pointer whitespace-nowrap rounded-lg font-medium transition-colors ' +
+        (on ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900');
+      btnRow.appendChild(el('div', { className: cls, onclick: () => go(k) }, l));
+    });
+    row.appendChild(btnRow);
+    nvOuter.appendChild(row);
   });
-  nv.appendChild(nvInner); a.appendChild(nv);
+  nv.appendChild(nvOuter);
+  a.appendChild(nv);
 
   // Content
   const ct = el('div', { className: 'max-w-7xl mx-auto px-6 py-6' });

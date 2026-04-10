@@ -4,6 +4,7 @@ import { authRequired, requireRole } from '../middleware/auth.js';
 import { query } from '../utils/db.js';
 import { getBitableStatus, pollAllBitableTables } from '../services/bitable-poller.js';
 import { logger } from '../utils/logger.js';
+import { getShanghaiYmdParts } from '../utils/anomaly-week-bounds.js';
 import { startRandomInspections } from '../services/random-inspection.js';
 import { scheduleProactiveOutcomeOnClose } from '../services/proactive-v2/proactive-task-outcome-on-close.js';
 
@@ -59,6 +60,7 @@ const SQL_ANOMALY_DRILL = `SELECT anomaly_key, store, severity,
   ORDER BY created_at DESC LIMIT 100`;
 
 const SQL_ANOMALY_ACTIVITY_DAY = `SELECT anomaly_key, store, severity, trigger_value, status,
+  trigger_date::text AS trigger_date,
   COALESCE(trigger_value::text, task_id, '') AS description, created_at
   FROM anomaly_triggers WHERE trigger_date = $1::date ORDER BY created_at DESC LIMIT 100`;
 
@@ -374,7 +376,7 @@ r.put('/feature-flags', ...admin, async (req, res) => {
 
 // ─── Agent Activity (每日任务执行清单) ───
 r.get('/agent-activity', ...admin, async (req, res) => {
-  const date = req.query.date || new Date().toISOString().slice(0, 10);
+  const date = String(req.query.date || '').trim() || getShanghaiYmdParts().ymd;
   const agent = req.query.agent || null;
   try {
     // 1. Task logs（兼容 V2 列名与旧 HRMS agent_task_logs）
@@ -402,8 +404,24 @@ r.get('/agent-activity', ...admin, async (req, res) => {
                   FROM rhythm_logs WHERE execution_date = $1::date ORDER BY created_at DESC LIMIT 50`;
     const rhythmLogs = await query(rhySql, [date]).catch(() => ({ rows: [] }));
 
-    // 3. Anomaly triggers
+    // 3. Anomaly triggers（按业务 trigger_date，与次日凌晨落库的周/月规则一致）
     const anomalyTriggers = await query(SQL_ANOMALY_ACTIVITY_DAY, [date]).catch(() => ({ rows: [] }));
+
+    // 3b. A/B/C 管理数据告警（飞书已成功发出后写入 agent_admin_alert_log）
+    let adminAlerts = { rows: [] };
+    try {
+      adminAlerts = await query(
+        `SELECT id, priority, alert_type, title,
+                LEFT(body, 2500) AS body_preview, dedupe_key, recipient_count, sent_count, sent_at
+         FROM agent_admin_alert_log
+         WHERE DATE(timezone('Asia/Shanghai', sent_at)) = $1::date
+         ORDER BY sent_at DESC
+         LIMIT 100`,
+        [date]
+      );
+    } catch (e) {
+      if (!/relation .+ does not exist/i.test(String(e.message))) throw e;
+    }
 
     // 4. Master tasks created/updated today
     let mtSql = `SELECT task_id, title, store, severity, status, current_agent AS agent, created_at, closed_at
@@ -438,11 +456,13 @@ r.get('/agent-activity', ...admin, async (req, res) => {
       taskLogs: taskLogs.rows,
       rhythmLogs: rhythmLogs.rows,
       anomalyTriggers: anomalyTriggers.rows,
+      adminAlerts: adminAlerts.rows || [],
       masterTasks: masterTasks.rows,
       collabEvents: collabEvents.rows,
       totalInteractions: taskLogs.rows.length,
       totalAnomalies: anomalyTriggers.rows.length,
-      totalRhythm: rhythmLogs.rows.length
+      totalRhythm: rhythmLogs.rows.length,
+      totalAdminAlerts: (adminAlerts.rows || []).length
     });
   } catch (e) { res.status(500).json({ error: e?.message }); }
 });

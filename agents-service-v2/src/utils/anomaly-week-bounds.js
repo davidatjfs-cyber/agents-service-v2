@@ -1,5 +1,15 @@
 /**
  * 上海时区「自然周」周一～周日边界（用于周度异常，周与周之间不累计）。
+ *
+ * ## shanghaiLastCompletedWeekBounds（周度 BI / 周评核心）
+ * 取「上一完整自然周」= **上周一 00:00 起至上周日 止** 对应的 yyyy-mm-dd 闭区间。
+ *
+ * 算法：`today`（上海日历）→ `yesterday` → `shanghaiWeekMonSunContaining(yesterday)`。
+ * - **每周一 05:00（上海）触发周评时**：`today`=周一，`yesterday`=**上周日**，所含周为 **上周一～上周日**。
+ *   不会出现「周二～本周一」这种错位窗口。
+ * - 若在周二及之后调用，得到的是「含昨天的那一整周」；周度 BI 任务应仅在周一凌晨调度，与此口径一致。
+ *
+ * 与 `rhythm-engine` 周巡检、`anomaly-engine` 周频规则、`periodic-scoring.previousWeekMonday()` 同源。
  */
 
 /** @returns {{ ymd: string, y: number, m: number, d: number }} */

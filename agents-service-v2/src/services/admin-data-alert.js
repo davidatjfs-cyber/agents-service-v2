@@ -16,6 +16,7 @@ import { logger } from '../utils/logger.js';
 import { sendText } from './feishu-client.js';
 
 const TABLE = 'agent_v2_data_alert_dedupe';
+const LOG_TABLE = 'agent_admin_alert_log';
 
 /** 飞书正文展示用中文类型（日志里仍用英文 alertType 便于检索） */
 const ALERT_TYPE_LABEL_ZH = {
@@ -69,6 +70,25 @@ async function ensureDedupeTable() {
     )`);
 }
 
+/** 控制台「Agent 活动」按日查看 A/B/C 管理告警（至少成功发出过一条飞书时落库） */
+export async function ensureAdminAlertLogTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS ${LOG_TABLE} (
+      id BIGSERIAL PRIMARY KEY,
+      priority CHAR(1) NOT NULL DEFAULT 'B',
+      alert_type VARCHAR(96) NOT NULL DEFAULT '',
+      title TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL DEFAULT '',
+      dedupe_key VARCHAR(320) NOT NULL DEFAULT '',
+      recipient_count INT NOT NULL DEFAULT 0,
+      sent_count INT NOT NULL DEFAULT 0,
+      sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_agent_admin_alert_log_sh_date
+    ON ${LOG_TABLE} ((DATE(timezone('Asia/Shanghai', sent_at))))`);
+}
+
 /**
  * @param {object} opts
  * @param {string} opts.alertType 短类型键，便于检索日志
@@ -101,6 +121,7 @@ export async function notifyAdminsDataIssue(opts) {
 
   try {
     await ensureDedupeTable();
+    await ensureAdminAlertLogTable();
     const prev = await query(`SELECT sent_at FROM ${TABLE} WHERE dedupe_key = $1`, [dedupeKey]);
     if (prev.rows?.[0]) {
       const ageMs = Date.now() - new Date(prev.rows[0].sent_at).getTime();
@@ -149,6 +170,26 @@ export async function notifyAdminsDataIssue(opts) {
       if (res?.ok) sent++;
     }
     logger.info({ alertType, dedupeKey, recipients: (r.rows || []).length, sent }, 'admin data alert sent');
+    if (sent > 0) {
+      try {
+        await query(
+          `INSERT INTO ${LOG_TABLE}
+           (priority, alert_type, title, body, dedupe_key, recipient_count, sent_count)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            priority,
+            alertType,
+            title.slice(0, 2000),
+            text.slice(0, 12000),
+            dedupeKey.slice(0, 320),
+            (r.rows || []).length,
+            sent
+          ]
+        );
+      } catch (logErr) {
+        logger.warn({ err: logErr?.message, dedupeKey }, 'admin alert log insert failed');
+      }
+    }
     return { ok: sent > 0, sent };
   } catch (e) {
     logger.warn({ err: e?.message, alertType, dedupeKey }, 'notifyAdminsDataIssue failed');

@@ -24,6 +24,7 @@ import {
   isMajixianPmObserverUsername
 } from '../utils/scoring-assignee.js';
 import { expandAgentStoreLabels } from '../config/store-mapping.js';
+import { getShanghaiYmdParts } from '../utils/anomaly-week-bounds.js';
 
 const MONTHLY_RATING_PENDING = '待定';
 
@@ -86,12 +87,16 @@ function fmtStoreLevelLabel(level) {
   }
 }
 
+/** 以上海日历的「当前月」算上月，避免服务器 UTC 在月初/月末与业务日错位 */
 function getPrevMonthPeriod() {
-  const now = new Date();
-  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const year = prevMonth.getFullYear();
-  const month = String(prevMonth.getMonth() + 1).padStart(2, '0');
-  return `${year}-${month}`;
+  const { y, m } = getShanghaiYmdParts();
+  let pm = m - 1;
+  let py = y;
+  if (pm < 1) {
+    pm = 12;
+    py -= 1;
+  }
+  return `${py}-${String(pm).padStart(2, '0')}`;
 }
 
 function getDaysInMonth(period) {
