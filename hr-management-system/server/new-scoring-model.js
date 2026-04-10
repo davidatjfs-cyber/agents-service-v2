@@ -738,9 +738,9 @@ async function getMonthlyNewWechatMembers(store, period) {
   
   try {
     const result = await pool().query(`
-      SELECT COALESCE(SUM(new_wechat_members), 0) as total
-      FROM daily_reports 
-      WHERE store = $1 AND date >= $2 AND date <= $3
+      SELECT COALESCE(SUM(new_wechat_members), 0) AS total
+      FROM daily_reports
+      WHERE TRIM(store) = TRIM($1::text) AND date >= $2::date AND date <= $3::date
     `, [store, startDate, endDate]);
     
     return Number(result.rows[0]?.total || 0);
