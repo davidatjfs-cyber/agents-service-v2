@@ -179,9 +179,9 @@ async function getHongchaoManagerExecutionRating(store, period) {
   const totalMembers = Number(result.rows[0]?.total || 0);
 
   let rating;
-  if (totalMembers >= 300) rating = 'A';
-  else if (totalMembers >= 249) rating = 'B';
-  else if (totalMembers >= 200) rating = 'C';
+  if (totalMembers >= 400) rating = 'A';
+  else if (totalMembers >= 349) rating = 'B';
+  else if (totalMembers >= 300) rating = 'C';
   else rating = 'D';
 
   return { rating, value: totalMembers, detail: { total_wechat_members: totalMembers } };

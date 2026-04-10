@@ -41,6 +41,11 @@ function cronJobLabelZh(jobKey) {
   return CRON_JOB_LABEL_ZH[k] || '定时任务';
 }
 
+/** 凡经 runWithCronLog 包装且抛错时，会向 admin/hq_manager 发飞书告警的任务清单（与 job_key 一致） */
+export function listCronJobKeysWithFeishuFailureAlert() {
+  return Object.keys(CRON_JOB_LABEL_ZH);
+}
+
 export async function ensureCronRunTable() {
   try {
     await query(`

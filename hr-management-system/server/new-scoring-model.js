@@ -89,11 +89,11 @@ export const EMPLOYEE_SCORE_CONFIG = {
       },
       '洪潮': {
         data_sources: ['企微会员'],
-        // 企微会员每月新增数量
+        // 企微会员每月新增数量（洪潮大宁久光店长执行力）
         rating_thresholds: {
-          'A': { min_new_members: 300 },
-          'B': { min_new_members: 249 },
-          'C': { min_new_members: 200 },
+          'A': { min_new_members: 400 },
+          'B': { min_new_members: 349 },
+          'C': { min_new_members: 300 },
           'D': { default: true }
         }
       }
@@ -145,7 +145,7 @@ const DEFAULT_EMPLOYEE_RATING_CONFIG = {
   execution: {
     store_production_manager: { A_max_missing: 6, B_max_missing: 13, C_max_missing: 20, D_min_missing: 21 },
     store_manager: {
-      hongchao: { A_min_new_members: 300, B_min_new_members: 249, C_min_new_members: 200, D_max_new_members: 199 },
+      hongchao: { A_min_new_members: 400, B_min_new_members: 349, C_min_new_members: 300, D_max_new_members: 299 },
       majixian: { low_score_threshold: 7, A_max_missing: 2, A_max_low_score: 2, B_max_missing: 4, B_max_low_score: 4, C_max_missing: 6, C_max_low_score: 6, D_min_missing: 7, D_min_low_score: 7 }
     }
   },

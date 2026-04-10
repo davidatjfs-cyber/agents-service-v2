@@ -28,7 +28,7 @@ async function getPMReportStatus(store, brand, date) {
 }
 
 /**
- * 洪潮店长执行力：企微会员为「当月累计至检查日（含）」口径，与月评 300+/A 一致；禁止用单日新增误判。
+ * 洪潮店长执行力：企微会员为「当月累计至检查日（含）」口径，与月评企微档位一致；禁止用单日新增误判。
  */
 async function getHongchaoWechatMonthToDate(store, date) {
   const monthStart = String(date || '').slice(0, 7) + '-01';
@@ -130,9 +130,10 @@ function evaluatePMExecution(reports) {
  * @returns {{rating: string, value: number}}
  */
 function evaluateHongchaoManager(wechatMembers) {
-  if (wechatMembers >= 300) return { rating: 'A', value: wechatMembers };
-  if (wechatMembers >= 249) return { rating: 'B', value: wechatMembers };
-  if (wechatMembers >= 200) return { rating: 'C', value: wechatMembers };
+  // 洪潮店长：A≥400，B 349–399，C 300–348，其余 D（按当月累计至检查日）
+  if (wechatMembers >= 400) return { rating: 'A', value: wechatMembers };
+  if (wechatMembers >= 349) return { rating: 'B', value: wechatMembers };
+  if (wechatMembers >= 300) return { rating: 'C', value: wechatMembers };
   return { rating: 'D', value: wechatMembers };
 }
 

@@ -10342,8 +10342,15 @@ async function pushIssuesToFeishu() {
 // Push performance scores to users via Feishu
 async function pushScoresToFeishu() {
   try {
+    // new_model_monthly：由 agents-service 月度综合评级统一发卡片并批量标记已通知；
+    // 若仍走本通道，会在每月 10 日 01:00～01:18 之间用「周报」版式误发上月月评数据（与 01:18 正式月评卡矛盾）。
     const r = await pool().query(
-      `SELECT * FROM agent_scores WHERE feishu_notified = FALSE AND created_at >= NOW() - INTERVAL '7 days' ORDER BY created_at DESC LIMIT 20`
+      `SELECT * FROM agent_scores
+       WHERE feishu_notified = FALSE
+         AND created_at >= NOW() - INTERVAL '7 days'
+         AND COALESCE(score_model, '') <> 'new_model_monthly'
+       ORDER BY created_at DESC
+       LIMIT 20`
     );
     if (!r.rows?.length) return 0;
 
@@ -10455,16 +10462,25 @@ async function pushScoresToFeishu() {
       if (bd.execution_rating != null && String(bd.execution_rating).trim() !== '') dimLines.push(`• 执行力：${String(bd.execution_rating).trim()}级`);
       const dimText = dimLines.length ? dimLines.join('\n') : '• 暂无维度评级';
 
-      const msgText = `📊 绩效考核周报\n\n${fu.name || score.username}，你好！以下是你在${score.store}（${score.brand}）的绩效考核周报（与月度总结区分：本条对应系统刚写入的一条评分记录）。\n\n📋 岗位：${roleLabel}\n🗓️ ${periodLabel}${modelLine}\n\n📊 本期总分：**${score.total_score} 分**（满分100）\n\n评分维度：\n${dimText}\n\n扣分明细：\n${deductionText}\n\n${summaryZh ? '说明：' + summaryZh + '\n\n' : ''}如有异议，请回复「申诉」并说明原因。`;
+      const isMonthlyModel = modelKey === 'new_model_monthly';
+      const perfTitle = isMonthlyModel ? '绩效考核月报' : '绩效考核周报';
+      const perfKind = isMonthlyModel ? '月度绩效摘要（与上方「月度综合评级」卡片同源数据时请以卡片为准）' : '绩效考核周报（与月度总结区分：本条对应系统刚写入的一条评分记录）';
+      const msgText = `📊 ${perfTitle}\n\n${fu.name || score.username}，你好！以下是你在${score.store}（${score.brand}）的${perfKind}。\n\n📋 岗位：${roleLabel}\n🗓️ ${periodLabel}${modelLine}\n\n📊 本期总分：**${score.total_score} 分**（满分100）\n\n评分维度：\n${dimText}\n\n扣分明细：\n${deductionText}\n\n${summaryZh ? '说明：' + summaryZh + '\n\n' : ''}如有异议，请回复「申诉」并说明原因。`;
       const msg = prefixWithAgentName('chief_evaluator', msgText);
 
       const scoreNum = Number(score.total_score || 0);
       const cardTemplate = scoreNum >= 85 ? 'green' : scoreNum >= 70 ? 'blue' : scoreNum >= 60 ? 'yellow' : 'red';
-      const riskHint = scoreNum < 70 ? '⚠️ 本期分数低于70，建议优先整改本周高频异常项。' : '✅ 本期分数处于安全区间，请继续保持。';
+      const riskHint = isMonthlyModel
+        ? scoreNum < 70
+          ? '⚠️ 月度得分低于70，建议优先整改异常项。'
+          : '✅ 月度分数处于安全区间，请继续保持。'
+        : scoreNum < 70
+          ? '⚠️ 本期分数低于70，建议优先整改本周高频异常项。'
+          : '✅ 本期分数处于安全区间，请继续保持。';
 
       const card = {
         header: {
-          title: { tag: 'plain_text', content: '📊 绩效考核周报' },
+          title: { tag: 'plain_text', content: `📊 ${perfTitle}` },
           template: cardTemplate
         },
         elements: [
@@ -10516,7 +10532,7 @@ async function pushScoresToFeishu() {
                 text: {
                   tag: 'lark_md',
                   content:
-                    `📋 **抄送**｜绩效考核日报（与当事人同内容）\n` +
+                    `📋 **抄送**｜${perfTitle}（与当事人同内容）\n` +
                     `👤 考核对象：**${fu.name || score.username}**｜${score.store}（${score.brand}）`
                 }
               },

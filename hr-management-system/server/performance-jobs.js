@@ -1,8 +1,9 @@
 /**
  * 月度绩效闭环 + 菜品优化报告（飞书卡片）
  * - 每月 10 日 01:00（上海）：上月 employee_scores + store_ratings + agent_scores(YYYY-MM)（与毛利率等关账口径对齐）
- * - 每月 10 日 08:00（上海）：绩效摘要文本 + **上月整月**菜品优化月报（卡片）→ admin/hq_manager
- * - 每周一 08:00（上海）：**上周 Mon–Sun** 菜品优化周报（卡片）→ admin/hq_manager
+ * - 每月 10 日 08:00（上海）：绩效摘要文本（个人）→ 各岗位；管理员全员汇总文本已停用（与 agents 月度评级汇总卡重复）
+ * - 每月 1 日 08:00（上海）：**上月整月**菜品优化月报（卡片）→ admin/hq_manager（失败则飞书通知管理员）
+ * - 每周一 08:00–11:59（上海）：**上周 Mon–Sun** 菜品优化周报（卡片）→ admin/hq_manager（失败则通知管理员）
  *
  * 菜品四象限（按门店 × 堂食/外卖 分别计算）：
  * - 横轴：销量 = SUM(qty)；纵轴：利润额 = SUM(revenue) − SUM(qty×单位成本)（非利润率）
@@ -114,8 +115,29 @@ function normDish(n) {
 
 let _slotMonthlyCalc = '';
 let _slotMonthlyPush = '';
-let _slotDishMonthly = '';
+let _slotDishMonthlyDay1 = '';
 let _slotDishWeekly = '';
+
+/** 失败时通知 admin/hq_manager（与 agents-service runWithCronLog 告警风格一致） */
+async function notifyHrmsPerfAdmins(taskName, err) {
+  const msg = String(err?.message || err || '未知错误').slice(0, 500);
+  const cal = shanghaiCalendar();
+  const timeStr = `${cal.ymd} ${String(cal.hour).padStart(2, '0')}:${String(cal.minute).padStart(2, '0')}`;
+  const text =
+    `⚠️ 【HRMS 定时任务失败】\n任务：${taskName}\n时间：${timeStr}（上海）\n错误：${msg}\n\n请检查服务日志并在必要时联系运维补跑或补发。`;
+  try {
+    const hq = await pool().query(
+      `SELECT username FROM feishu_users WHERE registered = true AND role IN ('admin','hq_manager')`
+    );
+    for (const h of hq.rows || []) {
+      const fu = await lookupFeishuUserByUsername(h.username);
+      if (!fu?.open_id) continue;
+      await sendLarkMessage(fu.open_id, text).catch(() => {});
+    }
+  } catch (e) {
+    console.error('[perf-jobs] notifyHrmsPerfAdmins failed', e?.message || e);
+  }
+}
 
 export async function runMonthlyPerformanceClose() {
   const cal = shanghaiCalendar();
@@ -238,19 +260,7 @@ async function sendFeishuPerformanceDigest(period) {
     await sendLarkMessage(fu.open_id, text).catch(() => {});
   }
 
-  const hq = await pool().query(
-    `SELECT username FROM feishu_users WHERE registered = true AND role IN ('admin','hq_manager')`
-  );
-  const lines = (rows.rows || []).map(
-    (r) =>
-      `• ${r.store} · ${r.name || r.username}（${roleLabelZh(r.role)}）：${r.total_score}分 执行${r.breakdown?.execution_rating || '—'} 态度${r.breakdown?.attitude_rating || '—'} 能力${r.breakdown?.ability_rating || '—'} ${fmtStoreLevelLabel(r.breakdown?.store_rating)}`
-  );
-  const digest = `${title} — 全员汇总\n\n${lines.join('\n') || '无记录'}`;
-  for (const h of hq.rows || []) {
-    const fu = await lookupFeishuUserByUsername(h.username);
-    if (!fu?.open_id) continue;
-    await sendLarkMessage(fu.open_id, digest.slice(0, 12000)).catch(() => {});
-  }
+  // 管理员侧「全员汇总」文本已移除：与 agents-service 每月 10 日「月度评级汇总」飞书卡片重复，避免噪音。
   await pool().query(
     `UPDATE agent_scores SET feishu_notified = TRUE
      WHERE period = $1 AND score_model = 'new_model_monthly'`,
@@ -533,21 +543,41 @@ export function startHrmsPerformanceJobs() {
       if (d === 10 && hour === 1 && minute < 12) {
         if (_slotMonthlyCalc !== slotBase) {
           _slotMonthlyCalc = slotBase;
-          await runMonthlyPerformanceClose();
+          try {
+            await runMonthlyPerformanceClose();
+          } catch (e) {
+            console.error('[perf-jobs] monthly close failed', e?.message || e);
+            await notifyHrmsPerfAdmins('月度绩效关账（每月10日01:00）', e);
+          }
         }
       }
 
       if (hour === 8 && minute < 12) {
+        // 每月 1 日：上月菜品优化月报（原误配在 10 日与关账同日，现按业务约定改到月初）
+        if (d === 1) {
+          const moKey = `dish-mo1-${slotBase}`;
+          if (_slotDishMonthlyDay1 !== moKey) {
+            _slotDishMonthlyDay1 = moKey;
+            const period = prevMonthPeriod(cal);
+            try {
+              await sendMonthlyDishOptimizationReport(period);
+            } catch (e) {
+              console.error('[perf-jobs] monthly dish report failed', e?.message || e);
+              await notifyHrmsPerfAdmins(`菜品优化月报（每月1日·${period}）`, e);
+            }
+          }
+        }
+
         if (d === 10) {
           if (_slotMonthlyPush !== slotBase) {
             _slotMonthlyPush = slotBase;
             const period = prevMonthPeriod(cal);
-            await sendFeishuPerformanceDigest(period);
-          }
-          if (_slotDishMonthly !== `mo-${slotBase}`) {
-            _slotDishMonthly = `mo-${slotBase}`;
-            const period = prevMonthPeriod(cal);
-            await sendMonthlyDishOptimizationReport(period);
+            try {
+              await sendFeishuPerformanceDigest(period);
+            } catch (e) {
+              console.error('[perf-jobs] performance digest failed', e?.message || e);
+              await notifyHrmsPerfAdmins(`月度绩效摘要推送（每月10日·${period}）`, e);
+            }
           }
         }
 
@@ -557,15 +587,30 @@ export function startHrmsPerformanceJobs() {
           if (_slotDishWeekly !== daySlot) {
             _slotDishWeekly = daySlot;
             const { start: wkStart, end: wkEnd } = lastWeekMonSunYmd(cal.ymd);
-            await sendWeeklyDishOptimizationReport(wkStart, wkEnd);
+            try {
+              await sendWeeklyDishOptimizationReport(wkStart, wkEnd);
+            } catch (e) {
+              console.error('[perf-jobs] weekly dish report failed', e?.message || e);
+              await notifyHrmsPerfAdmins(`菜品优化周报（${wkStart}～${wkEnd}）`, e);
+            }
           }
         }
       }
     } catch (e) {
       console.error('[perf-jobs] tick error:', e?.message || e);
+      await notifyHrmsPerfAdmins('HRMS 绩效/菜品调度 tick', e);
     }
   }, 5 * 60 * 1000);
   console.log(
-    '[perf-jobs] scheduler on (5m tick): monthly close 10th 01:00; digest+monthly dish 10th 08:00; weekly dish Mon 08:00–11:59 (Asia/Shanghai)'
+    '[perf-jobs] scheduler on (5m tick): monthly close 10th 01:00; digest 10th 08:00; monthly dish 1st 08:00; weekly dish Mon 08:00–11:59 (Asia/Shanghai)'
   );
 }
+
+/** 文档/运维：本模块内向管理员发飞书失败告警的任务名（与代码 try/catch 一致） */
+export const HRMS_PERF_FAILURE_ALERT_TASKS = [
+  '月度绩效关账（每月10日01:00）',
+  '月度绩效摘要推送（每月10日·上月周期）',
+  '菜品优化月报（每月1日·上月周期）',
+  '菜品优化周报（上周一～日）',
+  'HRMS 绩效/菜品调度 tick'
+];

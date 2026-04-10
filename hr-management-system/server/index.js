@@ -6383,6 +6383,7 @@ async function recalcWechatMonthTotalsForStoreMonth(pool, store, anchorDate) {
   const st = String(store || '').trim();
   const ymd = String(anchorDate || '').slice(0, 10);
   if (!st || ymd.length < 10) return;
+  // 按自然月分区：[monthStart, nextMonth)；跨月后 anchor 落在下月即从下月 1 号重算，累计从 0 重新累加。
   const monthStart = `${ymd.slice(0, 7)}-01`;
   try {
     await pool.query(
