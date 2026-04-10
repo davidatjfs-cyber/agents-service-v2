@@ -3,11 +3,25 @@
  * 管理汇总需同时命中两种写法。
  */
 
-/** 上海日历日 + n 天 → YYYY-MM-DD */
-export function addDaysYmdShanghai(ymd, deltaDays) {
-  const t = new Date(`${ymd}T12:00:00+08:00`);
-  t.setUTCDate(t.getUTCDate() + deltaDays);
-  return t.toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+import { addDaysYmdShanghai } from './anomaly-week-bounds.js';
+
+export { addDaysYmdShanghai };
+
+/**
+ * 自然周跨两个自然月时，周度 anomaly_rollups_v2 按「触发日所在月」拆成两行 period：
+ *   week_2026-03-30__202603 与 week_2026-03-30__202604
+ * 同月整周仍为 week_2026-04-07。
+ * anchorYmd：用于跨月周判断「写哪一段」时的锚点（如 HQ 判罚当日、trigger_date）。
+ */
+export function anomalyRollupPeriodKey(weekMonday, anchorYmd) {
+  const wk = String(weekMonday || '').slice(0, 10);
+  const weekEnd = addDaysYmdShanghai(wk, 6);
+  const wm = wk.slice(0, 7);
+  const em = weekEnd.slice(0, 7);
+  if (wm === em) return `week_${wk}`;
+  const a = String(anchorYmd || wk).slice(0, 10);
+  const ymKey = `${a.slice(0, 4)}${a.slice(5, 7)}`;
+  return `week_${wk}__${ymKey}`;
 }
 
 /**

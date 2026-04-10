@@ -1,7 +1,7 @@
 /**
  * 周度门店评级：按 anomaly_triggers 聚合扣分，写入 agent_scores（店长 / 出品经理维度）。
  * score_model=anomaly_rollups_v2；扣分按异常类型/严重度/频次由 scoring-model.calcDeductions 等计算。
- * 人效异常（labor_efficiency）：店长与出品经理各写一行 agent_scores（efficiency_anomaly 双岗）；并有 mergeLaborEfficiencyIfMissing 兜底防漏记出品。
+ * 实收营收 / 人效 / 桌访占比 / 毛利率 等为月度扣分项：周度任务只汇总「周频/日频」规则，不因上述 triggers 在周行扣分（飞书任务仍可周提醒）。
  * 任务卡催办链路不向 agent_scores 写入扣分，仅打工作态度标；与本周度 BI 汇总独立。
  * 同步：HRMS 公司通知栏 hrms_user_notifications + 飞书周度卡片（本人 + 管理员/总部营运汇总）
  */
@@ -55,10 +55,21 @@ const ANOMALY_KEY_ZH = {
 /**
  * 每条扣分写入 HRMS 档案「公司通知」数据源，同时发飞书即时消息给责任人 + admin/hq_manager 抄送
  */
-async function recordDeductionNotifications({ username, store, role, periodMonday, weekEndStr, details }) {
+async function recordDeductionNotifications({
+  username,
+  store,
+  role,
+  periodMonday,
+  weekEndStr,
+  rangeStart,
+  rangeEnd,
+  details
+}) {
   if (!username || String(username).startsWith('__periodic')) return;
   await ensureHrmsUserNotificationsTable();
-  const rangeZh = `${periodMonday}～${weekEndStr}`;
+  const rs = String(rangeStart || periodMonday || '').slice(0, 10);
+  const re = String(rangeEnd || weekEndStr || '').slice(0, 10);
+  const rangeZh = `${rs}～${re}`;
   
   // 查询责任人飞书 open_id
   let assigneeOpenId = null;
@@ -298,69 +309,54 @@ function mergeTableVisitProductWeekDeduction(triggerRows) {
 }
 
 /**
- * 人效异常：周度汇总须同时落在店长与出品经理的 agent_scores（与 scoring-model efficiency_anomaly 双岗一致）。
- * 若 calcDeductions 因映射遗漏未写入 labor_efficiency 行，在此兜底补一条，避免只记店长、漏记出品。
+ * 人效（labor_efficiency）已列入 MONTHLY_DEDUCTION_KEYS：周度 anomaly_rollups_v2 不得再按 triggers 补扣，
+ * 否则会出现「每周写入人效扣分」、与「周提醒、月扣分」产品规则相反（历史上曾导致店长周分异常偏低）。
  */
-function mergeLaborEfficiencyIfMissing(baseTotal, baseDetails, role, triggerRows) {
-  const hasLabor = (triggerRows || []).some((row) => row.anomaly_key === 'labor_efficiency');
-  if (!hasLabor) return { baseTotal, baseDetails };
-  if ((baseDetails || []).some((d) => d.anomaly_key === 'labor_efficiency')) {
-    return { baseTotal, baseDetails };
-  }
-  if (role !== 'store_manager' && role !== 'store_production_manager') {
-    return { baseTotal, baseDetails };
-  }
-  const laborRows = (triggerRows || []).filter((row) => row.anomaly_key === 'labor_efficiency');
-  const high = laborRows.some((x) => String(x.severity || '').toLowerCase() === 'high');
-  const sev = high ? 'high' : 'medium';
-  const pts = sev === 'high' ? 20 : 10;
-  const det = {
-    category: 'efficiency_anomaly',
-    severity: sev,
-    anomaly_key: 'labor_efficiency',
-    points: pts
-  };
-  return { baseTotal: baseTotal + pts, baseDetails: [...(baseDetails || []), det] };
+function mergeLaborEfficiencyIfMissing(baseTotal, baseDetails, _role, _triggerRows) {
+  return { baseTotal, baseDetails };
 }
 
-/** 按门店 × 周期写入 agent_scores（period=week_周一，score_model=anomaly_rollups_v2）— 供飞书「异常周汇总」与 HRMS new_model 区分 */
-export async function scoreStoreForPeriod(store, periodMonday) {
-  const weekEnd = new Date(periodMonday);
-  weekEnd.setDate(weekEnd.getDate() + 6);
-  const endStr = weekEnd.toISOString().slice(0, 10);
-  const brand = (await getBrandForStore(store).catch(() => null)) || '未知';
+/** @param {string} ym YYYY-MM */
+function lastDayYmdForYm(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  const last = new Date(y, m, 0).getDate();
+  return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
+}
 
-  // 绩效统计只在自然月内进行，不跨月累计：取 weekEnd 所在月的1号作为下限，
-  // 如果 periodMonday 和 weekEnd 跨月（例如 3/31~4/6），统计区间限制为 4/1~4/6，不含上月触发。
-  const weekEndMonth = endStr.slice(0, 7); // e.g. "2026-04"
-  const monthStart = `${weekEndMonth}-01`;
-  const effectiveStart = periodMonday > monthStart ? periodMonday : monthStart;
+/**
+ * 将「周一～周日」按自然月切成若干段；每段内 trigger_date 只属于该月，满足绩效不跨月累计。
+ */
+function splitWeekByCalendarMonths(weekStart, weekEnd) {
+  const segments = [];
+  let cur = String(weekStart).slice(0, 10);
+  const wkEnd = String(weekEnd).slice(0, 10);
+  while (cur <= wkEnd) {
+    const ymMonth = cur.slice(0, 7);
+    const monthEnd = lastDayYmdForYm(ymMonth);
+    const segEnd = wkEnd < monthEnd ? wkEnd : monthEnd;
+    segments.push({
+      start: cur,
+      end: segEnd,
+      ymMonth,
+      ymKey: ymMonth.replace(/-/g, '')
+    });
+    if (segEnd >= wkEnd) break;
+    cur = addDaysYmdShanghai(segEnd, 1);
+  }
+  return segments;
+}
 
-  const r = await query(
-    `SELECT anomaly_key, severity, trigger_value
-     FROM anomaly_triggers
-     WHERE store = $1
-       AND trigger_date >= $2::date
-       AND trigger_date <= $3::date
-       AND COALESCE(status, 'open') = 'open'`,
-    [store, effectiveStart, endStr]
-  );
-
-  const tableVisitProductMerged = mergeTableVisitProductWeekDeduction(r.rows || []);
+function computeRoleRollupFromRows(rows, role) {
+  const tableVisitProductMerged = mergeTableVisitProductWeekDeduction(rows || []);
 
   let rechargeSum = 0;
   let badProductPts = 0;
   let badServicePts = 0;
   const worst = new Map();
-  const monthlyReminders = []; // 月度扣分规则：周度仅记录提醒，不扣分
 
-  for (const row of r.rows || []) {
+  for (const row of rows || []) {
     const key = row.anomaly_key;
-    // 月度扣分规则：跳过扣分，仅记录提醒（由 HRMS 月评分系统每月扣1次）
-    if (MONTHLY_DEDUCTION_KEYS.has(key)) {
-      monthlyReminders.push({ anomaly_key: key, severity: row.severity, trigger_date: row.trigger_date });
-      continue;
-    }
+    if (MONTHLY_DEDUCTION_KEYS.has(key)) continue;
     if (key === 'recharge_zero') {
       const tv = parseTriggerValue(row);
       const pts = Number(tv.penalty_points != null ? tv.penalty_points : row.severity === 'high' ? 4 : 2);
@@ -390,101 +386,153 @@ export async function scoreStoreForPeriod(store, periodMonday) {
   }
   const anomalies = [...worst.values()];
 
-  for (const role of ['store_manager', 'store_production_manager']) {
-    let { total: baseTotal, details: baseDetails } = calcDeductions(anomalies, role);
-    let extra = 0;
-    const extraDetails = [];
-    if (role === 'store_manager') {
-      if (rechargeSum > 0) {
-        extra += rechargeSum;
-        extraDetails.push({
-          category: 'recharge_anomaly',
-          severity: 'mixed',
-          anomaly_key: 'recharge_zero',
-          points: rechargeSum
-        });
-      }
-      if (badServicePts > 0) {
-        extra += badServicePts;
-        extraDetails.push({
-          category: 'service_review',
-          severity: 'custom',
-          anomaly_key: 'bad_review_service',
-          points: badServicePts
-        });
-      }
-    }
-    if (role === 'store_production_manager' && badProductPts > 0) {
-      extra += badProductPts;
-      extraDetails.push({
-        category: 'product_review',
-        severity: 'custom',
-        anomaly_key: 'bad_review_product',
-        points: badProductPts
-      });
-    }
-    if (role === 'store_production_manager' && tableVisitProductMerged.totalPoints > 0) {
-      const tvp = tableVisitProductMerged.totalPoints;
-      extra += tvp;
-      const sev = tableVisitProductMerged.lines.some((l) => l.points >= 10) ? 'high' : 'medium';
-      const breakdown = tableVisitProductMerged.lines
-        .map((l) => `${l.complaint}×${l.cnt}→${l.points}分`)
-        .join('；');
-      extraDetails.push({
-        category: 'table_visit_anomaly',
-        severity: sev,
-        anomaly_key: 'table_visit_product',
-        points: tvp,
-        detail_note: `按产品累计：${breakdown}`
-      });
-    }
+  let { total: baseTotal, details: baseDetails } = calcDeductions(anomalies, role);
+  const merged = mergeLaborEfficiencyIfMissing(baseTotal, baseDetails, role, rows || []);
+  baseTotal = merged.baseTotal;
+  baseDetails = merged.baseDetails;
 
-    const total = baseTotal + extra;
-    const details = [...baseDetails, ...extraDetails];
-    const totalScore = Math.max(0, 100 - total);
-    const roleZh = roleLabelZh(role);
-    const summaryZh = `周度自动评分：基于 ${periodMonday}～${endStr} 异常触发汇总，${roleZh} 合计扣 ${total} 分。`;
-    const users = await resolveScoringUsers(store, role);
-    for (const { username, name } of users) {
-      try {
-        await query(
-          `INSERT INTO agent_scores (
-             brand, store, username, name, role, period, score_model,
-             total_score, deductions, breakdown, summary
-           ) VALUES ($1,$2,$3,$4,$5,$6,'anomaly_rollups_v2',$7,$8::jsonb,$9::jsonb,$10)
-           ON CONFLICT (brand, store, username, period)
-           DO UPDATE SET
-             score_model = EXCLUDED.score_model,
-             total_score = EXCLUDED.total_score,
-             deductions = EXCLUDED.deductions,
-             breakdown = EXCLUDED.breakdown,
-             summary = EXCLUDED.summary,
-             name = EXCLUDED.name,
-             feishu_notified = FALSE,
-             updated_at = NOW()`,
-          [
-            brand,
-            store,
+  let extra = 0;
+  const extraDetails = [];
+  if (role === 'store_manager') {
+    if (rechargeSum > 0) {
+      extra += rechargeSum;
+      extraDetails.push({
+        category: 'recharge_anomaly',
+        severity: 'mixed',
+        anomaly_key: 'recharge_zero',
+        points: rechargeSum
+      });
+    }
+    if (badServicePts > 0) {
+      extra += badServicePts;
+      extraDetails.push({
+        category: 'service_review',
+        severity: 'custom',
+        anomaly_key: 'bad_review_service',
+        points: badServicePts
+      });
+    }
+  }
+  if (role === 'store_production_manager' && badProductPts > 0) {
+    extra += badProductPts;
+    extraDetails.push({
+      category: 'product_review',
+      severity: 'custom',
+      anomaly_key: 'bad_review_product',
+      points: badProductPts
+    });
+  }
+  if (role === 'store_production_manager' && tableVisitProductMerged.totalPoints > 0) {
+    const tvp = tableVisitProductMerged.totalPoints;
+    extra += tvp;
+    const sev = tableVisitProductMerged.lines.some((l) => l.points >= 10) ? 'high' : 'medium';
+    const breakdown = tableVisitProductMerged.lines
+      .map((l) => `${l.complaint}×${l.cnt}→${l.points}分`)
+      .join('；');
+    extraDetails.push({
+      category: 'table_visit_anomaly',
+      severity: sev,
+      anomaly_key: 'table_visit_product',
+      points: tvp,
+      detail_note: `按产品累计：${breakdown}`
+    });
+  }
+
+  const total = baseTotal + extra;
+  const details = [...baseDetails, ...extraDetails];
+  const totalScore = Math.max(0, 100 - total);
+  return { totalScore, details, totalDeducted: total };
+}
+
+/** 按门店 × 周期写入 agent_scores（period=week_周一 或 跨月拆分为 week_周一__YYYYMM，score_model=anomaly_rollups_v2） */
+export async function scoreStoreForPeriod(store, periodMonday) {
+  const endStr = addDaysYmdShanghai(periodMonday, 6);
+  const brand = (await getBrandForStore(store).catch(() => null)) || '未知';
+  const segments = splitWeekByCalendarMonths(periodMonday, endStr);
+
+  if (segments.length > 1) {
+    try {
+      await query(
+        `DELETE FROM agent_scores
+         WHERE brand = $1 AND store = $2 AND score_model = 'anomaly_rollups_v2' AND period = $3`,
+        [brand, store, `week_${periodMonday}`]
+      );
+    } catch (e) {
+      logger.warn({ err: e?.message, store, periodMonday }, 'periodic-scoring: drop legacy cross-month row failed');
+    }
+  }
+
+  for (const seg of segments) {
+    const r = await query(
+      `SELECT anomaly_key, severity, trigger_value
+       FROM anomaly_triggers
+       WHERE store = $1
+         AND trigger_date >= $2::date
+         AND trigger_date <= $3::date
+         AND COALESCE(status, 'open') = 'open'`,
+      [store, seg.start, seg.end]
+    );
+
+    const periodTag = segments.length > 1 ? `week_${periodMonday}__${seg.ymKey}` : `week_${periodMonday}`;
+    const monthPartZh =
+      segments.length > 1 ? `${Number(seg.ymMonth.slice(5, 7))} 月段` : '';
+    const rangeZh = `${seg.start}～${seg.end}`;
+
+    for (const role of ['store_manager', 'store_production_manager']) {
+      const { totalScore, details, totalDeducted } = computeRoleRollupFromRows(r.rows || [], role);
+      const roleZh = roleLabelZh(role);
+      const summaryZh =
+        segments.length > 1
+          ? `周度自动评分（${monthPartZh}）：基于 ${rangeZh} 异常触发汇总，${roleZh} 合计扣 ${totalDeducted} 分（自然周 ${periodMonday}～${endStr}，按自然月拆分不计跨月）。`
+          : `周度自动评分：基于 ${periodMonday}～${endStr} 异常触发汇总，${roleZh} 合计扣 ${totalDeducted} 分。`;
+      const users = await resolveScoringUsers(store, role);
+      for (const { username, name } of users) {
+        try {
+          await query(
+            `INSERT INTO agent_scores (
+               brand, store, username, name, role, period, score_model,
+               total_score, deductions, breakdown, summary
+             ) VALUES ($1,$2,$3,$4,$5,$6,'anomaly_rollups_v2',$7,$8::jsonb,$9::jsonb,$10)
+             ON CONFLICT (brand, store, username, period)
+             DO UPDATE SET
+               score_model = EXCLUDED.score_model,
+               total_score = EXCLUDED.total_score,
+               deductions = EXCLUDED.deductions,
+               breakdown = EXCLUDED.breakdown,
+               summary = EXCLUDED.summary,
+               name = EXCLUDED.name,
+               feishu_notified = FALSE,
+               updated_at = NOW()`,
+            [
+              brand,
+              store,
+              username,
+              name,
+              role,
+              periodTag,
+              totalScore,
+              JSON.stringify(details),
+              JSON.stringify({
+                扣分项条数: details.length,
+                数据来源: '异常触发汇总',
+                ...(segments.length > 1 ? { 月分段: seg.ymMonth, 自然周: `${periodMonday}～${endStr}` } : {})
+              }),
+              summaryZh
+            ]
+          );
+          await recordDeductionNotifications({
             username,
-            name,
+            store,
             role,
-            `week_${periodMonday}`,
-            totalScore,
-            JSON.stringify(details),
-            JSON.stringify({ 扣分项条数: details.length, 数据来源: '异常触发汇总' }),
-            summaryZh
-          ]
-        );
-        await recordDeductionNotifications({
-          username,
-          store,
-          role,
-          periodMonday,
-          weekEndStr: endStr,
-          details
-        });
-      } catch (e) {
-        logger.warn({ err: e?.message, store, role, username }, 'periodic-scoring upsert failed');
+            periodMonday,
+            weekEndStr: endStr,
+            rangeStart: seg.start,
+            rangeEnd: seg.end,
+            details
+          });
+        } catch (e) {
+          logger.warn({ err: e?.message, store, role, username }, 'periodic-scoring upsert failed');
+        }
       }
     }
   }
@@ -497,14 +545,22 @@ function roleLabelZh(role) {
 }
 
 async function loadAnomalyRollupRows(periodMonday) {
-  const periodTag = `week_${periodMonday}`;
+  const base = `week_${periodMonday}`;
   const r = await query(
     `SELECT username, name, store, role, total_score, deductions, summary, period,
             COALESCE(updated_at, created_at) AS sort_ts
      FROM agent_scores
-     WHERE period = $1 AND score_model = 'anomaly_rollups_v2'
-     ORDER BY store, role, sort_ts DESC`,
-    [periodTag]
+     WHERE score_model = 'anomaly_rollups_v2'
+       AND (
+         period = $1
+         OR (
+           length(period) > length($1) + 2
+           AND left(period, length($1)) = $1
+           AND substring(period, length($1) + 1, 2) = '__'
+         )
+       )
+     ORDER BY store, role, period, sort_ts DESC`,
+    [base]
   );
   return r.rows || [];
 }
@@ -540,7 +596,9 @@ export async function sendWeeklyPerformanceFeishu(periodMonday, options = {}) {
       const placeholder = un.startsWith('__periodic');
       const who = row.name || (placeholder ? rzh : row.username) || rzh;
       const bindTag = placeholder ? ' · ⚠️未绑定飞书' : '';
-      return `- **${row.store}** · ${who}（${rzh}）${bindTag}：**${row.total_score}** 分`;
+      const p = String(row.period || '');
+      const crossTag = p.includes('__') ? ` · 月分段 ${p.split('__').pop()}` : '';
+      return `- **${row.store}** · ${who}（${rzh}）${bindTag}：**${row.total_score}** 分${crossTag}`;
     });
     for (const row of list) {
       if (!row.username || String(row.username).startsWith('__periodic')) continue;

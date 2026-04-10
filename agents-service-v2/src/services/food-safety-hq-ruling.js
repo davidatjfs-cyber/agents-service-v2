@@ -21,6 +21,7 @@ import {
   shanghaiWeekMonSunContaining,
   addDaysYmdShanghai
 } from '../utils/anomaly-week-bounds.js';
+import { anomalyRollupPeriodKey } from '../utils/week-period-keys.js';
 import { ensureHrmsUserNotificationsTable } from '../utils/hrms-user-notifications.js';
 
 const FOOD_SAFETY_HQ_POINTS = 20;
@@ -358,7 +359,7 @@ export async function tryHandleFoodSafetyHqRuling({ taskId, responseText, openId
     const { ymd: today } = getShanghaiYmdParts();
     const { weekStart } = shanghaiWeekMonSunContaining(today);
     const weekEnd = addDaysYmdShanghai(weekStart, 6);
-    const period = `week_${weekStart}`;
+    const period = anomalyRollupPeriodKey(weekStart, today);
 
     if (parsed.kind === 'dismiss') {
       await query(

@@ -1855,16 +1855,24 @@ async function load(t) {
 }
 
 // ═══════════════════════════════════════════════════════
-// TABS & ROUTER
+// TABS & ROUTER（单行扁平导航，与数据中心改版解耦）
 // ═══════════════════════════════════════════════════════
-const TAB_GROUPS = [
-  { subtitle: '概况', items: [['dashboard', '📊 仪表盘'], ['activity', '📋 Agent活动']] },
-  { subtitle: '数据与配置', items: [['datasources', '📡 数据源'], ['agents', '🤖 Agent配置'], ['scheduled', '⏰ 定时任务']] },
-  { subtitle: '规则与绩效', items: [['anomaly', '🚨 异常阈值'], ['performance', '📋 绩效考核']] },
-  { subtitle: '营销与评估', items: [['marketing', '📢 营销管理'], ['evaluation', '🔍 Agent评估']] },
-  { subtitle: '知识与系统', items: [['knowledge', '📚 知识库'], ['memory', '🧠 记忆'], ['flags', '🚩 开关'], ['configs', '⚙️ 配置'], ['audit', '📝 审计']] }
+const TABS = [
+  ['dashboard', '📊 仪表盘'],
+  ['activity', '📋 Agent活动'],
+  ['datasources', '📡 数据源'],
+  ['agents', '🤖 Agent配置'],
+  ['scheduled', '⏰ 定时任务'],
+  ['anomaly', '🚨 异常阈值'],
+  ['performance', '📋 绩效考核'],
+  ['marketing', '📢 营销管理'],
+  ['evaluation', '🔍 Agent评估'],
+  ['knowledge', '📚 知识库'],
+  ['memory', '🧠 记忆'],
+  ['flags', '🚩 开关'],
+  ['configs', '⚙️ 配置'],
+  ['audit', '📝 审计']
 ];
-const TABS = TAB_GROUPS.flatMap((g) => g.items);
 const VW = { dashboard: viewDash, activity: viewActivity, datasources: viewDataSources, agents: viewAgents, scheduled: viewScheduled, anomaly: viewAnomaly, performance: viewPerformance, marketing: viewMarketing, evaluation: viewEval, knowledge: viewKnowledge, memory: viewMemory, flags: viewFlags, configs: viewCfgs, audit: viewAudit };
 
 function render() {
@@ -1883,24 +1891,16 @@ function render() {
   hi.appendChild(btn('退出登录', () => { localStorage.removeItem('aat'); localStorage.removeItem('aau'); renderLogin(); }, 'text-sm text-gray-500 hover:text-red-500 bg-transparent'));
   hd.appendChild(hi); a.appendChild(hd);
 
-  // Nav：分组横滑 + 当前项高亮，减少「一排超长标签」带来的杂乱感
   const nv = el('nav', { className: 'bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm' });
-  const nvOuter = el('div', { className: 'max-w-7xl mx-auto px-4 py-3 space-y-2' });
-  TAB_GROUPS.forEach((grp) => {
-    const row = el('div', { className: 'flex flex-wrap items-center gap-x-1 gap-y-1' });
-    row.appendChild(el('span', { className: 'text-[10px] font-bold uppercase tracking-wider text-gray-400 mr-1 sm:mr-2 shrink-0 w-full sm:w-20 sm:text-right' }, grp.subtitle));
-    const btnRow = el('div', { className: 'flex flex-wrap gap-1 flex-1 min-w-0' });
-    grp.items.forEach(([k, l]) => {
-      const on = tab === k;
-      const cls =
-        'px-3 py-1.5 text-xs sm:text-sm cursor-pointer whitespace-nowrap rounded-lg font-medium transition-colors ' +
-        (on ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900');
-      btnRow.appendChild(el('div', { className: cls, onclick: () => go(k) }, l));
-    });
-    row.appendChild(btnRow);
-    nvOuter.appendChild(row);
+  const nvInner = el('div', { className: 'max-w-7xl mx-auto px-4 py-2 flex flex-wrap gap-1' });
+  TABS.forEach(([k, l]) => {
+    const on = tab === k;
+    const cls =
+      'px-3 py-1.5 text-xs sm:text-sm cursor-pointer whitespace-nowrap rounded-lg font-medium transition-colors ' +
+      (on ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900');
+    nvInner.appendChild(el('div', { className: cls, onclick: () => go(k) }, l));
   });
-  nv.appendChild(nvOuter);
+  nv.appendChild(nvInner);
   a.appendChild(nv);
 
   // Content

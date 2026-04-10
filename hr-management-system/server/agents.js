@@ -11065,6 +11065,98 @@ export function registerAgentRoutes(app, authRequired) {
     }
   });
 
+  /** 数据中心精简看板：Agent 活动摘要 + 管理告警 + 定时任务 + 双写说明（与 Agent 控制台信息对齐） */
+  app.get('/api/agents/data-center-brief', authRequired, async (req, res) => {
+    const role = String(req.user?.role || '').trim();
+    if (!['admin', 'hq_manager', 'hr_manager'].includes(role)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    const shToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
+    const p = pool();
+    try {
+      const [
+        alertsR,
+        cronR,
+        taskCntR,
+        rhythmCntR,
+        anomalyCntR,
+        alertTodayR,
+        perfRollupR
+      ] = await Promise.all([
+        p
+          .query(
+            `SELECT id, priority, alert_type, title, LEFT(body, 400) AS body_preview, sent_at
+             FROM agent_admin_alert_log
+             ORDER BY sent_at DESC
+             LIMIT 35`
+          )
+          .catch(() => ({ rows: [] })),
+        p
+          .query(
+            `SELECT job_key, run_ymd, ok, LEFT(COALESCE(error,''), 200) AS error_preview, created_at
+             FROM agent_v2_cron_runs
+             ORDER BY created_at DESC
+             LIMIT 45`
+          )
+          .catch(() => ({ rows: [] })),
+        p
+          .query(
+            `SELECT COUNT(*)::int AS c FROM agent_task_logs
+             WHERE (created_at AT TIME ZONE 'Asia/Shanghai')::date = $1::date`,
+            [shToday]
+          )
+          .catch(() => ({ rows: [{ c: 0 }] })),
+        p
+          .query(`SELECT COUNT(*)::int AS c FROM rhythm_logs WHERE execution_date = $1::date`, [shToday]).catch(() => ({
+            rows: [{ c: 0 }]
+          })),
+        p
+          .query(`SELECT COUNT(*)::int AS c FROM anomaly_triggers WHERE trigger_date = $1::date`, [shToday]).catch(() => ({
+            rows: [{ c: 0 }]
+          })),
+        p
+          .query(
+            `SELECT COUNT(*)::int AS c FROM agent_admin_alert_log
+             WHERE DATE(timezone('Asia/Shanghai', sent_at)) = $1::date`,
+            [shToday]
+          )
+          .catch(() => ({ rows: [{ c: 0 }] })),
+        p
+          .query(
+            `SELECT ROUND(AVG(total_score)::numeric, 1) AS avg_bi,
+                    COUNT(*)::int AS rollup_rows
+             FROM agent_scores
+             WHERE score_model = 'anomaly_rollups_v2'
+               AND updated_at > NOW() - INTERVAL '14 days'`
+          )
+          .catch(() => ({ rows: [{ avg_bi: null, rollup_rows: 0 }] }))
+      ]);
+
+      return res.json({
+        shanghaiDate: shToday,
+        dualWrite: {
+          summary:
+            'HRMS 在审批与全量保存时双写到独立表（员工、休假、奖惩、积分、考勤、薪资域等）。失败会向管理群飞书告警；请关注下方「管理告警」。',
+          scopes: ['全量 state→表', '休假/奖惩/积分/考勤审批流', '薪资域异步双写']
+        },
+        activityToday: {
+          agentTaskLogs: Number(taskCntR.rows?.[0]?.c || 0),
+          rhythmRuns: Number(rhythmCntR.rows?.[0]?.c || 0),
+          anomalyTriggers: Number(anomalyCntR.rows?.[0]?.c || 0),
+          adminAlerts: Number(alertTodayR.rows?.[0]?.c || 0)
+        },
+        performanceRollup14d: {
+          avgScore: perfRollupR.rows?.[0]?.avg_bi != null ? Number(perfRollupR.rows[0].avg_bi) : null,
+          rowCount: Number(perfRollupR.rows?.[0]?.rollup_rows || 0)
+        },
+        adminAlerts: alertsR.rows || [],
+        cronRuns: cronR.rows || []
+      });
+    } catch (e) {
+      return res.status(500).json({ error: String(e?.message || e) });
+    }
+  });
+
   // ── Performance Monitoring API ──
   app.get('/api/agents/performance', authRequired, async (req, res) => {
     const role = String(req.user?.role || '').trim();

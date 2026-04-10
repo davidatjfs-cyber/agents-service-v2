@@ -112,6 +112,7 @@ async function getMonthlyPerformanceScore(username, period) {
   const [year, month] = period.split('-');
   const startDate = `${year}-${month}-01`;
   const endDate = `${year}-${month}-31`;
+  const monthKey = `${year}${month}`;
 
   const result = await query(
     `SELECT COALESCE(SUM(total_score), 0) as total,
@@ -119,9 +120,14 @@ async function getMonthlyPerformanceScore(username, period) {
      FROM agent_scores
      WHERE LOWER(TRIM(username)) = LOWER(TRIM($1))
        AND score_model = 'anomaly_rollups_v2'
-       AND substring(period from 6 for 10)::date >= $2::date
-       AND substring(period from 6 for 10)::date <= $3::date`,
-    [username, startDate, endDate]
+       AND (
+         (POSITION('__' IN period) = 0
+           AND substring(period from 6 for 10)::date >= $2::date
+           AND substring(period from 6 for 10)::date <= $3::date)
+         OR
+         (POSITION('__' IN period) > 0 AND split_part(period, '__', 2) = $4)
+       )`,
+    [username, startDate, endDate, monthKey]
   );
 
   const total = Number(result.rows[0]?.total || 0);

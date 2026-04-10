@@ -8522,94 +8522,55 @@
             </div>
 
             <div id="agents-page" class="hidden">
-                <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+                <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:20px;">
                     <div>
-                        <h2 style="margin:0;">数据中心</h2>
-                        <div id="dc-subtitle" style="margin-top:6px;color:#777;font-size:12px;">系统健康 · 数据监控 · 智能分析</div>
+                        <h2 style="margin:0;font-weight:600;letter-spacing:.02em;">数据中心</h2>
+                        <div id="dc-subtitle" style="margin-top:8px;color:#64748b;font-size:12px;line-height:1.5;max-width:520px;">Agent 活动与管理告警 · 绩效周汇总 · 飞书多维表同步 · 定时任务与健康（详细配置请使用 Agent 控制台）</div>
                     </div>
-                    <button class="btn btn-secondary" onclick="loadDataCenterDashboard()" style="font-size:12px;padding:5px 14px;">刷新</button>
+                    <button class="btn btn-secondary" onclick="loadDataCenterDashboard()" style="font-size:12px;padding:8px 16px;border-radius:8px;">刷新</button>
                 </div>
-                <!-- 系统健康状态条 -->
-                <div id="dc-health-bar" style="margin-bottom:14px;padding:10px 14px;border-radius:10px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.06);display:flex;flex-wrap:wrap;gap:12px 18px;align-items:center;font-size:12px;color:#94a3b8;">
+                <div id="dc-health-bar" style="margin-bottom:16px;padding:12px 16px;border-radius:12px;background:rgba(15,23,42,0.55);border:1px solid rgba(148,163,184,0.12);display:flex;flex-wrap:wrap;gap:14px 20px;align-items:center;font-size:12px;color:#94a3b8;">
                     <span style="color:#64748b;">加载中...</span>
                 </div>
-                <!-- 统计卡片 -->
-                <div id="dc-stats-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:18px;"></div>
-                <!-- 数据源同步状态 -->
-                <div style="margin-bottom:18px;">
-                    <div style="font-size:13px;font-weight:700;color:#94a3b8;margin-bottom:8px;letter-spacing:.5px;">📁 数据源同步状态</div>
-                    <div id="dc-sync-list" style="background:rgba(0,0,0,0.2);border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,0.05);">
-                        <div style="padding:12px;text-align:center;color:#64748b;font-size:12px;">加载中...</div>
-                    </div>
+                <div style="display:flex;flex-direction:column;gap:20px;">
+                    <section style="border-radius:14px;background:rgba(15,23,42,0.45);border:1px solid rgba(148,163,184,0.1);overflow:hidden;">
+                        <div style="padding:14px 18px;border-bottom:1px solid rgba(148,163,184,0.08);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                            <div style="font-size:13px;font-weight:600;color:#e2e8f0;letter-spacing:.04em;">Agent 活动内容</div>
+                            <div id="dc-activity-date" style="font-size:11px;color:#64748b;">—</div>
+                        </div>
+                        <div id="dc-activity-body" style="padding:14px 18px;font-size:12px;color:#94a3b8;line-height:1.6;">加载中…</div>
+                    </section>
+                    <section style="border-radius:14px;background:rgba(15,23,42,0.45);border:1px solid rgba(148,163,184,0.1);overflow:hidden;">
+                        <div style="padding:14px 18px;border-bottom:1px solid rgba(148,163,184,0.08);">
+                            <div style="font-size:13px;font-weight:600;color:#e2e8f0;letter-spacing:.04em;">绩效看板</div>
+                            <div style="font-size:11px;color:#64748b;margin-top:4px;">周度 BI 汇总（anomaly_rollups_v2）· 跨自然周若跨月会按月份拆分，不混算</div>
+                        </div>
+                        <div id="dc-perf-body" style="padding:14px 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;"></div>
+                    </section>
+                    <section style="border-radius:14px;background:rgba(15,23,42,0.45);border:1px solid rgba(148,163,184,0.1);overflow:hidden;">
+                        <div style="padding:14px 18px;border-bottom:1px solid rgba(148,163,184,0.08);">
+                            <div style="font-size:13px;font-weight:600;color:#e2e8f0;letter-spacing:.04em;">警告通知</div>
+                            <div style="font-size:11px;color:#64748b;margin-top:4px;">管理侧数据告警（含双写/数据一致性类飞书投递记录）</div>
+                        </div>
+                        <div id="dc-alerts-body" style="padding:0;max-height:280px;overflow-y:auto;"></div>
+                    </section>
+                    <section style="border-radius:14px;background:rgba(15,23,42,0.45);border:1px solid rgba(148,163,184,0.1);overflow:hidden;">
+                        <div style="padding:14px 18px;border-bottom:1px solid rgba(148,163,184,0.08);">
+                            <div style="font-size:13px;font-weight:600;color:#e2e8f0;letter-spacing:.04em;">数据源与任务</div>
+                            <div style="font-size:11px;color:#64748b;margin-top:4px;">飞书多维表同步 · 双写范围说明 · Agents-V2 定时任务最近运行</div>
+                        </div>
+                        <div id="dc-dualwrite-strip" style="padding:12px 18px;font-size:11px;color:#94a3b8;line-height:1.55;border-bottom:1px solid rgba(148,163,184,0.06);"></div>
+                        <div id="dc-sync-list" style="background:transparent;border-radius:0;overflow:hidden;border:none;">
+                            <div style="padding:12px 18px;text-align:center;color:#64748b;font-size:12px;">加载中...</div>
+                        </div>
+                        <div style="padding:0 0 12px;">
+                            <div style="padding:8px 18px 4px;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.06em;">定时任务</div>
+                            <div id="dc-cron-body" style="padding:0 12px 8px;max-height:220px;overflow-y:auto;font-size:11px;"></div>
+                        </div>
+                    </section>
                 </div>
-                <!-- 快捷操作 -->
-                <div style="font-size:13px;font-weight:700;color:#94a3b8;margin-bottom:8px;letter-spacing:.5px;">⚡ 快捷操作</div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px;">
-                    <div class="card" style="cursor:pointer;text-align:center;padding:16px 10px;" onclick="openAgentMonitorModal();setTimeout(()=>switchAmTab('overview'),100)">
-                        <div style="font-size:24px;margin-bottom:6px;">📡</div>
-                        <div style="font-size:13px;font-weight:600;color:#e2e8f0;">运营概览</div>
-                        <div style="font-size:11px;color:#64748b;margin-top:4px;">品牌态势总览</div>
-                    </div>
-                    <div class="card" style="cursor:pointer;text-align:center;padding:16px 10px;" onclick="openAgentMonitorModal();setTimeout(()=>switchAmTab('issues'),100)">
-                        <div style="font-size:24px;margin-bottom:6px;">🚨</div>
-                        <div style="font-size:13px;font-weight:600;color:#e2e8f0;">异常告警</div>
-                        <div style="font-size:11px;color:#64748b;margin-top:4px;">实时异常追踪</div>
-                    </div>
-                    <div class="card" style="cursor:pointer;text-align:center;padding:16px 10px;" onclick="openAgentMonitorModal();setTimeout(()=>switchAmTab('scores'),100)">
-                        <div style="font-size:24px;margin-bottom:6px;">📊</div>
-                        <div style="font-size:13px;font-weight:600;color:#e2e8f0;">绩效看板</div>
-                        <div style="font-size:11px;color:#64748b;margin-top:4px;">员工评分汇总</div>
-                    </div>
-                    <div class="card" style="cursor:pointer;text-align:center;padding:16px 10px;" onclick="openAgentMonitorModal();setTimeout(()=>switchAmTab('audits'),100)">
-                        <div style="font-size:24px;margin-bottom:6px;">🔍</div>
-                        <div style="font-size:13px;font-weight:600;color:#e2e8f0;">审核记录</div>
-                        <div style="font-size:11px;color:#64748b;margin-top:4px;">图片/视觉审核</div>
-                    </div>
-                    <div class="card" style="cursor:pointer;text-align:center;padding:16px 10px;" onclick="openAgentMonitorModal();setTimeout(()=>switchAmTab('messages'),100)">
-                        <div style="font-size:24px;margin-bottom:6px;">💬</div>
-                        <div style="font-size:13px;font-weight:600;color:#e2e8f0;">消息日志</div>
-                        <div style="font-size:11px;color:#64748b;margin-top:4px;">Agent收发记录</div>
-                    </div>
-                    <div class="card" style="cursor:pointer;text-align:center;padding:16px 10px;" onclick="openAgentMonitorModal();setTimeout(()=>switchAmTab('users'),100)">
-                        <div style="font-size:24px;margin-bottom:6px;">👥</div>
-                        <div style="font-size:13px;font-weight:600;color:#e2e8f0;">飞书用户</div>
-                        <div style="font-size:11px;color:#64748b;margin-top:4px;">用户绑定管理</div>
-                    </div>
-                    <div class="card" style="cursor:pointer;text-align:center;padding:16px 10px;" onclick="openAnnouncementModal()">
-                        <div style="font-size:24px;margin-bottom:6px;">📢</div>
-                        <div style="font-size:13px;font-weight:600;color:#e2e8f0;">发布公告</div>
-                        <div style="font-size:11px;color:#64748b;margin-top:4px;">全员/门店通知</div>
-                    </div>
-                </div>
-                <div id="agents-config-section" style="display:none;">
-                    <div style="font-size:13px;font-weight:700;color:#94a3b8;margin-bottom:10px;letter-spacing:.5px;">⚙️ 配置管理</div>
-                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">
-                        <div class="card" style="cursor:pointer;text-align:center;padding:14px 10px;" onclick="openAgentConfigModal();setTimeout(()=>switchAgentConfigTab('configs'),100)">
-                            <div style="font-size:20px;margin-bottom:4px;">🤖</div>
-                            <div style="font-size:12px;font-weight:600;color:#e2e8f0;">基础配置</div>
-                        </div>
-                        <div class="card" style="cursor:pointer;text-align:center;padding:14px 10px;" onclick="openAgentConfigModal();setTimeout(()=>switchAgentConfigTab('op_config'),100)">
-                            <div style="font-size:20px;margin-bottom:4px;">🔍</div>
-                            <div style="font-size:12px;font-weight:600;color:#e2e8f0;">OP巡检</div>
-                        </div>
-                        <div class="card" style="cursor:pointer;text-align:center;padding:14px 10px;" onclick="openAgentConfigModal();setTimeout(()=>switchAgentConfigTab('bi_config'),100)">
-                            <div style="font-size:20px;margin-bottom:4px;">📊</div>
-                            <div style="font-size:12px;font-weight:600;color:#e2e8f0;">BI规则</div>
-                        </div>
-                        <div class="card" style="cursor:pointer;text-align:center;padding:14px 10px;" onclick="openAgentConfigModal();setTimeout(()=>switchAgentConfigTab('rules'),100)">
-                            <div style="font-size:20px;margin-bottom:4px;">👤</div>
-                            <div style="font-size:12px;font-weight:600;color:#e2e8f0;">责任人规则</div>
-                        </div>
-                        <div class="card" style="cursor:pointer;text-align:center;padding:14px 10px;" onclick="openAgentConfigModal();setTimeout(()=>switchAgentConfigTab('templates'),100)">
-                            <div style="font-size:20px;margin-bottom:4px;">📝</div>
-                            <div style="font-size:12px;font-weight:600;color:#e2e8f0;">模板库</div>
-                        </div>
-                        <div class="card" style="cursor:pointer;text-align:center;padding:14px 10px;" onclick="openAgentConfigModal();setTimeout(()=>switchAgentConfigTab('hr_rating'),100)">
-                            <div style="font-size:20px;margin-bottom:4px;">⭐</div>
-                            <div style="font-size:12px;font-weight:600;color:#e2e8f0;">HR评级</div>
-                        </div>
-                    </div>
-                </div>
+                <p style="margin:20px 0 8px;font-size:11px;color:#475569;line-height:1.5;">Agent 监控、配置、营销与审计等请打开 <strong>Agent Ops 控制台</strong>；本页仅保留只读总览。</p>
+                <div id="agents-config-section" style="display:none !important;"></div>
                 <div id="agents-config-lock-tip" style="display:none;"></div>
                 <button class="btn btn-secondary" id="btn-agents-monitor-main" style="display:none;" onclick="openAgentMonitorModal()">Agent监控</button>
                 <button class="btn" id="btn-agents-config-main" style="display:none;" onclick="openAgentConfigModal()">Agent配置中心</button>
@@ -16864,29 +16825,30 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             const btnMain = document.getElementById('btn-agents-config-main');
             const btnCard = document.getElementById('btn-agents-config-card');
             const lockTip = document.getElementById('agents-config-lock-tip');
-            const cfgSection = document.getElementById('agents-config-section');
             if (btnMain) btnMain.style.display = canManageAgents ? '' : 'none';
             if (btnCard) btnCard.style.display = canManageAgents ? '' : 'none';
             if (lockTip) lockTip.style.display = canManageAgents ? 'none' : '';
-            if (cfgSection) cfgSection.style.display = canManageAgents ? '' : 'none';
             loadDataCenterDashboard();
         }
 
         async function loadDataCenterDashboard() {
             const hdr = { 'Authorization': 'Bearer ' + (HRMS_API.token ? HRMS_API.token() : '') };
-            // Fetch health + dashboard + bitable-sync in parallel
-            const [healthRes, dashRes, syncRes] = await Promise.allSettled([
+            const role = String(currentUser?.role || '').trim();
+            const canBrief = ['admin', 'hq_manager', 'hr_manager'].includes(role);
+            const fetches = [
                 fetch('/api/health', { headers: hdr }).then(r => r.json()).catch(() => null),
                 fetch('/api/agents/dashboard', { headers: hdr }).then(r => r.json()).catch(() => null),
                 fetch('/api/agents/bitable-sync', { headers: hdr }).then(r => r.json()).catch(() => null)
-            ]);
-            const health = healthRes.status === 'fulfilled' ? healthRes.value : null;
-            const _dashRaw = dashRes.status === 'fulfilled' ? dashRes.value : null;
+            ];
+            if (canBrief) fetches.push(fetch('/api/agents/data-center-brief', { headers: hdr }).then(r => r.json()).catch(() => null));
+            const results = await Promise.allSettled(fetches);
+            const health = results[0].status === 'fulfilled' ? results[0].value : null;
+            const _dashRaw = results[1].status === 'fulfilled' ? results[1].value : null;
             const dash = (_dashRaw && !_dashRaw.error) ? _dashRaw : null;
-            const _syncRaw = syncRes.status === 'fulfilled' ? syncRes.value : null;
+            const _syncRaw = results[2].status === 'fulfilled' ? results[2].value : null;
             const sync = (_syncRaw && !_syncRaw.error) ? _syncRaw : null;
+            const brief = canBrief && results[3] && results[3].status === 'fulfilled' && !results[3].value?.error ? results[3].value : null;
 
-            // ── Health bar ──
             const hBar = document.getElementById('dc-health-bar');
             if (hBar && health) {
                 const ag = health.agents || {};
@@ -16902,43 +16864,120 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 `;
             }
 
-            // ── Stats cards ──
-            const grid = document.getElementById('dc-stats-grid');
-            if (grid && !dash) {
-                grid.innerHTML = '<div style="grid-column:1/-1;padding:16px;text-align:center;color:#ef4444;font-size:12px;">数据加载失败，请刷新重试' + (_dashRaw?.error ? ' (' + _dashRaw.error + ')' : '') + '</div>';
-            }
-            if (grid && dash) {
-                const cards = [
-                    { icon: '🚨', label: '待处理异常', value: dash.openIssues ?? '-', color: (dash.openIssues > 0 ? '#ef4444' : '#22c55e') },
-                    { icon: '📊', label: '平均绩效', value: dash.avgScore != null ? Number(dash.avgScore).toFixed(1) : '-', color: '#3b82f6' },
-                    { icon: '🔍', label: '审核记录', value: dash.totalAudits ?? '-', color: '#a855f7' },
-                    { icon: '💬', label: '飞书消息', value: dash.totalMessages ?? '-', color: '#06b6d4' },
-                    { icon: '👥', label: '飞书用户', value: dash.totalFeishuUsers ?? '-', color: '#f59e0b' },
-                    { icon: '📁', label: '数据记录', value: dash.totalGenericRecords ?? '-', color: '#10b981' }
-                ];
-                grid.innerHTML = cards.map(c => `
-                    <div style="background:rgba(0,0,0,0.2);border-radius:10px;padding:14px;border:1px solid rgba(255,255,255,0.05);">
-                        <div style="font-size:20px;margin-bottom:6px;">${c.icon}</div>
-                        <div style="font-size:20px;font-weight:700;color:${c.color};margin-bottom:2px;">${c.value}</div>
-                        <div style="font-size:11px;color:#64748b;">${c.label}</div>
-                    </div>
-                `).join('');
+            const actDateEl = document.getElementById('dc-activity-date');
+            const actBody = document.getElementById('dc-activity-body');
+            if (actDateEl) actDateEl.textContent = brief?.shanghaiDate ? '上海日期 ' + brief.shanghaiDate : '—';
+            if (actBody) {
+                if (!canBrief) {
+                    actBody.innerHTML = '<span style="color:#64748b;">当前角色仅展示公开健康状态；完整活动摘要需管理员 / 总部营运 / HR。</span>';
+                } else if (!brief) {
+                    actBody.innerHTML = '<span style="color:#ef4444;">活动摘要加载失败（请确认已登录且接口可用）</span>';
+                } else {
+                    const a = brief.activityToday || {};
+                    actBody.innerHTML = `
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:10px;">
+                            <div><span style="color:#64748b;">任务日志</span> <strong style="color:#e2e8f0;">${a.agentTaskLogs ?? 0}</strong></div>
+                            <div><span style="color:#64748b;">节奏引擎</span> <strong style="color:#e2e8f0;">${a.rhythmRuns ?? 0}</strong></div>
+                            <div><span style="color:#64748b;">异常触发</span> <strong style="color:#e2e8f0;">${a.anomalyTriggers ?? 0}</strong></div>
+                            <div><span style="color:#64748b;">今日管理告警</span> <strong style="color:#e2e8f0;">${a.adminAlerts ?? 0}</strong></div>
+                        </div>
+                        <div style="color:#64748b;font-size:11px;">口径与 Agent 控制台「Agent 活动」一致（按上海日汇总）。</div>`;
+                }
             }
 
-            // ── Sync list ──
+            const perfBody = document.getElementById('dc-perf-body');
+            if (perfBody) {
+                if (!dash) {
+                    perfBody.innerHTML = '<div style="color:#ef4444;font-size:12px;">绩效摘要加载失败' + (_dashRaw?.error ? ' (' + escapeHtml(String(_dashRaw.error)) + ')' : '') + '</div>';
+                } else {
+                    const br = brief?.performanceRollup14d || {};
+                    const avgBi = br.avgScore != null ? Number(br.avgScore).toFixed(1) : '—';
+                    const tiles = [
+                        { k: '待处理异常', v: dash.openIssues ?? '—', c: (Number(dash.openIssues) > 0 ? '#f87171' : '#34d399') },
+                        { k: '近14天·周度BI均分', v: avgBi, c: '#60a5fa', sub: br.rowCount != null ? br.rowCount + ' 条 rollup' : '' },
+                        { k: '30天·仪表盘均分', v: dash.avgScore != null ? Number(dash.avgScore).toFixed(1) : '—', c: '#a78bfa', sub: '含全部 score 模型' },
+                        { k: '飞书消息(7天)', v: dash.totalMessages ?? '—', c: '#22d3ee' },
+                        { k: '飞书用户', v: dash.totalFeishuUsers ?? '—', c: '#fbbf24' },
+                        { k: '视觉审核(30天)', v: dash.totalAudits ?? '—', c: '#c084fc' }
+                    ];
+                    perfBody.innerHTML = tiles.map(t => `
+                        <div style="padding:12px 14px;border-radius:10px;background:rgba(2,6,23,0.35);border:1px solid rgba(148,163,184,0.08);">
+                            <div style="font-size:11px;color:#64748b;margin-bottom:4px;">${escapeHtml(t.k)}</div>
+                            <div style="font-size:22px;font-weight:700;color:${t.c};line-height:1.1;">${escapeHtml(String(t.v))}</div>
+                            ${t.sub ? `<div style="font-size:10px;color:#475569;margin-top:4px;">${escapeHtml(t.sub)}</div>` : ''}
+                        </div>`).join('');
+                }
+            }
+
+            const alertsBody = document.getElementById('dc-alerts-body');
+            if (alertsBody) {
+                if (!canBrief || !brief) {
+                    alertsBody.innerHTML = '<div style="padding:16px;color:#64748b;font-size:12px;">' + (!canBrief ? '无权限查看管理告警。' : '告警列表加载失败。') + '</div>';
+                } else {
+                    const rows = brief.adminAlerts || [];
+                    if (!rows.length) {
+                        alertsBody.innerHTML = '<div style="padding:16px;color:#64748b;font-size:12px;">暂无最近管理告警记录。</div>';
+                    } else {
+                        alertsBody.innerHTML = rows.map(r => {
+                            const pr = String(r.priority || '').toUpperCase();
+                            const col = pr === 'A' ? '#f87171' : pr === 'C' ? '#fbbf24' : '#fb923c';
+                            return `<div style="padding:10px 18px;border-bottom:1px solid rgba(148,163,184,0.06);font-size:12px;">
+                                <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;">
+                                    <span style="flex-shrink:0;padding:2px 6px;border-radius:4px;background:${col}22;color:${col};font-size:10px;font-weight:700;">${escapeHtml(pr || '—')}</span>
+                                    <span style="color:#e2e8f0;font-weight:600;flex:1;min-width:0;">${_dcEsc(r.title)}</span>
+                                    <span style="color:#475569;font-size:10px;white-space:nowrap;">${_dcFmtTime(r.sent_at)}</span>
+                                </div>
+                                <div style="margin-top:4px;color:#64748b;font-size:11px;line-height:1.45;">${_dcEsc(r.body_preview || r.alert_type || '')}</div>
+                            </div>`;
+                        }).join('');
+                    }
+                }
+            }
+
+            const dw = document.getElementById('dc-dualwrite-strip');
+            if (dw) {
+                if (brief?.dualWrite) {
+                    const sc = (brief.dualWrite.scopes || []).map(s => `<span style="display:inline-block;margin:2px 6px 2px 0;padding:2px 8px;border-radius:999px;background:rgba(59,130,246,0.12);color:#93c5fd;font-size:10px;">${_dcEsc(s)}</span>`).join('');
+                    dw.innerHTML = `<div style="margin-bottom:6px;">${_dcEsc(brief.dualWrite.summary || '')}</div><div>${sc}</div>`;
+                } else {
+                    dw.innerHTML = '<span style="color:#64748b;">双写范围说明需管理员加载 data-center-brief。</span>';
+                }
+            }
+
+            const cronBody = document.getElementById('dc-cron-body');
+            if (cronBody) {
+                if (!canBrief || !brief || !Array.isArray(brief.cronRuns)) {
+                    cronBody.innerHTML = '<div style="padding:8px 6px;color:#64748b;">—</div>';
+                } else if (!brief.cronRuns.length) {
+                    cronBody.innerHTML = '<div style="padding:8px 6px;color:#64748b;">暂无 cron 运行记录（表未创建或无数据）。</div>';
+                } else {
+                    const jobZh = { weekly_store_scoring: '周度门店评分', daily_bi_anomaly: '日频BI异常', food_safety_daily_scan: '食安日扫' };
+                    cronBody.innerHTML = brief.cronRuns.map(c => {
+                        const ok = c.ok === true;
+                        const label = jobZh[c.job_key] || c.job_key;
+                        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid rgba(148,163,184,0.05);">
+                            <span style="width:7px;height:7px;border-radius:50%;background:${ok ? '#22c55e' : '#ef4444'};flex-shrink:0;"></span>
+                            <span style="flex:1;min-width:0;color:#cbd5e1;">${_dcEsc(label)}</span>
+                            <span style="color:#64748b;white-space:nowrap;">${_dcEsc(c.run_ymd || '')}</span>
+                            <span style="color:#475569;font-size:10px;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${ok ? 'ok' : _dcEsc(c.error_preview || 'fail')}</span>
+                        </div>`;
+                    }).join('');
+                }
+            }
+
             const sList = document.getElementById('dc-sync-list');
             if (sList && !sync) {
-                sList.innerHTML = '<div style="padding:12px;text-align:center;color:#ef4444;font-size:12px;">同步数据加载失败' + (_syncRaw?.error ? ' (' + _syncRaw.error + ')' : '') + '</div>';
+                sList.innerHTML = '<div style="padding:12px 18px;text-align:center;color:#ef4444;font-size:12px;">同步数据加载失败' + (_syncRaw?.error ? ' (' + escapeHtml(String(_syncRaw.error)) + ')' : '') + '</div>';
             }
             const syncItems = sync?.items || sync?.sources || [];
             if (sList && sync && Array.isArray(syncItems)) {
                 if (syncItems.length === 0) {
-                    sList.innerHTML = '<div style="padding:12px;text-align:center;color:#64748b;font-size:12px;">暂无数据源</div>';
+                    sList.innerHTML = '<div style="padding:12px 18px;text-align:center;color:#64748b;font-size:12px;">暂无数据源</div>';
                 } else {
                     sList.innerHTML = syncItems.map(s => {
                         const ago = s.lastSync ? _dcTimeAgo(s.lastSync) : '从未同步';
                         const ok = s.count > 0;
-                        return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:12px;">
+                        return `<div style="display:flex;align-items:center;gap:10px;padding:10px 18px;border-bottom:1px solid rgba(148,163,184,0.06);font-size:12px;">
                             <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ok ? '#22c55e' : '#f59e0b'};flex-shrink:0;"></span>
                             <span style="color:#e2e8f0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_dcEsc(s.name)}</span>
                             <span style="color:#64748b;white-space:nowrap;">${s.count}条</span>
@@ -16947,8 +16986,16 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     }).join('');
                 }
             } else if (sList) {
-                sList.innerHTML = '<div style="padding:12px;text-align:center;color:#64748b;font-size:12px;">无法获取同步状态</div>';
+                sList.innerHTML = '<div style="padding:12px 18px;text-align:center;color:#64748b;font-size:12px;">无法获取同步状态</div>';
             }
+        }
+
+        function _dcFmtTime(iso) {
+            try {
+                if (!iso) return '';
+                const d = new Date(iso);
+                return d.toLocaleString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' });
+            } catch (e) { return ''; }
         }
 
         function _dcEsc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }

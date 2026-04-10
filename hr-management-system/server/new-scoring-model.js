@@ -275,6 +275,7 @@ async function getMonthlyAnomalyRollupAverageScore(username, period) {
   if (!year || !month) return 100;
   const startDate = `${year}-${month}-01`;
   const endDate = `${year}-${month}-${String(getDaysInPeriod(period)).padStart(2, '0')}`;
+  const monthKey = `${year}${String(month).padStart(2, '0')}`;
   const r = await pool().query(
     `SELECT COALESCE(SUM(total_score), 0)::numeric AS total,
             COUNT(*)::int AS week_count
@@ -282,9 +283,14 @@ async function getMonthlyAnomalyRollupAverageScore(username, period) {
      WHERE LOWER(TRIM(username)) = LOWER(TRIM($1))
        AND score_model = 'anomaly_rollups_v2'
        AND period LIKE 'week_%'
-       AND substring(period from 6 for 10)::date >= $2::date
-       AND substring(period from 6 for 10)::date <= $3::date`,
-    [username, startDate, endDate]
+       AND (
+         (POSITION('__' IN period) = 0
+           AND substring(period from 6 for 10)::date >= $2::date
+           AND substring(period from 6 for 10)::date <= $3::date)
+         OR
+         (POSITION('__' IN period) > 0 AND split_part(period, '__', 2) = $4)
+       )`,
+    [username, startDate, endDate, monthKey]
   );
   const total = Number(r.rows[0]?.total || 0);
   const weekCount = Number(r.rows[0]?.week_count || 0);
