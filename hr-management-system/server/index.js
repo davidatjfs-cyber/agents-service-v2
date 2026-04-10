@@ -6378,6 +6378,33 @@ function dailyReportItemFromPgRow(row) {
   };
 }
 
+/** 重算当月各日报行的 wechat_month_total（按日 running sum，修复「累计=当日」及补录后不一致） */
+async function recalcWechatMonthTotalsForStoreMonth(pool, store, anchorDate) {
+  const st = String(store || '').trim();
+  const ymd = String(anchorDate || '').slice(0, 10);
+  if (!st || ymd.length < 10) return;
+  const monthStart = `${ymd.slice(0, 7)}-01`;
+  try {
+    await pool.query(
+      `WITH sums AS (
+         SELECT date::date AS d,
+           SUM(COALESCE(new_wechat_members, 0)) OVER (ORDER BY date)::bigint AS cum
+         FROM daily_reports
+         WHERE TRIM(store) = TRIM($1::text)
+           AND date >= $2::date
+           AND date < ($2::date + INTERVAL '1 month')
+       )
+       UPDATE daily_reports dr
+       SET wechat_month_total = LEAST(2147483647, GREATEST(0, sums.cum))::int
+       FROM sums
+       WHERE TRIM(dr.store) = TRIM($1::text) AND dr.date::date = sums.d`,
+      [st, monthStart]
+    );
+  } catch (e) {
+    console.error('[wechat_month_total recalc]', e?.message);
+  }
+}
+
 // 本月包房累计（仅洪潮品牌）
 app.get('/api/daily-reports/private-room-month-total', authRequired, async (req, res) => {
   const store = String(req.query?.store || '').trim();
@@ -6470,7 +6497,7 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
           FROM daily_reports
           WHERE date >= $1::date AND date <= $2::date`;
         if (store) {
-          sql += ` AND TRIM(store) = $3`;
+          sql += ` AND TRIM(store) = TRIM($3::text)`;
           args.push(String(store).trim());
         }
         const pgR = await pool.query(sql, args);
@@ -6543,7 +6570,9 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
         const monthStart = date.slice(0, 7) + '-01';
         const monthEnd = date.slice(0, 7) + '-31';
         const baseR = await pool.query(
-          `SELECT COALESCE(SUM(new_wechat_members), 0) AS base FROM daily_reports WHERE store = $1 AND date >= $2 AND date <= $3 AND date <> $4`,
+          `SELECT COALESCE(SUM(new_wechat_members), 0) AS base
+           FROM daily_reports
+           WHERE TRIM(store) = TRIM($1::text) AND date >= $2::date AND date <= $3::date AND date <> $4::date`,
           [store, monthStart, monthEnd, date]
         );
         wechat_month_base = Number(baseR.rows?.[0]?.base || 0);
@@ -6708,15 +6737,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
           rechargeCount, rechargeAmount,
           weather, segments, discountDine, discountDelivery, categories, deliveryDetail, badReviewsDianping, staff, scheduleNextDay, photos
         ]);
-        // 重新计算本月累计并写回
-        const monthStart = date.slice(0, 7) + '-01';
-        await pool.query(`
-          UPDATE daily_reports SET wechat_month_total = (
-            SELECT COALESCE(SUM(new_wechat_members), 0)
-            FROM daily_reports
-            WHERE store = $1 AND date >= $2 AND date <= $3
-          ) WHERE store = $1 AND date = $3
-        `, [store, monthStart, date]);
+        await recalcWechatMonthTotalsForStoreMonth(pool, store, date);
       } catch (e) { console.error('[daily_report_update]', e.message); }
 
       if (wantSubmit || submittedAt) {
@@ -6838,16 +6859,8 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
         ]);
       } catch (e) { console.error('[daily_report_insert]', e.message); }
 
-      // 重新计算本月累计并写回
-      const monthStart = date.slice(0, 7) + '-01';
       try {
-        await pool.query(`
-          UPDATE daily_reports SET wechat_month_total = (
-            SELECT COALESCE(SUM(new_wechat_members), 0)
-            FROM daily_reports
-            WHERE store = $1 AND date >= $2 AND date <= $3
-          ) WHERE store = $1 AND date = $3
-        `, [store, monthStart, date]);
+        await recalcWechatMonthTotalsForStoreMonth(pool, store, date);
       } catch (e) { console.error('[daily_report_insert_month]', e.message); }
 
       shouldNotifySchedule = !!wantSubmit;

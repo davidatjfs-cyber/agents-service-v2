@@ -14,6 +14,7 @@ import { logger } from '../utils/logger.js';
 import { sendCard } from './feishu-client.js';
 import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
 import { getPMReportStatusByBizDate } from './pm-execution-report-coverage.js';
+import { sortFeishuScoringRows } from '../utils/scoring-assignee.js';
 
 // ─────────────────────────────────────────────
 // 1. 数据查询函数
@@ -27,17 +28,17 @@ async function getPMReportStatus(store, brand, date) {
 }
 
 /**
- * 获取洪潮店长昨日企微会员新增
- * @param {string} store - 门店名
- * @param {string} date - 日期 YYYY-MM-DD
- * @returns {Promise<number>}
+ * 洪潮店长执行力：企微会员为「当月累计至检查日（含）」口径，与月评 300+/A 一致；禁止用单日新增误判。
  */
-async function getHongchaoWechatMembers(store, date) {
+async function getHongchaoWechatMonthToDate(store, date) {
+  const monthStart = String(date || '').slice(0, 7) + '-01';
   const result = await query(
-    `SELECT COALESCE(SUM(new_wechat_members), 0) as total 
-     FROM daily_reports 
-     WHERE store ILIKE '%洪潮%' AND date = $1::date`,
-    [date]
+    `SELECT COALESCE(SUM(new_wechat_members), 0) AS total
+     FROM daily_reports
+     WHERE TRIM(store) = TRIM($1::text)
+       AND date >= $2::date
+       AND date <= $3::date`,
+    [store, monthStart, date]
   );
   return Number(result.rows[0]?.total || 0);
 }
@@ -76,6 +77,29 @@ async function getMajixianMeetingReport(store, date) {
     score,
     qualified: score >= 7
   };
+}
+
+/** 同一门店同岗位多人绑定时选 canonical（马己仙出品经理优先黎永荣/NNYXLYR04，压低 nnyxcs35） */
+function collapseExecutionRatingStaff(rows) {
+  const m = new Map();
+  for (const row of rows) {
+    const key = `${String(row.store || '').trim()}||${row.role}`;
+    const prev = m.get(key);
+    if (!prev) {
+      m.set(key, row);
+      continue;
+    }
+    if (row.role === 'store_production_manager' && /马己仙/.test(String(row.store || ''))) {
+      const [best] = sortFeishuScoringRows(row.store, 'store_production_manager', [
+        { username: prev.username, disp: prev.name, name: prev.name },
+        { username: row.username, disp: row.name, name: row.name }
+      ]);
+      m.set(key, best.username === row.username ? row : prev);
+    } else {
+      m.set(key, prev);
+    }
+  }
+  return [...m.values()];
 }
 
 // ─────────────────────────────────────────────
@@ -124,7 +148,12 @@ function evaluateMajixianManager(meeting) {
   if (meeting.qualified) {
     return { rating: 'A', score: meeting.score, qualified: true };
   }
-  return { rating: 'D', score: meeting.score, qualified: false, missing: `得分${meeting.score}分<7分` };
+  return {
+    rating: 'D',
+    score: meeting.score,
+    qualified: false,
+    missing: `例会不合格（得分${meeting.score}分，低于7分合格线）`
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -387,23 +416,21 @@ export async function runDailyExecutionRating(date) {
 
     logger.info({ date }, 'daily execution rating: starting');
 
-    // 获取所有需要检查的门店和人员
     const staffResult = await query(
-      `SELECT DISTINCT ON (store, role) 
-              fu.username, fu.name, fu.open_id, fu.role, fu.store,
-              CASE 
+      `SELECT fu.username, fu.name, fu.open_id, fu.role, fu.store,
+              CASE
                 WHEN fu.store ILIKE '%洪潮%' THEN '洪潮'
                 WHEN fu.store ILIKE '%马己仙%' THEN '马己仙'
                 ELSE '未知'
-              END as brand
+              END AS brand
        FROM feishu_users fu
-       WHERE fu.registered = true 
+       WHERE fu.registered = true
          AND fu.role IN ('store_manager', 'store_production_manager')
          AND fu.store IS NOT NULL AND fu.store != ''
-       ORDER BY store, role, fu.username`
+       ORDER BY fu.store, fu.role, fu.updated_at DESC NULLS LAST, fu.username`
     );
 
-    const staff = staffResult.rows || [];
+    const staff = collapseExecutionRatingStaff(staffResult.rows || []);
     if (!staff.length) {
       logger.warn('daily execution rating: no staff found');
       return { date, checked: 0, results: [] };
@@ -430,8 +457,8 @@ export async function runDailyExecutionRating(date) {
           }
         } else if (role === 'store_manager') {
           if (brand === '洪潮') {
-            // 洪潮店长：企微会员
-            const members = await getHongchaoWechatMembers(store, date);
+            // 洪潮店长：企微会员（当月累计，与月评口径一致）
+            const members = await getHongchaoWechatMonthToDate(store, date);
             const eval_ = evaluateHongchaoManager(members);
             rating = eval_.rating;
             missing = eval_.rating === 'D' ? ['企微会员新增不足'] : [];

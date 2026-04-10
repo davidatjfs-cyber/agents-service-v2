@@ -18,6 +18,7 @@ import {
   shanghaiWeekMonSunContaining,
   addDaysYmdShanghai
 } from '../utils/anomaly-week-bounds.js';
+import { sortFeishuScoringRows, resolveMajixianProductionManagersForScoring } from '../utils/scoring-assignee.js';
 
 const CAT_ZH = {
   revenue_anomaly: '营收/实收异常',
@@ -209,6 +210,9 @@ function previousWeekMonday() {
  * 须每人写入一行 agent_scores，否则汇总里会漏人且他人被误算成「唯一负责人」。
  */
 async function resolveScoringUsers(store, role) {
+  if (role === 'store_production_manager' && /马己仙/.test(String(store || ''))) {
+    return resolveMajixianProductionManagersForScoring(store);
+  }
   try {
     const r = await query(
       `SELECT username, COALESCE(NULLIF(TRIM(name),''), username) AS disp
@@ -218,7 +222,7 @@ async function resolveScoringUsers(store, role) {
        ORDER BY updated_at DESC NULLS LAST`,
       [store, role]
     );
-    const rows = r.rows || [];
+    const rows = sortFeishuScoringRows(store, role, r.rows || []);
     if (rows.length) {
       const seen = new Set();
       const out = [];

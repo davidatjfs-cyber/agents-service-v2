@@ -7,6 +7,7 @@ import { logger } from '../utils/logger.js';
 import { ensureHrmsUserNotificationsTable } from '../utils/hrms-user-notifications.js';
 import { getBrandForStore } from './config-service.js';
 import { sendCard, buildBiBonusCard } from './feishu-client.js';
+import { resolveSingleScoringUser } from '../utils/scoring-assignee.js';
 
 function pad(n) {
   return String(n).padStart(2, '0');
@@ -35,26 +36,6 @@ function shanghaiPrevMonthBounds() {
 
 function isJiuguangStore(store) {
   return /(大宁久光|洪潮久光)/.test(String(store || ''));
-}
-
-async function resolveScoringUser(store, role) {
-  try {
-    const r = await query(
-      `SELECT username, COALESCE(NULLIF(TRIM(name),''), username) AS disp
-       FROM feishu_users
-       WHERE registered = true AND role = $2
-         AND (store = $1 OR $1 ILIKE '%' || store || '%' OR store ILIKE '%' || $1 || '%')
-       ORDER BY updated_at DESC NULLS LAST
-       LIMIT 1`,
-      [store, role]
-    );
-    const row = r.rows?.[0];
-    if (row?.username) return { username: row.username, name: row.disp || row.username };
-  } catch (_e) {
-    /* ignore */
-  }
-  if (role === 'store_manager') return { username: '__periodic_store_manager__', name: '店长(周度自动·未绑定)' };
-  return { username: '__periodic_kitchen__', name: '出品经理(周度自动·未绑定)' };
 }
 
 async function hadTriggerInRange(store, keys, start, end) {
@@ -197,7 +178,7 @@ async function applyBonusForUser(p) {
   }
   if (bonus <= 0) return { store, role, bonus: 0 };
 
-  const { username, name } = await resolveScoringUser(store, role);
+  const { username, name } = await resolveSingleScoringUser(store, role);
   const period = `monthbonus_${label}`;
   const summary = `月度异常项未触发加分（${label}）：共 ${additions.length} 项，+${bonus} 分`;
 
@@ -206,13 +187,14 @@ async function applyBonusForUser(p) {
   await query(
     `INSERT INTO agent_scores (
        brand, store, username, name, role, period, score_model,
-       base_score, total_score, additions, deductions, breakdown, summary
-     ) VALUES ($1,$2,$3,$4,$5,$6,'anomaly_item_monthly_bonus',100,$7,$8::jsonb,'[]'::jsonb,$9::jsonb,$10)
+       total_score, additions, deductions, breakdown, summary
+     ) VALUES ($1,$2,$3,$4,$5,$6,'anomaly_item_monthly_bonus',$7,$8::jsonb,'[]'::jsonb,$9::jsonb,$10)
      ON CONFLICT (brand, store, username, period)
      DO UPDATE SET
        total_score = EXCLUDED.total_score,
        additions = EXCLUDED.additions,
        summary = EXCLUDED.summary,
+       name = COALESCE(NULLIF(TRIM(EXCLUDED.name), ''), agent_scores.name),
        updated_at = NOW()`,
     [
       brand,

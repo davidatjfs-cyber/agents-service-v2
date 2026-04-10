@@ -170,10 +170,10 @@ async function getHongchaoManagerExecutionRating(store, period) {
   const endDate = `${year}-${month}-31`;
 
   const result = await query(
-    `SELECT COALESCE(SUM(new_wechat_members), 0) as total
-     FROM daily_reports 
-     WHERE store ILIKE '%洪潮%' AND date >= $1::date AND date <= $2::date`,
-    [startDate, endDate]
+    `SELECT COALESCE(SUM(new_wechat_members), 0) AS total
+     FROM daily_reports
+     WHERE TRIM(store) = TRIM($1::text) AND date >= $2::date AND date <= $3::date`,
+    [store, startDate, endDate]
   );
 
   const totalMembers = Number(result.rows[0]?.total || 0);
