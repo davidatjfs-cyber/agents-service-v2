@@ -36,6 +36,7 @@ import { safeExecute, safeErrorLog } from './utils/error-handler.js';
 import { handleMarginMessage } from './margin-message-handler.js';
 import { deduplicateMessage } from './message-deduplication.js';
 import { getOpsAgentConfig, getBiAgentConfig, getCategoryAssigneeRoleMap, AGENT_FEATURE_FLAGS } from './agent-config-manager.js';
+import { cronJobLabelZh } from './cron-job-label-zh.js';
 import { buildSalesReport } from './bi-sales-detail.js';
 import {
   generateWeeklyReport,
@@ -3268,6 +3269,11 @@ export async function ensureAgentTables() {
     await runMig('010_hrms_perf_notifications.sql');
   } catch (e) {
     console.error('[agents] ensureAgentTables 010 failed:', e?.message || e);
+  }
+  try {
+    await runMig('012_agent_scores_base_score.sql');
+  } catch (e) {
+    console.error('[agents] ensureAgentTables 012 failed:', e?.message || e);
   }
 }
 
@@ -11150,7 +11156,10 @@ export function registerAgentRoutes(app, authRequired) {
           rowCount: Number(perfRollupR.rows?.[0]?.rollup_rows || 0)
         },
         adminAlerts: alertsR.rows || [],
-        cronRuns: cronR.rows || []
+        cronRuns: (cronR.rows || []).map((row) => ({
+          ...row,
+          job_label_zh: cronJobLabelZh(row.job_key)
+        }))
       });
     } catch (e) {
       return res.status(500).json({ error: String(e?.message || e) });

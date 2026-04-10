@@ -8579,7 +8579,7 @@
                             <div style="padding:12px 18px;text-align:center;color:#64748b;font-size:12px;">加载中...</div>
                         </div>
                         <div style="padding:0 0 12px;">
-                            <div style="padding:8px 18px 4px;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.06em;">定时任务</div>
+                            <div style="padding:8px 18px 4px;font-size:11px;font-weight:600;color:#64748b;letter-spacing:.04em;">定时任务（最近运行）</div>
                             <div id="dc-cron-body" style="padding:0 12px 8px;max-height:220px;overflow-y:auto;font-size:11px;"></div>
                         </div>
                     </section>
@@ -16987,15 +16987,16 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 } else if (!brief.cronRuns.length) {
                     cronBody.innerHTML = '<div style="padding:8px 6px;color:#64748b;">暂无 cron 运行记录（表未创建或无数据）。</div>';
                 } else {
-                    const jobZh = { weekly_store_scoring: '周度门店评分', daily_bi_anomaly: '日频BI异常', food_safety_daily_scan: '食安日扫' };
                     cronBody.innerHTML = brief.cronRuns.map(c => {
                         const ok = c.ok === true;
-                        const label = jobZh[c.job_key] || c.job_key;
+                        const label = c.job_label_zh || c.job_key;
+                        const statusZh = ok ? '成功' : _dcEsc(c.error_preview || '失败');
+                        const tip = ok ? '' : String(c.error_preview || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
                         return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid rgba(148,163,184,0.05);">
                             <span style="width:7px;height:7px;border-radius:50%;background:${ok ? '#22c55e' : '#ef4444'};flex-shrink:0;"></span>
                             <span style="flex:1;min-width:0;color:#cbd5e1;">${_dcEsc(label)}</span>
                             <span style="color:#64748b;white-space:nowrap;">${_dcEsc(c.run_ymd || '')}</span>
-                            <span style="color:#475569;font-size:10px;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${ok ? 'ok' : _dcEsc(c.error_preview || 'fail')}</span>
+                            <span style="color:#475569;font-size:10px;max-width:200px;overflow:hidden;text-overflow:ellipsis;" title="${tip}">${statusZh}</span>
                         </div>`;
                     }).join('');
                 }
