@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * 核验 BI「桌访产品异常」与 chat/KPI 同源口径：
- * - fetchMergedTableVisitEntries + tableVisitEntryIsDissatisfied
- * - dissatisfactionDishFromMergedEntry（优先「今天不满意的菜品」）
- * - dissatisfactionMainReasonFromEntry（优先「不满意的主要原因是什么」）
- * - checkTableVisitProduct 汇总结果（上周一至上周日，上海自然周）
+ * 核验 BI「桌访产品异常」口径（与聊天宽口径区分）：
+ * - fetchMergedTableVisitEntries（上周一～上周日）
+ * - tableVisitEntryEligibleForTableVisitProductBi + dissatisfactionDishForTableVisitProductBi（仅「今天不满意菜品」列）
+ * - dissatisfactionMainReasonFromEntry
+ * - checkTableVisitProduct
  *
  * 用法：
  *   cd agents-service-v2 && DATABASE_URL=... node scripts/verify-table-visit-product-bi.mjs "马己仙上海音乐广场店"
@@ -15,8 +15,8 @@ import { checkTableVisitProduct } from '../src/services/anomaly-engine.js';
 import {
   ext,
   fetchMergedTableVisitEntries,
-  tableVisitEntryIsDissatisfied,
-  dissatisfactionDishFromMergedEntry,
+  tableVisitEntryEligibleForTableVisitProductBi,
+  dissatisfactionDishForTableVisitProductBi,
   dissatisfactionMainReasonFromEntry,
   isPositiveTableVisitSatisfaction
 } from '../src/services/deterministic-replies.js';
@@ -40,33 +40,31 @@ async function main() {
 
   const { weekStart, weekEnd } = shanghaiLastCompletedWeekBounds();
   const entries = await fetchMergedTableVisitEntries(store, weekStart, weekEnd);
-  const dissatisfied = entries.filter(tableVisitEntryIsDissatisfied);
+  const dissatisfiedBi = entries.filter(tableVisitEntryEligibleForTableVisitProductBi);
 
   const perRow = entries.map((e, i) => {
     const f = e.fields && typeof e.fields === 'object' ? e.fields : {};
     const sat = String(e.sat || ext(f['今天用餐是否满意']) || ext(f['满意度']) || '').trim();
-    const dishCol = ext(
-      f['今天不满意的菜品'] || f['今天 不满意菜品'] || f['今天不满意菜品'] || ''
-    );
+    const dishColStrict = ext(f['今天不满意菜品'] || f['今天 不满意菜品'] || '');
     const satPos = sat ? isPositiveTableVisitSatisfaction(sat) : false;
-    const mergedD = dissatisfactionDishFromMergedEntry(e) || '';
+    const biDish = dissatisfactionDishForTableVisitProductBi(e) || '';
     return {
       n: i + 1,
-      isDissatisfied: tableVisitEntryIsDissatisfied(e),
+      eligibleBi: tableVisitEntryEligibleForTableVisitProductBi(e),
       sat: snippet(sat, 40),
       satPositive: sat ? satPos : null,
-      feishuUnsatDishField: snippet(dishCol, 60),
-      mergedDishLine: snippet(mergedD, 80),
+      biColumn今天不满意菜品: snippet(dishColStrict, 60),
+      biDishLine: snippet(biDish, 80),
       mergedReason: snippet(dissatisfactionMainReasonFromEntry(e), 80),
       entryDishFallback: snippet(e.dish || '', 60)
     };
   });
 
-  // 只看「明确满意却仍带不满意菜品」的假阳性；有菜无原因/未填满意度而排除属正常口径
+  // 明确满意却仍填「今天不满意菜品」的假阳性
   const suspicious = perRow.filter((r) => {
-    if (r.isDissatisfied) return false;
+    if (r.eligibleBi) return false;
     if (r.satPositive !== true) return false;
-    const d = String(r.mergedDishLine || '').replace(/…$/,'').trim();
+    const d = String(r.biDishLine || '').replace(/…$/, '').trim();
     return d.length >= 2;
   });
 
@@ -77,7 +75,7 @@ async function main() {
     window: { weekStart, weekEnd },
     totals: {
       mergedEntries: entries.length,
-      dissatisfiedRows: dissatisfied.length,
+      dissatisfiedRowsBi: dissatisfiedBi.length,
       suspiciousPositiveSatWithUnhappyDish: suspicious.length
     },
     biTableVisitProduct: {
@@ -87,9 +85,9 @@ async function main() {
       products: biResult.value?.products || [],
       threshold: biResult.threshold
     },
-    dissatisfiedBreakdown: dissatisfied.map((e, i) => ({
+    dissatisfiedBreakdownBi: dissatisfiedBi.map((e, i) => ({
       n: i + 1,
-      dish: dissatisfactionDishFromMergedEntry(e),
+      dish: dissatisfactionDishForTableVisitProductBi(e),
       reason: dissatisfactionMainReasonFromEntry(e)
     })),
     suspiciousPreview: suspicious.slice(0, 25)
@@ -102,15 +100,15 @@ async function main() {
     console.log(`门店: ${store}`);
     console.log(`统计窗口(上周自然周): ${weekStart} ~ ${weekEnd}`);
     console.log(`合并桌访条数: ${out.totals.mergedEntries}`);
-    console.log(`计为「不满意」条数: ${out.totals.dissatisfiedRows}`);
+    console.log(`计为「不满意」(BI·仅今天不满意菜品列)条数: ${out.totals.dissatisfiedRowsBi}`);
     console.log(`可疑(满意度为正向却仍带不满意菜品): ${out.totals.suspiciousPositiveSatWithUnhappyDish}`);
     console.log('\n--- checkTableVisitProduct 结果 ---');
     console.log(`triggered: ${biResult.triggered}  severity: ${biResult.severity || '—'}`);
     console.log(`detail: ${biResult.detail}`);
     console.log('products:', JSON.stringify(biResult.value?.products || [], null, 2));
-    if (out.dissatisfiedBreakdown.length) {
-      console.log('\n--- 计入不满意汇总明细(前30条) ---');
-      out.dissatisfiedBreakdown.slice(0, 30).forEach((x) => {
+    if (out.dissatisfiedBreakdownBi.length) {
+      console.log('\n--- 计入 BI 不满意汇总明细(前30条) ---');
+      out.dissatisfiedBreakdownBi.slice(0, 30).forEach((x) => {
         console.log(`  ${x.n}. 菜品: ${snippet(x.dish, 100)} | 原因: ${snippet(x.reason, 100)}`);
       });
     }
@@ -124,7 +122,7 @@ async function main() {
   const ok =
     out.totals.suspiciousPositiveSatWithUnhappyDish === 0 || process.env.VERIFY_ALLOW_SUSPICIOUS === '1';
   if (!ok) {
-    console.error('\n[verify] FAIL: 存在「满意度为正向却仍带不满意菜品」记录，请核对飞书满意度与「今天不满意的菜品」。');
+    console.error('\n[verify] FAIL: 存在「满意度为正向却仍填今天不满意菜品」记录，请核对飞书满意度与该列。');
     process.exit(2);
   }
 }

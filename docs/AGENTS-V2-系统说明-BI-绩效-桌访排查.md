@@ -145,7 +145,7 @@
 | `revenue_achievement` | 实收营收异常 | **weekly**（与 patrol/周报调度一致） |
 | `labor_efficiency` | 人效值异常 | **weekly** |
 | `recharge_zero` | 充值异常 | **daily** |
-| `table_visit_product` | 桌访产品异常 | **weekly**（周度扣分按**产品维度分别计分后相加**：单产品≥4次10分、≥2次5分；多产品触线则累加，与 `anomaly-engine.checkTableVisitProduct` + `periodic-scoring.mergeTableVisitProductWeekDeduction` 一致） |
+| `table_visit_product` | 桌访产品异常 | **weekly**（**每周一 05:00** 上海跑周频 BI；窗口 **仅上周一～周日** `shanghaiLastCompletedWeekBounds`；菜名**仅**来自「今天不满意菜品」列，见 `dissatisfactionDishForTableVisitProductBi`；扣分按产品维度累计） |
 | `table_visit_ratio` | 桌访占比异常 | **weekly** |
 | `gross_margin` | 毛利率异常 | **monthly** |
 | `bad_review_product` | 差评产品异常 | **weekly** |

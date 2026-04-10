@@ -10,8 +10,8 @@ import { enqueueNotifyJob, enqueueCollabJob } from './anomaly-queue.js';
 import { runBiAnomalyNotifyPipeline } from './anomaly-notify-pipeline.js';
 import {
   fetchMergedTableVisitEntries,
-  tableVisitEntryIsDissatisfied,
-  dissatisfactionDishFromMergedEntry,
+  tableVisitEntryEligibleForTableVisitProductBi,
+  dissatisfactionDishForTableVisitProductBi,
   fetchActualGrossMarginForStorePeriod,
   visitEntryStoreMatches
 } from './deterministic-replies.js';
@@ -305,9 +305,9 @@ export async function checkRechargeZero(store) {
 
 // ─── 4. 桌访产品异常 ───
 /**
- * 与飞书问答「桌访」同源：fetchMergedTableVisitEntries（table_visit_records + feishu_generic_records 去重）。
- * 仅统计「今天不满意的菜品」类字段中的菜品，且行须被 tableVisitEntryIsDissatisfied 命中
- * （满意度为好则排除；未填满意度时须「不满意菜品 + 不满意的主要原因」同时成立，或与 V2 一致）。
+ * 周频 BI 仅在**每周一**调度（rhythm-engine 05:00 上海）；窗口为 **shanghaiLastCompletedWeekBounds() = 上周一～上周日**（不以「本周」为锚）。
+ * 菜品名**严格**取自桌访表/多维表独立列「今天不满意菜品」（及「今天 不满意菜品」空格变体），见 dissatisfactionDishForTableVisitProductBi；
+ * 不读取其它「不满意」类列名，不回落 e.dish。行须 tableVisitEntryEligibleForTableVisitProductBi（满意度为好则排除；未填满意度时须本列有菜名且有不满意主要原因）。
  */
 export async function checkTableVisitProduct(store) {
   const { weekStart: startDate, weekEnd: endDate } = shanghaiLastCompletedWeekBounds();
@@ -319,10 +319,9 @@ export async function checkTableVisitProduct(store) {
     return { triggered: false, detail: `桌访产品检测异常: ${err.message}` };
   }
 
-  // 仅统计「真实不满意」记录上的结构化菜品（与问答侧 tableVisitEntryIsDissatisfied 同源）
   const byCanon = new Map();
-  for (const e of entries.filter(tableVisitEntryIsDissatisfied)) {
-    const raw = String(dissatisfactionDishFromMergedEntry(e) || '').trim();
+  for (const e of entries.filter(tableVisitEntryEligibleForTableVisitProductBi)) {
+    const raw = String(dissatisfactionDishForTableVisitProductBi(e) || '').trim();
     if (!raw) continue;
     // 拆分：支持中英文逗号、顿号、斜杠作为分隔符
     const dishes = raw.split(/[,，、\/]/).map((s) => s.trim()).filter(Boolean);
@@ -339,7 +338,12 @@ export async function checkTableVisitProduct(store) {
     .sort((a, b) => b.cnt - a.cnt)
     .map((p) => ({ complaint: p.complaint, cnt: String(p.cnt) }));
 
-  if (productsAll.length === 0) return { triggered: false, detail: '本窗口无结构化「问题菜品」记录' };
+  if (productsAll.length === 0) {
+    return {
+      triggered: false,
+      detail: `本窗口（${startDate}~${endDate}，上周）无「今天不满意菜品」列可统计的有效记录；请确认飞书/同步字段名与该列一致。`
+    };
+  }
 
   /** 周度绩效扣分：按产品维度分别计分后相加（≥4次10分，≥2次5分；多产品分别触发则累加，如4个产品各≥2次共20分） */
   const productsScored = [];
@@ -382,7 +386,7 @@ export async function checkTableVisitProduct(store) {
       window: `${startDate}~${endDate}`,
       weekStart: startDate,
       weekEnd: endDate,
-      dataSource: 'merged_table_visit_same_as_chat'
+      dataSource: 'merged_table_visit_bi_strict_field_今天不满意菜品_last_completed_week'
     },
     threshold: {
       medium: '单产品≥2次：该产品扣5分（多产品分别计）',

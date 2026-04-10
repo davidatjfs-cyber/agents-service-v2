@@ -144,17 +144,13 @@ export const ANOMALY_RULES = [
     dataSource: {
       table: 'table_visit_records + feishu_generic_records（与聊天「桌访」合并去重，同源）',
       fields: [
-        '今天不满意的菜品',
-        'dissatisfaction_dish',
-        '今天有问题的菜品',
-        '今天不满意菜品',
-        '今天 不满意菜品',
-        '不满意菜品',
-        '产品不满意项',
-        '不满意的主要原因是什么'
+        '今天不满意菜品（BI 唯一计分来源；飞书列名须与此一致，或经入库写入 fields 同名键）',
+        '今天 不满意菜品（唯一允许的空格变体）',
+        'dissatisfaction_dish（仅经 syntheticFieldsFromStructuredRow 映射到「今天不满意菜品」后参与 BI）',
+        '不满意的主要原因是什么（与菜品列联判「不满意」行，规则见 deterministic-replies）'
       ],
       calc:
-        '上海「上周一～上周日」窗口；按结构化菜品名统计次数。周度绩效扣分：每个触线产品单独计分——该周同一产品≥4次扣10分，≥2次扣5分（4次档不叠加5分）；多个产品分别触线则扣分相加（例：4个产品各≥2次→20分）。'
+        '调度：每周一 05:00（Asia/Shanghai）周频 BI。窗口：shanghaiLastCompletedWeekBounds = 仅「上周一～上周日」。菜品名仅拆分「今天不满意菜品」列内容；周度扣分按产品维度累计（≥4→10，≥2→5）。'
     },
     assignTo: { role: 'ops', title: '运营' },
     notifyTarget: { role: 'kitchen_manager', title: '出品经理' },

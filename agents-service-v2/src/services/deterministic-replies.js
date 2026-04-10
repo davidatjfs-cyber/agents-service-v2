@@ -259,6 +259,48 @@ export function dissatisfactionDishFromMergedEntry(e) {
   return String(e?.dish || '').trim();
 }
 
+/**
+ * 桌访产品异常（BI 周度）专用：**只**读桌访表/多维表独立列「今天不满意菜品」（及「今天 不满意菜品」空格变体）。
+ * 不读「今天不满意的菜品」等其它列名，不回落 e.dish，避免与「喜欢的菜」等字段混用；问答侧仍用 dissatisfactionDishFromMergedEntry。
+ * 结构化表 `dissatisfaction_dish` 经 syntheticFieldsFromStructuredRow 会写入 fields['今天不满意菜品']，与飞书同源合并后仍走此键。
+ */
+export function dissatisfactionDishForTableVisitProductBi(e) {
+  const o = e?.fields && typeof e.fields === 'object' ? e.fields : {};
+  const a = ext(o['今天不满意菜品'] ?? '').trim();
+  if (a) return a;
+  const b = ext(o['今天 不满意菜品'] ?? '').trim();
+  if (b) return b;
+  return '';
+}
+
+/**
+ * 桌访产品异常（BI）是否计为「不满意」：与 tableVisitEntryIsDissatisfied 同逻辑，但**菜品文本仅**来自「今天不满意菜品」列（见上）。
+ */
+export function tableVisitEntryEligibleForTableVisitProductBi(e) {
+  const f = e?.fields && typeof e.fields === 'object' ? e.fields : {};
+  const satRaw = String(
+    (e && e.sat != null && String(e.sat).trim() !== '') ? e.sat : ext(f['今天用餐是否满意'] || f['满意度'] || '')
+  ).trim();
+  if (satRaw && isPositiveTableVisitSatisfaction(satRaw)) return false;
+
+  const rawDish = dissatisfactionDishForTableVisitProductBi(e);
+  const blocked = new Set(['无', '没有', '暂无', '不清楚', '未知', '其他', '无菜品', '/', '-', '—', '无。', 'none', 'n/a', 'N/A']);
+  const parts = String(rawDish || '')
+    .split(/[,，、/]/)
+    .map((x) => x.trim())
+    .filter((x) => x && !blocked.has(x));
+
+  const reason = String(dissatisfactionMainReasonFromEntry(e) || '').trim();
+  const reasonMeaningful =
+    reason.length >= 2 && !/^(无|没有|暂无|不详|未知|-|—|你好|谢谢|ok|OK)$/i.test(reason);
+
+  if (satRaw && /不满意|很差|糟糕|差劲|^否$/i.test(satRaw) && !isPositiveTableVisitSatisfaction(satRaw)) {
+    return parts.length > 0 || reasonMeaningful;
+  }
+
+  return parts.length > 0 && reasonMeaningful;
+}
+
 /** 不满意主要原因：与业务表「不满意的主要原因是什么」对齐 */
 export function dissatisfactionMainReasonFromEntry(e) {
   const f = e?.fields && typeof e.fields === 'object' ? e.fields : {};
