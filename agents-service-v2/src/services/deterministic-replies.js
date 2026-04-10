@@ -374,6 +374,125 @@ export function materialReceiptFieldsIndicateAnomaly(fields) {
   return false;
 }
 
+function ymdAddDaysMaterialQuery(ymd, deltaDays) {
+  const parts = String(ymd || '')
+    .split('-')
+    .map((x) => parseInt(x, 10));
+  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return String(ymd || '');
+  const [y, m, d] = parts;
+  const u = Date.UTC(y, m - 1, d + deltaDays);
+  return new Date(u).toISOString().slice(0, 10);
+}
+
+function storeMatchesRowWithAliases(displayStore, rowStoreRaw) {
+  const rowStore = ext(rowStoreRaw);
+  if (!rowStore) return false;
+  const labels = expandAgentStoreLabels(displayStore);
+  return labels.some((lab) => sameStore(rowStore, lab));
+}
+
+function materialBrandOkForStoreChat(agentData, displayStore) {
+  const b = String(agentData?.brand || '').trim();
+  if (!b) return true;
+  const s = String(displayStore || '');
+  if (/马己仙/.test(s)) return b === '马己仙';
+  if (/洪潮/.test(s)) return b === '洪潮';
+  return true;
+}
+
+function materialRowHasAnomalyUnified(f) {
+  if (materialReceiptFieldsIndicateAnomaly(f)) return true;
+  const qc = ext(f?.quality_check || f['质量检查']);
+  const t = String(qc || '').trim();
+  if (!t || /^[-—－\s]+$/.test(t)) return false;
+  const compact = t.replace(/\s/g, '');
+  if (/^(正常|合格|良好|无异常|OK|ok|无|暂无)+$/i.test(compact)) return false;
+  if (/异常|不合格|拒收|变质|损坏|问题|缺/.test(t)) return true;
+  return t.length > 1;
+}
+
+/**
+ * 原料收货：`agent_messages.material_report`（飞书 bitable 轮询写入），门店用 `expandAgentStoreLabels` 对齐别名。
+ */
+export async function queryMaterialReportRowsFromAgentMessages(displayStore, startYmd, endYmd) {
+  const s = String(displayStore || '').trim();
+  const lo = String(startYmd || '').trim();
+  const hi = String(endYmd || '').trim();
+  if (!s || !lo || !hi) return [];
+  const caLo = ymdAddDaysMaterialQuery(lo, -45);
+  const caHi = ymdAddDaysMaterialQuery(hi, 45);
+  try {
+    const r = await query(
+      `SELECT agent_data, created_at FROM agent_messages
+       WHERE content_type = 'material_report'
+         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date
+         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date`,
+      [caLo, caHi]
+    );
+    const out = [];
+    for (const row of r.rows || []) {
+      const ad = row.agent_data && typeof row.agent_data === 'object' ? row.agent_data : {};
+      if (!materialBrandOkForStoreChat(ad, s)) continue;
+      const fields = ad.fields || {};
+      if (!storeMatchesRowWithAliases(s, fields.store)) continue;
+      const biz = resolveBitableBusinessYmd(fields.date, row.created_at);
+      if (!biz || biz < lo || biz > hi) continue;
+      out.push({ f: fields, ca: row.created_at });
+    }
+    return out;
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'queryMaterialReportRowsFromAgentMessages');
+    return [];
+  }
+}
+
+/** data_auditor 等：按门店 + 业务日区间输出原料收货明细（优先 agent_messages，兜底 feishu_generic_records） */
+export async function buildMaterialReportReplyForDateRange(store, startYmd, endYmd) {
+  const s = String(store || '').trim();
+  if (!s || !startYmd || !endYmd) return '';
+  let rows = await queryMaterialReportRowsFromAgentMessages(s, startYmd, endYmd);
+  if (!rows.length) {
+    try {
+      const r = await query(
+        `SELECT fields, created_at FROM feishu_generic_records
+         WHERE config_key LIKE 'material_%'
+         ORDER BY updated_at DESC
+         LIMIT 3000`
+      );
+      rows = (r.rows || [])
+        .map((row) => ({
+          f: row.fields && typeof row.fields === 'object' ? row.fields : {},
+          ca: row.created_at
+        }))
+        .filter((x) => {
+          if (!storeMatchesRowWithAliases(s, x.f['所属门店'] || x.f['门店'])) return false;
+          const d = bitableDate(x.f['收货日期'] || x.f['日期'], x.ca);
+          return d && inRange(d, startYmd, endYmd);
+        });
+    } catch (e) {
+      logger.warn({ err: e?.message }, 'buildMaterialReportReplyForDateRange feishu fallback');
+    }
+  }
+  if (!rows.length) {
+    return `当前门店「${s}」在${startYmd}～${endYmd}内暂无原料收货报告数据。`;
+  }
+  const lines = [`【数据来源:原料收货日报】共${rows.length}条。`, ''];
+  rows.slice(0, 15).forEach((row, i) => {
+    const f = row.f || {};
+    const d =
+      resolveBitableBusinessYmd(f.date, row.ca) ||
+      bitableDate(f['收货日期'] || f['日期'], row.ca) ||
+      String(row.ca || '').slice(0, 10);
+    const item =
+      ext(f.material_name) || ext(f['原料名称']) || ext(f['品名']) || ext(f['异常原料名称']) || '';
+    const qty = ext(f.quantity) || ext(f['数量']) || '';
+    const amt = ext(f.total_price) || ext(f['总价']) || ext(f['金额']) || '';
+    const supplier = ext(f.supplier) || ext(f['供应商']) || '';
+    lines.push(`${i + 1}. ${d} ${item} ${qty}${amt ? ' ¥' + amt : ''} ${supplier}`.trim());
+  });
+  return lines.join('\n');
+}
+
 export function resolveDateRange(text, dd = 7) {
   const q = String(text||'').trim();
   const now = new Date();
@@ -1345,31 +1464,57 @@ async function buildMeetingReportReply(store, text) {
 // ── 6. Material Report (原料收货) ────────────────────
 
 async function buildMaterialReportReply(store, text) {
-  const q = String(text||'').trim(), s = String(store||'').trim();
+  const q = String(text || '').trim();
+  const s = String(store || '').trim();
   if (!s) return '';
   if (!/(原料|收货|食材|进货|供应商|原材料)/.test(q)) return '';
   const p = resolveDateRange(q, 7);
   try {
-    const r = await query(`SELECT fields, created_at FROM feishu_generic_records WHERE config_key LIKE 'material_%' ORDER BY updated_at DESC LIMIT 3000`);
-    const all = (r.rows||[]).map(row => ({ f: row.fields && typeof row.fields==='object' ? row.fields : {}, ca: row.created_at }));
-    const matched = all.filter(x => sameStore(ext(x.f['所属门店']||x.f['门店']), s));
-    const rows = matched.filter(x => {
-      const d = bitableDate(x.f['收货日期']||x.f['日期'], x.ca);
-      return d && inRange(d, p.start, p.end);
-    });
-    if (!rows.length) return `${p.label}原料收货日报（${s}）：0条记录。该时间段暂无原料异常数据入库。`;
-    const hasIssue = rows.filter((x) => materialReceiptFieldsIndicateAnomaly(x.f));
+    let rows = await queryMaterialReportRowsFromAgentMessages(s, p.start, p.end);
+    if (!rows.length) {
+      const r = await query(
+        `SELECT fields, created_at FROM feishu_generic_records
+         WHERE config_key LIKE 'material_%'
+         ORDER BY updated_at DESC
+         LIMIT 3000`
+      );
+      rows = (r.rows || [])
+        .map((row) => ({
+          f: row.fields && typeof row.fields === 'object' ? row.fields : {},
+          ca: row.created_at
+        }))
+        .filter((x) => {
+          if (!storeMatchesRowWithAliases(s, x.f['所属门店'] || x.f['门店'])) return false;
+          const d = bitableDate(x.f['收货日期'] || x.f['日期'], x.ca);
+          return d && inRange(d, p.start, p.end);
+        });
+    }
+    if (!rows.length) {
+      return `${p.label}原料收货日报（${s}）：0条记录。该时间段暂无原料收货数据入库（已查 agent_messages 与飞书同步表）。`;
+    }
+    const hasIssue = rows.filter((x) => materialRowHasAnomalyUnified(x.f));
     const matTop = new Map();
-    hasIssue.forEach(x => { const n = ext(x.f['异常原料名称']); if (n) matTop.set(n,(matTop.get(n)||0)+1); });
+    hasIssue.forEach((x) => {
+      const n = ext(x.f['异常原料名称'] || x.f.material_name || x.f['原料名称']);
+      if (n) matTop.set(n, (matTop.get(n) || 0) + 1);
+    });
     const sevTop = new Map();
-    hasIssue.forEach(x => { const sv = ext(x.f['严重情况']); if (sv) sevTop.set(sv,(sevTop.get(sv)||0)+1); });
-    return [`${p.label}原料收货日报（${s}）`,
+    hasIssue.forEach((x) => {
+      const sv = ext(x.f['严重情况']);
+      if (sv) sevTop.set(sv, (sevTop.get(sv) || 0) + 1);
+    });
+    return [
+      `${p.label}原料收货日报（${s}）`,
       `- 收货记录：${rows.length}条`,
       `- 异常记录：${hasIssue.length}条`,
-      `- 异常原料Top：${topN(matTop,5).map(([k,v])=>`${k}(${v}次)`).join('、')||'无'}`,
-      `- 严重程度：${Array.from(sevTop.entries()).map(([k,v])=>`${k}(${v})`).join('、')||'无'}`
+      `- 异常原料Top：${topN(matTop, 5).map(([k, v]) => `${k}(${v}次)`).join('、') || '无'}`,
+      `- 严重程度：${Array.from(sevTop.entries())
+        .map(([k, v]) => `${k}(${v})`)
+        .join('、') || '无'}`
     ].join('\n');
-  } catch(e) { return `原料收货日报查询失败：${e?.message||'未知错误'}`; }
+  } catch (e) {
+    return `原料收货日报查询失败：${e?.message || '未知错误'}`;
+  }
 }
 
 // ── 7. Bad Review (差评) ─────────────────────────────
@@ -1678,27 +1823,30 @@ export async function buildMaterialBriefingBlock(store, ymd) {
   const day = String(ymd || '').trim();
   if (!s || !day) return '';
   try {
-    const r = await query(
-      `SELECT fields, created_at FROM feishu_generic_records
-       WHERE config_key LIKE 'material_%'
-       ORDER BY updated_at DESC
-       LIMIT 3000`
-    );
-    const rows = filterFeishuRowsByStoreAndDate(
-      r.rows || [],
-      s,
-      day,
-      [(f) => f['所属门店'] || f['门店']],
-      [(f) => f['收货日期'] || f['日期']]
-    );
+    let rows = await queryMaterialReportRowsFromAgentMessages(s, day, day);
+    if (!rows.length) {
+      const r = await query(
+        `SELECT fields, created_at FROM feishu_generic_records
+         WHERE config_key LIKE 'material_%'
+         ORDER BY updated_at DESC
+         LIMIT 3000`
+      );
+      rows = filterFeishuRowsByStoreAndDate(
+        r.rows || [],
+        s,
+        day,
+        [(f) => f['所属门店'] || f['门店']],
+        [(f) => f['收货日期'] || f['日期']]
+      ).map((row) => ({ f: row.fields || {}, ca: row.created_at }));
+    }
     if (!rows.length) {
       return `**🥬 昨天原料收货（${day}）**\n· ⚠️ 无记录`;
     }
-    const hasIssue = rows.filter((x) => materialReceiptFieldsIndicateAnomaly(x.fields || {}));
+    const hasIssue = rows.filter((x) => materialRowHasAnomalyUnified(x.f || {}));
     const matTop = new Map();
     hasIssue.forEach((x) => {
-      const f = x.fields || {};
-      const n = ext(f['异常原料名称']);
+      const f = x.f || {};
+      const n = ext(f['异常原料名称'] || f.material_name || f['原料名称']);
       if (n) matTop.set(n, (matTop.get(n) || 0) + 1);
     });
     const topStr = topN(matTop, 4).map(([k, v]) => `${k}(${v})`).join('、') || '无';

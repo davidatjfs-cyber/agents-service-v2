@@ -5,7 +5,7 @@
  * 未达标项：记录HR备案 + 发送公司通知 + 飞书卡片通知
  * 
  * 数据源：
- * - 出品经理：开档/收档 agent_messages（按表内业务日期）；原料收货 feishu_generic_records（与聊天口径一致）
+ * - 出品经理：开档/收档/原料收货均为 agent_messages（飞书 bitable 轮询写入，按业务日 + 档口齐套）
  * - 洪潮店长：daily_reports (new_wechat_members)
  * - 马己仙店长：agent_messages (meeting_report，飞书例会同步写入)
  */
@@ -83,21 +83,31 @@ function collapseExecutionRatingStaff(rows) {
 // ─────────────────────────────────────────────
 
 /**
- * 出品经理执行力评级
- * @param {Object} reports - {opening, closing, material}
- * @returns {{rating: string, missing: string[]}}
+ * 出品经理执行力：开档/收档须各品牌档口齐 + 原料≥1；单日只备一条案，明细写入 executionDetailLines。
  */
 function evaluatePMExecution(reports) {
-  const missing = [];
-  if (!reports.opening) missing.push('开档报告');
-  if (!reports.closing) missing.push('收档报告');
-  if (!reports.material) missing.push('原料收货日报');
-
-  // 日评：只要有一项未提交就算未达成
-  if (missing.length === 0) {
-    return { rating: 'A', missing: [] };
+  const lines = [];
+  if (!reports.opening) {
+    lines.push(
+      reports.missingOpeningStations?.length
+        ? `开档缺档口：${reports.missingOpeningStations.join('、')}`
+        : '开档：档口未齐（无法识别档口或记录不足）'
+    );
   }
-  return { rating: 'D', missing };
+  if (!reports.closing) {
+    lines.push(
+      reports.missingClosingStations?.length
+        ? `收档缺档口：${reports.missingClosingStations.join('、')}`
+        : '收档：档口未齐（无法识别档口或记录不足）'
+    );
+  }
+  if (!reports.material) {
+    lines.push(`原料收货：缺记录（统计 ${reports.materialCount ?? 0} 条，需≥1）`);
+  }
+  if (lines.length === 0) {
+    return { rating: 'A', missing: [], executionDetailLines: [] };
+  }
+  return { rating: 'D', missing: ['出品执行力未完全达标'], executionDetailLines: lines };
 }
 
 /**
@@ -156,7 +166,7 @@ async function recordExecutionFiling({ store, username, role, date, rating, miss
       [
         store,
         'execution_rating_daily',
-        `${store} · 执行力日评不达标 · ${missing.join('/')}`,
+        `${store} · 执行力日评未达标 · ${missing.join('/')}`,
         'pending_review',
         username,
         role,
@@ -180,13 +190,15 @@ async function recordExecutionFiling({ store, username, role, date, rating, miss
 /**
  * 构建执行力备案飞书卡片
  */
-function buildFilingCard({ store, username, name, role, rating, missing }, date) {
+function buildFilingCard({ store, username, name, role, rating, missing, executionDetailLines }, date) {
   const roleLabel = role === 'store_manager' ? '店长' : '出品经理';
   const ratingColor = rating === 'B' ? 'blue' : rating === 'C' ? 'orange' : 'red';
 
   let missingMd = '';
-  if (missing && missing.length > 0) {
-    missingMd = `\n**未达标项目**\n${missing.map(m => `❌ ${m}`).join('\n')}`;
+  if (executionDetailLines && executionDetailLines.length > 0) {
+    missingMd = `\n**未达标说明**\n${missing.map((m) => `· ${m}`).join('\n')}\n**明细**\n${executionDetailLines.map((l) => `· ${l}`).join('\n')}`;
+  } else if (missing && missing.length > 0) {
+    missingMd = `\n**未达标项目**\n${missing.map((m) => `❌ ${m}`).join('\n')}`;
   }
 
   const content = `**备案类型**：工作执行力评级
@@ -203,7 +215,7 @@ function buildFilingCard({ store, username, name, role, rating, missing }, date)
     },
     elements: [
       { tag: 'div', text: { tag: 'lark_md', content } },
-      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：开档/收档/原料收货报告 · 每日08:00自动检查' }] }
+      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：agent_messages（飞书同步）· 每日08:00自动检查' }] }
     ]
   };
 }
@@ -222,7 +234,9 @@ function buildSummaryCard(results, date) {
     for (const r of failedResults) {
       const roleLabel = r.role === 'store_manager' ? '店长' : '出品经理';
       md += `\n• **${r.store}** · ${roleLabel} ${r.name || r.username}：${r.rating}级`;
-      if (r.missing && r.missing.length > 0) {
+      if (r.executionDetailLines && r.executionDetailLines.length > 0) {
+        md += `（${r.executionDetailLines.join('；')}）`;
+      } else if (r.missing && r.missing.length > 0) {
         md += `（${r.missing.join('/')}）`;
       }
     }
@@ -238,7 +252,7 @@ function buildSummaryCard(results, date) {
     },
     elements: [
       { tag: 'div', text: { tag: 'lark_md', content: md } },
-      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：agent_messages + daily_reports + feishu_generic_records · 每日08:00自动检查' }] }
+      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：agent_messages + daily_reports · 每日08:00自动检查' }] }
     ]
   };
 }
@@ -255,8 +269,13 @@ function buildAdminFilingCard(results, date) {
     md += `\n**备案明细**\n`;
     for (const r of failedResults) {
       const roleLabel = r.role === 'store_manager' ? '店长' : '出品经理';
-      const missing = r.missing && r.missing.length > 0 ? `（${r.missing.join('/')}）` : '';
-      md += `\n• ${r.store} · ${roleLabel} ${r.name || r.username}：${r.rating}级 ${missing}`;
+      const missExtra =
+        r.executionDetailLines && r.executionDetailLines.length > 0
+          ? `（${r.executionDetailLines.join('；')}）`
+          : r.missing && r.missing.length > 0
+            ? `（${r.missing.join('/')}）`
+            : '';
+      md += `\n• ${r.store} · ${roleLabel} ${r.name || r.username}：${r.rating}级 ${missExtra}`;
     }
   } else {
     md += `\n✅ 全部达标，无需备案`;
@@ -270,7 +289,7 @@ function buildAdminFilingCard(results, date) {
     },
     elements: [
       { tag: 'div', text: { tag: 'lark_md', content: md } },
-      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：开档/收档/原料收货报告 · 每日08:00自动检查' }] }
+      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：agent_messages（飞书同步）· 每日08:00自动检查' }] }
     ]
   };
 }
@@ -288,7 +307,12 @@ async function sendExecutionRatingNotifications(results, date) {
   for (const r of failedResults) {
     const card = buildFilingCard(r, date);
     const roleLabel = r.role === 'store_manager' ? '店长' : '出品经理';
-    const missingText = r.missing && r.missing.length > 0 ? r.missing.join('/') : '';
+    const missingText =
+      r.executionDetailLines && r.executionDetailLines.length > 0
+        ? r.executionDetailLines.join('；')
+        : r.missing && r.missing.length > 0
+          ? r.missing.join('/')
+          : '';
 
     // 飞书卡片（无 open_id 则无法发飞书，但 HRMS 公司通知仍应写入）
     if (r.open_id) {
@@ -446,17 +470,38 @@ export async function runDailyExecutionRating(date) {
 
       try {
         if (role === 'store_production_manager') {
-          // 出品经理：检查3种报告
           const reports = await getPMReportStatus(store, brand, date);
           const eval_ = evaluatePMExecution(reports);
           rating = eval_.rating;
           missing = eval_.missing;
-          detail = { opening: reports.opening, closing: reports.closing, material: reports.material };
+          const executionDetailLines = eval_.executionDetailLines || [];
+          detail = {
+            opening: reports.opening,
+            closing: reports.closing,
+            material: reports.material,
+            materialCount: reports.materialCount,
+            missingOpeningStations: reports.missingOpeningStations,
+            missingClosingStations: reports.missingClosingStations,
+            executionDetailLines
+          };
 
-          // 未达标：记录HR备案 + 发送通知
           if (rating !== 'A') {
             await recordExecutionFiling({ store, username, role, date, rating, missing, detail });
           }
+          results.push({
+            username,
+            name,
+            open_id,
+            role,
+            store,
+            brand,
+            date,
+            rating,
+            missing,
+            executionDetailLines,
+            detail
+          });
+          continue;
         } else if (role === 'store_manager') {
           if (brand === '洪潮') {
             // 洪潮店长：企微会员（当月累计，与月评口径一致）
@@ -487,7 +532,19 @@ export async function runDailyExecutionRating(date) {
         continue;
       }
 
-      results.push({ username, name, open_id, role, store, brand, date, rating, missing, detail });
+      results.push({
+        username,
+        name,
+        open_id,
+        role,
+        store,
+        brand,
+        date,
+        rating,
+        missing,
+        executionDetailLines: undefined,
+        detail
+      });
     }
 
     // 发送通知

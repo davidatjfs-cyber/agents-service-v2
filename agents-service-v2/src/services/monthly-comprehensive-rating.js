@@ -16,12 +16,7 @@ import { logger } from '../utils/logger.js';
 import { ensureHrmsUserNotificationsTable } from '../utils/hrms-user-notifications.js';
 import { sendCard, sendText } from './feishu-client.js';
 import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
-import {
-  countDistinctOpeningBizDays,
-  countDistinctClosingBizDays,
-  countDistinctMaterialBizDays,
-  getMajixianMeetingExecutionStatsForStore
-} from './pm-execution-report-coverage.js';
+import { countFullyCompliantPMDaysInRange, getMajixianMeetingExecutionStatsForStore } from './pm-execution-report-coverage.js';
 import {
   isMajixianStore,
   sortFeishuScoringRows,
@@ -171,42 +166,32 @@ async function getAttitudeRating(username, period) {
 
 /**
  * 出品经理执行力（月度）
- * 数据源：开档/收档 agent_messages + 原料 feishu_generic_records；均按表内业务日期统计（与执行力日评/聊天一致）
+ * 自然日维度：当日须开档档口齐 + 收档档口齐 + 原料≥1；统计「完全达标天数」与「未达标天数」。
  */
 async function getPMExecutionRating(store, brand, period) {
   const [year, month] = period.split('-');
-  const startDate = `${year}-${month}-01`;
-  const endDate = `${year}-${month}-31`;
-
   const daysInMonth = getDaysInMonth(period);
-  const expectedTotal = daysInMonth * 3;
+  const startDate = `${year}-${month}-01`;
+  const endDate = `${year}-${month}-${String(daysInMonth).padStart(2, '0')}`;
 
   const brandZh = String(brand || '').includes('马己') ? '马己仙' : String(brand || '').includes('洪') ? '洪潮' : brand;
 
-  const [openingCount, closingCount, materialCount] = await Promise.all([
-    countDistinctOpeningBizDays(store, startDate, endDate),
-    countDistinctClosingBizDays(store, startDate, endDate),
-    countDistinctMaterialBizDays(store, brandZh, startDate, endDate)
-  ]);
-
-  const totalSubmitted = openingCount + closingCount + materialCount;
-  const totalMissing = Math.max(0, expectedTotal - totalSubmitted);
+  const compliantDays = await countFullyCompliantPMDaysInRange(store, brandZh, startDate, endDate);
+  const nonCompliantDays = Math.max(0, daysInMonth - compliantDays);
 
   let rating;
-  if (totalMissing <= 6) rating = 'A';
-  else if (totalMissing <= 13) rating = 'B';
-  else if (totalMissing <= 20) rating = 'C';
+  if (nonCompliantDays <= 2) rating = 'A';
+  else if (nonCompliantDays <= 5) rating = 'B';
+  else if (nonCompliantDays <= 10) rating = 'C';
   else rating = 'D';
 
   return {
     rating,
-    value: totalMissing,
+    value: nonCompliantDays,
     detail: {
-      opening_days: openingCount,
-      closing_days: closingCount,
-      material_days: materialCount,
-      expected_days: daysInMonth,
-      total_missing: totalMissing
+      days_in_month: daysInMonth,
+      compliant_days: compliantDays,
+      non_compliant_days: nonCompliantDays
     }
   };
 }

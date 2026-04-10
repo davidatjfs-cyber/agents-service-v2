@@ -25,7 +25,8 @@ import {
   fetchActualGrossMarginForStorePeriod,
   formatActualGrossMarginBitableLines,
   pickStoreFromQuestionText,
-  resolveMonthlyRevenueTargetYuan
+  resolveMonthlyRevenueTargetYuan,
+  buildMaterialReportReplyForDateRange
 } from './deterministic-replies.js';
 import { analyzeMetricTree, formatMetricAnalysisForPrompt } from './analysis-engine.js';
 import { getBestStrategy, formatExperiencePromptBlock } from './agent-experience.js';
@@ -773,31 +774,11 @@ async function buildDeterministicMeetingReply(store, start, end) {
   }
 }
 
-/** 原料收货报告：100% 从 DB 取数，确定性格式 */
+/** 原料收货报告：优先 agent_messages（与飞书轮询同源），兜底 feishu_generic_records */
 async function buildDeterministicMaterialReply(store, start, end) {
   if (!store) return '';
   try {
-    const r = await query(
-      `SELECT fields, created_at FROM feishu_generic_records
-       WHERE config_key LIKE 'material_%'
-         AND (fields->>'门店' ILIKE $3 OR fields->>'所属门店' ILIKE $3)
-         AND created_at::date BETWEEN $1::date AND ($2::date + INTERVAL '1 day')
-       ORDER BY created_at DESC LIMIT 25`,
-      [start, end, `%${store}%`]
-    );
-    const rows = r.rows || [];
-    if (!rows.length) return `当前门店「${store}」在${start}～${end}内暂无原料收货报告数据。`;
-    const lines = [`【数据来源:原料收货日报】共${rows.length}条。`, ''];
-    rows.slice(0, 15).forEach((row, i) => {
-      const f = row.fields && typeof row.fields === 'object' ? row.fields : {};
-      const d = extractBitableFieldTextFromFields(f, '收货日期') || String(row.created_at || '').slice(0, 10);
-      const item = extractBitableFieldTextFromFields(f, '品名') || extractBitableFieldTextFromFields(f, '原料名称') || '';
-      const qty = extractBitableFieldTextFromFields(f, '数量') || '';
-      const amt = extractBitableFieldTextFromFields(f, '金额') || '';
-      const supplier = extractBitableFieldTextFromFields(f, '供应商') || '';
-      lines.push(`${i + 1}. ${d} ${item} ${qty}${amt ? ' ¥' + amt : ''} ${supplier}`);
-    });
-    return lines.join('\n');
+    return await buildMaterialReportReplyForDateRange(store, start, end);
   } catch (e) {
     logger.warn({ err: e?.message }, 'buildDeterministicMaterialReply failed');
     return '';

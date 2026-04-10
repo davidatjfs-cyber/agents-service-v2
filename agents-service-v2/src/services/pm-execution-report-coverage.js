@@ -31,75 +31,150 @@ function parseMeetingScore(fields) {
   return Number.isFinite(n) ? n : null;
 }
 
-/**
- * 单日：是否有业务日期 = dateYmd 的开档报告
- */
-export async function pmHasOpeningReportBizDate(displayStore, dateYmd) {
-  const r = await query(
-    `SELECT agent_data, created_at FROM agent_messages
-     WHERE content_type = 'opening_report'
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= ($1::date - $2::int)
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($1::date + $3::int)`,
-    [dateYmd, CREATED_AT_PAD_BEFORE_SINGLE_DAY, CREATED_AT_PAD_AFTER_SINGLE_DAY]
-  );
-  for (const row of r.rows || []) {
-    const fields = row.agent_data?.fields || {};
-    if (!storeMatchesRow(displayStore, fields.store)) continue;
-    const biz = resolveBitableBusinessYmd(fields.date, row.created_at);
-    if (biz === dateYmd) return true;
+/** 马己仙厨房档口（开档/收档各需 1 条/档口/日） */
+export const KITCHEN_STATIONS_MAJIXIAN = Object.freeze(['煲仔', '水吧', '炒锅', '烧味', '砧板']);
+/** 洪潮厨房档口 */
+export const KITCHEN_STATIONS_HONGCHAO = Object.freeze(['煲仔', '水吧', '炒锅', '卤水', '砧板', '刺身']);
+
+export function expectedKitchenStationsForBrand(brandZh) {
+  const b = String(brandZh || '').trim();
+  if (b === '洪潮') return [...KITCHEN_STATIONS_HONGCHAO];
+  return [...KITCHEN_STATIONS_MAJIXIAN];
+}
+
+/** 将飞书「档口」文本归一到标准档口名（仅匹配当前品牌清单） */
+export function matchKitchenStation(rawStation, brandZh) {
+  const s = String(rawStation || '').trim();
+  if (!s) return null;
+  for (const key of expectedKitchenStationsForBrand(brandZh)) {
+    if (s.includes(key)) return key;
   }
-  return false;
+  return null;
+}
+
+function ymdAddDays(ymd, deltaDays) {
+  const [y, m, d] = ymd.split('-').map((x) => parseInt(x, 10));
+  const u = Date.UTC(y, m - 1, d + deltaDays);
+  return new Date(u).toISOString().slice(0, 10);
+}
+
+function* eachYmdInclusive(startYmd, endYmd) {
+  let cur = startYmd;
+  while (cur <= endYmd) {
+    yield cur;
+    cur = ymdAddDays(cur, 1);
+  }
 }
 
 /**
- * 单日：是否有业务日期 = dateYmd 的收档报告
+ * 按业务日聚合：开档/收档已提交的档口集合 + 原料条数（与执行力日评/月度一致）
  */
-export async function pmHasClosingReportBizDate(displayStore, dateYmd) {
-  const r = await query(
-    `SELECT agent_data, created_at FROM agent_messages
-     WHERE content_type = 'closing_report'
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= ($1::date - $2::int)
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($1::date + $3::int)`,
-    [dateYmd, CREATED_AT_PAD_BEFORE_SINGLE_DAY, CREATED_AT_PAD_AFTER_SINGLE_DAY]
-  );
-  for (const row of r.rows || []) {
+export async function buildPmKitchenMapsForRange(displayStore, brandZh, startYmd, endYmd) {
+  const padB = CREATED_AT_PAD_BEFORE_MONTH;
+  const padA = CREATED_AT_PAD_AFTER_MONTH;
+  const caLo = ymdAddDays(startYmd, -padB);
+  const caHi = ymdAddDays(endYmd, padA);
+
+  const [openR, closeR, matR] = await Promise.all([
+    query(
+      `SELECT agent_data, created_at FROM agent_messages
+       WHERE content_type = 'opening_report'
+         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date
+         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date`,
+      [caLo, caHi]
+    ),
+    query(
+      `SELECT agent_data, created_at FROM agent_messages
+       WHERE content_type = 'closing_report'
+         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date
+         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date`,
+      [caLo, caHi]
+    ),
+    query(
+      `SELECT agent_data, created_at FROM agent_messages
+       WHERE content_type = 'material_report'
+         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date
+         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date`,
+      [caLo, caHi]
+    )
+  ]);
+
+  const openingByDate = new Map();
+  const closingByDate = new Map();
+  const materialByDate = new Map();
+
+  const addStation = (map, biz, stKey) => {
+    if (!biz || biz < startYmd || biz > endYmd || !stKey) return;
+    if (!map.has(biz)) map.set(biz, new Set());
+    map.get(biz).add(stKey);
+  };
+
+  for (const row of openR.rows || []) {
     const fields = row.agent_data?.fields || {};
     if (!storeMatchesRow(displayStore, fields.store)) continue;
     const biz = resolveBitableBusinessYmd(fields.date, row.created_at);
-    if (biz === dateYmd) return true;
+    const st = matchKitchenStation(fields.station, brandZh);
+    if (st) addStation(openingByDate, biz, st);
   }
-  return false;
-}
-
-/**
- * 单日：是否有业务日期 = dateYmd 的原料收货（agent_messages.material_report，与飞书轮询写入同源）
- */
-export async function pmHasMaterialReportBizDate(displayStore, brandZh, dateYmd) {
-  const r = await query(
-    `SELECT agent_data, created_at FROM agent_messages
-     WHERE content_type = 'material_report'
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= ($1::date - $2::int)
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($1::date + $3::int)`,
-    [dateYmd, CREATED_AT_PAD_BEFORE_SINGLE_DAY, CREATED_AT_PAD_AFTER_SINGLE_DAY]
-  );
-  for (const row of r.rows || []) {
+  for (const row of closeR.rows || []) {
+    const fields = row.agent_data?.fields || {};
+    if (!storeMatchesRow(displayStore, fields.store)) continue;
+    const biz = resolveBitableBusinessYmd(fields.date, row.created_at);
+    const st = matchKitchenStation(fields.station, brandZh);
+    if (st) addStation(closingByDate, biz, st);
+  }
+  for (const row of matR.rows || []) {
     const ad = row.agent_data && typeof row.agent_data === 'object' ? row.agent_data : {};
     if (!materialBrandMatches(ad, brandZh)) continue;
     const fields = ad.fields || {};
     if (!storeMatchesRow(displayStore, fields.store)) continue;
     const biz = resolveBitableBusinessYmd(fields.date, row.created_at);
-    if (biz === dateYmd) return true;
+    if (!biz || biz < startYmd || biz > endYmd) continue;
+    materialByDate.set(biz, (materialByDate.get(biz) || 0) + 1);
   }
-  return false;
+
+  return { openingByDate, closingByDate, materialByDate };
+}
+
+/** 出品执行力：某日是否档口齐 + 原料≥1（单日） */
+export async function getPMExecutionComplianceForBizDate(displayStore, brandZh, dateYmd) {
+  const maps = await buildPmKitchenMapsForRange(displayStore, brandZh, dateYmd, dateYmd);
+  const expected = expectedKitchenStationsForBrand(brandZh);
+  const oSet = maps.openingByDate.get(dateYmd) || new Set();
+  const cSet = maps.closingByDate.get(dateYmd) || new Set();
+  const matC = maps.materialByDate.get(dateYmd) || 0;
+  const missingOpeningStations = expected.filter((s) => !oSet.has(s));
+  const missingClosingStations = expected.filter((s) => !cSet.has(s));
+  const materialComplete = matC >= 1;
+  return {
+    opening: missingOpeningStations.length === 0,
+    closing: missingClosingStations.length === 0,
+    material: materialComplete,
+    materialCount: matC,
+    missingOpeningStations,
+    missingClosingStations,
+    expectedStations: expected
+  };
+}
+
+/** 月度：有多少个自然日完全达标（开档 N 档 + 收档 N 档 + 原料≥1） */
+export async function countFullyCompliantPMDaysInRange(displayStore, brandZh, startYmd, endYmd) {
+  const maps = await buildPmKitchenMapsForRange(displayStore, brandZh, startYmd, endYmd);
+  const expected = expectedKitchenStationsForBrand(brandZh);
+  let compliant = 0;
+  for (const day of eachYmdInclusive(startYmd, endYmd)) {
+    const oSet = maps.openingByDate.get(day) || new Set();
+    const cSet = maps.closingByDate.get(day) || new Set();
+    const matC = maps.materialByDate.get(day) || 0;
+    const openOk = expected.every((s) => oSet.has(s));
+    const closeOk = expected.every((s) => cSet.has(s));
+    if (openOk && closeOk && matC >= 1) compliant++;
+  }
+  return compliant;
 }
 
 export async function getPMReportStatusByBizDate(store, brandZh, dateYmd) {
-  const [opening, closing, material] = await Promise.all([
-    pmHasOpeningReportBizDate(store, dateYmd),
-    pmHasClosingReportBizDate(store, dateYmd),
-    pmHasMaterialReportBizDate(store, brandZh, dateYmd)
-  ]);
-  return { opening, closing, material };
+  return getPMExecutionComplianceForBizDate(store, brandZh, dateYmd);
 }
 
 function collectDistinctBizDays(rows, displayStore, fieldDateKeys, startYmd, endYmd) {

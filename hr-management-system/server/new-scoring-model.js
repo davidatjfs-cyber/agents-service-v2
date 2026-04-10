@@ -4,7 +4,7 @@
  * 月度口径（与 agents-service `monthly-comprehensive-rating` 对齐）：
  * - 绩效分 total_score：`agent_scores` / `anomaly_rollups_v2` 当月各自然周 `total_score` 算术平均（BI 异常触发后的周汇总）。
  * - 工作态度：`master_tasks` 且 `hr_performance_recorded = true` 的备案未完成（distinct task_id）。
- * - 工作执行力：除洪潮店长（企微新增 = HRMS 营业日报当月汇总）外，均只读 `agent_messages`（开档/收档/原料/例会均由飞书轮询写入该表，口径统一）。
+ * - 工作执行力：除洪潮店长（企微新增 = HRMS 营业日报当月汇总）外，均只读 `agent_messages`（开档/收档/原料/例会均由飞书轮询写入该表，口径统一）。出品经理月度按「自然日是否档口齐+原料齐」计未达标天数，与 agents 月评一致。
  * - 工作能力：出品 = `monthly_margins` 实收毛利率 vs 目标；店长 = 营业日报 **每月 9 日** `dianping_rating`（与 agents 店长能力一致）。
  */
 
@@ -12,9 +12,7 @@ import { pool } from './utils/database.js';
 import { inferBrandFromStoreName } from './agents.js';
 import { safeExecute, safeErrorLog } from './utils/error-handler.js';
 import {
-  countDistinctClosingBizDays,
-  countDistinctMaterialBizDays,
-  countDistinctOpeningBizDays,
+  countFullyCompliantPMDaysInRange,
   getMajixianMeetingExecutionStatsFromAgentMessages
 } from './lib/pm-execution-for-scoring.js';
 import {
@@ -99,14 +97,14 @@ export const EMPLOYEE_SCORE_CONFIG = {
   },
   execution_rules: {
     store_production_manager: {
-      // 马己仙和洪潮出品经理相同：收档报告+开档报告+原料收货日报，每天各提交1次
-      data_sources: ['收档报告DB', '开档报告', '原料收货日报'],
+      // 马己仙5档口、洪潮6档口：每日开档+收档各须档口齐，原料≥1；月度按「未完全达标自然日数」评级
+      data_sources: ['开档报告', '收档报告', '原料收货日报'],
       expected_frequency: 'daily',
       rating_thresholds: {
-        'A': { max_missing: 6 },  // <7次得A
-        'B': { max_missing: 13 }, // <14次得B
-        'C': { max_missing: 20 }, // <21次得C
-        'D': { min_missing: 21 }  // >=21次得D
+        'A': { max_noncompliant_days: 2 },
+        'B': { max_noncompliant_days: 5 },
+        'C': { max_noncompliant_days: 10 },
+        'D': { default: true }
       }
     },
     store_manager: {
@@ -179,7 +177,15 @@ export const EMPLOYEE_SCORE_CONFIG = {
 const DEFAULT_EMPLOYEE_RATING_CONFIG = {
   levelLabels: { A: 'A', B: 'B', C: 'C', D: 'D' },
   execution: {
-    store_production_manager: { A_max_missing: 6, B_max_missing: 13, C_max_missing: 20, D_min_missing: 21 },
+    store_production_manager: {
+      A_max_noncompliant_days: 2,
+      B_max_noncompliant_days: 5,
+      C_max_noncompliant_days: 10,
+      A_max_missing: 6,
+      B_max_missing: 13,
+      C_max_missing: 20,
+      D_min_missing: 21
+    },
     store_manager: {
       hongchao: { A_min_new_members: 400, B_min_new_members: 349, C_min_new_members: 300, D_max_new_members: 299 },
       majixian: { low_score_threshold: 7, A_max_missing: 2, A_max_low_score: 2, B_max_missing: 4, B_max_low_score: 4, C_max_missing: 6, C_max_low_score: 6, D_min_missing: 7, D_min_low_score: 7 }
@@ -362,22 +368,18 @@ export async function calculateExecutionRating(store, username, role, period) {
       const endDate = `${year}-${month}-${String(getDaysInPeriod(period)).padStart(2, '0')}`;
       const brandTag = inferBrandFromStoreName(store);
       const brandZh = brandTag === '洪潮' ? '洪潮' : '马己仙';
-      const [openingCount, closingCount, materialCount] = await Promise.all([
-        countDistinctOpeningBizDays(store, startDate, endDate),
-        countDistinctClosingBizDays(store, startDate, endDate),
-        countDistinctMaterialBizDays(store, brandZh, startDate, endDate)
-      ]);
       const expectedDays = getDaysInPeriod(period);
-      const totalExpected = expectedDays * 3;
-      const totalSubmitted = openingCount + closingCount + materialCount;
-      const totalMissing = Math.max(0, totalExpected - totalSubmitted);
+      const compliantDays = await countFullyCompliantPMDaysInRange(store, brandZh, startDate, endDate);
+      const nonCompliantDays = Math.max(0, expectedDays - compliantDays);
       const t = cfg?.execution?.store_production_manager || DEFAULT_EMPLOYEE_RATING_CONFIG.execution.store_production_manager;
-      
-      // 根据缺提交次数确定评级
-      if (totalMissing <= Number(t.A_max_missing)) return 'A';
-      else if (totalMissing <= Number(t.B_max_missing)) return 'B';
-      else if (totalMissing <= Number(t.C_max_missing)) return 'C';
-      else return 'D';
+
+      const maxA = Number(t.A_max_noncompliant_days ?? 2);
+      const maxB = Number(t.B_max_noncompliant_days ?? 5);
+      const maxC = Number(t.C_max_noncompliant_days ?? 10);
+      if (nonCompliantDays <= maxA) return 'A';
+      if (nonCompliantDays <= maxB) return 'B';
+      if (nonCompliantDays <= maxC) return 'C';
+      return 'D';
     }
     
     if (role === 'store_manager') {

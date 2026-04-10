@@ -125,6 +125,121 @@ function materialBrandMatches(agentData, brandZh) {
   return b === brandZh;
 }
 
+const KITCHEN_STATIONS_MAJIXIAN = Object.freeze(['煲仔', '水吧', '炒锅', '烧味', '砧板']);
+const KITCHEN_STATIONS_HONGCHAO = Object.freeze(['煲仔', '水吧', '炒锅', '卤水', '砧板', '刺身']);
+
+function expectedKitchenStationsForBrand(brandZh) {
+  const b = String(brandZh || '').trim();
+  if (b === '洪潮') return [...KITCHEN_STATIONS_HONGCHAO];
+  return [...KITCHEN_STATIONS_MAJIXIAN];
+}
+
+function matchKitchenStation(rawStation, brandZh) {
+  const s = String(rawStation || '').trim();
+  if (!s) return null;
+  for (const key of expectedKitchenStationsForBrand(brandZh)) {
+    if (s.includes(key)) return key;
+  }
+  return null;
+}
+
+function ymdAddDays(ymd, deltaDays) {
+  const [y, m, d] = ymd.split('-').map((x) => parseInt(x, 10));
+  const u = Date.UTC(y, m - 1, d + deltaDays);
+  return new Date(u).toISOString().slice(0, 10);
+}
+
+function* eachYmdInclusive(startYmd, endYmd) {
+  let cur = startYmd;
+  while (cur <= endYmd) {
+    yield cur;
+    cur = ymdAddDays(cur, 1);
+  }
+}
+
+async function buildPmKitchenMapsForRange(displayStore, brandZh, startYmd, endYmd) {
+  const padB = CREATED_AT_PAD_BEFORE_MONTH;
+  const padA = CREATED_AT_PAD_AFTER_MONTH;
+  const caLo = ymdAddDays(startYmd, -padB);
+  const caHi = ymdAddDays(endYmd, padA);
+
+  const [openR, closeR, matR] = await Promise.all([
+    pool().query(
+      `SELECT agent_data, created_at FROM agent_messages
+       WHERE content_type = 'opening_report'
+         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date
+         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date`,
+      [caLo, caHi]
+    ),
+    pool().query(
+      `SELECT agent_data, created_at FROM agent_messages
+       WHERE content_type = 'closing_report'
+         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date
+         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date`,
+      [caLo, caHi]
+    ),
+    pool().query(
+      `SELECT agent_data, created_at FROM agent_messages
+       WHERE content_type = 'material_report'
+         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date
+         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date`,
+      [caLo, caHi]
+    )
+  ]);
+
+  const openingByDate = new Map();
+  const closingByDate = new Map();
+  const materialByDate = new Map();
+
+  const addStation = (map, biz, stKey) => {
+    if (!biz || biz < startYmd || biz > endYmd || !stKey) return;
+    if (!map.has(biz)) map.set(biz, new Set());
+    map.get(biz).add(stKey);
+  };
+
+  for (const row of openR.rows || []) {
+    const fields = row.agent_data?.fields || {};
+    if (!storeMatchesRow(displayStore, fields.store)) continue;
+    const biz = resolveBitableBusinessYmd(fields.date, row.created_at);
+    const st = matchKitchenStation(fields.station, brandZh);
+    if (st) addStation(openingByDate, biz, st);
+  }
+  for (const row of closeR.rows || []) {
+    const fields = row.agent_data?.fields || {};
+    if (!storeMatchesRow(displayStore, fields.store)) continue;
+    const biz = resolveBitableBusinessYmd(fields.date, row.created_at);
+    const st = matchKitchenStation(fields.station, brandZh);
+    if (st) addStation(closingByDate, biz, st);
+  }
+  for (const row of matR.rows || []) {
+    const ad = row.agent_data && typeof row.agent_data === 'object' ? row.agent_data : {};
+    if (!materialBrandMatches(ad, brandZh)) continue;
+    const fields = ad.fields || {};
+    if (!storeMatchesRow(displayStore, fields.store)) continue;
+    const biz = resolveBitableBusinessYmd(fields.date, row.created_at);
+    if (!biz || biz < startYmd || biz > endYmd) continue;
+    materialByDate.set(biz, (materialByDate.get(biz) || 0) + 1);
+  }
+
+  return { openingByDate, closingByDate, materialByDate };
+}
+
+/** 与 agents `countFullyCompliantPMDaysInRange` 一致：月度出品执行力用「完全达标自然日」计数 */
+export async function countFullyCompliantPMDaysInRange(displayStore, brandZh, startYmd, endYmd) {
+  const maps = await buildPmKitchenMapsForRange(displayStore, brandZh, startYmd, endYmd);
+  const expected = expectedKitchenStationsForBrand(brandZh);
+  let compliant = 0;
+  for (const day of eachYmdInclusive(startYmd, endYmd)) {
+    const oSet = maps.openingByDate.get(day) || new Set();
+    const cSet = maps.closingByDate.get(day) || new Set();
+    const matC = maps.materialByDate.get(day) || 0;
+    const openOk = expected.every((st) => oSet.has(st));
+    const closeOk = expected.every((st) => cSet.has(st));
+    if (openOk && closeOk && matC >= 1) compliant++;
+  }
+  return compliant;
+}
+
 function parseMeetingScore(fields) {
   const raw = fields?.meeting_score ?? fields?.score ?? fields?.得分;
   const n = Number(String(raw ?? '').trim());
