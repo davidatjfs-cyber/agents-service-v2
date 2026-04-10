@@ -234,15 +234,19 @@ export async function checkLaborEfficiency(store) {
 
 // ─── 3. 充值异常 ───
 // 连续无充值天数：第1天扣2分、第2天扣4分、第3天2分、第4天4分…（绩效周汇总按 penalty_points 累加）
+//
+// 判定基准日 = 上海「昨日」完整营业日（不是「今天」）。避免当日日报尚未关账、充值字段仍为 0 时误派单
+//（典型客诉：昨日营业日已有充值，但任务仍发「充值异常」——实为在评判「今天」的不完整日报）。
 export async function checkRechargeZero(store) {
   try {
     const todaySh = shanghaiTodayYmd();
+    const evalSh = addDaysYmdShanghai(todaySh, -1);
     const hasRecharge = (rec) => rec && (rec.cnt > 0 || rec.amt > 0);
 
-    // 充值 streak 只在当月内累计，月初（1日）自动重置，不跨月统计
-    const [ty, tm] = todaySh.split('-').map(Number);
+    // streak 仅在「判定日」所在自然月内累计（月初重置，不跨该月）
+    const [ey, em] = evalSh.split('-').map(Number);
     const pad = (n) => String(n).padStart(2, '0');
-    const monthStart = `${ty}-${pad(tm)}-01`;
+    const monthStart = `${ey}-${pad(em)}-01`;
 
     const r = await query(
       `SELECT date::date::text AS d,
@@ -262,19 +266,19 @@ export async function checkRechargeZero(store) {
       byDay.set(key, { cnt: parseInt(row.cnt || 0, 10), amt: parseFloat(row.amt || 0) });
     }
 
-    const todayR = byDay.get(todaySh);
-    if (!todayR) {
-      return { triggered: false, detail: `${todaySh} 无营业日报，跳过充值判定` };
+    const evalR = byDay.get(evalSh);
+    if (!evalR) {
+      return { triggered: false, detail: `${evalSh} 无营业日报，跳过充值判定（口径：上海昨日）` };
     }
-    if (hasRecharge(todayR)) {
-      return { triggered: false, detail: `${todaySh} 有充值，正常` };
+    if (hasRecharge(evalR)) {
+      return { triggered: false, detail: `${evalSh} 有充值，正常（口径：上海昨日）` };
     }
 
-    // streak 向回数，遇到当月1号则截止（不跨月）
+    // streak 从判定日向回数，到当月 1 号为止（不跨判定日所在月）
     let streak = 0;
     for (let i = 0; i < 31; i++) {
-      const d = addDaysYmdShanghai(todaySh, -i);
-      if (d < monthStart) break; // 不跨月
+      const d = addDaysYmdShanghai(evalSh, -i);
+      if (d < monthStart) break;
       const rec = byDay.get(d);
       if (!rec) break;
       if (hasRecharge(rec)) break;
@@ -289,14 +293,16 @@ export async function checkRechargeZero(store) {
       triggered: true,
       severity,
       value: {
-        dateToday: todaySh,
+        evaluationYmd: evalSh,
+        dateToday: evalSh,
+        runCalendarYmd: todaySh,
         consecutive_zero_days: streak,
         penalty_points,
         month_start: monthStart,
-        today: { count: todayR.cnt, amount: todayR.amt }
+        today: { count: evalR.cnt, amount: evalR.amt }
       },
       threshold: { medium: '2分（连续第1天无充值）', high: '4分（连续第2天起无充值）' },
-      detail: `本月连续${streak}日无充值（${monthStart}起不跨月，截至${todaySh}），本日绩效扣分 ${penalty_points} 分`
+      detail: `判定营业日 ${evalSh}（以上海昨日为准，避免当日未关账误报）：该日日报充值笔数与金额为 0；${monthStart} 起不跨月连续无充值 ${streak} 日，绩效扣分 ${penalty_points} 分`
     };
   } catch (err) {
     return { triggered: false, detail: `充值检测异常: ${err.message}` };
@@ -928,6 +934,9 @@ export async function runAnomalyChecks(frequency, stores, options = {}) {
         if (result.triggered) {
           const triggerDate =
             result.value?.weekEnd ||
+            (ruleKey === 'recharge_zero' && result.value?.evaluationYmd
+              ? result.value.evaluationYmd
+              : null) ||
             (ruleKey === 'revenue_achievement_monthly' || ruleKey === 'gross_margin'
               ? shanghaiPrevCalendarMonthBounds().last
               : null) ||

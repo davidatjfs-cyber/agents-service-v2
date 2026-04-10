@@ -218,11 +218,12 @@ export async function runBiAnomalyNotifyPipeline({
     if (ruleKey === 'recharge_zero') {
       rechargePts = Number(value?.penalty_points ?? 0) || 0;
       sevZh = severity === 'high' ? '高' : severity === 'medium' ? '中' : String(severity || '—');
-      const todayYmd = value?.dateToday || getShanghaiYmdParts().ymd;
+      const todayYmd = value?.evaluationYmd || value?.dateToday || getShanghaiYmdParts().ymd;
       const monthStart = value?.month_start || '';
+      const runY = value?.runCalendarYmd || '';
       const periodZh = monthStart
-        ? `本日 ${todayYmd}（即时；当月自 ${monthStart} 起累计，不跨月）`
-        : `本日 ${todayYmd}（即时触发）`;
+        ? `判定营业日 ${todayYmd}（以上海「昨日」口径，任务在 ${runY || '—'} 触发；当月自 ${monthStart} 起累计，不跨月）`
+        : `判定营业日 ${todayYmd}（以上海「昨日」口径${runY ? `，${runY} 触发` : ''}）`;
       rechargeCur = await fetchLatestAnomalyRollupScore(u.username);
       rechargeRem = Math.max(0, rechargeCur - rechargePts);
       const assigneeName = u.display_name || u.username || '—';
