@@ -3048,7 +3048,15 @@ ${execData}
 
   const responseText = stripJsonFromResponse(r.content || '请描述营销执行需求，系统将查询真实活动数据。');
   saveMemory('marketing_executor', store, responseText.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
-  return { agent: 'marketing_executor', response: responseText, store, data: execData, reportTitle: '营销执行报告', dataBacked: true };
+  const baseReturn = {
+    agent: 'marketing_executor',
+    response: responseText,
+    store,
+    data: execData,
+    reportTitle: '营销执行报告',
+    dataBacked: true
+  };
+  return await mergeReportWithDataAuditorDecision(baseReturn, text, ctx);
 }
 // ── 8. Procurement Advisor (采购建议) ──
 async function handleProcurementAdvisor(text, ctx) {
@@ -3401,4 +3409,32 @@ export async function dispatchToAgent(route,text,ctx={}) {
     return { agent: route, response: '出错请重试', error: e?.message };
   }
 }
+
+/**
+ * 报告类输出后追加 data_auditor 决策（含【今日重点动作】等）。
+ * 防循环：ctx.__fromReport 为真时不二次调用；仅当问题含 执行/效果/策略/报告 时触发。
+ * @param {Record<string, unknown>} originalReturn
+ * @param {string} text
+ * @param {Record<string, unknown>} ctx
+ */
+async function mergeReportWithDataAuditorDecision(originalReturn, text, ctx) {
+  if (!originalReturn || typeof originalReturn !== 'object') return originalReturn;
+  if (ctx?.__fromReport) return originalReturn;
+  const t = String(text || '');
+  if (!/执行|效果|策略|报告/.test(t)) return originalReturn;
+  const reportText = String(originalReturn.response || '').trim();
+  if (!reportText) return originalReturn;
+  try {
+    const childCtx = { ...(ctx || {}), __fromReport: true };
+    const decision = await dispatchToAgent('data_auditor', t, childCtx);
+    const decisionBody = String(decision?.response || '').trim();
+    if (!decisionBody) return originalReturn;
+    const mergedResponse = `${reportText}\n\n⸻\n\n【决策补充】\n\n${decisionBody}`;
+    return { ...originalReturn, response: mergedResponse };
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'mergeReportWithDataAuditorDecision skipped');
+    return originalReturn;
+  }
+}
+
 export{HANDLERS};
