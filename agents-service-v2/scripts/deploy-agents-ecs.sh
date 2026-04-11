@@ -118,3 +118,20 @@ cd "${REMOTE_DIR}" && node scripts/verify-knowledge-llm-chain.mjs 2>&1 || echo '
 EOS
 echo ""
 echo "Done. replyEngine 应与 src/reply-engine-version.js 中 REPLY_ENGINE_BUILD 一致。"
+
+# HRMS 静态入口（nginx /opt/hrms）：与 agents 同 ECS 时随本次部署一并发布；独立仓库无 ../scripts 则跳过
+HRMS_FRONTEND_DEPLOY="${HRMS_FRONTEND_DEPLOY:-1}"
+if [[ "${HRMS_FRONTEND_DEPLOY}" == "1" ]]; then
+  HRMS_FE_SCRIPT="${REPO_ROOT}/scripts/deploy-hrms-frontend.sh"
+  if [[ -f "${HRMS_FE_SCRIPT}" ]]; then
+    echo ""
+    echo ">>> HRMS 静态资源（working-fixed.html / sw.js 等）→ ${ECS_HOST}:/opt/hrms/"
+    bash "${HRMS_FE_SCRIPT}"
+  else
+    echo ""
+    echo ">>> skip HRMS 静态部署（未找到 ${HRMS_FE_SCRIPT}，仅 agents-service-v2 单仓时属正常）"
+  fi
+else
+  echo ""
+  echo ">>> SKIP_HRMS_FRONTEND=1 — 已跳过 HRMS 静态部署"
+fi

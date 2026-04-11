@@ -6696,7 +6696,8 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
             delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses, operational_anomaly_note,
             recharge_count, recharge_amount,
             weather, segments, discount_dine, discount_delivery, categories, delivery_detail, bad_reviews_dianping, staff, schedule_next_day, photos)
-          VALUES ($1, $2, $3, $4, $5, $6, $7,
+          /* $1/$2/$3 显式类型：避免 PG 对「VALUES 首列 varchar」与子查询中 $1::text 推断不一致 → inconsistent types for parameter $1 */
+          VALUES ($1::text, $2::text, $3::date, $4, $5, $6, $7,
             COALESCE((
               SELECT SUM(dr.new_wechat_members)::bigint
               FROM daily_reports dr
@@ -6826,7 +6827,8 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
             delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses, operational_anomaly_note,
             recharge_count, recharge_amount,
             weather, segments, discount_dine, discount_delivery, categories, delivery_detail, bad_reviews_dianping, staff, schedule_next_day, photos)
-          VALUES ($1, $2, $3, $4, $5, $6, $7,
+          /* $1/$2/$3 显式类型：避免 PG 对「VALUES 首列 varchar」与子查询中 $1::text 推断不一致 → inconsistent types for parameter $1 */
+          VALUES ($1::text, $2::text, $3::date, $4, $5, $6, $7,
             COALESCE((
               SELECT SUM(dr.new_wechat_members)::bigint
               FROM daily_reports dr
