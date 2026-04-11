@@ -177,7 +177,7 @@ async function getAttitudeRating(username, period) {
 
 /**
  * 出品经理执行力（月度）
- * 自然日维度：当日须开档档口齐 + 收档档口齐 + 原料≥1；统计「完全达标天数」与「未达标天数」。
+ * 按业务日逐日判定；每日未完全达标计为 1 次不合格（与 ops_tasks 日频备案一致），月度汇总为「不合格次数」。
  */
 async function getPMExecutionRating(store, brand, period) {
   const [year, month] = period.split('-');
@@ -202,7 +202,9 @@ async function getPMExecutionRating(store, brand, period) {
     detail: {
       days_in_month: daysInMonth,
       compliant_days: compliantDays,
-      non_compliant_days: nonCompliantDays
+      non_compliant_days: nonCompliantDays,
+      /** 与「未达标天数」同值；对外文案统一称「次数」 */
+      non_compliant_count: nonCompliantDays
     }
   };
 }
@@ -264,7 +266,8 @@ async function getMajixianManagerExecutionRating(store, period) {
       total_meetings: totalMeetings,
       qualified_meetings: stats.qualifiedMeetings,
       unqualified_meetings: unqualifiedMeetings,
-      missing_days: missingCount
+      missing_days: missingCount,
+      missing_meeting_count: missingCount
     }
   };
 }
@@ -962,11 +965,17 @@ async function sendMonthlyRatingNotifications(results, period) {
 
 function buildMonthlyRatingCard(r, period) {
   const roleLabel = roleLabelZh(r.role);
-  const execCount = r.execution_detail?.non_compliant_days ?? r.execution_detail?.missing_days ?? r.execution_detail?.value ?? '—';
+  const execCount =
+    r.execution_detail?.non_compliant_count ??
+    r.execution_detail?.missing_meeting_count ??
+    r.execution_detail?.non_compliant_days ??
+    r.execution_detail?.missing_days ??
+    r.execution_detail?.value ??
+    '—';
   const attitudeCount = r.attitude_detail?.incomplete_tasks ?? '—';
 
   const execLine = r.role === 'store_production_manager'
-    ? `• 执行力：**${r.execution_rating}级**（本月不合格 **${execCount}** 天 | ≤2天A / ≤4天B / ≤6天C / >6天D）`
+    ? `• 执行力：**${r.execution_rating}级**（本月不合格 **${execCount}** 次 | ≤2次A / ≤4次B / ≤6次C / >6次D）`
     : `• 执行力：**${r.execution_rating}级**（本月不合格 **${execCount}** 次）`;
 
   const content = `**门店**：${r.store}
@@ -996,7 +1005,12 @@ ${execLine}
 
 function buildMonthlyRatingText(r, period) {
   const roleLabel = roleLabelZh(r.role);
-  const execCount = r.execution_detail?.non_compliant_days ?? r.execution_detail?.missing_days ?? '—';
+  const execCount =
+    r.execution_detail?.non_compliant_count ??
+    r.execution_detail?.missing_meeting_count ??
+    r.execution_detail?.non_compliant_days ??
+    r.execution_detail?.missing_days ??
+    '—';
   const attitudeCount = r.attitude_detail?.incomplete_tasks ?? '—';
   return `${period} 月度综合评级
 
@@ -1012,7 +1026,12 @@ ${r.store} · ${roleLabel} ${r.name || r.username}
 function buildMonthlySummaryCard(results, period) {
   const lines = results.map(r => {
     const roleLabel = roleLabelZh(r.role);
-    const execCount = r.execution_detail?.non_compliant_days ?? r.execution_detail?.missing_days ?? '—';
+    const execCount =
+      r.execution_detail?.non_compliant_count ??
+      r.execution_detail?.missing_meeting_count ??
+      r.execution_detail?.non_compliant_days ??
+      r.execution_detail?.missing_days ??
+      '—';
     const attCount = r.attitude_detail?.incomplete_tasks ?? '—';
     return `• **${r.store}** · ${roleLabel} ${r.name || r.username}：${r.performance_score}分 | 执行${r.execution_rating}(${execCount}次) 态度${r.attitude_rating}(${attCount}次) 能力${r.ability_rating} 门店${r.store_rating}`;
   });
@@ -1037,7 +1056,12 @@ ${lines.join('\n')}`;
 function buildMonthlySummaryText(results, period) {
   const lines = results.map(r => {
     const roleLabel = roleLabelZh(r.role);
-    const execCount = r.execution_detail?.non_compliant_days ?? r.execution_detail?.missing_days ?? '—';
+    const execCount =
+      r.execution_detail?.non_compliant_count ??
+      r.execution_detail?.missing_meeting_count ??
+      r.execution_detail?.non_compliant_days ??
+      r.execution_detail?.missing_days ??
+      '—';
     const attCount = r.attitude_detail?.incomplete_tasks ?? '—';
     return `• ${r.store} · ${roleLabel} ${r.name || r.username}：${r.performance_score}分 | 执行${r.execution_rating}(${execCount}次) 态度${r.attitude_rating}(${attCount}次) 能力${r.ability_rating} 门店${r.store_rating}`;
   });

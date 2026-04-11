@@ -1658,10 +1658,29 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
             [taskId]
           );
           logger.info({ taskId, store: task.store }, 'Task reply review: 3x fail → attitude record (no score deduction)');
-          await sendCompanyNoticeToAssignees(
-            task,
-            `因任务回复连续三次审核不合格，已记入工作态度备案（影响月度工作态度评级；不计周度绩效分/agent_scores）。\n门店：${task.store}\n任务ID：${taskId}\n标题：${String(task.title || '').slice(0, 280)}`
-          ).catch((e) => logger.warn({ err: e?.message, taskId }, 'review penalty: company notice failed'));
+          let monthlyAtt = 0;
+          try {
+            const { getShanghaiYmd } = await import('./report-delivery.js');
+            const { getMonthlyAttitudeFilingCount } = await import('../utils/performance-filing-counts.js');
+            const ymd = getShanghaiYmd();
+            const au = String(task.assignee_username || '').trim();
+            if (au) monthlyAtt = await getMonthlyAttitudeFilingCount(au, ymd);
+          } catch (_e) {
+            monthlyAtt = 0;
+          }
+          const ym = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 7);
+          const attitudeBody = [
+            `【工作态度备案】本次为本月第 ${monthlyAtt} 次备案`,
+            `本月（${ym}）累计工作态度不合格次数：${monthlyAtt} 次`,
+            '因任务回复连续三次审核不合格，已记入工作态度备案（影响月度工作态度评级；不计周度绩效分/agent_scores）。',
+            `门店：${task.store}`,
+            `任务ID：${taskId}`,
+            `标题：${String(task.title || '').slice(0, 280)}`
+          ].join('\n');
+          await sendCompanyNoticeToAssignees(task, attitudeBody, {
+            title: `工作态度备案（本月第${monthlyAtt}次）`,
+            type: 'attitude_filing'
+          }).catch((e) => logger.warn({ err: e?.message, taskId }, 'review penalty: company notice failed'));
         } catch (e) {
           logger.error({ taskId, store: task.store, err: e?.message }, 'Task reply review: 3x fail → DB update FAILED');
         }

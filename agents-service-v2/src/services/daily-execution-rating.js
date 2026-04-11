@@ -16,6 +16,7 @@ import { sendCard } from './feishu-client.js';
 import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
 import { getPMReportStatusByBizDate, getMajixianMeetingDayEval } from './pm-execution-report-coverage.js';
 import { sortFeishuScoringRows } from '../utils/scoring-assignee.js';
+import { getMonthlyExecutionFilingCount } from '../utils/performance-filing-counts.js';
 
 // ─────────────────────────────────────────────
 // 1. 数据查询函数
@@ -54,53 +55,6 @@ async function getMajixianMeetingReport(store, date) {
     score: ev.score,
     qualified: ev.qualified
   };
-}
-
-/**
- * 查询某人本月（含当日）累计执行力不合格备案次数
- * 统计 ops_tasks 中 task_type=execution_rating_daily 且 biz_date 在当月的记录条数
- */
-async function getMonthlyExecutionFilingCount(username, store, date) {
-  try {
-    const monthStart = String(date).slice(0, 7) + '-01';
-    const r = await query(
-      `SELECT COUNT(*)::int AS cnt
-       FROM ops_tasks
-       WHERE lower(trim(assignee_username)) = lower(trim($1))
-         AND trim(store) = trim($2)
-         AND task_type = 'execution_rating_daily'
-         AND biz_date >= $3::date
-         AND biz_date <= $4::date`,
-      [username, store, monthStart, date]
-    );
-    return Number(r.rows?.[0]?.cnt || 0);
-  } catch (_e) {
-    return 0;
-  }
-}
-
-/**
- * 查询某人本月（含当日）累计工作态度不合格备案次数
- * 统计 master_tasks 中 hr_performance_recorded=true 且 dispatched_at 在当月的记录条数
- */
-async function getMonthlyAttitudeFilingCount(username, date) {
-  try {
-    const monthStart = String(date).slice(0, 7) + '-01';
-    const sources = ['random_inspection', 'scheduled_inspection', 'bi_anomaly', 'auto_collab', 'data_auditor'];
-    const r = await query(
-      `SELECT COUNT(DISTINCT task_id)::int AS cnt
-       FROM master_tasks
-       WHERE lower(trim(coalesce(assignee_username, ''))) = lower(trim($1))
-         AND source = ANY($2::text[])
-         AND coalesce(hr_performance_recorded, false) = true
-         AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date >= $3::date
-         AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date <= $4::date`,
-      [username, sources, monthStart, date]
-    );
-    return Number(r.rows?.[0]?.cnt || 0);
-  } catch (_e) {
-    return 0;
-  }
 }
 
 /** 同一门店同岗位多人绑定时选 canonical（马己仙出品经理优先黎永荣/NNYXLYR04，压低 nnyxcs35） */
