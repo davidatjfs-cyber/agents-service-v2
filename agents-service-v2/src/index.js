@@ -44,6 +44,7 @@ import { startTaskCardReminderScheduler } from './services/task-card-reminders.j
 import { sendMorningBriefing } from './services/morning-briefing.js';
 import { sendDailyTaskCompletionReport } from './services/daily-task-completion.js';
 import { runDailyExecutionRating } from './services/daily-execution-rating.js';
+import { runDailyAttitudeFilingReport } from './services/daily-attitude-filing-report.js';
 import { runMonthlyComprehensiveRating } from './services/monthly-comprehensive-rating.js';
 import { getAIOperationsReport } from './services/ai-operations.js';
 import adminApi from './routes/admin-api.js';
@@ -951,6 +952,13 @@ async function start() {
     );
   }, { timezone: 'Asia/Shanghai' });
   logger.info('Daily execution rating cron scheduled at 08:02 Asia/Shanghai');
+  // 工作态度备案日报：08:05，晚于执行力、早于食安 08:15
+  cron.schedule('5 8 * * *', () => {
+    runWithCronLog('daily_attitude_filing_report', () => runDailyAttitudeFilingReport()).catch((e) =>
+      logger.warn({ err: e?.message }, 'daily attitude filing report cron error')
+    );
+  }, { timezone: 'Asia/Shanghai' });
+  logger.info('Daily attitude filing report cron scheduled at 08:05 Asia/Shanghai');
   // 月度综合评级：每月10号 01:18（Asia/Shanghai），晚于 01:03 KPI、00:30 加分
   cron.schedule('18 1 10 * *', () => {
     runWithCronLog('monthly_comprehensive_rating', async () => {

@@ -84,7 +84,9 @@ export async function probeMemPalaceHealth() {
       configured: fromEnv,
       baseUrl,
       reachable: ok,
-      httpStatus: res.status
+      httpStatus: res.status,
+      /** MemPalace 当前仅做 HTTP /health 探测；条目枚举需服务端提供列表 API 后方可展示 */
+      detailHint: ok ? '仅连通性检测；无条目列表' : null
     };
   } catch (e) {
     return {
@@ -92,7 +94,8 @@ export async function probeMemPalaceHealth() {
       configured: fromEnv,
       baseUrl,
       reachable: false,
-      error: String(e?.message || e)
+      error: String(e?.message || e),
+      detailHint: '仅连通性检测；无条目列表'
     };
   }
 }

@@ -9,8 +9,73 @@ import { query } from '../utils/db.js';
 import { getConfig } from './config-service.js';
 import { runAnomalyChecks } from './anomaly-engine.js';
 import { sendText, sendCard } from './feishu-client.js';
-import { collectStoreLookupVariants } from '../utils/feishu-assignee-resolve.js';
+import { resolveSingleScoringUser } from '../utils/scoring-assignee.js';
 import { formatTaskCardAuditSection } from './task-reply-audit-hint.js';
+
+/** 定时任务多角色时：先店长、再出品经理，其余保持配置顺序 */
+const PRIMARY_ROLE_ORDER = ['store_manager', 'store_production_manager', 'front_manager'];
+
+function orderedAssigneeRoles(roleList) {
+  const rl = Array.isArray(roleList) && roleList.length ? roleList : ['store_manager'];
+  const set = new Set(rl);
+  return [...PRIMARY_ROLE_ORDER.filter((r) => set.has(r)), ...rl.filter((r) => !PRIMARY_ROLE_ORDER.includes(r))];
+}
+
+/**
+ * 巡检摘要卡：每个门店只绑定一名主责任人（与绩效/执行力「岗位唯一」一致）。
+ */
+async function resolvePrimaryPatrolAssignee(store, roleList) {
+  const ordered = orderedAssigneeRoles(roleList);
+  for (const role of ordered) {
+    const u = await resolveSingleScoringUser(store, role);
+    if (!u?.username || String(u.username).startsWith('__periodic')) continue;
+    const r = await query(
+      `SELECT username, role, open_id FROM feishu_users
+       WHERE registered = true AND open_id IS NOT NULL AND LOWER(username) = LOWER($1)
+       LIMIT 1`,
+      [u.username]
+    ).catch(() => ({ rows: [] }));
+    const row = r.rows?.[0];
+    if (row?.open_id) {
+      return {
+        username: String(row.username || u.username).trim(),
+        role: String(row.role || role).trim(),
+        open_id: String(row.open_id).trim()
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * 非巡检定时卡：每个岗位类型各发一名规范责任人（马己仙出品仅黎永荣主号，不含观察号）。
+ */
+async function resolveScheduledCardRecipients(store, roleList) {
+  const ordered = orderedAssigneeRoles(roleList);
+  const out = [];
+  const seenOpen = new Set();
+  for (const role of ordered) {
+    const u = await resolveSingleScoringUser(store, role);
+    if (!u?.username || String(u.username).startsWith('__periodic')) continue;
+    const r = await query(
+      `SELECT username, role, open_id FROM feishu_users
+       WHERE registered = true AND open_id IS NOT NULL AND LOWER(username) = LOWER($1)
+       LIMIT 1`,
+      [u.username]
+    ).catch(() => ({ rows: [] }));
+    const row = r.rows?.[0];
+    if (!row?.open_id) continue;
+    const oid = String(row.open_id).trim();
+    if (seenOpen.has(oid)) continue;
+    seenOpen.add(oid);
+    out.push({
+      username: String(row.username || u.username).trim(),
+      role: String(row.role || role).trim(),
+      open_id: oid
+    });
+  }
+  return out;
+}
 
 const DEDUPE_MS = 120_000;
 const _dedupe = new Map();
@@ -309,18 +374,12 @@ export async function executeDailyInspectionItem(item) {
       });
       card._fallback = `【${label}】${store} · ${timeNow}\nBI检测完成 · ${alertN ? `新触发${alertN}条异常` : '无新异常'}`;
 
-      // 先确定责任人，再只给该责任人发消息，避免同 store+role 多人重复发送
+      // 先确定唯一主责任人（岗位规范账号），再只给该人发消息
       const roleList = Array.isArray(roles) && roles.length ? roles : ['store_manager'];
-      const storeVariants = collectStoreLookupVariants(store);
-      const staffR = await query(
-        `SELECT username, role, open_id FROM feishu_users
-         WHERE registered = true AND role = ANY($1::text[]) AND trim(store) = ANY($2::text[])
-         LIMIT 1`,
-        [roleList, storeVariants.length ? storeVariants : [store]]
-      ).catch(() => ({ rows: [] }));
-      const assigneeUsername = staffR.rows?.[0]?.username || '';
-      const assigneeRole = staffR.rows?.[0]?.role || roleList[0] || 'store_manager';
-      const assigneeOpenId = staffR.rows?.[0]?.open_id || '';
+      const primary = await resolvePrimaryPatrolAssignee(store, roleList);
+      const assigneeUsername = primary?.username || '';
+      const assigneeRole = primary?.role || roleList[0] || 'store_manager';
+      const assigneeOpenId = primary?.open_id || '';
 
       const sentMsgIds = [];
       const pingedOpenIds = [];
@@ -374,27 +433,20 @@ export async function executeDailyInspectionItem(item) {
     const card = buildScheduledCard({ store, label, desc: desc || '请按要求完成并反馈', taskId, timeNow, replyExtra });
     card._fallback = `【${label}】${store}\n${desc || '定时任务提醒，请按要求完成并反馈。'}\n时间：${timeNow}\n任务ID：${taskId}`;
 
-    // 确定所有责任人，给所有匹配的员工发消息
+    // 每个岗位类型一名规范责任人（马己仙出品经理固定黎永荣主号）
     const roleList = Array.isArray(roles) && roles.length ? roles : ['store_manager'];
-    const storeVariants = collectStoreLookupVariants(store);
-    const staffR = await query(
-      `SELECT username, role, open_id FROM feishu_users
-       WHERE registered = true AND role = ANY($1::text[]) AND trim(store) = ANY($2::text[])
-       ORDER BY username`,
-      [roleList, storeVariants.length ? storeVariants : [store]]
-    ).catch(() => ({ rows: [] }));
+    const staffRows = await resolveScheduledCardRecipients(store, roleList);
 
-    if (!staffR.rows?.length) {
-      logger.warn({ store, roleList }, 'daily-inspection: no staff found');
+    if (!staffRows.length) {
+      logger.warn({ store, roleList }, 'daily-inspection: no resolved staff (feishu_users / 岗位绑定)');
       continue;
     }
 
-    // 同店同角色多人（如两名出品经理）：共用一个 task_id，合并所有飞书 message_id，避免重复 INSERT 仅首人落库、他人回复无法命中 feishu_msg_ids
     const allSentMsgIds = [];
     const allPingedOpenIds = [];
     const assigneeUsernames = [];
 
-    for (const staff of staffR.rows) {
+    for (const staff of staffRows) {
       const un = String(staff.username || '').trim();
       if (un) assigneeUsernames.push(un);
       const assigneeOpenId = String(staff.open_id || '').trim();
@@ -412,8 +464,8 @@ export async function executeDailyInspectionItem(item) {
       allPingedOpenIds.push(assigneeOpenId);
     }
 
-    const primaryUsername = assigneeUsernames[0] || String(staffR.rows[0]?.username || '').trim() || '';
-    const primaryRole = staffR.rows[0]?.role || roleList[0] || 'store_manager';
+    const primaryUsername = assigneeUsernames[0] || String(staffRows[0]?.username || '').trim() || '';
+    const primaryRole = staffRows[0]?.role || roleList[0] || 'store_manager';
 
     try {
       await query(
@@ -442,14 +494,14 @@ export async function executeDailyInspectionItem(item) {
         ]
       );
       logger.info(
-        { taskId, store, primaryUsername, primaryRole, msgIds: allSentMsgIds.length, assigneeN: staffR.rows.length },
+        { taskId, store, primaryUsername, primaryRole, msgIds: allSentMsgIds.length, assigneeN: staffRows.length },
         'daily-inspection: task saved to master_tasks (merged assignees)'
       );
     } catch (e) {
       logger.warn({ err: e?.message, taskId, store }, 'daily-inspection: master_tasks insert failed');
     }
 
-    logger.info({ type, label, store, taskId, assigneeCount: staffR.rows.length }, 'daily-inspection: scheduled cards sent to all assignees');
+    logger.info({ type, label, store, taskId, assigneeCount: staffRows.length }, 'daily-inspection: scheduled cards sent to resolved assignees');
   }
   return { ok: true, type, custom: true };
 }

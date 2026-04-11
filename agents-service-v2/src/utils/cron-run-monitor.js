@@ -33,7 +33,8 @@ const CRON_JOB_LABEL_ZH = {
   daily_attendance_report: '考勤日报',
   escalation_scan: '任务升级扫描',
   task_card_reminders: '任务卡片催办',
-  daily_inspection_tick: '每日巡检调度（整轮）'
+  daily_inspection_tick: '每日巡检调度（整轮）',
+  daily_attitude_filing_report: '工作态度备案日报（昨日汇总）'
 };
 
 function cronJobLabelZh(jobKey) {

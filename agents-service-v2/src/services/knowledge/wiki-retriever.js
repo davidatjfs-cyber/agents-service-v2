@@ -12,8 +12,15 @@ export function probeWikiKnowledgeHealth() {
       return { dirExists: false, mdCount: 0, ok: false, dir };
     }
     const files = fs.readdirSync(dir);
-    const md = files.filter((f) => f.endsWith('.md'));
-    return { dirExists: true, mdCount: md.length, ok: true, dir };
+    const md = files.filter((f) => f.endsWith('.md')).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+    return {
+      dirExists: true,
+      mdCount: md.length,
+      /** 运维展示用文件名列表（最多 40 条，避免 health JSON 过大） */
+      mdFiles: md.slice(0, 40),
+      ok: true,
+      dir
+    };
   } catch (e) {
     return { dirExists: false, mdCount: 0, ok: false, dir, error: String(e?.message || e) };
   }

@@ -9,6 +9,7 @@ import { logger } from '../utils/logger.js';
 import { getConfig } from './config-service.js';
 import { sendCard, sendText } from './feishu-client.js';
 import { formatTaskCardAuditSection } from './task-reply-audit-hint.js';
+import { resolveSingleScoringUser } from '../utils/scoring-assignee.js';
 
 const _timers = new Map();
 const _status = new Map();
@@ -39,15 +40,6 @@ async function getActiveStores() {
   try {
     const r = await query(`SELECT DISTINCT store FROM daily_reports WHERE date >= CURRENT_DATE - 30 AND store IS NOT NULL`);
     return r.rows.map(x => x.store);
-  } catch { return []; }
-}
-
-async function getStoreStaff(storeName, roles) {
-  try {
-    const r = await query(
-      `SELECT username, role, store FROM feishu_users WHERE registered = true`,
-    );
-    return (r.rows || []).filter(u => sameStore(u.store, storeName) && roles.includes(u.role));
   } catch { return []; }
 }
 
@@ -108,21 +100,22 @@ async function sendSafetyCheck(config) {
     ? config.assigneeRoles
     : ['store_manager', 'store_production_manager'];
 
-  const staff = await getStoreStaff(pickedStore, roles);
-  // 按配置角色顺序排列，便于「主责任人」与定时任务一致（先勾选的角色优先）
-  const staffSorted = [];
+  /** 与定时巡检一致：每岗唯一规范账号（马己仙出品 → 黎永荣主号） */
+  const recipients = [];
   for (const role of roles) {
-    for (const u of staff) {
-      if (u.role === role && u.username && !staffSorted.find((x) => x.username === u.username)) staffSorted.push(u);
-    }
+    const canon = await resolveSingleScoringUser(pickedStore, role);
+    if (!canon?.username || String(canon.username).startsWith('__periodic')) continue;
+    const un = String(canon.username).trim();
+    if (recipients.some((x) => x.username.toLowerCase() === un.toLowerCase())) continue;
+    recipients.push({ username: un, role });
   }
-  const usernames = staffSorted.map((u) => u.username).filter(Boolean);
+  const usernames = recipients.map((r) => r.username);
   let assigneeUsername = '';
   let assigneeRole = roles[0] || 'store_manager';
   for (const role of roles) {
-    const u = staff.find((s) => s.role === role);
-    if (u?.username) {
-      assigneeUsername = u.username;
+    const hit = recipients.find((s) => s.role === role);
+    if (hit?.username) {
+      assigneeUsername = hit.username;
       assigneeRole = role;
       break;
     }
