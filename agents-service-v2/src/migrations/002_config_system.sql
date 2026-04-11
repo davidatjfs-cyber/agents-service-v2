@@ -85,7 +85,7 @@ INSERT INTO agent_v2_configs (config_key, config_value, description, updated_by)
     "data_source": "daily_reports",
     "threshold": {
       "洪潮": {"medium": {"below": 1100}, "high": {"below": 1000}},
-      "马己仙": {"medium": {"below": 1400}, "high": {"below": 1300}},
+      "马己仙": {"medium": {"below": 1500}, "high": {"below": 1400}},
       "default": {"medium": {"below": 1200}, "high": {"below": 1000}}
     },
     "assign_to": "store_manager",

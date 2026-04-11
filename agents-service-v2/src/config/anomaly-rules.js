@@ -81,7 +81,7 @@ export const ANOMALY_RULES = [
     brands: null,
     thresholds: {
       '洪潮': { medium: { below: 1100 }, high: { below: 1000 } },
-      '马己仙': { medium: { below: 1400 }, high: { below: 1300 } }
+      '马己仙': { medium: { below: 1500 }, high: { below: 1400 } }
     },
     dataSource: {
       table: 'daily_reports',
