@@ -1669,8 +1669,23 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
             monthlyAtt = 0;
           }
           const ym = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 7);
+          const au0 = String(task.assignee_username || '').trim();
+          let dispName = au0;
+          if (au0) {
+            try {
+              const nr = await query(
+                `SELECT COALESCE(NULLIF(TRIM(name),''), username) AS disp FROM feishu_users
+                 WHERE lower(trim(username)) = lower(trim($1)) AND coalesce(registered, false) = true LIMIT 1`,
+                [au0]
+              );
+              dispName = String(nr.rows?.[0]?.disp || au0).trim() || au0;
+            } catch {
+              dispName = au0;
+            }
+          }
           const attitudeBody = [
-            `【工作态度备案】本次为本月第 ${monthlyAtt} 次备案`,
+            `【工作态度备案】本次为本月第 ${monthlyAtt} 次备案（全门店累计，与月度评级一致）`,
+            au0 ? `责任人：${dispName}（${au0}）` : '责任人：（未绑定 assignee_username）',
             `本月（${ym}）累计工作态度不合格次数：${monthlyAtt} 次`,
             '因任务回复连续三次审核不合格，已记入工作态度备案（影响月度工作态度评级；不计周度绩效分/agent_scores）。',
             `门店：${task.store}`,

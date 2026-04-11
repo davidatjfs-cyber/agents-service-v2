@@ -43,3 +43,27 @@ export async function getMonthlyAttitudeFilingCount(username, dateYmd) {
     return 0;
   }
 }
+
+/**
+ * 同上，但仅统计指定门店（卡片上常只展示一家店，需与「全门店合计」区分以免误解）
+ */
+export async function getMonthlyAttitudeFilingCountForStore(username, store, dateYmd) {
+  try {
+    const monthStart = String(dateYmd).slice(0, 7) + '-01';
+    const sources = ['random_inspection', 'scheduled_inspection', 'bi_anomaly', 'auto_collab', 'data_auditor'];
+    const r = await query(
+      `SELECT COUNT(DISTINCT task_id)::int AS cnt
+       FROM master_tasks
+       WHERE lower(trim(coalesce(assignee_username, ''))) = lower(trim($1))
+         AND lower(trim(coalesce(store, ''))) = lower(trim($5))
+         AND source = ANY($2::text[])
+         AND coalesce(hr_performance_recorded, false) = true
+         AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date >= $3::date
+         AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date <= $4::date`,
+      [username, sources, monthStart, dateYmd, String(store || '').trim()]
+    );
+    return Number(r.rows?.[0]?.cnt || 0);
+  } catch (_e) {
+    return 0;
+  }
+}
