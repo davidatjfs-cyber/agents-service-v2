@@ -857,12 +857,12 @@ async function sendMonthlyRatingNotifications(results, period) {
              VALUES ($1, $2, $3, $4, $5::jsonb)`,
             [
               r.username,
-              `工作态度备案（${period}月，共${attitudeCount}次不合格）`,
+              `工作态度备案｜${r.name || r.username}（${r.username}）·${period}月·本人${attitudeCount}次`,
               [
                 `【工作态度备案】${period} 月度`,
                 `门店：${r.store}`,
-                `岗位：${roleLabel} · ${r.name || r.username}`,
-                `本月（${period}）累计工作态度不合格次数：${attitudeCount} 次`,
+                `岗位：${roleLabel} · ${r.name || r.username}（账号 **${r.username}**）`,
+                `**本人**本月（${period}）工作态度备案累计：**${attitudeCount}** 次（与系统月度评级同一 SQL：仅计该账号名下 master_tasks 已备案任务，全门店去重；不含他人）`,
                 `态度评级：${r.attitude_rating} 级（≤2次A / ≤4次B / ≤8次C / >8次D）`
               ].join('\n'),
               'attitude_rating_monthly',
@@ -986,7 +986,7 @@ function buildMonthlyRatingCard(r, period) {
 
 **核心评级**
 ${execLine}
-• 工作态度：**${r.attitude_rating}级**（本月态度不合格 **${attitudeCount}** 次 | ≤2次A / ≤4次B / ≤8次C / >8次D）
+• 工作态度：**${r.attitude_rating}级**（**本人**本月工作态度备案 **${attitudeCount}** 次 | ≤2次A / ≤4次B / ≤8次C / >8次D）
 • 工作能力：**${r.ability_rating}级**
 • 门店级别：${fmtStoreLevelLabel(r.store_rating)}`;
 
@@ -1018,7 +1018,7 @@ ${r.store} · ${roleLabel} ${r.name || r.username}
 
 绩效得分：${r.performance_score}分
 执行力：${r.execution_rating}级（本月不合格${execCount}次）
-工作态度：${r.attitude_rating}级（本月态度不合格${attitudeCount}次）
+工作态度：${r.attitude_rating}级（本人本月工作态度备案${attitudeCount}次）
 工作能力：${r.ability_rating}级
 门店级别：${fmtStoreLevelLabel(r.store_rating)}`;
 }

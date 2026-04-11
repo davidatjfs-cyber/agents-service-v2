@@ -23,7 +23,13 @@ export async function getMonthlyExecutionFilingCount(username, store, dateYmd) {
   }
 }
 
-/** 工作态度：master_tasks 已 HR 备案任务数（按人+自然月，distinct task_id） */
+/**
+ * 工作态度备案累计（**仅统计传入的 assignee_username 本人**，不含他人、不含执行力备案）。
+ * - 表：master_tasks
+ * - 条件：该行的 assignee_username（trim+lower 匹配）= 传入账号；source ∈ 定时巡检/抽检/BI/协作/数据审计；
+ *   hr_performance_recorded=true；任务派发日（上海日历）落在 [当月1日, dateYmd]
+ * - 计数：COUNT(DISTINCT task_id) → **不同任务各计 1 次**，同一任务不会重复累加
+ */
 export async function getMonthlyAttitudeFilingCount(username, dateYmd) {
   try {
     const monthStart = String(dateYmd).slice(0, 7) + '-01';
@@ -45,7 +51,7 @@ export async function getMonthlyAttitudeFilingCount(username, dateYmd) {
 }
 
 /**
- * 同上，但仅统计指定门店（卡片上常只展示一家店，需与「全门店合计」区分以免误解）
+ * 同上，但在「本人」前提下 **再加门店筛选**（trim+lower 精确匹配 store 字符串）。
  */
 export async function getMonthlyAttitudeFilingCountForStore(username, store, dateYmd) {
   try {
