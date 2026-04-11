@@ -506,7 +506,7 @@ function countStoresWithTodayDailyReport(allStoresData) {
 }
 
 // ─── 考勤日报 — 考勤 + 人效 + 排班建议（飞书卡片推送）
-// 首跑 22:15 + 补跑 23:10：避免营业日报晚于首跑写入 PG 时，卡片仅余「排班建议」却被标记发送成功、当天无法重试。
+// 首跑 22:30 + 补跑 23:10：与营业日报「提交后再写 PG」对齐；若仍无行则补跑重试。
 export async function dailyAttendanceReport() {
   logger.info('📋 Running daily attendance report');
   const today = getShanghaiYmd();
@@ -891,7 +891,7 @@ function buildAttendanceCard(allStoresData, today) {
   // 底部备注
   elements.push({
     tag: 'note',
-    elements: [{ tag: 'plain_text', content: '数据来源：营业日报 + 员工管理 · 每晚22:00自动推送' }]
+    elements: [{ tag: 'plain_text', content: '数据来源：营业日报 + 员工管理 · 每晚22:30自动推送' }]
   });
 
   return {
@@ -958,7 +958,7 @@ function buildStoreCard(sd, today) {
 
   elements.push({
     tag: 'note',
-    elements: [{ tag: 'plain_text', content: '数据来源：营业日报 + 员工管理 · 每晚22:00自动推送' }]
+    elements: [{ tag: 'plain_text', content: '数据来源：营业日报 + 员工管理 · 每晚22:30自动推送' }]
   });
 
   return {
@@ -1069,8 +1069,8 @@ export function startRhythmScheduler() {
     }
   }, { timezone: 'Asia/Shanghai' });
 
-  // 每日 22:15 — 考勤日报（依赖 PG daily_reports 当日行；早于多数门店日结保存时可能无行）
-  cron.schedule('15 22 * * *', async () => {
+  // 每日 22:30 — 考勤日报（依赖 PG daily_reports 当日行；营业日报仅「提交」后写入 PG）
+  cron.schedule('30 22 * * *', async () => {
     try {
       await runWithCronLog('daily_attendance_report', async () => {
         await dailyAttendanceReport();
@@ -1092,6 +1092,6 @@ export function startRhythmScheduler() {
   }, { timezone: 'Asia/Shanghai' });
 
   logger.info(
-    '✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+日频BI(每日05:08)+月收(每月1日08:12)+周报(周一10:06)+月评(每月1日10:18)+考勤(每日22:15+补跑23:10)'
+    '✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+日频BI(每日05:08)+月收(每月1日08:12)+周报(周一10:06)+月评(每月1日10:18)+考勤(每日22:30+补跑23:10)'
   );
 }

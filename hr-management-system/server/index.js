@@ -6655,7 +6655,9 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
         updatedBy: username
       };
 
-      // 同时更新到daily_reports表（保存所有业务字段供Agent/BI查询）
+      // 营业日报 → PostgreSQL：仅「正式提交」或「已提交后的再保存」时双写；草稿只留在 hrms_state，避免 PG 被半成品污染
+      const shouldSyncDailyReportsPg = !!wantSubmit || alreadySubmitted;
+      if (shouldSyncDailyReportsPg) {
       try {
         const todayWechat = Math.max(0, Math.floor(Number(payload?.new_wechat_members) || 0));
         const dineOrders = Math.floor(Number(payload?.dine?.orders) || 0);
@@ -6764,6 +6766,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
         console.error('[daily_report_update]', e.message);
         void notifyAdminsDualWriteFailure(`daily_reports（营业日报 PG 同步·更新 ${store} ${date}）`, e);
       }
+      }
 
       if (wantSubmit || submittedAt) {
         item.submittedAt = nextSubmittedAt;
@@ -6788,7 +6791,9 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
         item.submittedBy = username;
       }
 
-      // 新建日报时也必须同步到 daily_reports（否则评分模型/Agent 数据源会缺失）
+      // 新建营业日报 → PG：仅在本请求带「正式提交」时双写；首次仅保存草稿不写 PG
+      const shouldSyncNewDailyReportPg = !!wantSubmit;
+      if (shouldSyncNewDailyReportPg) {
       try {
         const todayWechat = Math.max(0, Math.floor(Number(payload?.new_wechat_members) || 0));
         const dineOrders = Math.floor(Number(payload?.dine?.orders) || 0);
@@ -6902,6 +6907,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
       } catch (e) {
         console.error('[daily_report_insert_month]', e.message);
         void notifyAdminsDualWriteFailure(`daily_reports（企微月累计重算 ${store} ${date}）`, e);
+      }
       }
 
       shouldNotifySchedule = !!wantSubmit;
