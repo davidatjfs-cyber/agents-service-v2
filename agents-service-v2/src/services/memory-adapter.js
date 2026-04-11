@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from '../utils/logger.js';
-import { rankKnowledgeCandidatesWithDeepseek, useDeepseekForKnowledgeRanking } from './knowledge/deepseek-knowledge.js';
+import { rankKnowledgeCandidatesWithLlm, useKnowledgeLlmRanking } from './knowledge/deepseek-knowledge.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -136,7 +136,7 @@ export async function recallMemory(opts) {
     if (!wing || !room) return [];
     const limit = Number.isFinite(opts?.limit) ? Math.min(50, Math.max(1, opts.limit)) : 5;
     const q = String(opts?.query ?? '');
-    const fetchLimit = useDeepseekForKnowledgeRanking() && q.trim() ? Math.min(30, Math.max(limit, 15)) : limit;
+    const fetchLimit = useKnowledgeLlmRanking() && q.trim() ? Math.min(30, Math.max(limit, 15)) : limit;
     const res = await http().post('/search', {
       wing,
       room,
@@ -149,14 +149,14 @@ export async function recallMemory(opts) {
     }
     const rows = Array.isArray(res.data) ? res.data : [];
     let ordered = rows;
-    let usedDeepseekOrder = false;
+    let usedLlmOrder = false;
 
-    if (useDeepseekForKnowledgeRanking() && q.trim() && rows.length) {
+    if (useKnowledgeLlmRanking() && q.trim() && rows.length) {
       const candidates = rows.map((row, i) => ({
         i,
         preview: String(row?.content || '').slice(0, 600)
       }));
-      const idxs = await rankKnowledgeCandidatesWithDeepseek({
+      const { indices: idxs } = await rankKnowledgeCandidatesWithLlm({
         store: wing,
         query: q,
         candidates,
@@ -164,11 +164,11 @@ export async function recallMemory(opts) {
       });
       if (idxs.length) {
         ordered = idxs.map((i) => rows[i]).filter(Boolean);
-        usedDeepseekOrder = true;
+        usedLlmOrder = true;
       }
     }
 
-    const minScore = usedDeepseekOrder ? 0.55 : 0.7;
+    const minScore = usedLlmOrder ? 0.55 : 0.7;
     const out = [];
     for (const row of ordered) {
       let sc = Number(row?.metadata?.score);

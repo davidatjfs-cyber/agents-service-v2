@@ -1,13 +1,18 @@
 /**
- * Wiki / MemPalace 检索：用 DeepSeek 重排序与截断（无 API Key 时由调用方回退本地逻辑）
+ * Wiki / MemPalace 检索排序：优先 DeepSeek，失败或无 Key 时用本地 Ollama，再失败则回退由调用方本地启发式顺序。
  */
-import { callDeepSeek } from '../llm-provider.js';
+import { callDeepSeek, callOllamaLLM } from '../llm-provider.js';
 import { logger } from '../../utils/logger.js';
 
-export function useDeepseekForKnowledgeRanking() {
-  const key = String(process.env.DEEPSEEK_API_KEY || '').trim();
+/** 关闭显式 KNOWLEDGE_USE_DEEPSEEK=false 时不走任何 LLM 排序 */
+export function useKnowledgeLlmRanking() {
   const off = String(process.env.KNOWLEDGE_USE_DEEPSEEK || '').trim().toLowerCase() === 'false';
-  return !!key && !off;
+  return !off;
+}
+
+/** @deprecated 语义同 useKnowledgeLlmRanking（保留兼容） */
+export function useDeepseekForKnowledgeRanking() {
+  return useKnowledgeLlmRanking();
 }
 
 function extractJsonObject(text) {
@@ -22,44 +27,85 @@ function extractJsonObject(text) {
   }
 }
 
+function normalizeIndices(raw, candidatesLength, limit) {
+  const j = extractJsonObject(raw);
+  const idx = Array.isArray(j?.indices) ? j.indices.map((x) => parseInt(String(x), 10)).filter((n) => Number.isFinite(n)) : [];
+  const uniq = [];
+  const seen = new Set();
+  for (const i of idx) {
+    if (i < 0 || i >= candidatesLength || seen.has(i)) continue;
+    seen.add(i);
+    uniq.push(i);
+    if (uniq.length >= limit) break;
+  }
+  return uniq;
+}
+
+function buildRankMessages(sys, userBody) {
+  return [
+    { role: 'system', content: sys },
+    { role: 'user', content: userBody }
+  ];
+}
+
 /**
  * @param {{ store: string, query: string, candidates: Array<{ i: number, filename?: string, preview: string }>, limit: number }} p
- * @returns {Promise<number[]>} 按相关度排序后的下标（最多 limit 个）
+ * @returns {Promise<{ indices: number[], provider: 'deepseek'|'ollama'|'none' }>}
  */
-export async function rankKnowledgeCandidatesWithDeepseek(p) {
+export async function rankKnowledgeCandidatesWithLlm(p) {
   const { store, query, candidates, limit } = p;
-  if (!candidates?.length) return [];
+  if (!candidates?.length) return { indices: [], provider: 'none' };
+  if (!useKnowledgeLlmRanking()) return { indices: [], provider: 'none' };
+
   const sys =
     '你是餐饮经营知识库检索排序器。只输出一个 JSON 对象，不要 Markdown。' +
-    '格式：{"indices":[整数下标按相关度从高到低],"scores":[[下标,0到1的分数]]}；indices 最多 ' +
+    '格式：{"indices":[整数下标 i 按相关度从高到低]}；indices 最多 ' +
     limit +
-    ' 个，只保留与当前用户问题相关的条目；都不相关则 {"indices":[]}。';
-  const user = [
+    ' 个；都不相关则 {"indices":[]}。';
+  const userBody = [
     `门店：${store}`,
     `用户问题：${String(query || '').slice(0, 800)}`,
     '候选（每项有下标 i 与正文摘要 preview）：',
     JSON.stringify(candidates.map((c) => ({ i: c.i, fn: c.filename || '', preview: String(c.preview || '').slice(0, 600) })))
   ].join('\n');
-  try {
-    const raw = await callDeepSeek(user, {
-      systemPrompt: sys,
-      temperature: 0.1,
-      max_tokens: 512,
-      timeoutMs: 45000
-    });
-    const j = extractJsonObject(raw);
-    const idx = Array.isArray(j?.indices) ? j.indices.map((x) => parseInt(String(x), 10)).filter((n) => Number.isFinite(n)) : [];
-    const uniq = [];
-    const seen = new Set();
-    for (const i of idx) {
-      if (i < 0 || i >= candidates.length || seen.has(i)) continue;
-      seen.add(i);
-      uniq.push(i);
-      if (uniq.length >= limit) break;
+
+  const hasDsKey = !!String(process.env.DEEPSEEK_API_KEY || '').trim();
+
+  if (hasDsKey) {
+    try {
+      const raw = await callDeepSeek(userBody, {
+        systemPrompt: sys,
+        temperature: 0.1,
+        max_tokens: 512,
+        timeoutMs: 45000
+      });
+      const indices = normalizeIndices(raw, candidates.length, limit);
+      return { indices, provider: 'deepseek' };
+    } catch (e) {
+      logger.warn({ err: e?.message }, 'knowledge-rank: DeepSeek 失败，尝试 Ollama');
     }
-    return uniq;
-  } catch (e) {
-    logger.warn({ err: e?.message }, 'deepseek-knowledge: rank failed');
-    return [];
   }
+
+  try {
+    const ores = await callOllamaLLM(buildRankMessages(sys, userBody), {
+      purpose: 'knowledge_rank',
+      max_tokens: 512,
+      temperature: 0.1
+    });
+    if (ores?.ok && ores.content) {
+      const indices = normalizeIndices(ores.content, candidates.length, limit);
+      return { indices, provider: 'ollama' };
+    }
+    logger.warn({ err: ores?.error }, 'knowledge-rank: Ollama 未返回有效内容');
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'knowledge-rank: Ollama 调用异常');
+  }
+
+  return { indices: [], provider: 'none' };
+}
+
+/** @deprecated 请用 rankKnowledgeCandidatesWithLlm；返回值仅为 indices 数组以保持旧调用点兼容 */
+export async function rankKnowledgeCandidatesWithDeepseek(p) {
+  const r = await rankKnowledgeCandidatesWithLlm(p);
+  return r.indices;
 }
