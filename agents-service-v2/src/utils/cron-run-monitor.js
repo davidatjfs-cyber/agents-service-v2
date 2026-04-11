@@ -31,6 +31,7 @@ const CRON_JOB_LABEL_ZH = {
   rhythm_monthly_evaluation: '总部月度评估节奏',
   monthly_revenue_anomaly: '月度营收异常检测',
   daily_attendance_report: '考勤日报',
+  daily_attendance_report_catchup: '考勤日报（23:10补跑）',
   escalation_scan: '任务升级扫描',
   task_card_reminders: '任务卡片催办',
   daily_inspection_tick: '每日巡检调度（整轮）',

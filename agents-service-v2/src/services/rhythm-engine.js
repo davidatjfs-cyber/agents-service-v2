@@ -500,10 +500,16 @@ async function fetchHrmsHeadcountForStore(store) {
   }
 }
 
-// ─── 22:00 考勤日报 — 考勤 + 人效 + 排班建议（飞书卡片推送） ───
+/** 当日 PG 营业日报是否已落库（考勤日报唯一数据源；与 hrms_state 双写延迟解耦） */
+function countStoresWithTodayDailyReport(allStoresData) {
+  return (allStoresData || []).filter((sd) => !!sd?.dailyReport).length;
+}
+
+// ─── 考勤日报 — 考勤 + 人效 + 排班建议（飞书卡片推送）
+// 首跑 22:15 + 补跑 23:10：避免营业日报晚于首跑写入 PG 时，卡片仅余「排班建议」却被标记发送成功、当天无法重试。
 export async function dailyAttendanceReport() {
   logger.info('📋 Running daily attendance report');
-  const today = shanghaiTodayYmd();
+  const today = getShanghaiYmd();
   const stores = await getActiveStores();
   if (!stores.length) { logger.warn('dailyAttendanceReport: no active stores'); return; }
 
@@ -521,7 +527,7 @@ export async function dailyAttendanceReport() {
     sd.allStaff = allStaffR.rows || [];
     sd.hrmsEmployeeCount = await fetchHrmsHeadcountForStore(store);
 
-    // 营业日报
+    // 营业日报（仅 PostgreSQL daily_reports；若双写失败则此处无行 → 与 HRMS 前端「有数据」不一致）
     const drR = await query(
       `SELECT actual_revenue, labor_total, efficiency, pre_discount_revenue,
               segments, staff, schedule_next_day
@@ -535,12 +541,26 @@ export async function dailyAttendanceReport() {
     allStoresData.push(sd);
   }
 
+  const readyN = countStoresWithTodayDailyReport(allStoresData);
+  const missingStores = allStoresData.filter((sd) => !sd.dailyReport).map((sd) => sd.store);
+  if (readyN === 0 && stores.length > 0) {
+    logger.warn(
+      { today, storeSample: stores.slice(0, 5), missingN: missingStores.length },
+      'dailyAttendanceReport: 当日 daily_reports 无行（可能未到保存时间、或 HRMS→PG 双写失败）；飞书发送将标为失败以便补跑重试'
+    );
+  } else if (missingStores.length) {
+    logger.info(
+      { today, readyN, missingSome: missingStores.slice(0, 8) },
+      'dailyAttendanceReport: 部分门店缺当日 PG 营业日报，卡片将仅包含有数门店'
+    );
+  }
+
   // 构建飞书卡片
   const card = buildAttendanceCard(allStoresData, today);
 
   // 推送
   const { sendCard, sendText } = await import('./feishu-client.js');
-  const runYmd = getShanghaiYmd();
+  const runYmd = today;
   let failedCount = 0;
 
   // admin + hq_manager 收到所有门店
@@ -556,9 +576,20 @@ export async function dailyAttendanceReport() {
       scope: 'hq_summary',
       sendFn: async () => {
         const res = await sendCard(u.open_id, card, 'open_id').catch(() => ({ ok: false }));
-        if (res?.ok) return { ok: true };
+        if (res?.ok) {
+          if (readyN === 0 && stores.length > 0) {
+            return { ok: false, error: 'no_pg_daily_report_for_today' };
+          }
+          return { ok: true };
+        }
         const textRes = await sendText(u.open_id, `📋 出勤日报 ${today}`, 'open_id').catch(() => ({ ok: false }));
-        return { ok: !!textRes?.ok, error: res?.error || textRes?.error || '' };
+        if (textRes?.ok) {
+          if (readyN === 0 && stores.length > 0) {
+            return { ok: false, error: 'no_pg_daily_report_for_today' };
+          }
+          return { ok: true };
+        }
+        return { ok: false, error: res?.error || textRes?.error || '' };
       }
     });
     if (!deliver?.ok) {
@@ -578,6 +609,12 @@ export async function dailyAttendanceReport() {
     );
     if (sms.rows?.length) {
       const storeCard = buildStoreCard(sd, today);
+      let hasDr = false;
+      try {
+        hasDr = parseStoreData(sd) != null;
+      } catch (e) {
+        logger.warn({ store: sd.store, err: e?.message }, 'dailyAttendanceReport: parseStoreData failed');
+      }
       for (const u of sms.rows) {
         const deliver = await sendReportToRecipient({
           jobKey: 'daily_attendance_report',
@@ -586,9 +623,20 @@ export async function dailyAttendanceReport() {
           scope: `store_${sd.store}`,
           sendFn: async () => {
             const res = await sendCard(u.open_id, storeCard, 'open_id').catch(() => ({ ok: false }));
-            if (res?.ok) return { ok: true };
+            if (res?.ok) {
+              if (!hasDr) {
+                return { ok: false, error: 'no_pg_daily_report_for_store_today' };
+              }
+              return { ok: true };
+            }
             const textRes = await sendText(u.open_id, `📋 ${sd.store} 出勤日报 ${today}`, 'open_id').catch(() => ({ ok: false }));
-            return { ok: !!textRes?.ok, error: res?.error || textRes?.error || '' };
+            if (textRes?.ok) {
+              if (!hasDr) {
+                return { ok: false, error: 'no_pg_daily_report_for_store_today' };
+              }
+              return { ok: true };
+            }
+            return { ok: false, error: res?.error || textRes?.error || '' };
           }
         });
         if (!deliver?.ok) {
@@ -602,9 +650,9 @@ export async function dailyAttendanceReport() {
   if (failedCount > 0) {
     throw new Error(`daily attendance report has ${failedCount} failed recipients`);
   }
-  logger.info({ hqPush: hq.rows?.length || 0 }, 'daily attendance report pushed');
-  await logRhythm('daily_attendance', 'success', { storeCount: stores.length });
-  return { ok: true, storeCount: stores.length };
+  logger.info({ hqPush: hq.rows?.length || 0, readyN, storeCount: stores.length }, 'daily attendance report pushed');
+  await logRhythm('daily_attendance', 'success', { storeCount: stores.length, storesWithData: readyN });
+  return { ok: true, storeCount: stores.length, storesWithData: readyN };
 }
 
 // ─── 飞书卡片构建 ───
@@ -768,6 +816,21 @@ function buildAttendanceCard(allStoresData, today) {
   });
 
   elements.push({ tag: 'hr' });
+
+  const missingPg = (allStoresData || []).filter((s) => !s?.dailyReport).map((s) => s.store);
+  const hasAny = (allStoresData || []).some((s) => !!s?.dailyReport);
+  if (missingPg.length && hasAny) {
+    elements.push({
+      tag: 'div',
+      text: {
+        tag: 'lark_md',
+        content:
+          `> ⚠️ **部分门店缺当日 PostgreSQL \`daily_reports\` 行**（HRMS 前端有草稿但双写未落库时会出现）。` +
+            `已跳过：${missingPg.slice(0, 14).join('、')}${missingPg.length > 14 ? ` 等共${missingPg.length}家` : ''}`
+      }
+    });
+    elements.push({ tag: 'hr' });
+  }
 
   for (const sd of allStoresData) {
     const d = parseStoreData(sd);
@@ -1006,7 +1069,7 @@ export function startRhythmScheduler() {
     }
   }, { timezone: 'Asia/Shanghai' });
 
-  // 每日 22:15 — 考勤日报（打卡+休假+人效排班建议）
+  // 每日 22:15 — 考勤日报（依赖 PG daily_reports 当日行；早于多数门店日结保存时可能无行）
   cron.schedule('15 22 * * *', async () => {
     try {
       await runWithCronLog('daily_attendance_report', async () => {
@@ -1017,7 +1080,18 @@ export function startRhythmScheduler() {
     }
   }, { timezone: 'Asia/Shanghai' });
 
+  // 每日 23:10 — 考勤日报补跑（首跑无 PG 数据时不落成功标记，此处可重发）
+  cron.schedule('10 23 * * *', async () => {
+    try {
+      await runWithCronLog('daily_attendance_report_catchup', async () => {
+        await dailyAttendanceReport();
+      });
+    } catch (e) {
+      logger.error({ err: e?.message }, 'daily attendance report catch-up failed');
+    }
+  }, { timezone: 'Asia/Shanghai' });
+
   logger.info(
-    '✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+日频BI(每日05:08)+月收(每月1日08:12)+周报(周一10:06)+月评(每月1日10:18)+考勤(每日22:15)'
+    '✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+日频BI(每日05:08)+月收(每月1日08:12)+周报(周一10:06)+月评(每月1日10:18)+考勤(每日22:15+补跑23:10)'
   );
 }
