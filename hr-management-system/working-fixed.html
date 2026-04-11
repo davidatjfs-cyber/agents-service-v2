@@ -16916,7 +16916,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     if (mp && typeof mp === 'object') {
                         const mpOk = mp.reachable === true;
                         const mpHint = mp.enabled ? '已启用' : '未启用';
-                        extra += `${dot(mpOk)}<span title="${escapeHtml(String(mp.baseUrl || ''))}">MemPalace</span><span style="color:#64748b;margin-right:10px;">(${mpHint})</span>`;
+                        const invT = mp.inventory && mp.inventory.total != null ? String(mp.inventory.total) : '';
+                        extra += `${dot(mpOk)}<span title="${escapeHtml(String(mp.baseUrl || ''))}">MemPalace</span><span style="color:#64748b;margin-right:10px;">(${mpHint}${invT ? ' · ' + invT + '条' : ''})</span>`;
                     }
                     if (wk && typeof wk === 'object') {
                         const wkOk = wk.ok === true;
@@ -16953,8 +16954,49 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     }
                     const mp = as.mempalace;
                     if (mp && typeof mp === 'object') {
-                        const mh = escapeHtml(String(mp.detailHint || '当前仅做 HTTP 健康探测，MemPalace 未提供条目枚举接口，数据中心无法列出「记忆条目」明细。'));
-                        bits.push('<div style="color:#64748b;">MemPalace：' + mh + '</div>');
+                        if (mp.inventory && Array.isArray(mp.inventory.items) && mp.inventory.items.length) {
+                            const blocks = mp.inventory.items.map((it) => {
+                                let ts = '—';
+                                try {
+                                    if (it.timestamp) ts = new Date(it.timestamp).toLocaleString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' });
+                                } catch (e) { /* ignore */ }
+                                const pv = escapeHtml(String(it.preview || '').slice(0, 600));
+                                const meta =
+                                    '#' +
+                                    escapeHtml(String(it.seq != null ? it.seq : '')) +
+                                    ' · wing ' +
+                                    escapeHtml(String(it.wing || '—')) +
+                                    ' · room ' +
+                                    escapeHtml(String(it.room || '—')) +
+                                    ' · ' +
+                                    escapeHtml(String(it.type || '—')) +
+                                    (it.score != null ? ' · score ' + escapeHtml(String(it.score)) : '');
+                                return (
+                                    '<div style="margin-bottom:10px;padding:8px;border-radius:8px;background:rgba(2,6,23,0.4);border:1px solid rgba(148,163,184,0.08);">' +
+                                    '<div style="color:#94a3b8;font-size:10px;">' +
+                                    meta +
+                                    '</div>' +
+                                    '<div style="color:#64748b;font-size:10px;margin-top:3px;">' +
+                                    escapeHtml(ts) +
+                                    '</div>' +
+                                    '<pre style="margin:6px 0 0;white-space:pre-wrap;font-size:10px;color:#e2e8f0;max-height:140px;overflow:auto;">' +
+                                    pv +
+                                    (it.truncated ? '\n…' : '') +
+                                    '</pre></div>'
+                                );
+                            });
+                            bits.push(
+                                '<details style="cursor:pointer;margin-bottom:8px;"><summary style="color:#cbd5e1;">MemPalace 记忆明细（最近 ' +
+                                escapeHtml(String(mp.inventory.returned != null ? mp.inventory.returned : mp.inventory.items.length)) +
+                                ' 条 · 进程内共 ' +
+                                escapeHtml(String(mp.inventory.total != null ? mp.inventory.total : '—')) +
+                                ' 条）</summary><div style="margin-top:8px;">' +
+                                blocks.join('') +
+                                '</div></details>'
+                            );
+                        } else if (mp.detailHint) {
+                            bits.push('<div style="color:#64748b;margin-bottom:6px;">MemPalace：' + escapeHtml(String(mp.detailHint)) + '</div>');
+                        }
                     }
                     hExtra.innerHTML = bits.join('');
                     hExtra.style.display = bits.length ? 'block' : 'none';

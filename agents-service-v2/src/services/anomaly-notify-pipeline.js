@@ -14,6 +14,7 @@ import { sendCard, sendText, buildAnomalyCard, buildBiDeductionCard } from './fe
 import { getShanghaiYmdParts } from '../utils/anomaly-week-bounds.js';
 import { anomalyRuleLabelZh } from '../utils/anomaly-labels.js';
 import { planAndExecute } from './master-planner.js';
+import { resolveSingleScoringUser, isMajixianPmObserverUsername } from '../utils/scoring-assignee.js';
 
 function storeKey(v) {
   return String(v || '')
@@ -99,6 +100,59 @@ async function pickUsersForStoreAndRoles(store, dbRoles) {
     (u) => dbRoles.includes(u.role) && sameStore(u.store, store)
   );
   return rows;
+}
+
+function dedupeUsersByOpenId(rows) {
+  const seen = new Set();
+  const out = [];
+  for (const u of rows || []) {
+    const k = String(u.open_id || '').trim();
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(u);
+  }
+  return out;
+}
+
+async function fetchFeishuUserRow(username) {
+  const u = String(username || '').trim();
+  if (!u) return null;
+  try {
+    const r = await query(
+      `SELECT open_id, username, role, store,
+              COALESCE(NULLIF(TRIM(name), ''), username) AS display_name
+       FROM feishu_users
+       WHERE registered = true AND open_id IS NOT NULL AND LOWER(username) = LOWER($1)
+       LIMIT 1`,
+      [u]
+    );
+    const row = r.rows?.[0];
+    if (!row?.open_id) return null;
+    return row;
+  } catch (_e) {
+    return null;
+  }
+}
+
+/**
+ * BI 通知与任务卡：出品经理强制为「岗位唯一规范账号」（马己仙 → 黎永荣主号），避免误绑观察号抢责。
+ */
+async function collapseProductionManagerNotifyRecipients(store, users) {
+  const list = [...(users || [])];
+  const nonPm = list.filter((u) => u.role !== 'store_production_manager');
+  const pms = list.filter((u) => u.role === 'store_production_manager');
+  if (!pms.length) return dedupeUsersByOpenId(list);
+  const pmsNoObserver = pms.filter((x) => !isMajixianPmObserverUsername(x.username));
+  const canon = await resolveSingleScoringUser(store, 'store_production_manager');
+  if (!canon?.username || String(canon.username).startsWith('__periodic')) {
+    return dedupeUsersByOpenId([...nonPm, ...(pmsNoObserver[0] ? [pmsNoObserver[0]] : [])]);
+  }
+  const hit = pms.find((x) => String(x.username || '').toLowerCase() === String(canon.username).toLowerCase());
+  if (hit) return dedupeUsersByOpenId([...nonPm, hit]);
+  const row = await fetchFeishuUserRow(canon.username);
+  if (row && sameStore(row.store, store)) return dedupeUsersByOpenId([...nonPm, row]);
+  if (row) return dedupeUsersByOpenId([...nonPm, row]);
+  return dedupeUsersByOpenId([...nonPm, ...(pmsNoObserver[0] ? [pmsNoObserver[0]] : [])]);
 }
 
 /** 食安：门店店长/出品 + 全量 admin/hq_manager（不按门店过滤） */
@@ -191,8 +245,9 @@ export async function runBiAnomalyNotifyPipeline({
 }) {
   const brand = brandIn || (await getBrandForStore(store).catch(() => null)) || '';
   const roles = await getNotifyDbRoles(ruleKey);
-  const users =
+  let users =
     ruleKey === 'food_safety' ? await pickUsersForFoodSafety(store, roles) : await pickUsersForStoreAndRoles(store, roles);
+  users = await collapseProductionManagerNotifyRecipients(store, users);
 
   const taskId = `ANO-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
 

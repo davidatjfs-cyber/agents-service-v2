@@ -1,7 +1,7 @@
 /**
  * Minimal MemPalace-compatible HTTP API for agents-service-v2.
  * (Upstream github.com/mempalace/mempalace is an unrelated skill manager;
- *  this service implements the /health, POST /memory, POST /search contract.)
+ *  this service implements /health, GET /inventory, POST /memory, POST /search.)
  */
 import express from 'express';
 import { writeFileSync } from 'fs';
@@ -57,6 +57,36 @@ app.post('/search', (req, res) => {
   }
   rows = rows.slice().sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).slice(0, limit);
   res.status(200).json(rows);
+});
+
+/** 运维/HRMS 数据中心：最近写入的记忆条目摘要（仅进程内存储；重启后清空） */
+app.get('/inventory', (req, res) => {
+  const rawLimit = parseInt(String(req.query?.limit ?? ''), 10);
+  const limit = Math.min(300, Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 80));
+  const previewLen = Math.min(800, Math.max(80, parseInt(String(req.query?.preview ?? ''), 10) || 320));
+  const sorted = memories.slice().sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  const slice = sorted.slice(0, limit);
+  const items = slice.map((m, idx) => {
+    const content = String(m.content ?? '');
+    return {
+      seq: idx + 1,
+      wing: m.wing,
+      room: m.room,
+      type: m.type || 'strategy',
+      preview: content.slice(0, previewLen),
+      contentLength: content.length,
+      truncated: content.length > previewLen,
+      timestamp: m.timestamp,
+      score: m.metadata && typeof m.metadata.score === 'number' ? m.metadata.score : null
+    };
+  });
+  res.status(200).json({
+    ok: true,
+    total: memories.length,
+    returned: items.length,
+    previewMaxChars: previewLen,
+    items
+  });
 });
 
 function tryListen(preferredPort, fallbackPort) {

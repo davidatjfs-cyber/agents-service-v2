@@ -67,7 +67,7 @@ export async function saveMemory(opts) {
  * @param {{ agent: string, store: string, query?: string, limit?: number }} opts
  * @returns {Promise<Array<{ content: string, score: number }>>}
  */
-/** 运维/健康检查：MemPalace HTTP 是否可达（与 ENABLE_MEMPALACE 是否开启无关） */
+/** 运维/健康检查：MemPalace HTTP 是否可达（与 ENABLE_MEMPALACE 是否开启无关）；可选拉取 /inventory 明细 */
 export async function probeMemPalaceHealth() {
   const enabled = process.env.ENABLE_MEMPALACE === 'true';
   const fromEnv = !!String(process.env.MEMPALACE_URL || '').trim();
@@ -79,15 +79,38 @@ export async function probeMemPalaceHealth() {
       res.status >= 200 &&
       res.status < 300 &&
       (body?.ok === true || body?.status === 'healthy');
-    return {
+    const out = {
       enabled,
       configured: fromEnv,
       baseUrl,
       reachable: ok,
       httpStatus: res.status,
-      /** MemPalace 当前仅做 HTTP /health 探测；条目枚举需服务端提供列表 API 后方可展示 */
-      detailHint: ok ? '仅连通性检测；无条目列表' : null
+      inventory: null,
+      detailHint: null
     };
+    if (ok) {
+      try {
+        const inv = await http().get('/inventory', { params: { limit: 80, preview: 360 } });
+        if (inv.status >= 200 && inv.status < 300 && inv.data && Array.isArray(inv.data.items)) {
+          out.inventory = {
+            total: Number(inv.data.total) || 0,
+            returned: Number(inv.data.returned) || inv.data.items.length,
+            previewMaxChars: inv.data.previewMaxChars,
+            items: inv.data.items
+          };
+          out.detailHint =
+            out.inventory.total > 0
+              ? `共 ${out.inventory.total} 条（下列展示最近 ${out.inventory.returned} 条摘要；进程重启后内存清空）`
+              : '暂无记忆条目（尚未写入 /memory）';
+        } else {
+          out.detailHint = '已连通，但未识别 /inventory 响应（请升级 mempalace 服务）';
+        }
+      } catch (_e) {
+        out.detailHint = '已连通，拉取 /inventory 失败（旧版 MemPalace 无此接口）';
+      }
+    }
+    if (!out.detailHint && !ok) out.detailHint = '服务不可达';
+    return out;
   } catch (e) {
     return {
       enabled,
@@ -95,7 +118,8 @@ export async function probeMemPalaceHealth() {
       baseUrl,
       reachable: false,
       error: String(e?.message || e),
-      detailHint: '仅连通性检测；无条目列表'
+      inventory: null,
+      detailHint: '服务不可达'
     };
   }
 }
