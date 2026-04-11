@@ -192,8 +192,8 @@ async function getPMExecutionRating(store, brand, period) {
 
   let rating;
   if (nonCompliantDays <= 2) rating = 'A';
-  else if (nonCompliantDays <= 5) rating = 'B';
-  else if (nonCompliantDays <= 10) rating = 'C';
+  else if (nonCompliantDays <= 4) rating = 'B';
+  else if (nonCompliantDays <= 6) rating = 'C';
   else rating = 'D';
 
   return {
@@ -832,7 +832,54 @@ async function sendMonthlyRatingNotifications(results, period) {
   let failedCount = 0;
   const runYmd = getShanghaiYmd();
 
-  // 1. 个人通知
+  // 1. 工作态度HRMS备案通知（逐人单独写入，含本月累计次数）
+  await ensureHrmsUserNotificationsTable();
+  for (const r of results) {
+    const attitudeCount = r.attitude_detail?.incomplete_tasks ?? 0;
+    const roleLabel = roleLabelZh(r.role);
+    if (attitudeCount > 0) {
+      try {
+        const dup = await query(
+          `SELECT 1 FROM hrms_user_notifications
+           WHERE lower(trim(target_username)) = lower(trim($1))
+             AND type = 'attitude_rating_monthly'
+             AND (meta->>'period') = $2
+             AND (meta->>'store') = $3
+           LIMIT 1`,
+          [r.username, period, String(r.store || '')]
+        );
+        if (!dup.rows?.length) {
+          await query(
+            `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
+             VALUES ($1, $2, $3, $4, $5::jsonb)`,
+            [
+              r.username,
+              `工作态度备案（${period}月，共${attitudeCount}次不合格）`,
+              [
+                `【工作态度备案】${period} 月度`,
+                `门店：${r.store}`,
+                `岗位：${roleLabel} · ${r.name || r.username}`,
+                `本月（${period}）累计工作态度不合格次数：${attitudeCount} 次`,
+                `态度评级：${r.attitude_rating} 级（≤2次A / ≤4次B / ≤8次C / >8次D）`
+              ].join('\n'),
+              'attitude_rating_monthly',
+              JSON.stringify({
+                period,
+                attitude_rating: r.attitude_rating,
+                monthly_attitude_count: attitudeCount,
+                store: r.store,
+                role: r.role
+              })
+            ]
+          );
+        }
+      } catch (e) {
+        logger.warn({ err: e?.message, u: r.username }, 'attitude filing hrms notification failed');
+      }
+    }
+  }
+
+  // 2. 个人月度综合评级飞书通知（含执行力和态度累计次数）
   for (const r of results) {
     const card = buildMonthlyRatingCard(r, period);
     if (r.open_id) {
@@ -862,7 +909,7 @@ async function sendMonthlyRatingNotifications(results, period) {
     }
   }
 
-  // 2. 汇总通知给管理员和总部营运
+  // 3. 汇总通知给管理员和总部营运
   const adminRecipients = await query(
     `SELECT open_id, username, role FROM feishu_users 
      WHERE registered = true AND open_id IS NOT NULL AND open_id != ''
@@ -915,16 +962,23 @@ async function sendMonthlyRatingNotifications(results, period) {
 
 function buildMonthlyRatingCard(r, period) {
   const roleLabel = roleLabelZh(r.role);
+  const execCount = r.execution_detail?.non_compliant_days ?? r.execution_detail?.missing_days ?? r.execution_detail?.value ?? '—';
+  const attitudeCount = r.attitude_detail?.incomplete_tasks ?? '—';
+
+  const execLine = r.role === 'store_production_manager'
+    ? `• 执行力：**${r.execution_rating}级**（本月不合格 **${execCount}** 天 | ≤2天A / ≤4天B / ≤6天C / >6天D）`
+    : `• 执行力：**${r.execution_rating}级**（本月不合格 **${execCount}** 次）`;
+
   const content = `**门店**：${r.store}
 **岗位**：${roleLabel} · ${r.name || r.username}
-**周期**：${period}
+**统计月**：${period}
 
 **绩效得分**：**${r.performance_score}** 分
 
 **核心评级**
-• 执行力：${r.execution_rating}级
-• 工作态度：${r.attitude_rating}级
-• 工作能力：${r.ability_rating}级
+${execLine}
+• 工作态度：**${r.attitude_rating}级**（本月态度不合格 **${attitudeCount}** 次 | ≤2次A / ≤4次B / ≤8次C / >8次D）
+• 工作能力：**${r.ability_rating}级**
 • 门店级别：${fmtStoreLevelLabel(r.store_rating)}`;
 
   return {
@@ -935,20 +989,22 @@ function buildMonthlyRatingCard(r, period) {
     },
     elements: [
       { tag: 'div', text: { tag: 'lark_md', content } },
-      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：周度异常汇总 + 每日执行力 + 月度毛利率/点评 · 每月10号01:18自动生成' }] }
+      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：周度异常汇总 + 每日执行力备案 + 月度毛利率/点评 · 每月10号01:18自动生成' }] }
     ]
   };
 }
 
 function buildMonthlyRatingText(r, period) {
   const roleLabel = roleLabelZh(r.role);
+  const execCount = r.execution_detail?.non_compliant_days ?? r.execution_detail?.missing_days ?? '—';
+  const attitudeCount = r.attitude_detail?.incomplete_tasks ?? '—';
   return `${period} 月度综合评级
 
 ${r.store} · ${roleLabel} ${r.name || r.username}
 
 绩效得分：${r.performance_score}分
-执行力：${r.execution_rating}级
-工作态度：${r.attitude_rating}级
+执行力：${r.execution_rating}级（本月不合格${execCount}次）
+工作态度：${r.attitude_rating}级（本月态度不合格${attitudeCount}次）
 工作能力：${r.ability_rating}级
 门店级别：${fmtStoreLevelLabel(r.store_rating)}`;
 }
@@ -956,7 +1012,9 @@ ${r.store} · ${roleLabel} ${r.name || r.username}
 function buildMonthlySummaryCard(results, period) {
   const lines = results.map(r => {
     const roleLabel = roleLabelZh(r.role);
-    return `• **${r.store}** · ${roleLabel} ${r.name || r.username}：${r.performance_score}分 | 执行${r.execution_rating} 态度${r.attitude_rating} 能力${r.ability_rating} 门店${r.store_rating}`;
+    const execCount = r.execution_detail?.non_compliant_days ?? r.execution_detail?.missing_days ?? '—';
+    const attCount = r.attitude_detail?.incomplete_tasks ?? '—';
+    return `• **${r.store}** · ${roleLabel} ${r.name || r.username}：${r.performance_score}分 | 执行${r.execution_rating}(${execCount}次) 态度${r.attitude_rating}(${attCount}次) 能力${r.ability_rating} 门店${r.store_rating}`;
   });
 
   const content = `**${period} 月度综合评级汇总**
@@ -971,7 +1029,7 @@ ${lines.join('\n')}`;
     },
     elements: [
       { tag: 'div', text: { tag: 'lark_md', content } },
-      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：周度异常汇总 + 每日执行力 + 月度毛利率/点评 · 每月10号01:18自动生成' }] }
+      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：周度异常汇总 + 每日执行力备案 + 月度毛利率/点评 · 每月10号01:18自动生成' }] }
     ]
   };
 }
@@ -979,7 +1037,9 @@ ${lines.join('\n')}`;
 function buildMonthlySummaryText(results, period) {
   const lines = results.map(r => {
     const roleLabel = roleLabelZh(r.role);
-    return `• ${r.store} · ${roleLabel} ${r.name || r.username}：${r.performance_score}分 | 执行${r.execution_rating} 态度${r.attitude_rating} 能力${r.ability_rating} 门店${r.store_rating}`;
+    const execCount = r.execution_detail?.non_compliant_days ?? r.execution_detail?.missing_days ?? '—';
+    const attCount = r.attitude_detail?.incomplete_tasks ?? '—';
+    return `• ${r.store} · ${roleLabel} ${r.name || r.username}：${r.performance_score}分 | 执行${r.execution_rating}(${execCount}次) 态度${r.attitude_rating}(${attCount}次) 能力${r.ability_rating} 门店${r.store_rating}`;
   });
 
   return `${period} 月度综合评级汇总

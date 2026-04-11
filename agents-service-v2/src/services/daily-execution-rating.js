@@ -56,6 +56,53 @@ async function getMajixianMeetingReport(store, date) {
   };
 }
 
+/**
+ * 查询某人本月（含当日）累计执行力不合格备案次数
+ * 统计 ops_tasks 中 task_type=execution_rating_daily 且 biz_date 在当月的记录条数
+ */
+async function getMonthlyExecutionFilingCount(username, store, date) {
+  try {
+    const monthStart = String(date).slice(0, 7) + '-01';
+    const r = await query(
+      `SELECT COUNT(*)::int AS cnt
+       FROM ops_tasks
+       WHERE lower(trim(assignee_username)) = lower(trim($1))
+         AND trim(store) = trim($2)
+         AND task_type = 'execution_rating_daily'
+         AND biz_date >= $3::date
+         AND biz_date <= $4::date`,
+      [username, store, monthStart, date]
+    );
+    return Number(r.rows?.[0]?.cnt || 0);
+  } catch (_e) {
+    return 0;
+  }
+}
+
+/**
+ * 查询某人本月（含当日）累计工作态度不合格备案次数
+ * 统计 master_tasks 中 hr_performance_recorded=true 且 dispatched_at 在当月的记录条数
+ */
+async function getMonthlyAttitudeFilingCount(username, date) {
+  try {
+    const monthStart = String(date).slice(0, 7) + '-01';
+    const sources = ['random_inspection', 'scheduled_inspection', 'bi_anomaly', 'auto_collab', 'data_auditor'];
+    const r = await query(
+      `SELECT COUNT(DISTINCT task_id)::int AS cnt
+       FROM master_tasks
+       WHERE lower(trim(coalesce(assignee_username, ''))) = lower(trim($1))
+         AND source = ANY($2::text[])
+         AND coalesce(hr_performance_recorded, false) = true
+         AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date >= $3::date
+         AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date <= $4::date`,
+      [username, sources, monthStart, date]
+    );
+    return Number(r.rows?.[0]?.cnt || 0);
+  } catch (_e) {
+    return 0;
+  }
+}
+
 /** 同一门店同岗位多人绑定时选 canonical（马己仙出品经理优先黎永荣/NNYXLYR04，压低 nnyxcs35） */
 function collapseExecutionRatingStaff(rows) {
   const m = new Map();
@@ -85,10 +132,13 @@ function collapseExecutionRatingStaff(rows) {
 
 /**
  * 出品经理执行力：开档/收档须各品牌档口齐 + 原料≥1；单日只备一条案，明细写入 executionDetailLines。
+ * missing 字段直接记录缺失项目名（开档/收档/原料收货），而非固定文字，便于备案标题区分。
  */
 function evaluatePMExecution(reports) {
   const lines = [];
+  const missingItems = [];
   if (!reports.opening) {
+    missingItems.push('开档');
     lines.push(
       reports.missingOpeningStations?.length
         ? `开档缺档口：${reports.missingOpeningStations.join('、')}`
@@ -96,6 +146,7 @@ function evaluatePMExecution(reports) {
     );
   }
   if (!reports.closing) {
+    missingItems.push('收档');
     lines.push(
       reports.missingClosingStations?.length
         ? `收档缺档口：${reports.missingClosingStations.join('、')}`
@@ -103,12 +154,13 @@ function evaluatePMExecution(reports) {
     );
   }
   if (!reports.material) {
+    missingItems.push('原料收货');
     lines.push(`原料收货：缺记录（统计 ${reports.materialCount ?? 0} 条，需≥1）`);
   }
   if (lines.length === 0) {
     return { rating: 'A', missing: [], executionDetailLines: [] };
   }
-  return { rating: 'D', missing: ['出品执行力未完全达标'], executionDetailLines: lines };
+  return { rating: 'D', missing: missingItems, executionDetailLines: lines };
 }
 
 /**
@@ -173,7 +225,7 @@ async function recordExecutionFiling({ store, username, role, date, rating, miss
       [
         store,
         'execution_rating_daily',
-        `${store} · 执行力日评未达标 · ${missing.join('/')}`,
+        `${store} · 执行力日评未达标（${missing.join('/')}）· ${date}`,
         'pending_review',
         username,
         role,
@@ -195,29 +247,31 @@ async function recordExecutionFiling({ store, username, role, date, rating, miss
 // ─────────────────────────────────────────────
 
 /**
- * 构建执行力备案飞书卡片
+ * 构建执行力备案飞书卡片（含本月累计不合格次数）
  */
-function buildFilingCard({ store, username, name, role, rating, missing, executionDetailLines }, date) {
+function buildFilingCard({ store, username, name, role, rating, missing, executionDetailLines }, date, monthlyCount) {
   const roleLabel = role === 'store_manager' ? '店长' : '出品经理';
   const ratingColor = rating === 'B' ? 'blue' : rating === 'C' ? 'orange' : 'red';
+  const monthYm = String(date).slice(0, 7);
 
   let missingMd = '';
   if (executionDetailLines && executionDetailLines.length > 0) {
-    missingMd = `\n**未达标说明**\n${missing.map((m) => `· ${m}`).join('\n')}\n**明细**\n${executionDetailLines.map((l) => `· ${l}`).join('\n')}`;
+    missingMd = `\n**未达标项目**：${missing.join('/')}
+**明细**\n${executionDetailLines.map((l) => `· ${l}`).join('\n')}`;
   } else if (missing && missing.length > 0) {
     missingMd = `\n**未达标项目**\n${missing.map((m) => `❌ ${m}`).join('\n')}`;
   }
 
-  const content = `**备案类型**：工作执行力评级
+  const content = `**备案类型**：工作执行力备案（本次第 **${monthlyCount}** 次）
 **门店**：${store}
 **岗位**：${roleLabel} · ${name || username}
-**日期**：${date}
-**评级**：${rating}级${missingMd}`;
+**业务日期**：${date}
+**本月累计不合格次数**：**${monthlyCount}** 次（${monthYm}）${missingMd}`;
 
   return {
     config: { wide_screen_mode: true },
     header: {
-      title: { tag: 'plain_text', content: `📋 工作执行力评级备案 · ${date}` },
+      title: { tag: 'plain_text', content: `📋 工作执行力备案 · 本月第${monthlyCount}次 · ${date}` },
       template: ratingColor
     },
     elements: [
@@ -228,61 +282,25 @@ function buildFilingCard({ store, username, name, role, rating, missing, executi
 }
 
 /**
- * 发送执行力备案通知
- */
-function buildSummaryCard(results, date) {
-  const failedResults = results.filter(r => r.rating !== 'A');
-  const allResults = results;
-
-  let md = `**日期**：${date}\n**检查门店数**：${new Set(allResults.map(r => r.store)).size}\n**总检查项**：${allResults.length}\n**达标**：${allResults.length - failedResults.length}\n**未达标**：${failedResults.length}\n`;
-
-  if (failedResults.length > 0) {
-    md += `\n**未达标明细**\n`;
-    for (const r of failedResults) {
-      const roleLabel = r.role === 'store_manager' ? '店长' : '出品经理';
-      md += `\n• **${r.store}** · ${roleLabel} ${r.name || r.username}：${r.rating}级`;
-      if (r.executionDetailLines && r.executionDetailLines.length > 0) {
-        md += `（${r.executionDetailLines.join('；')}）`;
-      } else if (r.missing && r.missing.length > 0) {
-        md += `（${r.missing.join('/')}）`;
-      }
-    }
-  } else {
-    md += `\n✅ 全部达标！`;
-  }
-
-  return {
-    config: { wide_screen_mode: true },
-    header: {
-      title: { tag: 'plain_text', content: `📊 执行力日评汇总 · ${date}` },
-      template: 'blue'
-    },
-    elements: [
-      { tag: 'div', text: { tag: 'lark_md', content: md } },
-      { tag: 'note', elements: [{ tag: 'plain_text', content: `检查业务日：${date}（上海昨日）· 出品经理与马己仙店长读 agent_messages` }] }
-    ]
-  };
-}
-
-/**
- * 构建执行力备案汇总卡片（管理员/总部营运）
+ * 构建执行力备案汇总卡片（管理员/总部营运，含本月累计次数）
  */
 function buildAdminFilingCard(results, date) {
   const failedResults = results.filter(r => r.rating !== 'A');
+  const monthYm = String(date).slice(0, 7);
 
-  let md = `**日期**：${date}\n**备案人数**：${failedResults.length}\n`;
+  let md = `**业务日期**：${date}\n**本次备案人数**：${failedResults.length}\n`;
 
   if (failedResults.length > 0) {
-    md += `\n**备案明细**\n`;
+    md += `\n**备案明细**（含本月累计次数）\n`;
     for (const r of failedResults) {
       const roleLabel = r.role === 'store_manager' ? '店长' : '出品经理';
-      const missExtra =
+      const missItems = r.missing && r.missing.length > 0 ? r.missing.join('/') : '';
+      const detailExtra =
         r.executionDetailLines && r.executionDetailLines.length > 0
-          ? `（${r.executionDetailLines.join('；')}）`
-          : r.missing && r.missing.length > 0
-            ? `（${r.missing.join('/')}）`
-            : '';
-      md += `\n• ${r.store} · ${roleLabel} ${r.name || r.username}：${r.rating}级 ${missExtra}`;
+          ? `\n  └ ${r.executionDetailLines.join('；')}`
+          : '';
+      const monthCount = r.monthlyFilingCount != null ? r.monthlyFilingCount : '—';
+      md += `\n• **${r.store}** · ${roleLabel} ${r.name || r.username}：${missItems ? `未达标（${missItems}）` : '未达标'} | 本月累计 **${monthCount}** 次${detailExtra}`;
     }
   } else {
     md += `\n✅ 全部达标，无需备案`;
@@ -291,7 +309,7 @@ function buildAdminFilingCard(results, date) {
   return {
     config: { wide_screen_mode: true },
     header: {
-      title: { tag: 'plain_text', content: `📋 工作执行力评级备案汇总 · ${date}` },
+      title: { tag: 'plain_text', content: `📋 工作执行力备案汇总 · ${monthYm} 月累计` },
       template: 'blue'
     },
     elements: [
@@ -303,23 +321,30 @@ function buildAdminFilingCard(results, date) {
 
 /**
  * 发送执行力备案通知（飞书卡片 + HRMS公司通知）
+ * 通知内容含：本次为本月第N次备案 + 本月累计不合格次数
  */
 async function sendExecutionRatingNotifications(results, date) {
   const failedResults = results.filter(r => r.rating !== 'A');
   let sentCount = 0;
   let failedCount = 0;
   const runYmd = getShanghaiYmd();
+  const monthYm = String(date).slice(0, 7);
 
-  // 1. 发备案通知给未达标人员（飞书卡片 + HRMS通知）
+  // 1. 查询每位未达标人员的本月累计次数，挂到结果上
   for (const r of failedResults) {
-    const card = buildFilingCard(r, date);
+    r.monthlyFilingCount = await getMonthlyExecutionFilingCount(r.username, r.store, date);
+  }
+
+  // 2. 发备案通知给未达标人员（飞书卡片 + HRMS通知）
+  for (const r of failedResults) {
+    const monthlyCount = r.monthlyFilingCount ?? 1;
+    const card = buildFilingCard(r, date, monthlyCount);
     const roleLabel = r.role === 'store_manager' ? '店长' : '出品经理';
-    const missingText =
+    const missingText = r.missing && r.missing.length > 0 ? r.missing.join('/') : '';
+    const detailText =
       r.executionDetailLines && r.executionDetailLines.length > 0
         ? r.executionDetailLines.join('；')
-        : r.missing && r.missing.length > 0
-          ? r.missing.join('/')
-          : '';
+        : '';
 
     // 飞书卡片（无 open_id 则无法发飞书，但 HRMS 公司通知仍应写入）
     if (r.open_id) {
@@ -336,7 +361,7 @@ async function sendExecutionRatingNotifications(results, date) {
         });
         if (deliver?.ok && !deliver?.skipped) {
           sentCount++;
-          logger.info({ recipient: r.username, store: r.store }, 'execution filing card sent to individual');
+          logger.info({ recipient: r.username, store: r.store, monthlyCount }, 'execution filing card sent to individual');
         } else if (!deliver?.ok) {
           failedCount++;
           logger.warn({ recipient: r.username, store: r.store, err: deliver?.error }, 'execution filing card send failed after retries');
@@ -349,14 +374,15 @@ async function sendExecutionRatingNotifications(results, date) {
       logger.warn({ recipient: r.username, store: r.store }, 'execution filing: feishu_users.open_id empty, skip individual Feishu card');
     }
 
-    // HRMS 公司通知（表上无 (target_username,type,meta) 唯一约束，禁止使用 ON CONFLICT — 否则会整句失败且静默丢通知）
+    // HRMS 公司通知（无唯一约束，手动去重）
     try {
       const metaPayload = JSON.stringify({
         date,
         rating: r.rating,
         missing: r.missing,
         store: r.store,
-        role: r.role
+        role: r.role,
+        monthly_filing_count: monthlyCount
       });
       const dup = await query(
         `SELECT 1 FROM hrms_user_notifications
@@ -368,18 +394,27 @@ async function sendExecutionRatingNotifications(results, date) {
         [r.username, date, String(r.store || '')]
       );
       if (!dup.rows?.length) {
+        const hrmsMsg = [
+          `【工作执行力备案】本月第 ${monthlyCount} 次`,
+          `门店：${r.store}`,
+          `岗位：${roleLabel} · ${r.name || r.username}`,
+          `业务日期：${date}`,
+          `未达标项目：${missingText || '—'}`,
+          detailText ? `明细：${detailText}` : '',
+          `本月（${monthYm}）累计不合格次数：${monthlyCount} 次`
+        ].filter(Boolean).join('\n');
         await query(
           `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
            VALUES ($1, $2, $3, $4, $5::jsonb)`,
           [
             r.username,
-            '工作执行力评级备案',
-            `您的工作执行力评级为${r.rating}级，未达标项目：${missingText || '无'}。\n门店：${r.store}\n岗位：${roleLabel} · ${r.name || r.username}\n日期：${date}`,
+            `工作执行力备案（本月第${monthlyCount}次）`,
+            hrmsMsg,
             'execution_rating_daily',
             metaPayload
           ]
         );
-        logger.info({ recipient: r.username, store: r.store }, 'execution filing hrms notification inserted');
+        logger.info({ recipient: r.username, store: r.store, monthlyCount }, 'execution filing hrms notification inserted');
       } else {
         logger.info({ recipient: r.username, store: r.store, date }, 'execution filing hrms notification deduped');
       }
@@ -388,7 +423,7 @@ async function sendExecutionRatingNotifications(results, date) {
     }
   }
 
-  // 2. 发备案汇总通知给管理员和总部营运（一条汇总，包含所有未达标人员）
+  // 3. 发备案汇总通知给管理员和总部营运（含所有未达标人员及本月累计次数）
   if (failedResults.length > 0) {
     const adminRecipients = await query(
       `SELECT open_id, username, role FROM feishu_users
