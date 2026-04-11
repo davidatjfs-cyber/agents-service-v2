@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { getWikiDataDir } from './knowledge-paths.js';
 
 export function shouldWriteWiki({ response }) {
   if (!response) return false;
@@ -54,16 +55,31 @@ function safeWikiFilePart(s) {
     .slice(0, 80);
 }
 
+function appendWikiAuditLine(dir, record) {
+  try {
+    const fp = path.join(dir, 'wiki-audit.jsonl');
+    const line = JSON.stringify({ ...record, ts: Date.now() }) + '\n';
+    const fd = fs.openSync(fp, 'a', 0o600);
+    try {
+      fs.writeSync(fd, line, undefined, 'utf8');
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
- * 将结构化知识写入本地 Markdown（knowledge/wiki）
+ * 将结构化知识写入 Markdown（磁盘原子写入 + 审计日志）
  */
 export async function writeWikiKnowledge({ agent, store, query, response, data }) {
   if (!shouldWriteWiki({ response })) return;
 
   const timestamp = Date.now();
   const structured = extractStructuredData(response);
-  const dataSnippet =
-    typeof data === 'string' ? data : JSON.stringify(data ?? {});
+  const dataSnippet = typeof data === 'string' ? data : JSON.stringify(data ?? {});
 
   const content = `
 
@@ -92,11 +108,15 @@ ${JSON.stringify(structured, null, 2)}
 ${dataSnippet.slice(0, 300)}
 `;
 
-  const dir = path.join(process.cwd(), 'knowledge', 'wiki');
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const dir = getWikiDataDir();
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
 
   const file = `${safeWikiFilePart(store)}_${safeWikiFilePart(agent)}_${timestamp}.md`;
-  fs.writeFileSync(path.join(dir, file), content, 'utf-8');
+  const finalPath = path.join(dir, file);
+  const tmp = path.join(dir, `.${safeWikiFilePart(store)}_${timestamp}_${process.pid}.tmp`);
+  fs.writeFileSync(tmp, content, 'utf8');
+  fs.renameSync(tmp, finalPath);
 
-  console.log('[WIKI WRITE]', file);
+  appendWikiAuditLine(dir, { event: 'write', file, agent: safeWikiFilePart(agent), store: safeWikiFilePart(store) });
+  console.log('[WIKI WRITE]', finalPath);
 }

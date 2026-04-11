@@ -16922,7 +16922,9 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     if (wk && typeof wk === 'object') {
                         const wkOk = wk.ok === true;
                         const wkN = wk.mdCount != null ? String(wk.mdCount) : '?';
-                        extra += `${dot(wkOk)}<span title="knowledge/wiki">Wiki</span><span style="color:#64748b;margin-right:10px;">(${wkN}篇)</span>`;
+                        const wkDisk = wk.persistence === 'disk' ? '落盘' : '';
+                        const wkDs = wk.deepseekRank ? '·DeepSeek排序' : '';
+                        extra += `${dot(wkOk)}<span title="knowledge/wiki${wkDisk ? '（' + wkDisk + '）' : ''}${wkDs}">Wiki</span><span style="color:#64748b;margin-right:10px;">(${wkN}篇)</span>`;
                     }
                 }
                 hBar.innerHTML = `

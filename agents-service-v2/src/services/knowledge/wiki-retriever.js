@@ -1,33 +1,46 @@
 import fs from 'fs';
 import path from 'path';
+import { getWikiDataDir } from './knowledge-paths.js';
+import { rankKnowledgeCandidatesWithDeepseek, useDeepseekForKnowledgeRanking } from './deepseek-knowledge.js';
 
 /**
- * 从 knowledge/wiki 目录按门店名粗匹配 + 简单字符重合打分检索片段
+ * 从 Wiki 目录检索片段（默认 DeepSeek 重排序；无 Key 时回退字符重合打分）
  */
-/** 运维/健康检查：本地 knowledge/wiki 目录可读且可枚举 */
+/** 运维/健康检查 */
 export function probeWikiKnowledgeHealth() {
-  const dir = path.join(process.cwd(), 'knowledge', 'wiki');
+  const dir = getWikiDataDir();
   try {
     if (!fs.existsSync(dir)) {
-      return { dirExists: false, mdCount: 0, ok: false, dir };
+      return { dirExists: false, mdCount: 0, ok: false, dir, persistence: 'disk' };
     }
     const files = fs.readdirSync(dir);
     const md = files.filter((f) => f.endsWith('.md')).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
     return {
       dirExists: true,
       mdCount: md.length,
-      /** 运维展示用文件名列表（最多 40 条，避免 health JSON 过大） */
       mdFiles: md.slice(0, 40),
       ok: true,
-      dir
+      dir,
+      persistence: 'disk',
+      deepseekRank: useDeepseekForKnowledgeRanking()
     };
   } catch (e) {
-    return { dirExists: false, mdCount: 0, ok: false, dir, error: String(e?.message || e) };
+    return { dirExists: false, mdCount: 0, ok: false, dir, error: String(e?.message || e), persistence: 'disk' };
   }
 }
 
+function localCharScore(content, q) {
+  let score = 0;
+  String(q || '')
+    .split('')
+    .forEach((k) => {
+      if (k.trim() && content.includes(k)) score++;
+    });
+  return score;
+}
+
 export async function retrieveWikiKnowledge({ store, query, limit = 3 }) {
-  const dir = path.join(process.cwd(), 'knowledge', 'wiki');
+  const dir = getWikiDataDir();
   if (!fs.existsSync(dir)) return [];
 
   const storeKey = String(store || '').trim();
@@ -35,22 +48,45 @@ export async function retrieveWikiKnowledge({ store, query, limit = 3 }) {
 
   const q = String(query || '');
   const files = fs.readdirSync(dir);
+  const filesMatching = files.filter((f) => f.endsWith('.md') && f.includes(storeKey));
+  if (!filesMatching.length) return [];
 
-  const results = files
-    .filter((f) => f.endsWith('.md') && f.includes(storeKey))
-    .map((f) => {
-      const content = fs.readFileSync(path.join(dir, f), 'utf-8');
-      let score = 0;
-      q.split('').forEach((k) => {
-        if (k.trim() && content.includes(k)) score++;
-      });
-      return { content, score };
-    })
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+  const excerpts = filesMatching.map((f, idx) => {
+    const full = fs.readFileSync(path.join(dir, f), 'utf-8').slice(0, 65000);
+    return {
+      i: idx,
+      filename: f,
+      full,
+      preview: full.slice(0, 1500),
+      localScore: localCharScore(full, q)
+    };
+  });
 
-  return results.map((r) => ({
-    summary: r.content.slice(0, 100),
-    strategy: r.content.slice(100, 200)
+  let order = [...excerpts]
+    .sort((a, b) => b.localScore - a.localScore)
+    .map((e) => e.i);
+  if (useDeepseekForKnowledgeRanking() && q.trim()) {
+    const ranked = await rankKnowledgeCandidatesWithDeepseek({
+      store: storeKey,
+      query: q,
+      candidates: excerpts.map((e) => ({ i: e.i, filename: e.filename, preview: e.preview })),
+      limit: Math.min(12, excerpts.length)
+    });
+    if (ranked.length) order = ranked;
+  }
+
+  const uniq = [];
+  const seen = new Set();
+  for (const idx of order) {
+    const ex = excerpts.find((e) => e.i === idx);
+    if (!ex || seen.has(ex.filename)) continue;
+    seen.add(ex.filename);
+    uniq.push(ex);
+    if (uniq.length >= limit) break;
+  }
+
+  return uniq.map((r) => ({
+    summary: r.full.slice(0, 100),
+    strategy: r.full.slice(100, 200)
   }));
 }

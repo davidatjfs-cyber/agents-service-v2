@@ -1,45 +1,86 @@
 /**
- * Minimal MemPalace-compatible HTTP API for agents-service-v2.
- * (Upstream github.com/mempalace/mempalace is an unrelated skill manager;
- *  this service implements /health, GET /inventory, POST /memory, POST /search.)
+ * MemPalace HTTP — 长期记忆服务（磁盘持久化 + 可选完整性校验与访问控制）
+ * 契约：GET /health、GET /inventory、POST /memory、POST /search
  */
 import express from 'express';
 import { writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { mempalaceAuthMiddleware } from './auth-middleware.js';
+import {
+  getDataDir,
+  ensureDataDir,
+  loadMemoriesFromDisk,
+  appendMemoryRecord,
+  sanitizeWingRoom,
+  sanitizeContent,
+  rotateBackupIfNeeded
+} from './memory-store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 const portFile = join(rootDir, '.active-port');
+const dataDir = getDataDir(rootDir);
 
-/** @type {Array<{ wing: string, room: string, type: string, content: string, metadata: object, timestamp: number }>} */
+/** @type {Array<{ id: number, wing: string, room: string, type: string, content: string, metadata: object, timestamp: number }>} */
 const memories = [];
+
+ensureDataDir(dataDir);
+const boot = loadMemoriesFromDisk(dataDir, memories);
+let nextId = (Number(boot.maxId) || 0) + 1;
+if (nextId < 1) nextId = 1;
+
+console.log(
+  `[MemPalace] dataDir=${dataDir} diskLoaded=${boot.loaded} skipped=${boot.skipped} memCount=${memories.length} nextId=${nextId}`
+);
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
+app.use(mempalaceAuthMiddleware);
 
 app.get('/health', (_req, res) => {
-  res.status(200).json({ ok: true, status: 'healthy' });
+  res.status(200).json({
+    ok: true,
+    status: 'healthy',
+    persistence: 'disk',
+    dataDir,
+    memoryCount: memories.length,
+    diskBoot: boot
+  });
 });
 
 app.post('/memory', (req, res) => {
   const b = req.body || {};
+  const wing = sanitizeWingRoom(b.wing);
+  const room = sanitizeWingRoom(b.room);
+  if (!wing || !room) {
+    return res.status(400).json({ ok: false, error: 'wing_and_room_required' });
+  }
+  const id = nextId++;
   const rec = {
-    wing: String(b.wing ?? ''),
-    room: String(b.room ?? ''),
-    type: String(b.type ?? ''),
-    content: String(b.content ?? ''),
+    id,
+    wing,
+    room,
+    type: sanitizeWingRoom(b.type || 'strategy').slice(0, 64) || 'strategy',
+    content: sanitizeContent(b.content),
     metadata: b.metadata && typeof b.metadata === 'object' ? b.metadata : {},
-    timestamp: typeof b.timestamp === 'number' ? b.timestamp : Date.now()
+    timestamp: typeof b.timestamp === 'number' && Number.isFinite(b.timestamp) ? b.timestamp : Date.now()
   };
   memories.push(rec);
-  res.status(200).json({ ok: true, id: memories.length });
+  try {
+    appendMemoryRecord(dataDir, rec);
+    rotateBackupIfNeeded(dataDir);
+  } catch (e) {
+    console.error('[MemPalace] persist failed', e);
+    return res.status(500).json({ ok: false, error: 'persist_failed' });
+  }
+  res.status(200).json({ ok: true, id });
 });
 
 app.post('/search', (req, res) => {
   const b = req.body || {};
-  const wing = String(b.wing ?? '');
-  const room = String(b.room ?? '');
+  const wing = sanitizeWingRoom(b.wing);
+  const room = sanitizeWingRoom(b.room);
   const q = String(b.query ?? '').trim().toLowerCase();
   const limit = Math.min(50, Math.max(1, parseInt(String(b.limit ?? '5'), 10) || 5));
 
@@ -52,14 +93,12 @@ app.post('/search', (req, res) => {
       const c = String(m.content || '').toLowerCase();
       return needles.some((n) => c.includes(n));
     });
-    // 中文整句无空格时关键词过滤常为空：回退为同 wing/room 的最近记忆，便于 strategy 稳定命中
     rows = filtered.length ? filtered : pool;
   }
   rows = rows.slice().sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).slice(0, limit);
   res.status(200).json(rows);
 });
 
-/** 运维/HRMS 数据中心：最近写入的记忆条目摘要（仅进程内存储；重启后清空） */
 app.get('/inventory', (req, res) => {
   const rawLimit = parseInt(String(req.query?.limit ?? ''), 10);
   const limit = Math.min(300, Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 80));
@@ -70,6 +109,7 @@ app.get('/inventory', (req, res) => {
     const content = String(m.content ?? '');
     return {
       seq: idx + 1,
+      id: m.id,
       wing: m.wing,
       room: m.room,
       type: m.type || 'strategy',
@@ -85,6 +125,7 @@ app.get('/inventory', (req, res) => {
     total: memories.length,
     returned: items.length,
     previewMaxChars: previewLen,
+    dataDir,
     items
   });
 });
@@ -97,7 +138,7 @@ function tryListen(preferredPort, fallbackPort) {
       /* ignore */
     }
     console.log(`MemPalace HTTP listening on http://localhost:${preferredPort}`);
-    console.log(`Health: http://localhost:${preferredPort}/health`);
+    console.log(`Health: http://localhost:${preferredPort}/health  dataDir=${dataDir}`);
   });
   server.on('error', (err) => {
     if (err && err.code === 'EADDRINUSE' && preferredPort !== fallbackPort) {

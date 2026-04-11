@@ -2,3 +2,5 @@ node_modules/
 .active-port
 .env
 *.log
+# 生产记忆数据（数字资产）勿提交仓库；部署机由 rsync 创建目录
+data/

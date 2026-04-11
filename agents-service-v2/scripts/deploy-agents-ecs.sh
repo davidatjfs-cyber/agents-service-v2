@@ -111,6 +111,8 @@ echo '--- health ---'
 H=\$(curl -sS -m 10 http://127.0.0.1:3101/health)
 echo "\$H"
 echo "\$H" | grep -q '"replyEngine"' || { echo 'ERROR: /health 无 replyEngine — ss -tlnp | grep 3101 查看占用' >&2; exit 1; }
+echo '--- mempalace /health (disk persistence) ---'
+curl -sS -m 6 http://127.0.0.1:3001/health | grep -q '"persistence":"disk"' && echo 'OK: MemPalace persistence=disk' || echo 'WARN: MemPalace /health 未返回 persistence=disk（检查 pm2 mempalace-http）'
 EOS
 echo ""
 echo "Done. replyEngine 应与 src/reply-engine-version.js 中 REPLY_ENGINE_BUILD 一致。"

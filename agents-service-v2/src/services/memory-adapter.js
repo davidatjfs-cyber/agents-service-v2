@@ -7,6 +7,7 @@ import { existsSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from '../utils/logger.js';
+import { rankKnowledgeCandidatesWithDeepseek, useDeepseekForKnowledgeRanking } from './knowledge/deepseek-knowledge.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -26,10 +27,14 @@ function resolveBaseUrl() {
 }
 
 function http() {
+  const headers = {};
+  const tok = String(process.env.MEMPALACE_HTTP_TOKEN || process.env.MEMPALACE_BEARER_TOKEN || '').trim();
+  if (tok) headers.Authorization = `Bearer ${tok}`;
   return axios.create({
     baseURL: resolveBaseUrl(),
-    timeout: 4500,
-    validateStatus: () => true
+    timeout: Math.max(5000, parseInt(String(process.env.MEMPALACE_HTTP_TIMEOUT_MS || '12000'), 10) || 12000),
+    validateStatus: () => true,
+    headers
   });
 }
 
@@ -100,7 +105,7 @@ export async function probeMemPalaceHealth() {
           };
           out.detailHint =
             out.inventory.total > 0
-              ? `共 ${out.inventory.total} 条（下列展示最近 ${out.inventory.returned} 条摘要；进程重启后内存清空）`
+              ? `共 ${out.inventory.total} 条（下列展示最近 ${out.inventory.returned} 条摘要；MemPalace 已落盘 JSONL）`
               : '暂无记忆条目（尚未写入 /memory）';
         } else {
           out.detailHint = '已连通，但未识别 /inventory 响应（请升级 mempalace 服务）';
@@ -130,24 +135,49 @@ export async function recallMemory(opts) {
     const room = String(opts?.agent ?? '');
     if (!wing || !room) return [];
     const limit = Number.isFinite(opts?.limit) ? Math.min(50, Math.max(1, opts.limit)) : 5;
+    const q = String(opts?.query ?? '');
+    const fetchLimit = useDeepseekForKnowledgeRanking() && q.trim() ? Math.min(30, Math.max(limit, 15)) : limit;
     const res = await http().post('/search', {
       wing,
       room,
-      query: String(opts?.query ?? ''),
-      limit
+      query: q,
+      limit: fetchLimit
     });
     if (res.status < 200 || res.status >= 300) {
       logger.warn({ status: res.status }, 'memory-adapter recallMemory non-2xx');
       return [];
     }
     const rows = Array.isArray(res.data) ? res.data : [];
+    let ordered = rows;
+    let usedDeepseekOrder = false;
+
+    if (useDeepseekForKnowledgeRanking() && q.trim() && rows.length) {
+      const candidates = rows.map((row, i) => ({
+        i,
+        preview: String(row?.content || '').slice(0, 600)
+      }));
+      const idxs = await rankKnowledgeCandidatesWithDeepseek({
+        store: wing,
+        query: q,
+        candidates,
+        limit: Math.min(15, rows.length)
+      });
+      if (idxs.length) {
+        ordered = idxs.map((i) => rows[i]).filter(Boolean);
+        usedDeepseekOrder = true;
+      }
+    }
+
+    const minScore = usedDeepseekOrder ? 0.55 : 0.7;
     const out = [];
-    for (const row of rows) {
-      const sc = Number(row?.metadata?.score);
-      if (!Number.isFinite(sc) || sc < 0.7) continue;
+    for (const row of ordered) {
+      let sc = Number(row?.metadata?.score);
+      if (!Number.isFinite(sc)) sc = usedDeepseekOrder ? 0.72 : 0;
+      if (sc < minScore) continue;
       const content = String(row?.content ?? '');
       if (!content) continue;
       out.push({ content, score: sc });
+      if (out.length >= limit) break;
     }
     return out;
   } catch (e) {
