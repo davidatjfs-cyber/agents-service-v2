@@ -6,7 +6,7 @@
  * 
  * 数据源：
  * - 出品经理：开档/收档/原料收货均为 agent_messages（飞书 bitable 轮询写入，按业务日 + 档口齐套）
- * - 洪潮店长：daily_reports (new_wechat_members)
+ * - 洪潮店长：企微为月累计指标，**不参与日频**备案（避免与日卡片混淆；月评仍读 daily_reports）
  * - 马己仙店长：agent_messages (meeting_report，飞书例会同步写入)
  */
 import { query } from '../utils/db.js';
@@ -222,7 +222,7 @@ function buildFilingCard({ store, username, name, role, rating, missing, executi
     },
     elements: [
       { tag: 'div', text: { tag: 'lark_md', content } },
-      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：agent_messages（飞书同步）· 每日08:00自动检查' }] }
+      { tag: 'note', elements: [{ tag: 'plain_text', content: `检查业务日：${date}（上海昨日）· agent_messages 飞书同步 · 每日08:00` }] }
     ]
   };
 }
@@ -259,7 +259,7 @@ function buildSummaryCard(results, date) {
     },
     elements: [
       { tag: 'div', text: { tag: 'lark_md', content: md } },
-      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：agent_messages + daily_reports · 每日08:00自动检查' }] }
+      { tag: 'note', elements: [{ tag: 'plain_text', content: `检查业务日：${date}（上海昨日）· 出品经理与马己仙店长读 agent_messages` }] }
     ]
   };
 }
@@ -296,7 +296,7 @@ function buildAdminFilingCard(results, date) {
     },
     elements: [
       { tag: 'div', text: { tag: 'lark_md', content: md } },
-      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：agent_messages（飞书同步）· 每日08:00自动检查' }] }
+      { tag: 'note', elements: [{ tag: 'plain_text', content: `检查业务日：${date}（上海昨日）；洪潮店长企微项仅月评，不列入日频备案` }] }
     ]
   };
 }
@@ -526,16 +526,10 @@ export async function runDailyExecutionRating(date) {
           continue;
         } else if (role === 'store_manager') {
           if (brand === '洪潮') {
-            // 洪潮店长：企微会员（当月累计，与月评口径一致）
-            const members = await getHongchaoWechatMonthToDate(store, date);
-            const eval_ = evaluateHongchaoManager(members);
-            rating = eval_.rating;
-            missing = eval_.rating === 'D' ? ['企微会员新增不足'] : [];
-            detail = { wechatMembers: members };
-
-            if (rating !== 'A') {
-              await recordExecutionFiling({ store, username, role, date, rating, missing, detail });
-            }
+            // 企微为月累计 / 周频考核口径，不参与日频执行力备案（避免与日卡片「企微不足」混淆）
+            rating = 'A';
+            missing = [];
+            detail = { hongchaoWechatDailySkipped: true };
           } else if (brand === '马己仙') {
             // 马己仙店长：例会报告
             const meeting = await getMajixianMeetingReport(store, date);

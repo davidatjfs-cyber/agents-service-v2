@@ -547,6 +547,16 @@ export async function syncDataAuditorIssuesToMasterTasks(newIssueIds) {
       const issue = ir.rows?.[0];
       if (!issue) continue;
 
+      const cat = String(issue.category || '');
+      const ttl = String(issue.title || '');
+      if (
+        cat.includes('原料收货') ||
+        /近\s*\d+\s*天.*原料|条原料.*异常|原料异常反馈/i.test(ttl)
+      ) {
+        console.log('[master:data_auditor] skip deprecated material issue → master_tasks', issueId, ttl.slice(0, 80));
+        continue;
+      }
+
       const dup = await pool().query(
         `SELECT id FROM master_tasks WHERE source_ref = $1 AND source = 'data_auditor' LIMIT 1`,
         [String(issueId)]

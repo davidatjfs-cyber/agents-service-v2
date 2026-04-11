@@ -8,6 +8,11 @@ import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { sendCard } from './feishu-client.js';
 import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
+import {
+  isMajixianStore,
+  isMajixianPmObserverUsername,
+  resolveMajixianProductionManagersForScoring
+} from '../utils/scoring-assignee.js';
 
 /** 任务类型 → 中文标签 */
 function taskTypeLabel(type) {
@@ -307,7 +312,10 @@ export async function sendDailyTaskCompletionReport() {
     
     // 获取接收人
     const recipients = await getRecipients();
-    const hqRecipients = recipients.filter((r) => ['admin', 'hq_manager'].includes(r.role));
+    const hqRecipients = recipients.filter(
+      (r) =>
+        ['admin', 'hq_manager'].includes(r.role) && !isMajixianPmObserverUsername(r.username)
+    );
 
     let sentCount = 0;
     let failedCount = 0;
@@ -372,6 +380,7 @@ export async function sendDailyTaskCompletionReport() {
       for (const row of fuRows) {
         const un = String(row.username || '').trim().toLowerCase();
         if (!assigneeKeys.includes(un)) continue;
+        if (isMajixianStore(store) && isMajixianPmObserverUsername(un)) continue;
         const oid = String(row.open_id || '').trim();
         if (!oid || storeSentOpen.has(`${oid}::${store}`)) continue;
         storeSentOpen.add(`${oid}::${store}`);
@@ -397,6 +406,46 @@ export async function sendDailyTaskCompletionReport() {
         } catch (e) {
           failedCount++;
           logger.warn({ err: e?.message, recipient: row.username, store }, 'store task completion card send failed');
+        }
+      }
+
+      if (isMajixianStore(store)) {
+        try {
+          const pms = await resolveMajixianProductionManagersForScoring(store);
+          const primary = pms[0];
+          const canonUn = String(primary?.username || '').trim();
+          if (canonUn && canonUn !== '__periodic_kitchen__') {
+            const canonR = await query(
+              `SELECT username, open_id FROM feishu_users
+               WHERE registered = true AND open_id IS NOT NULL AND trim(open_id) <> ''
+                 AND lower(trim(username)) = lower(trim($1))`,
+              [canonUn]
+            );
+            const oid = String(canonR.rows?.[0]?.open_id || '').trim();
+            if (oid && !storeSentOpen.has(`${oid}::${store}`)) {
+              storeSentOpen.add(`${oid}::${store}`);
+              const deliver = await sendReportToRecipient({
+                jobKey: 'daily_task_completion_report',
+                runYmd,
+                username: canonR.rows[0].username || oid,
+                scope: `store_${store}_mj_pm_canon`,
+                sendFn: async () => {
+                  const cardRes = await sendCard(oid, storeCard, 'open_id');
+                  return { ok: !!cardRes?.ok, error: cardRes?.error || '' };
+                }
+              });
+              if (deliver?.ok && deliver?.skipped) skippedCount++;
+              if (deliver?.ok && !deliver?.skipped) {
+                sentCount++;
+                logger.info({ recipient: canonUn, store }, 'store task completion card sent (马己仙出品主责)');
+              } else if (!deliver?.ok) {
+                failedCount++;
+                logger.warn({ recipient: canonUn, store, err: deliver?.error }, '马己仙主责出品任务达成率发送失败');
+              }
+            }
+          }
+        } catch (e) {
+          logger.warn({ err: e?.message, store }, '马己仙主责出品任务达成率投递异常');
         }
       }
     }

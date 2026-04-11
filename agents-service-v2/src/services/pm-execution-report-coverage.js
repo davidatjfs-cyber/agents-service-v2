@@ -3,7 +3,7 @@
  * 洪潮店长企微执行力不在此模块（见 daily_reports）。
  */
 import { query } from '../utils/db.js';
-import { expandAgentStoreLabels, normalizeAgentMaterialBrand } from '../config/store-mapping.js';
+import { expandAgentStoreLabels, normalizeAgentMaterialBrand, resolveAgentCanonicalStore } from '../config/store-mapping.js';
 import { sameStore, ext, resolveBitableBusinessYmd } from './deterministic-replies.js';
 
 /** 按业务日判定时，created_at 扫描窗口：避免飞书晚同步（入库晚于业务日数日）被 SQL 提前过滤掉 */
@@ -15,8 +15,19 @@ const CREATED_AT_PAD_AFTER_MONTH = 45;
 function storeMatchesRow(displayStore, rowStoreRaw) {
   const rowStore = ext(rowStoreRaw);
   if (!rowStore) return false;
-  const labels = expandAgentStoreLabels(displayStore);
-  return labels.some((lab) => sameStore(rowStore, lab));
+  const dispLabs = expandAgentStoreLabels(displayStore);
+  const rowCanon = resolveAgentCanonicalStore(rowStore) || rowStore;
+  const rowLabs = expandAgentStoreLabels(rowCanon);
+  for (const dl of dispLabs) {
+    if (sameStore(dl, rowStore)) return true;
+    for (const rl of rowLabs) {
+      if (sameStore(dl, rl)) return true;
+    }
+  }
+  for (const rl of rowLabs) {
+    if (sameStore(rowStore, rl)) return true;
+  }
+  return false;
 }
 
 function materialBrandMatches(agentData, brandZh) {
@@ -26,9 +37,37 @@ function materialBrandMatches(agentData, brandZh) {
 }
 
 function parseMeetingScore(fields) {
-  const raw = fields?.meeting_score ?? fields?.score ?? fields?.得分;
-  const n = Number(String(raw ?? '').trim());
+  const raw =
+    fields?.meeting_score ??
+    fields?.score ??
+    fields?.得分 ??
+    fields?.['例会得分'] ??
+    fields?.['评分'] ??
+    fields?.['会议得分'];
+  const s = ext(raw)
+    .replace(/分\s*$/g, '')
+    .trim();
+  if (!s) return null;
+  const m = s.match(/(\d+(?:\.\d+)?)/);
+  if (!m) return null;
+  const n = Number(m[1]);
   return Number.isFinite(n) ? n : null;
+}
+
+/** 飞书日期列常见非标写法 → 再交给 resolveBitableBusinessYmd */
+function normalizeMeetingDateCell(raw) {
+  const s = ext(raw).trim();
+  if (!s) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const cn = s.match(/(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/);
+  if (cn) {
+    return `${cn[1]}-${String(cn[2]).padStart(2, '0')}-${String(cn[3]).padStart(2, '0')}`;
+  }
+  const sl = s.match(/(\d{4})\s*[\/\.\-年]\s*(\d{1,2})\s*[\/\.\-月]\s*(\d{1,2})/);
+  if (sl) {
+    return `${sl[1]}-${String(sl[2]).padStart(2, '0')}-${String(sl[3]).padStart(2, '0')}`;
+  }
+  return s;
 }
 
 /** 马己仙厨房档口（开档/收档各需 1 条/档口/日） */
@@ -56,6 +95,35 @@ function ymdAddDays(ymd, deltaDays) {
   const [y, m, d] = ymd.split('-').map((x) => parseInt(x, 10));
   const u = Date.UTC(y, m - 1, d + deltaDays);
   return new Date(u).toISOString().slice(0, 10);
+}
+
+function shanghaiYmdFromCreatedAt(createdAt) {
+  if (!createdAt) return '';
+  const d = createdAt instanceof Date ? createdAt : new Date(createdAt);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
+}
+
+/**
+ * 例会业务日：优先飞书「日期/会议日期」列；列为空且飞书在次日凌晨入库时，按「前一自然日」归因（与营业日关账一致）。
+ */
+function meetingReportBizYmd(fields, createdAt, anchorYmd) {
+  const rawDate =
+    normalizeMeetingDateCell(fields?.date) ||
+    normalizeMeetingDateCell(fields?.['会议日期']) ||
+    normalizeMeetingDateCell(fields?.['例会日期']) ||
+    normalizeMeetingDateCell(fields?.['会议时间']) ||
+    '';
+  let biz = resolveBitableBusinessYmd(rawDate || null, createdAt);
+  if (!rawDate && biz !== anchorYmd) {
+    const sh = shanghaiYmdFromCreatedAt(createdAt);
+    const sc = parseMeetingScore(fields);
+    if (sc != null && sc >= 7) {
+      if (sh === ymdAddDays(anchorYmd, 1)) biz = anchorYmd;
+      if (sh === ymdAddDays(anchorYmd, 2)) biz = anchorYmd;
+    }
+  }
+  return biz;
 }
 
 function* eachYmdInclusive(startYmd, endYmd) {
@@ -258,7 +326,27 @@ export async function getMajixianMeetingExecutionStatsForStore(displayStore, sta
   for (const row of r.rows || []) {
     const fields = row.agent_data?.fields || {};
     if (!storeMatchesRow(displayStore, fields.store)) continue;
-    const biz = resolveBitableBusinessYmd(fields.date, row.created_at);
+    const rawDate =
+      normalizeMeetingDateCell(fields.date) ||
+      normalizeMeetingDateCell(fields['会议日期']) ||
+      normalizeMeetingDateCell(fields['例会日期']) ||
+      normalizeMeetingDateCell(fields['会议时间']) ||
+      '';
+    let biz = resolveBitableBusinessYmd(rawDate || null, row.created_at);
+    if (!rawDate) {
+      const sh = shanghaiYmdFromCreatedAt(row.created_at);
+      const sc = parseMeetingScore(fields);
+      const prevDay = ymdAddDays(sh, -1);
+      if (
+        sc != null &&
+        sc >= 7 &&
+        prevDay >= startYmd &&
+        prevDay <= endYmd &&
+        biz === sh
+      ) {
+        biz = prevDay;
+      }
+    }
     if (!biz || biz < startYmd || biz > endYmd) continue;
     totalMeetings++;
     const sc = parseMeetingScore(fields);
@@ -268,7 +356,13 @@ export async function getMajixianMeetingExecutionStatsForStore(displayStore, sta
   return { totalMeetings, qualifiedMeetings, unqualifiedMeetings };
 }
 
-/** 马己仙店长执行力日评：某日是否已提交例会及得分（agent_messages.meeting_report） */
+/**
+ * 马己仙店长执行力日评：某日是否已提交例会及得分（agent_messages.meeting_report）
+ *
+ * 认定顺序：① 业务日 = dateYmd 的飞书记录；②（可关）前一日业务日已合格（≥7）且当日无记录时，
+ * 承认「例会写在昨日 / 关账跨日」仍算本日执行力达标。门店列与 feishu_users.store 双向做别名展开，避免「大宁店↔音乐广场店」漏配。
+ * 环境变量：MEETING_REPORT_EXECUTION_COUNT_PREVIOUS_DAY=0 关闭②。
+ */
 export async function getMajixianMeetingDayEval(displayStore, dateYmd) {
   const r = await query(
     `SELECT agent_data, created_at FROM agent_messages
@@ -277,20 +371,43 @@ export async function getMajixianMeetingDayEval(displayStore, dateYmd) {
        AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($1::date + $3::int)`,
     [dateYmd, CREATED_AT_PAD_BEFORE_SINGLE_DAY, CREATED_AT_PAD_AFTER_SINGLE_DAY]
   );
-  let latestFields = null;
-  let latestTs = 0;
+  const acceptPrevDay =
+    String(process.env.MEETING_REPORT_EXECUTION_COUNT_PREVIOUS_DAY || '1').trim() !== '0';
+  const prevYmd = ymdAddDays(dateYmd, -1);
+
+  let latestExact = null;
+  let latestExactTs = 0;
+  let latestPrev = null;
+  let latestPrevTs = 0;
+
   for (const row of r.rows || []) {
     const fields = row.agent_data?.fields || {};
     if (!storeMatchesRow(displayStore, fields.store)) continue;
-    const biz = resolveBitableBusinessYmd(fields.date, row.created_at);
-    if (biz !== dateYmd) continue;
+    const biz = meetingReportBizYmd(fields, row.created_at, dateYmd);
     const ts = new Date(row.created_at).getTime();
-    if (ts >= latestTs) {
-      latestTs = ts;
-      latestFields = fields;
+    if (biz === dateYmd) {
+      if (ts >= latestExactTs) {
+        latestExactTs = ts;
+        latestExact = fields;
+      }
+      continue;
+    }
+    if (acceptPrevDay && biz === prevYmd) {
+      const sc0 = parseMeetingScore(fields);
+      if (sc0 != null && sc0 >= 7 && ts >= latestPrevTs) {
+        latestPrevTs = ts;
+        latestPrev = fields;
+      }
     }
   }
-  if (!latestFields) return { submitted: false, score: null, qualified: false };
-  const sc = parseMeetingScore(latestFields);
-  return { submitted: true, score: sc, qualified: sc != null && sc >= 7 };
+
+  const pick = latestExact || (acceptPrevDay ? latestPrev : null);
+  if (!pick) return { submitted: false, score: null, qualified: false };
+  const sc = parseMeetingScore(pick);
+  return {
+    submitted: true,
+    score: sc,
+    qualified: sc != null && sc >= 7,
+    _matchedViaPreviousBizDay: !latestExact && !!latestPrev
+  };
 }

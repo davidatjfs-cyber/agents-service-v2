@@ -6573,17 +6573,19 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
     items.sort((a, b) => String(b?.date || '').localeCompare(String(a?.date || '')) || String(b?.updatedAt || b?.createdAt || '').localeCompare(String(a?.updatedAt || a?.createdAt || '')));
     items = items.slice(0, limit);
 
-    // 企微累计基数: 当查询指定门店+日期时，返回该月其他日期的企微新增合计
+    // 企微累计基数: 当查询指定门店+日期时，返回该月「当前日期之前」的企微新增合计（避免 YYYY-MM-31 非法日期导致查询失败→基数恒为 0）
     let wechat_month_base = 0;
     if (store && date) {
       try {
-        const monthStart = date.slice(0, 7) + '-01';
-        const monthEnd = date.slice(0, 7) + '-31';
+        const monthStart = `${String(date).slice(0, 7)}-01`;
         const baseR = await pool.query(
           `SELECT COALESCE(SUM(new_wechat_members), 0) AS base
            FROM daily_reports
-           WHERE TRIM(store) = TRIM($1::text) AND date >= $2::date AND date <= $3::date AND date <> $4::date`,
-          [store, monthStart, monthEnd, date]
+           WHERE TRIM(store) = TRIM($1::text)
+             AND date >= $2::date
+             AND date < ($2::date + INTERVAL '1 month')
+             AND date <> $3::date`,
+          [store, monthStart, date]
         );
         wechat_month_base = Number(baseR.rows?.[0]?.base || 0);
       } catch (_e) {}
@@ -6694,7 +6696,15 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
             delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses, operational_anomaly_note,
             recharge_count, recharge_amount,
             weather, segments, discount_dine, discount_delivery, categories, delivery_detail, bad_reviews_dianping, staff, schedule_next_day, photos)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, 0, true, NOW(),
+          VALUES ($1, $2, $3, $4, $5, $6, $7,
+            COALESCE((
+              SELECT SUM(dr.new_wechat_members)::bigint
+              FROM daily_reports dr
+              WHERE TRIM(dr.store) = TRIM($1::text)
+                AND dr.date >= date_trunc('month', $3::date)::date
+                AND dr.date < $3::date
+            ), 0) + $7,
+            true, NOW(),
             $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
             $18, $19, $20, $21, $22, $23, $24, $25,
             $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
@@ -6704,6 +6714,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
             actual_margin = EXCLUDED.actual_margin,
             dianping_rating = EXCLUDED.dianping_rating,
             new_wechat_members = EXCLUDED.new_wechat_members,
+            wechat_month_total = EXCLUDED.wechat_month_total,
             pre_discount_revenue = EXCLUDED.pre_discount_revenue,
             total_discount = EXCLUDED.total_discount,
             dine_orders = EXCLUDED.dine_orders,
@@ -6815,7 +6826,15 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
             delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses, operational_anomaly_note,
             recharge_count, recharge_amount,
             weather, segments, discount_dine, discount_delivery, categories, delivery_detail, bad_reviews_dianping, staff, schedule_next_day, photos)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, 0, true, NOW(),
+          VALUES ($1, $2, $3, $4, $5, $6, $7,
+            COALESCE((
+              SELECT SUM(dr.new_wechat_members)::bigint
+              FROM daily_reports dr
+              WHERE TRIM(dr.store) = TRIM($1::text)
+                AND dr.date >= date_trunc('month', $3::date)::date
+                AND dr.date < $3::date
+            ), 0) + $7,
+            true, NOW(),
             $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
             $18, $19, $20, $21, $22, $23, $24, $25,
             $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
@@ -6825,6 +6844,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
             actual_margin = EXCLUDED.actual_margin,
             dianping_rating = EXCLUDED.dianping_rating,
             new_wechat_members = EXCLUDED.new_wechat_members,
+            wechat_month_total = EXCLUDED.wechat_month_total,
             pre_discount_revenue = EXCLUDED.pre_discount_revenue,
             total_discount = EXCLUDED.total_discount,
             dine_orders = EXCLUDED.dine_orders,

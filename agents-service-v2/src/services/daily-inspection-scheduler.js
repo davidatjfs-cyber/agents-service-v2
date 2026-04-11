@@ -83,6 +83,12 @@ function shouldSkipLegacyScheduledLabels(item, label, desc) {
   return parts.some((p) => p && blob.includes(p));
 }
 
+/** 早期「近7天 N 条原料异常」类定时项：非 BI anomaly_triggers，不应再写入 master_tasks */
+function shouldSkipDeprecatedMaterialRollupSchedule(item, label, desc) {
+  const blob = `${label || ''} ${desc || ''} ${String(item?.type || '')} ${item?.replyRequirements || ''} ${item?.replyHint || ''}`;
+  return /近\s*\d+\s*天.*原料|条原料.*异常|原料异常反馈/i.test(blob);
+}
+
 function frequencyMatches(freq, type) {
   const f = String(freq || 'daily').toLowerCase();
   const t = String(type || '').toLowerCase();
@@ -271,6 +277,10 @@ export async function executeDailyInspectionItem(item) {
   if (shouldSkipLegacyScheduledLabels(item, label, desc)) {
     logger.info({ type, label }, 'daily-inspection: skip LEGACY_SCHEDULED_TASK_SKIP_LABELS');
     return { ok: true, skipped: true, reason: 'legacy_scheduled_skip', type };
+  }
+  if (shouldSkipDeprecatedMaterialRollupSchedule(item, label, desc)) {
+    logger.info({ type, label }, 'daily-inspection: skip deprecated material rollup schedule');
+    return { ok: true, skipped: true, reason: 'deprecated_material_rollup', type };
   }
 
   // 巡检类（patrol/weekly/monthly）：发 BI 检测摘要卡片
