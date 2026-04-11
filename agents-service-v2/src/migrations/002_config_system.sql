@@ -139,7 +139,7 @@ INSERT INTO agent_v2_configs (config_key, config_value, description, updated_by)
   "gross_margin": {
     "name": "毛利率异常",
     "enabled": true,
-    "frequency": "weekly",
+    "frequency": "monthly",
     "data_source": "monthly_margins / feishu actual_gross_margin / daily_reports",
     "threshold": {
       "洪潮": {"medium": {"below_pct": 69}, "high": {"below_pct": 68}},
@@ -166,18 +166,35 @@ INSERT INTO agent_v2_configs (config_key, config_value, description, updated_by)
     "human_required": ["整改执行"]
   },
   "bad_review_service": {
-    "name": "差评报告服务异常",
+    "name": "大众点评服务差评",
     "enabled": true,
     "frequency": "weekly",
-    "data_source": "feishu_generic_records.bad_reviews",
+    "data_source": "feishu_generic_records.bad_review dianping only",
     "threshold": {
-      "medium": {"two_week_count": 2},
-      "high": {"two_week_count": 3}
+      "count_per_week_medium": 1,
+      "count_per_week_high": 2,
+      "deduction_rule": "1=5pts; 2=20pts(2x10); 3=30pts(3x10); per natural week no cross-week accumulation"
     },
-    "assign_to": "front_manager",
+    "assign_to": "store_manager",
+    "notify_target_role": "store_manager",
     "evidence": ["差评截图", "培训方案"],
-    "auto_actions": ["服务差评趋势分析"],
-    "human_required": ["服务培训安排"]
+    "auto_actions": ["推送"],
+    "human_required": ["培训"]
+  },
+  "hongchao_jiuguang_private_room": {
+    "name": "洪潮久光包房使用异常",
+    "enabled": true,
+    "frequency": "weekly",
+    "data_source": "daily_reports",
+    "threshold": {
+      "target_uses": 28,
+      "medium_below": 22,
+      "high_below": 20
+    },
+    "assign_to": "store_manager",
+    "evidence": ["包房使用明细"],
+    "auto_actions": ["推送"],
+    "human_required": ["整改方案"]
   },
   "traffic_decline": {
     "name": "客流量/订单数异常",

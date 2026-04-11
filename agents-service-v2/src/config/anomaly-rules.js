@@ -81,7 +81,7 @@ export const ANOMALY_RULES = [
     brands: null,
     thresholds: {
       '洪潮': { medium: { below: 1100 }, high: { below: 1000 } },
-      '马己仙': { medium: { below: 1500 }, high: { below: 1400 } }
+      '马己仙': { medium: { below: 1400 }, high: { below: 1300 } }
     },
     dataSource: {
       table: 'daily_reports',
@@ -263,7 +263,7 @@ export const ANOMALY_RULES = [
       table: 'feishu_generic_records',
       config: 'bad_review',
       fields: ['差评类型=服务'],
-      calc: '大众点评差评中关于服务的，1周内1条medium,2条high；2周内仅1条不触发'
+      calc: '大众点评差评中关于服务的，每自然周独立计算不跨周：1条=medium(5分)；2条=high(20分，即2×10)；3条=30分(3×10)；次周清零重新统计'
     },
     assignTo: { role: 'ops', title: '运营' },
     notifyTarget: { role: 'store_manager', title: '店长' },
@@ -274,10 +274,38 @@ export const ANOMALY_RULES = [
       optional: []
     },
     autoActions: ['trigger', 'remind', 'follow_up'],
-    notes: '2周出现1条不触发异常（跨周稀释）'
+    notes: '每自然周独立计算，不跨周累计；1条5分、2条20分（2×10）、3条30分（3×10）；次周清零重新统计'
   },
 
-  // ─── 9. 食品安全评价异常 ───
+  // ─── 9. 洪潮久光包房使用异常 ───
+  {
+    key: 'hongchao_jiuguang_private_room',
+    name: '洪潮久光包房使用异常',
+    frequency: 'weekly',
+    brands: ['洪潮'],
+    thresholds: {
+      target_uses: 28,
+      medium: { below: 22 },
+      high: { below: 20 }
+    },
+    dataSource: {
+      table: 'daily_reports',
+      fields: ['private_room_uses'],
+      calc: '上周一～上周日，2间包房合计使用次数；每周目标28次，<22触发medium，<20触发high'
+    },
+    assignTo: { role: 'store_manager', title: '店长' },
+    notifyTarget: { role: 'store_manager', title: '店长' },
+    hrFollowUp: true,
+    hrTiming: 'on_trigger',
+    evidence: {
+      required: ['包房使用明细', '未达标原因分析'],
+      optional: ['整改方案']
+    },
+    autoActions: ['trigger', 'remind'],
+    notes: '仅适用于洪潮久光门店（大宁久光），每周一检测上周使用次数'
+  },
+
+  // ─── 10. 食品安全评价异常 ───
   {
     key: 'food_safety',
     name: '食品安全评价异常',
@@ -323,7 +351,7 @@ export const ANOMALY_RULES = [
     notes: '最高优先级，立即触发，需人工审批结案。红色通道。'
   },
 
-  // ─── 10. 客流量/订单数异常 ───
+  // ─── 11. 客流量/订单数异常 ───
   {
     key: 'traffic_decline',
     name: '客流量/订单数异常',
