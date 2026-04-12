@@ -262,7 +262,7 @@
 1. **桌访（马己仙无数据）**：`feishu_generic_records` 查询改为先按门店 **ILIKE 模式**（含 HRMS 全称 ↔ 飞书简称）过滤，再 `LIMIT`，避免洪潮高频同步占满 `ORDER BY updated_at LIMIT 3000` 窗口。涉及 `deterministic-replies.js`、`agent-handlers.js`（`buildDeterministicTableVisitReply`）。  
 2. **销售毛利估算**：新增 `services/margin-from-sales.js`，用 **`sales_raw` + `dish_library_costs`**（飞书菜品库/外卖库同步表）估算毛利率；在 `data_auditor` 中识别「毛利率/菜品成本」类问题触发。  
 3. **绩效读数**：`chief_evaluator` / `appeal` 对 **`anomaly_triggers`、`agent_scores`** 的列名与真实表结构对齐（`anomaly_key`、`total_score`、`period` 等）。  
-4. **周度门店评分**：新增 `services/periodic-scoring.js`，每周一 02:15 按近 7 天异常汇总扣分并写入 **`agent_scores`**（店长 / 出品经理两条虚拟账号维度）。  
+4. **周度门店评分**：新增 `services/periodic-scoring.js`，**每周一 08:25（Asia/Shanghai）** cron 跑 `runWeeklyStoreScoring`，按当周 `anomaly_triggers` 汇总扣分并写入 **`agent_scores`**（店长 / 出品经理维度；未绑定时可为占位账号）。说明：旧文档曾误写「02:15」，以代码 `cron.schedule(..., { timezone: 'Asia/Shanghai' })` 为准。HRMS `pushScoresToFeishu` 为 **每 5 分钟**重试未通知行；`anomaly_rollups_v2` 的「绩效考核周报」飞书卡与即时「BI异常情况扣分」卡解耦时，以 `agents.js` 内「仅上海周一推送」逻辑为准。  
 5. **环境变量**：本地 `.env` 示例见 `agents-service-v2/.env.example`；需同时 **`ENABLE_AUTOMATIONS=true`** 与 **`ENABLE_DB_WRITE=true`** 才能跑定时任务并写入评分。
 
 ---
