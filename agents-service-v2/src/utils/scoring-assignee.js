@@ -6,6 +6,26 @@ import { query } from './db.js';
 
 const CANONICAL_MAJIXIAN_PM = { username: 'NNYXLYR04', displayName: '黎永荣' };
 
+/**
+ * 报告/卡片上的展示名：马己仙出品经理观察号与误填「测试」等占位名，统一为主责「黎永荣」，
+ * 与执行力日评、月度评级选人逻辑一致（数据来源仍为 master_tasks.assignee_username）。
+ */
+export function resolvePerformanceReportDisplayName(store, role, username, rawNameFromFeishu) {
+  const raw = String(rawNameFromFeishu ?? '').trim();
+  const u = String(username || '').trim().toLowerCase();
+  const canonU = String(CANONICAL_MAJIXIAN_PM.username).toLowerCase();
+  if (isMajixianStore(store) && role === 'store_production_manager') {
+    if (isMajixianPmObserverUsername(username)) return CANONICAL_MAJIXIAN_PM.displayName;
+    if (u === canonU) {
+      if (raw && /黎/.test(raw)) return raw;
+      return CANONICAL_MAJIXIAN_PM.displayName;
+    }
+    if (/^测试$/i.test(raw) || /^test$/i.test(raw)) return CANONICAL_MAJIXIAN_PM.displayName;
+  }
+  if (raw) return raw;
+  return String(username || '').trim() || '—';
+}
+
 /** 马己仙出品观察账号：接收与黎永荣相同的绩效推送，但不参与任务类飞书交互（见 message-pipeline / feishu-client） */
 export const MAJIXIAN_PM_OBSERVER_USERNAME = 'nnyxcs35';
 

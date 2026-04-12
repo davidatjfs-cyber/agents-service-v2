@@ -11,7 +11,8 @@ import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
 import {
   isMajixianStore,
   isMajixianPmObserverUsername,
-  resolveMajixianProductionManagersForScoring
+  resolveMajixianProductionManagersForScoring,
+  resolvePerformanceReportDisplayName
 } from '../utils/scoring-assignee.js';
 
 /** 任务类型 → 中文标签 */
@@ -123,10 +124,12 @@ async function getRecipients() {
   return result.rows || [];
 }
 
-/** 构建任务明细区块（仅洪潮店） */
-function buildTaskDetailSection(tasks, username, nameMap) {
-  const displayName = nameMap.get(username.toLowerCase()) || username;
+/** 构建任务明细区块 */
+function buildTaskDetailSection(store, tasks, username, nameMap) {
   const userTasks = tasks.filter(t => t.assignee_username.toLowerCase() === username.toLowerCase());
+  const role = userTasks[0]?.assignee_role || '';
+  const rawName = nameMap.get(username.toLowerCase()) || username;
+  const displayName = resolvePerformanceReportDisplayName(store, role, username, rawName);
   
   if (!userTasks.length) return '';
   
@@ -151,24 +154,6 @@ function buildTaskDetailSection(tasks, username, nameMap) {
   return md;
 }
 
-/** 构建汇总区块（马己仙店） */
-function buildSummarySection(tasks, username, nameMap) {
-  const displayName = nameMap.get(username.toLowerCase()) || username;
-  const userTasks = tasks.filter(t => t.assignee_username.toLowerCase() === username.toLowerCase());
-  
-  if (!userTasks.length) return '';
-  
-  let completedCount = userTasks.filter(t => isCompleted(t.status)).length;
-  let totalCount = userTasks.length;
-  const rate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-  
-  let md = `**${displayName}**\n`;
-  md += `任务总数：${totalCount} ｜ 已完成：${completedCount}\n`;
-  md += `**达成率：${rate}%**`;
-  
-  return md;
-}
-
 /** 构建门店区块 */
 function buildStoreSection(store, tasks, nameMap) {
   let md = `**${store}**\n`;
@@ -184,12 +169,12 @@ function buildStoreSection(store, tasks, nameMap) {
   
   // 所有门店都显示明细
   for (const username of managerUsernames) {
-    const section = buildTaskDetailSection(tasks, username, nameMap);
+    const section = buildTaskDetailSection(store, tasks, username, nameMap);
     if (section) md += `\n${section}\n`;
   }
   
   for (const username of pmUsernames) {
-    const section = buildTaskDetailSection(tasks, username, nameMap);
+    const section = buildTaskDetailSection(store, tasks, username, nameMap);
     if (section) md += `\n${section}\n`;
   }
   
@@ -272,13 +257,16 @@ function buildStoreCard(store, storeMd, yesterday) {
   };
 }
 
-/** 主函数：发送每日任务达成率报告 */
-export async function sendDailyTaskCompletionReport() {
+/** 主函数：发送每日任务达成率报告；可选 yesterdayYmd；force 时跳过「本 run_ymd 已成功」去重便于验收重发 */
+export async function sendDailyTaskCompletionReport(opts = {}) {
   try {
-    const nowSh = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' });
-    const today = nowSh.slice(0, 10);
-    const yesterday = new Date(new Date(today + 'T00:00:00+08:00') - 86400000)
-      .toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
+    let yesterday = String(opts?.yesterdayYmd || '').trim().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(yesterday)) {
+      const nowSh = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' });
+      const today = nowSh.slice(0, 10);
+      yesterday = new Date(new Date(today + 'T00:00:00+08:00') - 86400000)
+        .toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
+    }
     
     logger.info({ yesterday }, 'daily task completion report: starting');
     
@@ -321,6 +309,7 @@ export async function sendDailyTaskCompletionReport() {
     let failedCount = 0;
     let skippedCount = 0;
     const runYmd = getShanghaiYmd();
+    const forceResend = !!opts?.force;
     
     // 发送 HQ 版本（admin + hq_manager 收到所有门店）
     const hqCard = buildHQCard(storeSections, yesterday);
@@ -331,6 +320,7 @@ export async function sendDailyTaskCompletionReport() {
           runYmd,
           username: recipient.username || recipient.open_id,
           scope: 'hq_summary',
+          force: forceResend,
           sendFn: async () => {
             const cardRes = await sendCard(recipient.open_id, hqCard, 'open_id');
             return { ok: !!cardRes?.ok, error: cardRes?.error || '' };
@@ -390,6 +380,7 @@ export async function sendDailyTaskCompletionReport() {
             runYmd,
             username: row.username || oid,
             scope: `store_${store}_${un}`,
+            force: forceResend,
             sendFn: async () => {
               const cardRes = await sendCard(oid, storeCard, 'open_id');
               return { ok: !!cardRes?.ok, error: cardRes?.error || '' };
@@ -429,6 +420,7 @@ export async function sendDailyTaskCompletionReport() {
                 runYmd,
                 username: canonR.rows[0].username || oid,
                 scope: `store_${store}_mj_pm_canon`,
+                force: forceResend,
                 sendFn: async () => {
                   const cardRes = await sendCard(oid, storeCard, 'open_id');
                   return { ok: !!cardRes?.ok, error: cardRes?.error || '' };

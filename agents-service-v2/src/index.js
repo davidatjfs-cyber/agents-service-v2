@@ -432,7 +432,24 @@ app.post('/api/rhythm/attendance', authRequired, requireRole('admin', 'hq_manage
 
 app.post('/api/rhythm/task-completion', authRequired, requireRole('admin', 'hq_manager'), async (req, res) => {
   try {
-    const result = await sendDailyTaskCompletionReport();
+    const raw = req.body?.yesterdayYmd != null ? String(req.body.yesterdayYmd).trim().slice(0, 10) : '';
+    const yesterdayYmd = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+    const force = !!req.body?.force;
+    const result = await sendDailyTaskCompletionReport({
+      ...(yesterdayYmd ? { yesterdayYmd } : {}),
+      ...(force ? { force: true } : {})
+    });
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/rhythm/attitude-filing', authRequired, requireRole('admin', 'hq_manager'), async (req, res) => {
+  try {
+    const raw = req.body?.bizYmd != null ? String(req.body.bizYmd).trim().slice(0, 10) : '';
+    const bizYmd = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : undefined;
+    const result = await runDailyAttitudeFilingReport(bizYmd ? { bizYmd } : {});
     res.json({ ok: true, result });
   } catch (e) {
     res.status(500).json({ error: e.message });

@@ -72,10 +72,12 @@ export async function sendReportToRecipient(opts) {
     username,
     scope,
     sendFn,
-    maxAttempts = 3
+    maxAttempts = 3,
+    /** 为 true 时忽略当日已成功记录，用于管理员手动验收重发 */
+    force = false
   } = opts || {};
   await ensureReportDeliveryTable();
-  if (await hasSuccess(jobKey, runYmd, username, scope)) {
+  if (!force && (await hasSuccess(jobKey, runYmd, username, scope))) {
     return { ok: true, skipped: true };
   }
   let lastErr = '';
