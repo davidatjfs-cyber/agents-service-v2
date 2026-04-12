@@ -449,7 +449,11 @@ app.post('/api/rhythm/attitude-filing', authRequired, requireRole('admin', 'hq_m
   try {
     const raw = req.body?.bizYmd != null ? String(req.body.bizYmd).trim().slice(0, 10) : '';
     const bizYmd = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : undefined;
-    const result = await runDailyAttitudeFilingReport(bizYmd ? { bizYmd } : {});
+    const force = !!req.body?.force;
+    const result = await runDailyAttitudeFilingReport({
+      ...(bizYmd ? { bizYmd } : {}),
+      ...(force ? { force: true } : {})
+    });
     res.json({ ok: true, result });
   } catch (e) {
     res.status(500).json({ error: e.message });

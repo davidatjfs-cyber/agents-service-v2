@@ -192,11 +192,12 @@ async function fetchYesterdayFilings(bizYmd) {
 }
 
 /**
- * @param {{ bizYmd?: string }} opts bizYmd 不传则为上海「昨日」
+ * @param {{ bizYmd?: string, force?: boolean }} opts bizYmd 不传则为上海「昨日」；force 时跳过当日投递去重便于验收重发
  */
 export async function runDailyAttitudeFilingReport(opts = {}) {
   const runYmd = getShanghaiYmd();
   const bizYmd = String(opts?.bizYmd || '').trim() || ymdAddDays(runYmd, -1);
+  const forceResend = !!opts?.force;
   const rows = await fetchYesterdayFilings(bizYmd);
   const nameMap = await loadFeishuDisplayNameMap(rows.map((r) => r.assignee_username));
   const monthlyMapHq = await buildMonthlyAttitudeCountMap(rows, bizYmd, null);
@@ -233,6 +234,7 @@ export async function runDailyAttitudeFilingReport(opts = {}) {
       runYmd,
       username,
       scope: 'hq_summary',
+      force: forceResend,
       sendFn: async () => sendOpenId(u.open_id, card)
     });
   }
@@ -275,6 +277,7 @@ export async function runDailyAttitudeFilingReport(opts = {}) {
         runYmd,
         username,
         scope: `store:${storeKey(store)}:${role}`,
+        force: forceResend,
         sendFn: async () => sendOpenId(row.open_id, card)
       });
     }

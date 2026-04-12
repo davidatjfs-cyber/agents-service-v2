@@ -5084,9 +5084,18 @@ async function notifyAdminsDualWriteFailure(scopeLabel, err) {
     }
     const reason = String(err?.message || err || 'unknown').slice(0, 500);
     const timeStr = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' }).replace('T', ' ');
-    const msg = `【HRMS 双写失败告警】\n范围：${scopeLabel}\n原因：${reason}\n时间：${timeStr}（上海）\n请检查 hrms_state 与独立表一致性。`;
-    for (const row of rows) {
-      void sendLarkMessage(row.open_id, msg, { skipDedup: true }).catch(() => {});
+    const msg =
+      `【HRMS 双写失败告警】\n范围：${scopeLabel}\n原因：${reason}\n时间：${timeStr}（上海）\n` +
+      `说明：营业日报若 PG 失败，接口会返回 **502（pg_sync_failed）** 且 **不会** 写入 hrms_state，避免「前端已提交、库表无行」。\n` +
+      `请检查 DATABASE_URL、表约束、字段类型；可用 POST /api/admin/sync-submitted-daily-reports-pg 从 state 补写 daily_reports。\n` +
+      `请核对 hrms_state 与独立表一致性。`;
+    const sends = (rows || []).map((row) =>
+      sendLarkMessage(row.open_id, msg, { skipDedup: true }).catch((e) => ({ err: e?.message || e }))
+    );
+    const settled = await Promise.all(sends);
+    const failed = settled.filter((x) => x && x.err);
+    if (failed.length) {
+      console.error('[dual-write] some Feishu admin alerts failed:', failed.length, failed[0]?.err);
     }
   } catch (e) {
     console.error('[dual-write] notify admins failed:', e?.message);
@@ -6415,6 +6424,149 @@ async function recalcWechatMonthTotalsForStoreMonth(pool, store, anchorDate) {
   }
 }
 
+/**
+ * 从 hrms_state 中的日报条目 UPSERT 到 PostgreSQL daily_reports（与 POST /api/daily-reports 正式提交双写字段一致）。
+ * 供 admin 在「state 已提交但 PG 缺行」时补数，不修改 hrms_state。
+ */
+async function upsertDailyReportPgFromStateReport(dr) {
+  const payload = dr?.data && typeof dr.data === 'object' ? dr.data : {};
+  const store = String(dr?.store || '').trim();
+  const date = safeDateOnly(dr?.date);
+  if (!store || !date) throw new Error('missing_store_or_date');
+  const operationalAnomalyNote = String(
+    payload?.operational_anomaly_note ?? payload?.operationalAnomalyNote ?? ''
+  )
+    .trim()
+    .slice(0, 4000);
+  const brand = String(payload?.brand || '').trim();
+  const todayWechat = Math.max(0, Math.floor(Number(payload?.new_wechat_members) || 0));
+  const dineOrders = Math.floor(Number(payload?.dine?.orders) || 0);
+  const dineRevenue = Number(payload?.dine?.revenue) || 0;
+  const dineTraffic = Math.floor(Number(payload?.dine?.traffic) || 0);
+  const preDiscountRevenue = Number(payload?.gross) || 0;
+  const totalDiscount = Number(payload?.discount?.total) || 0;
+  const efficiencyVal = Number(payload?.efficiency) || 0;
+  const laborTotalVal = Number(payload?.laborTotal) || 0;
+  const grossProfit = Number(payload?.margin) || 0;
+  const budgetVal = Number(payload?.budget) || 0;
+  const budgetRateVal = Number(payload?.budgetRate) || 0;
+  const deliveryElemeRev = Number(payload?.delivery?.eleme?.revenue) || 0;
+  const deliveryMeituanRev = Number(payload?.delivery?.meituan?.revenue) || 0;
+  const deliveryActual = Number(payload?.delivery?.eleme?.actual || 0) + Number(payload?.delivery?.meituan?.actual || 0);
+  const deliveryOrders = Math.floor(Number(payload?.delivery?.eleme?.orders || 0)) + Math.floor(Number(payload?.delivery?.meituan?.orders || 0));
+  const deliveryPreRevenue = deliveryElemeRev + deliveryMeituanRev;
+  const deliveryBadReviews = Math.floor(Number(payload?.badReviews?.meituan || 0)) + Math.floor(Number(payload?.badReviews?.eleme || 0));
+  const privateRoomUses = Math.max(0, Math.floor(Number(payload?.private_room_uses) || 0));
+  const rechargeCount = Math.max(0, Math.floor(Number(payload?.recharge?.count) || 0));
+  const rechargeAmount = Number(payload?.recharge?.amount) || 0;
+  const weather = String(payload?.weather || '').trim() || null;
+  const segments = payload?.segments ? JSON.stringify(payload.segments) : null;
+  const discountDine = Number(payload?.discount?.dine) || 0;
+  const discountDelivery = Number(payload?.discount?.delivery) || 0;
+  const categories = payload?.categories ? JSON.stringify(payload.categories) : null;
+  const deliveryDetail = payload?.delivery ? JSON.stringify(payload.delivery) : null;
+  const badReviewsDianping = Math.floor(Number(payload?.badReviews?.dianping) || 0);
+  const staff = payload?.staff ? JSON.stringify(payload.staff) : null;
+  const scheduleNextDay = payload?.scheduleNextDay ? JSON.stringify(payload.scheduleNextDay) : null;
+  const photos = payload?.photos ? JSON.stringify(payload.photos) : null;
+
+  await pool.query(
+    `
+          INSERT INTO daily_reports (store, brand, date, actual_revenue, actual_margin, dianping_rating, new_wechat_members, wechat_month_total, submitted, submitted_at,
+            pre_discount_revenue, total_discount, dine_orders, dine_revenue, dine_traffic, efficiency, labor_total, gross_profit, budget, budget_rate,
+            delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses, operational_anomaly_note,
+            recharge_count, recharge_amount,
+            weather, segments, discount_dine, discount_delivery, categories, delivery_detail, bad_reviews_dianping, staff, schedule_next_day, photos)
+          VALUES ($1::text, $2::text, $3::date, $4, $5, $6, $7,
+            COALESCE((
+              SELECT SUM(dr.new_wechat_members)::bigint
+              FROM daily_reports dr
+              WHERE TRIM(dr.store) = TRIM($1::text)
+                AND dr.date >= date_trunc('month', $3::date)::date
+                AND dr.date < $3::date
+            ), 0) + $7,
+            true, NOW(),
+            $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+            $18, $19, $20, $21, $22, $23, $24, $25,
+            $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
+          ON CONFLICT (store, date)
+          DO UPDATE SET 
+            actual_revenue = EXCLUDED.actual_revenue,
+            actual_margin = EXCLUDED.actual_margin,
+            dianping_rating = EXCLUDED.dianping_rating,
+            new_wechat_members = EXCLUDED.new_wechat_members,
+            wechat_month_total = EXCLUDED.wechat_month_total,
+            pre_discount_revenue = EXCLUDED.pre_discount_revenue,
+            total_discount = EXCLUDED.total_discount,
+            dine_orders = EXCLUDED.dine_orders,
+            dine_revenue = EXCLUDED.dine_revenue,
+            dine_traffic = EXCLUDED.dine_traffic,
+            efficiency = EXCLUDED.efficiency,
+            labor_total = EXCLUDED.labor_total,
+            gross_profit = EXCLUDED.gross_profit,
+            budget = EXCLUDED.budget,
+            budget_rate = EXCLUDED.budget_rate,
+            delivery_actual = EXCLUDED.delivery_actual,
+            delivery_orders = EXCLUDED.delivery_orders,
+            delivery_pre_revenue = EXCLUDED.delivery_pre_revenue,
+            delivery_bad_reviews = EXCLUDED.delivery_bad_reviews,
+            private_room_uses = EXCLUDED.private_room_uses,
+            operational_anomaly_note = EXCLUDED.operational_anomaly_note,
+            recharge_count = EXCLUDED.recharge_count,
+            recharge_amount = EXCLUDED.recharge_amount,
+            weather = EXCLUDED.weather,
+            segments = EXCLUDED.segments,
+            discount_dine = EXCLUDED.discount_dine,
+            discount_delivery = EXCLUDED.discount_delivery,
+            categories = EXCLUDED.categories,
+            delivery_detail = EXCLUDED.delivery_detail,
+            bad_reviews_dianping = EXCLUDED.bad_reviews_dianping,
+            staff = EXCLUDED.staff,
+            schedule_next_day = EXCLUDED.schedule_next_day,
+            photos = EXCLUDED.photos,
+            updated_at = NOW()
+        `,
+    [
+      store,
+      brand,
+      date,
+      payload?.actual || 0,
+      payload?.margin || null,
+      payload?.dianping_rating || null,
+      todayWechat,
+      preDiscountRevenue,
+      totalDiscount,
+      dineOrders,
+      dineRevenue,
+      dineTraffic,
+      efficiencyVal,
+      laborTotalVal,
+      grossProfit,
+      budgetVal,
+      budgetRateVal,
+      deliveryActual,
+      deliveryOrders,
+      deliveryPreRevenue,
+      deliveryBadReviews,
+      privateRoomUses,
+      operationalAnomalyNote || null,
+      rechargeCount,
+      rechargeAmount,
+      weather,
+      segments,
+      discountDine,
+      discountDelivery,
+      categories,
+      deliveryDetail,
+      badReviewsDianping,
+      staff,
+      scheduleNextDay,
+      photos
+    ]
+  );
+  await recalcWechatMonthTotalsForStoreMonth(pool, store, date);
+}
+
 // 本月包房累计（仅洪潮品牌）
 app.get('/api/daily-reports/private-room-month-total', authRequired, async (req, res) => {
   const store = String(req.query?.store || '').trim();
@@ -7017,6 +7169,49 @@ app.delete('/api/daily-reports', authRequired, async (req, res) => {
       { dailyReports: ['store', 'date'] }
     );
     return res.json({ ok: true });
+  } catch (e) {
+    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+  }
+});
+
+/** admin：从 hrms_state 将「已提交」营业日报强制 UPSERT 到 daily_reports（不修改 state，用于补 PG） */
+app.post('/api/admin/sync-submitted-daily-reports-pg', authRequired, async (req, res) => {
+  const role = String(req.user?.role || '').trim();
+  if (role !== 'admin' && role !== 'hq_manager') {
+    return res.status(403).json({ error: 'forbidden', message: '仅 admin 或 hq_manager' });
+  }
+  const date = safeDateOnly(req.body?.date);
+  const storeFilter = String(req.body?.store || '').trim();
+  if (!date) {
+    return res.status(400).json({ error: 'missing_date', hint: 'JSON body: { "date": "2026-04-11", "store": "可选精确店名" }' });
+  }
+  try {
+    const state0 = (await getSharedState()) || {};
+    const list = Array.isArray(state0.dailyReports) ? state0.dailyReports : [];
+    const results = [];
+    for (const dr of list) {
+      const d = safeDateOnly(dr?.date);
+      const st = String(dr?.store || '').trim();
+      if (d !== date) continue;
+      if (storeFilter && st !== storeFilter) continue;
+      const submitted = !!(dr?.submittedAt || dr?.submitted_at || dr?.submitted);
+      if (!submitted) continue;
+      try {
+        await upsertDailyReportPgFromStateReport(dr);
+        results.push({ store: st, date: d, ok: true });
+      } catch (e) {
+        const msg = String(e?.message || e);
+        void notifyAdminsDualWriteFailure(`daily_reports（admin 补写 PG ${st} ${d}）`, e);
+        results.push({ store: st, date: d, ok: false, error: msg });
+      }
+    }
+    return res.json({
+      ok: true,
+      date,
+      storeFilter: storeFilter || null,
+      matched: results.length,
+      results
+    });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
   }
