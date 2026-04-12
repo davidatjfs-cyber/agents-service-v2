@@ -71,13 +71,13 @@ echo "  检查文件是否包含新标记..."
 python3 - <<'PY'
 import pathlib, sys
 p = pathlib.Path('/opt/hrms/working-fixed.html').read_text(errors='ignore')
-need = ['pts-picker-', 'pts-rule-opt', 'pts-radio-dot', 'selectPointsRule']
+need = ['pts-picker-', 'pts-rule-opt', 'pts-radio-dot', 'selectPointsRule', 'dr-holiday-switch']
 bad = [n for n in need if n not in p]
 if bad:
     print('FAIL: 以下标记缺失 =>', bad)
     sys.exit(1)
 else:
-    print('  OK: working-fixed.html 包含所有新标记')
+    print('  OK: working-fixed.html 包含所有新标记（含营业日报节假日开关）')
 
 sw = pathlib.Path('/opt/hrms/sw.js').read_text(errors='ignore')
 import re

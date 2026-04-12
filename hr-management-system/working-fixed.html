@@ -6371,6 +6371,13 @@
                                     </select>
                                 </div>
                             </div>
+                            <div style="margin-top: 12px; padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03);">
+                                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: rgba(226,232,240,0.95); font-size: 14px;">
+                                    <input type="checkbox" id="dr-holiday-switch" onchange="syncDailyReportComputed()" style="width: 20px; height: 20px; accent-color: #f97316;">
+                                    <span style="font-weight: 800;">节假日 / 周末标记</span>
+                                </label>
+                                <div style="margin-top: 6px; font-size: 11px; color: rgba(200,215,230,0.65); line-height: 1.45;">周六、周日或国定假日营业时勾选，便于报表与绩效区分口径；与天气一并保存并同步数据库。</div>
+                            </div>
 
                         </div>
 
@@ -15427,8 +15434,13 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                 });
         }
 
+        let __paymentSubmitting = false;
         function submitPaymentForm() {
             if (!hrmsCanCreatePayments(currentUser?.role)) return;
+            if (__paymentSubmitting) {
+                showNotification('正在提交，请稍候…', 'warning');
+                return;
+            }
             const date = String(document.getElementById('pay-form-date')?.value || '').trim();
             const amountRaw = Number(document.getElementById('pay-form-amount')?.value || '');
             const amount = Number.isFinite(amountRaw) && amountRaw > 0 ? amountRaw : null;
@@ -15458,6 +15470,10 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                 return;
             }
 
+            __paymentSubmitting = true;
+            const paySubmitBtn = document.querySelector('#payment-create-view button[onclick="submitPaymentForm()"]');
+            try { if (paySubmitBtn) paySubmitBtn.disabled = true; } catch (e0) {}
+
             HRMS_API.createApproval('payment', { date, amount, store, category, payee, payeeName, payeeAccount, payeeBank, urgency, note })
                 .then(() => {
                     showNotification('请款单已提交', 'success');
@@ -15468,7 +15484,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                 .catch(e => {
                     const raw = String(e?.message || e);
                     const friendlyMap = {
-                        'duplicate_pending': '您已有一笔待审批的请款单，请等待审批完成后再提交',
+                        'duplicate_pending': '已存在内容相同的待审批请款单，请勿重复提交；如需修改请先联系审批人退回或处理完上一笔',
                         'missing_store': '请选择所属门店',
                         'missing_date': '请选择请款日期',
                         'missing_amount': '请输入请款金额',
@@ -15479,6 +15495,10 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                     const key = Object.keys(friendlyMap).find(k => raw.includes(k));
                     const msg = key ? friendlyMap[key] : raw;
                     showNotification('提交失败：' + msg, 'error');
+                })
+                .finally(() => {
+                    __paymentSubmitting = false;
+                    try { if (paySubmitBtn) paySubmitBtn.disabled = false; } catch (e1) {}
                 });
         }
 
@@ -30141,6 +30161,10 @@ ${knowledgeContent.slice(0, 30000)}`;
             if (dateEl) dateEl.value = drGetDefaultDate();
             const wEl = document.getElementById('dr-weather');
             if (wEl) wEl.value = '晴';
+            try {
+                const hEl = document.getElementById('dr-holiday-switch');
+                if (hEl) hEl.checked = false;
+            } catch (e) {}
 
             try { drResetStaffState(); } catch (e) {}
             try { __DR_PHOTOS = []; renderDailyReportPhotos(); } catch (e) {}
@@ -31164,6 +31188,7 @@ ${knowledgeContent.slice(0, 30000)}`;
 
             const data = {
                 weather: String(document.getElementById('dr-weather')?.value || '').trim(),
+                holiday_switch: !!document.getElementById('dr-holiday-switch')?.checked,
                 budget,
                 gross,
                 actual,
@@ -31363,6 +31388,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 const title = escapeHtml(fmtDateTitle(rawDate));
                 const store = escapeHtml(rawStore);
                 const weather = escapeHtml(String(r?.data?.weather || '').trim());
+                const holidayMark = !!(r?.data?.holiday_switch ?? r?.data?.holidaySwitch);
                 const submittedAt = String(r?.submittedAt || r?.submitted_at || '').trim();
                 const submitterName = escapeHtml(String(r?.submitterName || '').trim());
                 const submittedBadge = submittedAt ? '<span style="margin-left:6px; font-size:10px; padding:2px 7px; border-radius:99px; background:rgba(34,197,94,0.15); color:#22c55e; font-weight:800;">已提交</span>' : '<span style="margin-left:6px; font-size:10px; padding:2px 7px; border-radius:99px; background:rgba(245,158,11,0.15); color:#f59e0b; font-weight:800;">草稿</span>';
@@ -31390,6 +31416,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                             <span style="color:#60a5fa; font-weight:800;">🏬 ${store}</span>
                             ${submitterName ? `<span style="color:rgba(200,215,230,0.7);">·</span><span style="color:rgba(200,215,230,0.7);">👤 ${submitterName}</span>` : ''}
                             ${weather ? `<span style="color:rgba(200,215,230,0.7);">·</span><span style="color:rgba(200,215,230,0.7);">${weather}</span>` : ''}
+                            ${holidayMark ? `<span style="margin-left:6px; font-size:10px; padding:2px 7px; border-radius:99px; background:rgba(249,115,22,0.18); color:#fb923c; font-weight:800;">休</span>` : ''}
                         </div>
 
                         <div class="dr-report-kpis">
@@ -31517,6 +31544,10 @@ ${knowledgeContent.slice(0, 30000)}`;
                     const wEl = document.getElementById('dr-weather');
                     if (wEl) wEl.value = String(data?.weather || wEl.value || '').trim() || wEl.value;
                 } catch (e2) {}
+                try {
+                    const hEl = document.getElementById('dr-holiday-switch');
+                    if (hEl) hEl.checked = !!(data?.holiday_switch ?? data?.holidaySwitch);
+                } catch (e3) {}
             } catch (e) {}
 
             // Backward compatible: accept {name,days} or {user,name,days}
