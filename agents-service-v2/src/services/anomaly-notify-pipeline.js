@@ -11,7 +11,7 @@ import { logger } from '../utils/logger.js';
 import { ANOMALY_RULES } from '../config/anomaly-rules.js';
 import { getBrandForStore, getAnomalyRules } from './config-service.js';
 import { sendCard, sendText, buildAnomalyCard, buildBiDeductionCard } from './feishu-client.js';
-import { getShanghaiYmdParts } from '../utils/anomaly-week-bounds.js';
+import { getShanghaiYmdParts, shanghaiWeekMonSunContaining } from '../utils/anomaly-week-bounds.js';
 import { anomalyRuleLabelZh } from '../utils/anomaly-labels.js';
 import { planAndExecute } from './master-planner.js';
 import { resolveSingleScoringUser, isMajixianPmObserverUsername } from '../utils/scoring-assignee.js';
@@ -213,15 +213,29 @@ function extractMessageId(sendRes) {
   return d?.message_id || d?.data?.message_id || '';
 }
 
-/** 与周度扣分卡片一致：取 anomaly_rollups_v2 最新总分，无记录则 100 */
-async function fetchLatestAnomalyRollupScore(username) {
+/**
+ * 与周度扣分卡片一致：取 anomaly_rollups_v2 总分；必须限定门店与自然周 period，
+ * 禁止仅用 username + ORDER BY updated_at（多店多周并存时会错绑到「刚被更新」的另一行）。
+ */
+async function fetchLatestAnomalyRollupScore(username, store = null, weekPeriod = null) {
   if (!username) return 100;
   try {
+    const cond = [`username = $1`, `score_model = 'anomaly_rollups_v2'`];
+    const params = [username];
+    let n = 2;
+    if (store) {
+      cond.push(`(store = $${n} OR $${n} ILIKE '%' || store || '%' OR store ILIKE '%' || $${n} || '%')`);
+      params.push(store);
+      n++;
+    }
+    if (weekPeriod) {
+      cond.push(`(period = $${n} OR period LIKE $${n} || '__%')`);
+      params.push(weekPeriod);
+      n++;
+    }
     const scoreRes = await query(
-      `SELECT total_score FROM agent_scores
-       WHERE username = $1 AND score_model = 'anomaly_rollups_v2'
-       ORDER BY updated_at DESC LIMIT 1`,
-      [username]
+      `SELECT total_score FROM agent_scores WHERE ${cond.join(' AND ')} ORDER BY updated_at DESC LIMIT 1`,
+      params
     );
     if (scoreRes.rows?.[0]?.total_score != null) {
       return Math.max(0, Number(scoreRes.rows[0].total_score));
@@ -290,7 +304,9 @@ export async function runBiAnomalyNotifyPipeline({
       const periodZh = monthStart
         ? `判定营业日 ${todayYmd}（以上海「昨日」口径，任务在 ${runY || '—'} 触发；当月自 ${monthStart} 起累计，不跨月）`
         : `判定营业日 ${todayYmd}（以上海「昨日」口径${runY ? `，${runY} 触发` : ''}）`;
-      rechargeCur = await fetchLatestAnomalyRollupScore(u.username);
+      const { weekStart: rechargeWeekStart } = shanghaiWeekMonSunContaining(String(todayYmd).slice(0, 10));
+      const rechargeWeekPeriod = `week_${rechargeWeekStart}`;
+      rechargeCur = await fetchLatestAnomalyRollupScore(u.username, store, rechargeWeekPeriod);
       rechargeRem = Math.max(0, rechargeCur - rechargePts);
       const assigneeName = u.display_name || u.username || '—';
       card = buildBiDeductionCard({

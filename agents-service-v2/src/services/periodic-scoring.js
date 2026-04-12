@@ -66,7 +66,9 @@ async function recordDeductionNotifications({
   weekEndStr,
   rangeStart,
   rangeEnd,
-  details
+  details,
+  /** 本周期 UPSERT 后的总分（与 details 同源）；用于推算每条扣分前的「现有分」，避免误读他店/他周或「已扣分后再 SELECT」的错序 */
+  scoreAfterRollup
 }) {
   if (!username || String(username).startsWith('__periodic')) return;
   await ensureHrmsUserNotificationsTable();
@@ -87,21 +89,10 @@ async function recordDeductionNotifications({
     assigneeName = fu.rows?.[0]?.name || username;
   } catch (_e) { /* ignore */ }
   
-  // 查询当前剩余分数（从 agent_scores 中查询最新记录）
-  let currentScore = 100;
-  try {
-    const scoreRes = await query(
-      `SELECT total_score FROM agent_scores 
-       WHERE username = $1 AND score_model = 'anomaly_rollups_v2'
-       ORDER BY updated_at DESC LIMIT 1`,
-      [username]
-    );
-    if (scoreRes.rows?.[0]?.total_score) {
-      currentScore = Math.max(0, scoreRes.rows[0].total_score);
-    }
-  } catch (e) {
-    logger.warn({ err: e?.message, username }, 'Failed to fetch current score, using default 100');
-  }
+  const after = Math.max(0, Math.min(100, Number(scoreAfterRollup)));
+  const ptSum = (details || []).reduce((s, d) => s + Math.max(0, Number(d.points || 0)), 0);
+  /** 在「本批 details 已并入 total」前提下，扣分前总分 = 当前总分 + 本批扣分之和（通常为 100） */
+  let running = Math.min(100, after + ptSum);
   
   // 查询 admin+hq_manager 的飞书 open_id（管理层抄送）
   let mgmtOpenIds = [];
@@ -116,12 +107,14 @@ async function recordDeductionNotifications({
   for (const d of details || []) {
     const pts = Number(d.points || 0);
     if (!pts) continue;
+    const currentScore = running;
+    const remainingScore = Math.max(0, currentScore - pts);
+    running = remainingScore;
     const reason =
       (CAT_ZH[d.category] || d.category || '异常规则') +
       (d.detail_note ? `\n${String(d.detail_note).slice(0, 400)}` : '');
     const keyZh = ANOMALY_KEY_ZH[d.anomaly_key] || '相关规则';
     const sevZh = d.severity === 'high' ? '高' : d.severity === 'medium' ? '中' : String(d.severity || '-');
-    const remainingScore = Math.max(0, currentScore - pts);
     
     // 构建卡片
     const card = buildBiDeductionCard({
@@ -548,7 +541,8 @@ export async function scoreStoreForPeriod(store, periodMonday, options = {}) {
               weekEndStr: endStr,
               rangeStart: seg.start,
               rangeEnd: seg.end,
-              details
+              details,
+              scoreAfterRollup: totalScore
             });
           }
         } catch (e) {

@@ -395,13 +395,14 @@ export async function tryHandleFoodSafetyHqRuling({ taskId, responseText, openId
         continue;
       }
       for (const u of users) {
+        /** 必须与即将写入的 agent_scores 行同一 brand/store/period，禁止仅用 username + ORDER BY updated_at（会误取他店他周，导致「现有分」与「剩余分」自相矛盾） */
         let currentScore = 100;
         try {
           const sr = await query(
             `SELECT total_score FROM agent_scores
              WHERE username = $1 AND score_model = 'anomaly_rollups_v2'
-             ORDER BY updated_at DESC LIMIT 1`,
-            [u.username]
+               AND brand = $2 AND store = $3 AND period = $4`,
+            [u.username, brand, store, period]
           );
           if (sr.rows?.[0]?.total_score != null) {
             currentScore = Math.max(0, Number(sr.rows[0].total_score));

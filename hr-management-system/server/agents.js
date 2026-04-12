@@ -10348,6 +10348,12 @@ async function pushIssuesToFeishu() {
   }
 }
 
+/** 周度异常汇总（anomaly_rollups_v2）的「绩效考核周报」仅周一推送，避免与即时「BI异常情况扣分」卡重复轰炸；非周一积压行保留 feishu_notified=false 至下周一再推。 */
+function isShanghaiMondayNow() {
+  const wd = new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Shanghai', weekday: 'short' });
+  return wd === 'Mon';
+}
+
 // Push performance scores to users via Feishu
 async function pushScoresToFeishu() {
   try {
@@ -10365,6 +10371,10 @@ async function pushScoresToFeishu() {
 
     let pushed = 0;
     for (const score of r.rows) {
+      const sm = String(score.score_model || '').trim();
+      if (sm === 'anomaly_rollups_v2' && !isShanghaiMondayNow()) {
+        continue;
+      }
       const fu = await lookupFeishuUserByUsername(score.username);
       if (!fu?.open_id) continue;
 
