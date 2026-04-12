@@ -2480,6 +2480,25 @@ app.post('/api/approvals', authRequired, async (req, res) => {
         if (!date) return res.status(400).json({ error: 'missing_date' });
         if (amount == null || amount <= 0) return res.status(400).json({ error: 'missing_amount' });
         if (!category) return res.status(400).json({ error: 'missing_category' });
+        // 请款历史上被排除在 duplicate_pending 之外，连点/重复请求会产生多笔「内容相同」的待审单
+        try {
+          const dupPay = await pool.query(
+            `SELECT id FROM approval_requests
+             WHERE type = 'payment' AND status = 'pending'
+               AND lower(applicant_username) = lower($1)
+               AND trim(both from coalesce(payload->>'store','')) = trim(both from $2::text)
+               AND left(trim(both from coalesce(payload->>'date', payload->>'applyDate', payload->>'requestDate','')), 10) = $3::text
+               AND (nullif(replace(trim(both from coalesce(payload->>'amount','')), ',', ''), '')::numeric) = $4::numeric
+               AND trim(both from coalesce(payload->>'category', payload->>'project','')) = trim(both from $5::text)
+             LIMIT 1`,
+            [username, store, date, amount, category]
+          );
+          if ((dupPay.rows || []).length) {
+            return res.status(409).json({ error: 'duplicate_pending', id: dupPay.rows[0].id });
+          }
+        } catch (dupErr) {
+          console.warn('[approvals] payment duplicate check failed:', dupErr?.message);
+        }
       } else if (type === 'reward_punishment') {
         if (!(role === 'admin' || role === 'hq_manager' || role === 'hr_manager' || role === 'store_manager')) {
           return res.status(403).json({ error: 'forbidden' });
@@ -6348,6 +6367,7 @@ function dailyReportItemFromPgRow(row) {
     wechat_month_total: Math.floor(Number(row.wechat_month_total) || 0),
     gross: pre,
     weather: String(row.weather || '').trim() || undefined,
+    holiday_switch: !!row.holiday_switch,
     discount: {
       total: disc,
       dine: Number(row.discount_dine) || 0,
@@ -6460,6 +6480,7 @@ async function upsertDailyReportPgFromStateReport(dr) {
   const rechargeCount = Math.max(0, Math.floor(Number(payload?.recharge?.count) || 0));
   const rechargeAmount = Number(payload?.recharge?.amount) || 0;
   const weather = String(payload?.weather || '').trim() || null;
+  const holidaySwitch = !!(payload?.holiday_switch ?? payload?.holidaySwitch);
   const segments = payload?.segments ? JSON.stringify(payload.segments) : null;
   const discountDine = Number(payload?.discount?.dine) || 0;
   const discountDelivery = Number(payload?.discount?.delivery) || 0;
@@ -6476,7 +6497,7 @@ async function upsertDailyReportPgFromStateReport(dr) {
             pre_discount_revenue, total_discount, dine_orders, dine_revenue, dine_traffic, efficiency, labor_total, gross_profit, budget, budget_rate,
             delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses, operational_anomaly_note,
             recharge_count, recharge_amount,
-            weather, segments, discount_dine, discount_delivery, categories, delivery_detail, bad_reviews_dianping, staff, schedule_next_day, photos)
+            weather, segments, discount_dine, discount_delivery, categories, delivery_detail, bad_reviews_dianping, staff, schedule_next_day, photos, holiday_switch)
           VALUES ($1::text, $2::text, $3::date, $4, $5, $6, $7,
             COALESCE((
               SELECT SUM(dr.new_wechat_members)::bigint
@@ -6488,7 +6509,7 @@ async function upsertDailyReportPgFromStateReport(dr) {
             true, NOW(),
             $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
             $19, $20, $21, $22, $23, $24, $25, $26,
-            $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
+            $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37)
           ON CONFLICT (store, date)
           DO UPDATE SET 
             actual_revenue = EXCLUDED.actual_revenue,
@@ -6524,6 +6545,7 @@ async function upsertDailyReportPgFromStateReport(dr) {
             staff = EXCLUDED.staff,
             schedule_next_day = EXCLUDED.schedule_next_day,
             photos = EXCLUDED.photos,
+            holiday_switch = EXCLUDED.holiday_switch,
             updated_at = NOW()
         `,
     [
@@ -6562,7 +6584,8 @@ async function upsertDailyReportPgFromStateReport(dr) {
       badReviewsDianping,
       staff,
       scheduleNextDay,
-      photos
+      photos,
+      holidaySwitch
     ]
   );
   await recalcWechatMonthTotalsForStoreMonth(pool, store, date);
@@ -6656,7 +6679,7 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
                  delivery_orders, delivery_bad_reviews, budget, budget_rate, submitted, submitted_at, updated_at,
                  recharge_count, recharge_amount,
                  weather, segments, discount_dine, discount_delivery, categories, delivery_detail,
-                 bad_reviews_dianping, staff, schedule_next_day, photos
+                 bad_reviews_dianping, staff, schedule_next_day, photos, holiday_switch
           FROM daily_reports
           WHERE date >= $1::date AND date <= $2::date`;
         if (store) {
@@ -6837,6 +6860,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
 
         // 全量字段提取
         const weather = String(payload?.weather || '').trim() || null;
+        const holidaySwitch = !!(payload?.holiday_switch ?? payload?.holidaySwitch);
         const segments = payload?.segments ? JSON.stringify(payload.segments) : null;
         const discountDine = Number(payload?.discount?.dine) || 0;
         const discountDelivery = Number(payload?.discount?.delivery) || 0;
@@ -6852,7 +6876,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
             pre_discount_revenue, total_discount, dine_orders, dine_revenue, dine_traffic, efficiency, labor_total, gross_profit, budget, budget_rate,
             delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses, operational_anomaly_note,
             recharge_count, recharge_amount,
-            weather, segments, discount_dine, discount_delivery, categories, delivery_detail, bad_reviews_dianping, staff, schedule_next_day, photos)
+            weather, segments, discount_dine, discount_delivery, categories, delivery_detail, bad_reviews_dianping, staff, schedule_next_day, photos, holiday_switch)
           /* $1/$2/$3 显式类型：避免 PG 对「VALUES 首列 varchar」与子查询中 $1::text 推断不一致 → inconsistent types for parameter $1 */
           VALUES ($1::text, $2::text, $3::date, $4, $5, $6, $7,
             COALESCE((
@@ -6865,7 +6889,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
             true, NOW(),
             $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
             $19, $20, $21, $22, $23, $24, $25, $26,
-            $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
+            $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37)
           ON CONFLICT (store, date)
           DO UPDATE SET 
             actual_revenue = EXCLUDED.actual_revenue,
@@ -6901,6 +6925,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
             staff = EXCLUDED.staff,
             schedule_next_day = EXCLUDED.schedule_next_day,
             photos = EXCLUDED.photos,
+            holiday_switch = EXCLUDED.holiday_switch,
             updated_at = NOW()
         `, [
           store, brand, date, 
@@ -6915,7 +6940,8 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
           privateRoomUses,
           operationalAnomalyNote || null,
           rechargeCount, rechargeAmount,
-          weather, segments, discountDine, discountDelivery, categories, deliveryDetail, badReviewsDianping, staff, scheduleNextDay, photos
+          weather, segments, discountDine, discountDelivery, categories, deliveryDetail, badReviewsDianping, staff, scheduleNextDay, photos,
+          holidaySwitch
         ]);
         await recalcWechatMonthTotalsForStoreMonth(pool, store, date);
       } catch (e) {
@@ -6973,6 +6999,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
 
         // 全量字段提取
         const weather = String(payload?.weather || '').trim() || null;
+        const holidaySwitch = !!(payload?.holiday_switch ?? payload?.holidaySwitch);
         const segments = payload?.segments ? JSON.stringify(payload.segments) : null;
         const discountDine = Number(payload?.discount?.dine) || 0;
         const discountDelivery = Number(payload?.discount?.delivery) || 0;
@@ -6988,7 +7015,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
             pre_discount_revenue, total_discount, dine_orders, dine_revenue, dine_traffic, efficiency, labor_total, gross_profit, budget, budget_rate,
             delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses, operational_anomaly_note,
             recharge_count, recharge_amount,
-            weather, segments, discount_dine, discount_delivery, categories, delivery_detail, bad_reviews_dianping, staff, schedule_next_day, photos)
+            weather, segments, discount_dine, discount_delivery, categories, delivery_detail, bad_reviews_dianping, staff, schedule_next_day, photos, holiday_switch)
           /* $1/$2/$3 显式类型：避免 PG 对「VALUES 首列 varchar」与子查询中 $1::text 推断不一致 → inconsistent types for parameter $1 */
           VALUES ($1::text, $2::text, $3::date, $4, $5, $6, $7,
             COALESCE((
@@ -7001,7 +7028,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
             true, NOW(),
             $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
             $19, $20, $21, $22, $23, $24, $25, $26,
-            $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
+            $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37)
           ON CONFLICT (store, date)
           DO UPDATE SET
             actual_revenue = EXCLUDED.actual_revenue,
@@ -7037,6 +7064,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
             staff = EXCLUDED.staff,
             schedule_next_day = EXCLUDED.schedule_next_day,
             photos = EXCLUDED.photos,
+            holiday_switch = EXCLUDED.holiday_switch,
             updated_at = NOW()
         `, [
           store,
@@ -7053,7 +7081,8 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
           privateRoomUses,
           operationalAnomalyNote || null,
           rechargeCount, rechargeAmount,
-          weather, segments, discountDine, discountDelivery, categories, deliveryDetail, badReviewsDianping, staff, scheduleNextDay, photos
+          weather, segments, discountDine, discountDelivery, categories, deliveryDetail, badReviewsDianping, staff, scheduleNextDay, photos,
+          holidaySwitch
         ]);
       } catch (e) {
         lastPgDualWriteError = lastPgDualWriteError || e;
@@ -14185,7 +14214,7 @@ app.listen(PORT, HOST, async () => {
     }
 
     // 020-024: HRMS 全量字段 + 独立表迁移
-    for (const name of ['020_daily_reports_all_fields', '021_hrms_leave_records', '022_hrms_reward_punishment_records', '023_approval_requests_migration', '024_employees_table_migration']) {
+    for (const name of ['020_daily_reports_all_fields', '021_hrms_leave_records', '022_hrms_reward_punishment_records', '023_approval_requests_migration', '024_employees_table_migration', '025_daily_reports_holiday_switch']) {
       try {
         const mig = await import('fs').then(f => f.promises.readFile(new URL(`./migrations/${name}.sql`, import.meta.url), 'utf8'));
         await pool.query(mig);
@@ -14208,7 +14237,7 @@ app.listen(PORT, HOST, async () => {
                delivery_orders, delivery_bad_reviews, budget, budget_rate, submitted, submitted_at, updated_at,
                recharge_count, recharge_amount,
                weather, segments, discount_dine, discount_delivery, categories, delivery_detail,
-               bad_reviews_dianping, staff, schedule_next_day, photos
+               bad_reviews_dianping, staff, schedule_next_day, photos, holiday_switch
         FROM daily_reports
         ORDER BY date DESC
       `);
@@ -14648,11 +14677,12 @@ app.listen(PORT, HOST, async () => {
           const scheduleNextDay = d?.scheduleNextDay ? JSON.stringify(d.scheduleNextDay) : null;
           const photos = d?.photos ? JSON.stringify(d.photos) : null;
           const weather = String(d?.weather || '').trim() || null;
+          const holidaySwitch = !!(d?.holiday_switch ?? d?.holidaySwitch);
           const discountDine = Number(d?.discount?.dine) || 0;
           const discountDelivery = Number(d?.discount?.delivery) || 0;
           const badReviewsDianping = Math.floor(Number(d?.badReviews?.dianping) || 0);
 
-          const hasDetail = segments || categories || deliveryDetail || staff || scheduleNextDay || photos || weather || discountDine || discountDelivery;
+          const hasDetail = segments || categories || deliveryDetail || staff || scheduleNextDay || photos || weather || discountDine || discountDelivery || holidaySwitch;
           if (!hasDetail) continue;
 
           await pool.query(
@@ -14667,9 +14697,10 @@ app.listen(PORT, HOST, async () => {
                discount_dine = COALESCE($10, discount_dine),
                discount_delivery = COALESCE($11, discount_delivery),
                bad_reviews_dianping = COALESCE($12, bad_reviews_dianping),
+               holiday_switch = COALESCE($13, holiday_switch),
                updated_at = NOW()
              WHERE store = $1 AND date = $2::date`,
-            [store, date, segments, categories, deliveryDetail, staff, scheduleNextDay, photos, weather, discountDine, discountDelivery, badReviewsDianping]
+            [store, date, segments, categories, deliveryDetail, staff, scheduleNextDay, photos, weather, discountDine, discountDelivery, badReviewsDianping, holidaySwitch]
           );
           backfillCount++;
         }

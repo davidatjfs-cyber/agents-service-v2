@@ -83,6 +83,7 @@ async function upsertDailyReportPgFromStateReport(pool, dr) {
   const rechargeCount = Math.max(0, Math.floor(Number(payload?.recharge?.count) || 0));
   const rechargeAmount = Number(payload?.recharge?.amount) || 0;
   const weather = String(payload?.weather || '').trim() || null;
+  const holidaySwitch = !!(payload?.holiday_switch ?? payload?.holidaySwitch);
   const segments = payload?.segments ? JSON.stringify(payload.segments) : null;
   const discountDine = Number(payload?.discount?.dine) || 0;
   const discountDelivery = Number(payload?.discount?.delivery) || 0;
@@ -99,7 +100,7 @@ async function upsertDailyReportPgFromStateReport(pool, dr) {
             pre_discount_revenue, total_discount, dine_orders, dine_revenue, dine_traffic, efficiency, labor_total, gross_profit, budget, budget_rate,
             delivery_actual, delivery_orders, delivery_pre_revenue, delivery_bad_reviews, private_room_uses, operational_anomaly_note,
             recharge_count, recharge_amount,
-            weather, segments, discount_dine, discount_delivery, categories, delivery_detail, bad_reviews_dianping, staff, schedule_next_day, photos)
+            weather, segments, discount_dine, discount_delivery, categories, delivery_detail, bad_reviews_dianping, staff, schedule_next_day, photos, holiday_switch)
           VALUES ($1::text, $2::text, $3::date, $4, $5, $6, $7,
             COALESCE((
               SELECT SUM(dr.new_wechat_members)::bigint
@@ -111,7 +112,7 @@ async function upsertDailyReportPgFromStateReport(pool, dr) {
             true, NOW(),
             $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
             $19, $20, $21, $22, $23, $24, $25, $26,
-            $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
+            $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37)
           ON CONFLICT (store, date)
           DO UPDATE SET 
             actual_revenue = EXCLUDED.actual_revenue,
@@ -147,6 +148,7 @@ async function upsertDailyReportPgFromStateReport(pool, dr) {
             staff = EXCLUDED.staff,
             schedule_next_day = EXCLUDED.schedule_next_day,
             photos = EXCLUDED.photos,
+            holiday_switch = EXCLUDED.holiday_switch,
             updated_at = NOW()
         `,
     [
@@ -185,7 +187,8 @@ async function upsertDailyReportPgFromStateReport(pool, dr) {
       badReviewsDianping,
       staff,
       scheduleNextDay,
-      photos
+      photos,
+      holidaySwitch
     ]
   );
   await recalcWechatMonthTotalsForStoreMonth(pool, store, date);
