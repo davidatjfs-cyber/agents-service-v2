@@ -178,7 +178,7 @@ async function recordDeductionNotifications({
  * anomaly_key → scoring-model 的 category（周度汇总专用）
  *
  * 扣分频率规则：
- * - 充值异常：**日频**检测并写入 anomaly_triggers；**周一「周度门店评分」**按自然周内各日 penalty_points **累加**后写入 anomaly_rollups_v2（勿将整条链描述为「周频才检测」）。
+ * - 充值异常：**日频**检测并写入 anomaly_triggers；周汇总写入 anomaly_rollups_v2 时，店长侧充值扣分按 **daily_reports** 对周内各已满营业日 **逐日重算**（连续无充值：第 1 日 2 分、第 2 日起每日 4 分直至有充值日）再 **求和**，**不**直接累加各 trigger 上固化的 penalty_points（勿将整条链描述为「周频才检测」）。
  * - 桌访/差评/包房等：按各规则频率检测；周汇总任务写入 anomaly_rollups_v2（其中月度键仅提醒、不扣分）。
  * - 月度扣分（monthly）：实收营收、人效、桌访占比、毛利率 — 周汇总不扣，由月评分/月任务执行。
  */

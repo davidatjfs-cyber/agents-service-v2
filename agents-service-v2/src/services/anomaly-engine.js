@@ -233,8 +233,11 @@ export async function checkLaborEfficiency(store) {
 }
 
 // ─── 3. 充值异常 ───
-// 连续无充值：当月内 streak 第 1 天扣 2 分、streak≥2 扣 4 分（有充值则 streak 归零）。
-// 周度绩效汇总 **不得** 对多条 anomaly_triggers 的 penalty_points 简单相加（同日多次日检会重复；且应以日报为准）；
+// 连续无充值（自然月内 streak，遇有充值日则 streak 归零；不跨月向回数）— 与业务约定一致：
+//   第 1 个连续无充值日 → 扣 2 分；第 2 个及以后连续无充值日 → 每日均扣 4 分，直至出现「有充值」日（该日不扣分）。
+// 例：D1 无充 2 分，D2 无充 4 分，D3 有充 0 分并重置，D4 无充 2 分，D5 无充 4 分，D6 无充 4 分……
+// 实现：`penalty_points = streak >= 2 ? 4 : 2`（streak 为从判定日连续向回数的无充值满报日数）。
+// 周度绩效汇总 **不得** 对多条 anomaly_triggers 的 penalty_points 简单相加（同日多次日检会重复；须以 daily_reports 按日重算）；
 // 见 `sumRechargePenaltyPointsForClosedDaysInRange`（按 daily_reports 重算）。
 //
 // 判定基准日 = 上海「昨日」完整营业日（不是「今天」）。避免当日日报尚未关账、充值字段仍为 0 时误派单
@@ -370,7 +373,7 @@ export async function checkRechargeZero(store) {
         evaluated_day_recharge: { count: evalR.cnt, amount: evalR.amt },
         today: { count: evalR.cnt, amount: evalR.amt }
       },
-      threshold: { medium: '2分（连续第1天无充值）', high: '4分（连续第2天起无充值）' },
+      threshold: { medium: '2分（连续无充值第1日）', high: '4分（连续无充值第2日起每日）' },
       detail: `判定营业日 ${evalSh}（以上海昨日为准，避免当日未关账误报）：该日日报充值笔数与金额为 0；${monthStart} 起不跨月连续无充值 ${streak} 日，绩效扣分 ${penalty_points} 分`
     };
   } catch (err) {

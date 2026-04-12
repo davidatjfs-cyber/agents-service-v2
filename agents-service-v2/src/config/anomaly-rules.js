@@ -116,7 +116,7 @@ export const ANOMALY_RULES = [
     dataSource: {
       table: 'daily_reports',
       fields: ['recharge_count', 'recharge_amount'],
-      calc: '当日充值=0为medium，连续2天=0为high'
+      calc: '自然月内连续无充值：第1满报日扣2分，第2日起每日扣4分直至有充值日（该日0分）；severity 仅作卡片色（medium/high）'
     },
     assignTo: { role: 'ops', title: '运营' },
     notifyTarget: { role: 'store_manager', title: '店长' },
