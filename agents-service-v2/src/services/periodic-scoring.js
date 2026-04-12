@@ -4,7 +4,8 @@
  *
  * **充值异常（recharge_zero）**：日频检测落库后 **立即** 调用 refreshWeeklyRollupAfterRechargeTrigger
  * 重算当周 anomaly_rollups_v2（与周一全量任务同一公式）；店长 **当天即可在绩效分看到更新**，周一任务再次全量跑仍幂等。
- * 汇总时计入 status 为 open/closed 的触发（排除 superseded、pending_data），避免飞书结案后误从扣分里消失。
+ * 周汇总时充值扣分按 **daily_reports** 与 `anomaly-engine` 同日 streak 规则 **逐日重算求和**，**不**再累加各条 `anomaly_triggers.penalty_points`（避免同日多次日检、多 trigger_date 指向同一营业日导致多扣）。
+ * 汇总时其它 anomaly 仍计入 status 为 open/closed 的触发（排除 superseded、pending_data），避免飞书结案后误从扣分里消失。
  *
  * 实收营收 / 人效 / 桌访占比 / 毛利率 等为月度扣分项：周度任务只汇总「周频/日频」规则，不因上述 triggers 在周行扣分（飞书任务仍可周提醒）。
  * 任务卡催办链路不向 agent_scores 写入扣分，仅打工作态度标；与本周度 BI 汇总独立。
@@ -28,6 +29,7 @@ import {
   resolveMajixianProductionManagersForScoring,
   majixianPmNewModelLookupUsername
 } from '../utils/scoring-assignee.js';
+import { sumRechargePenaltyPointsForClosedDaysInRange } from './anomaly-engine.js';
 
 const CAT_ZH = {
   revenue_anomaly: '营收/实收异常',
@@ -340,7 +342,9 @@ function splitWeekByCalendarMonths(weekStart, weekEnd) {
   return segments;
 }
 
-function computeRoleRollupFromRows(rows, role) {
+function computeRoleRollupFromRows(rows, role, opts = {}) {
+  const rechargeFromDaily = opts.rechargePenaltySum;
+  const rechargeLineDays = opts.rechargePenaltyLineDays || [];
   const tableVisitProductMerged = mergeTableVisitProductWeekDeduction(rows || []);
 
   let rechargeSum = 0;
@@ -352,9 +356,12 @@ function computeRoleRollupFromRows(rows, role) {
     const key = row.anomaly_key;
     if (MONTHLY_DEDUCTION_KEYS.has(key)) continue;
     if (key === 'recharge_zero') {
-      const tv = parseTriggerValue(row);
-      const pts = Number(tv.penalty_points != null ? tv.penalty_points : row.severity === 'high' ? 4 : 2);
-      if (Number.isFinite(pts) && pts > 0) rechargeSum += pts;
+      /** 周汇总充值分由 `sumRechargePenaltyPointsForClosedDaysInRange` 传入，避免累加 trigger 上已固化的 penalty */
+      if (rechargeFromDaily == null) {
+        const tv = parseTriggerValue(row);
+        const pts = Number(tv.penalty_points != null ? tv.penalty_points : row.severity === 'high' ? 4 : 2);
+        if (Number.isFinite(pts) && pts > 0) rechargeSum += pts;
+      }
       continue;
     }
     if (key === 'bad_review_product') {
@@ -388,13 +395,23 @@ function computeRoleRollupFromRows(rows, role) {
   let extra = 0;
   const extraDetails = [];
   if (role === 'store_manager') {
-    if (rechargeSum > 0) {
-      extra += rechargeSum;
+    const rechargeTotal = rechargeFromDaily != null ? rechargeFromDaily : rechargeSum;
+    if (rechargeTotal > 0) {
+      extra += rechargeTotal;
+      const note =
+        rechargeLineDays.length > 0
+          ? `按营业日报重算（当月 streak；不跨日重复计 trigger）：${rechargeLineDays
+              .map((x) => `${x.d} 连续${x.streak}日零充值→${x.penalty}分`)
+              .join('；')}`
+          : rechargeFromDaily != null
+            ? '按营业日报重算当周各日充值异常扣分'
+            : '';
       extraDetails.push({
         category: 'recharge_anomaly',
         severity: 'mixed',
         anomaly_key: 'recharge_zero',
-        points: rechargeSum
+        points: rechargeTotal,
+        ...(note ? { detail_note: note } : {})
       });
     }
     if (badServicePts > 0) {
@@ -485,8 +502,13 @@ export async function scoreStoreForPeriod(store, periodMonday, options = {}) {
       segments.length > 1 ? `${Number(seg.ymMonth.slice(5, 7))} 月段` : '';
     const rangeZh = `${seg.start}～${seg.end}`;
 
+    const rechargeRollup = await sumRechargePenaltyPointsForClosedDaysInRange(store, seg.start, seg.end);
+
     for (const role of ['store_manager', 'store_production_manager']) {
-      const { totalScore, details, totalDeducted } = computeRoleRollupFromRows(r.rows || [], role);
+      const { totalScore, details, totalDeducted } = computeRoleRollupFromRows(r.rows || [], role, {
+        rechargePenaltySum: rechargeRollup.sum,
+        rechargePenaltyLineDays: rechargeRollup.lineDays
+      });
       const roleZh = roleLabelZh(role);
       const summaryZh =
         segments.length > 1

@@ -233,60 +233,124 @@ export async function checkLaborEfficiency(store) {
 }
 
 // ─── 3. 充值异常 ───
-// 连续无充值天数：第1天扣2分、第2天扣4分、第3天2分、第4天4分…（绩效周汇总按 penalty_points 累加）
+// 连续无充值：当月内 streak 第 1 天扣 2 分、streak≥2 扣 4 分（有充值则 streak 归零）。
+// 周度绩效汇总 **不得** 对多条 anomaly_triggers 的 penalty_points 简单相加（同日多次日检会重复；且应以日报为准）；
+// 见 `sumRechargePenaltyPointsForClosedDaysInRange`（按 daily_reports 重算）。
 //
 // 判定基准日 = 上海「昨日」完整营业日（不是「今天」）。避免当日日报尚未关账、充值字段仍为 0 时误派单
 //（典型客诉：昨日营业日已有充值，但任务仍发「充值异常」——实为在评判「今天」的不完整日报）。
+function monthStartForYmd(ymd) {
+  return String(ymd || '').slice(0, 7) + '-01';
+}
+
+function hasRechargeRow(rec) {
+  return rec && (rec.cnt > 0 || rec.amt > 0);
+}
+
+/** 日报充值按日聚合（与 checkRechargeZero / 周汇总同源） */
+export async function fetchDailyReportRechargeByDayMap(store, dateFromInclusive, dateToInclusive) {
+  const r = await query(
+    `SELECT date::date::text AS d,
+            COALESCE(SUM(COALESCE(recharge_count, 0)), 0)::int AS cnt,
+            COALESCE(SUM(COALESCE(recharge_amount, 0)), 0)::numeric AS amt
+     FROM daily_reports
+     WHERE store ILIKE ANY($1::text[])
+       AND date::date >= $2::date
+       AND date::date <= $3::date
+     GROUP BY date::date
+     ORDER BY date::date ASC`,
+    [dailyReportIlikePatterns(store), dateFromInclusive, dateToInclusive]
+  );
+  const byDay = new Map();
+  for (const row of r.rows || []) {
+    const key = String(row.d || '').slice(0, 10);
+    byDay.set(key, { cnt: parseInt(row.cnt || 0, 10), amt: parseFloat(row.amt || 0) });
+  }
+  return byDay;
+}
+
+/**
+ * 单日营业日 evalSh：无日报→不扣；有充值→不触发；零充值则按当月 streak 得 2 或 4 分（与 checkRechargeZero 一致）。
+ * @returns {{ triggered:boolean, penalty_points:number, streak:number, month_start:string, evaluated_day_recharge?:{count:number,amount:number} }}
+ */
+export function evaluateRechargeZeroForDayFromMap(evalSh, byDay) {
+  const monthStart = monthStartForYmd(evalSh);
+  const evalR = byDay.get(evalSh);
+  if (!evalR) {
+    return { triggered: false, penalty_points: 0, streak: 0, month_start: monthStart, evaluated_day_recharge: null };
+  }
+  if (hasRechargeRow(evalR)) {
+    return {
+      triggered: false,
+      penalty_points: 0,
+      streak: 0,
+      month_start: monthStart,
+      evaluated_day_recharge: { count: evalR.cnt, amount: evalR.amt }
+    };
+  }
+  let streak = 0;
+  for (let i = 0; i < 31; i++) {
+    const d = addDaysYmdShanghai(evalSh, -i);
+    if (d < monthStart) break;
+    const rec = byDay.get(d);
+    if (!rec) break;
+    if (hasRechargeRow(rec)) break;
+    streak++;
+  }
+  const penalty_points = streak >= 2 ? 4 : 2;
+  return {
+    triggered: true,
+    penalty_points,
+    streak,
+    month_start: monthStart,
+    evaluated_day_recharge: { count: evalR.cnt, amount: evalR.amt }
+  };
+}
+
+/**
+ * 自然周（或月段）内每个「已满」营业日按 daily_reports 重算充值扣分并求和。
+ * 不含「今天」：lastClosed = min(rangeEnd, 上海昨日)，避免未关账日误算。
+ * 解决：多条 recharge_zero trigger（含不同 trigger_date 指向同一营业日）在周汇总里被 **累加 penalty_points** 导致多扣。
+ */
+export async function sumRechargePenaltyPointsForClosedDaysInRange(store, rangeStartYmd, rangeEndYmd) {
+  const todaySh = shanghaiTodayYmd();
+  const yesterdaySh = addDaysYmdShanghai(todaySh, -1);
+  const lastClosed = String(rangeEndYmd) < todaySh ? String(rangeEndYmd) : yesterdaySh;
+  if (String(rangeStartYmd) > lastClosed) {
+    return { sum: 0, lineDays: [] };
+  }
+  const msA = monthStartForYmd(rangeStartYmd);
+  const msB = monthStartForYmd(lastClosed);
+  const qStart = msA < msB ? msA : msB;
+  const byDay = await fetchDailyReportRechargeByDayMap(store, qStart, lastClosed);
+  let sum = 0;
+  const lineDays = [];
+  for (let d = String(rangeStartYmd); d <= lastClosed; d = addDaysYmdShanghai(d, 1)) {
+    const ev = evaluateRechargeZeroForDayFromMap(d, byDay);
+    if (ev.triggered && ev.penalty_points > 0) {
+      sum += ev.penalty_points;
+      lineDays.push({ d, penalty: ev.penalty_points, streak: ev.streak });
+    }
+  }
+  return { sum, lineDays };
+}
+
 export async function checkRechargeZero(store) {
   try {
     const todaySh = shanghaiTodayYmd();
     const evalSh = addDaysYmdShanghai(todaySh, -1);
-    const hasRecharge = (rec) => rec && (rec.cnt > 0 || rec.amt > 0);
-
-    // streak 仅在「判定日」所在自然月内累计（月初重置，不跨该月）
-    const [ey, em] = evalSh.split('-').map(Number);
-    const pad = (n) => String(n).padStart(2, '0');
-    const monthStart = `${ey}-${pad(em)}-01`;
-
-    const r = await query(
-      `SELECT date::date::text AS d,
-              COALESCE(SUM(COALESCE(recharge_count, 0)), 0)::int AS cnt,
-              COALESCE(SUM(COALESCE(recharge_amount, 0)), 0)::numeric AS amt
-       FROM daily_reports
-       WHERE store ILIKE ANY($1::text[])
-         AND date::date <= $2::date
-         AND date::date >= $3::date
-       GROUP BY date::date
-       ORDER BY date::date ASC`,
-      [dailyReportIlikePatterns(store), todaySh, monthStart]
-    );
-    const byDay = new Map();
-    for (const row of r.rows || []) {
-      const key = String(row.d || '').slice(0, 10);
-      byDay.set(key, { cnt: parseInt(row.cnt || 0, 10), amt: parseFloat(row.amt || 0) });
-    }
-
+    const monthStart = monthStartForYmd(evalSh);
+    const byDay = await fetchDailyReportRechargeByDayMap(store, monthStart, todaySh);
     const evalR = byDay.get(evalSh);
     if (!evalR) {
       return { triggered: false, detail: `${evalSh} 无营业日报，跳过充值判定（口径：上海昨日）` };
     }
-    if (hasRecharge(evalR)) {
+    if (hasRechargeRow(evalR)) {
       return { triggered: false, detail: `${evalSh} 有充值，正常（口径：上海昨日）` };
     }
-
-    // streak 从判定日向回数，到当月 1 号为止（不跨判定日所在月）
-    let streak = 0;
-    for (let i = 0; i < 31; i++) {
-      const d = addDaysYmdShanghai(evalSh, -i);
-      if (d < monthStart) break;
-      const rec = byDay.get(d);
-      if (!rec) break;
-      if (hasRecharge(rec)) break;
-      streak++;
-    }
-
-    // 规则：连续第1天无充值扣2分，连续第2天起（streak≥2）扣4分；有充值则 streak 重置
-    const penalty_points = streak >= 2 ? 4 : 2;
+    const ev = evaluateRechargeZeroForDayFromMap(evalSh, byDay);
+    const streak = ev.streak;
+    const penalty_points = ev.penalty_points;
     const severity = penalty_points >= 4 ? 'high' : 'medium';
 
     return {
