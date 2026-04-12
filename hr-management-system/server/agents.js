@@ -10560,7 +10560,7 @@ async function pushScoresToFeishu() {
             if (!ccSend.ok) {
               const ccMsg = prefixWithAgentName(
                 'chief_evaluator',
-                `📋 抄送·绩效考核日报\n对象：${fu.name || score.username}｜${score.store}\n\n${msgText}`
+                `📋 抄送·${perfTitle}\n对象：${fu.name || score.username}｜${score.store}\n\n${msgText}`
               );
               ccSend = await sendLarkMessage(oid, ccMsg);
             }
