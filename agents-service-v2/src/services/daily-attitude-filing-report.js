@@ -8,6 +8,10 @@ import { sendCard } from './feishu-client.js';
 import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
 import { resolveSingleScoringUser, resolvePerformanceReportDisplayName } from '../utils/scoring-assignee.js';
 import { collectStoreLookupVariants } from '../utils/feishu-assignee-resolve.js';
+import {
+  getMonthlyAttitudeFilingCount,
+  getMonthlyAttitudeFilingCountForStore
+} from '../utils/performance-filing-counts.js';
 
 const ATTITUDE_SOURCES = ['random_inspection', 'scheduled_inspection', 'bi_anomaly', 'auto_collab', 'data_auditor'];
 
@@ -82,7 +86,7 @@ function buildAttitudeFilingCard(title, bodyMd, template = 'blue') {
           {
             tag: 'plain_text',
             content:
-              '数据来源：master_tasks（昨日窗口内 updated_at，且 hr_performance_recorded=true；来源∈抽检/定时/BI/协作/审计）· 每日08:05 · 责任人展示名与执行力日报同一马己仙出品主责规则'
+              '数据来源：master_tasks（昨日条数按 updated_at；「本月累计」按 dispatched_at 落在当月1日—统计日，与月度评级/performance-filing-counts 同一 SQL）· 每日08:05'
           }
         ]
       }
@@ -90,7 +94,20 @@ function buildAttitudeFilingCard(title, bodyMd, template = 'blue') {
   };
 }
 
-function buildHqBodyMarkdown(byStore, rows, bizYmd, nameMap) {
+/** 昨日涉及账号 → 截至统计日「本月」态度备案累计（distinct task_id；与月度评级口径一致） */
+async function buildMonthlyAttitudeCountMap(rows, bizYmd, restrictStoreTrim) {
+  const users = [...new Set((rows || []).map((r) => String(r.assignee_username || '').trim()).filter(Boolean))];
+  const m = new Map();
+  for (const u of users) {
+    const cnt = restrictStoreTrim
+      ? await getMonthlyAttitudeFilingCountForStore(u, restrictStoreTrim, bizYmd)
+      : await getMonthlyAttitudeFilingCount(u, bizYmd);
+    m.set(u.toLowerCase(), cnt);
+  }
+  return m;
+}
+
+async function buildHqBodyMarkdown(byStore, rows, bizYmd, nameMap, monthlyMap) {
   const total = rows.length;
   if (!total) {
     return `**备案类型**：工作态度备案（全系统昨日汇总）
@@ -110,7 +127,7 @@ function buildHqBodyMarkdown(byStore, rows, bizYmd, nameMap) {
     const n = byStore.get(k)?.length || 0;
     md += `· **${k}**：${n} 条\n`;
   }
-  md += `\n**明细**（按更新时间）\n`;
+  md += `\n**明细**（按更新时间；与执行力备案一致展示「本月累计」）\n`;
   for (const row of rows) {
     const st = String(row.store || '').trim() || '（未填门店）';
     const role = String(row.assignee_role || '').trim();
@@ -118,13 +135,15 @@ function buildHqBodyMarkdown(byStore, rows, bizYmd, nameMap) {
     const raw = nameMap.get(un.toLowerCase()) || un;
     const disp = resolvePerformanceReportDisplayName(st, role, un, raw);
     const title = String(row.title || '').slice(0, 160);
+    const monthCnt = monthlyMap.get(un.toLowerCase()) ?? 0;
     md += `· **${st}**｜${sourceLabelZh(row.source)}｜${title}\n`;
     md += `  └ 责任人：**${disp}**（\`${un || '—'}\`）｜状态：${row.status || '—'}｜时间：${row.filed_at_sh || '—'}\n`;
+    md += `  └ **本月累计（工作态度备案）**：**${monthCnt}** 次（截至 **${bizYmd}**；全门店 distinct task_id，与月度评级同一 SQL）\n`;
   }
   return md;
 }
 
-function buildStoreBodyMarkdown(filtered, bizYmd, store, nameMap) {
+async function buildStoreBodyMarkdown(filtered, bizYmd, store, nameMap, monthlyMap) {
   const n = filtered.length;
   if (!n) {
     return `**备案类型**：工作态度备案（本店昨日）
@@ -139,7 +158,7 @@ function buildStoreBodyMarkdown(filtered, bizYmd, store, nameMap) {
 **统计日（上海）**：${bizYmd}
 **昨日备案条数**：**${n}** 条
 
-**明细**
+**明细**（与执行力备案一致含「本月累计」）
 `;
   for (const row of filtered) {
     const st = String(row.store || '').trim() || store;
@@ -148,8 +167,10 @@ function buildStoreBodyMarkdown(filtered, bizYmd, store, nameMap) {
     const raw = nameMap.get(un.toLowerCase()) || un;
     const disp = resolvePerformanceReportDisplayName(st, role, un, raw);
     const title = String(row.title || '').slice(0, 160);
+    const monthCnt = monthlyMap.get(un.toLowerCase()) ?? 0;
     md += `· **${sourceLabelZh(row.source)}**｜${title}\n`;
     md += `  └ 责任人：**${disp}**（\`${un || '—'}\`）｜状态：${row.status || '—'}｜时间：${row.filed_at_sh || '—'}\n`;
+    md += `  └ **本月累计（工作态度备案）**：**${monthCnt}** 次（截至 **${bizYmd}**；本店 distinct task_id，与月度评级同一 SQL）\n`;
   }
   return md;
 }
@@ -178,6 +199,7 @@ export async function runDailyAttitudeFilingReport(opts = {}) {
   const bizYmd = String(opts?.bizYmd || '').trim() || ymdAddDays(runYmd, -1);
   const rows = await fetchYesterdayFilings(bizYmd);
   const nameMap = await loadFeishuDisplayNameMap(rows.map((r) => r.assignee_username));
+  const monthlyMapHq = await buildMonthlyAttitudeCountMap(rows, bizYmd, null);
   const byStore = new Map();
   for (const row of rows) {
     const st = String(row.store || '').trim() || '（未填门店）';
@@ -203,7 +225,7 @@ export async function runDailyAttitudeFilingReport(opts = {}) {
     const hqTemplate = rows.length ? 'orange' : 'green';
     const card = buildAttitudeFilingCard(
       `📋 工作态度备案日报 · 全系统汇总 · ${bizYmd}`,
-      buildHqBodyMarkdown(byStore, rows, bizYmd, nameMap),
+      await buildHqBodyMarkdown(byStore, rows, bizYmd, nameMap, monthlyMapHq),
       hqTemplate
     );
     await sendReportToRecipient({
@@ -240,10 +262,11 @@ export async function runDailyAttitudeFilingReport(opts = {}) {
       const row = ur.rows?.[0];
       if (!row?.open_id) continue;
       const filtered = rows.filter((r) => rowMatchesUserStore(r.store, store));
+      const monthlyMapStore = await buildMonthlyAttitudeCountMap(filtered, bizYmd, store);
       const stTemplate = filtered.length ? 'orange' : 'green';
       const card = buildAttitudeFilingCard(
         `📋 工作态度备案日报 · 本店 · ${store} · ${bizYmd}`,
-        buildStoreBodyMarkdown(filtered, bizYmd, store, nameMap),
+        await buildStoreBodyMarkdown(filtered, bizYmd, store, nameMap, monthlyMapStore),
         stTemplate
       );
       const username = String(row.username || canon.username).trim();

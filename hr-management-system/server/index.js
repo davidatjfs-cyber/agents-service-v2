@@ -6629,6 +6629,8 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
     const idx = list.findIndex(r => String(r?.store || '').trim() === store && String(r?.date || '').trim() === date);
 
     let item;
+    /** 本次请求若执行了 daily_reports 双写且抛错，则必须失败返回，避免「HRMS 已提交、PG 无行」 */
+    let lastPgDualWriteError = null;
     let shouldNotifySchedule = false;
     if (idx >= 0) {
       const prev = list[idx] || {};
@@ -6646,7 +6648,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
 
       const brand = String(payload?.brand || '').trim();
 
-      const item = {
+      item = {
         ...prev,
         store,
         date,
@@ -6763,6 +6765,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
         ]);
         await recalcWechatMonthTotalsForStoreMonth(pool, store, date);
       } catch (e) {
+        lastPgDualWriteError = lastPgDualWriteError || e;
         console.error('[daily_report_update]', e.message);
         void notifyAdminsDualWriteFailure(`daily_reports（营业日报 PG 同步·更新 ${store} ${date}）`, e);
       }
@@ -6898,6 +6901,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
           weather, segments, discountDine, discountDelivery, categories, deliveryDetail, badReviewsDianping, staff, scheduleNextDay, photos
         ]);
       } catch (e) {
+        lastPgDualWriteError = lastPgDualWriteError || e;
         console.error('[daily_report_insert]', e.message);
         void notifyAdminsDualWriteFailure(`daily_reports（营业日报 PG 同步·新建 ${store} ${date}）`, e);
       }
@@ -6905,6 +6909,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
       try {
         await recalcWechatMonthTotalsForStoreMonth(pool, store, date);
       } catch (e) {
+        lastPgDualWriteError = lastPgDualWriteError || e;
         console.error('[daily_report_insert_month]', e.message);
         void notifyAdminsDualWriteFailure(`daily_reports（企微月累计重算 ${store} ${date}）`, e);
       }
@@ -6912,6 +6917,15 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
 
       shouldNotifySchedule = !!wantSubmit;
       list.unshift(item);
+    }
+
+    if (lastPgDualWriteError) {
+      return res.status(502).json({
+        error: 'pg_sync_failed',
+        message: String(lastPgDualWriteError.message || lastPgDualWriteError),
+        hint:
+          'PostgreSQL 表 daily_reports 双写失败：前端状态未保存。晨报/考勤/Agent 均依赖该表与 hrms_state 一致；请重试提交或联系管理员查看 HRMS 日志 [daily_report_*]、数据库约束与 DATABASE_URL。'
+      });
     }
 
     let nextState = { ...state0, dailyReports: list };
