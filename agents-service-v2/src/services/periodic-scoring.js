@@ -515,7 +515,12 @@ export async function scoreStoreForPeriod(store, periodMonday, options = {}) {
                breakdown = EXCLUDED.breakdown,
                summary = EXCLUDED.summary,
                name = EXCLUDED.name,
-               feishu_notified = FALSE,
+               feishu_notified = CASE
+                 WHEN agent_scores.feishu_notified = TRUE
+                      AND agent_scores.total_score = EXCLUDED.total_score
+                 THEN TRUE
+                 ELSE FALSE
+               END,
                updated_at = NOW()`,
             [
               brand,
