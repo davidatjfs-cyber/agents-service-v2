@@ -8,15 +8,49 @@
  *
  * 环境：HRMS_BASE_URL（默认 http://127.0.0.1:3000）、AGENTS_BASE_URL（默认 http://127.0.0.1:3101）、
  *       ADMIN_USERNAME、ADMIN_PASSWORD
+ *
+ * 无密码运维（仅本机、需能读取与 HRMS/agents 一致的 JWT_SECRET）：
+ *   OPS_USE_JWT_FORGE=1 node scripts/ops-ecs-resend.mjs …
+ *   HRMS 与 agents 若密钥不同，可分别设 HRMS_JWT_SECRET、AGENTS_JWT_SECRET（否则回落 JWT_SECRET）。
  */
 import 'dotenv/config';
+import jwt from 'jsonwebtoken';
 
 const HRMS = (process.env.HRMS_BASE_URL || 'http://127.0.0.1:3000').replace(/\/$/, '');
 const AGENTS = (process.env.AGENTS_BASE_URL || 'http://127.0.0.1:3101').replace(/\/$/, '');
 const user = process.env.ADMIN_USERNAME || 'admin';
 const pass = process.env.ADMIN_PASSWORD || 'admin123';
 
+function forgeHrmsAdminToken() {
+  const secret = process.env.HRMS_JWT_SECRET || process.env.JWT_SECRET;
+  if (!secret) throw new Error('OPS_USE_JWT_FORGE=1 时需要 HRMS_JWT_SECRET 或 JWT_SECRET');
+  /** 不传 sn：HRMS authRequired 会跳过 session_nonce 校验，等价于本机运维调用 */
+  return jwt.sign(
+    {
+      id: Number(process.env.OPS_JWT_USER_ID || 1) || 1,
+      username: process.env.OPS_JWT_USERNAME || 'admin',
+      name: process.env.OPS_JWT_NAME || 'Admin',
+      role: 'admin'
+    },
+    secret,
+    { expiresIn: '2h' }
+  );
+}
+
+function forgeAgentsAdminToken() {
+  const secret = process.env.AGENTS_JWT_SECRET || process.env.JWT_SECRET;
+  if (!secret) throw new Error('OPS_USE_JWT_FORGE=1 时需要 AGENTS_JWT_SECRET 或 JWT_SECRET');
+  return jwt.sign(
+    { username: process.env.OPS_JWT_USERNAME || 'admin', role: 'admin' },
+    secret,
+    { expiresIn: '2h' }
+  );
+}
+
 async function loginHrms() {
+  if (String(process.env.OPS_USE_JWT_FORGE || '').trim() === '1') {
+    return forgeHrmsAdminToken();
+  }
   const r = await fetch(`${HRMS}/api/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -28,6 +62,9 @@ async function loginHrms() {
 }
 
 async function loginAgents() {
+  if (String(process.env.OPS_USE_JWT_FORGE || '').trim() === '1') {
+    return forgeAgentsAdminToken();
+  }
   const r = await fetch(`${AGENTS}/api/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

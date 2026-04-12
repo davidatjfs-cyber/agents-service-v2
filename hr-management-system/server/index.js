@@ -6484,11 +6484,11 @@ async function upsertDailyReportPgFromStateReport(dr) {
               WHERE TRIM(dr.store) = TRIM($1::text)
                 AND dr.date >= date_trunc('month', $3::date)::date
                 AND dr.date < $3::date
-            ), 0) + $7,
+            ), 0) + $8::bigint,
             true, NOW(),
-            $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-            $18, $19, $20, $21, $22, $23, $24, $25,
-            $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
+            $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+            $19, $20, $21, $22, $23, $24, $25, $26,
+            $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
           ON CONFLICT (store, date)
           DO UPDATE SET 
             actual_revenue = EXCLUDED.actual_revenue,
@@ -6533,6 +6533,7 @@ async function upsertDailyReportPgFromStateReport(dr) {
       payload?.actual || 0,
       payload?.margin || null,
       payload?.dianping_rating || null,
+      todayWechat,
       todayWechat,
       preDiscountRevenue,
       totalDiscount,
@@ -6860,11 +6861,11 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
               WHERE TRIM(dr.store) = TRIM($1::text)
                 AND dr.date >= date_trunc('month', $3::date)::date
                 AND dr.date < $3::date
-            ), 0) + $7,
+            ), 0) + $8::bigint,
             true, NOW(),
-            $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-            $18, $19, $20, $21, $22, $23, $24, $25,
-            $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
+            $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+            $19, $20, $21, $22, $23, $24, $25, $26,
+            $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
           ON CONFLICT (store, date)
           DO UPDATE SET 
             actual_revenue = EXCLUDED.actual_revenue,
@@ -6906,6 +6907,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
           payload?.actual || 0,
           payload?.margin || null, 
           payload?.dianping_rating || null,
+          todayWechat,
           todayWechat,
           preDiscountRevenue, totalDiscount, dineOrders, dineRevenue, dineTraffic,
           efficiencyVal, laborTotalVal, grossProfit, budgetVal, budgetRateVal,
@@ -6995,11 +6997,11 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
               WHERE TRIM(dr.store) = TRIM($1::text)
                 AND dr.date >= date_trunc('month', $3::date)::date
                 AND dr.date < $3::date
-            ), 0) + $7,
+            ), 0) + $8::bigint,
             true, NOW(),
-            $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-            $18, $19, $20, $21, $22, $23, $24, $25,
-            $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
+            $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+            $19, $20, $21, $22, $23, $24, $25, $26,
+            $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
           ON CONFLICT (store, date)
           DO UPDATE SET
             actual_revenue = EXCLUDED.actual_revenue,
@@ -7043,6 +7045,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
           payload?.actual || 0,
           payload?.margin || null,
           payload?.dianping_rating || null,
+          todayWechat,
           todayWechat,
           preDiscountRevenue, totalDiscount, dineOrders, dineRevenue, dineTraffic,
           efficiencyVal, laborTotalVal, grossProfit, budgetVal, budgetRateVal,
