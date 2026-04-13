@@ -32,6 +32,10 @@ import {
   AgentCommunicationHelper 
 } from './agent-communication-system.js';
 import { pool as agentPool, setPool as setUnifiedAgentPool } from './utils/database.js';
+import {
+  pgGetMonthlyExecutionFilingCount,
+  pgGetMonthlyAttitudeFilingCount
+} from './lib/performance-filing-counts-pg.js';
 import { safeExecute, safeErrorLog } from './utils/error-handler.js';
 import { handleMarginMessage } from './margin-message-handler.js';
 import { deduplicateMessage } from './message-deduplication.js';
@@ -7319,23 +7323,10 @@ export async function runDataAuditor(checkMode = 'daily') {
     }
     } // end if (!isWeekly) for 充值异常
 
-    // 4) 桌访产品异常 - weekly only
-    const productMedium = Math.max(1, getStoreThreshold(storeName, 'tableVisitProductMedium', 2));
-    const productHigh = Math.max(productMedium, getStoreThreshold(storeName, 'tableVisitProductHigh', 4));
-    const productComplaints = tableVisitMetrics.dissatisfiedProducts;
-    if (!isDaily && enableTableVisit) for (const [key, count] of productComplaints) {
-      if (count >= productMedium) {
-        const [, productKey] = key.split('||');
-        const product = tableVisitMetrics.productLabelByKey.get(productKey) || productKey || '未知产品';
-        issues.push({
-          agent: 'data_auditor', brand, store: storeName, category: '桌访产品异常',
-          severity: count >= productHigh ? 'high' : 'medium',
-          title: `${storeName}「${product}」${weekAgoDate}~${nowDate} 不满意 ${count} 次`,
-          detail: `${weekAgoDate}~${nowDate} 不满意次数 ${count} 次（medium:≥${productMedium}, high:≥${productHigh}）。`,
-          data: { date: periodLabel, dissatisfiedProducts: product, dissatisfiedCount: count }
-        });
-      }
-    }
+    // 4) 桌访产品异常 - ⚠️ 已永久关闭（迁移至 agents-service-v2 的 BI 周度异常检测 checkTableVisitProduct）
+    // 旧版会为每个超阈值产品各生成一条 MT-XXXXXX-NNNN 任务（source=data_auditor），与 ANO- 任务重复，
+    // 严重污染绩效数据。新版每周一次，将所有超阈值产品合并为 1 张 ANO- 任务卡发给出品经理。
+    // 如需恢复，请在 agents-service-v2 的 anomaly-engine.js 中调整 checkTableVisitProduct 阈值。
 
     // 5) 桌访占比异常 - 阈值从配置中心读取
     const ratioMedium = getStoreThreshold(storeName, 'tableVisitRatioMedium', 0.5);
@@ -10479,10 +10470,31 @@ async function pushScoresToFeishu() {
       if (bd.execution_rating != null && String(bd.execution_rating).trim() !== '') dimLines.push(`• 执行力：${String(bd.execution_rating).trim()}级`);
       const dimText = dimLines.length ? dimLines.join('\n') : '• 暂无维度评级';
 
+      const shanghaiTodayYmd = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+      let execFilingN = 0;
+      let attFilingN = 0;
+      try {
+        if (score.username && score.store) {
+          execFilingN = await pgGetMonthlyExecutionFilingCount(pool(), score.username, score.store, shanghaiTodayYmd);
+        }
+        if (score.username) {
+          attFilingN = await pgGetMonthlyAttitudeFilingCount(pool(), score.username, shanghaiTodayYmd);
+        }
+      } catch (_e) {
+        /* ignore */
+      }
+
+      const isWeeklyAnomalyRollup = modelKey === 'anomaly_rollups_v2';
+      const midSectionTitle = isWeeklyAnomalyRollup ? '本月累计备案（自然月至今）' : '核心评级（A-D）';
+      const midSectionBody = isWeeklyAnomalyRollup
+        ? `• 工作执行力：**${execFilingN}** 次（执行力日评备案）\n• 工作态度：**${attFilingN}** 次（任务催办态度备案）`
+        : dimText;
+      const msgMidLabel = isWeeklyAnomalyRollup ? '本月累计备案' : '评分维度';
+
       const isMonthlyModel = modelKey === 'new_model_monthly';
       const perfTitle = isMonthlyModel ? '绩效考核月报' : '绩效考核周报';
       const perfKind = isMonthlyModel ? '月度绩效摘要（与上方「月度综合评级」卡片同源数据时请以卡片为准）' : '绩效考核周报（与月度总结区分：本条对应系统刚写入的一条评分记录）';
-      const msgText = `📊 ${perfTitle}\n\n${fu.name || score.username}，你好！以下是你在${score.store}（${score.brand}）的${perfKind}。\n\n📋 岗位：${roleLabel}\n🗓️ ${periodLabel}${modelLine}\n\n📊 本期总分：**${score.total_score} 分**（满分100）\n\n评分维度：\n${dimText}\n\n扣分明细：\n${deductionText}\n\n${summaryZh ? '说明：' + summaryZh + '\n\n' : ''}如有异议，请回复「申诉」并说明原因。`;
+      const msgText = `📊 ${perfTitle}\n\n${fu.name || score.username}，你好！以下是你在${score.store}（${score.brand}）的${perfKind}。\n\n📋 岗位：${roleLabel}\n🗓️ ${periodLabel}${modelLine}\n\n📊 本期总分：**${score.total_score} 分**（满分100）\n\n${msgMidLabel}：\n${midSectionBody}\n\n扣分明细：\n${deductionText}\n\n${summaryZh ? '说明：' + summaryZh + '\n\n' : ''}如有异议，请回复「申诉」并说明原因。`;
       const msg = prefixWithAgentName('chief_evaluator', msgText);
 
       const scoreNum = Number(score.total_score || 0);
@@ -10514,7 +10526,7 @@ async function pushScoresToFeishu() {
             }
           },
           { tag: 'hr' },
-          { tag: 'div', text: { tag: 'lark_md', content: `**核心评级（A-D）**\n${dimText}` } },
+          { tag: 'div', text: { tag: 'lark_md', content: `**${midSectionTitle}**\n${midSectionBody}` } },
           { tag: 'div', text: { tag: 'lark_md', content: `**扣分明细（本期）**\n${deductionText}` } },
           { tag: 'div', text: { tag: 'lark_md', content: `**管理提示**\n${riskHint}` } },
           ...(summaryZh ? [{ tag: 'div', text: { tag: 'lark_md', content: `**说明**\n${summaryZh}` } }] : []),

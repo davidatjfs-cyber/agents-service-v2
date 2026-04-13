@@ -17214,7 +17214,29 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     const t = _dcFmtTime(v);
                     return t || '—';
                 }
-                return v != null && v !== '' ? String(v) : '—';
+                if (v == null || v === '') return '—';
+                if (typeof v === 'object') {
+                    try {
+                        const s = JSON.stringify(v);
+                        return s.length > 200 ? s.slice(0, 197) + '…' : s;
+                    } catch (_) { return '[object]'; }
+                }
+                const sv = String(v);
+                // result_summary 若是 JSON 字符串则解析后展示关键字段
+                if (c.key === 'result_summary' && sv.startsWith('{')) {
+                    try {
+                        const obj = JSON.parse(sv);
+                        const parts = [];
+                        if (obj.triggered != null) parts.push('触发:' + (obj.triggered ? '是' : '否'));
+                        if (obj.kpiByStore?.length) parts.push('门店KPI:' + obj.kpiByStore.length + '店');
+                        if (obj.scanned != null) parts.push('扫描:' + obj.scanned);
+                        if (obj.issuesFound != null) parts.push('异常:' + obj.issuesFound);
+                        if (obj.triggered != null && obj.detail) parts.push(String(obj.detail).slice(0, 60));
+                        if (parts.length) return parts.join(' · ');
+                        return sv.length > 200 ? sv.slice(0, 197) + '…' : sv;
+                    } catch (_) { /* fall through */ }
+                }
+                return sv.length > 200 ? sv.slice(0, 197) + '…' : sv;
             };
             const sec = (title, rows, cols) => {
                 if (!rows || !rows.length) {

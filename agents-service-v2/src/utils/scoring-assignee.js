@@ -82,8 +82,8 @@ async function fetchFeishuUserByUsername(username) {
 }
 
 /**
- * 马己仙门店出品经理：主责为黎永荣（NNYXLYR04）；若存在 nnyxcs35 观察绑定，排在第二位，
- * 周度/月度写入与飞书同步两份（观察行 name 为「黎永荣（观察同步）」便于报告与管理端识别）。
+ * 马己仙门店出品经理：主责为黎永荣（NNYXLYR04）。周度/月度评分仅返回主责一行，避免管理报表重复；
+ * nnyxcs35 等观察号仍可通过通知侧 collapse 等逻辑接收卡片，但不写入 anomaly_rollups_v2 第二行。
  */
 export async function resolveMajixianProductionManagersForScoring(store) {
   if (!isMajixianStore(store)) return [];
@@ -127,15 +127,8 @@ export async function resolveMajixianProductionManagersForScoring(store) {
       return [{ username: '__periodic_kitchen__', name: '出品经理(周度自动·未绑定)' }];
     }
 
-    const out = [canon];
-    const obs = sorted.find((row) => isMajixianPmObserverUsername(row.username));
-    if (obs && !isMajixianPmObserverUsername(canon.username)) {
-      out.push({
-        username: String(obs.username || '').trim(),
-        name: `${CANONICAL_MAJIXIAN_PM.displayName}（观察同步）`
-      });
-    }
-    return out;
+    /** 仅写入主责一行 anomaly_rollups_v2，避免管理周报出现「黎永荣」与「黎永荣（观察同步）」重复；观察号仍可通过通知链路的 collapse 逻辑接收卡片 */
+    return [canon];
   } catch (_e) {
     /* ignore */
   }

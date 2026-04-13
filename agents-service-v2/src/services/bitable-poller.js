@@ -224,34 +224,37 @@ export async function pollBitableTable(configKey) {
   for (const record of allRecords) {
     const recordId = record.record_id;
     const dedupKey = `${config.appToken}_${config.tableId}_${recordId}`;
-    if (!config.skipDedup && _processedIds.has(dedupKey)) continue;
+    const alreadySeen = !config.skipDedup && _processedIds.has(dedupKey);
 
-    // Save to feishu_generic_records (shared with V1)
-    try {
-      await query(
-        `INSERT INTO feishu_generic_records (app_token, table_id, record_id, config_key, fields, raw, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, NOW(), NOW())
-         ON CONFLICT (app_token, table_id, record_id) DO UPDATE SET
-           config_key = COALESCE(EXCLUDED.config_key, feishu_generic_records.config_key),
-           fields = EXCLUDED.fields, raw = EXCLUDED.raw, updated_at = NOW()`,
-        [config.appToken || '', config.tableId || '', recordId, configKey,
-         JSON.stringify(record.fields || {}), JSON.stringify(record)]
-      );
-      newCount++;
-    } catch (e) {
-      if (!String(e?.message || '').includes('duplicate')) {
-        logger.error({ configKey, recordId, err: e?.message }, 'save generic record failed');
+    // Save to feishu_generic_records (shared with V1)：始终 upsert，确保字段最新
+    if (!alreadySeen) {
+      try {
+        await query(
+          `INSERT INTO feishu_generic_records (app_token, table_id, record_id, config_key, fields, raw, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, NOW(), NOW())
+           ON CONFLICT (app_token, table_id, record_id) DO UPDATE SET
+             config_key = COALESCE(EXCLUDED.config_key, feishu_generic_records.config_key),
+             fields = EXCLUDED.fields, raw = EXCLUDED.raw, updated_at = NOW()`,
+          [config.appToken || '', config.tableId || '', recordId, configKey,
+           JSON.stringify(record.fields || {}), JSON.stringify(record)]
+        );
+        newCount++;
+      } catch (e) {
+        if (!String(e?.message || '').includes('duplicate')) {
+          logger.error({ configKey, recordId, err: e?.message }, 'save generic record failed');
+        }
       }
     }
 
-    // Process type-specific data
+    // processRecord 始终执行（内部 upsertMsg 是幂等的），确保 agent_messages 中的
+    // agent_data.fields.date 等字段被 extractText 最新逻辑正确写入，修复历史误存的 JSON 字符串问题。
     try {
       await processRecord(configKey, config.type, record, config.brand);
     } catch (e) {
       logger.error({ configKey, recordId, err: e?.message }, 'process record failed');
     }
 
-    if (!config.skipDedup) {
+    if (!config.skipDedup && !alreadySeen) {
       _processedIds.add(dedupKey);
       // Prevent memory bloat
       if (_processedIds.size > DEDUP_MAX) {
@@ -520,8 +523,13 @@ function extractText(val) {
       return JSON.stringify(item);
     }).join(', ');
   }
-  if (val?.text) return val.text;
-  if (val?.name) return val.name;
+  if (val?.text != null) return String(val.text);
+  if (val?.name != null) return String(val.name);
+  // 飞书日期类型字段：{ date: "YYYY-MM-DD" } 或 { timestamp: 1744473600000 }
+  // 或 { value: 1744473600000, type: "timestamp" } 等格式，统一提取可解析的值
+  if (val?.date != null) return String(val.date);
+  if (val?.timestamp != null) return String(val.timestamp);
+  if (val?.value != null && typeof val.value !== 'object') return String(val.value);
   return JSON.stringify(val);
 }
 

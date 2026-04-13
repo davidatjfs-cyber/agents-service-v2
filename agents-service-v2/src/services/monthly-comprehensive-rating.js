@@ -25,8 +25,22 @@ import {
 } from '../utils/scoring-assignee.js';
 import { expandAgentStoreLabels } from '../config/store-mapping.js';
 import { getShanghaiYmdParts } from '../utils/anomaly-week-bounds.js';
+import {
+  getMonthlyExecutionFilingCount,
+  getMonthlyAttitudeFilingCount
+} from '../utils/performance-filing-counts.js';
 
 const MONTHLY_RATING_PENDING = '待定';
+
+/** period 形如 YYYY-MM（统计月闭合日，用于与周报一致的「备案」计数） */
+function lastYmdOfRatingPeriodYm(periodYm) {
+  const parts = String(periodYm || '').split('-');
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  if (!y || !m || m < 1 || m > 12) return `${String(periodYm || '').slice(0, 7)}-01`;
+  const last = new Date(y, m, 0).getDate();
+  return `${y}-${String(m).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
+}
 
 /** 单店汇总：仅用规范名+飞书别名，避免 `%洪潮%` 把多店企微加总进一家 */
 function aggregateIlikePatternsForStoreName(storeLabel) {
@@ -120,6 +134,9 @@ async function getMonthlyPerformanceScore(username, period) {
      FROM agent_scores
      WHERE LOWER(TRIM(username)) = LOWER(TRIM($1))
        AND score_model = 'anomaly_rollups_v2'
+       AND (store IS NULL OR store !~* '(测试门店|SAFE_TEST|_SAFE_TEST|沙箱|sandbox)')
+       AND COALESCE(username,'') NOT LIKE '__periodic%'
+       AND LOWER(TRIM(COALESCE(username,''))) <> 'nnyxcs35'
        AND (
          (POSITION('__' IN period) = 0
            AND substring(period from 6 for 10)::date >= $2::date
@@ -588,6 +605,16 @@ export async function runMonthlyComprehensiveRating(period) {
         const attitudeData = { incomplete_tasks: attitudeResult.value };
         const abilityData = abilityResult?.detail || {};
 
+        const periodLastYmd = lastYmdOfRatingPeriodYm(period);
+        let filingExecOps = 0;
+        let filingAttMt = 0;
+        try {
+          filingExecOps = await getMonthlyExecutionFilingCount(ratingU, store, periodLastYmd);
+          filingAttMt = await getMonthlyAttitudeFilingCount(ratingU, periodLastYmd);
+        } catch (_e) {
+          /* ignore */
+        }
+
         const summary = `月度综合评级（${period}）：执行力 ${executionResult?.rating || '—'}，态度 ${attitudeResult.rating}，能力 ${abilityResult?.rating || '—'}，门店 ${fmtStoreLevelLabel(storeRatingResult.rating)}。`;
 
         await query(
@@ -621,7 +648,9 @@ export async function runMonthlyComprehensiveRating(period) {
           store_rating: storeRatingResult.rating,
           execution_detail: executionData,
           attitude_detail: attitudeData,
-          ability_detail: abilityData
+          ability_detail: abilityData,
+          filing_exec_ops: filingExecOps,
+          filing_attitude_mt: filingAttMt
         });
 
         logger.info({ username, store, role, period, breakdown }, 'monthly comprehensive rating: evaluated');
@@ -973,6 +1002,10 @@ function buildMonthlyRatingCard(r, period) {
     r.execution_detail?.value ??
     '—';
   const attitudeCount = r.attitude_detail?.incomplete_tasks ?? '—';
+  const filingEx = Number(r.filing_exec_ops);
+  const filingAt = Number(r.filing_attitude_mt);
+  const filingExecLine = Number.isFinite(filingEx) ? filingEx : 0;
+  const filingAttLine = Number.isFinite(filingAt) ? filingAt : 0;
 
   const execLine = r.role === 'store_production_manager'
     ? `• 执行力：**${r.execution_rating}级**（本月不合格 **${execCount}** 次 | ≤2次A / ≤4次B / ≤6次C / >6次D）`
@@ -983,6 +1016,10 @@ function buildMonthlyRatingCard(r, period) {
 **统计月**：${period}
 
 **绩效得分**：**${r.performance_score}** 分
+
+**本月累计备案**（与周报同源，统计至 ${period} 月末）
+• 工作执行力：**${filingExecLine}** 次
+• 工作态度：**${filingAttLine}** 次
 
 **核心评级**
 ${execLine}
@@ -1012,11 +1049,14 @@ function buildMonthlyRatingText(r, period) {
     r.execution_detail?.missing_days ??
     '—';
   const attitudeCount = r.attitude_detail?.incomplete_tasks ?? '—';
+  const fe = Number.isFinite(Number(r.filing_exec_ops)) ? Number(r.filing_exec_ops) : 0;
+  const fa = Number.isFinite(Number(r.filing_attitude_mt)) ? Number(r.filing_attitude_mt) : 0;
   return `${period} 月度综合评级
 
 ${r.store} · ${roleLabel} ${r.name || r.username}
 
 绩效得分：${r.performance_score}分
+本月累计备案：工作执行力${fe}次，工作态度${fa}次
 执行力：${r.execution_rating}级（本月不合格${execCount}次）
 工作态度：${r.attitude_rating}级（本人本月工作态度备案${attitudeCount}次）
 工作能力：${r.ability_rating}级
@@ -1033,7 +1073,9 @@ function buildMonthlySummaryCard(results, period) {
       r.execution_detail?.missing_days ??
       '—';
     const attCount = r.attitude_detail?.incomplete_tasks ?? '—';
-    return `• **${r.store}** · ${roleLabel} ${r.name || r.username}：${r.performance_score}分 | 执行${r.execution_rating}(${execCount}次) 态度${r.attitude_rating}(${attCount}次) 能力${r.ability_rating} 门店${r.store_rating}`;
+    const fe = Number.isFinite(Number(r.filing_exec_ops)) ? Number(r.filing_exec_ops) : 0;
+    const fa = Number.isFinite(Number(r.filing_attitude_mt)) ? Number(r.filing_attitude_mt) : 0;
+    return `• **${r.store}** · ${roleLabel} ${r.name || r.username}：${r.performance_score}分 | 执行${r.execution_rating}(${execCount}次) 态度${r.attitude_rating}(${attCount}次) 能力${r.ability_rating} 门店${r.store_rating} | 备案执${fe}/态${fa}`;
   });
 
   const content = `**${period} 月度综合评级汇总**

@@ -58,6 +58,12 @@ function parseMeetingScore(fields) {
 function normalizeMeetingDateCell(raw) {
   const s = ext(raw).trim();
   if (!s) return '';
+  // 纯数字时间戳（10位秒级 / 13位毫秒级）→ 按上海时区解析为 YYYY-MM-DD
+  if (/^\d{10,13}$/.test(s)) {
+    const n = Number(s);
+    const ms = s.length === 13 ? n : n * 1000;
+    return new Date(ms).toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
+  }
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   const cn = s.match(/(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/);
   if (cn) {
@@ -66,6 +72,12 @@ function normalizeMeetingDateCell(raw) {
   const sl = s.match(/(\d{4})\s*[\/\.\-年]\s*(\d{1,2})\s*[\/\.\-月]\s*(\d{1,2})/);
   if (sl) {
     return `${sl[1]}-${String(sl[2]).padStart(2, '0')}-${String(sl[3]).padStart(2, '0')}`;
+  }
+  // M/D 或 MM/DD 短格式（飞书部分文本列）→ 补全为当年 YYYY-MM-DD
+  const md = s.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (md) {
+    const year = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 4);
+    return `${year}-${String(md[1]).padStart(2, '0')}-${String(md[2]).padStart(2, '0')}`;
   }
   return s;
 }

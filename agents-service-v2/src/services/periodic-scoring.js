@@ -27,8 +27,12 @@ import {
 import {
   sortFeishuScoringRows,
   resolveMajixianProductionManagersForScoring,
-  majixianPmNewModelLookupUsername
+  isMajixianPmObserverUsername
 } from '../utils/scoring-assignee.js';
+import {
+  getMonthlyExecutionFilingCount,
+  getMonthlyAttitudeFilingCount
+} from '../utils/performance-filing-counts.js';
 import { sumRechargePenaltyPointsForClosedDaysInRange } from './anomaly-engine.js';
 
 const CAT_ZH = {
@@ -91,10 +95,10 @@ async function recordDeductionNotifications({
     assigneeName = fu.rows?.[0]?.name || username;
   } catch (_e) { /* ignore */ }
   
-  const after = Math.max(0, Math.min(100, Number(scoreAfterRollup)));
+  const after = Number(scoreAfterRollup);
   const ptSum = (details || []).reduce((s, d) => s + Math.max(0, Number(d.points || 0)), 0);
-  /** 在「本批 details 已并入 total」前提下，扣分前总分 = 当前总分 + 本批扣分之和（通常为 100） */
-  let running = Math.min(100, after + ptSum);
+  /** 本批 details 已并入 total：倒推扣分前总分（基准 100 起扣，周度汇总可为负分） */
+  let running = after + ptSum;
   
   // 查询 admin+hq_manager 的飞书 open_id（管理层抄送）
   let mgmtOpenIds = [];
@@ -110,7 +114,7 @@ async function recordDeductionNotifications({
     const pts = Number(d.points || 0);
     if (!pts) continue;
     const currentScore = running;
-    const remainingScore = Math.max(0, currentScore - pts);
+    const remainingScore = currentScore - pts;
     running = remainingScore;
     const reason =
       (CAT_ZH[d.category] || d.category || '异常规则') +
@@ -451,8 +455,22 @@ function computeRoleRollupFromRows(rows, role, opts = {}) {
 
   const total = baseTotal + extra;
   const details = [...baseDetails, ...extraDetails];
-  const totalScore = Math.max(0, 100 - total);
+  const totalScore = 100 - total;
   return { totalScore, details, totalDeducted: total };
+}
+
+/** 测试门店 / 占位账号：不参与周度 anomaly 汇总展示与写入（无法 100% 识别「测试人」，但可屏蔽典型测试店与占位行） */
+function isExcludedTestOrPlaceholderRollupStore(store) {
+  const s = String(store || '');
+  return /测试门店|SAFE_TEST|_SAFE_TEST|沙箱|sandbox/i.test(s);
+}
+
+function shouldExcludeRollupRowFromReports(row) {
+  const u = String(row?.username || '');
+  if (u.startsWith('__periodic')) return true;
+  if (isMajixianPmObserverUsername(u)) return true;
+  if (isExcludedTestOrPlaceholderRollupStore(row?.store)) return true;
+  return false;
 }
 
 /**
@@ -470,6 +488,10 @@ export async function refreshWeeklyRollupAfterRechargeTrigger(store, evaluationY
 /** 按门店 × 周期写入 agent_scores（period=week_周一 或 跨月拆分为 week_周一__YYYYMM，score_model=anomaly_rollups_v2） */
 export async function scoreStoreForPeriod(store, periodMonday, options = {}) {
   const skipFeishuDeductionNotify = options.skipFeishuDeductionNotify === true;
+  if (isExcludedTestOrPlaceholderRollupStore(store)) {
+    logger.info({ store, periodMonday }, 'periodic-scoring: skip test/sandbox store rollup');
+    return;
+  }
   const endStr = addDaysYmdShanghai(periodMonday, 6);
   const brand = (await getBrandForStore(store).catch(() => null)) || '未知';
   const segments = splitWeekByCalendarMonths(periodMonday, endStr);
@@ -622,6 +644,7 @@ export async function sendWeeklyPerformanceFeishu(periodMonday, options = {}) {
       }
       list = await loadAnomalyRollupRows(periodMonday);
     }
+    list = (list || []).filter((row) => !shouldExcludeRollupRowFromReports(row));
     const hq = await query(
       `SELECT open_id, username FROM feishu_users
        WHERE registered = true AND open_id IS NOT NULL AND role IN ('admin','hq_manager')`
@@ -665,26 +688,15 @@ export async function sendWeeklyPerformanceFeishu(periodMonday, options = {}) {
               .join('\n')
           : '本周无异常扣分项。';
 
-      // 从 HRMS new_model 获取维度评级（门店级别/工作能力/工作态度/执行力）
-      let dimensionRatings = null;
+      const shanghaiYmd = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+      let executionFiling = 0;
+      let attitudeFiling = 0;
       try {
-        const dimUser = majixianPmNewModelLookupUsername(row.username, row.store);
-        const ratingR = await query(
-          `SELECT breakdown FROM agent_scores
-           WHERE username = $1 AND store = $2 AND score_model = 'new_model'
-           ORDER BY updated_at DESC LIMIT 1`,
-          [dimUser, row.store]
-        );
-        if (ratingR.rows?.[0]?.breakdown) {
-          const bd = ratingR.rows[0].breakdown;
-          dimensionRatings = {
-            store_rating: bd.store_rating,
-            ability_rating: bd.ability_rating,
-            attitude_rating: bd.attitude_rating,
-            execution_rating: bd.execution_rating
-          };
-        }
-      } catch (e) { /* ignore */ }
+        executionFiling = await getMonthlyExecutionFilingCount(row.username, row.store, shanghaiYmd);
+        attitudeFiling = await getMonthlyAttitudeFilingCount(row.username, shanghaiYmd);
+      } catch (_e) {
+        /* ignore */
+      }
 
       const card = buildPerformanceSummaryCard({
         title: '📊 绩效考核周报',
@@ -693,7 +705,8 @@ export async function sendWeeklyPerformanceFeishu(periodMonday, options = {}) {
         totalScore: row.total_score,
         role: roleLabelZh(row.role),
         detailMd,
-        dimensionRatings
+        dimensionRatings: null,
+        monthlyFilingSummary: { executionCount: executionFiling, attitudeCount: attitudeFiling }
       });
       if (oid) {
         let r = await sendCard(oid, card);

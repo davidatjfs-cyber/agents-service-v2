@@ -709,14 +709,24 @@ export function buildPerformanceSummaryCard({
   role,
   detailMd,
   managementDigest = false,
-  dimensionRatings = null
+  dimensionRatings = null,
+  /** 周度 anomaly 卡：与 HRMS 周报一致，展示自然月至今备案次数 */
+  monthlyFilingSummary = null
 }) {
   const scoreBlock = managementDigest
-    ? `**口径说明**：下列为各岗位 **上周异常触发汇总后的周度扣分得分**（与人力资源「执行力/态度/能力」月度模型分无关，避免混看）。`
-    : `**周度异常汇总得分**：**${totalScore}** 分（满分 100，按异常规则扣减后）`;
+    ? `**说明**：下列为各岗位 **上周异常触发汇总得分**（基准 100，扣减后可为负；与人力资源「执行力/态度/能力」月度模型分无关）。`
+    : `**周度异常汇总得分**：**${totalScore}** 分（基准 100，按异常规则扣减，**可为负**；与月度综合模型分独立）`;
   
   let ratingBlock = '';
-  if (dimensionRatings && typeof dimensionRatings === 'object') {
+  if (
+    monthlyFilingSummary &&
+    typeof monthlyFilingSummary === 'object' &&
+    (monthlyFilingSummary.executionCount != null || monthlyFilingSummary.attitudeCount != null)
+  ) {
+    const ex = Number(monthlyFilingSummary.executionCount) || 0;
+    const at = Number(monthlyFilingSummary.attitudeCount) || 0;
+    ratingBlock = `\n**本月累计备案（自然月至今）**\n• 工作执行力：**${ex}** 次\n• 工作态度：**${at}** 次`;
+  } else if (dimensionRatings && typeof dimensionRatings === 'object') {
     const lines = [];
     if (dimensionRatings.store_rating) lines.push(`• 门店级别：${dimensionRatings.store_rating}级`);
     if (dimensionRatings.ability_rating) lines.push(`• 工作能力：${dimensionRatings.ability_rating}级`);
@@ -737,7 +747,8 @@ export function buildPerformanceSummaryCard({
         elements: [
           {
             tag: 'plain_text',
-            content: '数据来自上周各门店异常触发记录汇总；核心评级来自人力资源综合模型。'
+            content:
+              '数据来自上周各门店异常触发记录汇总；「本月累计备案」来自执行力日评与任务态度备案；核心评级（若有）来自人力资源综合模型。'
           }
         ]
       }

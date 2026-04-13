@@ -54,6 +54,18 @@ function chaseKind(source) {
   return String(source || '') === 'bi_anomaly' ? 'bi' : 'attitude';
 }
 
+/** 备案/催办卡片「来源」展示：勿把 data_auditor 误标为「标准任务卡」 */
+function taskSourceLabelForAttitudeCard(source) {
+  const s = String(source || '').trim();
+  if (s === 'bi_anomaly') return 'BI异常任务卡';
+  if (s === 'data_auditor') return '数据审计（自动派单）';
+  if (s === 'scheduled_inspection') return '定时巡检';
+  if (s === 'random_inspection') return '随机抽检';
+  if (s === 'auto_collab') return '营销协作';
+  if (s === 'scheduled_checklist') return '定时检查表';
+  return s || '其它任务';
+}
+
 function resolutionCodeForChaseAttitude(source) {
   const s = String(source || '');
   if (s === 'scheduled_inspection' || s === 'random_inspection') return 'hr_attitude_inspection_chase';
@@ -87,7 +99,7 @@ async function resolveAssigneeDisplayName(username) {
  */
 function buildAttitudeFilingCard(task, sourceType, monthlyCount, assigneeDisp, monthlyStoreCount) {
   const isBi = sourceType === 'bi';
-  const sourceLabel = isBi ? 'BI异常任务卡' : '标准任务卡';
+  const sourceLabel = isBi ? 'BI异常任务卡' : taskSourceLabelForAttitudeCard(task.source);
   const ym = String(getShanghaiYmd()).slice(0, 7);
   const n = Number(monthlyCount) || 0;
   const ms = monthlyStoreCount != null ? Number(monthlyStoreCount) : null;
@@ -101,10 +113,8 @@ function buildAttitudeFilingCard(task, sourceType, monthlyCount, assigneeDisp, m
         : '**统计主体**：任务未写入 assignee_username，累计次数按 0 计；请核对 master_tasks';
 
   let scopeLines = `**本人本月工作态度备案累计**：**${n}** 次（${ym}，自然月）\n`;
-  scopeLines +=
-    '> 口径：`master_tasks.assignee_username` = 上述账号；来源∈定时巡检/抽检/BI/协作/数据审计；已 `hr_performance_recorded`；按 **不同 task_id** 计数（同一任务不重复）；派发日（上海）落在当月 1 日—今日；**统计该账号名下全部门店**（与 HRMS 月度态度评级同一 SQL）。**不含**他人任务、执行力备案、非上述来源。';
   if (ms != null && ms !== n) {
-    scopeLines += `\n**本人本任务门店（${String(task.store || '').slice(0, 40)}）本月累计**：**${ms}** 次（同上规则，仅加门店筛选）。`;
+    scopeLines += `**本人本任务门店本月累计**：**${ms}** 次（${String(task.store || '').slice(0, 40)}）。\n`;
   }
 
   let content = `${whoLine}
@@ -142,7 +152,7 @@ ${scopeLines}
 /** 总部群通报：第三人称摘要，与私聊责任人卡片区分标题与口径 */
 function buildHqGroupAttitudeFilingCard(task, sourceType, monthlyCount, assigneeDisp, monthlyStoreCount) {
   const isBi = sourceType === 'bi';
-  const sourceLabel = isBi ? 'BI异常任务卡' : '标准任务卡';
+  const sourceLabel = isBi ? 'BI异常任务卡' : taskSourceLabelForAttitudeCard(task.source);
   const sourceCode = String(task.source || '—').trim() || '—';
   const ym = String(getShanghaiYmd()).slice(0, 7);
   const n = Number(monthlyCount) || 0;
@@ -156,7 +166,7 @@ function buildHqGroupAttitudeFilingCard(task, sourceType, monthlyCount, assignee
         ? `**统计主体（唯一）**：账号 **${un}**`
         : '**统计主体**：assignee_username 未填';
 
-  let countLines = `**其本人本月工作态度备案累计**：**${n}** 次（${ym}；全门店不同任务去重，与月度评级同一 SQL；不含他人）`;
+  let countLines = `**其本人本月工作态度备案累计**：**${n}** 次（${ym}，自然月；全门店去重）`;
   if (ms != null && ms !== n) {
     countLines += `\n**其本人在本任务门店本月累计**：**${ms}** 次（${String(task.store || '').slice(0, 40)}）`;
   }

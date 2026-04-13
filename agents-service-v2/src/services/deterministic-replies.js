@@ -204,9 +204,37 @@ export function visitEntryStoreMatches(rowStore, userStore) {
 
 function bitableDate(v, fb) {
   if (v == null || v === '') return toD(fb);
+  // 飞书日期字段对象：{ date: "YYYY-MM-DD" } / { timestamp: ms } / { value: ms }
+  if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
+    if (v.date != null) return toD(String(v.date)) || toD(fb);
+    if (v.timestamp != null) {
+      const ms = Number(v.timestamp);
+      return Number.isFinite(ms) ? toD(new Date(ms > 1e12 ? ms : ms * 1000)) || toD(fb) : toD(fb);
+    }
+    if (v.value != null && typeof v.value !== 'object') {
+      const ms = Number(v.value);
+      return Number.isFinite(ms) ? toD(new Date(ms > 1e12 ? ms : ms * 1000)) || toD(fb) : toD(String(v.value)) || toD(fb);
+    }
+    return toD(fb);
+  }
   if (typeof v === 'number' && Number.isFinite(v)) return toD(new Date(v > 1e12 ? v : v * 1000));
   const s = String(v).trim(); if (!s) return toD(fb);
   if (/^\d{10,13}$/.test(s)) { const n = Number(s); return toD(new Date(s.length === 13 ? n : n * 1000)); }
+  // 已被 JSON.stringify 的飞书日期对象（历史入库数据）：'{"date":"YYYY-MM-DD"}' / '{"timestamp":ms}'
+  if (s.startsWith('{')) {
+    try {
+      const obj = JSON.parse(s);
+      if (obj.date) return toD(String(obj.date)) || toD(fb);
+      if (obj.timestamp != null) {
+        const ms = Number(obj.timestamp);
+        return Number.isFinite(ms) ? toD(new Date(ms > 1e12 ? ms : ms * 1000)) || toD(fb) : toD(fb);
+      }
+      if (obj.value != null && typeof obj.value !== 'object') {
+        const ms = Number(obj.value);
+        return Number.isFinite(ms) ? toD(new Date(ms > 1e12 ? ms : ms * 1000)) || toD(fb) : toD(String(obj.value)) || toD(fb);
+      }
+    } catch (_) { /* fall through */ }
+  }
   return toD(s) || toD(fb);
 }
 

@@ -770,7 +770,7 @@ app.post('/api/scoring/calculate', authRequired, async (req, res) => {
   try {
     const { anomalies, role, brand, achievementRate } = req.body;
     const ded = calcDeductions(anomalies || [], role);
-    const score = Math.max(0, 100 - ded.total);
+    const score = 100 - ded.total;
     const rating = storeRating(achievementRate || 0);
     const bonus = calcBonus(score, brand, rating);
     res.json({ score, deductions: ded, storeRating: rating, bonus });

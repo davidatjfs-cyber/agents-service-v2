@@ -238,7 +238,7 @@ async function fetchLatestAnomalyRollupScore(username, store = null, weekPeriod 
       params
     );
     if (scoreRes.rows?.[0]?.total_score != null) {
-      return Math.max(0, Number(scoreRes.rows[0].total_score));
+      return Number(scoreRes.rows[0].total_score);
     }
   } catch (_e) {
     /* ignore */
@@ -307,7 +307,7 @@ export async function runBiAnomalyNotifyPipeline({
       const { weekStart: rechargeWeekStart } = shanghaiWeekMonSunContaining(String(todayYmd).slice(0, 10));
       const rechargeWeekPeriod = `week_${rechargeWeekStart}`;
       rechargeCur = await fetchLatestAnomalyRollupScore(u.username, store, rechargeWeekPeriod);
-      rechargeRem = Math.max(0, rechargeCur - rechargePts);
+      rechargeRem = rechargeCur - rechargePts;
       const assigneeName = u.display_name || u.username || '—';
       card = buildBiDeductionCard({
         store,
