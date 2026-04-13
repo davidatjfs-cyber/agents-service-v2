@@ -10,6 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
     <title>年年有喜管理系统</title>
     <style>
         /* Premium International UI Design */
@@ -8528,78 +8529,238 @@
                 <div id="files-pagination" style="display:flex;justify-content:center;gap:8px;margin-top:16px;"></div>
             </div>
 
-            <div id="agents-page" class="hidden">
-                <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:20px;">
-                    <div>
-                        <h2 style="margin:0;font-weight:600;letter-spacing:.02em;">数据中心</h2>
-                        <div id="dc-subtitle" style="margin-top:8px;color:#64748b;font-size:12px;line-height:1.5;max-width:520px;">Agent 活动与管理告警 · 绩效周汇总 · 飞书多维表同步 · 定时任务与健康（详细配置请使用 Agent 控制台）</div>
-                    </div>
-                    <button class="btn btn-secondary" onclick="loadDataCenterDashboard()" style="font-size:12px;padding:8px 16px;border-radius:8px;">刷新</button>
-                </div>
-                <div id="dc-health-bar" style="margin-bottom:16px;padding:12px 16px;border-radius:12px;background:rgba(15,23,42,0.55);border:1px solid rgba(148,163,184,0.12);display:flex;flex-wrap:wrap;gap:14px 20px;align-items:center;font-size:12px;color:#94a3b8;">
-                    <span style="color:#64748b;">加载中...</span>
-                </div>
-                <div id="dc-health-extra" style="display:none;margin-bottom:16px;padding:10px 14px;border-radius:10px;background:rgba(15,23,42,0.35);border:1px solid rgba(148,163,184,0.08);font-size:11px;color:#94a3b8;line-height:1.5;"></div>
-                <div style="display:flex;flex-direction:column;gap:20px;">
-                    <section style="border-radius:14px;background:rgba(15,23,42,0.45);border:1px solid rgba(148,163,184,0.1);overflow:hidden;">
-                        <div style="padding:14px 18px;border-bottom:1px solid rgba(148,163,184,0.08);display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
-                            <div>
-                                <div style="font-size:13px;font-weight:600;color:#e2e8f0;letter-spacing:.04em;">Agent 活动内容</div>
-                                <div style="font-size:10px;color:#64748b;margin-top:4px;line-height:1.55;max-width:560px;"><strong>异常触发</strong>：引擎判定命中后写入库的<strong>一条记录</strong>（含业务触发日、严重度、状态）；不是「待办队列」，也<strong>不等于</strong>飞书任务是否结案。<strong>充值异常</strong>：每条记录的<strong>触发日</strong>=被判定的那<strong>一个营业日</strong>的日报（引擎用上海「昨日」避免未关账误报）。例如触发日为 <strong>4/10</strong> 表示判定的是 <strong>4/10</strong> 当天日报充值为 0；<strong>4/9 有充值与这一条无关</strong>。绩效分：充值落库后会<strong>当日重算</strong>当周<strong>周度 BI 异常汇总表</strong>（库表 <code style="font-size:9px;">anomaly_rollups_v2</code>），周一仍会全量重算（幂等）。飞书 <strong>BI 任务结案</strong>后，系统会把对应触发记录标为 <strong>已结案</strong>（状态码 <code style="font-size:9px;">closed</code>；新逻辑；历史未带日期的任务结案不会回溯）。<strong>食品安全</strong>：<strong>实时</strong>命中；总部营运「记录」后按岗<strong>各扣 20 分</strong>，不并入周度 BI 汇总扣分模型。下方表格：<strong>异常触发记录</strong>（<code style="font-size:9px;">anomaly_triggers</code>）、<strong>节奏引擎日志</strong>（<code style="font-size:9px;">rhythm_logs</code>）、<strong>调度任务主表</strong>（<code style="font-size:9px;">master_tasks</code>）、<strong>Agent 任务运行日志</strong>（<code style="font-size:9px;">agent_task_logs</code>）。</div>
-                            </div>
-                            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-                                <div id="dc-activity-date" style="font-size:11px;color:#64748b;text-align:right;line-height:1.4;">—</div>
-                                <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end;">
-                                    <label for="dc-activity-date-input" style="font-size:10px;color:#64748b;">汇总/明细日期</label>
-                                    <input id="dc-activity-date-input" type="date" style="padding:4px 8px;border-radius:8px;border:1px solid rgba(148,163,184,0.25);background:rgba(2,6,23,0.55);color:#e2e8f0;font-size:11px;" />
-                                    <button type="button" class="btn btn-secondary" style="font-size:11px;padding:5px 12px;" onclick="loadDataCenterDashboard()">加载</button>
+            <div id="agents-page" class="hidden dc-v2">
+                <style>
+                    #agents-page.dc-v2 { --dc-ink: rgba(248,250,252,0.96); --dc-muted: rgba(148,163,184,0.88); --dc-faint: rgba(100,116,139,0.95); --dc-line: rgba(148,163,184,0.14); --dc-glow: rgba(245,158,11,0.14); --dc-num: 'Outfit', ui-rounded, system-ui, sans-serif; }
+                    #agents-page.dc-v2 .dc-wrap { max-width: 820px; margin: 0 auto 28px; }
+                    #agents-page.dc-v2 .dc-hero {
+                        position: relative; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px;
+                        padding: 22px 0 20px; margin-bottom: 4px;
+                        border-bottom: 1px solid var(--dc-line);
+                    }
+                    #agents-page.dc-v2 .dc-hero::before {
+                        content: ''; position: absolute; inset: -8px -12px auto; height: 120px; pointer-events: none; z-index: 0;
+                        background: radial-gradient(ellipse 80% 70% at 20% 0%, rgba(245,158,11,0.12), transparent 55%),
+                            radial-gradient(ellipse 60% 50% at 90% 20%, rgba(56,189,248,0.08), transparent 50%);
+                    }
+                    #agents-page.dc-v2 .dc-hero > * { position: relative; z-index: 1; }
+                    #agents-page.dc-v2 .dc-eyebrow { font-size: 10px; letter-spacing: 0.22em; font-weight: 600; color: rgba(245,158,11,0.75); margin: 0 0 6px; text-transform: uppercase; }
+                    #agents-page.dc-v2 .dc-hero h2 { margin: 0; font-size: clamp(1.55rem, 4.2vw, 2rem); font-weight: 700; letter-spacing: 0.06em; color: var(--dc-ink); line-height: 1.15; }
+                    #agents-page.dc-v2 #dc-subtitle { margin-top: 10px; color: var(--dc-muted); font-size: 13px; line-height: 1.55; max-width: 36rem; }
+                    #agents-page.dc-v2 .dc-btn-refresh {
+                        border: 1px solid rgba(245,158,11,0.35); background: linear-gradient(145deg, rgba(245,158,11,0.18), rgba(245,158,11,0.06));
+                        color: #fde68a; font-size: 13px; font-weight: 600; padding: 10px 20px; border-radius: 999px; cursor: pointer;
+                        box-shadow: 0 0 0 1px rgba(0,0,0,0.2) inset, 0 8px 24px -10px rgba(245,158,11,0.35); transition: transform 0.2s ease, box-shadow 0.2s ease;
+                    }
+                    #agents-page.dc-v2 .dc-btn-refresh:active { transform: scale(0.98); }
+                    #agents-page.dc-v2 #dc-health-bar.dc-health-rail {
+                        margin-bottom: 14px; padding: 14px 16px; border-radius: 16px;
+                        background: linear-gradient(165deg, rgba(15,23,42,0.82), rgba(2,6,23,0.72));
+                        border: 1px solid var(--dc-line); box-shadow: 0 18px 40px -24px rgba(0,0,0,0.65);
+                        display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; font-size: 12px; color: var(--dc-muted);
+                    }
+                    #agents-page.dc-v2 .dc-health-rail .dc-h-inner { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; width: 100%; }
+                    #agents-page.dc-v2 .dc-chip {
+                        display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px 6px 10px; border-radius: 999px;
+                        background: rgba(2,6,23,0.45); border: 1px solid rgba(148,163,184,0.12); color: #e2e8f0; font-size: 12px; font-weight: 500;
+                    }
+                    #agents-page.dc-v2 .dc-chip .dc-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+                    #agents-page.dc-v2 .dc-chip-meta { margin-left: auto; color: var(--dc-faint); font-size: 11px; font-weight: 500; }
+                    #agents-page.dc-v2 #dc-health-extra { display: none; margin-bottom: 16px; padding: 12px 16px; border-radius: 14px; background: rgba(15,23,42,0.4); border: 1px solid rgba(148,163,184,0.1); font-size: 12px; color: var(--dc-muted); line-height: 1.55; }
+                    #agents-page.dc-v2 #dc-health-extra:empty { display: none !important; }
+                    #agents-page.dc-v2 .dc-stack { display: flex; flex-direction: column; gap: 18px; }
+                    #agents-page.dc-v2 .dc-panel {
+                        border-radius: 18px; overflow: hidden;
+                        background: linear-gradient(180deg, rgba(24,28,40,0.55), rgba(15,23,42,0.42));
+                        border: 1px solid var(--dc-line); box-shadow: 0 20px 50px -28px rgba(0,0,0,0.55);
+                    }
+                    #agents-page.dc-v2 .dc-panel-head {
+                        padding: 16px 18px 14px; border-bottom: 1px solid rgba(148,163,184,0.1);
+                        display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 12px;
+                    }
+                    #agents-page.dc-v2 .dc-panel-head h3 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: 0.08em; color: var(--dc-ink); }
+                    #agents-page.dc-v2 .dc-panel-sub { margin: 6px 0 0; font-size: 12px; color: var(--dc-faint); line-height: 1.45; max-width: 28rem; }
+                    #agents-page.dc-v2 .dc-panel-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; justify-content: flex-end; }
+                    #agents-page.dc-v2 #dc-activity-date.dc-date-chip { font-size: 11px; color: var(--dc-muted); text-align: right; line-height: 1.45; max-width: 220px; }
+                    #agents-page.dc-v2 .dc-input-date {
+                        padding: 8px 12px; border-radius: 12px; border: 1px solid rgba(148,163,184,0.22);
+                        background: rgba(2,6,23,0.65); color: #f1f5f9; font-size: 13px; min-height: 40px;
+                    }
+                    #agents-page.dc-v2 .dc-btn-go {
+                        padding: 8px 16px; border-radius: 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+                        border: 1px solid rgba(148,163,184,0.25); background: rgba(255,255,255,0.06); color: #e2e8f0;
+                    }
+                    #agents-page.dc-v2 details.dc-doc { margin: 0 18px 12px; border-radius: 12px; border: 1px dashed rgba(148,163,184,0.18); background: rgba(2,6,23,0.25); }
+                    #agents-page.dc-v2 details.dc-doc > summary {
+                        cursor: pointer; padding: 10px 14px; font-size: 12px; font-weight: 600; color: #94a3b8; list-style: none;
+                    }
+                    #agents-page.dc-v2 details.dc-doc > summary::-webkit-details-marker { display: none; }
+                    #agents-page.dc-v2 details.dc-doc[open] > summary { color: #cbd5e1; border-bottom: 1px solid rgba(148,163,184,0.08); }
+                    #agents-page.dc-v2 .dc-doc-body { padding: 12px 14px 14px; font-size: 11px; color: #94a3b8; line-height: 1.65; }
+                    #agents-page.dc-v2 .dc-kpi-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+                    @media (min-width: 560px) { #agents-page.dc-v2 .dc-kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+                    #agents-page.dc-v2 .dc-kpi {
+                        position: relative; padding: 16px 14px 14px; border-radius: 16px; overflow: hidden;
+                        background: rgba(2,6,23,0.5); border: 1px solid rgba(148,163,184,0.14);
+                        box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 32px -18px rgba(0,0,0,0.5);
+                    }
+                    #agents-page.dc-v2 .dc-kpi::before {
+                        content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; border-radius: 3px 0 0 3px; opacity: 0.9;
+                    }
+                    #agents-page.dc-v2 .dc-kpi--a::before { background: linear-gradient(180deg, #38bdf8, #0ea5e9); }
+                    #agents-page.dc-v2 .dc-kpi--b::before { background: linear-gradient(180deg, #a78bfa, #7c3aed); }
+                    #agents-page.dc-v2 .dc-kpi--c::before { background: linear-gradient(180deg, #fb923c, #ea580c); }
+                    #agents-page.dc-v2 .dc-kpi--d::before { background: linear-gradient(180deg, #f472b6, #db2777); }
+                    #agents-page.dc-v2 .dc-kpi-label { font-size: 11px; font-weight: 600; color: var(--dc-faint); letter-spacing: 0.04em; margin-bottom: 8px; }
+                    #agents-page.dc-v2 .dc-kpi-val {
+                        font-family: var(--dc-num); font-size: clamp(1.75rem, 6vw, 2.35rem); font-weight: 700; line-height: 1; letter-spacing: -0.02em; color: #f8fafc;
+                    }
+                    #agents-page.dc-v2 #dc-activity-detail.dc-detail-scroll {
+                        border-top: 1px solid rgba(148,163,184,0.1); padding: 16px 14px 20px; font-size: 12px; color: #94a3b8; max-height: 520px; overflow-y: auto;
+                        background: linear-gradient(180deg, rgba(2,6,23,0.38), rgba(2,6,23,0.18));
+                        border-radius: 0 0 14px 14px;
+                    }
+                    #agents-page.dc-v2 .dc-act-sec { margin-bottom: 18px; }
+                    #agents-page.dc-v2 .dc-act-sec-title {
+                        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+                        font-size: 12px; font-weight: 800; color: #e2e8f0; letter-spacing: 0.08em; margin-bottom: 10px;
+                    }
+                    #agents-page.dc-v2 .dc-act-count { font-size: 10px; font-weight: 700; color: #64748b; padding: 3px 10px; border-radius: 999px; background: rgba(148,163,184,0.14); letter-spacing: 0.04em; }
+                    #agents-page.dc-v2 .dc-table-scroll {
+                        overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 14px;
+                        border: 1px solid rgba(148,163,184,0.12); background: rgba(2,6,23,0.42);
+                        box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+                    }
+                    #agents-page.dc-v2 table.dc-data-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 560px; }
+                    #agents-page.dc-v2 table.dc-data-table thead tr { background: linear-gradient(180deg, rgba(30,41,59,0.95), rgba(15,23,42,0.88)); }
+                    #agents-page.dc-v2 table.dc-data-table th {
+                        text-align: left; padding: 11px 12px; color: #94a3b8; font-weight: 700; font-size: 11px;
+                        white-space: nowrap; border-bottom: 1px solid rgba(148,163,184,0.14);
+                    }
+                    #agents-page.dc-v2 table.dc-data-table td {
+                        padding: 11px 12px; vertical-align: top; color: #e2e8f0; border-top: 1px solid rgba(148,163,184,0.07);
+                        word-break: normal; overflow-wrap: anywhere;
+                    }
+                    #agents-page.dc-v2 table.dc-data-table td.dc-td-nowrap {
+                        white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; word-break: keep-all;
+                    }
+                    #agents-page.dc-v2 table.dc-data-table td.dc-td-summary {
+                        white-space: pre-line; max-width: min(92vw, 480px); color: #cbd5e1; line-height: 1.55; font-size: 12px;
+                    }
+                    #agents-page.dc-v2 #dc-activity-body.dc-kpi-deck { padding: 10px 14px 18px; }
+                    #agents-page.dc-v2 .dc-toolbar { padding: 12px 18px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; border-bottom: 1px solid rgba(148,163,184,0.08); }
+                    #agents-page.dc-v2 .dc-toolbar input { flex: 1; min-width: 160px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(148,163,184,0.2); background: rgba(2,6,23,0.5); color: #e2e8f0; font-size: 13px; }
+                    #agents-page.dc-v2 #dc-perf-body.dc-perf-grid { padding: 14px 16px 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 12px; }
+                    #agents-page.dc-v2 .dc-perf-card {
+                        padding: 16px 14px; border-radius: 16px; background: rgba(2,6,23,0.45); border: 1px solid rgba(148,163,184,0.1);
+                        transition: border-color 0.2s ease, transform 0.2s ease;
+                    }
+                    #agents-page.dc-v2 .dc-perf-card:hover { border-color: rgba(245,158,11,0.22); transform: translateY(-1px); }
+                    #agents-page.dc-v2 .dc-perf-card .dc-perf-k { font-size: 11px; color: var(--dc-faint); margin-bottom: 8px; font-weight: 600; }
+                    #agents-page.dc-v2 .dc-perf-card .dc-perf-v { font-family: var(--dc-num); font-size: 1.65rem; font-weight: 700; line-height: 1.1; }
+                    #agents-page.dc-v2 .dc-perf-card .dc-perf-s { font-size: 10px; color: #64748b; margin-top: 6px; line-height: 1.35; }
+                    #agents-page.dc-v2 #dc-alerts-body { max-height: 280px; overflow-y: auto; }
+                    #agents-page.dc-v2 .dc-foot { margin: 22px 0 8px; font-size: 11px; color: #64748b; line-height: 1.55; }
+                    @keyframes dc-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+                    #agents-page.dc-v2 .dc-kpi { animation: dc-rise 0.42s cubic-bezier(.2,.8,.2,1) backwards; }
+                    #agents-page.dc-v2 .dc-kpi:nth-child(1) { animation-delay: 0.03s; }
+                    #agents-page.dc-v2 .dc-kpi:nth-child(2) { animation-delay: 0.07s; }
+                    #agents-page.dc-v2 .dc-kpi:nth-child(3) { animation-delay: 0.11s; }
+                    #agents-page.dc-v2 .dc-kpi:nth-child(4) { animation-delay: 0.15s; }
+                    @media (prefers-reduced-motion: reduce) {
+                        #agents-page.dc-v2 .dc-kpi { animation: none; }
+                    }
+                </style>
+                <div class="dc-wrap">
+                    <header class="dc-hero">
+                        <div>
+                            <p class="dc-eyebrow">Operations</p>
+                            <h2>数据中心</h2>
+                            <div id="dc-subtitle">活动、绩效、同步与健康状态总览。配置与审计请使用 Agent 控制台。</div>
+                        </div>
+                        <button type="button" class="dc-btn-refresh" onclick="loadDataCenterDashboard()">刷新</button>
+                    </header>
+                    <div id="dc-health-bar" class="dc-health-rail"><span class="dc-h-inner"><span style="color:#64748b;">加载中…</span></span></div>
+                    <div id="dc-health-extra"></div>
+                    <div class="dc-stack">
+                        <section class="dc-panel">
+                            <div class="dc-panel-head">
+                                <div>
+                                    <h3>Agent 活动</h3>
+                                    <p class="dc-panel-sub">按所选日期的上海日历日汇总，与 Agent 控制台「Agent 活动」口径一致。</p>
+                                </div>
+                                <div class="dc-panel-actions">
+                                    <div id="dc-activity-date" class="dc-date-chip">—</div>
+                                    <label for="dc-activity-date-input" style="font-size:11px;color:#64748b;">日期</label>
+                                    <input id="dc-activity-date-input" class="dc-input-date" type="date" />
+                                    <button type="button" class="dc-btn-go" onclick="loadDataCenterDashboard()">加载</button>
                                 </div>
                             </div>
-                        </div>
-                        <div id="dc-activity-body" style="padding:14px 18px;font-size:12px;color:#94a3b8;line-height:1.6;">加载中…</div>
-                        <div id="dc-activity-detail" style="border-top:1px solid rgba(148,163,184,0.08);padding:12px 14px 16px;font-size:11px;color:#94a3b8;max-height:420px;overflow-y:auto;"></div>
-                    </section>
-                    <section style="border-radius:14px;background:rgba(15,23,42,0.45);border:1px solid rgba(148,163,184,0.1);overflow:hidden;">
-                        <div style="padding:14px 18px;border-bottom:1px solid rgba(148,163,184,0.08);">
-                            <div style="font-size:13px;font-weight:600;color:#e2e8f0;letter-spacing:.04em;">个人绩效分由来</div>
-                            <div style="font-size:11px;color:#64748b;margin-top:4px;">展示已写入<strong>绩效分表</strong>（库表 <code style="font-size:10px;">agent_scores</code>）的绩效行（周度 BI 汇总、月度模型、食安总部判罚等）及<strong>公司通知</strong>。扣分明细已尽量中文化；在<strong>本页停留</strong>时每约 <strong>45 秒</strong>自动刷新摘要与健康条，且会<strong>重复查询</strong>您上次成功解析的账号，便于第一时间看到新写入的分数。支持按<strong>姓名</strong>或飞书账号查询，重名时请改用账号。</div>
-                        </div>
-                        <div style="padding:12px 18px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-bottom:1px solid rgba(148,163,184,0.06);">
-                            <input id="dc-prov-username" type="text" placeholder="姓名或飞书账号" style="flex:1;min-width:160px;padding:8px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.2);background:rgba(2,6,23,0.5);color:#e2e8f0;font-size:12px;" />
-                            <button type="button" class="btn btn-secondary" style="padding:8px 14px;font-size:12px;" onclick="loadDcScoreProvenance()">查询</button>
-                        </div>
-                        <div id="dc-prov-results" style="padding:12px 18px 16px;font-size:11px;color:#94a3b8;max-height:380px;overflow-y:auto;"></div>
-                    </section>
-                    <section style="border-radius:14px;background:rgba(15,23,42,0.45);border:1px solid rgba(148,163,184,0.1);overflow:hidden;">
-                        <div style="padding:14px 18px;border-bottom:1px solid rgba(148,163,184,0.08);">
-                            <div style="font-size:13px;font-weight:600;color:#e2e8f0;letter-spacing:.04em;">绩效看板</div>
-                            <div style="font-size:11px;color:#64748b;margin-top:4px;">周度 BI 汇总（<strong>周度异常汇总表</strong>，库表 <code style="font-size:10px;">anomaly_rollups_v2</code>）· 跨自然周若跨月会按月份拆分，不混算</div>
-                        </div>
-                        <div id="dc-perf-body" style="padding:14px 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;"></div>
-                    </section>
-                    <section style="border-radius:14px;background:rgba(15,23,42,0.45);border:1px solid rgba(148,163,184,0.1);overflow:hidden;">
-                        <div style="padding:14px 18px;border-bottom:1px solid rgba(148,163,184,0.08);">
-                            <div style="font-size:13px;font-weight:600;color:#e2e8f0;letter-spacing:.04em;">警告通知</div>
-                            <div style="font-size:11px;color:#64748b;margin-top:4px;">管理侧数据告警（含双写/数据一致性类飞书投递记录）</div>
-                        </div>
-                        <div id="dc-alerts-body" style="padding:0;max-height:280px;overflow-y:auto;"></div>
-                    </section>
-                    <section style="border-radius:14px;background:rgba(15,23,42,0.45);border:1px solid rgba(148,163,184,0.1);overflow:hidden;">
-                        <div style="padding:14px 18px;border-bottom:1px solid rgba(148,163,184,0.08);">
-                            <div style="font-size:13px;font-weight:600;color:#e2e8f0;letter-spacing:.04em;">数据源与任务</div>
-                            <div style="font-size:11px;color:#64748b;margin-top:4px;">飞书多维表同步 · 双写范围说明 · Agents-V2 定时任务最近运行</div>
-                        </div>
-                        <div id="dc-dualwrite-strip" style="padding:12px 18px;font-size:11px;color:#94a3b8;line-height:1.55;border-bottom:1px solid rgba(148,163,184,0.06);"></div>
-                        <div id="dc-sync-list" style="background:transparent;border-radius:0;overflow:hidden;border:none;">
-                            <div style="padding:12px 18px;text-align:center;color:#64748b;font-size:12px;">加载中...</div>
-                        </div>
-                        <div style="padding:0 0 12px;">
-                            <div style="padding:8px 18px 4px;font-size:11px;font-weight:600;color:#64748b;letter-spacing:.04em;">定时任务（最近运行）</div>
-                            <div id="dc-cron-body" style="padding:0 12px 8px;max-height:220px;overflow-y:auto;font-size:11px;"></div>
-                        </div>
-                    </section>
+                            <details class="dc-doc">
+                                <summary>口径与数据表说明（可选阅读）</summary>
+                                <div class="dc-doc-body"><strong>异常触发</strong>：引擎判定命中后写入库的<strong>一条记录</strong>（含业务触发日、严重度、状态）；不是「待办队列」，也<strong>不等于</strong>飞书任务是否结案。<strong>充值异常</strong>：每条记录的<strong>触发日</strong>=被判定的那<strong>一个营业日</strong>的日报（引擎用上海「昨日」避免未关账误报）。例如触发日为 <strong>4/10</strong> 表示判定的是 <strong>4/10</strong> 当天日报充值为 0；<strong>4/9 有充值与这一条无关</strong>。绩效分：充值落库后会<strong>当日重算</strong>当周<strong>周度 BI 异常汇总表</strong>（库表 <code style="font-size:10px;">anomaly_rollups_v2</code>），周一仍会全量重算（幂等）。飞书 <strong>BI 任务结案</strong>后，系统会把对应触发记录标为 <strong>已结案</strong>（状态码 <code style="font-size:10px;">closed</code>；新逻辑；历史未带日期的任务结案不会回溯）。<strong>食品安全</strong>：<strong>实时</strong>命中；总部营运「记录」后按岗<strong>各扣 20 分</strong>，不并入周度 BI 汇总扣分模型。下方表格：<strong>异常触发记录</strong>（<code style="font-size:10px;">anomaly_triggers</code>）、<strong>节奏引擎日志</strong>（<code style="font-size:10px;">rhythm_logs</code>）、<strong>调度任务主表</strong>（<code style="font-size:10px;">master_tasks</code>）、<strong>Agent 任务运行日志</strong>（<code style="font-size:10px;">agent_task_logs</code>）。</div>
+                            </details>
+                            <div id="dc-activity-body" class="dc-kpi-deck">加载中…</div>
+                            <div id="dc-activity-detail" class="dc-detail-scroll"></div>
+                        </section>
+                        <section class="dc-panel">
+                            <div class="dc-panel-head">
+                                <div>
+                                    <h3>个人绩效分由来</h3>
+                                    <p class="dc-panel-sub">查询已写入绩效分表的记录；本页约 45 秒自动刷新摘要与健康条。</p>
+                                </div>
+                            </div>
+                            <details class="dc-doc" style="margin-top:0;border-top:none;border-radius:0;border-left:none;border-right:none;">
+                                <summary>详细说明（可选）</summary>
+                                <div class="dc-doc-body">展示已写入<strong>绩效分表</strong>（库表 <code style="font-size:10px;">agent_scores</code>）的绩效行（周度 BI 汇总、月度模型、食安总部判罚等）及<strong>公司通知</strong>。扣分明细已尽量中文化；在<strong>本页停留</strong>时会<strong>重复查询</strong>您上次成功解析的账号。支持按<strong>姓名</strong>或飞书账号查询，重名时请改用账号。</div>
+                            </details>
+                            <div class="dc-toolbar">
+                                <input id="dc-prov-username" type="text" placeholder="姓名或飞书账号" />
+                                <button type="button" class="dc-btn-go" onclick="loadDcScoreProvenance()">查询</button>
+                            </div>
+                            <div id="dc-prov-results" style="padding:12px 18px 18px;font-size:12px;color:#94a3b8;max-height:380px;overflow-y:auto;"></div>
+                        </section>
+                        <section class="dc-panel">
+                            <div class="dc-panel-head">
+                                <div>
+                                    <h3>绩效看板</h3>
+                                    <p class="dc-panel-sub">周度 BI 汇总与仪表盘指标。</p>
+                                </div>
+                            </div>
+                            <details class="dc-doc" style="margin-top:0;border-top:none;border-radius:0;border-left:none;border-right:none;">
+                                <summary>表与拆分规则（可选）</summary>
+                                <div class="dc-doc-body">周度 BI 汇总（<strong>周度异常汇总表</strong>，库表 <code style="font-size:10px;">anomaly_rollups_v2</code>）· 跨自然周若跨月会按月份拆分，不混算。</div>
+                            </details>
+                            <div id="dc-perf-body" class="dc-perf-grid"></div>
+                        </section>
+                        <section class="dc-panel">
+                            <div class="dc-panel-head">
+                                <div>
+                                    <h3>警告通知</h3>
+                                    <p class="dc-panel-sub">管理侧数据告警（含双写与一致性类飞书投递）。</p>
+                                </div>
+                            </div>
+                            <div id="dc-alerts-body"></div>
+                        </section>
+                        <section class="dc-panel">
+                            <div class="dc-panel-head">
+                                <div>
+                                    <h3>数据源与任务</h3>
+                                    <p class="dc-panel-sub">飞书多维表同步 · 双写范围 · 定时任务最近运行</p>
+                                </div>
+                            </div>
+                            <div id="dc-dualwrite-strip" style="padding:12px 18px;font-size:12px;color:#94a3b8;line-height:1.55;border-bottom:1px solid rgba(148,163,184,0.08);"></div>
+                            <div id="dc-sync-list" style="background:transparent;border:none;">
+                                <div style="padding:14px 18px;text-align:center;color:#64748b;font-size:12px;">加载中…</div>
+                            </div>
+                            <div style="padding:0 0 12px;">
+                                <div style="padding:10px 18px 4px;font-size:11px;font-weight:600;color:#64748b;letter-spacing:0.06em;">定时任务（最近运行）</div>
+                                <div id="dc-cron-body" style="padding:0 12px 10px;max-height:220px;overflow-y:auto;font-size:12px;"></div>
+                            </div>
+                        </section>
+                    </div>
+                    <p class="dc-foot">Agent 监控、配置、营销与审计等请打开 Agent Ops 控制台；本页为只读总览。</p>
                 </div>
-                <p style="margin:20px 0 8px;font-size:11px;color:#475569;line-height:1.5;">Agent 监控、配置、营销与审计等请打开 <strong>Agent Ops 控制台</strong>；本页仅保留只读总览。</p>
                 <div id="agents-config-section" style="display:none !important;"></div>
                 <div id="agents-config-lock-tip" style="display:none;"></div>
                 <button class="btn btn-secondary" id="btn-agents-monitor-main" style="display:none;" onclick="openAgentMonitorModal()">Agent监控</button>
@@ -11809,11 +11970,12 @@
                     body: JSON.stringify({ note: String(note || '') })
                 });
             },
-            async resubmitApproval(id) {
+            async resubmitApproval(id, body) {
+                const b = body && typeof body === 'object' ? body : {};
                 return this.request('/api/approvals/' + encodeURIComponent(String(id || '')) + '/resubmit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({})
+                    body: JSON.stringify(b)
                 });
             },
             async payPayment(id, note) {
@@ -12323,6 +12485,7 @@
                 const items = Array.isArray(approvalsResp?.items) ? approvalsResp.items : [];
                 if (!items.length) {
                     if (listEl) listEl.innerHTML = '<div style="color:rgba(200,215,230,0.75);">暂无积分记录</div>';
+                    loadPointsRanking();
                     return;
                 }
 
@@ -12796,6 +12959,28 @@
                         </div>` : ''}
                     </div>
                 `;
+                const mePtsReturned = String(currentUser?.username || '').toLowerCase();
+                const appPtsReturned = String(item?.applicant_username || '').toLowerCase();
+                if (String(item?.status || '') === 'returned' && mePtsReturned && appPtsReturned === mePtsReturned) {
+                    const reasonsBlock = batchItems.length
+                        ? batchItems.map((it) => {
+                            const rid = String(it?.ruleId || '').trim();
+                            const inm = String(it?.itemName || '').trim() || '积分事项';
+                            const rsn = String(it?.reason || '');
+                            return `<div style="margin-top:10px;padding:10px;border-radius:10px;border:1px solid rgba(99,102,241,0.25);background:rgba(99,102,241,0.06);">
+                                <div style="font-size:12px;color:rgba(200,215,230,0.85);margin-bottom:6px;">${escapeHtml(inm)} <span style="color:#94a3b8;">(${Number(it?.points || 0)}分)</span></div>
+                                <textarea class="pts-resubmit-reason form-input" data-rule-id="${escapeHtml(rid)}" rows="3" style="width:100%;resize:vertical;" placeholder="请填写或修改理由">${escapeHtml(rsn)}</textarea>
+                            </div>`;
+                        }).join('')
+                        : `<div style="margin-top:10px;">
+                            <textarea class="pts-resubmit-reason form-input" data-rule-id="${escapeHtml(String(payload?.ruleId || '').trim())}" rows="3" style="width:100%;resize:vertical;" placeholder="请填写或修改理由">${escapeHtml(String(payload?.reason || ''))}</textarea>
+                        </div>`;
+                    payloadHtml += `<div id="points-returned-edit-wrap" style="margin-top:14px;padding:12px;border-radius:12px;border:1px solid rgba(99,102,241,0.35);background:rgba(99,102,241,0.08);">
+                        <div style="font-weight:800;color:#a5b4fc;margin-bottom:8px;">退回修改</div>
+                        <div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:10px;">请核对每条理由后点「重新提交」。积分事项不可改；经退回再次提交不占用当天「新建申报」的次数。</div>
+                        ${reasonsBlock}
+                    </div>`;
+                }
             } else if (String(item?.type || '') === 'payment') {
                 const amt = Number(payload?.amount || 0);
                 const amountText = Number.isFinite(amt) ? ('¥' + amt.toLocaleString('zh-CN', { maximumFractionDigits: 2 })) : '¥0.00';
@@ -12982,7 +13167,19 @@
                 return;
             }
             if (!confirm('确认重新提交此申请？')) return;
-            HRMS_API.resubmitApproval(id)
+            let resubmitBody = {};
+            if (String(item?.type || '') === 'points') {
+                const wrap = document.getElementById('points-returned-edit-wrap');
+                const tas = wrap ? wrap.querySelectorAll('textarea.pts-resubmit-reason') : [];
+                const itemsOut = [];
+                tas.forEach((t) => {
+                    const rid = String(t.getAttribute('data-rule-id') || '').trim();
+                    const reason = String(t.value || '').trim();
+                    if (rid) itemsOut.push({ ruleId: rid, reason });
+                });
+                if (itemsOut.length) resubmitBody.items = itemsOut;
+            }
+            HRMS_API.resubmitApproval(id, resubmitBody)
                 .then(() => {
                     showNotification('已重新提交，等待审批', 'success');
                     closeApprovalDetailModal();
@@ -16928,8 +17125,14 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 const dbOk = health.database === true || health.database === 'ok';
                 const schedOk = ag.schedulerRunning === true;
                 const llmOk = ag.llmHealthy === true;
-                const dot = (ok) => `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ok ? '#22c55e' : '#ef4444'};margin-right:4px;"></span>`;
-                let extra = '';
+                const dotCol = (ok) => (ok ? '#22c55e' : '#ef4444');
+                const chip = (ok, label, sub) =>
+                    `<span class="dc-chip" title=""><span class="dc-dot" style="background:${dotCol(ok)};"></span><span>${escapeHtml(label)}${sub ? '<span style="opacity:.72;font-weight:500;margin-left:4px;">' + escapeHtml(sub) + '</span>' : ''}</span></span>`;
+                let chips = [
+                    chip(dbOk, '数据库', ''),
+                    chip(schedOk, '调度器', ''),
+                    chip(llmOk, 'LLM', '')
+                ];
                 if (as && typeof as === 'object') {
                     const mp = as.mempalace;
                     const wk = as.wikiKnowledge;
@@ -16937,23 +17140,24 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         const mpOk = mp.reachable === true;
                         const mpHint = mp.enabled ? '已启用' : '未启用';
                         const invT = mp.inventory && mp.inventory.total != null ? String(mp.inventory.total) : '';
-                        extra += `${dot(mpOk)}<span title="${escapeHtml(String(mp.baseUrl || ''))}">MemPalace</span><span style="color:#64748b;margin-right:10px;">(${mpHint}${invT ? ' · ' + invT + '条' : ''})</span>`;
+                        const sub = mpHint + (invT ? ' · ' + invT + '条' : '');
+                        chips.push(`<span class="dc-chip" title="${escapeHtml(String(mp.baseUrl || ''))}"><span class="dc-dot" style="background:${dotCol(mpOk)};"></span><span>MemPalace<span style="opacity:.72;font-weight:500;margin-left:4px;">${escapeHtml(sub)}</span></span></span>`);
                     }
                     if (wk && typeof wk === 'object') {
                         const wkOk = wk.ok === true;
                         const wkN = wk.mdCount != null ? String(wk.mdCount) : '?';
                         const wkDisk = wk.persistence === 'disk' ? '落盘' : '';
-                        const wkDs = wk.knowledgeLlmRanking ? '·LLM排序(DeepSeek→Ollama)' : '';
-                        extra += `${dot(wkOk)}<span title="knowledge/wiki${wkDisk ? '（' + wkDisk + '）' : ''}${wkDs}">Wiki</span><span style="color:#64748b;margin-right:10px;">(${wkN}篇)</span>`;
+                        const wkDs = wk.knowledgeLlmRanking ? '·LLM排序' : '';
+                        const wkTitle = 'Wiki' + (wkDisk ? '（' + wkDisk + '）' : '') + wkDs;
+                        chips.push(`<span class="dc-chip" title="${escapeHtml(wkTitle)}"><span class="dc-dot" style="background:${dotCol(wkOk)};"></span><span>Wiki<span style="opacity:.72;font-weight:500;margin-left:4px;">${escapeHtml(wkN)}篇</span></span></span>`);
                     }
                 }
-                hBar.innerHTML = `
-                    ${dot(dbOk)}<span>数据库</span>
-                    ${dot(schedOk)}<span>调度器</span>
-                    ${dot(llmOk)}<span>LLM</span>
-                    ${extra}
-                    <span style="margin-left:auto;color:#475569;font-size:11px;">${new Date().toLocaleTimeString('zh-CN')} · 45s自动刷新</span>
-                `;
+                hBar.innerHTML =
+                    '<span class="dc-h-inner">' +
+                    chips.join('') +
+                    '<span class="dc-chip-meta">' +
+                    escapeHtml(new Date().toLocaleTimeString('zh-CN')) +
+                    ' · 45s 刷新</span></span>';
                 const hExtra = document.getElementById('dc-health-extra');
                 if (hExtra && as && typeof as === 'object') {
                     const bits = [];
@@ -17040,19 +17244,20 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             }
             if (actBody) {
                 if (!canBrief) {
-                    actBody.innerHTML = '<span style="color:#64748b;">当前角色仅展示公开健康状态；完整活动摘要需管理员 / 总部营运 / HR。</span>';
+                    actBody.innerHTML = '<div style="padding:6px 4px 10px;color:#94a3b8;font-size:13px;line-height:1.55;">当前角色仅展示公开健康状态；完整活动摘要需管理员 / 总部营运 / HR。</div>';
                 } else if (!brief) {
-                    actBody.innerHTML = '<span style="color:#ef4444;">活动摘要加载失败（请确认已登录且接口可用）</span>';
+                    actBody.innerHTML = '<div style="padding:6px 4px 10px;color:#f87171;font-size:13px;">活动摘要加载失败（请确认已登录且接口可用）</div>';
                 } else {
                     const a = brief.activityToday || {};
+                    const n = (x) => escapeHtml(String(x ?? 0));
                     actBody.innerHTML = `
-                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:10px;">
-                            <div><span style="color:#64748b;">任务日志</span> <strong style="color:#e2e8f0;">${a.agentTaskLogs ?? 0}</strong></div>
-                            <div><span style="color:#64748b;">节奏引擎</span> <strong style="color:#e2e8f0;">${a.rhythmRuns ?? 0}</strong></div>
-                            <div><span style="color:#64748b;">异常触发</span> <strong style="color:#e2e8f0;">${a.anomalyTriggers ?? 0}</strong></div>
-                            <div><span style="color:#64748b;">今日管理告警</span> <strong style="color:#e2e8f0;">${a.adminAlerts ?? 0}</strong></div>
+                        <div class="dc-kpi-grid">
+                            <div class="dc-kpi dc-kpi--a"><div class="dc-kpi-label">任务日志</div><div class="dc-kpi-val">${n(a.agentTaskLogs)}</div></div>
+                            <div class="dc-kpi dc-kpi--b"><div class="dc-kpi-label">节奏引擎</div><div class="dc-kpi-val">${n(a.rhythmRuns)}</div></div>
+                            <div class="dc-kpi dc-kpi--c"><div class="dc-kpi-label">异常触发</div><div class="dc-kpi-val">${n(a.anomalyTriggers)}</div></div>
+                            <div class="dc-kpi dc-kpi--d"><div class="dc-kpi-label">管理告警</div><div class="dc-kpi-val">${n(a.adminAlerts)}</div></div>
                         </div>
-                        <div style="color:#64748b;font-size:11px;">口径与 Agent 控制台「Agent 活动」一致（按所选日期的上海日历日汇总）。</div>`;
+                        <p style="margin:12px 4px 0;font-size:11px;color:#64748b;line-height:1.45;">以上为所选上海日历日汇总，与 Agent 控制台「Agent 活动」一致。</p>`;
                 }
             }
 
@@ -17093,10 +17298,10 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         { k: '视觉审核(30天)', v: dash.totalAudits ?? '—', c: '#c084fc' }
                     ];
                     perfBody.innerHTML = tiles.map(t => `
-                        <div style="padding:12px 14px;border-radius:10px;background:rgba(2,6,23,0.35);border:1px solid rgba(148,163,184,0.08);">
-                            <div style="font-size:11px;color:#64748b;margin-bottom:4px;">${escapeHtml(t.k)}</div>
-                            <div style="font-size:22px;font-weight:700;color:${t.c};line-height:1.1;">${escapeHtml(String(t.v))}</div>
-                            ${t.sub ? `<div style="font-size:10px;color:#475569;margin-top:4px;">${escapeHtml(t.sub)}</div>` : ''}
+                        <div class="dc-perf-card">
+                            <div class="dc-perf-k">${escapeHtml(t.k)}</div>
+                            <div class="dc-perf-v" style="color:${t.c};">${escapeHtml(String(t.v))}</div>
+                            ${t.sub ? `<div class="dc-perf-s">${escapeHtml(t.sub)}</div>` : ''}
                         </div>`).join('');
                 }
             }
@@ -17183,6 +17388,55 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             }
         }
 
+        /** 节奏引擎 result_summary：JSON → 分行中文，避免表格里出现整段 JSON */
+        function dcFormatRhythmSummary(raw) {
+            if (raw == null || raw === '') return '—';
+            let obj = null;
+            if (typeof raw === 'object') {
+                obj = raw;
+            } else {
+                const s = String(raw).trim();
+                if (!s) return '—';
+                try {
+                    obj = JSON.parse(s);
+                } catch (_) {
+                    const trig = s.match(/"triggered"\s*:\s*(\d+)/);
+                    if (trig) return '已解析到触发统计 ' + trig[1] + '（摘要 JSON 不完整，已扩大服务端返回长度；若仍异常请查库 rhythm_logs.result_summary）';
+                    return s.length > 220 ? s.slice(0, 220) + '…' : s;
+                }
+            }
+            if (!obj || typeof obj !== 'object') return '—';
+            const lines = [];
+            if (obj.triggered != null) lines.push('触发记录数：' + String(obj.triggered));
+            if (Array.isArray(obj.kpiByStore) && obj.kpiByStore.length) {
+                const arr = obj.kpiByStore;
+                lines.push('门店指标（共 ' + arr.length + ' 家）：');
+                const max = 12;
+                for (let i = 0; i < Math.min(arr.length, max); i++) {
+                    const k = arr[i] || {};
+                    const name = String(k.store || k.store_name || '—').trim();
+                    const bits = [];
+                    if (k.total_tasks != null) bits.push('任务 ' + k.total_tasks);
+                    if (k.closed_tasks != null) bits.push('闭环 ' + k.closed_tasks);
+                    if (k.avg_ttc != null) bits.push('均出餐 ' + String(k.avg_ttc).replace(/(\.\d{1,4})\d+/, '$1'));
+                    if (k.avg_ttfr != null) bits.push('首单 ' + String(k.avg_ttfr).replace(/(\.\d{1,4})\d+/, '$1'));
+                    if (k.avg_timeout != null) bits.push('超时均 ' + String(k.avg_timeout).replace(/(\.\d{1,4})\d+/, '$1'));
+                    lines.push(' · ' + name + (bits.length ? '：' + bits.join('，') : ''));
+                }
+                if (arr.length > max) lines.push(' · … 其余 ' + (arr.length - max) + ' 家已折叠');
+            }
+            if (obj.scanned != null) lines.push('扫描条数：' + obj.scanned);
+            if (obj.issuesFound != null) lines.push('问题数：' + obj.issuesFound);
+            if (obj.detail) lines.push(String(obj.detail).slice(0, 240));
+            if (!lines.length) {
+                try {
+                    const j = JSON.stringify(obj);
+                    return j.length > 200 ? j.slice(0, 200) + '…' : j;
+                } catch (e) { return '—'; }
+            }
+            return lines.join('\n');
+        }
+
         function renderDcActivityDetailHtml(dj) {
             const ANOM_KEY_ZH = {
                 revenue_achievement: '实收营收异常',
@@ -17197,6 +17451,15 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 hongchao_jiuguang_private_room: '洪潮久光包房使用',
                 food_safety: '食品安全异常'
             };
+            const RHYTHM_TYPE_ZH = {
+                weekly_report: '周报',
+                daily_report: '日报',
+                rhythm_engine: '节奏引擎',
+                monthly_report: '月报',
+                bi_weekly: '双周报',
+                anomaly_scan: '异常扫描',
+                rollup: '汇总'
+            };
             const SEV_ZH = { high: '高', medium: '中', low: '低' };
             const TRIG_STATUS_ZH = {
                 open: '待结案',
@@ -17207,7 +17470,9 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             };
             const cellStr = (r, c) => {
                 let v = r[c.key];
+                if (c.key === 'result_summary') return dcFormatRhythmSummary(v);
                 if (c.map === 'anomaly_key') v = ANOM_KEY_ZH[String(v || '').trim()] || v;
+                if (c.map === 'rhythm_type') v = RHYTHM_TYPE_ZH[String(v || '').trim()] || v;
                 if (c.map === 'severity') v = SEV_ZH[String(v || '').toLowerCase()] || v;
                 if (c.map === 'trig_status') v = TRIG_STATUS_ZH[String(v || '').toLowerCase()] || v;
                 if (c.fmt === 'sh') {
@@ -17222,74 +17487,65 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     } catch (_) { return '[object]'; }
                 }
                 const sv = String(v);
-                // result_summary 若是 JSON 字符串则解析后展示关键字段
-                if (c.key === 'result_summary' && sv.startsWith('{')) {
-                    try {
-                        const obj = JSON.parse(sv);
-                        const parts = [];
-                        if (obj.triggered != null) parts.push('触发:' + (obj.triggered ? '是' : '否'));
-                        if (obj.kpiByStore?.length) parts.push('门店KPI:' + obj.kpiByStore.length + '店');
-                        if (obj.scanned != null) parts.push('扫描:' + obj.scanned);
-                        if (obj.issuesFound != null) parts.push('异常:' + obj.issuesFound);
-                        if (obj.triggered != null && obj.detail) parts.push(String(obj.detail).slice(0, 60));
-                        if (parts.length) return parts.join(' · ');
-                        return sv.length > 200 ? sv.slice(0, 197) + '…' : sv;
-                    } catch (_) { /* fall through */ }
-                }
                 return sv.length > 200 ? sv.slice(0, 197) + '…' : sv;
             };
             const sec = (title, rows, cols) => {
                 if (!rows || !rows.length) {
-                    return `<div style="margin-bottom:12px;"><div style="color:#94a3b8;font-weight:600;margin-bottom:4px;">${escapeHtml(title)}</div><div style="color:#475569;">暂无</div></div>`;
+                    return `<div class="dc-act-sec"><div class="dc-act-sec-title">${escapeHtml(title)}<span class="dc-act-count">0</span></div><div style="color:#64748b;font-size:12px;padding:2px 0 8px;">暂无</div></div>`;
                 }
-                const th = cols.map((c) => `<th style="text-align:left;padding:4px 6px;color:#64748b;font-weight:600;">${escapeHtml(c.label)}</th>`).join('');
+                const th = cols.map((c) => `<th>${escapeHtml(c.label)}</th>`).join('');
                 const trs = rows
                     .map((r) => {
                         const tds = cols
-                            .map((c) => `<td style="padding:4px 6px;vertical-align:top;word-break:break-word;">${_dcEsc(cellStr(r, c))}</td>`)
+                            .map((c) => {
+                                const raw = cellStr(r, c);
+                                const cls = c.key === 'result_summary' ? 'dc-td-summary' : (c.nowrap ? 'dc-td-nowrap' : '');
+                                return `<td${cls ? ` class="${cls}"` : ''}>${_dcEsc(raw)}</td>`;
+                            })
                             .join('');
-                        return `<tr style="border-top:1px solid rgba(148,163,184,0.08);">${tds}</tr>`;
+                        return `<tr>${tds}</tr>`;
                     })
                     .join('');
-                return `<div style="margin-bottom:14px;"><div style="color:#94a3b8;font-weight:600;margin-bottom:6px;">${escapeHtml(title)}（${rows.length}）</div><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:10px;"><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table></div></div>`;
+                return `<div class="dc-act-sec"><div class="dc-act-sec-title">${escapeHtml(title)}<span class="dc-act-count">${rows.length}</span></div><div class="dc-table-scroll"><table class="dc-data-table"><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table></div></div>`;
             };
             const legend =
-                '<div style="font-size:10px;color:#64748b;line-height:1.55;margin-bottom:12px;border-left:2px solid rgba(99,102,241,0.35);padding-left:8px;">' +
-                '<strong>列说明：</strong>「触发日」= 本条判定所指的<strong>营业日日历</strong>（充值：该日日报充值为 0 才记一条）。「落库」= 写入数据库时刻。充值绩效分：<strong>落库当日即重算</strong>当周汇总行，周一 08:25 再全量跑一遍。状态 <code style="font-size:9px;">open</code>/<code style="font-size:9px;">closed</code> 均参与扣分汇总；飞书结案后会标 <code style="font-size:9px;">closed</code>。' +
-                '</div>';
+                '<details class="dc-doc" style="margin:0 0 14px 2px;border-radius:12px;border:1px dashed rgba(148,163,184,0.2);background:rgba(2,6,23,0.28);">' +
+                '<summary style="cursor:pointer;padding:10px 12px;font-size:12px;font-weight:600;color:#94a3b8;list-style:none;">列说明：触发日、落库、状态码（展开）</summary>' +
+                '<div class="dc-doc-body" style="border-top:1px solid rgba(148,163,184,0.08);">「触发日」= 本条判定所指的<strong>营业日日历</strong>（充值：该日日报充值为 0 才记一条）。「落库」= 写入数据库时刻。充值绩效分：<strong>落库当日即重算</strong>当周汇总行，周一 08:25 再全量跑一遍。状态 <code style="font-size:10px;">open</code> / <code style="font-size:10px;">closed</code> 均参与扣分汇总；飞书结案后会标 <code style="font-size:10px;">closed</code>。</div>' +
+                '</details>';
             return (
                 legend +
                 sec('任务日志', dj.taskLogs, [
-                    { label: 'Agent', key: 'agent' },
+                    { label: 'Agent', key: 'agent', nowrap: true },
                     { label: '门店', key: 'store' },
-                    { label: '责任人', key: 'display_name' },
-                    { label: 'ms', key: 'latency_ms' },
-                    { label: '时间(沪)', key: 'created_at', fmt: 'sh' }
+                    { label: '责任人', key: 'display_name', nowrap: true },
+                    { label: 'ms', key: 'latency_ms', nowrap: true },
+                    { label: '时间(沪)', key: 'created_at', fmt: 'sh', nowrap: true }
                 ]) +
                 sec('异常触发', dj.anomalyTriggers, [
                     { label: '门店', key: 'store' },
-                    { label: '类型', key: 'anomaly_key', map: 'anomaly_key' },
-                    { label: '级别', key: 'severity', map: 'severity' },
-                    { label: '触发日', key: 'trigger_date' },
-                    { label: '落库(沪)', key: 'created_at', fmt: 'sh' },
-                    { label: '状态', key: 'status', map: 'trig_status' }
+                    { label: '类型', key: 'anomaly_key', map: 'anomaly_key', nowrap: true },
+                    { label: '级别', key: 'severity', map: 'severity', nowrap: true },
+                    { label: '触发日', key: 'trigger_date', nowrap: true },
+                    { label: '落库(沪)', key: 'created_at', fmt: 'sh', nowrap: true },
+                    { label: '状态', key: 'status', map: 'trig_status', nowrap: true }
                 ]) +
                 sec('节奏引擎', dj.rhythmLogs, [
-                    { label: '类型', key: 'rhythm_type' },
-                    { label: '状态', key: 'status' },
-                    { label: '业务日', key: 'execution_date' },
-                    { label: '执行(沪)', key: 'created_at', fmt: 'sh' },
+                    { label: '类型', key: 'rhythm_type', map: 'rhythm_type', nowrap: true },
+                    { label: '状态', key: 'status', nowrap: true },
+                    { label: '业务日', key: 'execution_date', nowrap: true },
+                    { label: '执行(沪)', key: 'created_at', fmt: 'sh', nowrap: true },
                     { label: '摘要', key: 'result_summary' }
                 ]) +
                 sec('调度任务', dj.masterTasks, [
-                    { label: '任务号', key: 'task_id' },
+                    { label: '任务号', key: 'task_id', nowrap: true },
                     { label: '标题', key: 'title' },
                     { label: '门店', key: 'store' },
-                    { label: '状态', key: 'status' },
-                    { label: '责任人', key: 'assignee_name' },
-                    { label: '派发(沪)', key: 'dispatched_at', fmt: 'sh' },
-                    { label: '创建(沪)', key: 'created_at', fmt: 'sh' },
-                    { label: '结案(沪)', key: 'resolved_at', fmt: 'sh' }
+                    { label: '状态', key: 'status', nowrap: true },
+                    { label: '责任人', key: 'assignee_name', nowrap: true },
+                    { label: '派发(沪)', key: 'dispatched_at', fmt: 'sh', nowrap: true },
+                    { label: '创建(沪)', key: 'created_at', fmt: 'sh', nowrap: true },
+                    { label: '结案(沪)', key: 'resolved_at', fmt: 'sh', nowrap: true }
                 ])
             );
         }

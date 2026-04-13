@@ -2537,8 +2537,16 @@ app.post('/api/approvals', authRequired, async (req, res) => {
         // Daily submission limit: 1 per day per employee
         // Use CURRENT_DATE (server-side, respects pg timezone) to avoid JS Date timezone mismatch
         try {
+          // 同一天「新建」积分单限 1 次；退回后再次激活（resubmit）会在 payload 写入 resubmittedAt，此类记录不计入占用额度，
+          // 避免员工修正退回单后当天无法再提交新的积分申请。
           const dupCheck = await pool.query(
-            `SELECT id FROM approval_requests WHERE type='points' AND lower(applicant_username)=lower($1) AND created_at >= CURRENT_DATE AND status != 'returned' LIMIT 1`,
+            `SELECT id FROM approval_requests
+             WHERE type='points'
+               AND lower(applicant_username)=lower($1)
+               AND created_at >= CURRENT_DATE
+               AND status != 'returned'
+               AND (payload->>'resubmittedAt') IS NULL
+             LIMIT 1`,
             [username]
           );
           if (dupCheck.rows?.length > 0) {
@@ -4002,6 +4010,51 @@ app.post('/api/approvals/:id/resubmit', authRequired, async (req, res) => {
       return res.status(403).json({ error: 'forbidden' });
     }
 
+    const updatedPayload = row.payload && typeof row.payload === 'object' ? { ...row.payload } : {};
+
+    // 积分退回后重新提交：允许随请求更新 items（理由等），校验规则与新建申请一致
+    if (String(row.type || '') === 'points') {
+      const bodyItems = Array.isArray(req.body?.items) ? req.body.items : null;
+      if (bodyItems && bodyItems.length === 0) {
+        return res.status(400).json({ error: 'empty_items', message: '积分条目不能为空' });
+      }
+      if (bodyItems && bodyItems.length > 0) {
+        const state = (await getSharedState()) || {};
+        const rules = Array.isArray(state?.pointRules) ? state.pointRules : [];
+        const applicantRec = stateFindUserRecord(state, username) || {};
+        const applicantStore = String(applicantRec?.store || '').trim();
+        if (!applicantStore) return res.status(400).json({ error: 'missing_store', message: '缺少门店信息，无法校验积分事项' });
+        if (bodyItems.length > 20) return res.status(400).json({ error: 'too_many_items', message: '单次最多申请20条' });
+        const validatedItems = [];
+        let totalPoints = 0;
+        for (let i = 0; i < bodyItems.length; i++) {
+          const it = bodyItems[i];
+          const rid = String(it?.ruleId || '').trim();
+          const rsn = String(it?.reason || '').trim();
+          if (!rid) return res.status(400).json({ error: 'missing_rule', message: `第${i + 1}条缺少事项` });
+          if (!rsn) return res.status(400).json({ error: 'missing_reason', message: `第${i + 1}条缺少理由` });
+          const rule = rules.find(r => String(r?.id || '').trim() === rid);
+          if (!rule) return res.status(400).json({ error: 'invalid_rule', message: `第${i + 1}条事项无效` });
+          if (rule?.enabled === false) return res.status(400).json({ error: 'rule_disabled', message: `第${i + 1}条事项已禁用` });
+          const ruleStore = String(rule?.store || '').trim();
+          if (ruleStore && ruleStore !== applicantStore) return res.status(400).json({ error: 'rule_store_mismatch', message: `第${i + 1}条事项门店不匹配` });
+          const rulePoints = safeNumber(rule?.points);
+          if (rulePoints == null || rulePoints <= 0) return res.status(400).json({ error: 'invalid_rule_points', message: `第${i + 1}条积分无效` });
+          validatedItems.push({ ruleId: rid, itemName: String(rule?.itemName || '').trim() || '积分事项', points: rulePoints, reason: rsn });
+          totalPoints += rulePoints;
+        }
+        updatedPayload.items = validatedItems;
+        updatedPayload.totalPoints = totalPoints;
+        updatedPayload.points = totalPoints;
+        updatedPayload.itemName = validatedItems.length === 1 ? validatedItems[0].itemName : `${validatedItems.length}项积分申请（共${totalPoints}分）`;
+        delete updatedPayload.ruleId;
+        delete updatedPayload.reason;
+      }
+      if (Array.isArray(req.body?.evidenceUrls)) {
+        updatedPayload.evidenceUrls = req.body.evidenceUrls.map(x => String(x || '').trim()).filter(Boolean);
+      }
+    }
+
     // Reset the chain: all steps back to pending/queued, first step becomes pending
     const chain = Array.isArray(row.chain) ? row.chain : [];
     for (let i = 0; i < chain.length; i++) {
@@ -4010,7 +4063,6 @@ app.post('/api/approvals/:id/resubmit', authRequired, async (req, res) => {
     const firstAssignee = chain.length > 0 ? String(chain[0]?.assignee || '').trim() : '';
 
     // Clean up return metadata from payload
-    const updatedPayload = row.payload && typeof row.payload === 'object' ? { ...row.payload } : {};
     updatedPayload.resubmittedAt = hrmsNowISO();
     delete updatedPayload.returnedAt;
     delete updatedPayload.returnedBy;

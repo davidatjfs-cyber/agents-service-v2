@@ -11221,7 +11221,7 @@ export function registerAgentRoutes(app, authRequired) {
         p
           .query(
             `SELECT rhythm_type, status, execution_date,
-                    LEFT(COALESCE(result_summary::text, ''), 200) AS result_summary,
+                    LEFT(COALESCE(result_summary::text, ''), 24000) AS result_summary,
                     LEFT(COALESCE(error_message, ''), 160) AS error_message, execution_time, created_at
              FROM rhythm_logs
              WHERE execution_date = $1::date
