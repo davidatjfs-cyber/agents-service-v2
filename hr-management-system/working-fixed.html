@@ -5793,12 +5793,17 @@
             text-align: left;
             padding: 10px 8px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+            white-space: nowrap;
         }
 
         #reports-page .rep-table td {
             padding: 10px 8px;
             border-top: 1px solid rgba(255, 255, 255, 0.06);
             color: rgba(226, 232, 240, 0.92);
+            word-break: normal;
+            overflow-wrap: anywhere;
+            vertical-align: top;
+            line-height: 1.45;
         }
 
         @media (max-width: 700px) {
@@ -5806,6 +5811,147 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* —— 分析报表：舒适排版 / 高级简洁 —— */
+        #reports-page .dr-shell.rep-shell {
+            max-width: 920px;
+            margin: 0 auto;
+            padding: 18px 14px calc(96px + env(safe-area-inset-bottom, 0px));
+        }
+        #reports-page .rep-page-head {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 16px;
+            margin-bottom: 20px;
+            padding-bottom: 18px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+        }
+        #reports-page .rep-eyebrow {
+            margin: 0 0 6px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            color: rgba(245, 158, 11, 0.78);
+            text-transform: uppercase;
+        }
+        #reports-page .rep-page-title {
+            margin: 0;
+            font-size: clamp(1.35rem, 4vw, 1.85rem);
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            color: var(--apple-text);
+        }
+        #reports-page .rep-page-desc {
+            margin: 8px 0 0;
+            max-width: 34rem;
+            font-size: 12.5px;
+            line-height: 1.55;
+            color: var(--apple-muted);
+        }
+        #reports-page .rep-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        #reports-page .rep-icon-btn {
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--apple-text);
+            border-radius: 12px;
+            padding: 9px 12px;
+            font-size: 13px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+        }
+        #reports-page .rep-icon-btn:active { transform: scale(0.97); }
+        #reports-page .rep-icon-btn--accent {
+            border-color: rgba(249, 115, 22, 0.35);
+            background: linear-gradient(135deg, rgba(249, 115, 22, 0.22), rgba(251, 146, 60, 0.12));
+        }
+        #reports-page .rep-filter-card {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px 14px;
+            padding: 16px;
+            margin-bottom: 18px;
+            border-radius: 18px;
+            background: linear-gradient(165deg, rgba(24, 28, 40, 0.58), rgba(15, 23, 42, 0.42));
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            box-shadow: 0 18px 48px -26px rgba(0, 0, 0, 0.55);
+        }
+        #reports-page .rep-field--full { grid-column: 1 / -1; }
+        #reports-page .rep-label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            color: rgba(200, 215, 230, 0.72);
+        }
+        #reports-page .rep-tabs {
+            margin-bottom: 16px;
+        }
+        #reports-page .rep-tabs-scroll {
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 8px;
+            overflow-x: auto;
+            padding: 4px 2px 12px;
+            scroll-snap-type: x mandatory;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+        }
+        #reports-page .rep-tab {
+            flex: 0 0 auto;
+            scroll-snap-align: start;
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(200, 215, 230, 0.82);
+            border-radius: 999px;
+            padding: 10px 16px;
+            font-size: 12.5px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+        }
+        #reports-page .rep-tab--active {
+            color: #0f172a;
+            border-color: rgba(245, 158, 11, 0.45);
+            background: linear-gradient(135deg, #fde68a, #f59e0b);
+            box-shadow: 0 10px 28px -10px rgba(245, 158, 11, 0.38);
+        }
+        #reports-page .rep-tab:active { transform: scale(0.98); }
+        #reports-page .rep-seg {
+            display: inline-flex;
+            gap: 4px;
+            margin-bottom: 14px;
+            padding: 4px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        #reports-page .rep-seg-btn {
+            border: none;
+            border-radius: 11px;
+            padding: 8px 18px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            color: rgba(200, 215, 230, 0.78);
+            background: transparent;
+            transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+        }
+        #reports-page .rep-seg-btn--active {
+            color: #f8fafc;
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            box-shadow: 0 6px 18px -8px rgba(37, 99, 235, 0.55);
+        }
+        #reports-page .rep-seg-btn:active { transform: scale(0.98); }
 
         #daily-report-page .dr-report-date {
             font-weight: 900;
@@ -7443,58 +7589,61 @@
             </div>
 
             <div id="reports-page" class="hidden">
-                <div class="dr-shell">
-                    <!-- 紧凑筛选栏 -->
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-                        <h2 style="margin:0; font-size:20px; font-weight:800;">分析报表</h2>
-                        <div style="display:flex; gap:6px; align-items:center;">
-                            <button class="btn btn-secondary" type="button" onclick="loadReportsData()" style="padding:8px 10px; font-size:12px; border-radius:8px;" title="刷新">🔄</button>
-                            <button id="rep-btn-csv" class="btn btn-secondary" type="button" onclick="exportCurrentReportCsv()" style="padding:8px 10px; font-size:12px; border-radius:8px; display:none;" title="下载CSV">📥 CSV</button>
-                            <button id="rep-btn-pdf" class="btn" type="button" onclick="exportCurrentReportPdf()" style="padding:8px 10px; font-size:12px; border-radius:8px; background:linear-gradient(135deg,#f97316,#fb923c); display:none;" title="导出PDF">📄 PDF</button>
+                <div class="dr-shell rep-shell">
+                    <header class="rep-page-head">
+                        <div>
+                            <p class="rep-eyebrow">Analytics</p>
+                            <h2 class="rep-page-title">分析报表</h2>
+                            <p class="rep-page-desc">选择门店、品牌与时间范围，查看业务、考勤、薪资与智能助手相关统计。</p>
                         </div>
-                    </div>
+                        <div class="rep-actions">
+                            <button class="rep-icon-btn" type="button" onclick="loadReportsData()" title="刷新">🔄</button>
+                            <button id="rep-btn-csv" class="rep-icon-btn" type="button" onclick="exportCurrentReportCsv()" style="display:none;" title="下载 CSV">📥 CSV</button>
+                            <button id="rep-btn-pdf" class="rep-icon-btn rep-icon-btn--accent" type="button" onclick="exportCurrentReportPdf()" style="display:none;" title="导出 PDF">📄 PDF</button>
+                        </div>
+                    </header>
 
-                    <!-- 门店+日期筛选 -->
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:14px; padding:14px;">
-                        <div style="grid-column:1/-1;">
-                            <label style="display:block; font-size:11px; font-weight:700; color:rgba(200,215,230,0.7); margin-bottom:4px;">门店</label>
-                            <select id="rep-store" class="dr-store-select" onchange="loadReportsData()" style="width:100%; padding:10px 12px; border-radius:10px; font-size:14px; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.18); color:#fff; -webkit-appearance:menulist; appearance:menulist;"></select>
+                    <section class="rep-filter-card" aria-label="筛选条件">
+                        <div class="rep-field--full">
+                            <label class="rep-label" for="rep-store">门店</label>
+                            <select id="rep-store" class="dr-store-select" onchange="loadReportsData()" style="width:100%; padding:11px 12px; border-radius:12px; font-size:14px; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.18); color:#fff; -webkit-appearance:menulist; appearance:menulist;"></select>
                         </div>
-                        <div style="grid-column:1/-1;">
-                            <label style="display:block; font-size:11px; font-weight:700; color:rgba(200,215,230,0.7); margin-bottom:4px;">品牌</label>
-                            <select id="rep-brand" class="dr-store-select" onchange="repEnsureSelectStores(true); loadReportsData();" style="width:100%; padding:10px 12px; border-radius:10px; font-size:14px; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.18); color:#fff; -webkit-appearance:menulist; appearance:menulist;">
+                        <div class="rep-field--full">
+                            <label class="rep-label" for="rep-brand">品牌</label>
+                            <select id="rep-brand" class="dr-store-select" onchange="repEnsureSelectStores(true); loadReportsData();" style="width:100%; padding:11px 12px; border-radius:12px; font-size:14px; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.18); color:#fff; -webkit-appearance:menulist; appearance:menulist;">
                                 <option value="">全部品牌</option>
                             </select>
                         </div>
                         <div>
-                            <label style="display:block; font-size:11px; font-weight:700; color:rgba(200,215,230,0.7); margin-bottom:4px;">开始日期</label>
-                            <input id="rep-start" type="date" class="dr-date-input" onchange="loadReportsData()" style="width:100%; padding:10px 12px; border-radius:10px; font-size:14px; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.18); color:#fff; color-scheme:dark;" />
+                            <label class="rep-label" for="rep-start">开始日期</label>
+                            <input id="rep-start" type="date" class="dr-date-input" onchange="loadReportsData()" style="width:100%; padding:11px 12px; border-radius:12px; font-size:14px; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.18); color:#fff; color-scheme:dark;" />
                         </div>
                         <div>
-                            <label style="display:block; font-size:11px; font-weight:700; color:rgba(200,215,230,0.7); margin-bottom:4px;">结束日期</label>
-                            <input id="rep-end" type="date" class="dr-date-input" onchange="loadReportsData()" style="width:100%; padding:10px 12px; border-radius:10px; font-size:14px; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.18); color:#fff; color-scheme:dark;" />
+                            <label class="rep-label" for="rep-end">结束日期</label>
+                            <input id="rep-end" type="date" class="dr-date-input" onchange="loadReportsData()" style="width:100%; padding:11px 12px; border-radius:12px; font-size:14px; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.18); color:#fff; color-scheme:dark;" />
                         </div>
-                        <div style="grid-column:1/-1;">
-                            <label style="display:block; font-size:11px; font-weight:700; color:rgba(200,215,230,0.7); margin-bottom:4px;">薪资月份</label>
-                            <input id="rep-month" type="month" class="dr-date-input" onchange="loadReportsData()" style="width:100%; padding:10px 12px; border-radius:10px; font-size:14px; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.18); color:#fff; color-scheme:dark;" placeholder="薪资月份" />
+                        <div class="rep-field--full">
+                            <label class="rep-label" for="rep-month">薪资月份</label>
+                            <input id="rep-month" type="month" class="dr-date-input" onchange="loadReportsData()" style="width:100%; padding:11px 12px; border-radius:12px; font-size:14px; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.18); color:#fff; color-scheme:dark;" placeholder="薪资月份" />
                         </div>
-                    </div>
+                    </section>
 
-                    <!-- Tab切换 -->
-                    <div style="display:flex; gap:0; margin-bottom:14px; background:rgba(255,255,255,0.06); border-radius:12px; padding:3px; border:1px solid rgba(255,255,255,0.08);">
-                        <button id="rep-tab-business" class="btn" type="button" onclick="showReportsTab('business'); loadReportsData();" style="flex:1; padding:10px 0; font-size:13px; font-weight:700; border-radius:10px; background:#2563eb; border:none;">业务分析表</button>
-                        <button id="rep-tab-attendance" class="btn btn-secondary" type="button" onclick="showReportsTab('attendance'); loadReportsData();" style="flex:1; padding:10px 0; font-size:13px; font-weight:700; border-radius:10px; border:none; background:transparent;">考勤表</button>
-                        <button id="rep-tab-payroll" class="btn btn-secondary" type="button" onclick="showReportsTab('payroll'); loadReportsData();" style="flex:1; padding:10px 0; font-size:13px; font-weight:700; border-radius:10px; border:none; background:transparent;">薪资表</button>
-                        <button id="rep-tab-inventory-forecast" class="btn btn-secondary" type="button" onclick="showReportsTab('inventory-forecast'); loadReportsData();" style="flex:1; padding:10px 0; font-size:13px; font-weight:700; border-radius:10px; border:none; background:transparent;">智能助手</button>
-                        <button id="rep-tab-promotions" class="btn btn-secondary" type="button" onclick="showReportsTab('promotions'); loadReportsData();" style="flex:1; padding:10px 0; font-size:13px; font-weight:700; border-radius:10px; border:none; background:transparent; display:none;">晋升记录</button>
-                        <button id="rep-tab-turnover" class="btn btn-secondary" type="button" onclick="showReportsTab('turnover'); loadReportsData();" style="flex:1; padding:10px 0; font-size:13px; font-weight:700; border-radius:10px; border:none; background:transparent;">离职率</button>
-                        <button id="rep-tab-leave-owed" class="btn btn-secondary" type="button" onclick="showReportsTab('leave-owed'); loadReportsData();" style="flex:1; padding:10px 0; font-size:13px; font-weight:700; border-radius:10px; border:none; background:transparent;">欠休报表</button>
-                    </div>
+                    <nav class="rep-tabs" aria-label="报表类型">
+                        <div class="rep-tabs-scroll">
+                            <button id="rep-tab-business" class="rep-tab rep-tab--active" type="button" onclick="showReportsTab('business'); loadReportsData();">业务分析表</button>
+                            <button id="rep-tab-attendance" class="rep-tab" type="button" onclick="showReportsTab('attendance'); loadReportsData();">考勤表</button>
+                            <button id="rep-tab-payroll" class="rep-tab" type="button" onclick="showReportsTab('payroll'); loadReportsData();">薪资表</button>
+                            <button id="rep-tab-inventory-forecast" class="rep-tab" type="button" onclick="showReportsTab('inventory-forecast'); loadReportsData();">智能助手</button>
+                            <button id="rep-tab-promotions" class="rep-tab" type="button" onclick="showReportsTab('promotions'); loadReportsData();" style="display:none;">晋升记录</button>
+                            <button id="rep-tab-turnover" class="rep-tab" type="button" onclick="showReportsTab('turnover'); loadReportsData();">离职率</button>
+                            <button id="rep-tab-leave-owed" class="rep-tab" type="button" onclick="showReportsTab('leave-owed'); loadReportsData();">欠休报表</button>
+                        </div>
+                    </nav>
 
                     <div id="rep-business" style="margin-bottom:18px;">
-                        <div style="display:flex; gap:6px; margin-bottom:12px;">
-                            <button id="rep-biz-view-table" class="btn" type="button" onclick="switchBizView('table')" style="padding:6px 14px; font-size:12px; border-radius:8px; background:#2563eb;">列表视图</button>
-                            <button id="rep-biz-view-dashboard" class="btn btn-secondary" type="button" onclick="switchBizView('dashboard')" style="padding:6px 14px; font-size:12px; border-radius:8px;">仪表盘</button>
+                        <div class="rep-seg" role="tablist" aria-label="业务分析视图">
+                            <button id="rep-biz-view-table" class="rep-seg-btn rep-seg-btn--active" type="button" onclick="switchBizView('table')">列表视图</button>
+                            <button id="rep-biz-view-dashboard" class="rep-seg-btn" type="button" onclick="switchBizView('dashboard')">仪表盘</button>
                         </div>
                         <div id="rep-business-box" style="color:rgba(200,215,230,0.6);">加载中...</div>
                         <div id="rep-dashboard-box" class="hidden"></div>
@@ -8647,6 +8796,32 @@
                     #agents-page.dc-v2 table.dc-data-table td.dc-td-summary {
                         white-space: pre-line; max-width: min(92vw, 480px); color: #cbd5e1; line-height: 1.55; font-size: 12px;
                     }
+                    #agents-page.dc-v2 .dc-mt-list { display: flex; flex-direction: column; gap: 12px; }
+                    #agents-page.dc-v2 .dc-mt-card {
+                        border-radius: 16px; padding: 14px 14px 12px;
+                        background: rgba(2, 6, 23, 0.5); border: 1px solid rgba(148, 163, 184, 0.12);
+                        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 28px -16px rgba(0, 0, 0, 0.45);
+                    }
+                    #agents-page.dc-v2 .dc-mt-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+                    #agents-page.dc-v2 .dc-mt-body { min-width: 0; flex: 1; }
+                    #agents-page.dc-v2 .dc-mt-id { font-family: var(--dc-num); font-size: 11px; color: #64748b; letter-spacing: 0.03em; line-height: 1.35; word-break: break-all; }
+                    #agents-page.dc-v2 .dc-mt-title { margin-top: 8px; font-size: 14px; font-weight: 700; color: #f8fafc; line-height: 1.45; word-break: normal; overflow-wrap: anywhere; }
+                    #agents-page.dc-v2 .dc-mt-store { margin-top: 8px; font-size: 12px; font-weight: 600; color: #a5b4fc; line-height: 1.4; word-break: normal; overflow-wrap: anywhere; }
+                    #agents-page.dc-v2 .dc-mt-badge {
+                        flex-shrink: 0; font-size: 11px; font-weight: 700; padding: 5px 11px; border-radius: 999px;
+                        background: rgba(34, 197, 94, 0.16); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.25);
+                    }
+                    #agents-page.dc-v2 .dc-mt-badge--open { background: rgba(234, 179, 8, 0.14); color: #fde047; border-color: rgba(234, 179, 8, 0.28); }
+                    #agents-page.dc-v2 .dc-mt-badge--muted { background: rgba(148, 163, 184, 0.12); color: #94a3b8; border-color: rgba(148, 163, 184, 0.18); }
+                    #agents-page.dc-v2 .dc-mt-grid {
+                        display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-top: 12px; padding-top: 12px;
+                        border-top: 1px solid rgba(148, 163, 184, 0.1); font-size: 12px; color: #e2e8f0;
+                    }
+                    @media (min-width: 520px) {
+                        #agents-page.dc-v2 .dc-mt-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+                    }
+                    #agents-page.dc-v2 .dc-mt-grid .k { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
+                    #agents-page.dc-v2 .dc-mt-grid .v { color: #cbd5e1; line-height: 1.35; word-break: normal; }
                     #agents-page.dc-v2 #dc-activity-body.dc-kpi-deck { padding: 10px 14px 18px; }
                     #agents-page.dc-v2 .dc-toolbar { padding: 12px 18px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; border-bottom: 1px solid rgba(148,163,184,0.08); }
                     #agents-page.dc-v2 .dc-toolbar input { flex: 1; min-width: 160px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(148,163,184,0.2); background: rgba(2,6,23,0.5); color: #e2e8f0; font-size: 13px; }
@@ -17508,6 +17683,37 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     .join('');
                 return `<div class="dc-act-sec"><div class="dc-act-sec-title">${escapeHtml(title)}<span class="dc-act-count">${rows.length}</span></div><div class="dc-table-scroll"><table class="dc-data-table"><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table></div></div>`;
             };
+            const MASTER_ST_ZH = {
+                closed: '已结案',
+                open: '待处理',
+                pending: '待处理',
+                dispatched: '已派发',
+                cancelled: '已取消',
+                resolved: '已解决',
+                in_progress: '进行中'
+            };
+            const secMasterTasks = (rows) => {
+                if (!rows || !rows.length) {
+                    return `<div class="dc-act-sec"><div class="dc-act-sec-title">调度任务<span class="dc-act-count">0</span></div><div style="color:#64748b;font-size:12px;padding:2px 0 8px;">暂无</div></div>`;
+                }
+                const cards = rows.map((r) => {
+                    const tid = escapeHtml(String(r.task_id || '—'));
+                    const title = escapeHtml(String(r.title || '').trim() || '—');
+                    const store = escapeHtml(String(r.store || '').trim() || '—');
+                    const assignee = escapeHtml(String(r.assignee_name || r.assignee_username || '—'));
+                    const rawSt = String(r.status || '').trim().toLowerCase();
+                    const stZh = MASTER_ST_ZH[rawSt] || String(r.status || '—').trim() || '—';
+                    const stDisp = escapeHtml(stZh);
+                    let badgeClass = 'dc-mt-badge dc-mt-badge--muted';
+                    if (rawSt === 'closed' || rawSt === 'resolved') badgeClass = 'dc-mt-badge';
+                    else if (rawSt === 'open' || rawSt === 'pending' || rawSt === 'dispatched' || rawSt === 'in_progress') badgeClass = 'dc-mt-badge dc-mt-badge--open';
+                    const d1 = escapeHtml(_dcFmtTime(r.dispatched_at) || '—');
+                    const d2 = escapeHtml(_dcFmtTime(r.created_at) || '—');
+                    const d3 = escapeHtml(_dcFmtTime(r.resolved_at) || '—');
+                    return `<article class="dc-mt-card"><div class="dc-mt-card-head"><div class="dc-mt-body"><div class="dc-mt-id">${tid}</div><div class="dc-mt-title">${title}</div><div class="dc-mt-store">${store}</div></div><span class="${badgeClass}">${stDisp}</span></div><div class="dc-mt-grid"><div><div class="k">责任人</div><div class="v">${assignee}</div></div><div><div class="k">派发（沪）</div><div class="v">${d1}</div></div><div><div class="k">创建（沪）</div><div class="v">${d2}</div></div><div><div class="k">结案（沪）</div><div class="v">${d3}</div></div></div></article>`;
+                }).join('');
+                return `<div class="dc-act-sec"><div class="dc-act-sec-title">调度任务<span class="dc-act-count">${rows.length}</span></div><div class="dc-mt-list">${cards}</div></div>`;
+            };
             const legend =
                 '<details class="dc-doc" style="margin:0 0 14px 2px;border-radius:12px;border:1px dashed rgba(148,163,184,0.2);background:rgba(2,6,23,0.28);">' +
                 '<summary style="cursor:pointer;padding:10px 12px;font-size:12px;font-weight:600;color:#94a3b8;list-style:none;">列说明：触发日、落库、状态码（展开）</summary>' +
@@ -17537,16 +17743,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     { label: '执行(沪)', key: 'created_at', fmt: 'sh', nowrap: true },
                     { label: '摘要', key: 'result_summary' }
                 ]) +
-                sec('调度任务', dj.masterTasks, [
-                    { label: '任务号', key: 'task_id', nowrap: true },
-                    { label: '标题', key: 'title' },
-                    { label: '门店', key: 'store' },
-                    { label: '状态', key: 'status', nowrap: true },
-                    { label: '责任人', key: 'assignee_name', nowrap: true },
-                    { label: '派发(沪)', key: 'dispatched_at', fmt: 'sh', nowrap: true },
-                    { label: '创建(沪)', key: 'created_at', fmt: 'sh', nowrap: true },
-                    { label: '结案(沪)', key: 'resolved_at', fmt: 'sh', nowrap: true }
-                ])
+                secMasterTasks(dj.masterTasks)
             );
         }
 
@@ -31968,17 +32165,11 @@ ${knowledgeContent.slice(0, 30000)}`;
                 if (box) box.classList.toggle('hidden', x !== t);
                 const btn = document.getElementById('rep-tab-' + x);
                 if (btn) {
-                    if (x === t) {
-                        btn.className = 'btn';
-                        btn.style.background = '#2563eb';
-                        btn.style.color = '#fff';
-                        btn.style.boxShadow = '0 2px 8px rgba(37,99,235,0.25)';
-                    } else {
-                        btn.className = 'btn btn-secondary';
-                        btn.style.background = 'transparent';
-                        btn.style.color = 'rgba(200,215,230,0.75)';
-                        btn.style.boxShadow = 'none';
-                    }
+                    btn.classList.add('rep-tab');
+                    btn.classList.toggle('rep-tab--active', x === t);
+                    btn.style.background = '';
+                    btn.style.color = '';
+                    btn.style.boxShadow = '';
                 }
             });
         }
@@ -32896,14 +33087,24 @@ ${knowledgeContent.slice(0, 30000)}`;
             if (view === 'dashboard') {
                 if (tableBox) tableBox.classList.add('hidden');
                 if (dashBox) dashBox.classList.remove('hidden');
-                if (btnTable) { btnTable.style.background = 'transparent'; btnTable.className = 'btn btn-secondary'; }
-                if (btnDash) { btnDash.style.background = '#2563eb'; btnDash.className = 'btn'; }
+                if (btnTable) {
+                    btnTable.classList.remove('rep-seg-btn--active');
+                    btnTable.classList.add('rep-seg-btn');
+                }
+                if (btnDash) {
+                    btnDash.classList.add('rep-seg-btn', 'rep-seg-btn--active');
+                }
                 renderBizDashboard();
             } else {
                 if (tableBox) tableBox.classList.remove('hidden');
                 if (dashBox) dashBox.classList.add('hidden');
-                if (btnTable) { btnTable.style.background = '#2563eb'; btnTable.className = 'btn'; }
-                if (btnDash) { btnDash.style.background = 'transparent'; btnDash.className = 'btn btn-secondary'; }
+                if (btnTable) {
+                    btnTable.classList.add('rep-seg-btn', 'rep-seg-btn--active');
+                }
+                if (btnDash) {
+                    btnDash.classList.remove('rep-seg-btn--active');
+                    btnDash.classList.add('rep-seg-btn');
+                }
             }
         }
 
