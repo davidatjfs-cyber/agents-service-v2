@@ -1590,6 +1590,133 @@ async function buildMaterialReportReply(store, text) {
   }
 }
 
+// ── 6b. Recharge (营业日报充值笔数/金额) ─────────────────
+
+function badReviewBodyTextFromFields(f) {
+  const keys = [
+    '评价内容', '差评原因', '差评内容', 'content', 'reason', '备注', '文字评价', '用户评论',
+    '评论内容', '评价详情', 'review_content', 'reviewContent'
+  ];
+  for (const k of keys) {
+    const v = ext(f[k]);
+    if (v) return String(v).trim();
+  }
+  return '';
+}
+
+function isHqRoleForDataScope(role) {
+  const r = String(role || '').trim().toLowerCase();
+  return r === 'admin' || r === 'hq_manager' || r === 'hr_manager';
+}
+
+/** 飞书问「昨天/今天充值情况」：来自 daily_reports.recharge_count / recharge_amount */
+async function buildRechargeSituationReply(store, text, ctx = {}) {
+  const q = String(text || '').trim();
+  if (!/充值|储值|充卡|会员\s*卡|会员卡|充值额|充值笔数|充值情况|充值数据|零充值/i.test(q)) return '';
+  const p = resolveDateRange(q, 7);
+  const role = String(ctx?.role || '').trim();
+  const fmtMoney = (n) =>
+    `¥${Number(n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+
+  if (!String(store || '').trim()) {
+    if (!isHqRoleForDataScope(role)) {
+      return (
+        '📊 **充值数据**\n' +
+        '当前账号未绑定门店或无法从话术中识别门店，无法自动查询营业日报中的充值字段。\n' +
+        '请发送如：**「昨天洪潮的充值情况」**，或确认已在 HRMS 绑定门店后再试。'
+      );
+    }
+    try {
+      const r = await query(
+        `SELECT TRIM(store) AS store, date::text AS d,
+                COALESCE(recharge_count, 0)::int AS cnt,
+                COALESCE(recharge_amount, 0)::numeric AS amt
+         FROM daily_reports
+         WHERE date >= $1::date AND date <= $2::date
+         ORDER BY date DESC, store ASC
+         LIMIT 200`,
+        [p.start, p.end]
+      );
+      const rows = r.rows || [];
+      if (!rows.length) {
+        return `📊 **充值数据（${p.label} · 全部门店）**\n暂无营业日报（daily_reports）记录。`;
+      }
+      const lines = [
+        `📊 **充值数据（${p.label} · 全部门店）**`,
+        '_来源：各店营业日报 `recharge_count` / `recharge_amount`_',
+        ''
+      ];
+      const byDay = new Map();
+      for (const row of rows) {
+        const k = row.d;
+        if (!byDay.has(k)) byDay.set(k, []);
+        byDay.get(k).push(row);
+      }
+      const days = [...byDay.keys()].sort((a, b) => String(b).localeCompare(String(a)));
+      for (const d of days) {
+        const list = byDay.get(d) || [];
+        lines.push(`**${d}**`);
+        let dayCnt = 0;
+        let dayAmt = 0;
+        for (const row of list) {
+          const c = Number(row.cnt) || 0;
+          const a = Number(row.amt) || 0;
+          dayCnt += c;
+          dayAmt += a;
+          const warn = c === 0 && a === 0 ? '　⚠️无充值' : '';
+          lines.push(`  · **${row.store}**：${c} 笔　${fmtMoney(a)}${warn}`);
+        }
+        lines.push(`  _当日合计：${dayCnt} 笔 · ${fmtMoney(dayAmt)}_`);
+        lines.push('');
+      }
+      return lines.join('\n').trim();
+    } catch (e) {
+      return `充值数据查询失败：${e?.message || '未知错误'}`;
+    }
+  }
+
+  const s = String(store || '').trim();
+  try {
+    const pats = dailyReportsIlikePatterns(s);
+    const patArr = pats.length ? pats : [`%${s.replace(/%/g, '')}%`];
+    const r = await query(
+      `SELECT date::text AS d, TRIM(store) AS st,
+              COALESCE(recharge_count, 0)::int AS cnt,
+              COALESCE(recharge_amount, 0)::numeric AS amt
+       FROM daily_reports
+       WHERE store ILIKE ANY($1::text[]) AND date >= $2::date AND date <= $3::date
+       ORDER BY date DESC
+       LIMIT 60`,
+      [patArr, p.start, p.end]
+    );
+    const rows = r.rows || [];
+    if (!rows.length) {
+      return `📊 **充值数据（${s}·${p.label}）**\n暂无营业日报记录；请确认该店已在 HRMS 提交对应日期的营业日报。`;
+    }
+    const lines = [
+      `📊 **充值数据（${s}·${p.label}）**`,
+      '_会员卡/储值充值笔数与金额来自营业日报字段。_'
+    ];
+    let totCnt = 0;
+    let totAmt = 0;
+    for (const row of rows) {
+      const c = Number(row.cnt) || 0;
+      const a = Number(row.amt) || 0;
+      totCnt += c;
+      totAmt += a;
+      const warn = c === 0 && a === 0 ? '　⚠️（当日无充值）' : '';
+      lines.push(`- **${row.d}**：${c} 笔　${fmtMoney(a)}${warn}`);
+    }
+    if (rows.length > 1) lines.push('', `_区间合计：${totCnt} 笔 · ${fmtMoney(totAmt)}_`);
+    if (rows.length === 1 && totCnt === 0 && totAmt === 0) {
+      lines.push('', '_提示：笔数与金额均为 0 时，请关注是否存在「充值业务停滞」风险，可结合线下收款渠道排查。_');
+    }
+    return lines.join('\n');
+  } catch (e) {
+    return `充值数据查询失败：${e?.message || '未知错误'}`;
+  }
+}
+
 // ── 7. Bad Review (差评) ─────────────────────────────
 
 async function buildBadReviewReply(store, text) {
@@ -1607,27 +1734,41 @@ async function buildBadReviewReply(store, text) {
     });
     if (!rows.length) return `📊 ${p.label}差评数据（${s}）：暂无差评记录入库。`;
     const prodTop = new Map(), kwTop = new Map(), platTop = new Map();
-    const samples = [];
     rows.forEach(row => {
       const f = row.fields||{};
       const prod = ext(f['差评产品']||f['product_name']);
       const kw = ext(f['差评关键词']||f['keywords']);
       const plat = ext(f['差评平台']||f['platform']);
-      const reason = ext(f['差评原因']||f['content']||f['reason']||f['评价内容']);
+      const reason = badReviewBodyTextFromFields(f);
       if (prod && prod !== '无') prodTop.set(prod,(prodTop.get(prod)||0)+1);
       if (kw) kw.split(/[,，、]/).forEach(k => { k=k.trim(); if(k) kwTop.set(k,(kwTop.get(k)||0)+1); });
       if (plat) {
         const pText = Array.isArray(plat) ? plat.join('') : String(plat);
         pText.split(/[,，、]/).forEach(pp => { pp=pp.trim(); if(pp) platTop.set(pp,(platTop.get(pp)||0)+1); });
       }
-      if (reason && samples.length < 3) samples.push(String(reason).slice(0,80));
     });
     const tn = (m,n=5) => topN(m,n).map(([k,v])=>`${k}(${v})`).join('、') || '无';
     const lines = [`📊 差评数据（${s}·${p.label}）`, `- 差评总数：${rows.length}条`];
     if (platTop.size) lines.push(`- 来源平台：${tn(platTop,3)}`);
     if (prodTop.size) lines.push(`- 差评产品Top：${tn(prodTop)}`);
     if (kwTop.size) lines.push(`- 关键词Top：${tn(kwTop)}`);
-    if (samples.length) { lines.push(`- 最新样例：`); samples.forEach(s2=>lines.push(`  · ${s2}`)); }
+    const detail = [];
+    rows.slice(0, 15).forEach((row, idx) => {
+      const f = row.fields || {};
+      const d = bitableDate(f['创建日期']||f['日期']||f['提交时间']||f['评价日期'], row.created_at) || '—';
+      const plat = ext(f['差评平台']||f['platform']||'—') || '—';
+      const prod = ext(f['差评产品']||f['product_name']||'');
+      const cat = ext(f['差评分类']||f['评分']||'');
+      let body = badReviewBodyTextFromFields(f);
+      if (body.length > 800) body = `${body.slice(0, 800)}…`;
+      detail.push(`${idx + 1}. **${d}** · ${plat}${prod ? ` · 产品：${prod}` : ''}${cat ? ` · 分类：${cat}` : ''}`);
+      detail.push(body ? `   内容：${body}` : '   内容：（飞书记录中暂无文字评价字段）');
+    });
+    if (detail.length) {
+      lines.push('', '**差评明细（逐条）**：');
+      lines.push(...detail);
+    }
+    if (rows.length > 15) lines.push('', `_…共 ${rows.length} 条，此处展示前 15 条_`);
     return lines.join('\n');
   } catch(e) { return `差评数据查询失败：${e?.message||'未知错误'}`; }
 }
@@ -2623,6 +2764,9 @@ export async function tryDeterministicReply(text, ctx) {
     if (pending) return pending;
     // Table visit
     reply = await buildTableVisitReply(store, q);
+    if (reply) return reply;
+    // Recharge (营业日报)
+    reply = await buildRechargeSituationReply(store, q, ctx);
     if (reply) return reply;
     // Bad review
     reply = await buildBadReviewReply(store, q);

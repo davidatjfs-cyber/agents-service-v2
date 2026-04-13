@@ -78,7 +78,10 @@ function severityZh(s) {
 }
 
 function pickReviewText(f) {
-  const keys = ['评价内容', '差评原因', 'content', 'reason', '差评内容', '备注'];
+  const keys = [
+    '评价内容', '差评原因', '差评内容', 'content', 'reason', '备注', '文字评价', '用户评论',
+    '评论内容', '评价详情', 'review_content', 'reviewContent'
+  ];
   for (const k of keys) {
     const v = f[k];
     if (v != null && String(v).trim()) return String(v).trim();
@@ -264,7 +267,9 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
     const dr = await query(
       `SELECT date, actual_revenue, budget_rate, dine_traffic, dine_orders,
               delivery_actual, efficiency, pre_discount_revenue,
-              operational_anomaly_note
+              operational_anomaly_note,
+              COALESCE(recharge_count, 0)::int AS recharge_count,
+              COALESCE(recharge_amount, 0)::numeric AS recharge_amount
        FROM daily_reports WHERE store ILIKE ANY($1::text[]) AND date = $2 LIMIT 1`,
       [storePatsBrief, yesterday]
     );
@@ -277,11 +282,15 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
       const opLine = opOne
         ? `· **营运异常报备**：${opOne.slice(0, 600)}${opOne.length > 600 ? '…' : ''}`
         : '· **营运异常报备**：✅ 无（昨日营业日报未填写）';
+      const rCnt = Math.floor(Number(d.recharge_count) || 0);
+      const rAmt = Number(d.recharge_amount) || 0;
+      const rWarn = rCnt === 0 && rAmt === 0 ? '　⚠️昨日无充值入账' : '';
       sections.push(
         `**📊 昨日营业 (${yesterday})**\n` +
         `· 实收营业额：${FMT_MONEY(d.actual_revenue)}　达成率：${rateIcon} ${FMT_PCT(d.budget_rate)}\n` +
         `· 堂食客流：${d.dine_traffic || 0}人　堂食桌数：${d.dine_orders || 0}桌\n` +
         `· 外卖营收：${FMT_MONEY(d.delivery_actual)}　人效：${FMT_MONEY(d.efficiency)}/人\n` +
+        `· **充值（会员卡/储值）**：**${rCnt}** 笔　**${FMT_MONEY(rAmt)}**（营业日报）${rWarn}\n` +
         opLine
       );
     } else {
@@ -456,23 +465,28 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
     sections.push(`**──────── 昨日营运速览 ────────**\n⚠️ 加载失败：${e?.message || '未知错误'}`);
   }
 
-  // 4. 昨日差评摘要（飞书差评报告）
+  // 4. 昨日差评（飞书差评报告：含逐条文字，便于店长跟进）
   try {
     const br = await getBadReviewRowsForStoreDateRange(store, yesterday, yesterday);
     if (br.length) {
-      const byPlat = new Map();
-      for (const row of br) {
+      const head = [
+        `**💬 昨日差评（${yesterday}）**`,
+        `_来源：飞书「差评报告」同步表（\`feishu_generic_records\`，config_key=bad_review）_`,
+        `· 差评总数：**${br.length}** 条`,
+        ''
+      ];
+      const body = [];
+      br.slice(0, 10).forEach((row, i) => {
         const f = row.fields && typeof row.fields === 'object' ? row.fields : {};
         const plat = pickReviewPlatform(f);
-        const txt = pickReviewText(f);
-        if (!byPlat.has(plat)) byPlat.set(plat, []);
-        if (txt) byPlat.get(plat).push(txt.slice(0, 120));
-      }
-      const parts = [];
-      for (const [plat, texts] of byPlat) {
-        parts.push(`· **${plat}** ${texts.length}条｜摘要：${texts[0] || '（无文字摘要）'}${texts.length > 1 ? '…' : ''}`);
-      }
-      sections.push(`**💬 昨日差评（${yesterday}）**\n${parts.join('\n')}`);
+        const prod = String(f['差评产品'] || f['product_name'] || '').trim();
+        let txt = pickReviewText(f);
+        if (txt.length > 500) txt = `${txt.slice(0, 500)}…`;
+        body.push(`${i + 1}. **${plat}**${prod ? ` · 产品：${prod}` : ''}`);
+        body.push(txt ? `   内容：${txt}` : '   内容：（记录中暂无评价正文，请在飞书多维表补充「评价内容」等字段）');
+      });
+      if (br.length > 10) body.push('', `_…共 ${br.length} 条，晨报展示前 10 条；完整列表可在飞书问「昨天差评情况」_`);
+      sections.push([...head, ...body].join('\n'));
     } else {
       sections.push(`**💬 昨日差评（${yesterday}）**\n✅ 飞书差评报告中无该日记录`);
     }
