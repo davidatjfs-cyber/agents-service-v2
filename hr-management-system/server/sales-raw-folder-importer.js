@@ -23,6 +23,12 @@ import {
 
 const LOCK = { running: false };
 
+/** 由 index 注册：目录入库出现失败时立刻飞书通知 admin（避免循环依赖） */
+let _importFailureNotifier = null;
+export function setSalesRawFolderImportFailureNotifier(fn) {
+  _importFailureNotifier = typeof fn === 'function' ? fn : null;
+}
+
 function inferDateFromFilename(input, now = new Date()) {
   const raw = String(input || '').trim();
   if (!raw) return '';
@@ -198,6 +204,18 @@ export async function runSalesRawFolderImportOnce() {
     if (files.length) {
       console.log('[sales-raw-folder] scan', dir, 'files', files.length, 'imported_ok', okN);
     }
+    const bad = results.filter((r) => !r.ok);
+    if (bad.length && _importFailureNotifier) {
+      const summary = bad
+        .map((r) => `${r.file}: ${String(r.error || r.hint || '').slice(0, 120)}`)
+        .join(' | ')
+        .slice(0, 480);
+      try {
+        void _importFailureNotifier(new Error(summary), { dir, failedCount: bad.length, processed: files.length });
+      } catch (_e) {
+        /* ignore */
+      }
+    }
     return { ok: true, dir, processed: files.length, results };
   } finally {
     LOCK.running = false;
@@ -214,10 +232,24 @@ export function startSalesRawFolderImporter() {
   }
   const ms = Math.max(60_000, Number(process.env.SALES_RAW_IMPORT_INTERVAL_MS || 900_000));
   setInterval(() => {
-    runSalesRawFolderImportOnce().catch((e) => console.error('[sales-raw-folder] tick error:', e?.message || e));
+    runSalesRawFolderImportOnce().catch((e) => {
+      console.error('[sales-raw-folder] tick error:', e?.message || e);
+      try {
+        void _importFailureNotifier?.(e, { dir, tick: true });
+      } catch (_e2) {
+        /* ignore */
+      }
+    });
   }, ms);
   setTimeout(() => {
-    runSalesRawFolderImportOnce().catch((e) => console.error('[sales-raw-folder] startup run:', e?.message || e));
+    runSalesRawFolderImportOnce().catch((e) => {
+      console.error('[sales-raw-folder] startup run:', e?.message || e);
+      try {
+        void _importFailureNotifier?.(e, { dir, startup: true });
+      } catch (_e2) {
+        /* ignore */
+      }
+    });
   }, 30_000);
   console.log(
     `[sales-raw-folder] 已启用：每 ${Math.round(ms / 60000)} 分钟扫描 ${dir}；成功→imported/，失败→failed/；SALES_RAW_IMPORT_FORCE=true 可跳过成本门槛`

@@ -4168,7 +4168,10 @@ async function loadUnifiedTableVisitRowsByStore(store, startDate, endDate) {
       const fields = row?.fields && typeof row.fields === 'object' ? row.fields : {};
       const rowStore = String(fields['所属门店'] || fields['门店'] || '').trim();
       if (!feishuTableRowMatches(store, rowStore)) continue;
-      const date = normalizeBitableDateValue(fields['日期'] || fields['营业日期'], row?.created_at);
+      const date = normalizeBitableDateValue(
+        fields['记录日期'] || fields['提交时间'] || fields['日期'] || fields['营业日期'],
+        row?.created_at
+      );
       if (!inDateRangeInclusive(date, startDate, endDate)) continue;
       out.push({
         date,
@@ -4662,7 +4665,7 @@ async function processTableVisitData(records) {
     const tableVisitData = {
       recordId: record.record_id,
       createdTime: record.created_time,
-      date: fields['日期'] || '',
+      date: fields['记录日期'] || fields['提交时间'] || fields['日期'] || fields['营业日期'] || '',
       store: fields['门店'] || fields['所属门店'] || '',
       brand: fields['所属品牌'] || '',
       tableNumber: fields['桌号'] || '',
@@ -4697,7 +4700,10 @@ async function processTableVisitData(records) {
       console.log(`[table_visit] saved record: ${tableVisitData.recordId}`);
 
       // 稳定同步：同时写入结构化表，便于BI精确查询
-      const visitDate = normalizeBitableDateValue(fields['日期'] || fields['营业日期'], record.created_time);
+      const visitDate = normalizeBitableDateValue(
+        fields['记录日期'] || fields['提交时间'] || fields['日期'] || fields['营业日期'],
+        record.created_time
+      );
       const visitStore = normalizeCanonicalStoreName(String(fields['门店'] || fields['所属门店'] || '').trim());
       if (visitDate && visitStore) {
         const rushText = String(extractBitableFieldText(fields['今天催菜内容']) || '').trim();

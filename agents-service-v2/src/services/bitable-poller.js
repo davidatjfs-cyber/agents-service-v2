@@ -30,7 +30,8 @@ const BITABLE_CONFIGS = {
     name: '桌访表',
     type: 'table_visit',
     pollingInterval: 300000,
-    sortField: '["日期 DESC"]'
+    // 勿按「日期」排序：现网表头多为「记录日期」无「日期」列时会导致 OpenAPI 报错、整表拉取失败
+    sortField: '["_id DESC"]'
   },
   'bad_review': {
     appId: process.env.BITABLE_TABLEVISIT_APP_ID || 'cli_a9fc0d13c838dcd6',
@@ -132,6 +133,48 @@ const BITABLE_CONFIGS = {
 const _tokenCache = new Map();
 const BASE_URL = 'https://open.feishu.cn/open-apis';
 
+/** 单次 HTTP 超时（大表 15s 极易误报；可用环境变量覆盖） */
+const BITABLE_HTTP_TIMEOUT_MS = (() => {
+  const n = Number(process.env.BITABLE_HTTP_TIMEOUT_MS);
+  return Number.isFinite(n) && n >= 15000 ? n : 60000;
+})();
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * 飞书 OpenAPI 与网页不同：大表/索引中常见 1254607「Data not ready」、或网络/超时。
+ * 仅用于 getBitableRecords 内退避重试；多轮仍失败时由 notifyBitablePollFetchFailed 按「真失败」告警。
+ */
+function isTransientBitableFetchError(errText) {
+  const s = String(errText || '');
+  return /1254607|data not ready|try again later|timeout|ECONNABORTED|ECONNRESET|ETIMEDOUT|socket hang up|EAI_AGAIN|429|502|503|504/i.test(s);
+}
+
+/** 轮询在 getBitableRecords 用尽重试后仍失败 → 视为真失败，必须通知管理员（与飞书网页能否打开无关）。 */
+function notifyBitablePollFetchFailed(configKey, config, error) {
+  const err = String(error || '').trim() || 'unknown';
+  const urgent =
+    err === 'no_token' ||
+    err === 'invalid_config' ||
+    /401|403|99991663|1254045|1254004|invalid tenant|credential|sort/i.test(err);
+  void notifyAdminsDataIssue({
+    alertType: 'bitable_poll_fetch_failed',
+    title: `飞书多维表同步失败：${config?.name || configKey}`,
+    lines: [
+      `配置键：${configKey}`,
+      `表名：${config?.name || '-'}`,
+      `app_token：${String(config?.appToken || '').slice(0, 12)}…`,
+      `table_id：${config?.tableId || '-'}`,
+      `错误摘要：${err.slice(0, 700)}`
+    ],
+    dedupeKey: `bitable_poll_fail_${configKey}`,
+    priority: urgent ? 'A' : 'B',
+    dedupeHours: urgent ? 2 : 6
+  });
+}
+
 async function getBitableTenantToken(configKey = 'ops_checklist') {
   const config = BITABLE_CONFIGS[configKey];
   if (!config) return '';
@@ -163,23 +206,53 @@ async function getBitableRecords(configKey, options = {}) {
   if (pageToken) params.page_token = pageToken;
   if (filter) params.filter = filter;
   if (config.sortField) params.sort = config.sortField;
-  else params.sort = JSON.stringify(["_id DESC"]);
-  try {
-    const resp = await axios.get(
-      `${BASE_URL}/bitable/v1/apps/${config.appToken}/tables/${config.tableId}/records`,
-      { headers: { Authorization: `Bearer ${token}` }, params, timeout: 15000 }
-    );
-    return {
-      ok: true,
-      records: resp.data?.data?.items || [],
-      hasMore: resp.data?.data?.has_more || false,
-      nextPageToken: resp.data?.data?.page_token || '',
-      total: resp.data?.data?.total || 0
-    };
-  } catch (e) {
-    logger.error({ configKey, err: e?.response?.data || e?.message }, 'bitable fetch failed');
-    return { ok: false, error: String(e?.message || e) };
+  else params.sort = JSON.stringify(['_id DESC']);
+
+  const maxAttempts = 6;
+  let lastErr = 'unknown';
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const resp = await axios.get(
+        `${BASE_URL}/bitable/v1/apps/${config.appToken}/tables/${config.tableId}/records`,
+        { headers: { Authorization: `Bearer ${token}` }, params, timeout: BITABLE_HTTP_TIMEOUT_MS }
+      );
+      const bizCode = resp.data?.code;
+      if (bizCode != null && Number(bizCode) !== 0) {
+        const msg = String(resp.data?.msg || resp.data?.error || '').trim() || 'unknown';
+        lastErr = `feishu_code_${bizCode}: ${msg}`;
+        if (isTransientBitableFetchError(lastErr) && attempt < maxAttempts) {
+          const delay = Math.min(20000, 2000 * attempt);
+          logger.warn({ configKey, bizCode, attempt, delay }, 'bitable business code transient, retrying');
+          await sleep(delay);
+          continue;
+        }
+        logger.error({ configKey, bizCode, msg }, 'bitable fetch business error');
+        return { ok: false, error: lastErr };
+      }
+      return {
+        ok: true,
+        records: resp.data?.data?.items || [],
+        hasMore: resp.data?.data?.has_more || false,
+        nextPageToken: resp.data?.data?.page_token || '',
+        total: resp.data?.data?.total || 0
+      };
+    } catch (e) {
+      const detail = e?.response?.data;
+      lastErr = detail
+        ? `HTTP ${e.response?.status || '?'} ${typeof detail === 'object' ? JSON.stringify(detail).slice(0, 400) : String(detail)}`
+        : String(e?.message || e);
+      if (isTransientBitableFetchError(lastErr) && attempt < maxAttempts) {
+        const delay = Math.min(20000, 2000 * attempt);
+        logger.warn({ configKey, attempt, delay, err: lastErr.slice(0, 300) }, 'bitable HTTP transient, retrying');
+        await sleep(delay);
+        continue;
+      }
+      logger.error({ configKey, err: detail || e?.message }, 'bitable fetch failed');
+      return { ok: false, error: lastErr };
+    }
   }
+  return { ok: false, error: lastErr };
 }
 
 // ── Dedup: track processed record IDs ──
@@ -213,7 +286,11 @@ export async function pollBitableTable(configKey) {
   let page = 0;
   while (page < 20) {
     const result = await getBitableRecords(configKey, { pageSize: 200, pageToken });
-    if (!result.ok) { logger.error({ configKey, error: result.error }, 'poll failed'); return; }
+    if (!result.ok) {
+      logger.error({ configKey, error: result.error }, 'poll failed');
+      notifyBitablePollFetchFailed(configKey, config, result.error);
+      return;
+    }
     allRecords.push(...(result.records || []));
     if (!result.hasMore || !result.nextPageToken) break;
     pageToken = result.nextPageToken;
@@ -224,25 +301,23 @@ export async function pollBitableTable(configKey) {
   for (const record of allRecords) {
     const recordId = record.record_id;
     const dedupKey = `${config.appToken}_${config.tableId}_${recordId}`;
-    const alreadySeen = !config.skipDedup && _processedIds.has(dedupKey);
+    const wasInDedupSet = !config.skipDedup && _processedIds.has(dedupKey);
 
-    // Save to feishu_generic_records (shared with V1)：始终 upsert，确保字段最新
-    if (!alreadySeen) {
-      try {
-        await query(
-          `INSERT INTO feishu_generic_records (app_token, table_id, record_id, config_key, fields, raw, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, NOW(), NOW())
-           ON CONFLICT (app_token, table_id, record_id) DO UPDATE SET
-             config_key = COALESCE(EXCLUDED.config_key, feishu_generic_records.config_key),
-             fields = EXCLUDED.fields, raw = EXCLUDED.raw, updated_at = NOW()`,
-          [config.appToken || '', config.tableId || '', recordId, configKey,
-           JSON.stringify(record.fields || {}), JSON.stringify(record)]
-        );
-        newCount++;
-      } catch (e) {
-        if (!String(e?.message || '').includes('duplicate')) {
-          logger.error({ configKey, recordId, err: e?.message }, 'save generic record failed');
-        }
+    // Save to feishu_generic_records：每条每轮都 upsert（飞书侧可能仅改字段；旧逻辑用 dedup 跳过写入会导致缓存永不更新）
+    try {
+      await query(
+        `INSERT INTO feishu_generic_records (app_token, table_id, record_id, config_key, fields, raw, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, NOW(), NOW())
+         ON CONFLICT (app_token, table_id, record_id) DO UPDATE SET
+           config_key = COALESCE(EXCLUDED.config_key, feishu_generic_records.config_key),
+           fields = EXCLUDED.fields, raw = EXCLUDED.raw, updated_at = NOW()`,
+        [config.appToken || '', config.tableId || '', recordId, configKey,
+         JSON.stringify(record.fields || {}), JSON.stringify(record)]
+      );
+      if (!config.skipDedup && !wasInDedupSet) newCount++;
+    } catch (e) {
+      if (!String(e?.message || '').includes('duplicate')) {
+        logger.error({ configKey, recordId, err: e?.message }, 'save generic record failed');
       }
     }
 
@@ -254,9 +329,8 @@ export async function pollBitableTable(configKey) {
       logger.error({ configKey, recordId, err: e?.message }, 'process record failed');
     }
 
-    if (!config.skipDedup && !alreadySeen) {
+    if (!config.skipDedup) {
       _processedIds.add(dedupKey);
-      // Prevent memory bloat
       if (_processedIds.size > DEDUP_MAX) {
         const oldest = Array.from(_processedIds).slice(0, DEDUP_CLEAN);
         oldest.forEach(id => _processedIds.delete(id));
@@ -300,7 +374,7 @@ async function processRecord(configKey, type, record, brand) {
         type: 'table_visit', recordId,
         fields: {
           store: extractText(fields['门店']) || extractText(fields['所属门店']),
-          date: extractText(fields['日期']),
+          date: extractText(fields['记录日期']) || extractText(fields['提交时间']) || extractText(fields['日期']),
           table_no: extractText(fields['桌号']),
           satisfaction: extractText(fields['今天用餐是否满意']) || extractText(fields['满意度']),
           product_issue: extractText(fields['今天不满意的菜品']) || extractText(fields['产品不满意项']),

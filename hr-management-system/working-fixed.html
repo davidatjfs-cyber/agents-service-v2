@@ -12471,6 +12471,151 @@
 
         let __POINTS_RULES_CACHE = [];
         let __POINTS_APPLY_COUNTER = 0;
+        let __POINTS_RET_ROW_SEQ = 0;
+
+        async function ensurePointsRulesCacheForResubmit() {
+            if (__POINTS_RULES_CACHE && __POINTS_RULES_CACHE.length) return;
+            try {
+                const rulesResp = await HRMS_API.getPointRules({ store: String(currentUser?.store || '').trim() });
+                const rules = (Array.isArray(rulesResp?.items) ? rulesResp.items : [])
+                    .filter(r => r?.enabled !== false)
+                    .sort((a, b) => Number(b?.points || 0) - Number(a?.points || 0));
+                __POINTS_RULES_CACHE = rules;
+            } catch (e) {
+                if (!__POINTS_RULES_CACHE) __POINTS_RULES_CACHE = [];
+            }
+        }
+
+        async function initPointsReturnedResubmitEditor() {
+            const rowsEl = document.getElementById('points-returned-rows');
+            if (!rowsEl) return;
+            await ensurePointsRulesCacheForResubmit();
+            rowsEl.innerHTML = '';
+            __POINTS_RET_ROW_SEQ = 0;
+            const cur = __CURRENT_APPROVAL;
+            const p = cur?.payload && typeof cur.payload === 'object' ? cur.payload : {};
+            const batch = Array.isArray(p.items) && p.items.length
+                ? p.items.slice()
+                : (String(p.ruleId || '').trim() ? [{ ruleId: p.ruleId, reason: p.reason || '', itemName: p.itemName, points: p.points }] : []);
+            if (!batch.length) {
+                addPointsReturnedResubmitRow({});
+                return;
+            }
+            batch.forEach((it) => {
+                addPointsReturnedResubmitRow({
+                    ruleId: it.ruleId,
+                    reason: it.reason,
+                    itemName: it.itemName,
+                    points: it.points
+                });
+            });
+        }
+
+        function addPointsReturnedResubmitRow(prefill) {
+            const container = document.getElementById('points-returned-rows');
+            if (!container) return;
+            const count = container.querySelectorAll('.pts-ret-item').length;
+            if (count >= 20) { showNotification('单次最多申请20条', 'warning'); return; }
+            __POINTS_RET_ROW_SEQ++;
+            const idx = __POINTS_RET_ROW_SEQ;
+            const rules = __POINTS_RULES_CACHE || [];
+            const rulesHtml = rules.length
+                ? rules.map((r, ri) => `<div class="pts-rule-opt pts-ret-rule-opt" data-rid="${escapeHtml(String(r?.id||''))}" data-pts="${Number(r?.points||0)}" onclick="selectPointsReturnedRule(this,${idx})" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;${ri < rules.length - 1 ? 'border-bottom:1px solid rgba(255,255,255,0.06);' : ''}cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background 0.18s ease;"><span style="flex:1;font-size:13px;color:rgba(226,232,240,0.9);line-height:1.5;padding-right:10px;">${escapeHtml(String(r?.itemName||'-'))}<span style="display:inline-block;margin-left:6px;font-size:11px;font-weight:700;color:rgba(250,204,21,0.82);">+${Number(r?.points||0)}分</span></span><div class="pts-radio-dot" style="width:22px;height:22px;border-radius:50%;border:2px solid rgba(255,255,255,0.2);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.15s ease;background:rgba(255,255,255,0.04);"></div></div>`).join('')
+                : '<div style="padding:18px;text-align:center;color:rgba(200,215,230,0.45);font-size:13px;">暂无可用事项</div>';
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'pts-ret-item';
+            itemDiv.setAttribute('data-idx', String(idx));
+            itemDiv.style.cssText = 'padding:14px;border-radius:14px;border:1px solid rgba(99,102,241,0.28);background:rgba(15,23,42,0.45);position:relative;';
+            const ruleBlock = `<input type="hidden" class="pts-ret-rule" value="">
+                    <div id="pts-ret-picker-${idx}" style="border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,0.12);background:rgba(30,41,59,0.65);max-height:min(48vh,260px);overflow-y:auto;-webkit-overflow-scrolling:touch;">
+                        <div style="padding:8px 12px;font-size:10px;font-weight:700;letter-spacing:0.1em;color:rgba(186,230,253,0.5);border-bottom:1px solid rgba(255,255,255,0.07);pointer-events:none;">选择积分事项</div>
+                        ${rulesHtml}
+                    </div>`;
+            itemDiv.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <span class="pts-ret-seq" style="font-size:12px;font-weight:700;color:#a5b4fc;">第 ${count + 1} 条</span>
+                    ${count > 0 ? `<button type="button" onclick="removePointsReturnedResubmitRow(this)" style="background:none;border:none;color:rgba(239,68,68,0.85);font-size:16px;cursor:pointer;padding:0 4px;line-height:1;" title="删除此条">✕</button>` : ''}
+                </div>
+                <div style="margin-bottom:8px;">
+                    <label style="display:block;font-size:11px;font-weight:600;color:rgba(200,215,230,0.72);margin-bottom:6px;">申请事项</label>
+                    ${ruleBlock}
+                </div>
+                <div>
+                    <label style="display:block;font-size:11px;font-weight:600;color:rgba(200,215,230,0.72);margin-bottom:4px;">申请理由</label>
+                    <textarea class="form-input pts-ret-reason" placeholder="请填写具体表现与贡献" style="width:100%;min-height:56px;padding:10px 12px;border-radius:10px;font-size:13px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:rgba(226,232,240,0.95);resize:vertical;"></textarea>
+                </div>
+            `;
+            container.appendChild(itemDiv);
+            const pf = prefill && typeof prefill === 'object' ? prefill : {};
+            const rid = String(pf.ruleId || '').trim();
+            const ta = itemDiv.querySelector('textarea.pts-ret-reason');
+            if (ta && pf.reason != null) ta.value = String(pf.reason);
+            if (rid) {
+                const picker = document.getElementById('pts-ret-picker-' + idx);
+                let hit = null;
+                if (picker) {
+                    picker.querySelectorAll('.pts-ret-rule-opt').forEach((o) => {
+                        if (String(o.getAttribute('data-rid') || '') === rid) hit = o;
+                    });
+                }
+                if (hit) selectPointsReturnedRule(hit, idx);
+                else {
+                    const warn = document.createElement('div');
+                    warn.style.cssText = 'font-size:11px;color:#fb923c;margin:0 0 8px;line-height:1.45;';
+                    const nm = String(pf.itemName || '').trim() || '原事项';
+                    warn.textContent = '「' + nm + '」已不在可选列表，请从下方重新选择一项。';
+                    const wrap = itemDiv.querySelector(`#pts-ret-picker-${idx}`);
+                    if (wrap && wrap.parentNode) wrap.parentNode.insertBefore(warn, wrap);
+                }
+            }
+            refreshPointsReturnedRowChrome();
+        }
+
+        function selectPointsReturnedRule(el, idx) {
+            const picker = document.getElementById('pts-ret-picker-' + idx);
+            if (!picker) return;
+            picker.querySelectorAll('.pts-ret-rule-opt').forEach(opt => {
+                opt.style.background = '';
+                opt.style.borderLeft = '';
+                opt.style.paddingLeft = '14px';
+                const dot = opt.querySelector('.pts-radio-dot');
+                if (dot) { dot.style.border='2px solid rgba(255,255,255,0.18)'; dot.style.background='rgba(255,255,255,0.03)'; dot.innerHTML=''; }
+            });
+            el.style.background = 'rgba(99,102,241,0.13)';
+            el.style.borderLeft = '3px solid rgba(129,140,248,0.65)';
+            el.style.paddingLeft = '11px';
+            const dot = el.querySelector('.pts-radio-dot');
+            if (dot) {
+                dot.style.border = '2px solid #818cf8';
+                dot.style.background = 'rgba(99,102,241,0.28)';
+                dot.innerHTML = '<div style="width:9px;height:9px;border-radius:50%;background:#a5b4fc;"></div>';
+            }
+            const itemDiv = el.closest('.pts-ret-item');
+            if (itemDiv) {
+                const hidden = itemDiv.querySelector('.pts-ret-rule');
+                if (hidden) hidden.value = el.getAttribute('data-rid');
+            }
+        }
+
+        function removePointsReturnedResubmitRow(btn) {
+            const itemDiv = btn.closest('.pts-ret-item');
+            if (itemDiv) itemDiv.remove();
+            refreshPointsReturnedRowChrome();
+        }
+
+        function refreshPointsReturnedRowChrome() {
+            const container = document.getElementById('points-returned-rows');
+            if (!container) return;
+            const items = container.querySelectorAll('.pts-ret-item');
+            items.forEach((el, i) => {
+                const numSpan = el.querySelector('.pts-ret-seq');
+                if (numSpan) numSpan.textContent = `第 ${i + 1} 条`;
+                const delBtn = el.querySelector('button[onclick*="removePointsReturnedResubmitRow"]');
+                if (items.length <= 1) {
+                    if (delBtn) delBtn.style.display = 'none';
+                } else if (delBtn) delBtn.style.display = '';
+            });
+        }
 
         function addPointsApplyItem() {
             const container = document.getElementById('points-apply-items');
@@ -13137,23 +13282,11 @@
                 const mePtsReturned = String(currentUser?.username || '').toLowerCase();
                 const appPtsReturned = String(item?.applicant_username || '').toLowerCase();
                 if (String(item?.status || '') === 'returned' && mePtsReturned && appPtsReturned === mePtsReturned) {
-                    const reasonsBlock = batchItems.length
-                        ? batchItems.map((it) => {
-                            const rid = String(it?.ruleId || '').trim();
-                            const inm = String(it?.itemName || '').trim() || '积分事项';
-                            const rsn = String(it?.reason || '');
-                            return `<div style="margin-top:10px;padding:10px;border-radius:10px;border:1px solid rgba(99,102,241,0.25);background:rgba(99,102,241,0.06);">
-                                <div style="font-size:12px;color:rgba(200,215,230,0.85);margin-bottom:6px;">${escapeHtml(inm)} <span style="color:#94a3b8;">(${Number(it?.points || 0)}分)</span></div>
-                                <textarea class="pts-resubmit-reason form-input" data-rule-id="${escapeHtml(rid)}" rows="3" style="width:100%;resize:vertical;" placeholder="请填写或修改理由">${escapeHtml(rsn)}</textarea>
-                            </div>`;
-                        }).join('')
-                        : `<div style="margin-top:10px;">
-                            <textarea class="pts-resubmit-reason form-input" data-rule-id="${escapeHtml(String(payload?.ruleId || '').trim())}" rows="3" style="width:100%;resize:vertical;" placeholder="请填写或修改理由">${escapeHtml(String(payload?.reason || ''))}</textarea>
-                        </div>`;
                     payloadHtml += `<div id="points-returned-edit-wrap" style="margin-top:14px;padding:12px;border-radius:12px;border:1px solid rgba(99,102,241,0.35);background:rgba(99,102,241,0.08);">
                         <div style="font-weight:800;color:#a5b4fc;margin-bottom:8px;">退回修改</div>
-                        <div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:10px;">请核对每条理由后点「重新提交」。积分事项不可改；经退回再次提交不占用当天「新建申报」的次数。</div>
-                        ${reasonsBlock}
+                        <div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:10px;">可删除填错的条目、点击「添加积分项」补充新事项；每条需选择事项并填写理由。重新提交不占用当天新建申报次数。</div>
+                        <div id="points-returned-rows" style="display:flex;flex-direction:column;gap:12px;"></div>
+                        <button type="button" class="btn btn-secondary" onclick="addPointsReturnedResubmitRow()" style="width:100%;margin-top:10px;padding:10px;border-radius:12px;border:1px dashed rgba(148,163,184,0.35);font-size:13px;font-weight:600;">+ 添加积分项</button>
                     </div>`;
                 }
             } else if (String(item?.type || '') === 'payment') {
@@ -13307,6 +13440,10 @@
                 exportPdfBtn.style.display = String(item?.type || '') === 'offboarding' ? '' : 'none';
             }
 
+            if (String(item?.type || '') === 'points' && String(item?.status || '') === 'returned' && myUsername && String(item?.applicant_username || '').toLowerCase() === myUsername) {
+                try { await initPointsReturnedResubmitEditor(); } catch (e) { console.warn(e); }
+            }
+
             modal.classList.add('show');
 
             HRMS_API.readApproval(key).then(() => {
@@ -13341,19 +13478,26 @@
                 showNotification('只有已退回的申请才能重新提交', 'warning');
                 return;
             }
-            if (!confirm('确认重新提交此申请？')) return;
             let resubmitBody = {};
             if (String(item?.type || '') === 'points') {
-                const wrap = document.getElementById('points-returned-edit-wrap');
-                const tas = wrap ? wrap.querySelectorAll('textarea.pts-resubmit-reason') : [];
+                const rowsEl = document.getElementById('points-returned-rows');
+                const rows = rowsEl ? rowsEl.querySelectorAll('.pts-ret-item') : [];
+                if (!rows.length) {
+                    showNotification('请至少保留一条积分申请', 'warning');
+                    return;
+                }
                 const itemsOut = [];
-                tas.forEach((t) => {
-                    const rid = String(t.getAttribute('data-rule-id') || '').trim();
-                    const reason = String(t.value || '').trim();
-                    if (rid) itemsOut.push({ ruleId: rid, reason });
-                });
-                if (itemsOut.length) resubmitBody.items = itemsOut;
+                for (let i = 0; i < rows.length; i++) {
+                    const el = rows[i];
+                    const ruleId = String(el.querySelector('.pts-ret-rule')?.value || '').trim();
+                    const reason = String(el.querySelector('.pts-ret-reason')?.value || '').trim();
+                    if (!ruleId) { showNotification(`第${i + 1}条请选择申请事项`, 'warning'); return; }
+                    if (!reason) { showNotification(`第${i + 1}条请填写申请理由`, 'warning'); return; }
+                    itemsOut.push({ ruleId, reason });
+                }
+                resubmitBody.items = itemsOut;
             }
+            if (!confirm('确认重新提交此申请？')) return;
             HRMS_API.resubmitApproval(id, resubmitBody)
                 .then(() => {
                     showNotification('已重新提交，等待审批', 'success');

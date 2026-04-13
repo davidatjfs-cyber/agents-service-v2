@@ -20,6 +20,7 @@ const LOG_TABLE = 'agent_admin_alert_log';
 
 /** 飞书正文展示用中文类型（日志里仍用英文 alertType 便于检索） */
 const ALERT_TYPE_LABEL_ZH = {
+  bitable_poll_fetch_failed: '飞书多维表轮询：拉取记录失败（整表未同步）',
   bitable_material_store_parse_empty: '原料表轮询：门店列有值但解析为空',
   bitable_material_date_parse_empty: '原料表轮询：日期列有值但解析为空',
   material_agent_feishu_divergence: '原料数据：助手结果与飞书同步库不一致',

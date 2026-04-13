@@ -7,6 +7,20 @@ import { pool } from './utils/database.js';
 import { inferBrandFromStoreName } from './agents.js';
 import { safeExecute, safeErrorLog } from './utils/error-handler.js';
 
+let _feishuSyncFailureNotifier = null;
+/** 由 index 注册：飞书→PG 定时/按表同步失败时立刻通知 admin */
+export function setFeishuSyncFailureNotifier(fn) {
+  _feishuSyncFailureNotifier = typeof fn === 'function' ? fn : null;
+}
+
+function notifyFeishuSyncFailure(label, error) {
+  try {
+    void _feishuSyncFailureNotifier?.(label, error);
+  } catch (_e) {
+    /* ignore */
+  }
+}
+
 // ─────────────────────────────────────────────
 // 1. 飞书应用配置
 // ─────────────────────────────────────────────
@@ -374,6 +388,7 @@ export async function syncKitchenReports(tableConfig, accessToken, reportType) {
     
   } catch (error) {
     console.error(`[sync] 同步 ${tableConfig.name} 失败:`, error);
+    notifyFeishuSyncFailure(tableConfig?.name || '厨房报告', error);
   }
 }
 
@@ -423,6 +438,7 @@ export async function syncMeetingReports(tableConfig, accessToken) {
     
   } catch (error) {
     console.error(`[sync] 同步 ${tableConfig.name} 失败:`, error);
+    notifyFeishuSyncFailure(tableConfig?.name || '例会报告', error);
   }
 }
 
@@ -468,6 +484,7 @@ export async function syncMaterialReports(tableConfig, accessToken, brand) {
     
   } catch (error) {
     console.error(`[sync] 同步 ${tableConfig.name} 失败:`, error);
+    notifyFeishuSyncFailure(tableConfig?.name || '原料收货日报', error);
   }
 }
 
@@ -543,6 +560,7 @@ export async function syncDishLibraryCosts() {
     return { ok: true, records: recordCount, upserted };
   } catch (error) {
     console.error('[sync] 菜品库同步失败:', error);
+    notifyFeishuSyncFailure('菜品库成本', error);
     return { ok: false, error: String(error?.message || error) };
   }
 }
@@ -576,6 +594,7 @@ export async function syncAllFeishuTables() {
     
   } catch (error) {
     console.error('[sync] 飞书同步失败:', error);
+    notifyFeishuSyncFailure('全量 syncAllFeishuTables', error);
   }
 }
 
@@ -601,6 +620,7 @@ export function startDailyFeishuSync() {
         console.log('[scheduler] 每日同步完成');
       } catch (error) {
         console.error('[scheduler] 每日同步失败:', error);
+        notifyFeishuSyncFailure('每日凌晨定时', error);
       }
       
       // 安排下一次同步
@@ -623,12 +643,16 @@ export function startDailyFeishuSync() {
         const runKey = localDateKey(nowSh);
         if (runKey !== lastWeeklyDishSyncKey) {
           lastWeeklyDishSyncKey = runKey;
-          await syncDishLibraryCosts();
-          console.log('[scheduler] 每周菜品库同步完成');
+          const dishR = await syncDishLibraryCosts();
+          if (dishR?.ok) {
+            console.log('[scheduler] 每周菜品库同步完成');
+          }
+          // 失败时已在 syncDishLibraryCosts 内 notifyFeishuSyncFailure
         }
       }
     } catch (error) {
       console.error('[scheduler] 每周菜品库同步失败:', error?.message || error);
+      notifyFeishuSyncFailure('每周菜品库调度', error);
     }
   }, 60 * 1000);
   console.log('[scheduler] 每周六00:00菜品库同步调度器已启动');

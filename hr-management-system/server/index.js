@@ -33,13 +33,13 @@ import { ensureAgentConfigTables, registerAgentConfigRoutes } from "./agent-conf
 import { setMasterPool, ensureMasterTables, startMasterAgent, registerMasterRoutes, handleTaskResponse } from './master-agent.js';
 import { setReportPool, generateWeeklyReport, formatReportMarkdown } from './bi-weekly-report.js';
 import { setSalesRawPool, parseSalesRawRows, insertSalesRawRows, evaluateSalesRawUploadQuality } from './sales-raw-upload.js';
-import { startSalesRawFolderImporter, runSalesRawFolderImportOnce } from './sales-raw-folder-importer.js';
+import { startSalesRawFolderImporter, runSalesRawFolderImportOnce, setSalesRawFolderImportFailureNotifier } from './sales-raw-folder-importer.js';
 import {
   startHrmsPerformanceJobs,
   sendWeeklyDishOptimizationReport,
   getLastCompletedWeekRangeShanghai
 } from './performance-jobs.js';
-import { startDailyFeishuSync, syncDishLibraryCosts } from './feishu-sync.js';
+import { startDailyFeishuSync, syncDishLibraryCosts, setFeishuSyncFailureNotifier } from './feishu-sync.js';
 import { calculateStoreRating, calculateEmployeeScore } from './new-scoring-model.js';
 import { registerNewScoringRoutes } from './new-scoring-api.js';
 import { handleMarginMessage } from './margin-message-handler.js';
@@ -873,7 +873,8 @@ function mapFeishuFieldToHrms(feishuRecord, fieldType) {
   
   if (fieldType === 'table_visit') {
     // 桌访记录完整字段映射（供agent使用）
-    mapped.date = parseFeishuDate(pickRaw('日期', '就餐日期', '发生日期'));
+    // 飞书多维里常见主键为「记录日期」「提交时间」，旧模板用「日期」；缺任一都会导致无法入结构化表
+    mapped.date = parseFeishuDate(pickRaw('记录日期', '提交时间', '日期', '就餐日期', '发生日期', '营业日期'));
     mapped.store = pickText('所属门店', '门店', '店铺');
     mapped.brand = pickText('所属品牌', '品牌');
     mapped.tableNumber = pickText('桌号', '桌位号');
@@ -5139,6 +5140,8 @@ async function mergeSharedStateFields(patches, arrayIdFields = {}) {
  * - employee_attendance_records（打卡写入、打卡确认同步镜像）
  * - employees（PUT /api/state 单条与批处理）
  * - daily_reports（营业日报：hrms_state 与 PostgreSQL 表同步失败时告警，避免 BI/绩效读库缺数）
+ * - sales_raw（Excel 上传 / 目录 SALES_RAW_IMPORT_DIR 自动入库失败或抛错）
+ * - 飞书表格→PG（feishu-sync 定时按表失败；Webhook bitable 异步处理失败；手动多维表同步失败）
  */
 async function notifyAdminsDualWriteFailure(scopeLabel, err) {
   try {
@@ -10045,6 +10048,12 @@ app.post('/api/reports/sales-raw/upload', authRequired, upload.single('file'), a
     }
     const forceUpload = String(req.body?.force || '') === 'true' && role === 'admin';
     if (!quality.pass && !forceUpload) {
+      void notifyAdminsDualWriteFailure(
+        'sales_raw（上传被成本覆盖率拦截）',
+        new Error(
+          `门店=${qStore} 业务=${selBiz} 覆盖率=${Number(quality?.salesCoveragePct || 0).toFixed(1)}% 门槛=${Number(quality?.thresholdPct || 0)}% 操作人=${username}`
+        )
+      );
       return res.status(422).json({
         error: 'low_cost_coverage',
         message: `成本覆盖率 ${Number(quality?.salesCoveragePct || 0).toFixed(1)}% 低于门槛 ${Number(quality?.thresholdPct || 0)}%，已阻止导入。请先补齐成本库或菜名别名。`,
@@ -10057,6 +10066,10 @@ app.post('/api/reports/sales-raw/upload', authRequired, upload.single('file'), a
     const ret = await insertSalesRawRows(parsed, qStore, selBiz, dates[0], dates[dates.length - 1]);
     return res.json({ ok: true, store: qStore, bizType: selBiz, dateRange: `${dates[0]}~${dates[dates.length-1]}`, rows: parsed.length, quality, qualityWarnings, ...ret });
   } catch (e) {
+    void notifyAdminsDualWriteFailure(
+      `sales_raw（Excel 上传入库异常·${String(req.body?.store || '').trim() || '?'}）`,
+      e
+    );
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e).slice(0, 300) });
   } finally {
     try { if (req.file?.path) fs.unlinkSync(req.file.path); } catch (e) {}
@@ -10071,6 +10084,7 @@ app.post('/api/admin/sales-raw/run-folder-import', authRequired, async (req, res
     const r = await runSalesRawFolderImportOnce();
     return res.json(r);
   } catch (e) {
+    void notifyAdminsDualWriteFailure('sales_raw（管理员触发目录导入抛错）', e);
     return res.status(500).json({ error: String(e?.message || e) });
   }
 });
@@ -13237,6 +13251,7 @@ app.post('/api/webhook/feishu', express.raw({ type: 'application/json' }), async
             'update feishu_sync_logs set sync_status = $1, error_message = $2, processed_at = now() where id = $3',
             ['failed', error?.message || error, logId]
           );
+          void notifyAdminsDualWriteFailure('飞书 Webhook → DB（bitable.record.changed 异步处理失败）', error);
         }
       });
       
@@ -13284,6 +13299,10 @@ async function processFeishuDataChange(event, logId) {
       await upsertFeishuGenericRecord({ appToken, tableId, record, configKey });
     } catch (e) {
       console.log('[processFeishuDataChange] generic upsert failed:', e?.message || e);
+      void notifyAdminsDualWriteFailure(
+        `飞书 Webhook → feishu_generic_records（table ${String(tableId || '').slice(0, 16)} record ${String(recordId || '').slice(0, 24)}）`,
+        e
+      );
     }
 
     // Only “桌访表” writes into structured table
@@ -13471,33 +13490,23 @@ app.get('/api/feishu/sync-status', authRequired, async (req, res) => {
   }
 });
 
-// 手动触发飞书数据同步
-app.post('/api/feishu/sync-manual', authRequired, async (req, res) => {
-  const role = String(req.user?.role || '').trim();
-  if (!['admin', 'hq_manager', 'store_manager'].includes(role)) {
-    return res.status(403).json({ error: 'forbidden' });
+/** 全量拉取指定多维表并写入 feishu_generic_records；桌访表同时 upsert table_visit_records（供 HTTP 与 CLI 共用） */
+async function runManualFeishuBitableSync({ appToken, tableId, appId, appSecret }) {
+  if (!appToken || !tableId) {
+    throw new Error('missing_app_token_or_table_id');
   }
-  
-  try {
-    const { appToken, tableId, appId, appSecret } = req.body;
-    
-    if (!appToken || !tableId) {
-      return res.status(400).json({ error: 'missing_app_token_or_table_id' });
-    }
-    
-    const accessToken = await getFeishuAccessToken({ appId, appSecret });
-    const data = await getFeishuBitableData(appToken, tableId, accessToken);
+  const accessToken = await getFeishuAccessToken({ appId, appSecret });
+  const data = await getFeishuBitableData(appToken, tableId, accessToken);
 
-    // 当前仅“桌访表”写入结构化表 table_visit_records，其它表写入通用表 feishu_generic_records
-    const TABLE_VISIT_TABLE_ID = 'tblpx5Efqc6eHo3L';
-    const isTableVisit = String(tableId || '').trim() === TABLE_VISIT_TABLE_ID;
-    
-    let synced = 0;
-    let failed = 0;
-    let genericUpserted = 0;
-    const failedDetails = [];
-    
-    for (const record of data.items || []) {
+  const TABLE_VISIT_TABLE_ID = 'tblpx5Efqc6eHo3L';
+  const isTableVisit = String(tableId || '').trim() === TABLE_VISIT_TABLE_ID;
+
+  let synced = 0;
+  let failed = 0;
+  let genericUpserted = 0;
+  const failedDetails = [];
+
+  for (const record of data.items || []) {
       try {
         const configKey = findConfigKeyByTableInfo(appToken, tableId);
         await upsertFeishuGenericRecord({ appToken, tableId, record, configKey });
@@ -13641,18 +13650,45 @@ app.post('/api/feishu/sync-manual', authRequired, async (req, res) => {
         failed++;
       }
     }
-    
-    res.json({
-      message: 'Manual sync completed',
-      synced,
-      failed,
-      total: data.items?.length || 0,
-      genericUpserted,
-      isTableVisit,
-      failedDetails
-    });
+
+  if (failed > 0) {
+    void notifyAdminsDualWriteFailure(
+      '飞书多维表手动同步（部分记录写入失败）',
+      new Error(
+        `failed=${failed} synced=${synced} total=${data.items?.length || 0} ` +
+          `${JSON.stringify((failedDetails || []).slice(0, 5))}`.slice(0, 500)
+      )
+    );
+  }
+
+  return {
+    message: 'Manual sync completed',
+    synced,
+    failed,
+    total: data.items?.length || 0,
+    genericUpserted,
+    isTableVisit,
+    failedDetails
+  };
+}
+
+// 手动触发飞书数据同步
+app.post('/api/feishu/sync-manual', authRequired, async (req, res) => {
+  const role = String(req.user?.role || '').trim();
+  if (!['admin', 'hq_manager', 'store_manager'].includes(role)) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+
+  try {
+    const { appToken, tableId, appId, appSecret } = req.body;
+    if (!appToken || !tableId) {
+      return res.status(400).json({ error: 'missing_app_token_or_table_id' });
+    }
+    const result = await runManualFeishuBitableSync({ appToken, tableId, appId, appSecret });
+    res.json(result);
   } catch (error) {
     console.error('[Manual Sync] Error:', error);
+    void notifyAdminsDualWriteFailure('飞书多维表手动同步（整次失败）', error);
     res.status(500).json({ error: 'server_error', message: error?.message || error });
   }
 });
@@ -13676,6 +13712,7 @@ app.post('/api/feishu/sync-dish-library', authRequired, async (req, res) => {
     });
   } catch (error) {
     console.error('[Dish Library Sync] Error:', error);
+    void notifyAdminsDualWriteFailure('菜品库成本同步（HTTP 接口抛错）', error);
     res.status(500).json({ error: 'server_error', message: error?.message || error });
   }
 });
@@ -14120,6 +14157,26 @@ registerSOPDistributionRoutes(app, authRequired);
 registerUploadStatusRoute(app, { pool, getSharedState, authRequired });
 app.use('/api', authRequired, fileRoutes);
 
+/** 运维 CLI：全量同步桌访表入 DB 后退出（不监听端口）。例：cd server && HRMS_CLI_SYNC_TABLE_VISIT=1 node index.js */
+if (String(process.env.HRMS_CLI_SYNC_TABLE_VISIT || '').trim() === '1') {
+  (async () => {
+    try {
+      await ensureFeishuGenericRecordsTable();
+      await ensureTableVisitRecordsTable();
+      const r = await runManualFeishuBitableSync({
+        appToken: process.env.BITABLE_TABLEVISIT_APP_TOKEN || 'PTWrbUdcbarCshst0QncMoY7nKe',
+        tableId: process.env.BITABLE_TABLEVISIT_TABLE_ID || 'tblpx5Efqc6eHo3L',
+        appId: process.env.FEISHU_APP_ID,
+        appSecret: process.env.FEISHU_APP_SECRET
+      });
+      console.log('[HRMS_CLI_SYNC_TABLE_VISIT]', JSON.stringify(r, null, 2));
+      process.exit(0);
+    } catch (e) {
+      console.error('[HRMS_CLI_SYNC_TABLE_VISIT]', e?.message || e);
+      process.exit(1);
+    }
+  })();
+} else {
 app.listen(PORT, HOST, async () => {
   console.log(`hrms-server listening on ${HOST}:${PORT}`);
 
@@ -14949,6 +15006,16 @@ app.listen(PORT, HOST, async () => {
     // 定时检查任务超时 & 升级 (每5分钟)
     setInterval(() => { checkTimeoutsAndEscalate().catch(e => console.error('[TaskBoard] timeout check error:', e?.message)); }, 5 * 60 * 1000);
 
+    // 飞书表格→PG 与 sales_raw 目录入库：失败第一时间通知 admin（见 notifyAdminsDualWriteFailure 注释）
+    setFeishuSyncFailureNotifier((label, err) => {
+      void notifyAdminsDualWriteFailure(`飞书表格→PG（${label}）`, err);
+    });
+    setSalesRawFolderImportFailureNotifier((err, ctx) => {
+      const where = ctx?.tick ? '定时扫描' : ctx?.startup ? '启动后首次扫描' : '目录入库';
+      const dirHint = ctx?.dir ? `·${String(ctx.dir).slice(0, 120)}` : '';
+      void notifyAdminsDualWriteFailure(`sales_raw（${where}${dirHint}）`, err);
+    });
+
     // Start Feishu daily sync
     startDailyFeishuSync();
     console.log('[feishu] Daily sync scheduler started');
@@ -15104,6 +15171,7 @@ app.listen(PORT, HOST, async () => {
     console.error('[migration] role cleanup failed:', e?.message || e);
   }
 });
+}
 
 // ── Attendance Check-in APIs (duplicate removed - active handler is earlier) ──
 // POST /api/checkin：须有效经纬度 + faceMatch + photoUrl；与生产移动端 / working-fixed 一致。
