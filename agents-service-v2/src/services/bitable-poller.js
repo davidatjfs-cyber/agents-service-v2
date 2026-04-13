@@ -106,8 +106,19 @@ const BITABLE_CONFIGS = {
     sortField: '["创建日期 DESC"]'
   },
   'task_responses': {
-    appId: process.env.BITABLE_TABLEVISIT_APP_ID || 'cli_a9fc0d13c838dcd6',
-    appSecret: process.env.BITABLE_TABLEVISIT_APP_SECRET || 'pRVuBmiWc0hzqP1YzZDqzGUPFlaProDN',
+    // Base 常为 BTA*，须与「拥有该 Base」的自建应用一致；勿误用桌访应用凭证（会 99991663）
+    appId:
+      process.env.BITABLE_TASK_RESP_APP_ID ||
+      process.env.FEISHU_APP_ID ||
+      process.env.LARK_APP_ID ||
+      process.env.BITABLE_TABLEVISIT_APP_ID ||
+      'cli_a9fc0d13c838dcd6',
+    appSecret:
+      process.env.BITABLE_TASK_RESP_APP_SECRET ||
+      process.env.FEISHU_APP_SECRET ||
+      process.env.LARK_APP_SECRET ||
+      process.env.BITABLE_TABLEVISIT_APP_SECRET ||
+      'pRVuBmiWc0hzqP1YzZDqzGUPFlaProDN',
     appToken: process.env.BITABLE_TASK_RESP_APP_TOKEN || 'BTAjbflrlaMRHesADUfc8usznqh',
     tableId: process.env.BITABLE_TASK_RESP_TABLE_ID || 'tblT86H1uuTJydne',
     name: '异常任务回复',
