@@ -6035,36 +6035,37 @@
         }
 
         #payment-page .rep-hero {
-            border-radius: 20px;
-            padding: 20px;
-            margin-bottom: 18px;
+            border-radius: 14px;
+            padding: 10px 12px 12px;
+            margin-bottom: 12px;
             background:
-                radial-gradient(800px 280px at 0% 0%, rgba(45, 212, 191, 0.12), transparent 55%),
+                radial-gradient(520px 160px at 0% 0%, rgba(45, 212, 191, 0.1), transparent 55%),
                 linear-gradient(155deg, rgba(18, 26, 38, 0.95), rgba(8, 11, 18, 0.98));
             color: var(--rep-text);
             border: 1px solid var(--rep-border);
-            box-shadow: 0 28px 56px -36px rgba(0, 0, 0, 0.75);
+            box-shadow: 0 18px 40px -28px rgba(0, 0, 0, 0.65);
         }
 
         #payment-page .rep-hero .pay-hero-title {
             font-weight: 800;
-            font-size: 14px;
-            letter-spacing: 0.06em;
+            font-size: 10px;
+            letter-spacing: 0.14em;
             color: var(--rep-muted);
+            margin-bottom: 2px;
         }
 
         #payment-page .rep-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 12px;
-            margin-top: 14px;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 8px;
         }
 
         #payment-page .rep-metric {
             background: rgba(0, 0, 0, 0.25);
             border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 14px;
-            padding: 14px 12px;
+            border-radius: 10px;
+            padding: 7px 8px;
             cursor: pointer;
             transition: transform 0.15s ease, box-shadow 0.2s ease;
         }
@@ -6074,15 +6075,15 @@
         }
 
         #payment-page .rep-metric .k {
-            font-size: 11px;
+            font-size: 9px;
             color: var(--rep-muted);
             font-weight: 700;
-            letter-spacing: 0.06em;
+            letter-spacing: 0.04em;
         }
 
         #payment-page .rep-metric .v {
-            margin-top: 8px;
-            font-size: 17px;
+            margin-top: 3px;
+            font-size: 14px;
             font-weight: 700;
             font-family: var(--rep-mono);
             color: var(--rep-teal);
@@ -6092,126 +6093,184 @@
             color: var(--rep-gold);
         }
 
+        #payment-page .rep-metric--gold .k {
+            font-size: 9px;
+        }
+
         #payment-page .rep-pay-section-title {
-            margin: 18px 0 10px;
-            font-size: 11px;
+            margin: 12px 0 6px;
+            font-size: 10px;
             font-weight: 800;
-            letter-spacing: 0.18em;
+            letter-spacing: 0.16em;
             color: var(--rep-muted);
         }
 
         #payment-page .rep-pay-stack {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 8px;
         }
 
         #payment-page .rep-pay-card {
-            border-radius: 18px;
-            padding: 16px 16px 14px;
+            border-radius: 14px;
+            padding: 10px 12px 10px;
             background: linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
             border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 16px 40px -28px rgba(0, 0, 0, 0.55);
+            box-shadow: 0 12px 28px -22px rgba(0, 0, 0, 0.55);
         }
 
         #payment-page .rep-pay-card__top {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            gap: 10px;
-            margin-bottom: 12px;
-            padding-bottom: 12px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            gap: 8px;
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        #payment-page .rep-pay-card__left {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            min-width: 0;
+            flex: 1;
+        }
+
+        #payment-page .rep-pay-card__titles {
+            min-width: 0;
+            flex: 1;
         }
 
         #payment-page .rep-pay-card__name {
-            font-size: 15px;
+            font-size: 13px;
             font-weight: 700;
             color: var(--rep-text);
+            line-height: 1.25;
         }
 
         #payment-page .rep-pay-card__amt {
-            font-size: 18px;
+            font-size: 15px;
             font-weight: 700;
             font-family: var(--rep-mono);
             color: var(--rep-gold);
             white-space: nowrap;
+            line-height: 1.2;
+            margin-top: 2px;
         }
 
+        #payment-page .rep-pay-card__meta,
         #payment-page .rep-pay-card__store {
             display: block;
-            margin-top: 4px;
-            font-size: 12px;
+            margin-top: 2px;
+            font-size: 11px;
+            line-height: 1.35;
             color: var(--rep-muted);
             font-weight: 500;
         }
 
-        #payment-page .rep-pay-card__grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px 12px;
-        }
-
-        #payment-page .rep-pay-cell {
-            padding: 10px 10px;
-            border-radius: 12px;
-            background: rgba(0, 0, 0, 0.22);
-            border: 1px solid rgba(255, 255, 255, 0.06);
-        }
-
-        #payment-page .rep-pay-cell .k {
-            display: block;
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.1em;
+        #payment-page .rep-pay-card__extra {
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px solid rgba(255, 255, 255, 0.07);
+            font-size: 11px;
+            line-height: 1.35;
             color: var(--rep-muted);
-            margin-bottom: 4px;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
         }
 
-        #payment-page .rep-pay-cell .v {
-            font-size: 13px;
-            font-weight: 600;
-            font-family: var(--rep-mono);
-            color: var(--rep-text);
+        #payment-page .rep-pay-card__extra strong {
+            color: rgba(226, 232, 240, 0.88);
+            font-weight: 700;
+        }
+
+        #payment-page .rep-pay-card__note {
+            margin-top: 4px;
+            font-size: 10px;
+            color: var(--rep-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #payment-page .pay-st-badge {
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 3px 9px;
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            line-height: 1.2;
+            border: 1px solid transparent;
+        }
+
+        #payment-page .pay-st-badge--pending {
+            color: #fde68a;
+            background: rgba(245, 158, 11, 0.16);
+            border-color: rgba(251, 191, 36, 0.45);
+        }
+
+        #payment-page .pay-st-badge--approved {
+            color: #fdba74;
+            background: rgba(249, 115, 22, 0.18);
+            border-color: rgba(251, 146, 60, 0.55);
+        }
+
+        #payment-page .pay-st-badge--paid {
+            color: #86efac;
+            background: rgba(34, 197, 94, 0.18);
+            border-color: rgba(74, 222, 128, 0.55);
+        }
+
+        #payment-page .pay-st-badge--rejected {
+            color: #fca5a5;
+            background: rgba(239, 68, 68, 0.16);
+            border-color: rgba(248, 113, 113, 0.5);
         }
 
         #payment-page .rep-pay-card__actions {
-            margin-top: 12px;
+            margin-top: 8px;
             display: flex;
             flex-wrap: wrap;
-            gap: 8px;
+            gap: 6px;
             justify-content: flex-end;
         }
 
         #payment-page .rep-pay-card__actions .btn {
             font-size: 11px;
-            padding: 8px 12px;
-            border-radius: 10px;
+            padding: 6px 10px;
+            border-radius: 9px;
         }
 
         #payment-page .pay-line-card--pending {
-            border-color: rgba(245, 158, 11, 0.35);
+            border-color: rgba(251, 191, 36, 0.32);
         }
 
         #payment-page .pay-line-card--approved {
-            border-color: rgba(52, 211, 153, 0.35);
+            border-color: rgba(251, 146, 60, 0.38);
         }
 
         #payment-page .pay-line-card--paid {
-            border-color: rgba(96, 165, 250, 0.35);
+            border-color: rgba(74, 222, 128, 0.42);
         }
 
         #payment-page .pay-line-card--rejected {
-            border-color: rgba(248, 113, 113, 0.4);
+            border-color: rgba(248, 113, 113, 0.45);
         }
 
         #payment-page .rep-pay-empty {
             text-align: center;
-            padding: 28px 18px;
+            padding: 14px 12px;
             color: var(--rep-muted);
-            font-size: 14px;
+            font-size: 13px;
             border: 1px dashed rgba(255, 255, 255, 0.12);
-            border-radius: 16px;
+            border-radius: 12px;
             background: rgba(0, 0, 0, 0.15);
         }
 
@@ -6283,7 +6342,7 @@
 
         @media (max-width: 700px) {
             #payment-page .rep-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
 
@@ -16146,9 +16205,9 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                 <div class="rep-grid">
                     <div class="rep-metric" onclick="filterPaymentByStatus('')"><div class="k">总数</div><div class="v">${total}</div></div>
                     <div class="rep-metric" onclick="filterPaymentByStatus('pending')"><div class="k">待审批</div><div class="v">${pending}</div></div>
-                    <div class="rep-metric" onclick="filterPaymentByStatus('approved')"><div class="k">已审核</div><div class="v">${approved}</div></div>
+                    <div class="rep-metric" onclick="filterPaymentByStatus('approved')"><div class="k">已审批</div><div class="v">${approved}</div></div>
                     <div class="rep-metric" onclick="filterPaymentByStatus('paid')"><div class="k">已付款</div><div class="v">${paid}</div></div>
-                    <div class="rep-metric rep-metric--gold" style="grid-column:1/-1; cursor:default;"><div class="k">当前筛选金额合计</div><div class="v">¥${sumFmt}</div></div>
+                    <div class="rep-metric rep-metric--gold" style="grid-column:1/-1; cursor:default;"><div class="k">金额合计</div><div class="v">¥${sumFmt}</div></div>
                 </div>`;
         }
 
@@ -16161,7 +16220,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
         function paymentStatusText(st) {
             const s = String(st || '').trim();
             if (s === 'pending') return '待审批';
-            if (s === 'approved') return '已审核';
+            if (s === 'approved') return '已审批';
             if (s === 'paid') return '已付款';
             if (s === 'rejected') return '已拒绝';
             return s || '-';
@@ -16197,27 +16256,38 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                 const canPay = String(it?.type || '') === 'payment'
                     && String(it?.status || '') === 'approved'
                     && (String(currentUser?.role || '') === ROLES.CASHIER || String(currentUser?.role || '') === ROLES.HQ_MANAGER || String(currentUser?.role || '') === ROLES.HR_MANAGER || isAdminUser());
-                const isPaid = String(it?.status || '') === 'paid';
-                const payBtn = canPay ? `<button class="btn" type="button" onclick="payPaymentById('${escapeHtml(id)}')" style="padding: 8px 12px; background: linear-gradient(135deg,#2563eb,#60a5fa); border:none;">付款</button>` : '';
-                const paidBadge = isPaid ? `<span class="btn btn-secondary" style="pointer-events:none; opacity:0.95;">已付款</span>` : '';
+                const payBtn = canPay ? `<button class="btn" type="button" onclick="payPaymentById('${escapeHtml(id)}')" style="padding: 6px 10px; background: linear-gradient(135deg,#2563eb,#60a5fa); border:none;">付款</button>` : '';
+
+                const metaBits = [];
+                if (store) metaBits.push(store);
+                if (who) metaBits.push(who);
+                if (category) metaBits.push(category);
+                if (urgency) metaBits.push('紧急 ' + urgency);
+                const metaLine = metaBits.length ? metaBits.map(x => escapeHtml(String(x))).join(' · ') : '—';
+                const payee = String(p?.payeeName || p?.payee || '').trim();
+                const noteRaw = String(p?.note || p?.description || '').trim();
+                const noteEsc = escapeHtml(noteRaw);
+                const noteBlock = noteRaw
+                    ? `<div class="rep-pay-card__note" title="${noteEsc}">说明：${noteEsc}</div>`
+                    : '';
+                const payeeBlock = payee
+                    ? `<div class="rep-pay-card__extra"><strong>收款</strong> ${escapeHtml(payee)}</div>`
+                    : '';
 
                 return `<article class="rep-pay-card pay-line-card ${lineClass}">
                     <div class="rep-pay-card__top">
-                        <div style="min-width:0;">
-                            <div class="rep-pay-card__name">请款 · ${escapeHtml(date || '-')}</div>
-                            <span class="rep-pay-card__store">${escapeHtml(store || '—')} · ${escapeHtml(who || '—')}</span>
+                        <div class="rep-pay-card__left">
+                            <span class="pay-st-badge pay-st-badge--${lineKey}" aria-label="状态">${escapeHtml(st || '-')}</span>
+                            <div class="rep-pay-card__titles">
+                                <div class="rep-pay-card__name">请款 · ${escapeHtml(date || '-')}</div>
+                                <div class="rep-pay-card__meta">${metaLine}</div>
+                                ${noteBlock}
+                            </div>
                         </div>
                         <div class="rep-pay-card__amt">${escapeHtml(amountText)}</div>
                     </div>
-                    <div class="rep-pay-card__grid">
-                        <div class="rep-pay-cell"><span class="k">状态</span><span class="v">${escapeHtml(st || '-')}</span></div>
-                        <div class="rep-pay-cell"><span class="k">项目</span><span class="v">${escapeHtml(category || '-')}</span></div>
-                        <div class="rep-pay-cell"><span class="k">紧急</span><span class="v">${escapeHtml(urgency || '-')}</span></div>
-                        ${(p?.payeeName || p?.payee) ? `<div class="rep-pay-cell" style="grid-column:1/-1;"><span class="k">收款方</span><span class="v">${escapeHtml(p?.payeeName || p?.payee || '-')}</span></div>` : ''}
-                        ${(p?.note || p?.description) ? `<div class="rep-pay-cell" style="grid-column:1/-1;"><span class="k">说明</span><span class="v" style="font-size:12px;line-height:1.45;">${escapeHtml(String(p?.note || p?.description || ''))}</span></div>` : ''}
-                    </div>
+                    ${payeeBlock}
                     <div class="rep-pay-card__actions">
-                        ${paidBadge}
                         <button class="btn btn-secondary" type="button" onclick="openApprovalDetailModal('${escapeHtml(id)}')">查看</button>
                         ${payBtn}
                     </div>
