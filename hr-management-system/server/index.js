@@ -1856,9 +1856,13 @@ app.get('/api/approvals', authRequired, async (req, res) => {
   const type = normalizeApprovalType(req.query?.type || '') || '';
   const storeQ = String(req.query?.store || '').trim();
   const approver = String(req.query?.approver || '').trim();
-  const approvedStart = safeDateOnly(req.query?.approvedStart);
-  const approvedEnd = safeDateOnly(req.query?.approvedEnd);
-  const limit = Math.min(200, Math.max(1, Number(req.query?.limit || 100)));
+  const dateStart = safeDateOnly(req.query?.dateStart || req.query?.approvedStart);
+  const dateEnd = safeDateOnly(req.query?.dateEnd || req.query?.approvedEnd);
+  let dateField = String(req.query?.dateField || 'created').trim().toLowerCase();
+  if (dateField !== 'created' && dateField !== 'updated') dateField = 'created';
+  const searchRaw = String(req.query?.search || '').trim();
+  const search = searchRaw.length > 200 ? searchRaw.slice(0, 200) : searchRaw;
+  const limit = Math.min(500, Math.max(1, Number(req.query?.limit || 100)));
 
   const allowedViews = ['assigned', 'created', 'all', 'approved'];
   if (!allowedViews.includes(view)) return res.status(400).json({ error: 'invalid_view' });
@@ -1918,13 +1922,25 @@ app.get('/api/approvals', authRequired, async (req, res) => {
     params.push(approver);
     clauses.push(`EXISTS (SELECT 1 FROM jsonb_array_elements(chain) elem WHERE lower(elem->>'assignee') = lower($${params.length}))`);
   }
-  if (approvedStart) {
-    params.push(approvedStart);
-    clauses.push(`EXISTS (SELECT 1 FROM jsonb_array_elements(chain) elem WHERE substring(coalesce(elem->>'decidedAt',''), 1, 10) >= $${params.length})`);
+  if (dateStart) {
+    params.push(dateStart);
+    if (dateField === 'updated') {
+      clauses.push(`(timezone('Asia/Shanghai', updated_at))::date >= $${params.length}::date`);
+    } else {
+      clauses.push(`(timezone('Asia/Shanghai', created_at))::date >= $${params.length}::date`);
+    }
   }
-  if (approvedEnd) {
-    params.push(approvedEnd);
-    clauses.push(`EXISTS (SELECT 1 FROM jsonb_array_elements(chain) elem WHERE substring(coalesce(elem->>'decidedAt',''), 1, 10) <= $${params.length})`);
+  if (dateEnd) {
+    params.push(dateEnd);
+    if (dateField === 'updated') {
+      clauses.push(`(timezone('Asia/Shanghai', updated_at))::date <= $${params.length}::date`);
+    } else {
+      clauses.push(`(timezone('Asia/Shanghai', created_at))::date <= $${params.length}::date`);
+    }
+  }
+  if (search) {
+    params.push(`%${search.toLowerCase()}%`);
+    clauses.push(`(lower(coalesce(applicant_username, '')) like $${params.length} or lower(coalesce(current_assignee_username, '')) like $${params.length} or lower(coalesce(payload::text, '')) like $${params.length})`);
   }
   params.push(limit);
 
@@ -1939,7 +1955,24 @@ app.get('/api/approvals', authRequired, async (req, res) => {
        limit $${params.length}`,
       params
     );
-    return res.json({ items: r.rows || [] });
+    const state0 = (await getSharedState().catch(() => null)) || {};
+    const decorate = async (row) => {
+      const applicantRec = await stateOrDbFindUserRecord(state0, row?.applicant_username);
+      const assigneeRec = await stateOrDbFindUserRecord(state0, row?.current_assignee_username);
+      const chain = Array.isArray(row?.chain) ? row.chain : [];
+      const chainDecorated = await Promise.all(chain.map(async (step) => {
+        const rec = await stateOrDbFindUserRecord(state0, step?.assignee);
+        return { ...step, assignee_name: String(rec?.name || step?.assignee || '').trim() };
+      }));
+      return {
+        ...row,
+        applicant_name: String(applicantRec?.name || row?.applicant_username || '').trim(),
+        current_assignee_name: String(assigneeRec?.name || row?.current_assignee_username || '').trim(),
+        chain: chainDecorated
+      };
+    };
+    const items = await Promise.all((r.rows || []).map(decorate));
+    return res.json({ items });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
   }
@@ -1987,7 +2020,21 @@ app.get('/api/approvals/:id', authRequired, async (req, res) => {
     if (!canUserViewApprovalRow(req.user, row, state0)) {
       return res.status(403).json({ error: 'forbidden' });
     }
-    return res.json({ item: row });
+    const applicantRec = await stateOrDbFindUserRecord(state0, row?.applicant_username);
+    const assigneeRec = await stateOrDbFindUserRecord(state0, row?.current_assignee_username);
+    const chain = Array.isArray(row?.chain) ? row.chain : [];
+    const chainDecorated = await Promise.all(chain.map(async (step) => {
+      const rec = await stateOrDbFindUserRecord(state0, step?.assignee);
+      return { ...step, assignee_name: String(rec?.name || step?.assignee || '').trim() };
+    }));
+    return res.json({
+      item: {
+        ...row,
+        applicant_name: String(applicantRec?.name || row?.applicant_username || '').trim(),
+        current_assignee_name: String(assigneeRec?.name || row?.current_assignee_username || '').trim(),
+        chain: chainDecorated
+      }
+    });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
   }
@@ -2944,6 +2991,7 @@ function buildOnboardingEmployeeRecordFromPayload(emp, stateForId) {
 }
 
 app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
+  const __decideStartedAt = Date.now();
   const username = String(req.user?.username || '').trim();
   const role = String(req.user?.role || '').trim();
   const id = String(req.params?.id || '').trim();
@@ -3172,16 +3220,14 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
           // Intermediate step approved, notify next approver
           const title = '新员工入职审批待处理';
           const msg = `${applicantName} 提交的新员工「${empName}」入职申请需要您审批。`;
-          stateN = addStateNotification(stateN, makeNotif(nextAssignee, title, msg, { type: 'onboarding_request', approvalId: updated.id }));
-          await saveSharedState(stateN);
+          await appendNotifications([makeNotif(nextAssignee, title, msg, { type: 'onboarding_request', approvalId: updated.id })]);
         }
 
         if (String(updated.status || '') === 'rejected') {
           // Rejected, notify submitter
           const title = '新员工入职审批被拒绝';
           const msg = `新员工「${empName}」入职申请被拒绝${note ? `：${note}` : ''}`;
-          stateN = addStateNotification(stateN, makeNotif(applicantUser, title, msg, { type: 'onboarding_result', approvalId: updated.id }));
-          await saveSharedState(stateN);
+          await appendNotifications([makeNotif(applicantUser, title, msg, { type: 'onboarding_result', approvalId: updated.id })]);
         }
       }
     } catch (e) {}
@@ -3252,10 +3298,7 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
           // Notify applicant + direct supervisor
           const msg = `${applicantName}提交的休假申请${sd}至${ed}，已经审批通过。`;
           const recipients = uniqUsernames([updated.applicant_username, applicantManager].filter(Boolean));
-          for (const u of recipients) {
-            state = addStateNotification(state, makeNotif(u, '休假申请已通过', msg, { type: 'leave_result', approvalId: updated.id, leaveId: rec.id }));
-          }
-          await saveSharedState(state);
+          await appendNotifications(recipients.map((u) => makeNotif(u, '休假申请已通过', msg, { type: 'leave_result', approvalId: updated.id, leaveId: rec.id })));
         }
 
         if (finalRejected && tp === 'leave') {
@@ -3266,17 +3309,13 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
           const ed2 = fmtLeaveDate2(endDate2);
           const msg = `${applicantName}提交的休假申请${sd2}至${ed2}，因为${note || '相关原因'}没有审批通过。`;
           const recipients = uniqUsernames([updated.applicant_username, applicantManager].filter(Boolean));
-          for (const u of recipients) {
-            state = addStateNotification(state, makeNotif(u, '休假申请未通过', msg, { type: 'leave_result', approvalId: updated.id }));
-          }
-          await saveSharedState(state);
+          await appendNotifications(recipients.map((u) => makeNotif(u, '休假申请未通过', msg, { type: 'leave_result', approvalId: updated.id })));
         }
 
         // Intermediate step: notify next approver for leave
         if (String(updated.status || '') === 'pending' && nextAssignee && tp === 'leave') {
           const msg = `${applicantName} 提交了休假申请，需要您审批。`;
-          state = addStateNotification(state, makeNotif(nextAssignee, '休假申请待审批', msg, { type: 'leave_request', approvalId: updated.id }));
-          await saveSharedState(state);
+          await appendNotifications([makeNotif(nextAssignee, '休假申请待审批', msg, { type: 'leave_request', approvalId: updated.id })]);
         }
 
         if ((finalApproved || finalRejected) && tp === 'offboarding') {
@@ -3496,17 +3535,12 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
             hqManager,
             isKitchen ? productionManagerByStore : ''
           ].filter(Boolean));
-          for (const u of recipients) {
-            state = addStateNotification(state, makeNotif(u, title, msg, { type: 'promotion_qualification_approved', approvalId: updated.id }));
-          }
-
+          const notifications = recipients.map((u) => makeNotif(u, title, msg, { type: 'promotion_qualification_approved', approvalId: updated.id }));
           if (plan.length) {
             const planMsg = `系统已生成培训安排：${plan.map(s => `${s.date} ${s.title}`).join('；')}`;
-            for (const u of recipients) {
-              state = addStateNotification(state, makeNotif(u, '晋升培训安排已生成', planMsg, { type: 'promotion_training_plan', approvalId: updated.id }));
-            }
+            notifications.push(...recipients.map((u) => makeNotif(u, '晋升培训安排已生成', planMsg, { type: 'promotion_training_plan', approvalId: updated.id })));
           }
-          await saveSharedState(state);
+          await appendNotifications(notifications);
         }
 
         if (finalRejected) {
@@ -3514,10 +3548,7 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
           const stageLabel = stage === 'formal' ? '正式晋升' : '晋升资格';
           const msg = `${applicantName}，你的${stageLabel}申请因为${note || '相关原因'}没有审批通过。`;
           const recipients = uniqUsernames([applicantUser, applicantManager].filter(Boolean));
-          for (const u of recipients) {
-            state = addStateNotification(state, makeNotif(u, '晋升申请未通过', msg, { type: 'promotion_result', approvalId: updated.id }));
-          }
-          await saveSharedState(state);
+          await appendNotifications(recipients.map((u) => makeNotif(u, '晋升申请未通过', msg, { type: 'promotion_result', approvalId: updated.id })));
         }
 
         // Intermediate step: notify next approver
@@ -3529,8 +3560,7 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
             ? '（通过时请指定带教人并确认培训起始日期）'
             : '';
           const msg = `${applicantName} 提交了${stageLabel}，需要您审批${needAssignMentorTip}。`;
-          state = addStateNotification(state, makeNotif(nextAssignee, '晋升申请待审批', msg, { type: 'promotion_request', approvalId: updated.id }));
-          await saveSharedState(state);
+          await appendNotifications([makeNotif(nextAssignee, '晋升申请待审批', msg, { type: 'promotion_request', approvalId: updated.id })]);
         }
       }
     } catch (e) {}
@@ -3596,31 +3626,30 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
           }
 
           // Notify target person (the one being rewarded/punished)
+          const notifications = [];
           if (targetUsername) {
             const msgTarget = isReward
               ? `${targetName}，由于${rpReason || '工作表现优秀'}原因，本月你会收到${amount || 0}元的奖励，继续努力哦！`
               : `${targetName}，由于${rpReason || '相关原因'}原因，本月你会收到${amount || 0}元的处罚，希望可以加油改进！`;
-            state = addStateNotification(state, makeNotif(targetUsername, `${typeLabel}通知`, msgTarget, { type: 'reward_punishment_result', approvalId: updated.id }));
+            notifications.push(makeNotif(targetUsername, `${typeLabel}通知`, msgTarget, { type: 'reward_punishment_result', approvalId: updated.id }));
           }
           // Notify initiator (applicant)
           const msgApplicant = isReward
             ? `${targetName}的奖励申请已审批通过，金额${amount || 0}元已计入薪资表。`
             : `${targetName}的处罚申请已审批通过，金额${amount || 0}元已计入薪资表。`;
-          state = addStateNotification(state, makeNotif(applicantUser, `${typeLabel}申请已通过`, msgApplicant, { type: 'reward_punishment_result', approvalId: updated.id }));
-          await saveSharedState(state);
+          notifications.push(makeNotif(applicantUser, `${typeLabel}申请已通过`, msgApplicant, { type: 'reward_punishment_result', approvalId: updated.id }));
+          await appendNotifications(notifications);
         }
 
         if (finalRejected) {
           const msg = `对${targetName}的${typeLabel}申请因为${note || '相关原因'}没有审批通过。`;
-          state = addStateNotification(state, makeNotif(applicantUser, `${typeLabel}申请未通过`, msg, { type: 'reward_punishment_result', approvalId: updated.id }));
-          await saveSharedState(state);
+          await appendNotifications([makeNotif(applicantUser, `${typeLabel}申请未通过`, msg, { type: 'reward_punishment_result', approvalId: updated.id })]);
         }
 
         // Intermediate step: notify next approver
         if (String(updated.status || '') === 'pending' && nextAssignee) {
           const msg = `${applicantName} 提交了${typeLabel}申请（${targetName}），需要您审批。`;
-          state = addStateNotification(state, makeNotif(nextAssignee, `${typeLabel}申请待审批`, msg, { type: 'reward_punishment_request', approvalId: updated.id }));
-          await saveSharedState(state);
+          await appendNotifications([makeNotif(nextAssignee, `${typeLabel}申请待审批`, msg, { type: 'reward_punishment_request', approvalId: updated.id })]);
         }
       }
     } catch (e) {}
@@ -3797,8 +3826,7 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
 
           // Notify submitter
           const msg = `${mcMonth} ${mcStore || '全部门店'} 的月度考勤确认已通过审批。工资数据将自动生成。`;
-          state = addStateNotification(state, makeNotif(applicantUser, '月度考勤确认已通过', msg, { type: 'monthly_confirm_result', approvalId: updated.id }));
-          await saveSharedState(state);
+          await appendNotifications([makeNotif(applicantUser, '月度考勤确认已通过', msg, { type: 'monthly_confirm_result', approvalId: updated.id })]);
         }
 
         if (String(updated.status || '') === 'rejected' && confirmationId) {
@@ -3812,35 +3840,17 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
           }
           state.monthlyConfirmations = confirmations;
           const msg = `${mcMonth} ${mcStore || '全部门店'} 的月度考勤确认被驳回${note ? `：${note}` : ''}`;
-          state = addStateNotification(state, makeNotif(applicantUser, '月度考勤确认被驳回', msg, { type: 'monthly_confirm_result', approvalId: updated.id }));
-          await saveSharedState(state);
+          await appendNotifications([makeNotif(applicantUser, '月度考勤确认被驳回', msg, { type: 'monthly_confirm_result', approvalId: updated.id })]);
         }
 
         // Intermediate step: notify next approver
         if (String(updated.status || '') === 'pending' && nextAssignee) {
           let state = state0;
           const msg = `${applicantName} 提交了 ${mcMonth} ${mcStore || '全部门店'} 的月度考勤确认，需要您审批。`;
-          state = addStateNotification(state, makeNotif(nextAssignee, '月度考勤确认待审批', msg, { type: 'monthly_confirm_request', approvalId: updated.id }));
-          await saveSharedState(state);
+          await appendNotifications([makeNotif(nextAssignee, '月度考勤确认待审批', msg, { type: 'monthly_confirm_request', approvalId: updated.id })]);
         }
       }
     } catch (e) { console.error('monthly_confirm post-approval error:', e); }
-
-    // --- Generic intermediate step notifications for leave/offboarding ---
-    try {
-      if (updated && (String(updated.type || '') === 'leave' || String(updated.type || '') === 'offboarding')) {
-        if (String(updated.status || '') === 'pending' && nextAssignee) {
-          const state0 = (await getSharedState()) || {};
-          const applicant = stateFindUserRecord(state0, updated.applicant_username) || {};
-          const applicantName = String(applicant?.name || updated.applicant_username).trim() || updated.applicant_username;
-          const label = approvalTypeLabel(String(updated.type || ''));
-          const msg = `${applicantName} 提交了${label}申请，需要您审批。`;
-          let stateN = state0;
-          stateN = addStateNotification(stateN, makeNotif(nextAssignee, `${label}申请待审批`, msg, { type: `${updated.type}_request`, approvalId: updated.id }));
-          await saveSharedState(stateN);
-        }
-      }
-    } catch (e) {}
 
     // 飞书通知：审批流转时通知下一审批人 / 审批结果通知申请人
     try {
@@ -3879,11 +3889,15 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
       }
     } catch (e) {}
 
-    return res.json(Object.keys(decideExtras).length ? { item: updated, ...decideExtras } : { item: updated });
+    const __decideMs = Date.now() - __decideStartedAt;
+    console.log('[approval-decide] ok', { id, ms: __decideMs, status: updated?.status, type: updated?.type });
+    return res.json(Object.keys(decideExtras).length ? { item: updated, decideMs: __decideMs, ...decideExtras } : { item: updated, decideMs: __decideMs });
   } catch (e) {
+    console.log('[approval-decide] error', { id, ms: Date.now() - __decideStartedAt, err: String(e?.message || e) });
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
   }
 });
+
 
 /**
  * 管理端：根据已通过的入职审批，将员工补写入 hrms_state.employees（幂等：同 username 会覆盖为审批单中的快照）。
@@ -5757,6 +5771,12 @@ function addStateNotification(state, notif) {
   const list = Array.isArray(s.notifications) ? s.notifications.slice() : [];
   list.push(notif);
   return { ...s, notifications: list };
+}
+
+async function appendNotifications(notifs) {
+  const list = Array.isArray(notifs) ? notifs.filter(Boolean) : [];
+  if (!list.length) return;
+  await mergeSharedStateFields({ notifications: list }, { notifications: 'id' });
 }
 
 function uniqUsernames(list) {
@@ -9493,7 +9513,17 @@ app.get('/api/reports/payroll', authRequired, async (req, res) => {
     const rows = Array.from(sumMap.values()).map(x => {
       const monthlySalary = findUserSalary(state0, x.username);
       const dailyRate = monthlySalary != null ? (monthlySalary / workDaysPerMonth) : null;
-      const computedBaseAmount = dailyRate != null ? (dailyRate * clampNum(x.days, 0)) : null;
+      const person = peopleByLower.get(String(x.username || '').trim().toLowerCase()) || null;
+      const leaveBalance = person ? calcEmployeeMonthlyLeaveBalance(state0, person, month) : null;
+      const attendanceDays = clampNum(x.days, 0);
+      const missingAttendanceDays = Number(Math.max(0, Number((workDaysPerMonth - attendanceDays).toFixed(2))));
+      const remainingLeaveBeforeOffset = leaveBalance ? Math.max(0, Number(leaveBalance.remaining || 0)) : 0;
+      const leaveOffsetDays = Number(Math.min(missingAttendanceDays, remainingLeaveBeforeOffset).toFixed(2));
+      const payableAttendanceDays = Number(Math.min(workDaysPerMonth, attendanceDays + leaveOffsetDays).toFixed(2));
+      const remainingLeaveAfterOffset = leaveBalance
+        ? Number(Math.max(0, remainingLeaveBeforeOffset - leaveOffsetDays).toFixed(2))
+        : null;
+      const computedBaseAmount = dailyRate != null ? (dailyRate * payableAttendanceDays) : null;
       const rewardPunishmentAdj = adjustmentMap.get(String(x.username || '').toLowerCase()) || 0;
       const rowStore = String(x.store || '').trim();
       const rowUser = String(x.username || '').trim().toLowerCase();
@@ -9523,7 +9553,12 @@ app.get('/api/reports/payroll', authRequired, async (req, res) => {
         store: effectiveStore,
         username: x.username,
         name: x.name,
-        attendanceDays: x.days,
+        attendanceDays,
+        payableAttendanceDays,
+        missingAttendanceDays,
+        leaveOffsetDays,
+        remainingLeaveBeforeOffset,
+        remainingLeaveAfterOffset,
         monthlySalary,
         dailyRate,
         computedBaseAmount,
@@ -11739,6 +11774,81 @@ function getLeaveBalanceOverride(state, username, month) {
   return { mode: 'remaining', value, raw };
 }
 
+/** 当月已批准休假在月内的天数合计（与薪资/累计假展示口径一致） */
+function calcEmployeeMonthlyApprovedLeaveDays(state, employee, month) {
+  const m = safeMonthOnly(month);
+  const emp = employee && typeof employee === 'object' ? employee : null;
+  const uname = String(emp?.username || '').trim().toLowerCase();
+  if (!m || !uname) return 0;
+  const leaveRecords = Array.isArray(state?.leaveRecords) ? state.leaveRecords : [];
+  let usedLeave = 0;
+  leaveRecords.forEach((lr) => {
+    if (String(lr?.applicant || '').toLowerCase() !== uname) return;
+    if (String(lr?.status || '') !== 'approved') return;
+    const sd = String(lr?.startDate || '').trim();
+    const ed = String(lr?.endDate || '').trim();
+    const rawDays = lr?.days != null && lr?.days !== '' ? Number(lr.days) : null;
+    const overlapDays = calcOverlapDaysWithinMonth(sd, ed, m);
+    let days = 0;
+    if (overlapDays > 0) {
+      const sameMonthRange = sd.startsWith(m) && ed.startsWith(m);
+      days = (sameMonthRange && rawDays != null && Number.isFinite(rawDays) && rawDays > 0)
+        ? rawDays
+        : overlapDays;
+    } else if (rawDays != null && Number.isFinite(rawDays) && rawDays > 0 && sd.startsWith(m)) {
+      days = rawDays;
+    }
+    if (Number.isFinite(days) && days > 0) usedLeave += days;
+  });
+  return Number(usedLeave.toFixed(2));
+}
+
+/**
+ * 满勤口径下用累计假抵扣考勤缺勤的天数（与薪资表 leaveOffsetDays 一致，按门店拆分后依次扣池）
+ * poolCap：当月可用于抵扣的剩余假池上限（通常为 月初累计 + 4 - 已用休息/休假）
+ */
+function calcMonthlyAttendanceLeaveBankOffsetDays(state, employee, month, poolCap) {
+  const m = safeMonthOnly(month);
+  const emp = employee && typeof employee === 'object' ? employee : null;
+  const uname = String(emp?.username || '').trim();
+  const uLower = uname.toLowerCase();
+  if (!m || !uLower) return 0;
+  let pool = Number(Math.max(0, Number(poolCap || 0)).toFixed(2));
+  if (!(pool > 0)) return 0;
+
+  const [yearNum, monthNum] = m.split('-').map(Number);
+  const monthDays = new Date(yearNum, monthNum, 0).getDate();
+  const workDaysPerMonth = Math.max(1, monthDays - 4);
+  const start = `${m}-01`;
+  const end = `${m}-31`;
+  let items = Array.isArray(state?.dailyReports) ? state.dailyReports : [];
+  items = items.filter(r => inDateRange(String(r?.date || '').trim(), start, end));
+  const attendanceRows = buildAttendanceFromReports(items);
+  const byStore = new Map();
+  for (const r of attendanceRows) {
+    const st = String(r?.store || '').trim();
+    const u = String(r?.username || '').trim().toLowerCase();
+    if (u !== uLower) continue;
+    const key = st || '_';
+    byStore.set(key, (byStore.get(key) || 0) + clampNum(r?.days, 0));
+  }
+  if (!byStore.size) {
+    const missing = Number(Math.max(0, workDaysPerMonth - 0).toFixed(2));
+    return Number(Math.min(missing, pool).toFixed(2));
+  }
+  let totalOffset = 0;
+  const stores = Array.from(byStore.entries()).sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+  for (const [, attDays] of stores) {
+    if (!(pool > 0)) break;
+    const attendanceDays = clampNum(attDays, 0);
+    const missing = Number(Math.max(0, Number((workDaysPerMonth - attendanceDays).toFixed(2))));
+    const off = Number(Math.min(missing, pool).toFixed(2));
+    totalOffset += off;
+    pool = Number(Math.max(0, pool - off).toFixed(2));
+  }
+  return Number(totalOffset.toFixed(2));
+}
+
 function calcEmployeeMonthlyCarryover(state, employee, month) {
   const m = safeMonthOnly(month);
   const emp = employee && typeof employee === 'object' ? employee : null;
@@ -11751,9 +11861,14 @@ function calcEmployeeMonthlyCarryover(state, employee, month) {
   while (cur && cur < m) {
     const ov = getLeaveBalanceOverride(state, uname, cur);
     const monthQuota = 4;
-    const used = Number(calcEmployeeMonthlyActualRestFromDailyReports(state, emp, cur)?.total || 0);
+    const usedRest = Number(calcEmployeeMonthlyActualRestFromDailyReports(state, emp, cur)?.total || 0);
+    const usedLeave = calcEmployeeMonthlyApprovedLeaveDays(state, emp, cur);
+    const usedLike = Number((usedRest + usedLeave).toFixed(2));
     const startCarry = ov && ov.mode === 'carryover' ? ov.value : carry;
-    carry = Number((startCarry + monthQuota - used).toFixed(2));
+    const preClose = Number((startCarry + monthQuota - usedLike).toFixed(2));
+    const poolForAtt = Math.max(0, preClose);
+    const attOff = calcMonthlyAttendanceLeaveBankOffsetDays(state, emp, cur, poolForAtt);
+    carry = Number((preClose - attOff).toFixed(2));
     cur = shiftMonth(cur, 1);
   }
   const currentOv = getLeaveBalanceOverride(state, uname, m);

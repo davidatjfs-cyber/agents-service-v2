@@ -128,8 +128,24 @@ export async function generateDiagnosis(store, yesterday) {
 }
 
 function buildDataSection(data, dishes) {
-  let section = `营收${fmtMoney(data.actual_revenue)} 达成率${fmtPct(data.budget_rate)}`;
-  section += ` | 客流${data.dine_traffic || 0} 订单${data.dine_orders || 0}`;
+  const dineRev = Number(data.dine_revenue || 0);
+  const delivRev = Number(data.delivery_actual || 0);
+  const dineOrders = Number(data.dine_orders || 0);
+  const delivOrders = Number(data.delivery_orders || 0);
+  const hasTakeout = delivRev > 0 || delivOrders > 0;
+
+  let section = '';
+  if (hasTakeout) {
+    const dineAvg = dineOrders > 0 ? Math.round(dineRev / dineOrders) : 0;
+    const delivAvg = delivOrders > 0 ? Math.round(delivRev / delivOrders) : 0;
+    section = `总营收${fmtMoney(data.actual_revenue)} 达成率${fmtPct(data.budget_rate)}`;
+    section += ` | 堂食: ${fmtMoney(dineRev)}/${dineOrders}单/客单${dineAvg}元`;
+    section += ` | 外卖: ${fmtMoney(delivRev)}/${delivOrders}单/客单${delivAvg}元`;
+    section += ` | 客流${data.dine_traffic || 0}`;
+  } else {
+    section = `营收${fmtMoney(data.actual_revenue)} 达成率${fmtPct(data.budget_rate)}`;
+    section += ` | 客流${data.dine_traffic || 0} 订单${dineOrders}`;
+  }
   if (data.efficiency) section += ` | 人效${fmtMoney(data.efficiency)}`;
   if (data.actual_margin) section += ` | 毛利率${fmtPct(data.actual_margin)}`;
 

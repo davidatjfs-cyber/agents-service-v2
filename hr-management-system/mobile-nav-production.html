@@ -7544,6 +7544,7 @@
                         <select id="approvals-view" onchange="loadApprovalsData()" style="padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9);">
                             <option value="assigned">待我审批</option>
                             <option value="created">我发起的</option>
+                            <option value="approved">我审批过的</option>
                             <option value="all">全部（管理层）</option>
                         </select>
                         <select id="approvals-status" onchange="loadApprovalsData()" style="padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9);">
@@ -7552,7 +7553,16 @@
                             <option value="approved">已通过</option>
                             <option value="paid">已付款</option>
                             <option value="rejected">已拒绝</option>
+                            <option value="returned">已退回</option>
                         </select>
+                        <select id="approvals-date-field" onchange="loadApprovalsData()" title="日期筛选含义" style="padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); max-width: 200px;">
+                            <option value="created">按申请日</option>
+                            <option value="updated">按最后更新（含审批）</option>
+                        </select>
+                        <input id="approvals-approved-start" type="date" onchange="loadApprovalsData()" style="padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); color-scheme:dark;" placeholder="开始日期" />
+                        <input id="approvals-approved-end" type="date" onchange="loadApprovalsData()" style="padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); color-scheme:dark;" placeholder="结束日期" />
+                        <input id="approvals-search" type="text" onkeydown="if(event.key==='Enter') loadApprovalsData()" style="padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); min-width: 120px;" placeholder="申请人/关键字" />
+                        <button class="btn btn-secondary" id="approvals-bulk-approve-btn" type="button" onclick="bulkApproveSelectedApprovals()" style="padding: 10px 14px; display:none;">批量通过</button>
                         <button class="btn btn-secondary" type="button" onclick="loadApprovalsData()" style="padding: 10px 14px;">刷新</button>
                     </div>
                 </div>
@@ -7560,7 +7570,7 @@
                 <div class="card">
                     <div class="card-icon orange">🧾</div>
                     <h4 style="margin: 0;">审批列表</h4>
-                    <div id="approvals-hint" style="margin-top: 10px; color:#777; font-size: 12px;">进入记录即视为已读；未读数量会显示在左侧导航。</div>
+                    <div id="approvals-hint" style="margin-top: 10px; color:#777; font-size: 12px;">进入记录即视为已读；未读数量会显示在左侧导航。「按申请日」对应提交时间；「按最后更新」对应记录更新时间（审批通过/驳回/退回等会更新）。管理层「全部」视图按审批类型分组。</div>
                     <div id="approvals-list" style="margin-top: 12px;"></div>
                     <div id="approvals-empty" style="margin-top: 12px; color:#777; font-size: 12px; display:none;">暂无审批记录。</div>
                 </div>
@@ -10528,6 +10538,13 @@
                 if (p.type) q.set('type', String(p.type));
                 if (p.store) q.set('store', String(p.store));
                 if (p.limit != null) q.set('limit', String(p.limit));
+                if (p.dateStart) q.set('dateStart', String(p.dateStart));
+                if (p.dateEnd) q.set('dateEnd', String(p.dateEnd));
+                if (p.dateField) q.set('dateField', String(p.dateField));
+                if (p.approvedStart) q.set('approvedStart', String(p.approvedStart));
+                if (p.approvedEnd) q.set('approvedEnd', String(p.approvedEnd));
+                if (p.approver) q.set('approver', String(p.approver));
+                if (p.search) q.set('search', String(p.search));
                 const qs = q.toString();
                 return this.request('/api/approvals' + (qs ? ('?' + qs) : ''), { method: 'GET' });
             },
@@ -10574,6 +10591,7 @@
         };
 
         let __APPROVALS_CACHE = [];
+        let __APPROVALS_SELECTED = new Set();
         let __CURRENT_APPROVAL = null;
         let __UNREAD_BADGES_TIMER = null;
 
@@ -10702,6 +10720,7 @@
             if (s === 'approved') return '已通过';
             if (s === 'paid') return '已付款';
             if (s === 'rejected') return '已拒绝';
+            if (s === 'returned') return '已退回';
             return s || '-';
         }
 
@@ -10725,6 +10744,10 @@
 
             const viewEl = document.getElementById('approvals-view');
             const statusEl = document.getElementById('approvals-status');
+            const approvedStartEl = document.getElementById('approvals-approved-start');
+            const approvedEndEl = document.getElementById('approvals-approved-end');
+            const dateFieldEl = document.getElementById('approvals-date-field');
+            const searchEl = document.getElementById('approvals-search');
             try {
                 const role = String(currentUser?.role || '').trim();
                 const canSeeAll = (role === ROLES.ADMIN || role === ROLES.HQ_MANAGER || role === ROLES.CASHIER);
@@ -10739,11 +10762,16 @@
             } catch (e) {}
             const view = String(viewEl?.value || 'assigned');
             const status = String(statusEl?.value || '').trim();
+            const approvedStart = String(approvedStartEl?.value || '').trim();
+            const approvedEnd = String(approvedEndEl?.value || '').trim();
+            const dateField = String(dateFieldEl?.value || 'created').trim();
+            const search = String(searchEl?.value || '').trim();
+            const lim = view === 'all' ? 500 : 200;
 
             box.innerHTML = '<div style="color:#888;padding:18px;text-align:center;">加载中...</div>';
             empty.style.display = 'none';
 
-            HRMS_API.getApprovals({ view: String(viewEl?.value || 'assigned'), status, limit: 200 })
+            HRMS_API.getApprovals({ view: String(viewEl?.value || 'assigned'), status, dateStart: approvedStart, dateEnd: approvedEnd, dateField, search, limit: lim })
                 .then(resp => {
                     const items = Array.isArray(resp?.items) ? resp.items : [];
                     __APPROVALS_CACHE = items;
@@ -10760,32 +10788,55 @@
         function renderApprovalsList(items) {
             const box = document.getElementById('approvals-list');
             const empty = document.getElementById('approvals-empty');
+            const bulkBtn = document.getElementById('approvals-bulk-approve-btn');
             if (!box || !empty) return;
 
             const list = Array.isArray(items) ? items : [];
+            const canBulkApproveType = (item) => {
+                const t = String(item?.type || '').trim();
+                return ['points', 'reward_punishment', 'monthly_confirm', 'payment'].includes(t);
+            };
+            const refreshBulkBtn = () => {
+                if (!bulkBtn) return;
+                const view = String(document.getElementById('approvals-view')?.value || 'assigned').trim();
+                bulkBtn.style.display = view === 'assigned' ? '' : 'none';
+                const selectedCount = Array.from(__APPROVALS_SELECTED || []).filter(Boolean).length;
+                bulkBtn.textContent = selectedCount > 0 ? `批量通过（${selectedCount}）` : '批量通过';
+                bulkBtn.disabled = selectedCount <= 0;
+            };
             if (!list.length) {
+                __APPROVALS_SELECTED = new Set();
+                refreshBulkBtn();
                 box.innerHTML = '';
                 empty.style.display = '';
                 return;
             }
             empty.style.display = 'none';
+            const validIds = new Set(list.map(it => String(it?.id || '').trim()).filter(Boolean));
+            __APPROVALS_SELECTED = new Set(Array.from(__APPROVALS_SELECTED || []).filter(id => validIds.has(id)));
+            refreshBulkBtn();
 
-            box.innerHTML = list.map(it => {
+            const approvalCardHtml = (it) => {
                 const id = String(it?.id || '').trim();
                 const type = approvalTypeText(it?.type);
                 const rawStatus = String(it?.status || '').trim();
                 const st = (String(it?.type || '') === 'payment' && rawStatus === 'approved') ? '已审核' : approvalStatusText(rawStatus);
-                const who = hrmsDisplayName(it?.applicant_username);
-                const assignee = hrmsDisplayName(it?.current_assignee_username);
+                const who = String(it?.applicant_name || '').trim() || hrmsDisplayName(it?.applicant_username);
+                const assignee = String(it?.current_assignee_name || '').trim() || hrmsDisplayName(it?.current_assignee_username);
                 const createdAt = String(it?.created_at || it?.createdAt || '').slice(0, 19).replace('T', ' ');
 
-                const statusColor = st === '待处理' ? 'rgba(245,158,11,0.12)' : (st === '已付款' ? 'rgba(59,130,246,0.10)' : (st === '已通过' ? 'rgba(34,197,94,0.10)' : 'rgba(239,68,68,0.10)'));
-                const borderColor = st === '待处理' ? '#f59e0b' : (st === '已付款' ? '#3b82f6' : (st === '已通过' ? '#22c55e' : '#ef4444'));
+                const statusColor = st === '待处理' ? 'rgba(245,158,11,0.12)' : (st === '已付款' ? 'rgba(59,130,246,0.10)' : (st === '已通过' ? 'rgba(34,197,94,0.10)' : (st === '已退回' ? 'rgba(148,163,184,0.12)' : 'rgba(239,68,68,0.10)')));
+                const borderColor = st === '待处理' ? '#f59e0b' : (st === '已付款' ? '#3b82f6' : (st === '已通过' ? '#22c55e' : (st === '已退回' ? '#94a3b8' : '#ef4444')));
                 const rawAssignee = String(it?.current_assignee_username || '').trim();
                 const myUn = String(currentUser?.username || '').toLowerCase();
                 const chainMatch = Array.isArray(it?.chain) && it.chain.some(s => String(s?.assignee || '').toLowerCase() === myUn && String(s?.status || '') === 'pending');
                 const canAct = String(it?.status || '') === 'pending' && myUn && (rawAssignee.toLowerCase() === myUn || chainMatch);
                 const meta = [createdAt, who !== '-' ? ('申请人 ' + who) : '', assignee !== '-' ? ('当前审批人 ' + assignee) : ''].filter(Boolean).join(' · ');
+                const canBulk = canAct && canBulkApproveType(it);
+                const checked = canBulk && __APPROVALS_SELECTED.has(id);
+                const checkbox = canBulk
+                    ? `<label style="display:flex; align-items:center; gap:6px; font-size:12px; color:rgba(200,215,230,0.78);"><input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleApprovalSelection('${escapeHtml(id)}', this.checked)">批量</label>`
+                    : '';
                 const btn = `<button class="btn btn-secondary" type="button" onclick="openApprovalDetailModal('${escapeHtml(id)}')" style="padding: 8px 12px;">查看</button>`;
                 const act = canAct ? '<span style="color: rgba(245,158,11,0.95); font-weight: 800; font-size: 12px;">待你处理</span>' : '';
 
@@ -10795,10 +10846,94 @@
                             <div style="font-weight: 900; color: rgba(226,232,240,0.95);">${escapeHtml(type)} · ${escapeHtml(st)} ${act}</div>
                             <div style="margin-top: 6px; font-size: 12px; color: rgba(200,215,230,0.78);">${escapeHtml(meta || '')}</div>
                         </div>
-                        <div style="display:flex; gap: 10px; align-items:center;">${btn}</div>
+                        <div style="display:flex; gap: 10px; align-items:center;">${checkbox}${btn}</div>
                     </div>
                 `;
-            }).join('');
+            };
+
+            const viewNow = String(document.getElementById('approvals-view')?.value || 'assigned').trim();
+            const TYPE_ORDER = ['onboarding', 'offboarding', 'leave', 'payment', 'points', 'reward_punishment', 'promotion', 'monthly_confirm'];
+            if (viewNow === 'all') {
+                const buckets = new Map();
+                list.forEach((it) => {
+                    const k = String(it?.type || '_other');
+                    if (!buckets.has(k)) buckets.set(k, []);
+                    buckets.get(k).push(it);
+                });
+                const parts = [];
+                const emitType = (tk) => {
+                    const sub = buckets.get(tk);
+                    if (!sub || !sub.length) return;
+                    parts.push(`<div style="margin:18px 0 8px; font-size:13px;color:rgba(200,215,230,0.92);font-weight:800;border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:6px;">${escapeHtml(approvalTypeText(tk))} <span style="opacity:0.65;font-weight:600;">（${sub.length}）</span></div>`);
+                    sub.forEach((row) => parts.push(approvalCardHtml(row)));
+                    buckets.delete(tk);
+                };
+                TYPE_ORDER.forEach(emitType);
+                Array.from(buckets.keys()).sort().forEach(emitType);
+                box.innerHTML = parts.join('');
+            } else {
+                box.innerHTML = list.map(approvalCardHtml).join('');
+            }
+            refreshBulkBtn();
+        }
+
+        function toggleApprovalSelection(id, checked) {
+            const key = String(id || '').trim();
+            if (!key) return;
+            if (!(__APPROVALS_SELECTED instanceof Set)) __APPROVALS_SELECTED = new Set();
+            if (checked) __APPROVALS_SELECTED.add(key);
+            else __APPROVALS_SELECTED.delete(key);
+            const bulkBtn = document.getElementById('approvals-bulk-approve-btn');
+            if (bulkBtn) {
+                const n = __APPROVALS_SELECTED.size;
+                bulkBtn.textContent = n > 0 ? `批量通过（${n}）` : '批量通过';
+                bulkBtn.disabled = n <= 0;
+            }
+        }
+
+        async function bulkApproveSelectedApprovals() {
+            const ids = Array.from(__APPROVALS_SELECTED || []);
+            if (!ids.length) {
+                showNotification('请先勾选要批量通过的审批', 'warning');
+                return;
+            }
+            const safeIds = ids.filter((id) => {
+                const item = (__APPROVALS_CACHE || []).find(x => String(x?.id || '') === id);
+                const t = String(item?.type || '').trim();
+                return ['points', 'reward_punishment', 'monthly_confirm', 'payment'].includes(t);
+            });
+            if (!safeIds.length) {
+                showNotification('当前勾选项不支持批量通过', 'warning');
+                return;
+            }
+            if (!confirm(`确认批量通过 ${safeIds.length} 条审批？仅会处理无需额外填写字段的审批。`)) return;
+            let ok = 0;
+            const failed = [];
+            const bulkBtn = document.getElementById('approvals-bulk-approve-btn');
+            const prevText = bulkBtn ? bulkBtn.textContent : '';
+            if (bulkBtn) {
+                bulkBtn.disabled = true;
+                bulkBtn.textContent = '批量处理中...';
+            }
+            for (const id of safeIds) {
+                try {
+                    await HRMS_API.decideApproval(id, true, '');
+                    ok += 1;
+                } catch (e) {
+                    failed.push(`${id}: ${String(e?.message || e)}`);
+                }
+            }
+            __APPROVALS_SELECTED = new Set();
+            if (bulkBtn) {
+                bulkBtn.textContent = prevText || '批量通过';
+            }
+            await loadApprovalsData();
+            if (!failed.length) {
+                showNotification(`批量审批成功，共 ${ok} 条`, 'success');
+            } else {
+                showNotification(`批量审批完成，成功 ${ok} 条，失败 ${failed.length} 条`, failed.length < safeIds.length ? 'warning' : 'error');
+                console.warn('[bulk-approve] failed items:', failed);
+            }
         }
 
         async function uploadPointsEvidence() {
@@ -11115,21 +11250,63 @@
                     listEl.innerHTML = '<div style="color:rgba(200,215,230,0.75);">暂无匹配记录</div>';
                     return;
                 }
-                listEl.innerHTML = items.map(it => {
-                    const itemName = String(it?.itemName || '积分事项').trim();
+                const grouped = new Map();
+                for (const it of items) {
+                    const username = String(it?.username || '').trim().toLowerCase();
                     const who = String(it?.name || it?.username || '-').trim();
-                    const st = String(it?.store || '-').trim();
-                    const pts = Number(it?.points || 0);
-                    const amount = Number((pts * 0.5).toFixed(2));
-                    const dt = String(it?.approvedAt || it?.createdAt || '').slice(0, 19).replace('T', ' ');
-                    const aid = String(it?.approvalId || '').trim();
-                    return `<div style="padding:10px 12px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); margin-bottom:8px;">
-                        <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
-                            <div style="font-weight:800; color:rgba(226,232,240,0.95);">${escapeHtml(itemName)} · ${pts}分</div>
-                            <div style="font-size:12px; color:#f59e0b; font-weight:800;">¥${amount.toFixed(2)}</div>
+                    const key = username || who;
+                    if (!grouped.has(key)) {
+                        grouped.set(key, {
+                            username,
+                            name: who,
+                            store: String(it?.store || '').trim(),
+                            items: [],
+                            totalPoints: 0,
+                            totalAmount: 0
+                        });
+                    }
+                    const group = grouped.get(key);
+                    group.items.push(it);
+                    group.totalPoints += Number(it?.points || 0) || 0;
+                    group.totalAmount += Number(it?.amount || ((Number(it?.points || 0) || 0) * 0.5)) || 0;
+                    if (!group.store && it?.store) group.store = String(it.store || '').trim();
+                }
+                const groupedList = Array.from(grouped.values()).sort((a, b) => {
+                    const byStore = String(a.store || '').localeCompare(String(b.store || ''), 'zh-Hans-CN');
+                    if (byStore !== 0) return byStore;
+                    return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN');
+                });
+                listEl.innerHTML = groupedList.map(group => {
+                    const rows = (Array.isArray(group.items) ? group.items : [])
+                        .slice()
+                        .sort((a, b) => String(b?.approvedAt || b?.createdAt || '').localeCompare(String(a?.approvedAt || a?.createdAt || '')))
+                        .map(it => {
+                            const itemName = String(it?.itemName || '积分事项').trim();
+                            const pts = Number(it?.points || 0);
+                            const amount = Number(it?.amount || (pts * 0.5));
+                            const dt = String(it?.approvedAt || it?.createdAt || '').slice(0, 19).replace('T', ' ');
+                            const aid = String(it?.approvalId || '').trim();
+                            return `<div style="padding:10px 12px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); margin-top:8px;">
+                                <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
+                                    <div style="font-weight:800; color:rgba(226,232,240,0.95);">${escapeHtml(itemName)} · ${pts}分</div>
+                                    <div style="font-size:12px; color:#f59e0b; font-weight:800;">¥${amount.toFixed(2)}</div>
+                                </div>
+                                <div style="margin-top:6px; font-size:12px; color:rgba(200,215,230,0.75);">${escapeHtml(group.store || '-')}${dt ? ' · ' + escapeHtml(dt) : ''}</div>
+                                ${aid ? `<div style="margin-top:8px;"><button class="btn btn-secondary" style="padding:6px 10px; font-size:12px;" onclick="openApprovalDetailModal('${escapeHtml(aid)}')">查看审批详情</button></div>` : ''}
+                            </div>`;
+                        }).join('');
+                    return `<div style="padding:12px; border-radius:16px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.02); margin-bottom:12px;">
+                        <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:center;">
+                            <div>
+                                <div style="font-weight:900; color:rgba(226,232,240,0.96); font-size:16px;">${escapeHtml(group.name || group.username || '-')}</div>
+                                <div style="margin-top:4px; font-size:12px; color:rgba(200,215,230,0.7);">${escapeHtml(group.store || '-')} · ${group.items.length}条记录</div>
+                            </div>
+                            <div style="text-align:right;">
+                                <div style="font-size:13px; color:#facc15; font-weight:900;">${Number(group.totalPoints || 0)}分</div>
+                                <div style="margin-top:4px; font-size:12px; color:#f59e0b; font-weight:800;">¥${Number(group.totalAmount || 0).toFixed(2)}</div>
+                            </div>
                         </div>
-                        <div style="margin-top:6px; font-size:12px; color:rgba(200,215,230,0.75);">${escapeHtml(st)} · ${escapeHtml(who)} · ${escapeHtml(dt || '-')}</div>
-                        ${aid ? `<div style="margin-top:8px;"><button class="btn btn-secondary" style="padding:6px 10px; font-size:12px;" onclick="openApprovalDetailModal('${escapeHtml(aid)}')">查看审批详情</button></div>` : ''}
+                        ${rows}
                     </div>`;
                 }).join('');
             } catch (e) {
@@ -11209,7 +11386,7 @@
             const type = approvalTypeText(item?.type);
             const rawStatus = String(item?.status || '').trim();
             const st = (String(item?.type || '') === 'payment' && rawStatus === 'approved') ? '已审核' : approvalStatusText(rawStatus);
-            const who = hrmsDisplayName(item?.applicant_username);
+            const who = String(item?.applicant_name || '').trim() || hrmsDisplayName(item?.applicant_username);
             const createdAt = String(item?.created_at || item?.createdAt || '').slice(0, 19).replace('T', ' ');
             if (sub) sub.textContent = `${type} · ${st} · ${createdAt}${who !== '-' ? (' · 申请人 ' + who) : ''}`;
 
@@ -11224,7 +11401,7 @@
                 const time = String(s?.decidedAt || '').slice(0, 19).replace('T', ' ');
                 return `<div style="padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06);">
                     <div style="display:flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
-                        <div style="font-weight: 800;">第 ${escapeHtml(step)} 步：${escapeHtml(hrmsDisplayName(assignee))}</div>
+                        <div style="font-weight: 800;">第 ${escapeHtml(step)} 步：${escapeHtml(String(s?.assignee_name || '').trim() || hrmsDisplayName(assignee))}</div>
                         <div style="font-weight: 800; color: rgba(226,232,240,0.95);">${escapeHtml(statusText || '-')}</div>
                     </div>
                     ${note ? `<div style="margin-top: 6px; color: rgba(200,215,230,0.85); font-size: 12px;">备注：${escapeHtml(note)}</div>` : ''}

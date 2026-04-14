@@ -1841,21 +1841,55 @@ function chairmanStoreTab(cfg) {
     });
     storeCard.appendChild(grid);
 
-    // ── Daily targets ──
-    const tgt = s.target_daily || {};
-    const tgtCard = el('div', { className: 'bg-blue-50 rounded-xl p-4 mb-4' });
-    tgtCard.appendChild(el('h4', { className: 'text-sm font-semibold text-blue-800 mb-3' }, '📊 日均目标'));
-    const tgtGrid = el('div', { className: 'grid grid-cols-2 md:grid-cols-4 gap-3' });
+    // ── Daily targets: Dine-in ──
+    const di = s.target_daily_dineIn || s.target_daily || {};
+    const diCard = el('div', { className: 'bg-blue-50 rounded-xl p-4 mb-4' });
+    diCard.appendChild(el('h4', { className: 'text-sm font-semibold text-blue-800 mb-3' }, '🍽️ 堂食日均目标'));
+    const diGrid = el('div', { className: 'grid grid-cols-2 md:grid-cols-4 gap-3' });
     [
-      ['目标营收(元)', 'revenue', tgt.revenue || 0],
-      ['目标订单数', 'orders', tgt.orders || 0],
-      ['目标客单价(元)', 'avgTicket', tgt.avgTicket || 0],
-      ['目标翻台率', 'turnover', tgt.turnover || 0],
+      ['堂食营收(元)', 'revenue', di.revenue || 0],
+      ['堂食订单数', 'orders', di.orders || 0],
+      ['堂食客单价(元)', 'avgTicket', di.avgTicket || 0],
+      ['翻台率', 'turnover', di.turnover || 0],
     ].forEach(([label, key, val]) => {
-      tgtGrid.appendChild(field(label, el('input', { type: 'number', value: String(val), id: `cs_${si}_tgt_${key}`, className: 'border border-blue-200 bg-white rounded-lg px-3 py-2 text-sm w-full', step: key === 'turnover' ? '0.1' : '1' })));
+      diGrid.appendChild(field(label, el('input', { type: 'number', value: String(val), id: `cs_${si}_tgt_di_${key}`, className: 'border border-blue-200 bg-white rounded-lg px-3 py-2 text-sm w-full', step: key === 'turnover' ? '0.1' : '1' })));
     });
-    tgtCard.appendChild(tgtGrid);
-    storeCard.appendChild(tgtCard);
+
+    // Has takeout toggle
+    const hasTakeout = s.hasTakeout !== false && (s.target_daily_takeout?.revenue > 0 || s.target_daily_takeout?.orders > 0);
+    const takeoutToggle = el('div', { className: 'flex items-center gap-2 mt-3' });
+    takeoutToggle.appendChild(el('label', { className: 'text-sm text-gray-700 font-medium' }, '有外卖业务：'));
+    const toggleCb = el('input', { type: 'checkbox', id: `cs_${si}_hasTakeout`, checked: hasTakeout, className: 'w-4 h-4' });
+    takeoutToggle.appendChild(toggleCb);
+    diCard.appendChild(diGrid);
+    diCard.appendChild(takeoutToggle);
+    storeCard.appendChild(diCard);
+
+    // ── Daily targets: Takeout ──
+    const to = s.target_daily_takeout || {};
+    const toCard = el('div', { className: 'bg-orange-50 rounded-xl p-4 mb-4', id: `cs_${si}_takeout_card` });
+    toCard.appendChild(el('h4', { className: 'text-sm font-semibold text-orange-800 mb-3' }, '🛵 外卖日均目标'));
+    const toGrid = el('div', { className: 'grid grid-cols-2 md:grid-cols-3 gap-3' });
+    [
+      ['外卖营收(元)', 'revenue', to.revenue || 0],
+      ['外卖订单数', 'orders', to.orders || 0],
+      ['外卖客单价(元)', 'avgTicket', to.avgTicket || 0],
+    ].forEach(([label, key, val]) => {
+      toGrid.appendChild(field(label, el('input', { type: 'number', value: String(val), id: `cs_${si}_tgt_to_${key}`, className: 'border border-orange-200 bg-white rounded-lg px-3 py-2 text-sm w-full', step: '1' })));
+    });
+    toCard.appendChild(toGrid);
+    storeCard.appendChild(toCard);
+
+    // Toggle takeout card visibility
+    const updateTakeoutVisibility = () => {
+      const show = toggleCb.checked;
+      toCard.style.display = show ? '' : 'none';
+      if (!show) {
+        ['revenue', 'orders', 'avgTicket'].forEach(k => { const inp = $(`cs_${si}_tgt_to_${k}`); if (inp) inp.value = '0'; });
+      }
+    };
+    toggleCb.addEventListener('change', updateTakeoutVisibility);
+    updateTakeoutVisibility();
 
     // ── Cost structure ──
     const cs = s.cost_structure || {};
@@ -1918,11 +1952,17 @@ function chairmanStoreTab(cfg) {
       Object.keys(stores).forEach((sn, si) => {
         const s = stores[sn];
         const g = id => $(id)?.value;
-        const tgt = {
-          revenue: Number(g(`cs_${si}_tgt_revenue`)) || s.target_daily?.revenue || 0,
-          orders: Number(g(`cs_${si}_tgt_orders`)) || s.target_daily?.orders || 0,
-          avgTicket: Number(g(`cs_${si}_tgt_avgTicket`)) || s.target_daily?.avgTicket || 0,
-          turnover: Number(g(`cs_${si}_tgt_turnover`)) || s.target_daily?.turnover || 0,
+        const tgtDI = {
+          revenue: Number(g(`cs_${si}_tgt_di_revenue`)) || s.target_daily_dineIn?.revenue || s.target_daily?.revenue || 0,
+          orders: Number(g(`cs_${si}_tgt_di_orders`)) || s.target_daily_dineIn?.orders || s.target_daily?.orders || 0,
+          avgTicket: Number(g(`cs_${si}_tgt_di_avgTicket`)) || s.target_daily_dineIn?.avgTicket || s.target_daily?.avgTicket || 0,
+          turnover: Number(g(`cs_${si}_tgt_di_turnover`)) || s.target_daily_dineIn?.turnover || s.target_daily?.turnover || 0,
+        };
+        const hasTO = $(`cs_${si}_hasTakeout`)?.checked;
+        const tgtTO = {
+          revenue: Number(g(`cs_${si}_tgt_to_revenue`)) || s.target_daily_takeout?.revenue || 0,
+          orders: Number(g(`cs_${si}_tgt_to_orders`)) || s.target_daily_takeout?.orders || 0,
+          avgTicket: Number(g(`cs_${si}_tgt_to_avgTicket`)) || s.target_daily_takeout?.avgTicket || 0,
         };
         const cs = {
           foodCostRate: Number(g(`cs_${si}_cs_foodCostRate`)) || s.cost_structure?.foodCostRate || 0,
@@ -1942,7 +1982,10 @@ function chairmanStoreTab(cfg) {
           tables: Number(g(`cs_${si}_tables`)) || s.tables || 0,
           avgPrice: Number(g(`cs_${si}_avgPrice`)) || s.avgPrice || 0,
           peakHours: peakHoursVal.length ? peakHoursVal : (s.peakHours || []),
-          target_daily: tgt, cost_structure: cs,
+          hasTakeout: hasTO,
+          target_daily_dineIn: tgtDI,
+          target_daily_takeout: hasTO ? tgtTO : { revenue: 0, orders: 0, avgTicket: 0 },
+          cost_structure: cs,
           coreStrategy: g(`cs_${si}_coreStrategy`) || s.coreStrategy || '',
           bottleneck: g(`cs_${si}_bottleneck`) || s.bottleneck || '',
           signatureProducts: g(`cs_${si}_signatureProducts`) || s.signatureProducts || '',

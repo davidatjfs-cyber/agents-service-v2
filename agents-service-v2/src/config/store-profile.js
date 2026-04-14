@@ -19,8 +19,10 @@ const DEFAULT_PROFILES = {
     seats: 100,
     tables: 25,
     avgPrice: 100,
+    hasTakeout: true,
     peakHours: ['11:30-13:30', '17:30-20:30'],
-    target_daily: { revenue: 12000, orders: 120, avgTicket: 100, turnover: 1.8 },
+    target_daily_dineIn: { revenue: 10000, orders: 100, avgTicket: 100, turnover: 1.8 },
+    target_daily_takeout: { revenue: 5000, orders: 80, avgTicket: 62 },
     cost_structure: { foodCostRate: 0.35, laborCostRate: 0.22, rentCostRate: 0.15, targetProfitRate: 0.18 },
     coreStrategy: '走量，翻台率是生命线',
     bottleneck: '午市客流',
@@ -40,8 +42,10 @@ const DEFAULT_PROFILES = {
     seats: 90,
     tables: 20,
     avgPrice: 260,
+    hasTakeout: false,
     peakHours: ['11:30-13:30', '17:30-21:00'],
-    target_daily: { revenue: 23000, orders: 88, avgTicket: 260, turnover: 1.5 },
+    target_daily_dineIn: { revenue: 23000, orders: 88, avgTicket: 260, turnover: 1.5 },
+    target_daily_takeout: { revenue: 0, orders: 0, avgTicket: 0 },
     cost_structure: { foodCostRate: 0.32, laborCostRate: 0.20, rentCostRate: 0.18, targetProfitRate: 0.20 },
     coreStrategy: '走质，客单价和包房利用率是核心',
     bottleneck: '晚市包房利用率',
@@ -101,13 +105,25 @@ export function buildStoreProfilePromptBlock(storeInput) {
     ? `⚠️ 需关注菜品: ${p.problemDishes.map(d => `${d.name}(${d.reason})`).join('、')}`
     : '';
 
+  const di = p.target_daily_dineIn || p.target_daily || {};
+  const to = p.target_daily_takeout || {};
+  const hasTakeout = p.hasTakeout && to.revenue > 0;
+
+  let targetLine = '';
+  if (hasTakeout) {
+    const totalRevenue = (di.revenue || 0) + (to.revenue || 0);
+    targetLine = `日均目标: 总营收${totalRevenue}元(堂食${di.revenue}+外卖${to.revenue}) | 堂食${di.orders || 0}单/客单${di.avgTicket || 0}元/翻台${di.turnover || 0}次 | 外卖${to.orders || 0}单/客单${to.avgTicket || 0}元`;
+  } else {
+    targetLine = `日均目标: 营收${di.revenue || 0}元 ${di.orders || 0}单 翻台${di.turnover || 0}次 客单价${di.avgTicket || 0}元`;
+  }
+
   return `
 【门店画像 - ${p.brand}${p.cuisine}】
-定位: ${p.positioning} | 人均${p.avgPrice}元 | ${p.seats}餐位/${p.tables}桌
+定位: ${p.positioning} | 人均${p.avgPrice}元 | ${p.seats}餐位/${p.tables}桌${hasTakeout ? ' | 有外卖' : ''}
 目标客群: ${p.targetCustomer}
 核心策略: ${p.coreStrategy}
 当前瓶颈: ${p.bottleneck}
-日均目标: 营收${p.target_daily.revenue}元 ${p.target_daily.orders}单 翻台${p.target_daily.turnover}次 客单价${p.target_daily.avgTicket}元
+${targetLine}
 成本结构: 食材${Math.round((p.cost_structure.foodCostRate || 0) * 100)}% 人力${Math.round((p.cost_structure.laborCostRate || 0) * 100)}% 租金${Math.round((p.cost_structure.rentCostRate || 0) * 100)}%
 高毛利招牌: ${topDishText}
 ${problemDishText}`.trim();

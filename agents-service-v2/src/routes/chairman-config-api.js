@@ -12,7 +12,7 @@ const CONFIG_KEY = 'chairman_config';
 function getDefaultConfig() {
   return {
     stores: {
-      '马己仙上海音乐广场店': {
+'马己仙上海音乐广场店': {
         brand: '马己仙',
         cuisine: '粤菜',
         positioning: '大众正餐',
@@ -20,6 +20,7 @@ function getDefaultConfig() {
         avgPrice: 100,
         seats: 100,
         tables: 25,
+        hasTakeout: true,
         coreStrategy: '走量，翻台率是生命线',
         bottleneck: '午市客流',
         signatureProducts: '',
@@ -34,8 +35,36 @@ function getDefaultConfig() {
           { name: '老火靓汤', price: 48, margin: 0.75 },
         ],
         problemDishes: [],
-        target_daily: { revenue: 12000, orders: 120, avgTicket: 100, turnover: 1.8 },
+        target_daily_dineIn: { revenue: 10000, orders: 100, avgTicket: 100, turnover: 1.8 },
+        target_daily_takeout: { revenue: 5000, orders: 80, avgTicket: 62 },
         cost_structure: { foodCostRate: 0.35, laborCostRate: 0.22, rentCostRate: 0.15, targetProfitRate: 0.18 },
+      },
+      '洪潮大宁久光店': {
+        brand: '洪潮',
+        cuisine: '潮汕菜',
+        positioning: '中高端正餐',
+        targetCustomer: '商务宴请、品质家庭聚餐',
+        avgPrice: 260,
+        seats: 90,
+        tables: 20,
+        hasTakeout: false,
+        coreStrategy: '走质，客单价和包房利用率是核心',
+        bottleneck: '晚市包房利用率',
+        signatureProducts: '',
+        competitiveAdvantage: '',
+        serviceStyle: '精致服务型',
+        privateRooms: 4,
+        kitchenCapacity: '',
+        lowSeasonNote: '',
+        topDishes: [
+          { name: '卤鹅拼盘', price: 168, margin: 0.69 },
+          { name: '生腌膏蟹', price: 138, margin: 0.70 },
+          { name: '牛肉火锅', price: 258, margin: 0.68 },
+        ],
+        problemDishes: [],
+        target_daily_dineIn: { revenue: 23000, orders: 88, avgTicket: 260, turnover: 1.5 },
+        target_daily_takeout: { revenue: 0, orders: 0, avgTicket: 0 },
+        cost_structure: { foodCostRate: 0.32, laborCostRate: 0.20, rentCostRate: 0.18, targetProfitRate: 0.20 },
       },
       '洪潮大宁久光店': {
         brand: '洪潮',
