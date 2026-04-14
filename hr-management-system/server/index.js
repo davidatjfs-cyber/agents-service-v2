@@ -11709,6 +11709,36 @@ function shiftMonth(ym, delta) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+/** 打卡时刻在上海时区的「时×60+分」，用于迟到/早退判断 */
+function hrmsClockMinutesInShanghai(d) {
+  if (!(d instanceof Date) || !Number.isFinite(d.getTime())) return NaN;
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(d);
+  const hh = Number(parts.find((x) => x.type === 'hour')?.value);
+  const mm = Number(parts.find((x) => x.type === 'minute')?.value);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return NaN;
+  return hh * 60 + mm;
+}
+
+/** 打卡记录归属的「上海日历日」YYYY-MM-DD */
+function hrmsDateKeyInShanghai(d) {
+  if (!(d instanceof Date) || !Number.isFinite(d.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
+  const gv = (t) => parts.find((x) => x.type === t)?.value || '';
+  return `${gv('year')}-${gv('month')}-${gv('day')}`;
+}
+
+/**
+ * 迟到/早退比对用的门店班次窗口（上海墙钟）。
+ * 洪潮大宁久光店：9:15 上班 – 21:00 下班；时段外打卡计迟到/早退。马己仙等未单独配置：9:00–22:00。
+ */
+function hrmsAttendanceWindowMinutesForStore(storeRaw) {
+  const s = String(storeRaw || '').trim();
+  const hongJiuguang = s.includes('洪潮大宁久光')
+    || (s.includes('洪潮') && (s.includes('久光') || s.includes('大宁')));
+  if (hongJiuguang) return { startMinutes: 9 * 60 + 15, endMinutes: 21 * 60 };
+  return { startMinutes: 9 * 60, endMinutes: 22 * 60 };
+}
+
 function resolveEmployeeLeaveCalcStartMonth(state, employee, fallbackMonth) {
   const emp = employee && typeof employee === 'object' ? employee : {};
   const uname = String(emp?.username || '').trim().toLowerCase();
@@ -11978,7 +12008,11 @@ async function runLeaveCumulativeCloseSnapshotForClosedMonth(closedMonth) {
     };
     n++;
   }
-  await saveSharedState({ ...state0, leaveCumulativeCloseSnapshots: snaps });
+  try {
+    await saveSharedState({ ...state0, leaveCumulativeCloseSnapshots: snaps });
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e), closedMonth: m };
+  }
   return { ok: true, closedMonth: m, nextMonth: nextM, employees: n };
 }
 
@@ -15386,7 +15420,7 @@ app.listen(PORT, HOST, async () => {
     async function sendSystemAlert(msg) {
       try {
         const admins = await pool.query(
-          `SELECT username FROM users WHERE role IN ('admin','hq_manager') AND status = 'active' LIMIT 5`
+          `SELECT username FROM users WHERE role IN ('admin','hq_manager','hr_manager') AND status = 'active' LIMIT 8`
         );
         for (const a of admins.rows) {
           const fu = await lookupFeishuUserByUsername(a.username);
@@ -15508,9 +15542,24 @@ app.listen(PORT, HOST, async () => {
         if (r?.ok) {
           _leaveCumulativeSnapshotDoneCurYm = curYm;
           console.log('[leave-cumulative-snapshot] locked closedMonth=', r.closedMonth, 'employees=', r.employees);
+        } else {
+          await sendSystemAlert([
+            '🔴 [HRMS] 上月累计假期自动快照失败',
+            `闭合月：${closedMonth}`,
+            `当前上海月：${curYm}`,
+            `原因：${String(r?.error || 'unknown')}`,
+            '请检查服务日志 [leave-cumulative-snapshot] 与 state 持久化；窗口内将每分钟重试。'
+          ].join('\n'));
         }
       } catch (e) {
         console.error('[leave-cumulative-snapshot] tick:', e?.message || e);
+        try {
+          await sendSystemAlert([
+            '🔴 [HRMS] 上月累计假期快照任务异常',
+            `错误：${String(e?.message || e)}`,
+            '请检查 hrms-service 日志与数据库/共享状态写入。'
+          ].join('\n'));
+        } catch (_) {}
       }
     }, 60 * 1000);
 
@@ -15860,7 +15909,7 @@ app.get('/api/checkin/summary', authRequired, async (req, res) => {
 
   try {
     const state = (await getSharedState()) || {};
-    let conditions = [`to_char(check_time, 'YYYY-MM') = $1`];
+    let conditions = [`to_char(timezone('Asia/Shanghai', check_time), 'YYYY-MM') = $1`];
     let params = [month];
     let idx = 2;
 
@@ -15876,7 +15925,7 @@ app.get('/api/checkin/summary', authRequired, async (req, res) => {
 
     const where = conditions.join(' and ');
     const r = await pool.query(
-      `select username, check_time::date as day, type, status, check_time
+      `select username, (timezone('Asia/Shanghai', check_time))::date as day, type, status, check_time
        from checkin_records where ${where} order by username, check_time asc`,
       params
     );
@@ -15974,7 +16023,7 @@ app.get('/api/profile/attendance-overview', authRequired, async (req, res) => {
     const monthStart = `${month}-01`;
     const monthEnd = `${month}-${String(new Date(yearNum, monthNum, 0).getDate()).padStart(2, '0')}`;
 
-    let conditions = [`to_char(check_time, 'YYYY-MM') = $1`, `lower(username) = lower($2)`];
+    let conditions = [`to_char(timezone('Asia/Shanghai', check_time), 'YYYY-MM') = $1`, `lower(username) = lower($2)`];
     let params = [month, username];
     if (role === 'store_manager' && myStore) {
       conditions.push(`store = $3`);
@@ -15987,11 +16036,13 @@ app.get('/api/profile/attendance-overview', authRequired, async (req, res) => {
     );
     const checkinRows = Array.isArray(r.rows) ? r.rows : [];
 
+    const attWin = hrmsAttendanceWindowMinutesForStore(myStore);
+
     const checkinByDay = new Map();
     checkinRows.forEach((row) => {
       const t = new Date(row.check_time);
       if (!Number.isFinite(t.getTime())) return;
-      const dayKey = toDateOnly(t);
+      const dayKey = hrmsDateKeyInShanghai(t);
       if (!dayKey || !dayKey.startsWith(month)) return;
       const list = checkinByDay.get(dayKey) || [];
       list.push({
@@ -16095,14 +16146,14 @@ app.get('/api/profile/attendance-overview', authRequired, async (req, res) => {
 
       if (plan.morning && clockInTimes.length) {
         const firstIn = clockInTimes.reduce((a, b) => (a.getTime() <= b.getTime() ? a : b));
-        const lateMinutes = firstIn.getHours() * 60 + firstIn.getMinutes();
-        if (lateMinutes > (9 * 60)) lateCount += 1;
+        const lateMin = hrmsClockMinutesInShanghai(firstIn);
+        if (Number.isFinite(lateMin) && lateMin > attWin.startMinutes) lateCount += 1;
       }
 
       if (plan.afternoon && clockOutTimes.length) {
         const lastOut = clockOutTimes.reduce((a, b) => (a.getTime() >= b.getTime() ? a : b));
-        const outMinutes = lastOut.getHours() * 60 + lastOut.getMinutes();
-        if (outMinutes < (22 * 60)) earlyLeaveCount += 1;
+        const outMin = hrmsClockMinutesInShanghai(lastOut);
+        if (Number.isFinite(outMin) && outMin < attWin.endMinutes) earlyLeaveCount += 1;
       }
     });
 

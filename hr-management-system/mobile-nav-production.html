@@ -14218,9 +14218,28 @@
                 if (addEmpBtn) addEmpBtn.style.display = (isAdminUser() || currentUser.role === ROLES.STORE_MANAGER) ? '' : 'none';
             } catch (e) {}
         }
+
+        var __profileAttPollTimer = null;
+        function stopProfileAttendanceAutoRefresh() {
+            if (__profileAttPollTimer) {
+                clearInterval(__profileAttPollTimer);
+                __profileAttPollTimer = null;
+            }
+        }
+        function startProfileAttendanceAutoRefresh() {
+            stopProfileAttendanceAutoRefresh();
+            __profileAttPollTimer = setInterval(function () {
+                try {
+                    if (typeof currentPage === 'string' && currentPage !== 'profile') return;
+                    if (document.visibilityState !== 'visible') return;
+                    if (typeof loadProfileLeaveBalance === 'function') loadProfileLeaveBalance();
+                } catch (e) {}
+            }, 45000);
+        }
         
         // 显示页面
         function showPage(pageName) {
+            stopProfileAttendanceAutoRefresh();
             console.log('切换到页面:', pageName);
             updateDebug('当前页面: ' + pageName);
 
@@ -14362,6 +14381,7 @@
             }
             try { refreshUnreadBadges(); } catch (e) {}
             closeMobileSidebar();
+            if (pageName === 'profile') startProfileAttendanceAutoRefresh();
         }
 
         function toggleMobileSidebar() {
