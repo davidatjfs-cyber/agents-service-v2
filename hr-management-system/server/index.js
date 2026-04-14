@@ -11756,12 +11756,21 @@ function resolveEmployeeLeaveCalcStartMonth(state, employee, fallbackMonth) {
   return clean[0] || safeMonthOnly(fallbackMonth) || hrmsNowISO().slice(0, 7);
 }
 
+/** 与 leaveBalanceOverrides / 审计记录 key 一致：用户名一律小写，避免大小写不一致导致「手动累计假期」未生效 */
+function leaveBalanceOverrideKey(username, month) {
+  return `${String(username || '').trim().toLowerCase()}_${String(month || '').trim()}`;
+}
+
 function getLeaveBalanceOverride(state, username, month) {
   const overrides = state?.leaveBalanceOverrides && typeof state.leaveBalanceOverrides === 'object'
     ? state.leaveBalanceOverrides
     : {};
-  const key = `${String(username || '').trim()}_${String(month || '').trim()}`;
-  const raw = overrides[key];
+  const canonical = leaveBalanceOverrideKey(username, month);
+  let raw = overrides[canonical];
+  if (raw == null) {
+    const legacy = `${String(username || '').trim()}_${String(month || '').trim()}`;
+    raw = overrides[legacy];
+  }
   if (raw == null) return null;
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
     const mode = String(raw.mode || '').trim().toLowerCase();
@@ -11859,6 +11868,7 @@ function calcEmployeeMonthlyCarryover(state, employee, month) {
   let cur = startMonth;
   let carry = 0;
   while (cur && cur < m) {
+    // 上月及以前：若该月存在「累计假期（carryover）」手动校准，则以手动值为月初起点，否则沿用滚动计算
     const ov = getLeaveBalanceOverride(state, uname, cur);
     const monthQuota = 4;
     const usedRest = Number(calcEmployeeMonthlyActualRestFromDailyReports(state, emp, cur)?.total || 0);
@@ -11871,6 +11881,7 @@ function calcEmployeeMonthlyCarryover(state, employee, month) {
     carry = Number((preClose - attOff).toFixed(2));
     cur = shiftMonth(cur, 1);
   }
+  // 当月月初累计池：若本月已手动设置「截止上月累计假期」(mode=carryover)，以手动值为准；否则以系统滚动计算为准
   const currentOv = getLeaveBalanceOverride(state, uname, m);
   if (currentOv && currentOv.mode === 'carryover') return Number(currentOv.value.toFixed(2));
   return Number(carry.toFixed(2));
@@ -11957,6 +11968,7 @@ function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
 
   usedLeave = Number((Number(usedLeave || 0)).toFixed(2));
 
+  // 月初「累计假期」池：calcEmployeeMonthlyCarryover 内已保证——有手动 carryover 覆盖则用手动，否则用系统滚动值
   const cumulativeLeaveDays = calcEmployeeMonthlyCarryover(state, emp, m);
   const totalLeave = Number((baseLeave + annualLeave).toFixed(2));
   const monthRemaining = Number((totalLeave - usedLeave).toFixed(2));
@@ -11966,11 +11978,20 @@ function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
   const overridden = !!override;
   const overrideMode = override?.mode || null;
   const overrideValue = override?.value ?? null;
-  const remaining = computedRemaining;
+  let remaining = computedRemaining;
+  if (override && String(override.mode || '').trim().toLowerCase() === 'remaining' && Number.isFinite(Number(override.value))) {
+    remaining = Number(Number(override.value).toFixed(2));
+  }
 
   const adjustments = Array.isArray(state?.leaveBalanceAdjustments) ? state.leaveBalanceAdjustments : [];
-  const overrideKey = `${uname}_${m}`;
-  const lastAdjustment = adjustments.find(a => String(a?.key || '') === overrideKey) || null;
+  const overrideKeyNorm = leaveBalanceOverrideKey(uname, m);
+  const lastAdjustment = adjustments.find((a) => {
+    const k = String(a?.key || '');
+    if (k && k.toLowerCase() === overrideKeyNorm) return true;
+    const mo = String(a?.month || '').trim();
+    const tu = String(a?.targetUsername || '').trim().toLowerCase();
+    return mo === m && tu === String(uname || '').trim().toLowerCase();
+  }) || null;
 
   weekDetails.forEach((wk) => {
     wk.remaining = Number((Number(wk.entitled || 0) - Number(wk.used || 0)).toFixed(2));
@@ -16026,7 +16047,15 @@ app.post('/api/checkin/leave-balance', authRequired, async (req, res) => {
     const overrides = state.leaveBalanceOverrides && typeof state.leaveBalanceOverrides === 'object'
       ? { ...state.leaveBalanceOverrides }
       : {};
-    const key = `${targetUsername}_${month}`;
+    const key = leaveBalanceOverrideKey(targetUsername, month);
+    const legacyKeys = Object.keys(overrides).filter((k) => {
+      const mm = String(k || '').match(/^(.+)_([0-9]{4}-[0-9]{2})$/);
+      if (!mm) return false;
+      if (String(mm[2] || '') !== month) return false;
+      return String(mm[1] || '').trim().toLowerCase() === String(targetUsername || '').trim().toLowerCase() && k !== key;
+    });
+    for (const lk of legacyKeys) delete overrides[lk];
+
     overrides[key] = {
       mode,
       value: Number(value),
