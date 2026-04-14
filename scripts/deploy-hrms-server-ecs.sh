@@ -12,6 +12,8 @@ ECS_HOST="${ECS_HOST:-root@47.100.96.30}"
 REMOTE_DIR="${REMOTE_DIR:-/opt/hrms/server}"
 LOCAL_SRC="$(cd "$(dirname "$0")/../hr-management-system/server" && pwd)"
 DISABLE_SCHEDULED_CHECKLIST="${DISABLE_SCHEDULED_CHECKLIST:-1}"
+BITABLE_TASK_RESP_APP_ID="${BITABLE_TASK_RESP_APP_ID:-cli_a9fc0d13c838dcd6}"
+BITABLE_TASK_RESP_APP_SECRET="${BITABLE_TASK_RESP_APP_SECRET:-pRVuBmiWc0hzqP1YzZDqzGUPFlaProDN}"
 
 echo ">>> node --check (local index.js + agents.js + bi-weekly-report.js)"
 node --check "${LOCAL_SRC}/index.js"
@@ -63,7 +65,11 @@ ensure_lark_from_feishu() {
 ensure_lark_from_feishu .env
 [[ -f .env.production ]] && ensure_lark_from_feishu .env.production || true
 ensure_kv .env PORT 3000
+ensure_kv .env BITABLE_TASK_RESP_APP_ID "$BITABLE_TASK_RESP_APP_ID"
+ensure_kv .env BITABLE_TASK_RESP_APP_SECRET "$BITABLE_TASK_RESP_APP_SECRET"
 [[ -f .env.production ]] && ensure_kv .env.production PORT 3000 || true
+[[ -f .env.production ]] && ensure_kv .env.production BITABLE_TASK_RESP_APP_ID "$BITABLE_TASK_RESP_APP_ID" || true
+[[ -f .env.production ]] && ensure_kv .env.production BITABLE_TASK_RESP_APP_SECRET "$BITABLE_TASK_RESP_APP_SECRET" || true
 # 数据中心健康条合并 agents-service /health（MemPalace、Wiki 等）
 ensure_kv .env AGENTS_SERVICE_HEALTH_URL http://127.0.0.1:3101/health
 [[ -f .env.production ]] && ensure_kv .env.production AGENTS_SERVICE_HEALTH_URL http://127.0.0.1:3101/health || true
@@ -99,6 +105,6 @@ EOS
 )
 
 ssh -o ConnectTimeout=60 "$ECS_HOST" \
-  "REMOTE_DIR='${REMOTE_DIR}' DISABLE_SCHEDULED_CHECKLIST='${DISABLE_SCHEDULED_CHECKLIST}' bash -s" <<< "$REMOTE_SCRIPT"
+  "REMOTE_DIR='${REMOTE_DIR}' DISABLE_SCHEDULED_CHECKLIST='${DISABLE_SCHEDULED_CHECKLIST}' BITABLE_TASK_RESP_APP_ID='${BITABLE_TASK_RESP_APP_ID}' BITABLE_TASK_RESP_APP_SECRET='${BITABLE_TASK_RESP_APP_SECRET}' bash -s" <<< "$REMOTE_SCRIPT"
 
 echo "Done."

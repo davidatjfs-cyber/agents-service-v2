@@ -9,6 +9,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ECS_HOST="${ECS_HOST:-root@47.100.96.30}"
 REMOTE_DIR="${REMOTE_DIR:-/opt/agents-service-v2}"
+BITABLE_TASK_RESP_APP_ID="${BITABLE_TASK_RESP_APP_ID:-cli_a9fc0d13c838dcd6}"
+BITABLE_TASK_RESP_APP_SECRET="${BITABLE_TASK_RESP_APP_SECRET:-pRVuBmiWc0hzqP1YzZDqzGUPFlaProDN}"
 
 if [[ "${SKIP_VERIFY:-0}" != "1" ]]; then
   bash "${ROOT}/scripts/verify-agents-local.sh"
@@ -40,7 +42,8 @@ fi
 
 # 合并为一次 SSH：固定 PORT=3101（ecosystem.config.cjs），删 pm2 后再起；仅当 3101 仍被占才 fuser
 echo ">>> remote: npm install + pm2 ecosystem (3101) + health"
-ssh -o ConnectTimeout=60 "${ECS_HOST}" bash -s <<EOS
+ssh -o ConnectTimeout=60 "${ECS_HOST}" \
+  "BITABLE_TASK_RESP_APP_ID='${BITABLE_TASK_RESP_APP_ID}' BITABLE_TASK_RESP_APP_SECRET='${BITABLE_TASK_RESP_APP_SECRET}' bash -s" <<EOS
 set -euo pipefail
 cd "${REMOTE_DIR}"
 ensure_kv() {
@@ -59,8 +62,12 @@ if [[ -f '.env.production' ]]; then
 fi
 ensure_kv .env PORT 3101
 ensure_kv .env CONFIRM_PRODUCTION true
+ensure_kv .env BITABLE_TASK_RESP_APP_ID "\${BITABLE_TASK_RESP_APP_ID}"
+ensure_kv .env BITABLE_TASK_RESP_APP_SECRET "\${BITABLE_TASK_RESP_APP_SECRET}"
 [[ -f .env.production ]] && ensure_kv .env.production PORT 3101 || true
 [[ -f .env.production ]] && ensure_kv .env.production CONFIRM_PRODUCTION true || true
+[[ -f .env.production ]] && ensure_kv .env.production BITABLE_TASK_RESP_APP_ID "\${BITABLE_TASK_RESP_APP_ID}" || true
+[[ -f .env.production ]] && ensure_kv .env.production BITABLE_TASK_RESP_APP_SECRET "\${BITABLE_TASK_RESP_APP_SECRET}" || true
 (npm ci --omit=dev 2>/dev/null || npm install --omit=dev)
 node scripts/apply-analysis-sop-sql.mjs
 node scripts/apply-strategy-rules-sql.mjs

@@ -4365,7 +4365,7 @@ app.get('/api/unread-counts', authRequired, async (req, res) => {
     const approvals = approvalsUnreadR.rows?.[0]?.cnt || 0;
 
     const state = (await getSharedState()) || {};
-    const me = stateFindUserRecord(state, username) || {};
+    const me = stateFindUserRecord(state, username) || await dbFindEmployeeRecord(username) || {};
     const myStore = String(me?.store || '').trim();
     const myDept = String(me?.department || '').trim();
     const myPos = String(me?.position || '').trim();
@@ -5380,6 +5380,24 @@ function stateFindUserRecord(state, username) {
   // employees first – real users live there
   const all = employees.concat(users);
   return all.find(x => String(x?.username || '').trim().toLowerCase() === u.toLowerCase()) || null;
+}
+
+async function dbFindEmployeeRecord(username) {
+  const u = String(username || '').trim();
+  if (!u) return null;
+  try {
+    const r = await pool.query(
+      `select username, name, role, store, department, position, status,
+              join_date as "joinDate", created_at as "createdAt"
+         from employees
+        where lower(username) = lower($1)
+        limit 1`,
+      [u]
+    );
+    return r.rows?.[0] || null;
+  } catch (_) {
+    return null;
+  }
 }
 
 async function pickAdminUsername(state) {
@@ -8225,6 +8243,53 @@ function buildAttendanceFromReports(items) {
   return out;
 }
 
+function isCountableCheckinStatus(status) {
+  const s = String(status || '').trim().toLowerCase();
+  return !s || s === 'normal' || s === 'confirmed' || s === 'no_gps';
+}
+
+function shanghaiDateOnly(input) {
+  const d = input instanceof Date ? input : new Date(input);
+  if (!Number.isFinite(d.getTime())) return '';
+  return d.toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
+}
+
+function buildAttendanceFromCheckinRecords(rows, options = {}) {
+  const out = [];
+  const map = new Map();
+  const start = safeDateOnly(options?.start);
+  const end = safeDateOnly(options?.end);
+  const knownUsers = options?.knownUsers instanceof Set ? options.knownUsers : null;
+
+  for (const row of (Array.isArray(rows) ? rows : [])) {
+    const user = String(row?.username || '').trim();
+    const userLower = user.toLowerCase();
+    if (!user || isLegacyTestUsername(userLower)) continue;
+    if (knownUsers && !knownUsers.has(userLower)) continue;
+    if (!isCountableCheckinStatus(row?.status)) continue;
+    const date = shanghaiDateOnly(row?.check_time);
+    if (!date) continue;
+    if (start && date < start) continue;
+    if (end && date > end) continue;
+    const store = String(row?.store || '').trim();
+    if (!store) continue;
+    const key = `${store}||${date}||${userLower}`;
+    if (map.has(key)) continue;
+    const rec = {
+      store,
+      date,
+      username: user,
+      name: String(row?.display_name || row?.name || user).trim(),
+      days: 1
+    };
+    map.set(key, rec);
+    out.push(rec);
+  }
+
+  out.sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.store).localeCompare(String(b.store)) || String(a.username).localeCompare(String(b.username)));
+  return out;
+}
+
 function pickMyStoreFromState(state, username) {
   const me = stateFindUserRecord(state, username) || {};
   const st = String(me?.store || '').trim();
@@ -9011,6 +9076,26 @@ app.get('/api/reports/leave-owed', authRequired, async (req, res) => {
     });
 
     let people = Array.from(map.values());
+    if (!people.length) {
+      try {
+        const params = [];
+        const where = [];
+        if (store) {
+          params.push(store);
+          where.push(`store = $${params.length}`);
+        }
+        if (!includeInactive) {
+          where.push(`coalesce(status, '') not in ('inactive', '离职')`);
+        }
+        const sql = `select username, name, role, store, department, position, status,
+                            join_date as "joinDate", created_at as "createdAt"
+                       from employees
+                       ${where.length ? ('where ' + where.join(' and ')) : ''}
+                      order by name asc, username asc`;
+        const dbRows = await pool.query(sql, params);
+        people = Array.isArray(dbRows.rows) ? dbRows.rows : [];
+      } catch (_) {}
+    }
     if (store) people = people.filter(p => String(p?.store || '').trim() === store);
     if (!includeInactive) {
       people = people.filter(p => {
@@ -9039,7 +9124,8 @@ app.get('/api/reports/leave-owed', authRequired, async (req, res) => {
         totalLeave: bal.totalLeave,
         actualRestDays: bal.usedLeave,
         holidayDays: bal.totalLeave,
-        cumulativeLeaveDays: calcCumulativeLeaveDaysByJoinDate(joinDate),
+        cumulativeLeaveDays: Number(bal?.cumulativeLeaveDays || 0),
+        monthRemaining: Number(bal?.monthRemaining || 0),
         computedRemaining: bal.computedRemaining,
         remaining,
         isOwed: remaining > 0,
@@ -9103,12 +9189,6 @@ app.get('/api/reports/attendance', authRequired, async (req, res) => {
     const state0 = (await getSharedState()) || {};
     const myStore = pickMyStoreFromState(state0, username);
     const store = role === 'store_manager' ? myStore : storeQ;
-    let items = Array.isArray(state0.dailyReports) ? state0.dailyReports.slice() : [];
-    items = items.filter(r => inDateRange(String(r?.date || '').trim(), start, end));
-    if (store) items = items.filter(r => String(r?.store || '').trim() === store);
-
-    const rows = buildAttendanceFromReports(items);
-
     // Also fetch detailed checkin records from DB
     let checkinDetails = [];
     try {
@@ -9126,6 +9206,8 @@ app.get('/api/reports/attendance', authRequired, async (req, res) => {
         return r;
       });
     } catch (e) {}
+
+    const rows = buildAttendanceFromCheckinRecords(checkinDetails, { start, end });
 
     return res.json({ start, end, store: store || '', rows, checkinDetails });
   } catch (e) {
@@ -9150,11 +9232,6 @@ app.get('/api/reports/payroll', authRequired, async (req, res) => {
 
     const start = `${month}-01`;
     const end = `${month}-31`;
-    let items = Array.isArray(state0.dailyReports) ? state0.dailyReports.slice() : [];
-    items = items.filter(r => inDateRange(String(r?.date || '').trim(), start, end));
-    if (store) items = items.filter(r => String(r?.store || '').trim() === store);
-
-    const attendanceRows = buildAttendanceFromReports(items);
     const pointStoreByUser = new Map();
     const pointSubsidyByUserStore = new Map();
     const pointRecords = Array.isArray(state0?.pointRecords) ? state0.pointRecords : [];
@@ -9196,6 +9273,35 @@ app.get('/api/reports/payroll', authRequired, async (req, res) => {
       knownUsers.add(u);
       canonicalUsernameByLower.set(u, String(p?.username || u).trim() || u);
     });
+    let attendanceRows = [];
+    try {
+      let conditions = [`check_time >= $1::date`, `check_time < ($2::date + interval '1 day')`];
+      let params = [start, end];
+      let idx = 3;
+      if (store) {
+        conditions.push(`store = $${idx}`);
+        params.push(store);
+        idx++;
+      }
+      const where = 'where ' + conditions.join(' and ');
+      const checkinSql = `select username, store, check_time, status from checkin_records ${where} order by check_time desc`;
+      const checkinRows = await pool.query(checkinSql, params);
+      const displayNameByLower = new Map();
+      peopleByLower.forEach((p, lower) => {
+        displayNameByLower.set(lower, String(p?.name || p?.username || '').trim());
+      });
+      const normalizedCheckins = (checkinRows.rows || []).map((r) => ({
+        ...r,
+        display_name: displayNameByLower.get(String(r?.username || '').trim().toLowerCase()) || String(r?.username || '').trim()
+      }));
+      attendanceRows = buildAttendanceFromCheckinRecords(normalizedCheckins, { start, end, knownUsers });
+    } catch (e) {
+      console.warn('[payroll] checkin_records attendance fallback to daily reports:', e?.message);
+      let items = Array.isArray(state0.dailyReports) ? state0.dailyReports.slice() : [];
+      items = items.filter(r => inDateRange(String(r?.date || '').trim(), start, end));
+      if (store) items = items.filter(r => String(r?.store || '').trim() === store);
+      attendanceRows = buildAttendanceFromReports(items);
+    }
     const [yearNum, monthNum] = month.split('-').map(Number);
     const monthDays = new Date(yearNum, monthNum, 0).getDate();
     // Business rule: daily rate uses salary / (days in month - 4 fixed weekly offs)
@@ -9318,17 +9424,26 @@ app.get('/api/reports/payroll', authRequired, async (req, res) => {
     const rows = Array.from(sumMap.values()).map(x => {
       const monthlySalary = findUserSalary(state0, x.username);
       const dailyRate = monthlySalary != null ? (monthlySalary / workDaysPerMonth) : null;
-      const baseAmount = dailyRate != null ? (dailyRate * clampNum(x.days, 0)) : null;
+      const computedBaseAmount = dailyRate != null ? (dailyRate * clampNum(x.days, 0)) : null;
       const rewardPunishmentAdj = adjustmentMap.get(String(x.username || '').toLowerCase()) || 0;
       const rowStore = String(x.store || '').trim();
       const rowUser = String(x.username || '').trim().toLowerCase();
       const fallbackStore = String(pointStoreByUser.get(rowUser) || '').trim();
       const effectiveStore = rowStore || fallbackStore;
       const adjKey = `${month}||${effectiveStore || 'ALL'}||${rowUser}`;
+      const payrollAdjByStore = payrollAdjMap?.[adjKey] && typeof payrollAdjMap[adjKey] === 'object' ? payrollAdjMap[adjKey] : {};
+      const payrollAdjAllStore = effectiveStore && payrollAdjMap?.[`${month}||ALL||${rowUser}`] && typeof payrollAdjMap[`${month}||ALL||${rowUser}`] === 'object'
+        ? payrollAdjMap[`${month}||ALL||${rowUser}`]
+        : {};
       const subsidyByStore = safeNumber(payrollAdjMap?.[adjKey]?.subsidy ?? payrollAdjMap?.[adjKey]?.amount) || 0;
       const subsidyAllStore = effectiveStore
         ? (safeNumber(payrollAdjMap?.[`${month}||ALL||${rowUser}`]?.subsidy ?? payrollAdjMap?.[`${month}||ALL||${rowUser}`]?.amount) || 0)
         : 0;
+      const manualBaseByStore = safeNumber(payrollAdjByStore?.baseAmount);
+      const manualBaseAllStore = safeNumber(payrollAdjAllStore?.baseAmount);
+      const baseAmount = manualBaseByStore != null
+        ? manualBaseByStore
+        : (manualBaseAllStore != null ? manualBaseAllStore : computedBaseAmount);
       const subsidyFromPayrollAdjustments = subsidyByStore + subsidyAllStore;
       const pointSubsidyByStore = safeNumber(pointSubsidyByUserStore.get(`${effectiveStore || 'ALL'}||${rowUser}`)) || 0;
       const pointSubsidyAllStore = effectiveStore ? (safeNumber(pointSubsidyByUserStore.get(`ALL||${rowUser}`)) || 0) : 0;
@@ -9342,7 +9457,9 @@ app.get('/api/reports/payroll', authRequired, async (req, res) => {
         attendanceDays: x.days,
         monthlySalary,
         dailyRate,
+        computedBaseAmount,
         baseAmount,
+        baseAmountOverridden: manualBaseByStore != null || manualBaseAllStore != null,
         rewardPunishmentAdj,
         subsidy,
         amount
@@ -9404,15 +9521,22 @@ app.post('/api/reports/payroll/adjustment', authRequired, async (req, res) => {
   if (!targetUsername) return res.status(400).json({ error: 'missing_username' });
 
   const subsidy = safeNumber(req.body?.subsidy);
-  if (subsidy == null) return res.status(400).json({ error: 'invalid_subsidy' });
+  const baseAmount = safeNumber(req.body?.baseAmount);
+  if (subsidy == null && baseAmount == null) return res.status(400).json({ error: 'missing_adjustment' });
 
   try {
+    const state0 = (await getSharedState()) || {};
     const key = `${month}||${store || 'ALL'}||${targetUsername.toLowerCase()}`;
+    const existing = state0?.payrollAdjustments?.[key] && typeof state0.payrollAdjustments[key] === 'object'
+      ? state0.payrollAdjustments[key]
+      : {};
     const item = {
+      ...existing,
       month,
       store: store || '',
       username: targetUsername,
-      subsidy,
+      ...(subsidy != null ? { subsidy } : {}),
+      ...(baseAmount != null ? { baseAmount } : {}),
       updatedBy: username,
       updatedAt: hrmsNowISO()
     };
@@ -11468,6 +11592,88 @@ function calcCumulativeLeaveDaysByJoinDate(joinDateInput) {
   return 0;
 }
 
+function shiftMonth(ym, delta) {
+  const m = safeMonthOnly(ym);
+  if (!m || !Number.isFinite(Number(delta))) return '';
+  const [y, mo] = m.split('-').map(Number);
+  const d = new Date(y, mo - 1 + Number(delta), 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function resolveEmployeeLeaveCalcStartMonth(state, employee, fallbackMonth) {
+  const emp = employee && typeof employee === 'object' ? employee : {};
+  const uname = String(emp?.username || '').trim().toLowerCase();
+  const joinDate = String(
+    emp?.joinDate || emp?.hireDate || emp?.startDate || emp?.entryDate || emp?.onboardDate || emp?.joiningDate || ''
+  ).trim();
+  const months = [];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(joinDate)) months.push(joinDate.slice(0, 7));
+
+  const reportList = Array.isArray(state?.dailyReports) ? state.dailyReports : [];
+  reportList.forEach((rep) => {
+    const repDate = String(rep?.date || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(repDate)) return;
+    const store = String(rep?.store || '').trim();
+    if (!store) return;
+    const data = rep?.data && typeof rep.data === 'object' ? rep.data : {};
+    const allRestStaff = []
+      .concat(Array.isArray(data?.staff?.frontRestStaff) ? data.staff.frontRestStaff : [])
+      .concat(Array.isArray(data?.staff?.kitchenRestStaff) ? data.staff.kitchenRestStaff : []);
+    const hit = allRestStaff.some((it) => String(it?.user || it?.username || '').trim().toLowerCase() === uname);
+    if (hit) months.push(repDate.slice(0, 7));
+  });
+
+  const leaveRecords = Array.isArray(state?.leaveRecords) ? state.leaveRecords : [];
+  leaveRecords.forEach((lr) => {
+    if (String(lr?.applicant || '').trim().toLowerCase() !== uname) return;
+    const sd = String(lr?.startDate || '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(sd)) months.push(sd.slice(0, 7));
+  });
+
+  const clean = months.filter(Boolean).sort();
+  return clean[0] || safeMonthOnly(fallbackMonth) || hrmsNowISO().slice(0, 7);
+}
+
+function getLeaveBalanceOverride(state, username, month) {
+  const overrides = state?.leaveBalanceOverrides && typeof state.leaveBalanceOverrides === 'object'
+    ? state.leaveBalanceOverrides
+    : {};
+  const key = `${String(username || '').trim()}_${String(month || '').trim()}`;
+  const raw = overrides[key];
+  if (raw == null) return null;
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const mode = String(raw.mode || '').trim().toLowerCase();
+    const value = Number(raw.value);
+    if (!Number.isFinite(value)) return null;
+    return { mode: mode || 'carryover', value, raw };
+  }
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return null;
+  return { mode: 'remaining', value, raw };
+}
+
+function calcEmployeeMonthlyCarryover(state, employee, month) {
+  const m = safeMonthOnly(month);
+  const emp = employee && typeof employee === 'object' ? employee : null;
+  const uname = String(emp?.username || '').trim();
+  if (!m || !uname) return 0;
+
+  const startMonth = resolveEmployeeLeaveCalcStartMonth(state, emp, m);
+  let cur = startMonth;
+  let carry = 0;
+  while (cur && cur < m) {
+    const ov = getLeaveBalanceOverride(state, uname, cur);
+    const monthQuota = 4;
+    const used = Number(calcEmployeeMonthlyActualRestFromDailyReports(state, emp, cur)?.total || 0);
+    const startCarry = ov && ov.mode === 'carryover' ? ov.value : carry;
+    carry = Number((startCarry + monthQuota - used).toFixed(2));
+    cur = shiftMonth(cur, 1);
+  }
+  const currentOv = getLeaveBalanceOverride(state, uname, m);
+  if (currentOv && currentOv.mode === 'carryover') return Number(currentOv.value.toFixed(2));
+  return Number(carry.toFixed(2));
+}
+
 function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
   const m = safeMonthOnly(month);
   const emp = employee && typeof employee === 'object' ? employee : null;
@@ -11496,16 +11702,7 @@ function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
   }
 
   const baseLeave = MONTHLY_REST_DAYS;
-
-  const joinDate = String(emp.joinDate || emp.createdAt || '').trim();
-  let annualLeave = 0;
-  if (joinDate) {
-    const jd = new Date(joinDate);
-    const monthStart = new Date(yr, mo - 1, 1);
-    const diffMs = monthStart - jd;
-    const diffYears = diffMs / (365.25 * 24 * 60 * 60 * 1000);
-    if (diffYears >= 1) annualLeave = Math.round((5 / 12) * 100) / 100;
-  }
+  const annualLeave = 0;
 
   const restStats = calcEmployeeMonthlyActualRestFromDailyReports(state, emp, m);
   let usedLeave = Number(restStats?.total || 0);
@@ -11561,18 +11758,19 @@ function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
 
   usedLeave = Number((Number(usedLeave || 0)).toFixed(2));
 
+  const cumulativeLeaveDays = calcEmployeeMonthlyCarryover(state, emp, m);
   const totalLeave = Number((baseLeave + annualLeave).toFixed(2));
-  const computedRemaining = Number((totalLeave - usedLeave).toFixed(2));
+  const monthRemaining = Number((totalLeave - usedLeave).toFixed(2));
+  const computedRemaining = Number((cumulativeLeaveDays + totalLeave - usedLeave).toFixed(2));
 
-  const overrides = state?.leaveBalanceOverrides && typeof state.leaveBalanceOverrides === 'object'
-    ? state.leaveBalanceOverrides
-    : {};
-  const overrideKey = `${uname}_${m}`;
-  const overrideVal = overrides[overrideKey];
-  const overridden = overrideVal != null && Number.isFinite(Number(overrideVal));
-  const remaining = overridden ? Number(overrideVal) : computedRemaining;
+  const override = getLeaveBalanceOverride(state, uname, m);
+  const overridden = !!override;
+  const overrideMode = override?.mode || null;
+  const overrideValue = override?.value ?? null;
+  const remaining = computedRemaining;
 
   const adjustments = Array.isArray(state?.leaveBalanceAdjustments) ? state.leaveBalanceAdjustments : [];
+  const overrideKey = `${uname}_${m}`;
   const lastAdjustment = adjustments.find(a => String(a?.key || '') === overrideKey) || null;
 
   weekDetails.forEach((wk) => {
@@ -11586,10 +11784,13 @@ function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
     annualLeave: Number(annualLeave.toFixed(2)),
     usedLeave: Number(usedLeave.toFixed(2)),
     totalLeave,
+    cumulativeLeaveDays: Number(cumulativeLeaveDays.toFixed(2)),
+    monthRemaining,
     computedRemaining,
     remaining: Number(remaining.toFixed(2)),
     overridden,
-    overrideValue: overridden ? Number(overrideVal) : null,
+    overrideValue: overridden ? Number(overrideValue) : null,
+    overrideMode: overridden ? overrideMode : null,
     weeklyDetails: weekDetails,
     lastAdjustment
   };
@@ -15561,10 +15762,8 @@ app.get('/api/profile/attendance-overview', authRequired, async (req, res) => {
     });
     restDays = Number(restDays.toFixed(2));
     const leaveBalance = calcEmployeeMonthlyLeaveBalance(state, me, month);
-    const monthRestRemaining = leaveBalance ? Number(leaveBalance.remaining || 0) : Number((4 - restDays).toFixed(2));
-
-    const joinDate = String(me?.joinDate || me?.hireDate || me?.startDate || me?.entryDate || me?.onboardDate || me?.joiningDate || '').trim();
-    const cumulativeLeaveDays = calcCumulativeLeaveDaysByJoinDate(joinDate);
+    const monthRestRemaining = leaveBalance ? Number(leaveBalance.monthRemaining || 0) : Number((4 - restDays).toFixed(2));
+    const cumulativeLeaveDays = leaveBalance ? Number(leaveBalance.cumulativeLeaveDays || 0) : 0;
 
     return res.json({
       month,
@@ -15581,6 +15780,8 @@ app.get('/api/profile/attendance-overview', authRequired, async (req, res) => {
         annualLeave: leaveBalance.annualLeave,
         usedLeave: leaveBalance.usedLeave,
         totalLeave: leaveBalance.totalLeave,
+        cumulativeLeaveDays: leaveBalance.cumulativeLeaveDays,
+        monthRemaining: leaveBalance.monthRemaining,
         computedRemaining: leaveBalance.computedRemaining,
         remaining: leaveBalance.remaining,
         overridden: !!leaveBalance.overridden,
@@ -15603,21 +15804,37 @@ app.post('/api/checkin/leave-balance', authRequired, async (req, res) => {
   const targetUsername = String(req.body?.username || '').trim();
   const month = String(req.body?.month || '').trim();
   const value = Number(req.body?.value);
+  const mode = String(req.body?.mode || 'carryover').trim().toLowerCase();
   const note = String(req.body?.note || '').trim();
   if (!targetUsername || !month || !Number.isFinite(value)) {
     return res.status(400).json({ error: 'missing_params' });
   }
+  if (mode !== 'remaining' && mode !== 'total_leave' && mode !== 'carryover') {
+    return res.status(400).json({ error: 'invalid_mode' });
+  }
   try {
     const state = (await getSharedState()) || {};
-    const person = stateFindUserRecord(state, targetUsername) || {};
+    const person = stateFindUserRecord(state, targetUsername) || await dbFindEmployeeRecord(targetUsername) || {};
     const before = calcEmployeeMonthlyLeaveBalance(state, person, month);
-    const oldValue = before ? Number(before.remaining || 0) : 0;
+    const oldValue = before
+      ? Number((mode === 'total_leave'
+        ? before.totalLeave
+        : mode === 'carryover'
+          ? before.cumulativeLeaveDays
+          : before.remaining) || 0)
+      : 0;
 
     const overrides = state.leaveBalanceOverrides && typeof state.leaveBalanceOverrides === 'object'
       ? { ...state.leaveBalanceOverrides }
       : {};
     const key = `${targetUsername}_${month}`;
-    overrides[key] = value;
+    overrides[key] = {
+      mode,
+      value: Number(value),
+      updatedBy: actor,
+      updatedAt: hrmsNowISO(),
+      note
+    };
 
     const logs = Array.isArray(state.leaveBalanceAdjustments) ? state.leaveBalanceAdjustments.slice() : [];
     const rec = {
@@ -15629,6 +15846,7 @@ app.post('/api/checkin/leave-balance', authRequired, async (req, res) => {
       store: String(person?.store || '').trim(),
       oldValue,
       newValue: Number(value),
+      mode,
       note,
       adjustedBy: actor,
       adjustedByRole: role,

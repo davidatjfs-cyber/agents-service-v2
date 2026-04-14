@@ -10,7 +10,45 @@
  */
 import { query } from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
-import { expandAgentStoreLabels } from '../../config/store-mapping.js';
+import { expandAgentStoreLabels, resolveAgentCanonicalStore } from '../../config/store-mapping.js';
+
+/**
+ * Load trend config with per-store overrides
+ * Global defaults → store-specific overrides
+ */
+async function getTrendConfig(store) {
+  let globalDefaults = {
+    weekday_trend_consecutive_weeks: 3,
+    meal_balance_threshold_medium: 0.30,
+    meal_balance_threshold_high: 0.25,
+    meal_balance_window_days: 5,
+    dish_decline_drop_pct: 0.20,
+    dish_decline_consecutive_weeks: 2,
+  };
+  let storeOverrides = {};
+  try {
+    const r = await query(
+      `SELECT config_value FROM hrms_state WHERE config_key = 'chairman_config'`
+    );
+    const cfg = r.rows?.[0]?.config_value;
+    if (cfg?.trend_rules) {
+      const tr = cfg.trend_rules;
+      if (tr.weekday_trend_consecutive_weeks != null) globalDefaults.weekday_trend_consecutive_weeks = tr.weekday_trend_consecutive_weeks;
+      if (tr.meal_balance_threshold_medium != null) globalDefaults.meal_balance_threshold_medium = tr.meal_balance_threshold_medium;
+      if (tr.meal_balance_threshold_high != null) globalDefaults.meal_balance_threshold_high = tr.meal_balance_threshold_high;
+      if (tr.meal_balance_window_days != null) globalDefaults.meal_balance_window_days = tr.meal_balance_window_days;
+      if (tr.dish_decline_drop_pct != null) globalDefaults.dish_decline_drop_pct = tr.dish_decline_drop_pct;
+      if (tr.dish_decline_consecutive_weeks != null) globalDefaults.dish_decline_consecutive_weeks = tr.dish_decline_consecutive_weeks;
+      storeOverrides = tr.storeOverrides || {};
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'Failed to load trend config from DB, using defaults');
+  }
+
+  const canon = resolveAgentCanonicalStore(store);
+  const override = storeOverrides[canon] || {};
+  return { ...globalDefaults, ...override };
+}
 
 function storePats(store) {
   const labels = expandAgentStoreLabels(store);
@@ -39,6 +77,8 @@ export async function checkWeekdayTrend(store, metricCol = 'actual_revenue') {
   const today = shanghaiToday();
   const wd = new Date(`${today}T12:00:00+08:00`).getDay();
   const wdZh = weekdayZh(today);
+  const config = await getTrendConfig(store);
+  const MIN_WEEKS = config.weekday_trend_consecutive_weeks;
 
   const pats = storePats(store);
 
@@ -67,7 +107,7 @@ export async function checkWeekdayTrend(store, metricCol = 'actual_revenue') {
     }
   }
 
-  if (consecutiveDown < 3) return { triggered: false, rule: 'weekday_trend' };
+  if (consecutiveDown < MIN_WEEKS) return { triggered: false, rule: 'weekday_trend' };
 
   const severity = consecutiveDown >= 4 ? 'high' : 'medium';
   const firstVal = Number(rows[consecutiveDown].val);
@@ -99,6 +139,7 @@ export async function checkWeekdayTrend(store, metricCol = 'actual_revenue') {
 export async function checkMealBalance(store) {
   const pats = storePats(store);
   const today = shanghaiToday();
+  const config = await getTrendConfig(store);
 
   const r = await query(
     `SELECT date, actual_revenue AS total,
@@ -115,10 +156,9 @@ export async function checkMealBalance(store) {
   const rows = r.rows || [];
   if (rows.length < 4) return { triggered: false, rule: 'meal_balance' };
 
-  /* [需你定义] 午市占比阈值，默认30% */
-  const THRESHOLD_MEDIUM = 0.30;
-  const THRESHOLD_HIGH = 0.25;
-  const WINDOW_DAYS = 5;
+  const THRESHOLD_MEDIUM = config.meal_balance_threshold_medium;
+  const THRESHOLD_HIGH = config.meal_balance_threshold_high;
+  const WINDOW_DAYS = config.meal_balance_window_days;
 
   const recent = rows.slice(-WINDOW_DAYS);
   let lowCount = 0;
@@ -149,6 +189,9 @@ export async function checkMealBalance(store) {
 export async function checkDishDecline(store) {
   const pats = storePats(store);
   const today = shanghaiToday();
+  const config = await getTrendConfig(store);
+  const DROP_PCT = config.dish_decline_drop_pct;
+  const MIN_WEEKS = config.dish_decline_consecutive_weeks;
 
   const week1End = addDays(today, -1);
   const week1Start = addDays(week1End, -6);
@@ -180,12 +223,12 @@ export async function checkDishDecline(store) {
 
     if (w2 <= 0) continue;
     const drop1 = (w1 - w2) / w2;
-    if (drop1 > -0.20) continue;
+    if (drop1 > -DROP_PCT) continue;
 
     const drop2 = w3 > 0 ? (w2 - w3) / w3 : 0;
-    const consecutiveDown = drop2 < -0.10 && drop1 < -0.10 ? 2 : 1;
+    const consecutiveDown = drop2 < -DROP_PCT && drop1 < -DROP_PCT ? 2 : 1;
 
-    if (consecutiveDown >= 2) {
+    if (consecutiveDown >= MIN_WEEKS) {
       declined.push({
         dish: row.dish_name,
         w3, w2, w1,

@@ -51,6 +51,7 @@ import { runDailyAttitudeFilingReport } from './services/daily-attitude-filing-r
 import { runMonthlyComprehensiveRating } from './services/monthly-comprehensive-rating.js';
 import { getAIOperationsReport } from './services/ai-operations.js';
 import adminApi from './routes/admin-api.js';
+import { registerChairmanConfigRoutes } from './routes/chairman-config-api.js';
 import {
   enforceRuntimeSafetyOrExit,
   getAppEnv,
@@ -728,6 +729,9 @@ app.post('/api/tasks/escalation-scan', authRequired, requireRole('admin', 'hq_ma
 
 // ─── Agent Config API ───
 app.use('/api', adminApi);
+
+// ─── Chairman Config API ───
+registerChairmanConfigRoutes(app);
 
 // ─── Agent Dispatch API ───
 app.post('/api/agent/chat', authRequired, async (req, res) => {

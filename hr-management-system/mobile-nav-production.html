@@ -26759,7 +26759,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                                 </table>
                             </div>` : ''}
                             ${rows.length > 0 ? `
-                            <div style="margin-top: 14px; font-size: 12px; color: rgba(200,215,230,0.75); font-weight: 800;">日报出勤汇总</div>
+                            <div style="margin-top: 14px; font-size: 12px; color: rgba(200,215,230,0.75); font-weight: 800;">打卡出勤汇总</div>
                             <div class="rep-table" style="overflow-x:auto;">
                                 <table>
                                     <thead>
@@ -26871,11 +26871,11 @@ ${knowledgeContent.slice(0, 30000)}`;
                                                 <td style="text-align:right;">${escapeHtml(String(r?.attendanceDays || 0))}</td>
                                                 <td style="text-align:right;">${fmt(r?.monthlySalary)}</td>
                                                 <td style="text-align:right;">${fmt(r?.dailyRate)}</td>
-                                                <td style="text-align:right;">${fmt(r?.baseAmount)}</td>
+                                                <td style="text-align:right; ${r?.baseAmountOverridden ? 'color:#fbbf24; font-weight:900;' : ''}">${fmt(r?.baseAmount)}</td>
                                                 <td style="text-align:right; color:${Number(r?.rewardPunishmentAdj || 0) >= 0 ? '#22c55e' : '#ef4444'}; font-weight: 800;">${Number(r?.rewardPunishmentAdj || 0) >= 0 ? '+' : ''}${fmt(r?.rewardPunishmentAdj)}</td>
                                                 <td style="text-align:right; color:${Number(r?.subsidy || 0) >= 0 ? '#60a5fa' : '#ef4444'}; font-weight: 800;">${Number(r?.subsidy || 0) >= 0 ? '+' : ''}${fmt(r?.subsidy)}</td>
                                                 <td style="text-align:right; font-weight: 900;">${fmt(r?.amount)}</td>
-                                                <td>${canEditPayroll ? `<button class="btn btn-secondary" type="button" style="padding:4px 8px; font-size:12px;" onclick="editPayrollSubsidy('${escapeHtml(String(r?.username || ''))}', '${escapeHtml(String(r?.store || ''))}', ${Number(r?.subsidy || 0)})">改补贴</button>` : '-'}</td>
+                                                <td>${canEditPayroll ? `<div style="display:flex; gap:6px; flex-wrap:wrap;"><button class="btn btn-secondary" type="button" style="padding:4px 8px; font-size:12px;" onclick="editPayrollBaseAmount('${escapeHtml(String(r?.username || ''))}', '${escapeHtml(String(r?.store || ''))}', ${Number(r?.baseAmount || 0)})">改基础应发</button><button class="btn btn-secondary" type="button" style="padding:4px 8px; font-size:12px;" onclick="editPayrollSubsidy('${escapeHtml(String(r?.username || ''))}', '${escapeHtml(String(r?.store || ''))}', ${Number(r?.subsidy || 0)})">改补贴</button></div>` : '-'}</td>
                                             </tr>
                                         `).join('')}
                                         <tr style="border-top: 1px solid rgba(255,255,255,0.1); font-weight: 900;">
@@ -27526,6 +27526,39 @@ ${knowledgeContent.slice(0, 30000)}`;
                 HRMS_API.setPayrollAdjustment({ month, store, username, subsidy })
                     .then(() => {
                         showNotification('补贴已更新', 'success');
+                        loadReportsData();
+                    })
+                    .catch(e => {
+                        showNotification('更新失败：' + String(e?.message || e), 'error');
+                    });
+            } catch (e) {
+                showNotification('更新失败：' + String(e?.message || e), 'error');
+            }
+        }
+
+        function editPayrollBaseAmount(username, store, currentBaseAmount) {
+            try {
+                if (!(currentUser && (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.HR_MANAGER))) {
+                    showNotification('仅管理员或总部人事可修改', 'warning');
+                    return;
+                }
+                const st = window.__REP_PAYROLL_LAST || {};
+                const month = String(st?.month || document.getElementById('rep-month')?.value || '').trim();
+                if (!month) {
+                    showNotification('请选择月份', 'warning');
+                    return;
+                }
+                const seed = Number(currentBaseAmount || 0);
+                const raw = prompt(`请输入 ${username} 的基础应发金额（元）`, String(Number.isFinite(seed) ? seed : 0));
+                if (raw === null) return;
+                const baseAmount = Number(raw);
+                if (!Number.isFinite(baseAmount)) {
+                    showNotification('请输入有效数字', 'warning');
+                    return;
+                }
+                HRMS_API.setPayrollAdjustment({ month, store, username, baseAmount })
+                    .then(() => {
+                        showNotification('基础应发已更新', 'success');
                         loadReportsData();
                     })
                     .catch(e => {
@@ -28488,13 +28521,13 @@ ${knowledgeContent.slice(0, 30000)}`;
         async function attSaveLeaveBalance(username, month, value) {
             try {
                 const v = Number(value);
-                if (!Number.isFinite(v) || v < 0) { showNotification('请输入有效数字', 'error'); return; }
+                if (!Number.isFinite(v)) { showNotification('请输入有效数字，支持 0.5', 'error'); return; }
                 await HRMS_API.request('/api/checkin/leave-balance', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, month, value: v })
+                    body: JSON.stringify({ username, month, value: v, mode: 'carryover' })
                 });
-                showNotification('假期天数已更新', 'success');
+                showNotification('累计假期已更新', 'success');
             } catch (e) {
                 showNotification('保存失败: ' + (e?.message || e), 'error');
             }

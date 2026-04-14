@@ -79,48 +79,86 @@ const TRAINING_TRIGGER_RULES = [
 /**
  * 检查并触发培训
  * 在异常触发后被调用
+ * 支持从DB配置读取品牌差异化的培训映射
  */
 export async function checkAndTriggerTraining(anomalyKey, store, severity) {
-  const rule = TRAINING_TRIGGER_RULES.find(r => r.anomalyKey === anomalyKey);
-  if (!rule) return { triggered: false };
+  // Try loading from DB config first (supports brand-differentiated config)
+  let trainingConfig = null;
+  let rule = TRAINING_TRIGGER_RULES.find(r => r.anomalyKey === anomalyKey);
 
+  try {
+    const r = await query(
+      `SELECT config_value FROM hrms_state WHERE config_key = 'chairman_config'`
+    );
+    const cfg = r.rows?.[0]?.config_value;
+    if (cfg?.training_map?.[anomalyKey]) {
+      trainingConfig = cfg.training_map[anomalyKey];
+      // If brand-differentiated, find the matching brand entry
+      if (trainingConfig.brands && Array.isArray(trainingConfig.brands)) {
+        const brandResult = await query(
+          `SELECT brand FROM anomaly_triggers WHERE store ILIKE $1 AND anomaly_key = $2 ORDER BY trigger_date DESC LIMIT 1`,
+          [`%${store}%`, anomalyKey]
+        );
+        const brand = brandResult.rows?.[0]?.brand || '';
+        const brandEntry = trainingConfig.brands.find(b => b.brand === brand) || trainingConfig.brands[0];
+        if (brandEntry) {
+          trainingConfig = brandEntry;
+        }
+      }
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'Failed to load training config from DB');
+  }
+
+  // Use DB config if available, otherwise use hardcoded rule
+  const effectiveRule = trainingConfig || rule;
+  if (!effectiveRule) return { triggered: false };
+
+  const minSeverity = effectiveRule.minSeverity || (rule?.minSeverity) || 'medium';
   const severityOrder = { low: 0, medium: 1, high: 2 };
-  if ((severityOrder[severity] || 0) < (severityOrder[rule.minSeverity] || 0)) {
+  if ((severityOrder[severity] || 0) < (severityOrder[minSeverity] || 0)) {
     return { triggered: false, reason: 'severity_below_threshold' };
   }
 
   try {
-    const brandResult = await query(
+    const brandResult2 = await query(
       `SELECT brand FROM anomaly_triggers WHERE store ILIKE $1 AND anomaly_key = $2 ORDER BY trigger_date DESC LIMIT 1`,
       [`%${store}%`, anomalyKey]
     );
-    const brand = brandResult.rows?.[0]?.brand || '';
+    const brand = brandResult2.rows?.[0]?.brand || '';
 
-    const cooldownKey = `training_trigger_${anomalyKey}`;
+    const cooldownDays = effectiveRule.cooldownDays || (rule?.cooldownDays) || 14;
     const cooldownCheck = await query(
       `SELECT 1 FROM master_tasks
        WHERE store ILIKE $1 AND source = 'training_trigger'
        AND title ILIKE $2
        AND created_at >= NOW() - INTERVAL '1 day' * $3
        LIMIT 1`,
-      [`%${store}%`, `%${rule.training.course}%`, rule.cooldownDays]
+      [`%${store}%`, `%${effectiveRule.course || effectiveRule.training?.course || ''}%`, cooldownDays]
     );
     if (cooldownCheck.rows?.length) {
       return { triggered: false, reason: 'cooldown' };
     }
 
+    const countWindowDays = effectiveRule.countWindowDays || (rule?.countWindowDays) || 7;
+    const minCount = effectiveRule.minCount || (rule?.minCount) || 2;
     const recentCount = await query(
       `SELECT COUNT(*) AS cnt FROM anomaly_triggers
        WHERE store ILIKE $1 AND anomaly_key = $2 AND trigger_date >= NOW() - INTERVAL '1 day' * $3`,
-      [`%${store}%`, anomalyKey, rule.countWindowDays]
+      [`%${store}%`, anomalyKey, countWindowDays]
     );
     const count = Number(recentCount.rows?.[0]?.cnt ?? 0);
-    if (count < rule.minCount) {
-      return { triggered: false, reason: `count_${count}_below_${rule.minCount}` };
+    if (count < minCount) {
+      return { triggered: false, reason: `count_${count}_below_${minCount}` };
     }
 
-    const role = rule.training.assignTo;
+    const course = effectiveRule.course || effectiveRule.training?.course || '培训';
+    const content = effectiveRule.content || effectiveRule.training?.content || '';
+    const examPass = effectiveRule.examPass || effectiveRule.training?.examPass || '';
+    const targetAudience = effectiveRule.targetAudience || [];
+    const role = effectiveRule.assignTo || effectiveRule.training?.assignTo || 'store_manager';
     const roleLabel = role === 'store_production_manager' ? '厨师长' : '店长';
+    const audienceLabel = targetAudience.length ? `培训对象: ${targetAudience.join('、')}\n` : '';
 
     const taskResult = await createTask({
       source: 'training_trigger',
@@ -128,13 +166,13 @@ export async function checkAndTriggerTraining(anomalyKey, store, severity) {
       severity: 'medium',
       store,
       brand,
-      title: `培训任务: ${rule.training.course}`,
-      detail: `触发原因: ${anomalyKey}异常(${count}次/${rule.countWindowDays}天)\n培训内容: ${rule.training.content}\n考核标准: ${rule.training.examPass}\n负责人: ${roleLabel}`,
+      title: `培训任务: ${course}`,
+      detail: `触发原因: ${anomalyKey}异常(${count}次/${countWindowDays}天)\n培训内容: ${content}\n考核标准: ${examPass}\n${audienceLabel}负责人: ${roleLabel}`,
       assigneeRole: role,
     });
 
     logger.info({ anomalyKey, store, task: taskResult.taskId }, 'training triggered');
-    return { triggered: true, taskId: taskResult.taskId, course: rule.training.course };
+    return { triggered: true, taskId: taskResult.taskId, course };
 
   } catch (e) {
     logger.warn({ err: e?.message, anomalyKey, store }, 'training trigger failed');

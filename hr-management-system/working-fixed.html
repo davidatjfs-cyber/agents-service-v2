@@ -34067,7 +34067,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                                 </table>
                             </div>` : ''}
                             ${rows.length > 0 ? `
-                            <div style="margin-top: 14px; font-size: 12px; color: rgba(200,215,230,0.75); font-weight: 800;">日报出勤汇总</div>
+                            <div style="margin-top: 14px; font-size: 12px; color: rgba(200,215,230,0.75); font-weight: 800;">打卡出勤汇总</div>
                             <div class="rep-table" style="overflow-x:auto;">
                                 <table>
                                     <thead>
@@ -34198,11 +34198,12 @@ ${knowledgeContent.slice(0, 30000)}`;
                                                 <td style="text-align:right;">${escapeHtml(String(r?.attendanceDays || 0))}</td>
                                                 <td style="text-align:right;">${fmt(r?.monthlySalary)}</td>
                                                 <td style="text-align:right;">${fmt(r?.dailyRate)}</td>
-                                                <td style="text-align:right;">${fmt(r?.baseAmount)}</td>
+                                                <td style="text-align:right; ${r?.baseAmountOverridden ? 'color:#fbbf24; font-weight:900;' : ''}">${fmt(r?.baseAmount)}</td>
                                                 <td style="text-align:right; color:${Number(r?.rewardPunishmentAdj || 0) >= 0 ? '#22c55e' : '#ef4444'}; font-weight: 800;">${Number(r?.rewardPunishmentAdj || 0) >= 0 ? '+' : ''}${fmt(r?.rewardPunishmentAdj)}</td>
                                                 <td style="text-align:right; color:${Number(r?.subsidy || 0) >= 0 ? '#60a5fa' : '#ef4444'}; font-weight: 800;">${Number(r?.subsidy || 0) >= 0 ? '+' : ''}${fmt(r?.subsidy)}</td>
                                                 <td style="text-align:right; font-weight: 900;">${fmt(r?.amount)}</td>
                                                 <td style="display:flex; gap:6px; flex-wrap:wrap;">
+                                                    ${canEditPayroll ? `<button class="btn btn-secondary" type="button" style="padding:4px 8px; font-size:12px;" onclick="editPayrollBaseAmount('${escapeHtml(String(r?.username || ''))}', '${escapeHtml(String(r?.store || ''))}', ${Number(r?.baseAmount || 0)})">改基础应发</button>` : ''}
                                                     ${canEditPayroll ? `<button class="btn btn-secondary" type="button" style="padding:4px 8px; font-size:12px;" onclick="editPayrollSubsidy('${escapeHtml(String(r?.username || ''))}', '${escapeHtml(String(r?.store || ''))}', ${Number(r?.subsidy || 0)})">改补贴</button>` : ''}
                                                     <button class="btn btn-secondary" type="button" style="padding:4px 8px; font-size:12px;" onclick="openSalaryChangeHistoryModal('${escapeHtml(String(r?.username || ''))}', '${escapeHtml(String(r?.name || r?.username || ''))}')">薪资记录</button>
                                                 </td>
@@ -34454,11 +34455,11 @@ ${knowledgeContent.slice(0, 30000)}`;
 
         async function repAdjustLeaveBalance(username, month, currentVal) {
             if (!currentUser) return;
-            const valueInput = prompt(`请输入 ${username} 在 ${month} 的调整后剩余假期（可负数）`, String(currentVal ?? '0'));
+            const valueInput = prompt(`请输入 ${username} 在 ${month} 的截止上月累计假期天数，可填 0.5`, String(currentVal ?? '0'));
             if (valueInput === null) return;
             const val = Number(String(valueInput || '').trim());
             if (!Number.isFinite(val)) {
-                showNotification('请输入有效数字', 'warning');
+                showNotification('请输入有效数字，支持 0.5', 'warning');
                 return;
             }
             const noteInput = prompt('请输入调整原因（将记录在审计日志中）', '');
@@ -34472,9 +34473,9 @@ ${knowledgeContent.slice(0, 30000)}`;
                 await HRMS_API.request('/api/checkin/leave-balance', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, month, value: val, note })
+                    body: JSON.stringify({ username, month, value: val, mode: 'carryover', note })
                 });
-                showNotification('假期已调整并记录审计日志', 'success');
+                showNotification('累计假期已调整并记录审计日志', 'success');
                 loadReportsData();
             } catch (e) {
                 showNotification('调整失败：' + String(e?.message || e), 'error');
@@ -34524,7 +34525,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                         <div class="rep-metric"><div class="k">欠休总天数</div><div class="v">${fmt(totals.owedDays, 2)}</div></div>
                     </div>
                 </div>
-                <div style="margin-top:12px; font-size:12px; color:rgba(200,215,230,0.72);">说明：月差值=当月假期天数-当月实际休息天数（正数表示欠休）。欠休总天数按正数部分汇总。末列“累计假期”与首页“累计假期”使用同一后端口径。</div>
+                <div style="margin-top:12px; font-size:12px; color:rgba(200,215,230,0.72);">说明：累计假期=截止上月累计余休；当月假期天数固定为 4 天；月差值=当月假期天数-当月实际休息天数；期末欠休=累计假期+月差值。调整入口调整的是“累计假期”，并支持 0.5 天。</div>
                 <div class="rep-table" style="margin-top:12px; overflow-x:auto;">
                     <table>
                         <thead>
@@ -34557,7 +34558,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                                     <td style="text-align:right;">${fmt(latestHolidayDays, 2)}</td>
                                     <td style="text-align:right; font-weight:900; color:#fbbf24;">${fmt(r?.cumulativeLeaveDays || 0, 1)}</td>
                                     <td style="font-size:11px; line-height:1.5;">${adjText}</td>
-                                    <td>${canAdjust ? `<button class="btn btn-secondary" type="button" style="padding:4px 8px; font-size:12px;" onclick="repAdjustLeaveBalance('${escapeJsString(String(r?.username || ''))}', '${escapeJsString(latestM)}', ${latestRemain})">调整</button>` : '-'}</td>
+                                    <td>${canAdjust ? `<button class="btn btn-secondary" type="button" style="padding:4px 8px; font-size:12px;" onclick="repAdjustLeaveBalance('${escapeJsString(String(r?.username || ''))}', '${escapeJsString(latestM)}', ${latestHolidayDays})">调整</button>` : '-'}</td>
                                 </tr>`;
                             }).join('')}
                         </tbody>
@@ -35187,6 +35188,39 @@ ${knowledgeContent.slice(0, 30000)}`;
                 HRMS_API.setPayrollAdjustment({ month, store, username, subsidy })
                     .then(() => {
                         showNotification('补贴已更新', 'success');
+                        loadReportsData();
+                    })
+                    .catch(e => {
+                        showNotification('更新失败：' + String(e?.message || e), 'error');
+                    });
+            } catch (e) {
+                showNotification('更新失败：' + String(e?.message || e), 'error');
+            }
+        }
+
+        function editPayrollBaseAmount(username, store, currentBaseAmount) {
+            try {
+                if (!(currentUser && (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.HR_MANAGER))) {
+                    showNotification('仅管理员或总部人事可修改', 'warning');
+                    return;
+                }
+                const st = window.__REP_PAYROLL_LAST || {};
+                const month = String(st?.month || document.getElementById('rep-month')?.value || '').trim();
+                if (!month) {
+                    showNotification('请选择月份', 'warning');
+                    return;
+                }
+                const seed = Number(currentBaseAmount || 0);
+                const raw = prompt(`请输入 ${username} 的基础应发金额（元）`, String(Number.isFinite(seed) ? seed : 0));
+                if (raw === null) return;
+                const baseAmount = Number(raw);
+                if (!Number.isFinite(baseAmount)) {
+                    showNotification('请输入有效数字', 'warning');
+                    return;
+                }
+                HRMS_API.setPayrollAdjustment({ month, store, username, baseAmount })
+                    .then(() => {
+                        showNotification('基础应发已更新', 'success');
                         loadReportsData();
                     })
                     .catch(e => {

@@ -42,7 +42,7 @@ function shanghaiTodayInputDate() {
 // ── State ──
 const AN = { master: 'Master调度中枢', data_auditor: '数据审计', ops_supervisor: '运营督导', chief_evaluator: '绩效考核', train_advisor: '培训顾问', appeal: '申诉处理', marketing_planner: '营销策划', marketing_executor: '营销执行', procurement_advisor: '采购建议' };
 let tab = 'dashboard';
-let S = { hl: {}, st: {}, fs: {}, agents: {}, rules: [], scores: {}, campaigns: [], templates: [], evalReport: {}, auditItems: [], cfgs: [], schedCfg: {}, anomalyCfg: {}, perfCfg: {}, ratingCfg: {}, kpiTargets: [], kbItems: [], memoryItems: [], featureFlags: {}, selectedAgent: 'data_auditor', activity: {}, activityDate: shanghaiTodayInputDate(), drillData: [], bitableStatus: {} };
+let S = { hl: {}, st: {}, fs: {}, agents: {}, rules: [], scores: {}, campaigns: [], templates: [], evalReport: {}, auditItems: [], cfgs: [], schedCfg: {}, anomalyCfg: {}, perfCfg: {}, ratingCfg: {}, kpiTargets: [], kbItems: [], memoryItems: [], featureFlags: {}, selectedAgent: 'data_auditor', activity: {}, activityDate: shanghaiTodayInputDate(), drillData: [], bitableStatus: {}, chairmanCfg: {}, chairmanTab: 'stores' };
 
 // ── DOM Helpers ──
 function $(id) { return document.getElementById(id); }
@@ -1712,7 +1712,663 @@ function viewCfgs() {
 }
 
 // ═══════════════════════════════════════════════════════
-// AUDIT LOG
+// CHAIRMAN CONFIG (董事长配置)
+// ═══════════════════════════════════════════════════════
+
+const CHAIRMAN_SUBTABS = [
+  ['stores', '🏪 门店画像'],
+  ['actions', '📋 行动模板'],
+  ['training', '🎓 培训联动'],
+  ['trends', '📈 趋势阈值'],
+];
+
+const ANOMALY_LABELS = {
+  revenue_achievement: '营收达成',
+  revenue_achievement_monthly: '月营收达成',
+  revenue_drop: '营收骤降',
+  traffic_decline: '客流下降',
+  labor_efficiency: '人效不足',
+  gross_margin: '毛利异常',
+  bad_review_service: '差评-服务',
+  bad_review_product: '差评-出品',
+  table_visit_product: '桌访-出品',
+  table_visit_ratio: '桌访占比低',
+  recharge_zero: '充值异常',
+  food_safety: '食品安全',
+  weekday_trend: '同日环比趋势',
+  meal_balance: '午晚市失衡',
+  dish_decline: '菜品衰退',
+};
+
+const SCENARIO_LIST = [
+  '午市客流不足', '客单价下降', '差评-服务', '差评-出品',
+  '毛利异常', '人效不足', '菜品衰退', '午晚市失衡',
+  '食品安全', '充值异常', '桌访不足', '营收骤降',
+];
+
+function viewChairman() {
+  const w = el('div');
+  const cfg = S.chairmanCfg || {};
+  const subtab = S.chairmanTab || 'stores';
+
+  w.appendChild(el('div', { className: 'flex justify-between items-center mb-4' }, [
+    el('h2', { className: 'text-lg font-bold text-gray-900' }, '👔 董事长级配置'),
+    el('span', { className: 'text-xs bg-amber-100 text-amber-700 px-3 py-1 rounded-full font-medium' }, '配置后影响晨报诊断、行动计划、培训联动')
+  ]));
+
+  // Sub-tabs
+  const nav = el('div', { className: 'flex gap-2 mb-4 border-b border-gray-200 pb-2' });
+  CHAIRMAN_SUBTABS.forEach(([k, l]) => {
+    const active = subtab === k;
+    nav.appendChild(el('button', {
+      className: 'px-4 py-2 text-sm rounded-lg font-medium transition-colors ' + (active ? 'bg-amber-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'),
+      onclick: () => { S.chairmanTab = k; render(); }
+    }, l));
+  });
+  w.appendChild(nav);
+
+  if (subtab === 'stores') w.appendChild(chairmanStoreTab(cfg));
+  else if (subtab === 'actions') w.appendChild(chairmanActionTab(cfg));
+  else if (subtab === 'training') w.appendChild(chairmanTrainingTab(cfg));
+  else if (subtab === 'trends') w.appendChild(chairmanTrendTab(cfg));
+
+  return w;
+}
+
+// ── Store Profiles ──
+function chairmanStoreTab(cfg) {
+  const stores = cfg.stores || {};
+  const storeNames = Object.keys(stores);
+  const wrap = el('div');
+
+  if (!storeNames.length) {
+    wrap.appendChild(el('p', { className: 'text-gray-500 text-sm' }, '暂无门店配置，请先加载默认配置'));
+    wrap.appendChild(btn('加载默认配置', async () => {
+      await POST('/api/chairman/config', { stores: 'init_defaults' });
+      msg('默认配置已加载'); go('chairman');
+    }));
+    return wrap;
+  }
+
+  storeNames.forEach((sn, si) => {
+    const s = stores[sn];
+    const brand = s.brand || '';
+    const isHC = /洪潮/.test(sn);
+    const isMJX = /马己仙/.test(sn);
+
+    const storeCard = el('div', { className: 'mb-6' });
+    storeCard.appendChild(el('div', { className: 'flex justify-between items-center mb-3' }, [
+      el('h3', { className: 'text-base font-bold text-gray-800' }, `🏪 ${sn}（${brand}）`),
+      el('span', { className: 'text-xs text-gray-400' }, `${s.cuisine || ''} | 人均${s.avgPrice || '-'}元 | ${s.seats || '-'}餐位`)
+    ]));
+
+    // ── Basic info grid ──
+    const grid = el('div', { className: 'grid grid-cols-2 md:grid-cols-3 gap-3 mb-4' });
+    const basics = [
+      ['定位', 'positioning', s.positioning || '', '如: 大众正餐'],
+      ['目标客群', 'targetCustomer', s.targetCustomer || '', '如: 周边白领、家庭聚餐'],
+      ['核心策略', 'coreStrategy', s.coreStrategy || '', '如: 走量，翻台率是生命线'],
+      ['当前瓶颈', 'bottleneck', s.bottleneck || '', '如: 午市客流'],
+      ['餐位数', 'seats', s.seats || '', '整数'],
+      ['桌数', 'tables', s.tables || '', '整数'],
+      ['人均(元)', 'avgPrice', s.avgPrice || '', '整数'],
+      ['面积(m²)', 'area', s.area || '', '整数'],
+    ];
+    basics.forEach(([label, key, val, ph]) => {
+      const field = el('div');
+      field.appendChild(lbl(label));
+      const inp = el('input', { type: key === 'seats' || key === 'tables' || key === 'area' || key === 'avgPrice' ? 'number' : 'text', value: String(val), id: `cs_${si}_${key}`, className: 'border border-gray-300 rounded-lg px-3 py-2 text-sm w-full', placeholder: ph });
+      field.appendChild(inp);
+      grid.appendChild(field);
+    });
+
+    // Peak hours
+    grid.appendChild((() => { const f = el('div'); f.appendChild(lbl('高峰时段')); const inp = el('input', { type: 'text', value: (s.peakHours || []).join(', '), id: `cs_${si}_peakHours`, className: 'border border-gray-300 rounded-lg px-3 py-2 text-sm w-full', placeholder: '如: 11:30-13:30, 17:30-20:30' }); f.appendChild(inp); return f; })());
+    // New fields the system needs to know
+    const extras = [
+      ['招牌产品/拳头产品', 'signatureProducts', s.signatureProducts || '', '如: 白切鸡、烧鹅（逗号分隔）'],
+      ['竞争优势/差异化', 'competitiveAdvantage', s.competitiveAdvantage || '', '如: 周边唯一正宗粤菜、食材当天到货'],
+      ['服务风格', 'serviceStyle', s.serviceStyle || '', '如: 快速翻台型 / 精致服务型'],
+      ['包房数', 'privateRooms', s.privateRooms || '', '整数，如0表示无包房'],
+      ['厨房产能(同时出菜)', 'kitchenCapacity', s.kitchenCapacity || '', '整数，如60'],
+      ['淡季/低谷说明', 'lowSeasonNote', s.lowSeasonNote || '', '如: 周一至周四午市冷清'],
+    ];
+    extras.forEach(([label, key, val, ph]) => {
+      const field = el('div');
+      field.appendChild(lbl(label));
+      field.appendChild(el('input', { type: 'text', value: String(val), id: `cs_${si}_${key}`, className: 'border border-gray-300 rounded-lg px-3 py-2 text-sm w-full', placeholder: ph }));
+      grid.appendChild(field);
+    });
+    storeCard.appendChild(grid);
+
+    // ── Daily targets ──
+    const tgt = s.target_daily || {};
+    const tgtCard = el('div', { className: 'bg-blue-50 rounded-xl p-4 mb-4' });
+    tgtCard.appendChild(el('h4', { className: 'text-sm font-semibold text-blue-800 mb-3' }, '📊 日均目标'));
+    const tgtGrid = el('div', { className: 'grid grid-cols-2 md:grid-cols-4 gap-3' });
+    [
+      ['目标营收(元)', 'revenue', tgt.revenue || 0],
+      ['目标订单数', 'orders', tgt.orders || 0],
+      ['目标客单价(元)', 'avgTicket', tgt.avgTicket || 0],
+      ['目标翻台率', 'turnover', tgt.turnover || 0],
+    ].forEach(([label, key, val]) => {
+      tgtGrid.appendChild(field(label, el('input', { type: 'number', value: String(val), id: `cs_${si}_tgt_${key}`, className: 'border border-blue-200 bg-white rounded-lg px-3 py-2 text-sm w-full', step: key === 'turnover' ? '0.1' : '1' })));
+    });
+    tgtCard.appendChild(tgtGrid);
+    storeCard.appendChild(tgtCard);
+
+    // ── Cost structure ──
+    const cs = s.cost_structure || {};
+    const csCard = el('div', { className: 'bg-green-50 rounded-xl p-4 mb-4' });
+    csCard.appendChild(el('h4', { className: 'text-sm font-semibold text-green-800 mb-3' }, '💰 成本结构（比率填小数，如0.35表示35%）'));
+    const csGrid = el('div', { className: 'grid grid-cols-2 md:grid-cols-4 gap-3' });
+    [
+      ['食材成本率', 'foodCostRate', cs.foodCostRate || 0],
+      ['人力成本率', 'laborCostRate', cs.laborCostRate || 0],
+      ['租金成本率', 'rentCostRate', cs.rentCostRate || 0],
+      ['目标利润率', 'targetProfitRate', cs.targetProfitRate || 0],
+    ].forEach(([label, key, val]) => {
+      csGrid.appendChild(field(label + ' (' + Math.round((val || 0) * 100) + '%)', el('input', { type: 'number', step: '0.01', value: String(val), id: `cs_${si}_cs_${key}`, className: 'border border-green-200 bg-white rounded-lg px-3 py-2 text-sm w-full' })));
+    });
+    csCard.appendChild(csGrid);
+    storeCard.appendChild(csCard);
+
+    // ── Top dishes ──
+    const dishes = s.topDishes || [];
+    const dishCard = el('div', { className: 'bg-amber-50 rounded-xl p-4 mb-4' });
+    dishCard.appendChild(el('h4', { className: 'text-sm font-semibold text-amber-800 mb-3' }, '🔥 高毛利招牌菜（填你店里真实菜品、价格、毛利率）'));
+    const dishList = el('div', { id: `cs_${si}_dishes` });
+    dishes.forEach((d, di) => {
+      dishList.appendChild(chairmanDishRow(si, di, d, false));
+    });
+    dishCard.appendChild(dishList);
+    const addDishBtn = btn('+ 添加招牌菜', () => {
+      const list = $(`cs_${si}_dishes`);
+      const newDi = list.children.length;
+      list.appendChild(chairmanDishRow(si, newDi, {}, true));
+    }, 'bg-amber-600 text-white text-sm px-3 py-1.5 rounded-lg hover:bg-amber-700 mt-2');
+    dishCard.appendChild(addDishBtn);
+    storeCard.appendChild(dishCard);
+
+    // ── Problem dishes ──
+    const probs = s.problemDishes || [];
+    const probCard = el('div', { className: 'bg-red-50 rounded-xl p-4 mb-4' });
+    probCard.appendChild(el('h4', { className: 'text-sm font-semibold text-red-800 mb-3' }, '⚠️ 需关注菜品（低毛利或差评多的菜品）'));
+    const probList = el('div', { id: `cs_${si}_probs` });
+    probs.forEach((d, di) => {
+      probList.appendChild(chairmanProbRow(si, di, d, false));
+    });
+    probCard.appendChild(probList);
+    const addProbBtn = btn('+ 添加关注菜品', () => {
+      const list = $(`cs_${si}_probs`);
+      const newDi = list.children.length;
+      list.appendChild(chairmanProbRow(si, newDi, {}, true));
+    }, 'bg-red-500 text-white text-sm px-3 py-1.5 rounded-lg hover:bg-red-600 mt-2');
+    probCard.appendChild(addProbBtn);
+    storeCard.appendChild(probCard);
+
+    wrap.appendChild(card(sn, [storeCard]));
+  });
+
+  // Save button
+  wrap.appendChild(el('div', { className: 'flex justify-end gap-3 mt-4' }, [
+    btn('💾 保存门店画像配置', async () => {
+      const stores = cfg.stores || {};
+      const update = { stores: {} };
+      Object.keys(stores).forEach((sn, si) => {
+        const s = stores[sn];
+        const g = id => $(id)?.value;
+        const tgt = {
+          revenue: Number(g(`cs_${si}_tgt_revenue`)) || s.target_daily?.revenue || 0,
+          orders: Number(g(`cs_${si}_tgt_orders`)) || s.target_daily?.orders || 0,
+          avgTicket: Number(g(`cs_${si}_tgt_avgTicket`)) || s.target_daily?.avgTicket || 0,
+          turnover: Number(g(`cs_${si}_tgt_turnover`)) || s.target_daily?.turnover || 0,
+        };
+        const cs = {
+          foodCostRate: Number(g(`cs_${si}_cs_foodCostRate`)) || s.cost_structure?.foodCostRate || 0,
+          laborCostRate: Number(g(`cs_${si}_cs_laborCostRate`)) || s.cost_structure?.laborCostRate || 0,
+          rentCostRate: Number(g(`cs_${si}_cs_rentCostRate`)) || s.cost_structure?.rentCostRate || 0,
+          targetProfitRate: Number(g(`cs_${si}_cs_targetProfitRate`)) || s.cost_structure?.targetProfitRate || 0,
+        };
+        const peakHoursVal = (g(`cs_${si}_peakHours`) || '').split(/[,，]/).map(x => x.trim()).filter(Boolean);
+        const dishes = chairmanCollectDishes(si);
+        const probs = chairmanCollectProbs(si);
+        update.stores[sn] = {
+          brand: s.brand, cuisine: s.cuisine,
+          positioning: g(`cs_${si}_positioning`) || s.positioning || '',
+          targetCustomer: g(`cs_${si}_targetCustomer`) || s.targetCustomer || '',
+          area: Number(g(`cs_${si}_area`)) || s.area || 0,
+          seats: Number(g(`cs_${si}_seats`)) || s.seats || 0,
+          tables: Number(g(`cs_${si}_tables`)) || s.tables || 0,
+          avgPrice: Number(g(`cs_${si}_avgPrice`)) || s.avgPrice || 0,
+          peakHours: peakHoursVal.length ? peakHoursVal : (s.peakHours || []),
+          target_daily: tgt, cost_structure: cs,
+          coreStrategy: g(`cs_${si}_coreStrategy`) || s.coreStrategy || '',
+          bottleneck: g(`cs_${si}_bottleneck`) || s.bottleneck || '',
+          signatureProducts: g(`cs_${si}_signatureProducts`) || s.signatureProducts || '',
+          competitiveAdvantage: g(`cs_${si}_competitiveAdvantage`) || s.competitiveAdvantage || '',
+          serviceStyle: g(`cs_${si}_serviceStyle`) || s.serviceStyle || '',
+          privateRooms: Number(g(`cs_${si}_privateRooms`)) || 0,
+          kitchenCapacity: Number(g(`cs_${si}_kitchenCapacity`)) || 0,
+          lowSeasonNote: g(`cs_${si}_lowSeasonNote`) || s.lowSeasonNote || '',
+          topDishes: dishes, problemDishes: probs,
+        };
+      });
+      await POST('/api/chairman/config', update);
+      msg('门店画像配置已保存');
+      go('chairman');
+    }, 'bg-amber-600 text-white text-sm px-6 py-3 rounded-lg hover:bg-amber-700 font-semibold shadow-sm')
+  ]));
+
+  return wrap;
+}
+
+function chairmanDishRow(si, di, d, isNew) {
+  const row = el('div', { className: 'flex gap-2 mb-2 items-center' });
+  row.appendChild(el('input', { type: 'text', value: String(isNew ? '' : (d.name || '')), id: `cs_${si}_dish_${di}_name`, className: 'border border-amber-200 bg-white rounded-lg px-2 py-1.5 text-sm flex-1', placeholder: '菜名' }));
+  row.appendChild(el('input', { type: 'number', value: String(isNew ? '' : (d.price || '')), id: `cs_${si}_dish_${di}_price`, className: 'border border-amber-200 bg-white rounded-lg px-2 py-1.5 text-sm w-20', placeholder: '价格' }));
+  row.appendChild(el('input', { type: 'number', step: '0.01', value: String(isNew ? '' : (d.margin || '')), id: `cs_${si}_dish_${di}_margin`, className: 'border border-amber-200 bg-white rounded-lg px-2 py-1.5 text-sm w-20', placeholder: '毛利0.68' }));
+  row.appendChild(el('button', { className: 'text-red-400 hover:text-red-600 text-lg font-bold px-1', onclick: () => row.remove() }, '✕'));
+  return row;
+}
+
+function chairmanCollectDishes(si) {
+  const dishes = [];
+  let di = 0;
+  while (true) {
+    const name = $(`cs_${si}_dish_${di}_name`)?.value?.trim();
+    if (!name) { di++; if (di > 50) break; continue; }
+    dishes.push({
+      name,
+      price: Number($(`cs_${si}_dish_${di}_price`)?.value) || 0,
+      margin: Number($(`cs_${si}_dish_${di}_margin`)?.value) || 0,
+    });
+    di++;
+    if (di > 50) break;
+  }
+  return dishes;
+}
+
+function chairmanProbRow(si, di, d, isNew) {
+  const row = el('div', { className: 'flex gap-2 mb-2 items-center' });
+  row.appendChild(el('input', { type: 'text', value: String(isNew ? '' : (d.name || '')), id: `cs_${si}_prob_${di}_name`, className: 'border border-red-200 bg-white rounded-lg px-2 py-1.5 text-sm flex-1', placeholder: '菜品名' }));
+  row.appendChild(el('input', { type: 'text', value: String(isNew ? '' : (d.reason || '')), id: `cs_${si}_prob_${di}_reason`, className: 'border border-red-200 bg-white rounded-lg px-2 py-1.5 text-sm flex-1', placeholder: '原因（如：毛利低、差评多）' }));
+  row.appendChild(el('button', { className: 'text-red-400 hover:text-red-600 text-lg font-bold px-1', onclick: () => row.remove() }, '✕'));
+  return row;
+}
+
+function chairmanCollectProbs(si) {
+  const probs = [];
+  let di = 0;
+  while (true) {
+    const name = $(`cs_${si}_prob_${di}_name`)?.value?.trim();
+    if (!name) { di++; if (di > 50) break; continue; }
+    probs.push({
+      name,
+      reason: $(`cs_${si}_prob_${di}_reason`)?.value?.trim() || '',
+    });
+    di++;
+    if (di > 50) break;
+  }
+  return probs;
+}
+
+// ── Action Templates ──
+function chairmanActionTab(cfg) {
+  const templates = cfg.action_templates || [];
+  const wrap = el('div');
+  const brands = ['马己仙', '洪潮'];
+
+  wrap.appendChild(el('p', { className: 'text-sm text-gray-600 mb-4 bg-amber-50 p-3 rounded-lg' },
+    '📋 行动模板是验证过的最佳实践方案。当异常触发时，系统会自动匹配模板并推送给店长选择。每个方案需包含具体的菜品名、定价、话术和可量化的验收标准。'
+  ));
+
+  // Show existing templates grouped by brand
+  brands.forEach(brand => {
+    const brandTemplates = templates.filter(t => t.brand === brand);
+    const brandCard = el('div', { className: 'mb-6' });
+    brandCard.appendChild(el('h3', { className: 'text-base font-bold text-gray-800 mb-3' }, `${brand === '马己仙' ? '🍛' : '🍲'} ${brand}模板 (${brandTemplates.length}个)`));
+
+    brandTemplates.forEach((t, ti) => {
+      const globalTi = templates.indexOf(t);
+      const tCard = el('div', { className: 'bg-white rounded-lg border border-gray-200 p-4 mb-3' });
+      tCard.appendChild(el('div', { className: 'flex justify-between items-center mb-2' }, [
+        el('span', { className: 'font-medium text-sm text-gray-900' }, `场景: ${t.scenario}`),
+        el('button', { className: 'text-red-400 hover:text-red-600 text-sm', onclick: () => {
+          templates.splice(globalTi, 1);
+          POST('/api/chairman/config', { action_templates: templates }).then(() => { msg('模板已删除'); go('chairman'); });
+        }}, '删除')
+      ]));
+
+      (t.options || []).forEach((opt, oi) => {
+        tCard.appendChild(el('div', { className: 'bg-gray-50 rounded-lg p-3 mb-2' }, [
+          el('div', { className: 'font-medium text-sm text-gray-800' }, `${String.fromCharCode(65 + oi)}. ${opt.title}`),
+          el('div', { className: 'text-xs text-gray-600 mt-1' }, opt.description),
+          el('div', { className: 'text-xs text-indigo-600 mt-1' }, `验收: ${opt.success_metric}`),
+          el('div', { className: 'text-xs text-gray-500' }, `负责: ${opt.assignee === 'store_production_manager' ? '厨师长' : '店长'} | 截止: ${opt.deadline}`),
+        ]));
+      });
+      brandCard.appendChild(tCard);
+    });
+
+    // Add new template form
+    const addForm = el('div', { className: 'bg-amber-50 rounded-lg p-4 border border-amber-200' });
+    addForm.appendChild(el('h4', { className: 'text-sm font-semibold text-amber-800 mb-2' }, '+ 新增模板'));
+    const formGrid = el('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-3' });
+    const scSel = el('select', { id: `nat_scenario_${brand}`, className: 'border border-amber-200 rounded-lg px-3 py-2 text-sm w-full bg-white' });
+    SCENARIO_LIST.forEach(s => scSel.appendChild(el('option', { value: s }, s)));
+    formGrid.appendChild(field('异常场景', scSel));
+
+    const titleInp = el('input', { type: 'text', id: `nat_title_${brand}`, className: 'border border-amber-200 rounded-lg px-3 py-2 text-sm w-full bg-white', placeholder: '如: 午市双人套餐引流' });
+    formGrid.appendChild(field('方案标题', titleInp));
+
+    const descInp = el('textarea', { id: `nat_desc_${brand}`, className: 'border border-amber-200 rounded-lg px-3 py-2 text-sm w-full bg-white', rows: '3', placeholder: '详细描述，包含具体菜品名、定价、话术。如：推98元双人餐（白切鸡+干炒牛河+老火靓汤+米饭），毛利率约62%...' });
+    formGrid.appendChild(field('方案描述（含菜品、定价、话术）', descInp));
+
+    const metInp = el('input', { type: 'text', id: `nat_metric_${brand}`, className: 'border border-amber-200 rounded-lg px-3 py-2 text-sm w-full bg-white', placeholder: '如: 午市订单≥45单/日，套餐点单率≥20%' });
+    formGrid.appendChild(field('验收标准（可量化的）', metInp));
+
+    const assSel = el('select', { id: `nat_assignee_${brand}`, className: 'border border-amber-200 rounded-lg px-3 py-2 text-sm w-full bg-white' });
+    assSel.appendChild(el('option', { value: 'store_manager' }, '店长'));
+    assSel.appendChild(el('option', { value: 'store_production_manager' }, '厨师长'));
+    formGrid.appendChild(field('负责人', assSel));
+
+    const dlInp = el('input', { type: 'text', id: `nat_deadline_${brand}`, className: 'border border-amber-200 rounded-lg px-3 py-2 text-sm w-full bg-white', placeholder: '如: 明午市前 / 3天内' });
+    formGrid.appendChild(field('截止时间', dlInp));
+
+    addForm.appendChild(formGrid);
+    addForm.appendChild(btn('添加模板', async () => {
+      const scenario = $(`nat_scenario_${brand}`)?.value;
+      const title = $(`nat_title_${brand}`)?.value?.trim();
+      const desc = $(`nat_desc_${brand}`)?.value?.trim();
+      const metric = $(`nat_metric_${brand}`)?.value?.trim();
+      const assignee = $(`nat_assignee_${brand}`)?.value;
+      const deadline = $(`nat_deadline_${brand}`)?.value?.trim();
+      if (!scenario || !title) { msg('场景和标题必填', true); return; }
+      const newTemplates = [...templates, {
+        scenario, brand, priority: 1,
+        options: [{ title, description: desc || '', success_metric: metric || '', assignee: assignee || 'store_manager', deadline: deadline || '3天内' }]
+      }];
+      await POST('/api/chairman/config', { action_templates: newTemplates });
+      msg('模板已添加');
+      go('chairman');
+    }, 'bg-amber-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-amber-700 mt-3'));
+    brandCard.appendChild(addForm);
+    wrap.appendChild(card(`${brand}行动模板`, [brandCard]));
+  });
+
+  return wrap;
+}
+
+// ── Training Trigger Rules ──
+function chairmanTrainingTab(cfg) {
+  const trainingMap = cfg.training_map || {};
+  const wrap = el('div');
+  const brands = ['马己仙', '洪潮'];
+  const audienceOptions = ['新入职员工', '新员工(3个月内)', '老员工', '店长', '厨师长', '前厅主管', '全部员工'];
+  const LEVEL_LABELS = { low: 'low仅', medium: 'medium+' };
+  const SEVERITY_OPTS = ['low', 'medium', 'high'];
+
+  wrap.appendChild(el('p', { className: 'text-sm text-gray-600 mb-4 bg-blue-50 p-3 rounded-lg' },
+    '🎓 当异常触发时，系统可能自动创建培训任务。配置决定：哪种异常→哪些品牌→什么培训→培训谁→考核标准→冷却期。'
+  ));
+
+  // Group training entries by anomaly key, then by brand
+  const allKeys = [...new Set([...Object.keys(ANOMALY_LABELS), ...Object.keys(trainingMap)])];
+
+  allKeys.forEach(key => {
+    const entry = trainingMap[key] || {};
+    const label = ANOMALY_LABELS[key] || key;
+    const isConfigured = entry.course || (entry.brands && entry.brands.length > 0);
+
+    const cardEl = el('div', { className: 'bg-white rounded-xl shadow-sm border p-4 mb-3' });
+    cardEl.appendChild(el('div', { className: 'flex justify-between items-center mb-3' }, [
+      el('span', { className: 'font-semibold text-sm text-gray-900' }, `${key} → ${label}`),
+      el('span', { className: 'text-xs ' + (isConfigured ? 'text-green-600' : 'text-gray-400') }, isConfigured ? '已配置' : '未配置')
+    ]));
+
+    // Check if this is a brand-differentiated config
+    const hasBrandConfig = entry.brands && Array.isArray(entry.brands);
+
+    if (hasBrandConfig) {
+      // Brand-differentiated mode
+      brands.forEach(brand => {
+        const brandCfg = entry.brands.find(b => b.brand === brand) || {};
+        const bDiv = el('div', { className: 'bg-gray-50 rounded-lg p-3 mb-2' });
+        bDiv.appendChild(el('div', { className: 'font-medium text-sm text-gray-800 mb-2' }, `${brand === '马己仙' ? '🍛' : '🍲'} ${brand}`));
+        const g = el('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-2' });
+        g.appendChild(field('课程名', el('input', { type: 'text', value: String(brandCfg.course || ''), id: `tr_${key}_${brand}_course`, className: 'border border-blue-200 rounded-lg px-2 py-1.5 text-sm w-full', placeholder: '课程名' })));
+        g.appendChild(field('培训内容', el('input', { type: 'text', value: String(brandCfg.content || ''), id: `tr_${key}_${brand}_content`, className: 'border border-blue-200 rounded-lg px-2 py-1.5 text-sm w-full', placeholder: '培训内容' })));
+        g.appendChild(field('考核标准', el('input', { type: 'text', value: String(brandCfg.examPass || ''), id: `tr_${key}_${brand}_exam`, className: 'border border-blue-200 rounded-lg px-2 py-1.5 text-sm w-full', placeholder: '如: 考试≥90分' })));
+        // Target audience multi-select
+        const audDiv = el('div');
+        audDiv.appendChild(lbl('培训对象'));
+        const audWrap = el('div', { className: 'flex flex-wrap gap-1' });
+        const selAud = (brandCfg.targetAudience || []).reduce((m, a) => { m[a] = true; return m; }, {});
+        audienceOptions.forEach(ao => {
+          const cb = el('input', { type: 'checkbox', id: `tr_${key}_${brand}_aud_${ao}`, checked: !!selAud[ao], className: 'mr-1' });
+          const lab = el('label', { className: 'text-xs text-gray-700 cursor-pointer mr-2' });
+          lab.appendChild(cb); lab.appendChild(document.createTextNode(' ' + ao));
+          audWrap.appendChild(lab);
+        });
+        audDiv.appendChild(audWrap);
+        g.appendChild(audDiv);
+        g.appendChild(field('冷却天数', el('input', { type: 'number', value: String(brandCfg.cooldownDays ?? entry.cooldownDays ?? 14), id: `tr_${key}_${brand}_cooldown`, className: 'border border-blue-200 rounded-lg px-2 py-1.5 text-sm w-full', min: '1', max: '90' })));
+        // Severity threshold
+        const sevDiv = el('div');
+        sevDiv.appendChild(lbl('最低严重度'));
+        const sevSel = el('select', { id: `tr_${key}_${brand}_severity`, className: 'border border-blue-200 rounded-lg px-2 py-1.5 text-sm w-full' });
+        SEVERITY_OPTS.forEach(sv => sevSel.appendChild(el('option', { value: sv, selected: (brandCfg.minSeverity || entry.minSeverity || 'medium') === sv }, sv + (sv === 'low' ? '(低也触发)' : sv === 'medium' ? '(中及以上)' : '(仅高)'))));
+        sevDiv.appendChild(sevSel);
+        g.appendChild(sevDiv);
+        bDiv.appendChild(g);
+        cardEl.appendChild(bDiv);
+      });
+    } else {
+      // Simple mode (shared config for all brands)
+      const grid = el('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-3' });
+      grid.appendChild(field('培训课程名', el('input', { type: 'text', value: String(entry.course || ''), id: `tr_${key}_course`, className: 'border border-blue-200 rounded-lg px-3 py-2 text-sm w-full', placeholder: '如: 服务流程SOP' })));
+      grid.appendChild(field('培训内容', el('input', { type: 'text', value: String(entry.content || ''), id: `tr_${key}_content`, className: 'border border-blue-200 rounded-lg px-3 py-2 text-sm w-full', placeholder: '如: 迎宾→入座→点餐→上菜→结账全流程' })));
+      grid.appendChild(field('考核标准', el('input', { type: 'text', value: String(entry.examPass || ''), id: `tr_${key}_exam`, className: 'border border-blue-200 rounded-lg px-3 py-2 text-sm w-full', placeholder: '如: 考试≥90分 / 出品合格率≥95%' })));
+      // Target audience
+      const audDiv = el('div');
+      audDiv.appendChild(lbl('培训对象（勾选）'));
+      const audWrap = el('div', { className: 'flex flex-wrap gap-1' });
+      const selAud = (entry.targetAudience || []).reduce((m, a) => { m[a] = true; return m; }, {});
+      audienceOptions.forEach(ao => {
+        const cb = el('input', { type: 'checkbox', id: `tr_${key}_aud_${ao}`, checked: !!selAud[ao], className: 'mr-1' });
+        const lab = el('label', { className: 'text-xs text-gray-700 cursor-pointer mr-2' });
+        lab.appendChild(cb); lab.appendChild(document.createTextNode(' ' + ao));
+        audWrap.appendChild(lab);
+      });
+      audDiv.appendChild(audWrap);
+      grid.appendChild(audDiv);
+      grid.appendChild(field('冷却天数', el('input', { type: 'number', value: String(entry.cooldownDays ?? 14), id: `tr_${key}_cooldown`, className: 'border border-blue-200 rounded-lg px-3 py-2 text-sm w-full', min: '1', max: '90' })));
+      const sevDiv = el('div');
+      sevDiv.appendChild(lbl('最低严重度'));
+      const sevSel = el('select', { id: `tr_${key}_severity`, className: 'border border-blue-200 rounded-lg px-3 py-2 text-sm w-full' });
+      SEVERITY_OPTS.forEach(sv => sevSel.appendChild(el('option', { value: sv, selected: (entry.minSeverity || 'medium') === sv }, sv + (sv === 'low' ? '(低也触发)' : sv === 'medium' ? '(中及以上)' : '(仅高)'))));
+      sevDiv.appendChild(sevSel);
+      grid.appendChild(sevDiv);
+      cardEl.appendChild(grid);
+    }
+    wrap.appendChild(cardEl);
+  });
+
+  // Custom mapping
+  const customCard = el('div', { className: 'bg-gray-50 rounded-xl p-4 mb-3 border border-dashed border-gray-300' });
+  customCard.appendChild(el('h4', { className: 'text-sm font-semibold text-gray-700 mb-2' }, '+ 自定义异常→培训映射'));
+  const customGrid = el('div', { className: 'grid grid-cols-2 md:grid-cols-4 gap-3' });
+  customGrid.appendChild(field('异常Key', el('input', { type: 'text', id: 'tr_custom_key', className: 'border border-gray-300 rounded-lg px-3 py-2 text-sm w-full', placeholder: '如: custom_issue' })));
+  customGrid.appendChild(field('培训课程名', el('input', { type: 'text', id: 'tr_custom_course', className: 'border border-gray-300 rounded-lg px-3 py-2 text-sm w-full', placeholder: '课程名' })));
+  customGrid.appendChild(field('培训内容', el('input', { type: 'text', id: 'tr_custom_content', className: 'border border-gray-300 rounded-lg px-3 py-2 text-sm w-full', placeholder: '培训内容' })));
+  customGrid.appendChild(field('考核标准', el('input', { type: 'text', id: 'tr_custom_exam', className: 'border border-gray-300 rounded-lg px-3 py-2 text-sm w-full', placeholder: '考核标准' })));
+  customCard.appendChild(customGrid);
+  wrap.appendChild(customCard);
+
+  wrap.appendChild(el('div', { className: 'flex justify-end mt-4' }, [
+    btn('💾 保存培训联动配置', async () => {
+      const newMap = {};
+      allKeys.forEach(key => {
+        const existing = trainingMap[key] || {};
+        const hasBrands = existing.brands && Array.isArray(existing.brands);
+        if (hasBrands) {
+          // Save brand-differentiated config
+          const brandConfigs = [];
+          brands.forEach(brand => {
+            const course = $(`tr_${key}_${brand}_course`)?.value?.trim();
+            if (!course) return;
+            const aud = [];
+            audienceOptions.forEach(ao => { if ($(`tr_${key}_${brand}_aud_${ao}`)?.checked) aud.push(ao); });
+            brandConfigs.push({
+              brand,
+              course,
+              content: $(`tr_${key}_${brand}_content`)?.value?.trim() || '',
+              examPass: $(`tr_${key}_${brand}_exam`)?.value?.trim() || '',
+              targetAudience: aud,
+              cooldownDays: Number($(`tr_${key}_${brand}_cooldown`)?.value) || 14,
+              minSeverity: $(`tr_${key}_${brand}_severity`)?.value || 'medium',
+            });
+          });
+          if (brandConfigs.length) {
+            newMap[key] = { brands: brandConfigs, cooldownDays: Number($(`tr_${key}_${brands[0]}_cooldown`)?.value) || 14, minSeverity: $(`tr_${key}_${brands[0]}_severity`)?.value || 'medium' };
+          }
+        } else {
+          // Save simple config
+          const course = $(`tr_${key}_course`)?.value?.trim();
+          if (!course) return;
+          const aud = [];
+          audienceOptions.forEach(ao => { if ($(`tr_${key}_aud_${ao}`)?.checked) aud.push(ao); });
+          newMap[key] = {
+            course,
+            content: $(`tr_${key}_content`)?.value?.trim() || '',
+            examPass: $(`tr_${key}_exam`)?.value?.trim() || '',
+            targetAudience: aud,
+            cooldownDays: Number($(`tr_${key}_cooldown`)?.value) || existing.cooldownDays || 14,
+            minSeverity: $(`tr_${key}_severity`)?.value || existing.minSeverity || 'medium',
+          };
+        }
+      });
+      const customKey = $('tr_custom_key')?.value?.trim();
+      if (customKey) {
+        const aud = [];
+        audienceOptions.forEach(ao => { if ($(`tr_${customKey}_aud_${ao}`)?.checked) aud.push(ao); });
+        newMap[customKey] = {
+          course: $('tr_custom_course')?.value?.trim() || '',
+          content: $('tr_custom_content')?.value?.trim() || '',
+          examPass: $('tr_custom_exam')?.value?.trim() || '',
+          targetAudience: aud,
+          cooldownDays: 14, minSeverity: 'medium',
+        };
+      }
+      await POST('/api/chairman/config', { training_map: newMap });
+      msg('培训联动配置已保存');
+      go('chairman');
+    }, 'bg-blue-600 text-white text-sm px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold shadow-sm')
+  ]));
+
+  return wrap;
+}
+
+// ── Trend Thresholds ──
+function chairmanTrendTab(cfg) {
+  const tr = cfg.trend_rules || {};
+  const storeOverrides = tr.storeOverrides || {};
+  const stores = Object.keys(cfg.stores || {});
+  const wrap = el('div');
+
+  wrap.appendChild(el('p', { className: 'text-sm text-gray-600 mb-4 bg-purple-50 p-3 rounded-lg' },
+    '📈 趋势检测规则阈值配置。全局阈值对所有门店生效，门店覆盖优先于全局。不同品牌/门店的阈值可以不同。'
+  ));
+
+  const cards = [];
+
+  // Global thresholds
+  { const g = el('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' });
+    g.appendChild(el('div', { className: 'bg-purple-50 rounded-lg p-3' }, [
+      el('div', { className: 'text-sm font-medium text-purple-900 mb-1' }, '连续下降周数阈值'),
+      el('div', { className: 'text-xs text-gray-500 mb-2' }, '同一weekday连续N周下降触发异常'),
+      field('中等级(medium)', el('input', { type: 'number', value: String(tr.weekday_trend_consecutive_weeks ?? 3), id: 'tr_wd_weeks', className: 'border border-purple-200 bg-white rounded-lg px-3 py-2 text-sm w-24', min: '2', max: '8' })),
+    ]));
+    g.appendChild(el('div', { className: 'text-xs text-gray-500 p-3' }, '说明：3表示连续3周同一weekday营收/客流下降触发medium，4周则升级为high。数字越大越不敏感。'));
+    cards.push(card('📅 同日环比趋势（规则12）— 全局阈值', g));
+  }
+
+  { const g = el('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' });
+    g.appendChild(field('medium阈值(午市占比)', el('input', { type: 'number', step: '0.01', value: String(tr.meal_balance_threshold_medium ?? 0.30), id: 'tr_mb_med', className: 'border border-purple-200 bg-white rounded-lg px-3 py-2 text-sm w-full', placeholder: '0.30' })));
+    g.appendChild(field('high阈值(午市占比)', el('input', { type: 'number', step: '0.01', value: String(tr.meal_balance_threshold_high ?? 0.25), id: 'tr_mb_high', className: 'border border-purple-200 bg-white rounded-lg px-3 py-2 text-sm w-full', placeholder: '0.25' })));
+    g.appendChild(field('观察窗口(天)', el('input', { type: 'number', value: String(tr.meal_balance_window_days ?? 5), id: 'tr_mb_days', className: 'border border-purple-200 bg-white rounded-lg px-3 py-2 text-sm w-full', min: '3', max: '14' })));
+    g.appendChild(el('div', { className: 'col-span-3 text-xs text-gray-500' }, '说明：近N天午市营收占比低于阈值时触发。0.30=30%。数字越低越容易触发。'));
+    cards.push(card('🍽️ 午晚市占比失衡（规则13）— 全局阈值', g));
+  }
+
+  { const g = el('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' });
+    g.appendChild(field('跌幅阈值(比率)', el('input', { type: 'number', step: '0.01', value: String(tr.dish_decline_drop_pct ?? 0.20), id: 'tr_dd_drop', className: 'border border-purple-200 bg-white rounded-lg px-3 py-2 text-sm w-full', placeholder: '0.20' })));
+    g.appendChild(field('连续下降周数', el('input', { type: 'number', value: String(tr.dish_decline_consecutive_weeks ?? 2), id: 'tr_dd_weeks', className: 'border border-purple-200 bg-white rounded-lg px-3 py-2 text-sm w-full', min: '1', max: '4' })));
+    g.appendChild(el('div', { className: 'col-span-2 text-xs text-gray-500' }, '说明：菜品周销量跌幅超过此比率且连续N周下降时触发。0.20=跌幅20%。'));
+    cards.push(card('📉 菜品衰退（规则14）— 全局阈值', g));
+  }
+
+  cards.forEach(c => wrap.appendChild(c));
+
+  // Per-store overrides
+  wrap.appendChild(el('div', { className: 'flex justify-between items-center mb-3 mt-4' }, [
+    el('h3', { className: 'text-base font-bold text-gray-900' }, '🏪 门店级阈值覆盖（优先于全局）'),
+    el('span', { className: 'text-xs text-gray-500' }, '留空则使用全局默认值')
+  ]));
+
+  stores.forEach((sn, si) => {
+    const so = storeOverrides[sn] || {};
+    const brand = cfg.stores?.[sn]?.brand || '';
+    const storeCard = el('div', { className: 'bg-white rounded-xl shadow-sm border p-4 mb-3' });
+    storeCard.appendChild(el('div', { className: 'font-semibold text-sm text-gray-900 mb-3' }, `${brand ? brand + ' · ' : ''}${sn}`));
+    const g = el('div', { className: 'grid grid-cols-2 md:grid-cols-3 gap-3' });
+    g.appendChild(field('连续下降周数', el('input', { type: 'number', value: String(so.weekday_trend_consecutive_weeks ?? ''), id: `trso_${si}_wd_weeks`, className: 'border border-purple-200 rounded-lg px-3 py-2 text-sm w-full', placeholder: '全局默认', min: '2', max: '8' })));
+    g.appendChild(field('午市占比medium', el('input', { type: 'number', step: '0.01', value: String(so.meal_balance_threshold_medium ?? ''), id: `trso_${si}_mb_med`, className: 'border border-purple-200 rounded-lg px-3 py-2 text-sm w-full', placeholder: '全局默认' })));
+    g.appendChild(field('午市占比high', el('input', { type: 'number', step: '0.01', value: String(so.meal_balance_threshold_high ?? ''), id: `trso_${si}_mb_high`, className: 'border border-purple-200 rounded-lg px-3 py-2 text-sm w-full', placeholder: '全局默认' })));
+    g.appendChild(field('午市观察天数', el('input', { type: 'number', value: String(so.meal_balance_window_days ?? ''), id: `trso_${si}_mb_days`, className: 'border border-purple-200 rounded-lg px-3 py-2 text-sm w-full', placeholder: '全局默认', min: '3', max: '14' })));
+    g.appendChild(field('菜品跌幅阈值', el('input', { type: 'number', step: '0.01', value: String(so.dish_decline_drop_pct ?? ''), id: `trso_${si}_dd_drop`, className: 'border border-purple-200 rounded-lg px-3 py-2 text-sm w-full', placeholder: '全局默认' })));
+    g.appendChild(field('菜品连续下降周数', el('input', { type: 'number', value: String(so.dish_decline_consecutive_weeks ?? ''), id: `trso_${si}_dd_weeks`, className: 'border border-purple-200 rounded-lg px-3 py-2 text-sm w-full', placeholder: '全局默认', min: '1', max: '4' })));
+    storeCard.appendChild(g);
+    wrap.appendChild(storeCard);
+  });
+
+  wrap.appendChild(el('div', { className: 'flex justify-end mt-4' }, [
+    btn('💾 保存趋势阈值配置', async () => {
+      const trend_rules = {
+        weekday_trend_consecutive_weeks: Number($('tr_wd_weeks')?.value) || 3,
+        meal_balance_threshold_medium: Number($('tr_mb_med')?.value) || 0.30,
+        meal_balance_threshold_high: Number($('tr_mb_high')?.value) || 0.25,
+        meal_balance_window_days: Number($('tr_mb_days')?.value) || 5,
+        dish_decline_drop_pct: Number($('tr_dd_drop')?.value) || 0.20,
+        dish_decline_consecutive_weeks: Number($('tr_dd_weeks')?.value) || 2,
+        storeOverrides: {},
+      };
+      stores.forEach((sn, si) => {
+        const override = {};
+        const wd = $('trso_' + si + '_wd_weeks')?.value;
+        if (wd) override.weekday_trend_consecutive_weeks = Number(wd);
+        const mbm = $('trso_' + si + '_mb_med')?.value;
+        if (mbm) override.meal_balance_threshold_medium = Number(mbm);
+        const mbh = $('trso_' + si + '_mb_high')?.value;
+        if (mbh) override.meal_balance_threshold_high = Number(mbh);
+        const mbd = $('trso_' + si + '_mb_days')?.value;
+        if (mbd) override.meal_balance_window_days = Number(mbd);
+        const ddd = $('trso_' + si + '_dd_drop')?.value;
+        if (ddd) override.dish_decline_drop_pct = Number(ddd);
+        const ddw = $('trso_' + si + '_dd_weeks')?.value;
+        if (ddw) override.dish_decline_consecutive_weeks = Number(ddw);
+        if (Object.keys(override).length) trend_rules.storeOverrides[sn] = override;
+      });
+      await POST('/api/chairman/config', { trend_rules });
+      msg('趋势阈值配置已保存');
+      go('chairman');
+    }, 'bg-purple-600 text-white text-sm px-6 py-3 rounded-lg hover:bg-purple-700 font-semibold shadow-sm')
+  ]));
+
+  return wrap;
+}
+
 // ═══════════════════════════════════════════════════════
 function viewAudit() {
   const w = el('div');
@@ -1851,6 +2507,7 @@ async function load(t) {
     if (t === 'audit') { S.auditItems = (await G('/api/audit-log?limit=50').catch(e => { catchNonAuth(e); return { log: [] }; })).log || []; }
     if (t === 'activity') { S.activity = await G('/api/agent-activity?date=' + S.activityDate).catch(e => { catchNonAuth(e); return {}; }); }
     if (t === 'datasources') { S.bitableStatus = await G('/api/bitable-status').catch(e => { catchNonAuth(e); return {}; }); }
+    if (t === 'chairman') { S.chairmanCfg = (await G('/api/chairman/config').catch(e => { catchNonAuth(e); return { ok: true, config: {} }; })).config || {}; }
   } catch (e) { if (e.message === 'auth') { localStorage.removeItem('aat'); renderLogin(); return 'auth'; } }
 }
 
@@ -1871,9 +2528,10 @@ const TABS = [
   ['memory', '🧠 记忆'],
   ['flags', '🚩 开关'],
   ['configs', '⚙️ 配置'],
+  ['chairman', '👔 董事长配置'],
   ['audit', '📝 审计']
 ];
-const VW = { dashboard: viewDash, activity: viewActivity, datasources: viewDataSources, agents: viewAgents, scheduled: viewScheduled, anomaly: viewAnomaly, performance: viewPerformance, marketing: viewMarketing, evaluation: viewEval, knowledge: viewKnowledge, memory: viewMemory, flags: viewFlags, configs: viewCfgs, audit: viewAudit };
+const VW = { dashboard: viewDash, activity: viewActivity, datasources: viewDataSources, agents: viewAgents, scheduled: viewScheduled, anomaly: viewAnomaly, performance: viewPerformance, marketing: viewMarketing, evaluation: viewEval, knowledge: viewKnowledge, memory: viewMemory, flags: viewFlags, configs: viewCfgs, chairman: viewChairman, audit: viewAudit };
 
 function render() {
   const a = $('app');
