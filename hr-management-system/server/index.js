@@ -1855,6 +1855,9 @@ app.get('/api/approvals', authRequired, async (req, res) => {
   const status = String(req.query?.status || '').trim();
   const type = normalizeApprovalType(req.query?.type || '') || '';
   const storeQ = String(req.query?.store || '').trim();
+  const approver = String(req.query?.approver || '').trim();
+  const approvedStart = safeDateOnly(req.query?.approvedStart);
+  const approvedEnd = safeDateOnly(req.query?.approvedEnd);
   const limit = Math.min(200, Math.max(1, Number(req.query?.limit || 100)));
 
   const allowedViews = ['assigned', 'created', 'all', 'approved'];
@@ -1910,6 +1913,18 @@ app.get('/api/approvals', authRequired, async (req, res) => {
   if (status) {
     params.push(status);
     clauses.push(`status = $${params.length}`);
+  }
+  if (approver) {
+    params.push(approver);
+    clauses.push(`EXISTS (SELECT 1 FROM jsonb_array_elements(chain) elem WHERE lower(elem->>'assignee') = lower($${params.length}))`);
+  }
+  if (approvedStart) {
+    params.push(approvedStart);
+    clauses.push(`EXISTS (SELECT 1 FROM jsonb_array_elements(chain) elem WHERE substring(coalesce(elem->>'decidedAt',''), 1, 10) >= $${params.length})`);
+  }
+  if (approvedEnd) {
+    params.push(approvedEnd);
+    clauses.push(`EXISTS (SELECT 1 FROM jsonb_array_elements(chain) elem WHERE substring(coalesce(elem->>'decidedAt',''), 1, 10) <= $${params.length})`);
   }
   params.push(limit);
 
@@ -11662,11 +11677,8 @@ function shiftMonth(ym, delta) {
 function resolveEmployeeLeaveCalcStartMonth(state, employee, fallbackMonth) {
   const emp = employee && typeof employee === 'object' ? employee : {};
   const uname = String(emp?.username || '').trim().toLowerCase();
-  const joinDate = String(
-    emp?.joinDate || emp?.hireDate || emp?.startDate || emp?.entryDate || emp?.onboardDate || emp?.joiningDate || ''
-  ).trim();
+  const name = String(emp?.name || '').trim();
   const months = [];
-  if (/^\d{4}-\d{2}-\d{2}$/.test(joinDate)) months.push(joinDate.slice(0, 7));
 
   const reportList = Array.isArray(state?.dailyReports) ? state.dailyReports : [];
   reportList.forEach((rep) => {
@@ -11678,7 +11690,13 @@ function resolveEmployeeLeaveCalcStartMonth(state, employee, fallbackMonth) {
     const allRestStaff = []
       .concat(Array.isArray(data?.staff?.frontRestStaff) ? data.staff.frontRestStaff : [])
       .concat(Array.isArray(data?.staff?.kitchenRestStaff) ? data.staff.kitchenRestStaff : []);
-    const hit = allRestStaff.some((it) => String(it?.user || it?.username || '').trim().toLowerCase() === uname);
+    const hit = allRestStaff.some((it) => {
+      const recUser = String(it?.user || it?.username || '').trim().toLowerCase();
+      const recName = String(it?.name || '').trim();
+      if (recUser && recUser === uname) return true;
+      if (!recUser && name && recName && recName === name) return true;
+      return false;
+    });
     if (hit) months.push(repDate.slice(0, 7));
   });
 
@@ -11687,6 +11705,16 @@ function resolveEmployeeLeaveCalcStartMonth(state, employee, fallbackMonth) {
     if (String(lr?.applicant || '').trim().toLowerCase() !== uname) return;
     const sd = String(lr?.startDate || '').trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(sd)) months.push(sd.slice(0, 7));
+  });
+
+  const overrides = state?.leaveBalanceOverrides && typeof state.leaveBalanceOverrides === 'object'
+    ? state.leaveBalanceOverrides
+    : {};
+  Object.keys(overrides).forEach((key) => {
+    const m = String(key || '').match(/^(.+)_([0-9]{4}-[0-9]{2})$/);
+    if (!m) return;
+    if (String(m[1] || '').trim().toLowerCase() !== uname) return;
+    months.push(String(m[2] || '').trim());
   });
 
   const clean = months.filter(Boolean).sort();

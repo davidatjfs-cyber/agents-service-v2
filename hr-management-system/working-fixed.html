@@ -8304,6 +8304,9 @@
                             <option value="paid">已付款</option>
                             <option value="rejected">已拒绝</option>
                         </select>
+                        <input id="approvals-approved-start" type="date" onchange="loadApprovalsData()" style="padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); color-scheme:dark;" placeholder="审批开始日期" />
+                        <input id="approvals-approved-end" type="date" onchange="loadApprovalsData()" style="padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); color-scheme:dark;" placeholder="审批结束日期" />
+                        <input id="approvals-approver" type="text" onkeydown="if(event.key==='Enter') loadApprovalsData()" style="padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9);" placeholder="审批人用户名" />
                         <button class="btn btn-secondary" type="button" onclick="loadApprovalsData()" style="padding: 10px 14px;">刷新</button>
                     </div>
                 </div>
@@ -12349,6 +12352,9 @@
 
             const viewEl = document.getElementById('approvals-view');
             const statusEl = document.getElementById('approvals-status');
+            const approvedStartEl = document.getElementById('approvals-approved-start');
+            const approvedEndEl = document.getElementById('approvals-approved-end');
+            const approverEl = document.getElementById('approvals-approver');
             try {
                 const role = String(currentUser?.role || '').trim();
                 const canSeeAll = (role === ROLES.ADMIN || role === ROLES.HQ_MANAGER || role === ROLES.CASHIER);
@@ -12363,11 +12369,14 @@
             } catch (e) {}
             const view = String(viewEl?.value || 'assigned');
             const status = String(statusEl?.value || '').trim();
+            const approvedStart = String(approvedStartEl?.value || '').trim();
+            const approvedEnd = String(approvedEndEl?.value || '').trim();
+            const approver = String(approverEl?.value || '').trim();
 
             box.innerHTML = '<div style="color:#888;padding:18px;text-align:center;">加载中...</div>';
             empty.style.display = 'none';
 
-            HRMS_API.getApprovals({ view: String(viewEl?.value || 'assigned'), status, limit: 200 })
+            HRMS_API.getApprovals({ view: String(viewEl?.value || 'assigned'), status, approvedStart, approvedEnd, approver, limit: 200 })
                 .then(resp => {
                     const items = Array.isArray(resp?.items) ? resp.items : [];
                     __APPROVALS_CACHE = items;
@@ -34417,12 +34426,15 @@ ${knowledgeContent.slice(0, 30000)}`;
 
             const rows = Array.from(byUser.values()).map((r) => {
                 let latestRemaining = 0;
+                let latestDiff = 0;
                 const latestMonth = monthList[monthList.length - 1] || '';
                 if (latestMonth && r.monthly[latestMonth]) latestRemaining = Number(r.monthly[latestMonth].remaining || 0);
+                if (latestMonth && r.monthly[latestMonth]) latestDiff = Number(r.monthly[latestMonth].diff || 0);
                 const cumulativeLeaveDays = Number(r?.monthly?.[latestMonth]?.cumulativeLeaveDays || 0);
                 return {
                     ...r,
                     latestRemaining,
+                    latestDiff,
                     cumulativeLeaveDays,
                     isOwedAny: monthList.some(m => Number(r?.monthly?.[m]?.remaining || 0) > 0)
                 };
@@ -34435,10 +34447,10 @@ ${knowledgeContent.slice(0, 30000)}`;
             const totals = rows.reduce((acc, r) => {
                 acc.people += 1;
                 if (r.isOwedAny) acc.owedPeople += 1;
+                acc.monthlyDiffTotal = Number((acc.monthlyDiffTotal + Number(r.latestDiff || 0)).toFixed(2));
                 acc.cumulativeLeaveDays = Number((acc.cumulativeLeaveDays + Number(r.cumulativeLeaveDays || 0)).toFixed(2));
-                acc.monthEndOwedDays = Number((acc.monthEndOwedDays + Math.max(0, Number(r.latestRemaining || 0))).toFixed(2));
                 return acc;
-            }, { people: 0, owedPeople: 0, cumulativeLeaveDays: 0, monthEndOwedDays: 0 });
+            }, { people: 0, owedPeople: 0, cumulativeLeaveDays: 0, monthlyDiffTotal: 0 });
 
             return {
                 month: monthList[monthList.length - 1] || '',
@@ -34516,19 +34528,19 @@ ${knowledgeContent.slice(0, 30000)}`;
             const titleStore = String(resp?.store || '').trim() || '全部门店';
             const statMonth = String(months[months.length - 1] || month || '').trim();
             const cumulativeTotal = Number(totals?.cumulativeLeaveDays || 0);
-            const monthEndOwedTotal = Number(totals?.monthEndOwedDays || 0);
+            const monthlyDiffTotal = Number(totals?.monthlyDiffTotal || 0);
 
             const html = `
                 <div class="rep-hero" style="background: linear-gradient(135deg, #dc2626, #f97316);">
                     <div style="font-weight:900; font-size:16px;">欠休报表 · ${escapeHtml(titleStore)}</div>
-                    <div class="meta" style="margin-top:6px;">统计月份：${escapeHtml(statMonth)} · 人员 ${fmtInt(totals.people)} · 欠休人数 ${fmtInt(totals.owedPeople)} · 累计假期合计 ${fmt(cumulativeTotal, 2)} · 期末欠休合计 ${fmt(monthEndOwedTotal, 2)}</div>
+                    <div class="meta" style="margin-top:6px;">统计月份：${escapeHtml(statMonth)} · 人员 ${fmtInt(totals.people)} · 欠休人数 ${fmtInt(totals.owedPeople)} · 本月欠休合计 ${fmt(monthlyDiffTotal, 2)} · 累计假期合计 ${fmt(cumulativeTotal, 2)}</div>
                     <div class="rep-grid" style="margin-top:10px;">
                         <div class="rep-metric"><div class="k">统计月份</div><div class="v">${escapeHtml(statMonth || '-')}</div></div>
+                        <div class="rep-metric"><div class="k">本月欠休合计</div><div class="v">${fmt(monthlyDiffTotal, 2)}</div></div>
                         <div class="rep-metric"><div class="k">累计假期合计</div><div class="v">${fmt(cumulativeTotal, 2)}</div></div>
-                        <div class="rep-metric"><div class="k">期末欠休合计</div><div class="v">${fmt(monthEndOwedTotal, 2)}</div></div>
                     </div>
                 </div>
-                <div style="margin-top:12px; font-size:12px; color:rgba(200,215,230,0.72);">说明：本表按“薪资月份”整月统计，不受上方日期区间影响。累计假期=截止上月累计余休；当月假期天数固定为 4 天；月差值=当月假期天数-当月实际休息与休假合计；期末欠休=累计假期+月差值。红色汇总里的“累计假期合计”=末列累计假期求和。</div>
+                <div style="margin-top:12px; font-size:12px; color:rgba(200,215,230,0.72);">说明：本表按“薪资月份”整月统计，不受上方日期区间影响。本月欠休合计=所选月份全部人员“假-休”求和；累计假期合计=末列累计假期求和。当前累计口径只从员工真正有休息/请假/人工校准数据的首月开始滚动，避免把无数据月份误算进累计。</div>
                 <div class="rep-table" style="margin-top:12px; overflow-x:auto;">
                     <table>
                         <thead>
