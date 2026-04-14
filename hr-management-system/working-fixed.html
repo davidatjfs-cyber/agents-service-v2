@@ -3925,11 +3925,11 @@
         }
 
         #employees-page .emp-card {
-            border-radius: 14px;
-            border: 1px solid rgba(255,255,255,0.06);
-            background: rgba(255,255,255,0.03);
-            padding: 14px 16px;
-            margin: 8px 10px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255, 255, 255, 0.035);
+            padding: 10px 12px;
+            margin: 6px 0;
             cursor: pointer;
             user-select: none;
             -webkit-tap-highlight-color: transparent;
@@ -3978,10 +3978,10 @@
         }
 
         #employees-page .emp-card-grid {
-            margin-top: 12px;
+            margin-top: 8px;
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 10px 16px;
+            gap: 6px 10px;
         }
 
         #employees-page .emp-card-item {
@@ -4007,20 +4007,21 @@
         }
 
         #employees-page .emp-card-actions {
-            margin-top: 14px;
-            padding-top: 12px;
-            border-top: 1px solid rgba(255,255,255,0.05);
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255,255,255,0.06);
             display: flex;
-            gap: 8px;
+            gap: 6px;
             justify-content: flex-end;
+            flex-wrap: wrap;
         }
 
         #employees-page .emp-card-actions .btn,
         #employees-page .emp-card-actions .btn-secondary {
-            padding: 7px 16px;
-            font-size: 13px;
-            font-weight: 500;
-            border-radius: 8px;
+            padding: 5px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 9px;
         }
 
         #employees-page .emp-card-more {
@@ -4032,6 +4033,253 @@
 
         #employees-page .emp-card.expanded .emp-card-more {
             display: block;
+        }
+
+        /* 员工管理：表头操作区对齐（避免按钮散乱） */
+        #employees-page .rep-page-head {
+            align-items: flex-start;
+        }
+
+        @media (min-width: 769px) {
+            #employees-page .rep-page-head__actions {
+                flex-shrink: 0;
+                max-width: min(420px, 52vw);
+                justify-content: flex-end;
+            }
+        }
+
+        @media (max-width: 768px) {
+            #employees-page .rep-page-head {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 10px;
+            }
+
+            #employees-page .rep-page-head__actions {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 8px;
+                width: 100%;
+                justify-content: stretch;
+            }
+
+            #employees-page .rep-page-head__actions .btn,
+            #employees-page .rep-page-head__actions .btn-secondary {
+                width: 100%;
+                box-sizing: border-box;
+                justify-content: center;
+                padding: 9px 10px;
+                font-size: 12px;
+            }
+
+            #employees-page #btn-training-batch-assign {
+                grid-column: 1 / -1;
+            }
+        }
+
+        #employees-page .emp-summary-strip {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 14px;
+            align-items: baseline;
+            font-size: 12px;
+            line-height: 1.45;
+            color: rgba(186, 198, 215, 0.88);
+        }
+
+        #employees-page .emp-summary-strip .emp-sum-k {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: rgba(186, 198, 215, 0.55);
+            margin-right: 4px;
+        }
+
+        #employees-page .emp-summary-strip .emp-sum-v {
+            font-weight: 700;
+            font-family: var(--rep-mono, ui-monospace, monospace);
+            color: rgba(233, 238, 246, 0.95);
+        }
+
+        #employees-page .emp-card-compact-meta {
+            font-size: 11px;
+            line-height: 1.4;
+            color: rgba(186, 198, 215, 0.78);
+            font-family: var(--rep-mono, ui-monospace, monospace);
+            margin-top: 2px;
+            word-break: break-all;
+        }
+
+        #employees-page .emp-card-compact-meta .emp-meta-sep {
+            opacity: 0.35;
+            margin: 0 5px;
+        }
+
+        #employees-page .emp-card-actions--tight .btn,
+        #employees-page .emp-card-actions--tight .btn-secondary {
+            padding: 5px 10px !important;
+            font-size: 11px !important;
+            font-weight: 600;
+            border-radius: 9px;
+        }
+
+        #employees-page .emp-card-actions--tight .btn:not(.btn-secondary) {
+            background: rgba(255, 255, 255, 0.06) !important;
+            border: 1px solid rgba(212, 175, 55, 0.35) !important;
+            color: #e8d48b !important;
+        }
+
+        #rewards-page .rw-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            margin: 0 0 12px;
+        }
+
+        #rewards-page .rw-sum-chip {
+            border-radius: 12px;
+            padding: 8px 8px 9px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.22);
+        }
+
+        #rewards-page .rw-sum-chip--reward {
+            border-color: rgba(74, 222, 128, 0.35);
+            background: linear-gradient(160deg, rgba(34, 197, 94, 0.12), rgba(0, 0, 0, 0.2));
+        }
+
+        #rewards-page .rw-sum-chip--punish {
+            border-color: rgba(248, 113, 113, 0.35);
+            background: linear-gradient(160deg, rgba(239, 68, 68, 0.12), rgba(0, 0, 0, 0.2));
+        }
+
+        #rewards-page .rw-sum-chip--total {
+            border-color: rgba(96, 165, 250, 0.35);
+            background: linear-gradient(160deg, rgba(59, 130, 246, 0.12), rgba(0, 0, 0, 0.2));
+        }
+
+        #rewards-page .rw-sum-chip .rw-sum-k {
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            color: rgba(186, 198, 215, 0.62);
+        }
+
+        #rewards-page .rw-sum-chip .rw-sum-v {
+            margin-top: 4px;
+            font-size: 14px;
+            font-weight: 800;
+            font-family: var(--rep-mono, ui-monospace, monospace);
+        }
+
+        #rewards-page .rep-table-shell .data-table th,
+        #rewards-page .rep-table-shell .data-table td {
+            padding: 8px 10px;
+            font-size: 12px;
+            vertical-align: middle;
+        }
+
+        #rewards-page .rw-id {
+            font-family: var(--rep-mono, ui-monospace, monospace);
+            font-size: 11px;
+            color: rgba(186, 198, 215, 0.85);
+        }
+
+        #rewards-page .rw-mini-btn {
+            margin-left: 6px;
+            padding: 3px 8px !important;
+            font-size: 11px !important;
+        }
+
+        #rewards-page .rw-st {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+        }
+
+        #rewards-page .rw-st--ok {
+            color: #86efac;
+            background: rgba(34, 197, 94, 0.14);
+            border: 1px solid rgba(74, 222, 128, 0.35);
+        }
+
+        #rewards-page .rw-st--bad {
+            color: #fca5a5;
+            background: rgba(239, 68, 68, 0.12);
+            border: 1px solid rgba(248, 113, 113, 0.35);
+        }
+
+        #rewards-page .rw-st--pend {
+            color: #fde68a;
+            background: rgba(245, 158, 11, 0.12);
+            border: 1px solid rgba(251, 191, 36, 0.35);
+        }
+
+        #leave-apply-modal.leave-modal-rep .modal-content {
+            max-width: 420px;
+            border-radius: 18px;
+            border: 1px solid rgba(212, 175, 55, 0.2);
+            background: linear-gradient(165deg, rgba(18, 26, 38, 0.98), rgba(8, 11, 18, 0.99));
+            box-shadow: 0 28px 56px -24px rgba(0, 0, 0, 0.65);
+        }
+
+        #leave-apply-modal.leave-modal-rep .modal-header {
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        #leave-apply-modal.leave-modal-rep .ui-modal-title {
+            letter-spacing: 0.04em;
+        }
+
+        #leave-apply-modal.leave-modal-rep .ui-modal-desc {
+            font-size: 12px;
+            line-height: 1.45;
+            color: rgba(186, 198, 215, 0.65);
+        }
+
+        #leave-apply-modal.leave-modal-rep .modal-body {
+            padding: 14px 16px 16px !important;
+        }
+
+        #leave-apply-modal.leave-modal-rep .form-group {
+            margin-bottom: 10px;
+        }
+
+        #leave-apply-modal.leave-modal-rep .form-label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: rgba(186, 198, 215, 0.62) !important;
+        }
+
+        #leave-apply-modal.leave-modal-rep .form-input,
+        #leave-apply-modal.leave-modal-rep select.form-input {
+            border-radius: 11px !important;
+            background: rgba(0, 0, 0, 0.35) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            padding: 10px 12px !important;
+            color: rgba(233, 238, 246, 0.95) !important;
+            color-scheme: dark;
+        }
+
+        #leave-apply-modal.leave-modal-rep #leave-balance-box {
+            border-radius: 12px !important;
+            padding: 9px 12px !important;
+            margin-bottom: 10px !important;
+            font-size: 11px !important;
+            line-height: 1.5 !important;
+        }
+
+        #leave-apply-modal.leave-modal-rep .leave-date-grid {
+            gap: 10px !important;
         }
 
         #rewards-page .rw-cards {
@@ -6843,7 +7091,8 @@
         #profile-page .dr-shell,
         #employees-page .dr-shell,
         #attendance-page .dr-shell,
-        #rewards-page .dr-shell {
+        #rewards-page .dr-shell,
+        #points-page .dr-shell {
             max-width: min(960px, 100%);
             margin: 0 auto;
             padding: 14px 14px 96px;
@@ -6852,7 +7101,8 @@
         #profile-page .rep-page-head,
         #employees-page .rep-page-head,
         #attendance-page .rep-page-head,
-        #rewards-page .rep-page-head {
+        #rewards-page .rep-page-head,
+        #points-page .rep-page-head {
             display: flex;
             align-items: flex-end;
             justify-content: space-between;
@@ -6865,7 +7115,8 @@
         #profile-page .rep-page-head h2,
         #employees-page .rep-page-head h2,
         #attendance-page .rep-page-head h2,
-        #rewards-page .rep-page-head h2 {
+        #rewards-page .rep-page-head h2,
+        #points-page .rep-page-head h2 {
             margin: 0;
             font-family: var(--rep-sans);
             font-weight: 700;
@@ -6877,7 +7128,8 @@
         #profile-page .rep-page-head__eyebrow,
         #employees-page .rep-page-head__eyebrow,
         #attendance-page .rep-page-head__eyebrow,
-        #rewards-page .rep-page-head__eyebrow {
+        #rewards-page .rep-page-head__eyebrow,
+        #points-page .rep-page-head__eyebrow {
             display: block;
             font-size: 10px;
             font-weight: 600;
@@ -6890,7 +7142,8 @@
         #profile-page .rep-page-head__sub,
         #employees-page .rep-page-head__sub,
         #attendance-page .rep-page-head__sub,
-        #rewards-page .rep-page-head__sub {
+        #rewards-page .rep-page-head__sub,
+        #points-page .rep-page-head__sub {
             margin: 6px 0 0;
             font-size: 12px;
             line-height: 1.45;
@@ -6921,6 +7174,32 @@
             border-radius: 10px;
             font-weight: 600;
             font-size: 12px;
+        }
+
+        /* 员工管理表头：覆盖全局 flex，窄屏强制两列网格（避免按钮纵向堆叠） */
+        @media (max-width: 768px) {
+            #employees-page .rep-page-head__actions {
+                display: grid !important;
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 8px !important;
+                width: 100% !important;
+                justify-content: stretch !important;
+                flex-wrap: nowrap !important;
+                align-items: stretch !important;
+            }
+
+            #employees-page .rep-page-head__actions .btn,
+            #employees-page .rep-page-head__actions .btn-secondary {
+                width: 100%;
+                box-sizing: border-box;
+                justify-content: center;
+                padding: 9px 10px;
+                font-size: 12px;
+            }
+
+            #employees-page #btn-training-batch-assign {
+                grid-column: 1 / -1;
+            }
         }
 
         #profile-page .card,
@@ -6997,7 +7276,8 @@
             background: rgba(0, 0, 0, 0.35);
         }
 
-        #employees-page .rep-filters.emp-filters-surface {
+        #employees-page .rep-filters.emp-filters-surface,
+        #points-page .rep-filters.emp-filters-surface {
             position: relative;
             border-radius: 20px;
             padding: 18px 18px 16px;
@@ -7010,7 +7290,8 @@
             backdrop-filter: blur(14px);
         }
 
-        #employees-page .rep-filters.emp-filters-surface::before {
+        #employees-page .rep-filters.emp-filters-surface::before,
+        #points-page .rep-filters.emp-filters-surface::before {
             content: "";
             position: absolute;
             inset: 0;
@@ -7019,16 +7300,19 @@
             background: linear-gradient(125deg, rgba(212, 175, 55, 0.07), transparent 42%);
         }
 
-        #employees-page .rep-filters.emp-filters-surface .rep-filters__head {
+        #employees-page .rep-filters.emp-filters-surface .rep-filters__head,
+        #points-page .rep-filters.emp-filters-surface .rep-filters__head {
             position: relative;
             margin-bottom: 14px;
         }
 
-        #employees-page .rep-filters.emp-filters-surface .rep-filters__grid {
+        #employees-page .rep-filters.emp-filters-surface .rep-filters__grid,
+        #points-page .rep-filters.emp-filters-surface .rep-filters__grid {
             position: relative;
         }
 
-        #employees-page .rep-filters.emp-filters-surface .rep-field label {
+        #employees-page .rep-filters.emp-filters-surface .rep-field label,
+        #points-page .rep-filters.emp-filters-surface .rep-field label {
             display: block;
             font-size: 10px;
             font-weight: 700;
@@ -7038,7 +7322,8 @@
             margin-bottom: 6px;
         }
 
-        #employees-page .rep-filters .rep-filters__eyebrow {
+        #employees-page .rep-filters .rep-filters__eyebrow,
+        #points-page .rep-filters .rep-filters__eyebrow {
             font-size: 10px;
             font-weight: 600;
             letter-spacing: 0.2em;
@@ -7046,7 +7331,8 @@
             opacity: 0.9;
         }
 
-        #employees-page .rep-filters .rep-filters__title {
+        #employees-page .rep-filters .rep-filters__title,
+        #points-page .rep-filters .rep-filters__title {
             margin-top: 4px;
             font-size: 15px;
             font-weight: 700;
@@ -7054,14 +7340,17 @@
             letter-spacing: 0.02em;
         }
 
-        #employees-page .rep-filters .rep-filters__hint {
+        #employees-page .rep-filters .rep-filters__hint,
+        #points-page .rep-filters .rep-filters__hint {
             margin-top: 6px;
             font-size: 11px;
             line-height: 1.45;
             color: var(--rep-muted);
         }
 
-        #employees-page .rep-filters.emp-filters-surface select {
+        #employees-page .rep-filters.emp-filters-surface select,
+        #points-page .rep-filters.emp-filters-surface select,
+        #points-page .rep-filters.emp-filters-surface input.form-input {
             width: 100%;
             padding: 10px 12px !important;
             border-radius: 12px !important;
@@ -8431,6 +8720,15 @@
             </div>
 
             <div id="points-page" class="hidden">
+                <div class="dr-shell">
+                    <header class="rep-page-head">
+                        <div>
+                            <span class="rep-page-head__eyebrow">POINTS</span>
+                            <h2>员工积分</h2>
+                            <p class="rep-page-head__sub">多劳多得 · 申报、排行榜与记录查询（与分析报表同一套深色面板）</p>
+                        </div>
+                    </header>
+
                 <!-- 顶部积分概览卡 -->
                 <div style="margin:0 0 16px 0; padding:20px; border-radius:20px; background:linear-gradient(135deg, rgba(37,99,235,0.15) 0%, rgba(99,102,241,0.08) 50%, rgba(15,23,42,0.95) 100%); border:1px solid rgba(99,102,241,0.2); position:relative; overflow:hidden;">
                     <div style="position:absolute; top:-30px; right:-30px; width:120px; height:120px; border-radius:50%; background:radial-gradient(circle, rgba(250,204,21,0.12), transparent 70%);"></div>
@@ -8489,15 +8787,33 @@
                 </div>
 
                 <!-- 总部管理员筛选 -->
-                <div id="points-admin-filter-card" style="display:none; margin-bottom:16px; padding:16px; border-radius:16px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);">
-                    <div style="font-size:14px; font-weight:700; color:rgba(226,232,240,0.9); margin-bottom:12px;">记录查询</div>
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                        <select id="points-admin-store" class="form-input" style="padding:10px 12px; border-radius:10px; font-size:13px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:rgba(226,232,240,0.95);"></select>
-                        <input id="points-admin-name" class="form-input" type="text" placeholder="姓名/账号" style="padding:10px 12px; border-radius:10px; font-size:13px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:rgba(226,232,240,0.95);">
-                        <input id="points-admin-start" class="form-input" type="date" style="padding:10px 12px; border-radius:10px; font-size:13px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:rgba(226,232,240,0.95);">
-                        <input id="points-admin-end" class="form-input" type="date" style="padding:10px 12px; border-radius:10px; font-size:13px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:rgba(226,232,240,0.95);">
+                <section id="points-admin-filter-card" class="rep-filters emp-filters-surface" style="display:none;" aria-label="积分记录查询">
+                    <div class="rep-filters__head">
+                        <div class="rep-filters__eyebrow">LOOKUP</div>
+                        <div class="rep-filters__title">记录查询</div>
+                        <p class="rep-filters__hint">按门店、员工与时间范围筛选积分流水；字段与经营分析报表检索区一致。</p>
                     </div>
-                    <button class="btn" type="button" onclick="queryPointsAdminRecords()" style="margin-top:10px; width:100%; padding:12px; border-radius:12px; background:linear-gradient(135deg, #2563eb, #6366f1); color:#fff; font-size:14px; font-weight:700; border:none;">查询</button>
+                    <div class="rep-filters__grid" style="grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));">
+                        <div class="rep-field">
+                            <label for="points-admin-store">门店</label>
+                            <select id="points-admin-store" class="form-input"></select>
+                        </div>
+                        <div class="rep-field">
+                            <label for="points-admin-name">员工</label>
+                            <input id="points-admin-name" class="form-input" type="text" placeholder="姓名或登录账号">
+                        </div>
+                        <div class="rep-field">
+                            <label for="points-admin-start">开始日期</label>
+                            <input id="points-admin-start" class="form-input" type="date">
+                        </div>
+                        <div class="rep-field">
+                            <label for="points-admin-end">结束日期</label>
+                            <input id="points-admin-end" class="form-input" type="date">
+                        </div>
+                    </div>
+                    <div style="display:flex; justify-content:flex-end; margin-top:12px;">
+                        <button class="btn" type="button" onclick="queryPointsAdminRecords()">查询记录</button>
+                    </div>
                     <div id="points-admin-query-summary" style="display:none; margin-top:12px; padding:12px 14px; border-radius:12px; border:1px solid rgba(250,204,21,0.25); background:rgba(250,204,21,0.06);">
                         <div style="font-size:12px; font-weight:800; color:rgba(250,204,21,0.95); margin-bottom:8px;">查询结果汇总</div>
                         <div style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px; font-size:13px; color:rgba(226,232,240,0.92);">
@@ -8507,12 +8823,13 @@
                             <div>涉及人数：<span id="points-admin-sum-people" style="font-weight:800;">0</span></div>
                         </div>
                     </div>
-                </div>
+                </section>
 
                 <!-- 积分记录 -->
                 <div id="points-records-card" style="padding:16px; border-radius:16px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);">
                     <h4 id="points-records-title" style="margin:0 0 12px 0; font-size:14px; font-weight:700; color:rgba(226,232,240,0.9);">积分记录</h4>
                     <div id="points-records-list"></div>
+                </div>
                 </div>
             </div>
 
@@ -9677,7 +9994,7 @@
                             <h2>员工管理</h2>
                             <p class="emp-subtitle rep-page-head__sub">统一管理员工信息、账号权限与组织结构</p>
                         </div>
-                        <div class="rep-page-head__actions emp-actions">
+                        <div class="rep-page-head__actions">
                             <button class="btn btn-secondary" onclick="publishExamAssignment()" id="btn-training-batch-assign" style="display:none;"><i>🎯</i> 培训批量安排</button>
                             <button class="btn" onclick="showAddEmployeeModal()" id="add-emp-btn"><i>➕</i> 新增员工</button>
                             <button class="btn" onclick="showBatchImportModal()" id="batch-import-btn"><i>📥</i> 批量导入</button>
@@ -10154,7 +10471,7 @@
                     <header class="dc-hero">
                         <div>
                             <p class="dc-eyebrow">Operations</p>
-                            <h2>数据中心</h2>
+                            <h2 id="dc-hero-title">数据中心</h2>
                             <div id="dc-subtitle">活动、绩效、同步与健康状态总览。配置与审计请使用 Agent 控制台。</div>
                         </div>
                         <button type="button" class="dc-btn-refresh" onclick="loadDataCenterDashboard()">刷新</button>
@@ -11349,8 +11666,8 @@
             </div>
 
             <!-- 休假申请弹窗 -->
-            <div id="leave-apply-modal" class="modal ui-modal">
-                <div class="modal-content" style="max-width: 480px;">
+            <div id="leave-apply-modal" class="modal ui-modal leave-modal-rep">
+                <div class="modal-content">
                     <div class="modal-header">
                         <div>
                             <h3 class="ui-modal-title">休假申请</h3>
@@ -11358,7 +11675,7 @@
                         </div>
                         <button class="modal-close" onclick="closeLeaveApplyModal()">×</button>
                     </div>
-                    <div class="modal-body" style="padding: 20px;">
+                    <div class="modal-body">
                         <div class="form-group">
                             <label class="form-label">休假类型 <span style="color:#ef4444;">*</span></label>
                             <select id="leave-type" class="form-input" style="-webkit-appearance: menulist; appearance: menulist;">
@@ -11374,7 +11691,7 @@
                             <span style="font-weight:700; color:rgba(226,232,240,0.9);">我的结余假期：</span>
                             <span id="leave-balance-value" style="color:#60a5fa; font-weight:700;">计算中...</span>
                         </div>
-                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                        <div class="leave-date-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap: 14px;">
                             <div class="form-group" style="margin-bottom:0;">
                                 <label class="form-label">开始日期 <span style="color:#ef4444;">*</span></label>
                                 <input id="leave-start-date" type="date" class="form-input" />
@@ -11384,7 +11701,7 @@
                                 <input id="leave-end-date" type="date" class="form-input" />
                             </div>
                         </div>
-                        <div class="form-group" style="margin-top: 14px;">
+                        <div class="form-group" style="margin-top: 10px;">
                             <label class="form-label">申请理由 <span style="color:#ef4444;">*</span></label>
                             <textarea id="leave-reason" class="form-input" rows="4" placeholder="请简要说明休假原因..." oninput="try{document.getElementById('leave-reason-count').textContent=this.value.length}catch(e){}"></textarea>
                             <div style="text-align: right; font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 4px;">
@@ -11393,7 +11710,7 @@
                         </div>
                         <!-- 天数字段已移至审批环节由总部人事核实填写 -->
                     </div>
-                    <div style="display:flex; justify-content:flex-end; gap:10px; padding: 14px 20px; border-top: 1px solid rgba(255,255,255,0.08);">
+                    <div class="leave-modal-rep__footer" style="display:flex; justify-content:flex-end; gap:10px; padding: 12px 16px 14px; border-top: 1px solid rgba(255,255,255,0.08);">
                         <button class="btn btn-secondary" type="button" onclick="closeLeaveApplyModal()">取消</button>
                         <button class="btn" type="button" onclick="submitLeaveApplication()">提交申请</button>
                     </div>
@@ -15636,7 +15953,7 @@ th { background: #f5f5f5; font-weight: 700; }
             const r = String(role || '').trim();
             if (r === ROLES.ADMIN) return ['profile', 'daily-report', 'reports', 'agents'];
             if (r === ROLES.STORE_MANAGER) return ['profile', 'attendance', 'daily-report', 'payment'];
-            if (r === ROLES.PRODUCTION_MANAGER) return ['profile', 'attendance', 'rewards', 'agents'];
+            if (r === ROLES.PRODUCTION_MANAGER) return ['profile', 'attendance', 'agents', 'rewards'];
             if (r === ROLES.HQ_MANAGER) return ['profile', 'daily-report', 'approvals', 'reports'];
             if (r === ROLES.HR_MANAGER) return ['profile', 'attendance', 'approvals', 'reports'];
             if (r === ROLES.CASHIER) return ['profile', 'attendance', 'payment', 'exam'];
@@ -15905,6 +16222,17 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                     if (nav) nav.style.display = canAccessModulePage(page) ? '' : 'none';
                 });
 
+            try {
+                const agentsNavLink = document.querySelector('.nav-item[data-page="agents"] .nav-link');
+                if (agentsNavLink && canAccessModulePage('agents')) {
+                    if (String(currentUser?.role || '').trim() === ROLES.ADMIN) {
+                        agentsNavLink.innerHTML = '<i>📊</i> <span>数据中心</span>';
+                    } else {
+                        agentsNavLink.innerHTML = '<i>📦</i> <span>智能助手</span>';
+                    }
+                }
+            } catch (e) {}
+
             const settingsNav = document.querySelector('.nav-item[data-page="settings"]');
             if (settingsNav) settingsNav.style.display = isAdminUser() ? '' : 'none';
 
@@ -16004,7 +16332,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             }
 
             if (pageName === 'rewards') {
-                const canAccess = currentUser && (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.HQ_MANAGER || currentUser.role === ROLES.STORE_MANAGER || currentUser.role === ROLES.HR_MANAGER);
+                const canAccess = currentUser && (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.HQ_MANAGER || currentUser.role === ROLES.STORE_MANAGER || currentUser.role === ROLES.HR_MANAGER || currentUser.role === ROLES.PRODUCTION_MANAGER);
                 if (!canAccess) {
                     showNotification('您没有奖罚管理权限', 'warning');
                     pageName = getHomePageName();
@@ -18903,7 +19231,27 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             })();
         }
 
+        function hrmsApplyAgentsHeroCopy() {
+            try {
+                const h2 = document.getElementById('dc-hero-title');
+                const sub = document.getElementById('dc-subtitle');
+                const eyebrow = document.querySelector('#agents-page .dc-eyebrow');
+                const r = String(currentUser?.role || '').trim();
+                if (!h2) return;
+                if (r === ROLES.ADMIN) {
+                    if (eyebrow) eyebrow.textContent = 'Operations';
+                    h2.textContent = '数据中心';
+                    if (sub) sub.textContent = '活动、绩效、同步与健康状态总览。配置与审计请使用 Agent 控制台。';
+                } else {
+                    if (eyebrow) eyebrow.textContent = 'Assistant';
+                    h2.textContent = '智能助手';
+                    if (sub) sub.textContent = '门店协同、标准执行与运营问题的智能支持入口。';
+                }
+            } catch (e) {}
+        }
+
         function loadAgentsData() {
+            hrmsApplyAgentsHeroCopy();
             const role = String(currentUser?.role || '').trim();
             const canManageAgents = !!currentUser && (role === ROLES.ADMIN || role === ROLES.HQ_MANAGER || role === ROLES.HR_MANAGER || role.startsWith('custom_'));
             const btnMain = document.getElementById('btn-agents-config-main');
@@ -28258,11 +28606,11 @@ ${knowledgeContent.slice(0, 30000)}`;
                         ? String(currentUser.store || '当前门店')
                         : (storesSet.length ? storesSet.join('、') : '全部门店');
                     summaryEl.innerHTML = `
-                        <div style="display:flex; flex-wrap:wrap; gap:10px 14px;">
-                            <span>🏬 <b>${escapeHtml(baseStoreLabel)}</b></span>
-                            <span>👥 在职员工 <b>${activeFiltered.length}</b> 人（筛选前在职 ${beforeFilterActiveCount} 人）</span>
-                            <span>🍽️ 前厅 <b>${frontCount}</b> 人</span>
-                            <span>👨‍🍳 后厨 <b>${kitchenCount}</b> 人</span>
+                        <div class="emp-summary-strip">
+                            <span><span class="emp-sum-k">范围</span><span class="emp-sum-v">${escapeHtml(baseStoreLabel)}</span></span>
+                            <span><span class="emp-sum-k">在职</span><span class="emp-sum-v">${activeFiltered.length}</span><span style="opacity:.55;font-weight:500;"> / 筛选前 ${beforeFilterActiveCount}</span></span>
+                            <span><span class="emp-sum-k">前厅</span><span class="emp-sum-v">${frontCount}</span></span>
+                            <span><span class="emp-sum-k">后厨</span><span class="emp-sum-v">${kitchenCount}</span></span>
                         </div>
                     `;
                 }
@@ -28289,7 +28637,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             };
             
             if (filtered.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#888;padding:40px;">暂无员工数据</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#888;padding:40px;">暂无员工数据</td></tr>';
                 try {
                     if (cardsEl) {
                         cardsEl.innerHTML = '<div style="text-align:center;color:rgba(200,215,230,0.72);padding:28px 12px;">暂无员工数据</div>';
@@ -28431,8 +28779,8 @@ ${knowledgeContent.slice(0, 30000)}`;
                         const click = `try{this.classList.toggle('expanded')}catch(e){}`;
                         const actions = `
                             <button class="btn btn-secondary" type="button" onclick="try{event.stopPropagation();}catch(e){};viewEmployee('${escapeJsString(empKey)}');">查看</button>
-                            ${isAdminUser() ? `<button class="btn" type="button" onclick="try{event.stopPropagation();}catch(e){};editEmployee('${escapeJsString(empKey)}');">编辑</button>` : ''}
-                            ${isAdminUser() ? `<button class="btn btn-secondary" type="button" style="color:#ef4444;" onclick="try{event.stopPropagation();}catch(e){};deleteEmployee('${escapeJsString(empKey)}');">删除</button>` : ''}
+                            ${isAdminUser() ? `<button class="btn btn-secondary" type="button" onclick="try{event.stopPropagation();}catch(e){};editEmployee('${escapeJsString(empKey)}');">编辑</button>` : ''}
+                            ${isAdminUser() ? `<button class="btn btn-secondary" type="button" style="color:#fca5a5;border-color:rgba(248,113,113,0.35);" onclick="try{event.stopPropagation();}catch(e){};deleteEmployee('${escapeJsString(empKey)}');">删除</button>` : ''}
                         `;
 
                         const stCls = emp.status === 'active' ? 'st-active' : (emp.status === 'inactive' ? 'st-inactive' : 'st-pending');
@@ -28442,13 +28790,8 @@ ${knowledgeContent.slice(0, 30000)}`;
                                     <div class="emp-card-name">${escapeHtml(name)}${newBadge}${coreTalentBadge}</div>
                                     <div class="emp-card-status ${stCls}">${escapeHtml(statusBadge)}</div>
                                 </div>
-                                <div class="emp-card-grid">
-                                    <div class="emp-card-item"><div class="k">门店</div><div class="v">${escapeHtml(store)}</div></div>
-                                    <div class="emp-card-item"><div class="k">岗位</div><div class="v">${escapeHtml(pos)}</div></div>
-                                    <div class="emp-card-item"><div class="k">工龄</div><div class="v">${escapeHtml(tenure)}</div></div>
-                                    <div class="emp-card-item"><div class="k">电话</div><div class="v">${escapeHtml(phone)}</div></div>
-                                </div>
-                                <div class="emp-card-actions">${actions}</div>
+                                <div class="emp-card-compact-meta">${escapeHtml(store)}<span class="emp-meta-sep">·</span>${escapeHtml(pos)}<span class="emp-meta-sep">·</span>${escapeHtml(tenure)}<span class="emp-meta-sep">·</span>${escapeHtml(phone)}</div>
+                                <div class="emp-card-actions emp-card-actions--tight">${actions}</div>
                                 <div class="emp-card-more">
                                     <div class="emp-card-grid">
                                         <div class="emp-card-item"><div class="k">性别</div><div class="v">${escapeHtml(gender)}</div></div>
@@ -36968,7 +37311,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                     };
                 });
             } catch (e) {
-                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#ef4444;padding:40px;">加载失败：' + escapeHtml(String(e?.message || e)) + '</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#ef4444;padding:40px;">加载失败：' + escapeHtml(String(e?.message || e)) + '</td></tr>';
                 if (cardsEl) cardsEl.innerHTML = '';
                 return;
             }
@@ -36984,7 +37327,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             } catch (e) {}
             
             if (rewards.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#888;padding:40px;">暂无奖惩记录</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#888;padding:40px;">暂无奖惩记录</td></tr>';
                 try {
                     if (cardsEl) {
                         cardsEl.innerHTML = '<div style="text-align:center;color:rgba(200,215,230,0.72);padding:28px 12px;">暂无奖惩记录</div>';
@@ -36997,17 +37340,19 @@ ${knowledgeContent.slice(0, 30000)}`;
                 const rewardTotal = rewards.filter(r => Number(r?.amount || 0) > 0).reduce((s, r) => s + Number(r?.amount || 0), 0);
                 const punishTotal = rewards.filter(r => Number(r?.amount || 0) < 0).reduce((s, r) => s + Math.abs(Number(r?.amount || 0)), 0);
                 cardsEl.innerHTML = `
-                    <div class="rw-card" style="background: rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.2);">
-                        <div class="label">奖励合计</div>
-                        <div class="value" style="color:#22c55e;">¥${rewardTotal.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                    </div>
-                    <div class="rw-card" style="background: rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2);">
-                        <div class="label">处罚合计</div>
-                        <div class="value" style="color:#ef4444;">¥${punishTotal.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                    </div>
-                    <div class="rw-card" style="background: rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.2);">
-                        <div class="label">记录总数</div>
-                        <div class="value" style="color:#60a5fa;">${rewards.length}</div>
+                    <div class="rw-summary-grid">
+                        <div class="rw-sum-chip rw-sum-chip--reward">
+                            <div class="rw-sum-k">奖励合计</div>
+                            <div class="rw-sum-v" style="color:#86efac;">¥${rewardTotal.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                        </div>
+                        <div class="rw-sum-chip rw-sum-chip--punish">
+                            <div class="rw-sum-k">处罚合计</div>
+                            <div class="rw-sum-v" style="color:#fca5a5;">¥${punishTotal.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                        </div>
+                        <div class="rw-sum-chip rw-sum-chip--total">
+                            <div class="rw-sum-k">记录数</div>
+                            <div class="rw-sum-v" style="color:#93c5fd;">${rewards.length}</div>
+                        </div>
                     </div>
                 `;
             }
@@ -37016,27 +37361,30 @@ ${knowledgeContent.slice(0, 30000)}`;
             const empMap = new Map(employees.map(e => [e.username, e.name]));
 
             tbody.innerHTML = rewards.map(r => {
-                const typeLabel = r.type === 'reward' ? 
-                    '<span style="color:#22c55e;">奖励</span>' : 
-                    '<span style="color:#ef4444;">惩罚</span>';
+                const typeLabel = r.type === 'reward'
+                    ? '<span style="color:#86efac;font-weight:800;">奖励</span>'
+                    : '<span style="color:#fca5a5;font-weight:800;">处罚</span>';
                 const empName = empMap.get(r.employee) || r.employee;
-                const amountColor = r.amount >= 0 ? '#22c55e' : '#ef4444';
+                const amountColor = r.amount >= 0 ? '#86efac' : '#fca5a5';
                 const amountText = r.amount >= 0 ? `+${r.amount}` : `${r.amount}`;
                 const statusRaw = String(r?.status || 'pending').trim();
                 const statusText = statusRaw === 'approved' ? '已通过' : (statusRaw === 'rejected' ? '已拒绝' : (statusRaw === 'paid' ? '已生效' : '审批中'));
-                const statusColor = statusRaw === 'approved' || statusRaw === 'paid' ? '#22c55e' : (statusRaw === 'rejected' ? '#ef4444' : '#f59e0b');
+                const stCls = statusRaw === 'approved' || statusRaw === 'paid' ? 'rw-st--ok' : (statusRaw === 'rejected' ? 'rw-st--bad' : 'rw-st--pend');
+                const rid = String(r.id || '');
+                const idShort = rid.length > 14 ? rid.slice(0, 12) + '…' : rid;
+                const reasonShort = String(r.reason || '').length > 16 ? String(r.reason).slice(0, 14) + '…' : String(r.reason || '');
                 
                 return `<tr>
-                    <td>${escapeHtml(r.id || '')}<div><button type="button" style="margin-top:4px; background:none; border:none; color:#60a5fa; text-decoration:underline; cursor:pointer; padding:0; font-size:12px;" onclick="openApprovalDetailModal('${escapeHtml(r.id || '')}')">查看详情</button></div></td>
+                    <td><span class="rw-id">${escapeHtml(idShort)}</span><button type="button" class="btn btn-secondary rw-mini-btn" onclick="openApprovalDetailModal('${escapeJsString(rid)}')">详情</button></td>
                     <td>${typeLabel}</td>
                     <td>${escapeHtml(empName)}</td>
                     <td>${escapeHtml(r.store || '-')}</td>
-                    <td>${escapeHtml(r.reason || '')}</td>
+                    <td title="${escapeHtml(r.reason || '')}">${escapeHtml(reasonShort || '-')}</td>
                     <td>${escapeHtml(r.result || '-')}</td>
-                    <td style="color:${amountColor};font-weight:600;">${amountText}</td>
-                    <td><span style="color:${statusColor};font-weight:700;">${statusText}</span></td>
-                    <td>${r.createdAt ? r.createdAt.slice(0, 10) : '-'}</td>
-                    <td><button class="btn" style="padding:4px 10px;font-size:12px;" onclick="openApprovalDetailModal('${escapeHtml(r.id || '')}')">查看</button></td>
+                    <td style="color:${amountColor};font-weight:700;font-family:ui-monospace,monospace;">${amountText}</td>
+                    <td><span class="rw-st ${stCls}">${statusText}</span></td>
+                    <td style="font-family:ui-monospace,monospace;">${r.createdAt ? r.createdAt.slice(0, 10) : '-'}</td>
+                    <td><button class="btn btn-secondary rw-mini-btn" type="button" onclick="openApprovalDetailModal('${escapeJsString(rid)}')">查看</button></td>
                 </tr>`;
             }).join('');
         }
@@ -38048,8 +38396,8 @@ ${knowledgeContent.slice(0, 30000)}`;
                 { icon:'💎', label:'员工积分', page:'points' },
                 { icon:'⏰', label:'考勤打卡', page:'attendance' },
                 { icon:'📊', label:'分析报表', page:'reports', roles:['admin','hr_manager','hq_manager','store_manager'] },
-                // 智能助手：管理员/总部营运/店长/出品经理 使用内置 agents 模块，而不是旧版 forecast.html
-                { icon:'📦', label:'智能助手', page:'agents', roles:['admin','hq_manager','store_manager','store_production_manager'] },
+                // 智能助手：非管理员的店长/出品经理/总部营运（管理员走「数据中心」入口）
+                { icon:'📦', label:'智能助手', page:'agents', roles:['hq_manager','store_manager','store_production_manager'] },
                 { icon:'⚙️', label:'系统设置', page:'settings', roles:['admin'] },
             ];
             const role = currentUser?.role || '';
@@ -38182,7 +38530,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 profile: { icon: '👤', label: '档案' },
                 attendance: { icon: '👤', label: '打卡' },
                 knowledge: { icon: '📚', label: '知识库' },
-                agents: { icon: '📊', label: '数据' },
+                agents: { icon: '📦', label: '智能助手' },
                 exam: { icon: '📝', label: '考试' },
                 'daily-report': { icon: '📒', label: '日报' },
                 payment: { icon: '💰', label: '请款' },
@@ -38205,7 +38553,10 @@ ${knowledgeContent.slice(0, 30000)}`;
             slots.forEach((slot, idx) => {
                 if (!slot) return;
                 const page = roleMenu[idx] || 'dashboard';
-                const meta = pageMeta[page] || pageMeta.dashboard;
+                let meta = pageMeta[page] || pageMeta.dashboard;
+                if (page === 'agents' && role === ROLES.ADMIN) {
+                    meta = { icon: '📊', label: '数据中心' };
+                }
                 slot.dataset.page = page;
                 const iconEl = slot.querySelector('.mobile-nav-icon');
                 const labelEl = slot.querySelector('.mobile-nav-label');
@@ -38238,7 +38589,9 @@ ${knowledgeContent.slice(0, 30000)}`;
                     'daily-report': 'daily-report',
                     'reports': 'reports',
                     'employees': 'employees',
-                    'profile': 'profile'
+                    'profile': 'profile',
+                    'rewards': 'rewards',
+                    'points': 'points'
                 };
                 
                 const mobilePage = pageMap[pageId];

@@ -3767,11 +3767,11 @@
         }
 
         #employees-page .emp-card {
-            border-radius: 14px;
-            border: 1px solid rgba(255,255,255,0.06);
-            background: rgba(255,255,255,0.03);
-            padding: 14px 16px;
-            margin: 8px 10px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255, 255, 255, 0.035);
+            padding: 10px 12px;
+            margin: 6px 0;
             cursor: pointer;
             user-select: none;
             -webkit-tap-highlight-color: transparent;
@@ -3820,10 +3820,10 @@
         }
 
         #employees-page .emp-card-grid {
-            margin-top: 12px;
+            margin-top: 8px;
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 10px 16px;
+            gap: 6px 10px;
         }
 
         #employees-page .emp-card-item {
@@ -3849,20 +3849,21 @@
         }
 
         #employees-page .emp-card-actions {
-            margin-top: 14px;
-            padding-top: 12px;
-            border-top: 1px solid rgba(255,255,255,0.05);
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255,255,255,0.06);
             display: flex;
-            gap: 8px;
+            gap: 6px;
             justify-content: flex-end;
+            flex-wrap: wrap;
         }
 
         #employees-page .emp-card-actions .btn,
         #employees-page .emp-card-actions .btn-secondary {
-            padding: 7px 16px;
-            font-size: 13px;
-            font-weight: 500;
-            border-radius: 8px;
+            padding: 5px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 9px;
         }
 
         #employees-page .emp-card-more {
@@ -3874,6 +3875,253 @@
 
         #employees-page .emp-card.expanded .emp-card-more {
             display: block;
+        }
+
+        /* 员工管理：表头操作区对齐（避免按钮散乱） */
+        #employees-page .rep-page-head {
+            align-items: flex-start;
+        }
+
+        @media (min-width: 769px) {
+            #employees-page .rep-page-head__actions {
+                flex-shrink: 0;
+                max-width: min(420px, 52vw);
+                justify-content: flex-end;
+            }
+        }
+
+        @media (max-width: 768px) {
+            #employees-page .rep-page-head {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 10px;
+            }
+
+            #employees-page .rep-page-head__actions {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 8px;
+                width: 100%;
+                justify-content: stretch;
+            }
+
+            #employees-page .rep-page-head__actions .btn,
+            #employees-page .rep-page-head__actions .btn-secondary {
+                width: 100%;
+                box-sizing: border-box;
+                justify-content: center;
+                padding: 9px 10px;
+                font-size: 12px;
+            }
+
+            #employees-page #btn-training-batch-assign {
+                grid-column: 1 / -1;
+            }
+        }
+
+        #employees-page .emp-summary-strip {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 14px;
+            align-items: baseline;
+            font-size: 12px;
+            line-height: 1.45;
+            color: rgba(186, 198, 215, 0.88);
+        }
+
+        #employees-page .emp-summary-strip .emp-sum-k {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: rgba(186, 198, 215, 0.55);
+            margin-right: 4px;
+        }
+
+        #employees-page .emp-summary-strip .emp-sum-v {
+            font-weight: 700;
+            font-family: var(--rep-mono, ui-monospace, monospace);
+            color: rgba(233, 238, 246, 0.95);
+        }
+
+        #employees-page .emp-card-compact-meta {
+            font-size: 11px;
+            line-height: 1.4;
+            color: rgba(186, 198, 215, 0.78);
+            font-family: var(--rep-mono, ui-monospace, monospace);
+            margin-top: 2px;
+            word-break: break-all;
+        }
+
+        #employees-page .emp-card-compact-meta .emp-meta-sep {
+            opacity: 0.35;
+            margin: 0 5px;
+        }
+
+        #employees-page .emp-card-actions--tight .btn,
+        #employees-page .emp-card-actions--tight .btn-secondary {
+            padding: 5px 10px !important;
+            font-size: 11px !important;
+            font-weight: 600;
+            border-radius: 9px;
+        }
+
+        #employees-page .emp-card-actions--tight .btn:not(.btn-secondary) {
+            background: rgba(255, 255, 255, 0.06) !important;
+            border: 1px solid rgba(212, 175, 55, 0.35) !important;
+            color: #e8d48b !important;
+        }
+
+        #rewards-page .rw-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            margin: 0 0 12px;
+        }
+
+        #rewards-page .rw-sum-chip {
+            border-radius: 12px;
+            padding: 8px 8px 9px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.22);
+        }
+
+        #rewards-page .rw-sum-chip--reward {
+            border-color: rgba(74, 222, 128, 0.35);
+            background: linear-gradient(160deg, rgba(34, 197, 94, 0.12), rgba(0, 0, 0, 0.2));
+        }
+
+        #rewards-page .rw-sum-chip--punish {
+            border-color: rgba(248, 113, 113, 0.35);
+            background: linear-gradient(160deg, rgba(239, 68, 68, 0.12), rgba(0, 0, 0, 0.2));
+        }
+
+        #rewards-page .rw-sum-chip--total {
+            border-color: rgba(96, 165, 250, 0.35);
+            background: linear-gradient(160deg, rgba(59, 130, 246, 0.12), rgba(0, 0, 0, 0.2));
+        }
+
+        #rewards-page .rw-sum-chip .rw-sum-k {
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            color: rgba(186, 198, 215, 0.62);
+        }
+
+        #rewards-page .rw-sum-chip .rw-sum-v {
+            margin-top: 4px;
+            font-size: 14px;
+            font-weight: 800;
+            font-family: var(--rep-mono, ui-monospace, monospace);
+        }
+
+        #rewards-page .rep-table-shell .data-table th,
+        #rewards-page .rep-table-shell .data-table td {
+            padding: 8px 10px;
+            font-size: 12px;
+            vertical-align: middle;
+        }
+
+        #rewards-page .rw-id {
+            font-family: var(--rep-mono, ui-monospace, monospace);
+            font-size: 11px;
+            color: rgba(186, 198, 215, 0.85);
+        }
+
+        #rewards-page .rw-mini-btn {
+            margin-left: 6px;
+            padding: 3px 8px !important;
+            font-size: 11px !important;
+        }
+
+        #rewards-page .rw-st {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+        }
+
+        #rewards-page .rw-st--ok {
+            color: #86efac;
+            background: rgba(34, 197, 94, 0.14);
+            border: 1px solid rgba(74, 222, 128, 0.35);
+        }
+
+        #rewards-page .rw-st--bad {
+            color: #fca5a5;
+            background: rgba(239, 68, 68, 0.12);
+            border: 1px solid rgba(248, 113, 113, 0.35);
+        }
+
+        #rewards-page .rw-st--pend {
+            color: #fde68a;
+            background: rgba(245, 158, 11, 0.12);
+            border: 1px solid rgba(251, 191, 36, 0.35);
+        }
+
+        #leave-apply-modal.leave-modal-rep .modal-content {
+            max-width: 420px;
+            border-radius: 18px;
+            border: 1px solid rgba(212, 175, 55, 0.2);
+            background: linear-gradient(165deg, rgba(18, 26, 38, 0.98), rgba(8, 11, 18, 0.99));
+            box-shadow: 0 28px 56px -24px rgba(0, 0, 0, 0.65);
+        }
+
+        #leave-apply-modal.leave-modal-rep .modal-header {
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        #leave-apply-modal.leave-modal-rep .ui-modal-title {
+            letter-spacing: 0.04em;
+        }
+
+        #leave-apply-modal.leave-modal-rep .ui-modal-desc {
+            font-size: 12px;
+            line-height: 1.45;
+            color: rgba(186, 198, 215, 0.65);
+        }
+
+        #leave-apply-modal.leave-modal-rep .modal-body {
+            padding: 14px 16px 16px !important;
+        }
+
+        #leave-apply-modal.leave-modal-rep .form-group {
+            margin-bottom: 10px;
+        }
+
+        #leave-apply-modal.leave-modal-rep .form-label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: rgba(186, 198, 215, 0.62) !important;
+        }
+
+        #leave-apply-modal.leave-modal-rep .form-input,
+        #leave-apply-modal.leave-modal-rep select.form-input {
+            border-radius: 11px !important;
+            background: rgba(0, 0, 0, 0.35) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            padding: 10px 12px !important;
+            color: rgba(233, 238, 246, 0.95) !important;
+            color-scheme: dark;
+        }
+
+        #leave-apply-modal.leave-modal-rep #leave-balance-box {
+            border-radius: 12px !important;
+            padding: 9px 12px !important;
+            margin-bottom: 10px !important;
+            font-size: 11px !important;
+            line-height: 1.5 !important;
+        }
+
+        #leave-apply-modal.leave-modal-rep .leave-date-grid {
+            gap: 10px !important;
         }
 
         #rewards-page .rw-cards {
@@ -6765,6 +7013,31 @@
             font-size: 12px;
         }
 
+        @media (max-width: 768px) {
+            #employees-page .rep-page-head__actions {
+                display: grid !important;
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 8px !important;
+                width: 100% !important;
+                justify-content: stretch !important;
+                flex-wrap: nowrap !important;
+                align-items: stretch !important;
+            }
+
+            #employees-page .rep-page-head__actions .btn,
+            #employees-page .rep-page-head__actions .btn-secondary {
+                width: 100%;
+                box-sizing: border-box;
+                justify-content: center;
+                padding: 9px 10px;
+                font-size: 12px;
+            }
+
+            #employees-page #btn-training-batch-assign {
+                grid-column: 1 / -1;
+            }
+        }
+
         #profile-page .card,
         #attendance-page .card {
             background: var(--rep-surface);
@@ -9028,7 +9301,8 @@
                             <h2>员工管理</h2>
                             <p class="emp-subtitle rep-page-head__sub">统一管理员工信息、账号权限与组织结构</p>
                         </div>
-                        <div class="rep-page-head__actions emp-actions">
+                        <div class="rep-page-head__actions">
+                            <button class="btn btn-secondary" onclick="publishExamAssignment()" id="btn-training-batch-assign" style="display:none;"><i>🎯</i> 培训批量安排</button>
                             <button class="btn" onclick="showAddEmployeeModal()" id="add-emp-btn"><i>➕</i> 新增员工</button>
                             <button class="btn" onclick="showBatchImportModal()" id="batch-import-btn"><i>📥</i> 批量导入</button>
                             <button class="btn btn-secondary" onclick="downloadEmployeeImportTemplate()" id="emp-import-template-btn"><i>⬇️</i> 模板</button>
@@ -9039,9 +9313,63 @@
                     <div class="emp-toolbar">
                         <div class="emp-search">
                             <span style="color: rgba(255,255,255,0.45);">🔎</span>
-                            <input type="text" placeholder="搜索姓名、账号、门店、岗位..." oninput="searchEmployees(this.value)" onkeyup="searchEmployees(this.value)">
+                            <input id="employee-search-input" type="text" placeholder="搜索姓名、账号、门店、岗位..." oninput="searchEmployees(this.value)" onkeyup="searchEmployees(this.value)">
                         </div>
                     </div>
+
+                    <div id="emp-summary-view">
+                        员工统计加载中...
+                    </div>
+
+                    <section class="rep-filters emp-filters-surface" aria-label="员工筛选">
+                        <div class="rep-filters__head">
+                            <div class="rep-filters__eyebrow">FILTERS</div>
+                            <div class="rep-filters__title">条件筛选</div>
+                            <p class="rep-filters__hint">按门店、岗位、性别、年龄与工龄组合筛选；与报表页相同的检索面板样式。</p>
+                        </div>
+                        <div class="rep-filters__grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));">
+                            <div class="rep-field">
+                                <label for="emp-filter-store">门店</label>
+                                <select id="emp-filter-store" onchange="applyEmployeeFilters()">
+                                    <option value="">全部门店</option>
+                                </select>
+                            </div>
+                            <div class="rep-field">
+                                <label for="emp-filter-position">岗位</label>
+                                <select id="emp-filter-position" onchange="applyEmployeeFilters()">
+                                    <option value="">全部岗位</option>
+                                </select>
+                            </div>
+                            <div class="rep-field">
+                                <label for="emp-filter-gender">性别</label>
+                                <select id="emp-filter-gender" onchange="applyEmployeeFilters()">
+                                    <option value="">全部性别</option>
+                                    <option value="男">男</option>
+                                    <option value="女">女</option>
+                                </select>
+                            </div>
+                            <div class="rep-field">
+                                <label for="emp-filter-age">年龄段</label>
+                                <select id="emp-filter-age" onchange="applyEmployeeFilters()">
+                                    <option value="">全部年龄段</option>
+                                    <option value="lt25">25岁以下</option>
+                                    <option value="25to30">25-30岁</option>
+                                    <option value="31to40">31-40岁</option>
+                                    <option value="gt40">40岁以上</option>
+                                </select>
+                            </div>
+                            <div class="rep-field">
+                                <label for="emp-filter-tenure">工龄</label>
+                                <select id="emp-filter-tenure" onchange="applyEmployeeFilters()">
+                                    <option value="">全部工龄</option>
+                                    <option value="lt1">1年以下</option>
+                                    <option value="1to3">1-3年</option>
+                                    <option value="3to5">3-5年</option>
+                                    <option value="gt5">5年以上</option>
+                                </select>
+                            </div>
+                        </div>
+                    </section>
 
                     <div class="emp-table-card">
                         <div class="emp-table-head">
@@ -10121,8 +10449,8 @@
             </div>
 
             <!-- 休假申请弹窗 -->
-            <div id="leave-apply-modal" class="modal ui-modal">
-                <div class="modal-content" style="max-width: 480px;">
+            <div id="leave-apply-modal" class="modal ui-modal leave-modal-rep">
+                <div class="modal-content">
                     <div class="modal-header">
                         <div>
                             <h3 class="ui-modal-title">休假申请</h3>
@@ -10130,7 +10458,7 @@
                         </div>
                         <button class="modal-close" onclick="closeLeaveApplyModal()">×</button>
                     </div>
-                    <div class="modal-body" style="padding: 20px;">
+                    <div class="modal-body">
                         <div class="form-group">
                             <label class="form-label">休假类型 <span style="color:#ef4444;">*</span></label>
                             <select id="leave-type" class="form-input" style="-webkit-appearance: menulist; appearance: menulist;">
@@ -10146,7 +10474,7 @@
                             <span style="font-weight:700; color:rgba(226,232,240,0.9);">我的结余假期：</span>
                             <span id="leave-balance-value" style="color:#60a5fa; font-weight:700;">计算中...</span>
                         </div>
-                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                        <div class="leave-date-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap: 14px;">
                             <div class="form-group" style="margin-bottom:0;">
                                 <label class="form-label">开始日期 <span style="color:#ef4444;">*</span></label>
                                 <input id="leave-start-date" type="date" class="form-input" />
@@ -10156,16 +10484,16 @@
                                 <input id="leave-end-date" type="date" class="form-input" />
                             </div>
                         </div>
-                        <div class="form-group" style="margin-top: 14px;">
-                            <label class="form-label">申请理由 <span style="color:#ef4444;">*</span> <span style="color: rgba(200, 215, 230, 0.62); font-size: 12px;">（不少于50字）</span></label>
-                            <textarea id="leave-reason" class="form-input" rows="4" placeholder="请详细说明休假原因，不少于50字..." oninput="try{document.getElementById('leave-reason-count').textContent=this.value.length}catch(e){}"></textarea>
+                        <div class="form-group" style="margin-top: 10px;">
+                            <label class="form-label">申请理由 <span style="color:#ef4444;">*</span></label>
+                            <textarea id="leave-reason" class="form-input" rows="4" placeholder="请简要说明休假原因..." oninput="try{document.getElementById('leave-reason-count').textContent=this.value.length}catch(e){}"></textarea>
                             <div style="text-align: right; font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 4px;">
                                 已输入 <span id="leave-reason-count">0</span> 字
                             </div>
                         </div>
-                        <!-- 天数字段已移至审批环节由直属上级填写 -->
+                        <!-- 天数字段已移至审批环节由总部人事核实填写 -->
                     </div>
-                    <div style="display:flex; justify-content:flex-end; gap:10px; padding: 14px 20px; border-top: 1px solid rgba(255,255,255,0.08);">
+                    <div class="leave-modal-rep__footer" style="display:flex; justify-content:flex-end; gap:10px; padding: 12px 16px 14px; border-top: 1px solid rgba(255,255,255,0.08);">
                         <button class="btn btn-secondary" type="button" onclick="closeLeaveApplyModal()">取消</button>
                         <button class="btn" type="button" onclick="submitLeaveApplication()">提交申请</button>
                     </div>
@@ -13690,7 +14018,7 @@
             if (paymentNav) paymentNav.style.display = hrmsCanAccessPayments(currentUser?.role) ? '' : 'none';
 
             const rewardsNav = document.querySelector('.nav-item[data-page="rewards"]');
-            const canSeeRewards = currentUser && (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.HQ_MANAGER || currentUser.role === ROLES.STORE_MANAGER || currentUser.role === ROLES.HR_MANAGER);
+            const canSeeRewards = currentUser && (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.HQ_MANAGER || currentUser.role === ROLES.STORE_MANAGER || currentUser.role === ROLES.HR_MANAGER || currentUser.role === ROLES.PRODUCTION_MANAGER);
             if (rewardsNav) rewardsNav.style.display = canSeeRewards ? '' : 'none';
 
             const pointsNav = document.querySelector('.nav-item[data-page="points"]');
@@ -13766,7 +14094,7 @@
             }
 
             if (pageName === 'rewards') {
-                const canAccess = currentUser && (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.HQ_MANAGER || currentUser.role === ROLES.STORE_MANAGER || currentUser.role === ROLES.HR_MANAGER);
+                const canAccess = currentUser && (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.HQ_MANAGER || currentUser.role === ROLES.STORE_MANAGER || currentUser.role === ROLES.HR_MANAGER || currentUser.role === ROLES.PRODUCTION_MANAGER);
                 if (!canAccess) {
                     showNotification('您没有奖罚管理权限', 'warning');
                     pageName = getHomePageName();
@@ -22456,25 +22784,92 @@ ${knowledgeContent.slice(0, 30000)}`;
             return age;
         }
 
+        function empCalcTenureYears(joinDateRaw) {
+            const jd = String(joinDateRaw || '').trim();
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(jd)) return null;
+            const start = new Date(jd + 'T00:00:00');
+            if (!Number.isFinite(start.getTime())) return null;
+            const now = new Date();
+            const years = (now.getTime() - start.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+            return Number.isFinite(years) && years >= 0 ? years : null;
+        }
+
+        function empIsKitchenRole(emp) {
+            const txt = `${String(emp?.position || '')} ${String(emp?.department || '')}`.toLowerCase();
+            return /(后厨|厨房|后堂|后场|出品|厨师|厨工)/.test(txt);
+        }
+
+        function applyEmployeeFilters() {
+            loadEmployeesData();
+        }
+
         function loadEmployeesData() {
             const tbody = document.getElementById('employee-tbody');
             if (!tbody) return;
 
             const cardsEl = document.getElementById('employee-cards');
 
-            const employees = HRMS_STORE.getEmployees() || [];
-            const users = (HRMS_STORE.getUsers ? HRMS_STORE.getUsers() : []) || [];
+            const employeesRaw = HRMS_STORE.getEmployees() || [];
+            const usersRaw = (HRMS_STORE.getUsers ? HRMS_STORE.getUsers() : []) || [];
             const byUsername = new Map();
+            const byUsernameLower = new Map();
             try {
-                (users || []).forEach(u => {
+                (usersRaw || []).forEach(u => {
                     const k = String(u?.username || '').trim();
-                    if (k && !byUsername.has(k)) byUsername.set(k, u);
+                    const kl = k.toLowerCase();
+                    if (!k) return;
+                    if (!byUsernameLower.has(kl)) {
+                        byUsernameLower.set(kl, {
+                            id: String(u?.id || '').trim(),
+                            username: k,
+                            password: String(u?.password || ''),
+                            name: String(u?.name || ''),
+                            role: hrmsNormalizeRoleCode(u?.role),
+                            store: String(u?.store || ''),
+                            managerUsername: String(u?.managerUsername || ''),
+                            position: String(u?.position || ''),
+                            department: String(u?.department || ''),
+                            level: String(u?.level || ''),
+                            salary: u?.salary ?? '',
+                            joinDate: String(u?.joinDate || ''),
+                            phone: String(u?.phone || ''),
+                            email: String(u?.email || ''),
+                            status: String(u?.status || 'active'),
+                            createdAt: String(u?.createdAt || ''),
+                            lastLogin: u?.lastLogin || null
+                        });
+                    }
                 });
-                (employees || []).forEach(u => {
+
+                (employeesRaw || []).forEach(u => {
                     const k = String(u?.username || '').trim();
-                    if (k && !byUsername.has(k)) byUsername.set(k, u);
+                    const kl = k.toLowerCase();
+                    if (!k) return;
+                    const existing = byUsernameLower.get(kl) || {};
+                    byUsernameLower.set(kl, {
+                        ...existing,
+                        ...u,
+                        username: k,
+                        role: hrmsNormalizeRoleCode(u?.role)
+                    });
+                });
+
+                byUsernameLower.forEach((v, kl) => {
+                    const k = String(v?.username || '').trim();
+                    if (!k) return;
+                    byUsername.set(k, v);
+                    byUsername.set(kl, v);
                 });
             } catch (e) {}
+
+            const employees = Array.from(byUsernameLower.values()).filter(e => String(e?.username || '').trim());
+            try {
+                const oldCount = Array.isArray(employeesRaw) ? employeesRaw.filter(e => String(e?.username || '').trim()).length : 0;
+                if (employees.length !== oldCount) {
+                    HRMS_STORE.setEmployees(employees);
+                }
+            } catch (e) {}
+
             const stores = (HRMS_STORE.getStores ? HRMS_STORE.getStores() : []) || [];
             
             // 根据当前用户角色过滤员工
@@ -22511,6 +22906,82 @@ ${knowledgeContent.slice(0, 30000)}`;
                 const bn = String(b?.name || b?.username || '').trim();
                 return an.localeCompare(bn, 'zh-Hans-CN');
             });
+
+            const searchQuery = String(document.getElementById('employee-search-input')?.value || '').trim().toLowerCase();
+            const filterStore = String(document.getElementById('emp-filter-store')?.value || '').trim();
+            const filterPos = String(document.getElementById('emp-filter-position')?.value || '').trim();
+            const filterGender = String(document.getElementById('emp-filter-gender')?.value || '').trim();
+            const filterAge = String(document.getElementById('emp-filter-age')?.value || '').trim();
+            const filterTenure = String(document.getElementById('emp-filter-tenure')?.value || '').trim();
+
+            try {
+                const storeEl = document.getElementById('emp-filter-store');
+                const posEl = document.getElementById('emp-filter-position');
+                if (storeEl) {
+                    const prev = filterStore;
+                    const vals = Array.from(new Set(filtered.map(e => String(e?.store || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+                    storeEl.innerHTML = '<option value="">全部门店</option>' + vals.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+                    if (prev) storeEl.value = prev;
+                }
+                if (posEl) {
+                    const prev = filterPos;
+                    const vals = Array.from(new Set(filtered.map(e => String(e?.position || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+                    posEl.innerHTML = '<option value="">全部岗位</option>' + vals.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+                    if (prev) posEl.value = prev;
+                }
+            } catch (e) {}
+
+            const beforeFilterCount = filtered.length;
+            const beforeFilterActiveCount = filtered.filter(e => !isInactiveEmp(e)).length;
+            filtered = filtered.filter((emp) => {
+                const name = String(emp?.name || '').trim();
+                const username = String(emp?.username || '').trim();
+                const store = String(emp?.store || '').trim();
+                const pos = String(emp?.position || '').trim();
+                const dept = String(emp?.department || '').trim();
+                const gender = String(emp?.gender || '').trim();
+                const salary = String(emp?.salary ?? emp?.wage ?? emp?.baseSalary ?? emp?.monthlySalary ?? emp?.pay ?? '').trim();
+                const joinDateRaw = String(emp?.joinDate || emp?.hireDate || emp?.startDate || emp?.entryDate || emp?.onboardDate || emp?.joiningDate || '').trim();
+                const text = `${name} ${username} ${store} ${pos} ${dept} ${gender} ${salary} ${joinDateRaw}`.toLowerCase();
+                if (searchQuery && !text.includes(searchQuery)) return false;
+                if (filterStore && store !== filterStore) return false;
+                if (filterPos && pos !== filterPos) return false;
+                if (filterGender && gender !== filterGender) return false;
+
+                const age = empCalcAgeFromBirthday(emp?.birthday);
+                if (filterAge === 'lt25' && !(age != null && age < 25)) return false;
+                if (filterAge === '25to30' && !(age != null && age >= 25 && age <= 30)) return false;
+                if (filterAge === '31to40' && !(age != null && age >= 31 && age <= 40)) return false;
+                if (filterAge === 'gt40' && !(age != null && age > 40)) return false;
+
+                const tenureYears = empCalcTenureYears(joinDateRaw);
+                if (filterTenure === 'lt1' && !(tenureYears != null && tenureYears < 1)) return false;
+                if (filterTenure === '1to3' && !(tenureYears != null && tenureYears >= 1 && tenureYears < 3)) return false;
+                if (filterTenure === '3to5' && !(tenureYears != null && tenureYears >= 3 && tenureYears < 5)) return false;
+                if (filterTenure === 'gt5' && !(tenureYears != null && tenureYears >= 5)) return false;
+                return true;
+            });
+
+            try {
+                const summaryEl = document.getElementById('emp-summary-view');
+                if (summaryEl) {
+                    const activeFiltered = filtered.filter(e => !isInactiveEmp(e));
+                    const storesSet = Array.from(new Set(activeFiltered.map(e => String(e?.store || '').trim()).filter(Boolean)));
+                    const kitchenCount = activeFiltered.filter(empIsKitchenRole).length;
+                    const frontCount = Math.max(0, activeFiltered.length - kitchenCount);
+                    const baseStoreLabel = currentUser?.role === ROLES.STORE_MANAGER
+                        ? String(currentUser.store || '当前门店')
+                        : (storesSet.length ? storesSet.join('、') : '全部门店');
+                    summaryEl.innerHTML = `
+                        <div class="emp-summary-strip">
+                            <span><span class="emp-sum-k">范围</span><span class="emp-sum-v">${escapeHtml(baseStoreLabel)}</span></span>
+                            <span><span class="emp-sum-k">在职</span><span class="emp-sum-v">${activeFiltered.length}</span><span style="opacity:.55;font-weight:500;"> / 筛选前 ${beforeFilterActiveCount}</span></span>
+                            <span><span class="emp-sum-k">前厅</span><span class="emp-sum-v">${frontCount}</span></span>
+                            <span><span class="emp-sum-k">后厨</span><span class="emp-sum-v">${kitchenCount}</span></span>
+                        </div>
+                    `;
+                }
+            } catch (e) {}
 
             const computeTenureText = (joinDateRaw) => {
                 const jd = String(joinDateRaw || '').trim();
@@ -22675,8 +23146,8 @@ ${knowledgeContent.slice(0, 30000)}`;
                         const click = `try{this.classList.toggle('expanded')}catch(e){}`;
                         const actions = `
                             <button class="btn btn-secondary" type="button" onclick="try{event.stopPropagation();}catch(e){};viewEmployee('${escapeJsString(empKey)}');">查看</button>
-                            ${isAdminUser() ? `<button class="btn" type="button" onclick="try{event.stopPropagation();}catch(e){};editEmployee('${escapeJsString(empKey)}');">编辑</button>` : ''}
-                            ${isAdminUser() ? `<button class="btn btn-secondary" type="button" style="color:#ef4444;" onclick="try{event.stopPropagation();}catch(e){};deleteEmployee('${escapeJsString(empKey)}');">删除</button>` : ''}
+                            ${isAdminUser() ? `<button class="btn btn-secondary" type="button" onclick="try{event.stopPropagation();}catch(e){};editEmployee('${escapeJsString(empKey)}');">编辑</button>` : ''}
+                            ${isAdminUser() ? `<button class="btn btn-secondary" type="button" style="color:#fca5a5;border-color:rgba(248,113,113,0.35);" onclick="try{event.stopPropagation();}catch(e){};deleteEmployee('${escapeJsString(empKey)}');">删除</button>` : ''}
                         `;
 
                         const stCls = emp.status === 'active' ? 'st-active' : (emp.status === 'inactive' ? 'st-inactive' : 'st-pending');
@@ -22686,13 +23157,8 @@ ${knowledgeContent.slice(0, 30000)}`;
                                     <div class="emp-card-name">${escapeHtml(name)}${newBadge}${coreTalentBadge}</div>
                                     <div class="emp-card-status ${stCls}">${escapeHtml(statusBadge)}</div>
                                 </div>
-                                <div class="emp-card-grid">
-                                    <div class="emp-card-item"><div class="k">门店</div><div class="v">${escapeHtml(store)}</div></div>
-                                    <div class="emp-card-item"><div class="k">岗位</div><div class="v">${escapeHtml(pos)}</div></div>
-                                    <div class="emp-card-item"><div class="k">工龄</div><div class="v">${escapeHtml(tenure)}</div></div>
-                                    <div class="emp-card-item"><div class="k">电话</div><div class="v">${escapeHtml(phone)}</div></div>
-                                </div>
-                                <div class="emp-card-actions">${actions}</div>
+                                <div class="emp-card-compact-meta">${escapeHtml(store)}<span class="emp-meta-sep">·</span>${escapeHtml(pos)}<span class="emp-meta-sep">·</span>${escapeHtml(tenure)}<span class="emp-meta-sep">·</span>${escapeHtml(phone)}</div>
+                                <div class="emp-card-actions emp-card-actions--tight">${actions}</div>
                                 <div class="emp-card-more">
                                     <div class="emp-card-grid">
                                         <div class="emp-card-item"><div class="k">性别</div><div class="v">${escapeHtml(gender)}</div></div>
@@ -23809,26 +24275,9 @@ ${knowledgeContent.slice(0, 30000)}`;
         }
         
         function searchEmployees(query) {
-            const rows = document.querySelectorAll('#employee-tbody tr');
-            const cards = document.querySelectorAll('#employee-cards .emp-card');
-            
-            rows.forEach(row => {
-                const text = row.textContent.toLowerCase();
-                if (text.includes(query.toLowerCase())) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
-                }
-            });
-
-            cards.forEach(card => {
-                const t = String(card.getAttribute('data-search') || '').toLowerCase();
-                if (t.includes(String(query || '').toLowerCase())) {
-                    card.style.display = '';
-                } else {
-                    card.style.display = 'none';
-                }
-            });
+            const input = document.getElementById('employee-search-input');
+            if (input && String(input.value || '') !== String(query || '')) input.value = String(query || '');
+            loadEmployeesData();
         }
         
         // 用户管理功能
@@ -29311,7 +29760,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                     };
                 });
             } catch (e) {
-                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#ef4444;padding:40px;">加载失败：' + escapeHtml(String(e?.message || e)) + '</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#ef4444;padding:40px;">加载失败：' + escapeHtml(String(e?.message || e)) + '</td></tr>';
                 if (cardsEl) cardsEl.innerHTML = '';
                 return;
             }
@@ -29327,7 +29776,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             } catch (e) {}
             
             if (rewards.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#888;padding:40px;">暂无奖惩记录</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#888;padding:40px;">暂无奖惩记录</td></tr>';
                 try {
                     if (cardsEl) {
                         cardsEl.innerHTML = '<div style="text-align:center;color:rgba(200,215,230,0.72);padding:28px 12px;">暂无奖惩记录</div>';
@@ -29340,17 +29789,19 @@ ${knowledgeContent.slice(0, 30000)}`;
                 const rewardTotal = rewards.filter(r => Number(r?.amount || 0) > 0).reduce((s, r) => s + Number(r?.amount || 0), 0);
                 const punishTotal = rewards.filter(r => Number(r?.amount || 0) < 0).reduce((s, r) => s + Math.abs(Number(r?.amount || 0)), 0);
                 cardsEl.innerHTML = `
-                    <div class="rw-card" style="background: rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.2);">
-                        <div class="label">奖励合计</div>
-                        <div class="value" style="color:#22c55e;">¥${rewardTotal.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                    </div>
-                    <div class="rw-card" style="background: rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2);">
-                        <div class="label">处罚合计</div>
-                        <div class="value" style="color:#ef4444;">¥${punishTotal.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                    </div>
-                    <div class="rw-card" style="background: rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.2);">
-                        <div class="label">记录总数</div>
-                        <div class="value" style="color:#60a5fa;">${rewards.length}</div>
+                    <div class="rw-summary-grid">
+                        <div class="rw-sum-chip rw-sum-chip--reward">
+                            <div class="rw-sum-k">奖励合计</div>
+                            <div class="rw-sum-v" style="color:#86efac;">¥${rewardTotal.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                        </div>
+                        <div class="rw-sum-chip rw-sum-chip--punish">
+                            <div class="rw-sum-k">处罚合计</div>
+                            <div class="rw-sum-v" style="color:#fca5a5;">¥${punishTotal.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                        </div>
+                        <div class="rw-sum-chip rw-sum-chip--total">
+                            <div class="rw-sum-k">记录数</div>
+                            <div class="rw-sum-v" style="color:#93c5fd;">${rewards.length}</div>
+                        </div>
                     </div>
                 `;
             }
@@ -29359,27 +29810,30 @@ ${knowledgeContent.slice(0, 30000)}`;
             const empMap = new Map(employees.map(e => [e.username, e.name]));
 
             tbody.innerHTML = rewards.map(r => {
-                const typeLabel = r.type === 'reward' ? 
-                    '<span style="color:#22c55e;">奖励</span>' : 
-                    '<span style="color:#ef4444;">惩罚</span>';
+                const typeLabel = r.type === 'reward'
+                    ? '<span style="color:#86efac;font-weight:800;">奖励</span>'
+                    : '<span style="color:#fca5a5;font-weight:800;">处罚</span>';
                 const empName = empMap.get(r.employee) || r.employee;
-                const amountColor = r.amount >= 0 ? '#22c55e' : '#ef4444';
+                const amountColor = r.amount >= 0 ? '#86efac' : '#fca5a5';
                 const amountText = r.amount >= 0 ? `+${r.amount}` : `${r.amount}`;
                 const statusRaw = String(r?.status || 'pending').trim();
                 const statusText = statusRaw === 'approved' ? '已通过' : (statusRaw === 'rejected' ? '已拒绝' : (statusRaw === 'paid' ? '已生效' : '审批中'));
-                const statusColor = statusRaw === 'approved' || statusRaw === 'paid' ? '#22c55e' : (statusRaw === 'rejected' ? '#ef4444' : '#f59e0b');
+                const stCls = statusRaw === 'approved' || statusRaw === 'paid' ? 'rw-st--ok' : (statusRaw === 'rejected' ? 'rw-st--bad' : 'rw-st--pend');
+                const rid = String(r.id || '');
+                const idShort = rid.length > 14 ? rid.slice(0, 12) + '…' : rid;
+                const reasonShort = String(r.reason || '').length > 16 ? String(r.reason).slice(0, 14) + '…' : String(r.reason || '');
                 
                 return `<tr>
-                    <td>${escapeHtml(r.id || '')}<div><button type="button" style="margin-top:4px; background:none; border:none; color:#60a5fa; text-decoration:underline; cursor:pointer; padding:0; font-size:12px;" onclick="openApprovalDetailModal('${escapeHtml(r.id || '')}')">查看详情</button></div></td>
+                    <td><span class="rw-id">${escapeHtml(idShort)}</span><button type="button" class="btn btn-secondary rw-mini-btn" onclick="openApprovalDetailModal('${escapeJsString(rid)}')">详情</button></td>
                     <td>${typeLabel}</td>
                     <td>${escapeHtml(empName)}</td>
                     <td>${escapeHtml(r.store || '-')}</td>
-                    <td>${escapeHtml(r.reason || '')}</td>
+                    <td title="${escapeHtml(r.reason || '')}">${escapeHtml(reasonShort || '-')}</td>
                     <td>${escapeHtml(r.result || '-')}</td>
-                    <td style="color:${amountColor};font-weight:600;">${amountText}</td>
-                    <td><span style="color:${statusColor};font-weight:700;">${statusText}</span></td>
-                    <td>${r.createdAt ? r.createdAt.slice(0, 10) : '-'}</td>
-                    <td><button class="btn" style="padding:4px 10px;font-size:12px;" onclick="openApprovalDetailModal('${escapeHtml(r.id || '')}')">查看</button></td>
+                    <td style="color:${amountColor};font-weight:700;font-family:ui-monospace,monospace;">${amountText}</td>
+                    <td><span class="rw-st ${stCls}">${statusText}</span></td>
+                    <td style="font-family:ui-monospace,monospace;">${r.createdAt ? r.createdAt.slice(0, 10) : '-'}</td>
+                    <td><button class="btn btn-secondary rw-mini-btn" type="button" onclick="openApprovalDetailModal('${escapeJsString(rid)}')">查看</button></td>
                 </tr>`;
             }).join('');
         }
