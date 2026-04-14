@@ -6933,7 +6933,8 @@
         #profile-page .dr-shell,
         #employees-page .dr-shell,
         #attendance-page .dr-shell,
-        #rewards-page .dr-shell {
+        #rewards-page .dr-shell,
+        #points-page .dr-shell {
             max-width: min(960px, 100%);
             margin: 0 auto;
             padding: 14px 14px 96px;
@@ -6942,7 +6943,8 @@
         #profile-page .rep-page-head,
         #employees-page .rep-page-head,
         #attendance-page .rep-page-head,
-        #rewards-page .rep-page-head {
+        #rewards-page .rep-page-head,
+        #points-page .rep-page-head {
             display: flex;
             align-items: flex-end;
             justify-content: space-between;
@@ -6955,7 +6957,8 @@
         #profile-page .rep-page-head h2,
         #employees-page .rep-page-head h2,
         #attendance-page .rep-page-head h2,
-        #rewards-page .rep-page-head h2 {
+        #rewards-page .rep-page-head h2,
+        #points-page .rep-page-head h2 {
             margin: 0;
             font-family: var(--rep-sans);
             font-weight: 700;
@@ -6967,7 +6970,8 @@
         #profile-page .rep-page-head__eyebrow,
         #employees-page .rep-page-head__eyebrow,
         #attendance-page .rep-page-head__eyebrow,
-        #rewards-page .rep-page-head__eyebrow {
+        #rewards-page .rep-page-head__eyebrow,
+        #points-page .rep-page-head__eyebrow {
             display: block;
             font-size: 10px;
             font-weight: 600;
@@ -6980,7 +6984,8 @@
         #profile-page .rep-page-head__sub,
         #employees-page .rep-page-head__sub,
         #attendance-page .rep-page-head__sub,
-        #rewards-page .rep-page-head__sub {
+        #rewards-page .rep-page-head__sub,
+        #points-page .rep-page-head__sub {
             margin: 6px 0 0;
             font-size: 12px;
             line-height: 1.45;
@@ -7112,7 +7117,8 @@
             background: rgba(0, 0, 0, 0.35);
         }
 
-        #employees-page .rep-filters.emp-filters-surface {
+        #employees-page .rep-filters.emp-filters-surface,
+        #points-page .rep-filters.emp-filters-surface {
             position: relative;
             border-radius: 20px;
             padding: 18px 18px 16px;
@@ -7125,7 +7131,8 @@
             backdrop-filter: blur(14px);
         }
 
-        #employees-page .rep-filters.emp-filters-surface::before {
+        #employees-page .rep-filters.emp-filters-surface::before,
+        #points-page .rep-filters.emp-filters-surface::before {
             content: "";
             position: absolute;
             inset: 0;
@@ -7134,16 +7141,19 @@
             background: linear-gradient(125deg, rgba(212, 175, 55, 0.07), transparent 42%);
         }
 
-        #employees-page .rep-filters.emp-filters-surface .rep-filters__head {
+        #employees-page .rep-filters.emp-filters-surface .rep-filters__head,
+        #points-page .rep-filters.emp-filters-surface .rep-filters__head {
             position: relative;
             margin-bottom: 14px;
         }
 
-        #employees-page .rep-filters.emp-filters-surface .rep-filters__grid {
+        #employees-page .rep-filters.emp-filters-surface .rep-filters__grid,
+        #points-page .rep-filters.emp-filters-surface .rep-filters__grid {
             position: relative;
         }
 
-        #employees-page .rep-filters.emp-filters-surface .rep-field label {
+        #employees-page .rep-filters.emp-filters-surface .rep-field label,
+        #points-page .rep-filters.emp-filters-surface .rep-field label {
             display: block;
             font-size: 10px;
             font-weight: 700;
@@ -7153,7 +7163,8 @@
             margin-bottom: 6px;
         }
 
-        #employees-page .rep-filters .rep-filters__eyebrow {
+        #employees-page .rep-filters .rep-filters__eyebrow,
+        #points-page .rep-filters .rep-filters__eyebrow {
             font-size: 10px;
             font-weight: 600;
             letter-spacing: 0.2em;
@@ -7161,7 +7172,8 @@
             opacity: 0.9;
         }
 
-        #employees-page .rep-filters .rep-filters__title {
+        #employees-page .rep-filters .rep-filters__title,
+        #points-page .rep-filters .rep-filters__title {
             margin-top: 4px;
             font-size: 15px;
             font-weight: 700;
@@ -7169,14 +7181,17 @@
             letter-spacing: 0.02em;
         }
 
-        #employees-page .rep-filters .rep-filters__hint {
+        #employees-page .rep-filters .rep-filters__hint,
+        #points-page .rep-filters .rep-filters__hint {
             margin-top: 6px;
             font-size: 11px;
             line-height: 1.45;
             color: var(--rep-muted);
         }
 
-        #employees-page .rep-filters.emp-filters-surface select {
+        #employees-page .rep-filters.emp-filters-surface select,
+        #points-page .rep-filters.emp-filters-surface select,
+        #points-page .rep-filters.emp-filters-surface input.form-input {
             width: 100%;
             padding: 10px 12px !important;
             border-radius: 12px !important;
@@ -8145,9 +8160,14 @@
             </div>
 
             <div id="points-page" class="hidden">
-                <div class="page-header">
-                    <h2>员工积分</h2>
-                </div>
+                <div class="dr-shell">
+                    <header class="rep-page-head">
+                        <div>
+                            <span class="rep-page-head__eyebrow">POINTS</span>
+                            <h2>员工积分</h2>
+                            <p class="rep-page-head__sub">多劳多得 · 申报、排行榜与记录查询（与分析报表同一套深色面板）</p>
+                        </div>
+                    </header>
 
                 <div style="margin-bottom: 12px; border-radius: 16px; padding: 14px; border:1px solid rgba(250,204,21,0.28); background: radial-gradient(120% 120% at 20% 0%, rgba(250,204,21,0.2), rgba(245,158,11,0.06) 45%, rgba(15,23,42,0.88) 100%); box-shadow: 0 12px 28px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.03);">
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
@@ -8189,16 +8209,32 @@
                     </button>
                 </div>
 
-                <div id="points-admin-filter-card" class="card" style="display:none; margin-bottom:12px; border-radius:16px; border:1px solid rgba(255,255,255,0.08); box-shadow: 0 12px 24px rgba(2,6,23,0.28);">
-                    <h4 style="margin:0 0 10px 0;">积分记录查询（总部）</h4>
-                    <div style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px;">
-                        <select id="points-admin-store" class="form-input"></select>
-                        <input id="points-admin-name" class="form-input" type="text" placeholder="员工姓名/账号">
-                        <input id="points-admin-start" class="form-input" type="date">
-                        <input id="points-admin-end" class="form-input" type="date">
+                <section id="points-admin-filter-card" class="rep-filters emp-filters-surface" style="display:none;" aria-label="积分记录查询">
+                    <div class="rep-filters__head">
+                        <div class="rep-filters__eyebrow">LOOKUP</div>
+                        <div class="rep-filters__title">记录查询</div>
+                        <p class="rep-filters__hint">按门店、员工与时间范围筛选积分流水；字段与经营分析报表检索区一致。</p>
                     </div>
-                    <div style="margin-top:10px; display:flex; justify-content:flex-end;">
-                        <button class="btn" type="button" onclick="queryPointsAdminRecords()" style="background:linear-gradient(135deg,#f59e0b,#facc15); color:#111827; font-weight:800;">查询记录</button>
+                    <div class="rep-filters__grid" style="grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));">
+                        <div class="rep-field">
+                            <label for="points-admin-store">门店</label>
+                            <select id="points-admin-store" class="form-input"></select>
+                        </div>
+                        <div class="rep-field">
+                            <label for="points-admin-name">员工</label>
+                            <input id="points-admin-name" class="form-input" type="text" placeholder="姓名或登录账号">
+                        </div>
+                        <div class="rep-field">
+                            <label for="points-admin-start">开始日期</label>
+                            <input id="points-admin-start" class="form-input" type="date">
+                        </div>
+                        <div class="rep-field">
+                            <label for="points-admin-end">结束日期</label>
+                            <input id="points-admin-end" class="form-input" type="date">
+                        </div>
+                    </div>
+                    <div style="display:flex; justify-content:flex-end; margin-top:12px;">
+                        <button class="btn" type="button" onclick="queryPointsAdminRecords()">查询记录</button>
                     </div>
                     <div id="points-admin-query-summary" style="display:none; margin-top:12px; padding:12px 14px; border-radius:12px; border:1px solid rgba(250,204,21,0.25); background:rgba(250,204,21,0.06);">
                         <div style="font-size:12px; font-weight:800; color:rgba(250,204,21,0.95); margin-bottom:8px;">查询结果汇总</div>
@@ -8209,11 +8245,12 @@
                             <div>涉及人数：<span id="points-admin-sum-people" style="font-weight:800;">0</span></div>
                         </div>
                     </div>
-                </div>
+                </section>
 
                 <div id="points-records-card" class="card" style="border-radius:16px; border:1px solid rgba(255,255,255,0.08); box-shadow: 0 12px 24px rgba(2,6,23,0.28);">
                     <h4 id="points-records-title" style="margin:0 0 10px 0;">我的积分记录</h4>
                     <div id="points-records-list"></div>
+                </div>
                 </div>
             </div>
 
