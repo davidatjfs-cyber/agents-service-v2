@@ -210,6 +210,42 @@ async function recordStandardChaseAttitudeOnly(task) {
     return false;
   }
 
+  const assignee = String(task.assignee_username || '').trim();
+  const store = String(task.store || '').trim();
+  const title = String(task.title || '').trim();
+  if (assignee && store && /充值异常|桌访产品异常/.test(title)) {
+    const dup = await query(
+      `SELECT task_id
+       FROM master_tasks
+       WHERE assignee_username = $1
+         AND COALESCE(hr_performance_recorded, false) = true
+         AND task_id <> $2
+         AND (
+           (store = $3) OR (store ILIKE $4)
+         )
+         AND (
+           title ILIKE $5 OR title ILIKE $6
+         )
+         AND created_at >= NOW() - INTERVAL '14 days'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [assignee, task.task_id, store, `%${store}%`, '%充值异常%', '%桌访产品异常%']
+    ).catch(() => ({ rows: [] }));
+    if (dup.rows?.length) {
+      await query(
+        `UPDATE master_tasks SET
+           hr_performance_recorded = TRUE,
+           status = 'hr_filed',
+           resolution_code = $2,
+           updated_at = NOW()
+         WHERE task_id = $1`,
+        [task.task_id, 'hr_attitude_standard_chase_deduped']
+      ).catch(() => {});
+      logger.info({ taskId: task.task_id, source: task.source, duplicateOf: dup.rows[0]?.task_id }, 'task-reminder: skip duplicate attitude filing for deprecated anomaly path');
+      return true;
+    }
+  }
+
   try {
     await query(
       `UPDATE master_tasks SET
@@ -227,7 +263,6 @@ async function recordStandardChaseAttitudeOnly(task) {
   }
 
   const dateYmd = getShanghaiYmd();
-  const assignee = String(task.assignee_username || '').trim();
   const monthlyCount = assignee ? await getMonthlyAttitudeFilingCount(assignee, dateYmd) : 0;
   const monthlyStoreCount = assignee
     ? await getMonthlyAttitudeFilingCountForStore(assignee, String(task.store || '').trim(), dateYmd)
@@ -286,6 +321,42 @@ async function recordBiChaseAttitudeOnly(task) {
     return false;
   }
 
+  const assignee = String(task.assignee_username || '').trim();
+  const store = String(task.store || '').trim();
+  const title = String(task.title || '').trim();
+  if (assignee && store && /充值异常|桌访产品异常/.test(title)) {
+    const dup = await query(
+      `SELECT task_id
+       FROM master_tasks
+       WHERE assignee_username = $1
+         AND COALESCE(hr_performance_recorded, false) = true
+         AND task_id <> $2
+         AND (
+           (store = $3) OR (store ILIKE $4)
+         )
+         AND (
+           title ILIKE $5 OR title ILIKE $6
+         )
+         AND created_at >= NOW() - INTERVAL '14 days'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [assignee, task.task_id, store, `%${store}%`, '%充值异常%', '%桌访产品异常%']
+    ).catch(() => ({ rows: [] }));
+    if (dup.rows?.length) {
+      await query(
+        `UPDATE master_tasks SET
+           hr_performance_recorded = TRUE,
+           status = 'hr_filed',
+           resolution_code = $2,
+           updated_at = NOW()
+         WHERE task_id = $1`,
+        [task.task_id, 'hr_attitude_bi_chase_deduped']
+      ).catch(() => {});
+      logger.info({ taskId: task.task_id, source: task.source, duplicateOf: dup.rows[0]?.task_id }, 'task-reminder: skip duplicate BI attitude filing for same anomaly');
+      return true;
+    }
+  }
+
   try {
     await query(
       `UPDATE master_tasks SET
@@ -303,16 +374,16 @@ async function recordBiChaseAttitudeOnly(task) {
   }
 
   const dateYmd = getShanghaiYmd();
-  const assignee = String(task.assignee_username || '').trim();
-  const monthlyCount = assignee ? await getMonthlyAttitudeFilingCount(assignee, dateYmd) : 0;
-  const monthlyStoreCount = assignee
-    ? await getMonthlyAttitudeFilingCountForStore(assignee, String(task.store || '').trim(), dateYmd)
+  const assigneeBi = String(task.assignee_username || '').trim();
+  const monthlyCount = assigneeBi ? await getMonthlyAttitudeFilingCount(assigneeBi, dateYmd) : 0;
+  const monthlyStoreCount = assigneeBi
+    ? await getMonthlyAttitudeFilingCountForStore(assigneeBi, String(task.store || '').trim(), dateYmd)
     : 0;
-  const assigneeDisp = assignee ? await resolveAssigneeDisplayName(assignee) : { name: '', username: '' };
+  const assigneeDisp = assigneeBi ? await resolveAssigneeDisplayName(assigneeBi) : { name: '', username: '' };
   const ym = dateYmd.slice(0, 7);
 
   const card = buildAttitudeFilingCard(task, 'bi', monthlyCount, assigneeDisp, monthlyStoreCount);
-  const whoShortBi = assignee ? `${assigneeDisp.name || assignee}（${assignee}）` : '责任人未填';
+  const whoShortBi = assigneeBi ? `${assigneeDisp.name || assigneeBi}（${assigneeBi}）` : '责任人未填';
   const noticeTitle = `工作态度备案｜${whoShortBi} · ${ym} · 本人累计${monthlyCount}次`;
   const noticeText = [
     `【工作态度备案】统计主体：${whoShortBi}；**仅统计该账号本人**本月（${ym}）工作态度备案累计 **${monthlyCount}** 次（全门店不同任务去重；不含他人、不含执行力）。`,
@@ -340,7 +411,7 @@ async function recordBiChaseAttitudeOnly(task) {
     if (!gRes?.ok) {
       await sendGroup(
         chatId,
-        `【工作态度备案】${assigneeDisp.name || assignee || '—'}（${assignee || '—'}）本人 ${ym} 累计 ${monthlyCount} 次（全门店去重${
+        `【工作态度备案】${assigneeDisp.name || assigneeBi || '—'}（${assigneeBi || '—'}）本人 ${ym} 累计 ${monthlyCount} 次（全门店去重${
           monthlyStoreCount !== monthlyCount ? `｜本店${monthlyStoreCount}次` : ''
         }）｜门店 ${task.store} 任务 ${task.task_id}（bi_anomaly）三次催办后仍未有效闭环：已打标「工作态度未完成」备案。` +
           `BI 异常对应的绩效扣分仅按异常规则在周度汇总（anomaly_rollups_v2）计算；任务卡催办不另扣分。`

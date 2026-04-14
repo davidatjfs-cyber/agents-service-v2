@@ -537,6 +537,16 @@ async function resolveAssignee(category, store, existingAssignee, sourceData) {
 /** 将 data_auditor 新写入的 agent_issues 同步为 master_tasks（供 Master 监听与周审计后调用） */
 export async function syncDataAuditorIssuesToMasterTasks(newIssueIds) {
   if (!newIssueIds?.length) return 0;
+  const disabledLegacyBiCategories = [
+    '实收营收异常',
+    '人效值异常',
+    '充值异常',
+    '桌访产品异常',
+    '桌访占比异常',
+    '产品差评异常',
+    '服务差评异常',
+    '总实收毛利率异常'
+  ];
   let created = 0;
   for (const issueId of newIssueIds) {
     try {
@@ -549,6 +559,12 @@ export async function syncDataAuditorIssuesToMasterTasks(newIssueIds) {
 
       const cat = String(issue.category || '');
       const ttl = String(issue.title || '');
+      // 旧 data_auditor 的 BI 异常已整体迁移到 agents-service-v2（ANO-*）。
+      // 若继续同步为 MT-*，会与新链路并行催办，最终造成重复任务与重复备案。
+      if (disabledLegacyBiCategories.some((name) => cat.includes(name))) {
+        console.log('[master:data_auditor] skip deprecated anomaly → master_tasks', issueId, cat, ttl.slice(0, 80));
+        continue;
+      }
       if (
         cat.includes('原料收货') ||
         /近\s*\d+\s*天.*原料|条原料.*异常|原料异常反馈/i.test(ttl)

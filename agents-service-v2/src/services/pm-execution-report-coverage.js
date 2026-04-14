@@ -122,6 +122,8 @@ function shanghaiYmdFromCreatedAt(createdAt) {
 function meetingReportBizYmd(fields, createdAt, anchorYmd) {
   const rawDate =
     normalizeMeetingDateCell(fields?.date) ||
+    normalizeMeetingDateCell(fields?.record_date) ||
+    normalizeMeetingDateCell(fields?.submit_time) ||
     normalizeMeetingDateCell(fields?.['会议日期']) ||
     normalizeMeetingDateCell(fields?.['例会日期']) ||
     normalizeMeetingDateCell(fields?.['会议时间']) ||

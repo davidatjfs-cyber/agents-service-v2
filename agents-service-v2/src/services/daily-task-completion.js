@@ -28,6 +28,9 @@ function taskTypeLabel(type) {
     case 'patrol_am': return '上午巡检';
     case 'patrol_pm': return '下午巡检';
     case 'tasting': return '试味';
+    case 'table_visit_product': return '桌访产品异常';
+    case 'table_visit_ratio': return '桌访占比异常';
+    case 'recharge_zero': return '充值异常';
     default:
       if (type.startsWith('custom_')) return '试味';
       return type;
@@ -61,6 +64,19 @@ function roleLabelZh(role) {
 /** 判断是否已完成 */
 function isCompleted(status) {
   return ['closed'].includes(status);
+}
+
+function canonicalTaskIdentity(task) {
+  const type = String(task?.task_type || '').trim();
+  const title = String(task?.title || '').trim();
+  const source = String(task?.source || '').trim();
+  if (type === 'table_visit_product' || /桌访产品异常/.test(title)) {
+    return 'table_visit_product';
+  }
+  if (type === 'recharge_zero' || /充值异常/.test(title)) {
+    return 'recharge_zero';
+  }
+  return `${source}::${type || title}`;
 }
 
 /** 判断是否洪潮店 */
@@ -126,12 +142,33 @@ async function getRecipients() {
 
 /** 构建任务明细区块 */
 function buildTaskDetailSection(store, tasks, username, nameMap) {
-  const userTasks = tasks.filter(t => t.assignee_username.toLowerCase() === username.toLowerCase());
-  const role = userTasks[0]?.assignee_role || '';
+  const rawUserTasks = tasks.filter(t => t.assignee_username.toLowerCase() === username.toLowerCase());
+  const role = rawUserTasks[0]?.assignee_role || '';
   const rawName = nameMap.get(username.toLowerCase()) || username;
   const displayName = resolvePerformanceReportDisplayName(store, role, username, rawName);
   
-  if (!userTasks.length) return '';
+  if (!rawUserTasks.length) return '';
+
+  const dedupedMap = new Map();
+  for (const task of rawUserTasks) {
+    const key = canonicalTaskIdentity(task);
+    const prev = dedupedMap.get(key);
+    if (!prev) {
+      dedupedMap.set(key, task);
+      continue;
+    }
+    const prevDone = isCompleted(prev.status);
+    const curDone = isCompleted(task.status);
+    if (curDone && !prevDone) {
+      dedupedMap.set(key, task);
+      continue;
+    }
+    const prevTs = new Date(prev.created_at || 0).getTime();
+    const curTs = new Date(task.created_at || 0).getTime();
+    if (curTs > prevTs) dedupedMap.set(key, task);
+  }
+  const userTasks = [...dedupedMap.values()];
+  userTasks.sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
   
   let md = `**${displayName}**\n`;
   

@@ -2559,14 +2559,10 @@ const BITABLE_CONFIGS = {
   'task_responses': {
     appId:
       process.env.BITABLE_TASK_RESP_APP_ID ||
-      process.env.FEISHU_APP_ID ||
-      process.env.LARK_APP_ID ||
       process.env.BITABLE_TABLEVISIT_APP_ID ||
       'cli_a9fc0d13c838dcd6',
     appSecret:
       process.env.BITABLE_TASK_RESP_APP_SECRET ||
-      process.env.FEISHU_APP_SECRET ||
-      process.env.LARK_APP_SECRET ||
       process.env.BITABLE_TABLEVISIT_APP_SECRET ||
       'pRVuBmiWc0hzqP1YzZDqzGUPFlaProDN',
     appToken: process.env.BITABLE_TASK_RESP_APP_TOKEN || 'BTAjbflrlaMRHesADUfc8usznqh',
@@ -3912,6 +3908,23 @@ function normProductKey(v) {
 
 function normalizeStoreKey(v) {
   return String(v || '').trim().toLowerCase().replace(/\s+/g, '');
+}
+
+// 旧 HRMS data_auditor 的 BI 异常已整体迁移到 agents-service-v2。
+// 这里若继续创建 issue，会与 v2 的 ANO-* 异常并行触发，导致重复任务/重复备案。
+const DISABLED_LEGACY_BI_CATEGORIES = new Set([
+  '实收营收异常',
+  '人效值异常',
+  '充值异常',
+  '桌访产品异常',
+  '桌访占比异常',
+  '产品差评异常',
+  '服务差评异常',
+  '总实收毛利率异常'
+]);
+
+function isDisabledLegacyBiCategory(category) {
+  return DISABLED_LEGACY_BI_CATEGORIES.has(String(category || '').trim());
 }
 
 // 用于 SQL LIKE 的模糊门店匹配参数
@@ -7469,6 +7482,10 @@ export async function runDataAuditor(checkMode = 'daily') {
   const newIssueIds = [];
   for (const issue of issues) {
     try {
+      if (isDisabledLegacyBiCategory(issue?.category)) {
+        console.log('[data_auditor] skip legacy BI issue (migrated to v2):', issue?.category, String(issue?.title || '').slice(0, 100));
+        continue;
+      }
       // Dedup by store + category + report date (not title, which can vary between runs)
       const issueDate = String(issue.data?.date || '').trim();
       const auditeeRole = String(issue.data?._auditee_role || '').trim();
@@ -10305,6 +10322,7 @@ async function pushIssuesToFeishu() {
       `SELECT ai.id, ai.title, ai.detail, ai.severity, ai.store, ai.category, ai.assignee_username
        FROM agent_issues ai
        WHERE ai.feishu_notified = FALSE AND ai.assignee_username IS NOT NULL
+         AND COALESCE(ai.agent, '') <> 'data_auditor'
        ORDER BY ai.created_at DESC LIMIT 20`
     );
     if (!r.rows?.length) return 0;

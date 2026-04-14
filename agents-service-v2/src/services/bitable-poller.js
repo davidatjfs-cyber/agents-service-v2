@@ -106,17 +106,15 @@ const BITABLE_CONFIGS = {
     sortField: '["创建日期 DESC"]'
   },
   'task_responses': {
-    // Base 常为 BTA*，须与「拥有该 Base」的自建应用一致；勿误用桌访应用凭证（会 99991663）
+    // Base 常为 BTA*。优先显式的 BITABLE_TASK_RESP_APP_*；
+    // 若未配置，则优先回退到历史上真正承载这套多维表的桌访应用，而不是通用 FEISHU/LARK 机器人应用。
+    // 否则在现网 FEISHU_APP_ID 指向其它 app（如 ops app）时，会因 token 与 Base 不匹配而报 99991663。
     appId:
       process.env.BITABLE_TASK_RESP_APP_ID ||
-      process.env.FEISHU_APP_ID ||
-      process.env.LARK_APP_ID ||
       process.env.BITABLE_TABLEVISIT_APP_ID ||
       'cli_a9fc0d13c838dcd6',
     appSecret:
       process.env.BITABLE_TASK_RESP_APP_SECRET ||
-      process.env.FEISHU_APP_SECRET ||
-      process.env.LARK_APP_SECRET ||
       process.env.BITABLE_TABLEVISIT_APP_SECRET ||
       'pRVuBmiWc0hzqP1YzZDqzGUPFlaProDN',
     appToken: process.env.BITABLE_TASK_RESP_APP_TOKEN || 'BTAjbflrlaMRHesADUfc8usznqh',
@@ -431,9 +429,11 @@ async function processRecord(configKey, type, record, brand) {
       await upsertMsg('meeting_report', '例会报告', {
         type: 'meeting_report', recordId,
         fields: {
-          store: extractText(fields['门店']),
+          store: extractText(fields['门店'] || fields['所属门店']),
           date: extractText(
             fields['日期'] ||
+              fields['记录日期'] ||
+              fields['提交时间'] ||
               fields['会议日期'] ||
               fields['例会日期'] ||
               fields['会议时间']
