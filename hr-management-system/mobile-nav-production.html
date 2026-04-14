@@ -3666,29 +3666,16 @@
         }
 
         /* Employees page — clean minimal mobile-first */
-        #employees-page .emp-shell {
+        #employees-page .dr-shell {
             display: flex;
             flex-direction: column;
             gap: 16px;
-            padding: 0 2px;
         }
 
         #employees-page .emp-header {
             display: flex;
             flex-direction: column;
             gap: 12px;
-        }
-
-        #employees-page .emp-title {
-            font-size: 20px;
-            font-weight: 700;
-            letter-spacing: -0.02em;
-            color: var(--apple-text);
-            margin: 0;
-        }
-
-        #employees-page .emp-subtitle {
-            display: none;
         }
 
         #employees-page .emp-actions {
@@ -6668,6 +6655,317 @@
             }
         }
 
+        /* ── 我的档案 / 员工管理 / 考勤打卡 / 奖惩管理：与#reports-page 同系金融面板 ── */
+        #profile-page,
+        #employees-page,
+        #attendance-page,
+        #rewards-page {
+            --rep-bg0: #06080c;
+            --rep-bg1: #0b0f16;
+            --rep-surface: rgba(255, 255, 255, 0.035);
+            --rep-border: rgba(212, 175, 55, 0.14);
+            --rep-border-soft: rgba(255, 255, 255, 0.08);
+            --rep-gold: #d4af37;
+            --rep-gold-glow: rgba(212, 175, 55, 0.22);
+            --rep-teal: #5eead4;
+            --rep-text: #e9eef6;
+            --rep-muted: rgba(186, 198, 215, 0.58);
+            --rep-mono: "IBM Plex Mono", ui-monospace, monospace;
+            --rep-sans: "IBM Plex Sans", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+            background:
+                radial-gradient(900px 520px at 100% -10%, rgba(45, 212, 191, 0.06), transparent 50%),
+                radial-gradient(700px 400px at -10% 20%, var(--rep-gold-glow), transparent 45%),
+                linear-gradient(165deg, var(--rep-bg0) 0%, var(--rep-bg1) 55%, #070a10 100%);
+            min-height: calc(100vh - 120px);
+            padding-top: 6px;
+            color: var(--rep-text);
+            font-family: var(--rep-sans);
+        }
+
+        #profile-page .dr-shell,
+        #employees-page .dr-shell,
+        #attendance-page .dr-shell,
+        #rewards-page .dr-shell {
+            max-width: min(960px, 100%);
+            margin: 0 auto;
+            padding: 14px 14px 96px;
+        }
+
+        #profile-page .rep-page-head,
+        #employees-page .rep-page-head,
+        #attendance-page .rep-page-head,
+        #rewards-page .rep-page-head {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--rep-border-soft);
+        }
+
+        #profile-page .rep-page-head h2,
+        #employees-page .rep-page-head h2,
+        #attendance-page .rep-page-head h2,
+        #rewards-page .rep-page-head h2 {
+            margin: 0;
+            font-family: var(--rep-sans);
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            font-size: 1.35rem;
+            color: var(--rep-text);
+        }
+
+        #profile-page .rep-page-head__eyebrow,
+        #employees-page .rep-page-head__eyebrow,
+        #attendance-page .rep-page-head__eyebrow,
+        #rewards-page .rep-page-head__eyebrow {
+            display: block;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.22em;
+            color: var(--rep-gold);
+            opacity: 0.85;
+            margin-bottom: 4px;
+        }
+
+        #profile-page .rep-page-head__sub,
+        #employees-page .rep-page-head__sub,
+        #attendance-page .rep-page-head__sub,
+        #rewards-page .rep-page-head__sub {
+            margin: 6px 0 0;
+            font-size: 12px;
+            line-height: 1.45;
+            color: var(--rep-muted);
+            font-weight: 500;
+            max-width: min(520px, 100%);
+        }
+
+        #profile-page .rep-page-head__actions,
+        #employees-page .rep-page-head__actions,
+        #attendance-page .rep-page-head__actions,
+        #rewards-page .rep-page-head__actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        #profile-page .rep-page-head__actions .btn,
+        #employees-page .rep-page-head__actions .btn,
+        #attendance-page .rep-page-head__actions .btn,
+        #rewards-page .rep-page-head__actions .btn,
+        #profile-page .rep-page-head__actions .btn-secondary,
+        #employees-page .rep-page-head__actions .btn-secondary,
+        #attendance-page .rep-page-head__actions .btn-secondary,
+        #rewards-page .rep-page-head__actions .btn-secondary {
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 12px;
+        }
+
+        #profile-page .card,
+        #attendance-page .card {
+            background: var(--rep-surface);
+            border: 1px solid var(--rep-border-soft);
+            box-shadow: 0 24px 48px -32px rgba(0, 0, 0, 0.65);
+        }
+
+        #attendance-page .rep-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 16px;
+            padding: 5px;
+            border-radius: 16px;
+            background: rgba(0, 0, 0, 0.28);
+            border: 1px solid var(--rep-border-soft);
+        }
+
+        #attendance-page .rep-tab {
+            flex: 1;
+            padding: 11px 6px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            color: var(--rep-muted);
+            background: transparent;
+            transition: color 0.2s, background 0.2s, box-shadow 0.25s;
+        }
+
+        #attendance-page .rep-tab--active {
+            color: #0a0c10 !important;
+            background: linear-gradient(135deg, #e8d48b, #c9a227) !important;
+            box-shadow: 0 8px 24px -8px rgba(212, 175, 55, 0.45);
+        }
+
+        #attendance-page .rep-filters-bar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+            padding: 12px 14px;
+            border-radius: 16px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+            border: 1px solid var(--rep-border);
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset, 0 16px 36px -28px rgba(0, 0, 0, 0.55);
+        }
+
+        #attendance-page .rep-filters-bar .input,
+        #attendance-page .rep-filters-bar input,
+        #attendance-page .rep-filters-bar select {
+            border-radius: 10px !important;
+            font-family: var(--rep-mono) !important;
+            background: rgba(0, 0, 0, 0.35) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            color: var(--rep-text) !important;
+            color-scheme: dark;
+        }
+
+        #rewards-page .rep-table-shell {
+            margin-top: 14px;
+            border-radius: 18px;
+            border: 1px solid var(--rep-border-soft);
+            overflow: hidden;
+            background: linear-gradient(160deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
+            box-shadow: 0 20px 44px -30px rgba(0, 0, 0, 0.65);
+        }
+
+        #rewards-page .rep-table-shell .data-table th {
+            background: rgba(0, 0, 0, 0.35);
+        }
+
+        #employees-page .rep-filters.emp-filters-surface {
+            position: relative;
+            border-radius: 20px;
+            padding: 18px 18px 16px;
+            margin-bottom: 16px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+            border: 1px solid var(--rep-border);
+            box-shadow:
+                0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+                0 20px 40px -28px rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(14px);
+        }
+
+        #employees-page .rep-filters.emp-filters-surface::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: 20px;
+            pointer-events: none;
+            background: linear-gradient(125deg, rgba(212, 175, 55, 0.07), transparent 42%);
+        }
+
+        #employees-page .rep-filters.emp-filters-surface .rep-filters__head {
+            position: relative;
+            margin-bottom: 14px;
+        }
+
+        #employees-page .rep-filters.emp-filters-surface .rep-filters__grid {
+            position: relative;
+        }
+
+        #employees-page .rep-filters.emp-filters-surface .rep-field label {
+            display: block;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--rep-muted) !important;
+            margin-bottom: 6px;
+        }
+
+        #employees-page .rep-filters .rep-filters__eyebrow {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.2em;
+            color: var(--rep-gold);
+            opacity: 0.9;
+        }
+
+        #employees-page .rep-filters .rep-filters__title {
+            margin-top: 4px;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--rep-text);
+            letter-spacing: 0.02em;
+        }
+
+        #employees-page .rep-filters .rep-filters__hint {
+            margin-top: 6px;
+            font-size: 11px;
+            line-height: 1.45;
+            color: var(--rep-muted);
+        }
+
+        #employees-page .rep-filters.emp-filters-surface select {
+            width: 100%;
+            padding: 10px 12px !important;
+            border-radius: 12px !important;
+            font-size: 13px !important;
+            font-family: var(--rep-mono) !important;
+            background: rgba(0, 0, 0, 0.35) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            color: var(--rep-text) !important;
+            color-scheme: dark;
+        }
+
+        #employees-page #emp-summary-view {
+            border-radius: 16px;
+            padding: 14px 16px !important;
+            margin: 0 0 14px !important;
+            background:
+                radial-gradient(520px 160px at 0% 0%, rgba(45, 212, 191, 0.1), transparent 55%),
+                linear-gradient(155deg, rgba(18, 26, 38, 0.92), rgba(8, 11, 18, 0.96)) !important;
+            border: 1px solid var(--rep-border) !important;
+            color: var(--rep-text) !important;
+            font-family: var(--rep-mono);
+            font-size: 13px !important;
+        }
+
+        #employees-page .emp-table-card {
+            border: 1px solid var(--rep-border-soft);
+            box-shadow: 0 24px 48px -32px rgba(0, 0, 0, 0.65);
+            background: linear-gradient(160deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
+        }
+
+        #employees-page .emp-table-card .emp-table-head .emp-table-label {
+            color: var(--rep-muted);
+            letter-spacing: 0.12em;
+            font-size: 11px;
+            text-transform: uppercase;
+            font-weight: 800;
+        }
+
+        #employees-page .emp-search {
+            border-radius: 14px;
+            border: 1px solid var(--rep-border-soft);
+            background: rgba(0, 0, 0, 0.22);
+        }
+
+        #employees-page .emp-search input {
+            color: var(--rep-text);
+        }
+
+        #rewards-page .rw-card {
+            border-color: var(--rep-border-soft);
+            background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+        }
+
+        #rewards-page .rw-card-title {
+            color: var(--rep-text);
+        }
+
+        #rewards-page .rw-card-meta {
+            color: var(--rep-muted);
+        }
+
+
         #daily-report-page .dr-report-date {
             font-weight: 900;
             font-size: 16px;
@@ -8723,19 +9021,20 @@
             </div>
             <!-- 员工管理页面 -->
             <div id="employees-page" class="hidden">
-                <div class="emp-shell">
-                    <div class="emp-header">
+                <div class="dr-shell">
+                    <header class="rep-page-head">
                         <div>
-                            <h2 class="emp-title">员工管理</h2>
-                            <div class="emp-subtitle">统一管理员工信息、账号权限与组织结构</div>
+                            <span class="rep-page-head__eyebrow">STAFF</span>
+                            <h2>员工管理</h2>
+                            <p class="emp-subtitle rep-page-head__sub">统一管理员工信息、账号权限与组织结构</p>
                         </div>
-                        <div class="emp-actions">
+                        <div class="rep-page-head__actions emp-actions">
                             <button class="btn" onclick="showAddEmployeeModal()" id="add-emp-btn"><i>➕</i> 新增员工</button>
                             <button class="btn" onclick="showBatchImportModal()" id="batch-import-btn"><i>📥</i> 批量导入</button>
                             <button class="btn btn-secondary" onclick="downloadEmployeeImportTemplate()" id="emp-import-template-btn"><i>⬇️</i> 模板</button>
                             <button class="btn" onclick="exportEmployees()" id="export-emp-btn"><i>📊</i> 导出</button>
                         </div>
-                    </div>
+                    </header>
 
                     <div class="emp-toolbar">
                         <div class="emp-search">
@@ -9094,52 +9393,62 @@
             </div>
 
             <div id="rewards-page" class="hidden">
-                <div class="page-header">
-                    <h2>奖惩管理</h2>
-                    <div style="margin-bottom: 20px;">
-                        <div class="action-buttons">
-                            <button class="btn" onclick="createRewardPunishment()"><i>🧾</i> 新建奖惩单</button>
-                        </div>
+                <div class="dr-shell">
+                <header class="rep-page-head">
+                    <div>
+                        <span class="rep-page-head__eyebrow">REWARDS</span>
+                        <h2>奖惩管理</h2>
+                        <p class="rep-page-head__sub">奖惩单列表与关键字段一览，风格与经营分析报表一致。</p>
                     </div>
-                </div>
+                    <div class="rep-page-head__actions">
+                        <button class="btn" type="button" onclick="createRewardPunishment()"><i>🧾</i> 新建奖惩单</button>
+                    </div>
+                </header>
 
                 <div class="rw-cards" id="rewards-cards"></div>
 
-                <div class="table-scroll-x">
-                    <table class="data-table" style="min-width: 860px;">
-                        <thead>
-                            <tr>
-                                <th>单号</th>
-                                <th>类型</th>
-                                <th>对象</th>
-                                <th>门店</th>
-                                <th>事由</th>
-                                <th>结果</th>
-                                <th>金额</th>
-                                <th>状态</th>
-                                <th>时间</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody id="rewards-tbody">
-                            <!-- 动态生成 -->
-                        </tbody>
-                    </table>
+                <div class="rep-table-shell">
+                    <div class="table-scroll-x">
+                        <table class="data-table" style="min-width: 860px;">
+                            <thead>
+                                <tr>
+                                    <th>单号</th>
+                                    <th>类型</th>
+                                    <th>对象</th>
+                                    <th>门店</th>
+                                    <th>事由</th>
+                                    <th>结果</th>
+                                    <th>金额</th>
+                                    <th>状态</th>
+                                    <th>时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rewards-tbody">
+                                <!-- 动态生成 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
                 </div>
             </div>
 
             <!-- 考勤打卡页面 -->
             <div id="attendance-page" class="hidden">
-                <div class="page-header">
-                    <h2>考勤打卡</h2>
-                </div>
+                <div class="dr-shell">
+                <header class="rep-page-head">
+                    <div>
+                        <span class="rep-page-head__eyebrow">ATTENDANCE</span>
+                        <h2>考勤打卡</h2>
+                        <p class="rep-page-head__sub">人脸 + 定位校验；记录查询与月度汇总与报表页同一套深色面板。</p>
+                    </div>
+                </header>
 
-                <!-- Tab buttons -->
-                <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
-                    <button class="btn" id="att-tab-checkin-btn" onclick="attSwitchTab('checkin')">打卡</button>
-                    <button class="btn btn-secondary" id="att-tab-records-btn" onclick="attSwitchTab('records')">打卡记录</button>
-                    <button class="btn btn-secondary" id="att-tab-summary-btn" onclick="attSwitchTab('summary')">月度汇总</button>
-                    <button class="btn btn-secondary" id="att-tab-location-btn" onclick="attSwitchTab('location')" style="display:none;">门店定位</button>
+                <div class="rep-tabs" role="tablist" aria-label="考勤子页">
+                    <button type="button" class="rep-tab rep-tab--active" id="att-tab-checkin-btn" onclick="attSwitchTab('checkin')">打卡</button>
+                    <button type="button" class="rep-tab" id="att-tab-records-btn" onclick="attSwitchTab('records')">打卡记录</button>
+                    <button type="button" class="rep-tab" id="att-tab-summary-btn" onclick="attSwitchTab('summary')">月度汇总</button>
+                    <button type="button" class="rep-tab" id="att-tab-location-btn" onclick="attSwitchTab('location')" style="display:none;">门店定位</button>
                 </div>
 
                 <!-- Check-in Tab -->
@@ -9191,7 +9500,7 @@
 
                 <!-- Records Tab -->
                 <div id="att-records-tab" style="display:none;">
-                    <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
+                    <div class="rep-filters-bar">
                         <input type="text" id="att-rec-name" class="input" placeholder="搜索姓名" style="width:100px; font-size:12px;">
                         <input type="date" id="att-rec-start" class="input" style="width:130px; font-size:12px;">
                         <span style="color:rgba(200,215,230,0.5);">至</span>
@@ -9229,7 +9538,7 @@
 
                 <!-- Summary Tab -->
                 <div id="att-summary-tab" style="display:none;">
-                    <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
+                    <div class="rep-filters-bar">
                         <input type="month" id="att-sum-month" class="input" style="width:150px; font-size:12px;">
                         <select id="att-sum-store" class="input" style="width:120px; font-size:12px;"><option value="">全部门店</option></select>
                         <button class="btn" onclick="attLoadSummary()" style="font-size:12px;">查询</button>
@@ -9246,6 +9555,7 @@
                         <div style="font-size:12px; color:rgba(200,215,230,0.6); margin-bottom:16px;">设置各门店GPS坐标；服务端按默认<strong>100米</strong>半径校验打卡距离</div>
                         <div id="att-store-locations-list"></div>
                     </div>
+                </div>
                 </div>
             </div>
 
@@ -9579,9 +9889,14 @@
             
             <!-- 个人信息页面 -->
             <div id="profile-page" class="hidden">
-                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 20px;">
-                    <h2 style="margin:0; font-size: 20px; font-weight: 800;">我的档案</h2>
-                </div>
+                <div class="dr-shell">
+                <header class="rep-page-head">
+                    <div>
+                        <span class="rep-page-head__eyebrow">PROFILE</span>
+                        <h2>我的档案</h2>
+                        <p class="rep-page-head__sub">个人档案、通知、绩效与本月考勤概览</p>
+                    </div>
+                </header>
 
                 <!-- 个人信息卡片 - 紧凑头部 -->
                 <div class="card" style="margin-bottom: 14px; padding: 20px;">
@@ -9801,6 +10116,7 @@
 
                 <div id="profile-mobile-toolbar" style="display:none;">
                     <button class="btn" type="button" onclick="openGmMailboxModal()">总经理信箱</button>
+                </div>
                 </div>
             </div>
 
@@ -29513,7 +29829,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 if (el) el.style.display = t === tab ? '' : 'none';
                 const btn = document.getElementById('att-tab-' + t + '-btn');
                 if (btn) {
-                    btn.className = t === tab ? 'btn' : 'btn btn-secondary';
+                    btn.className = 'rep-tab' + (t === tab ? ' rep-tab--active' : '');
                 }
             });
             if (tab === 'records') attLoadRecords();
