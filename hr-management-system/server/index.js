@@ -11718,43 +11718,40 @@ function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
     });
   });
 
-  // Fallback: when daily reports lack rest records, reuse approved leave records.
-  if (!(Number.isFinite(usedLeave) && usedLeave > 0)) {
-    const leaveRecords = Array.isArray(state?.leaveRecords) ? state.leaveRecords : [];
-    const uLower = uname.toLowerCase();
-    usedLeave = 0;
-    leaveRecords.forEach((lr) => {
-      if (String(lr?.applicant || '').toLowerCase() !== uLower) return;
-      if (String(lr?.status || '') !== 'approved') return;
-      const sd = String(lr?.startDate || '').trim();
-      const ed = String(lr?.endDate || '').trim();
-      const rawDays = lr?.days != null && lr?.days !== '' ? Number(lr.days) : null;
-      const overlapDays = calcOverlapDaysWithinMonth(sd, ed, m);
+  // Approved leave is additive with rest days: all monthly leave + rest should deduct this month's quota.
+  const leaveRecords = Array.isArray(state?.leaveRecords) ? state.leaveRecords : [];
+  const uLower = uname.toLowerCase();
+  leaveRecords.forEach((lr) => {
+    if (String(lr?.applicant || '').toLowerCase() !== uLower) return;
+    if (String(lr?.status || '') !== 'approved') return;
+    const sd = String(lr?.startDate || '').trim();
+    const ed = String(lr?.endDate || '').trim();
+    const rawDays = lr?.days != null && lr?.days !== '' ? Number(lr.days) : null;
+    const overlapDays = calcOverlapDaysWithinMonth(sd, ed, m);
 
-      let days = 0;
-      if (overlapDays > 0) {
-        const sameMonthRange = sd.startsWith(m) && ed.startsWith(m);
-        days = (sameMonthRange && rawDays != null && Number.isFinite(rawDays) && rawDays > 0)
-          ? rawDays
-          : overlapDays;
-      } else if (rawDays != null && Number.isFinite(rawDays) && rawDays > 0 && sd.startsWith(m)) {
-        days = rawDays;
-      }
-      if (!(Number.isFinite(days) && days > 0)) return;
-      usedLeave += days;
+    let days = 0;
+    if (overlapDays > 0) {
+      const sameMonthRange = sd.startsWith(m) && ed.startsWith(m);
+      days = (sameMonthRange && rawDays != null && Number.isFinite(rawDays) && rawDays > 0)
+        ? rawDays
+        : overlapDays;
+    } else if (rawDays != null && Number.isFinite(rawDays) && rawDays > 0 && sd.startsWith(m)) {
+      days = rawDays;
+    }
+    if (!(Number.isFinite(days) && days > 0)) return;
+    usedLeave += days;
 
-      if (overlapDays > 0) {
-        weekDetails.forEach((wk) => {
-          const [ws, we] = String(wk?.range || '').split('~');
-          const ov = calcDateSpanDaysInclusive(
-            (sd > ws ? sd : ws),
-            (ed < we ? ed : we)
-          );
-          if (ov && ov > 0) wk.used = Number((Number(wk.used || 0) + ov).toFixed(2));
-        });
-      }
-    });
-  }
+    if (overlapDays > 0) {
+      weekDetails.forEach((wk) => {
+        const [ws, we] = String(wk?.range || '').split('~');
+        const ov = calcDateSpanDaysInclusive(
+          (sd > ws ? sd : ws),
+          (ed < we ? ed : we)
+        );
+        if (ov && ov > 0) wk.used = Number((Number(wk.used || 0) + ov).toFixed(2));
+      });
+    }
+  });
 
   usedLeave = Number((Number(usedLeave || 0)).toFixed(2));
 
