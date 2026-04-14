@@ -10568,7 +10568,7 @@
                         <span style="font-size: 12px; color: rgba(200,215,230,0.5);">天</span>
                     </div>
                     <div style="margin-top: 8px; font-size: 10px; color: rgba(200,215,230,0.4); line-height: 1.5;">
-                        规则：每周1天周休 + 入职满1年后每月约0.42天年假（5天/年）。法定节假日加班另计+2天。
+                        规则：每周1天周休 + 入职满1年后每月约0.42天年假（5天/年）。法定节假日加班另计+2天。假期余额与考勤汇总均按上海当月；累计类口径与桌面端「我的档案」一致（上月末锁定，次月1日6:00落库）。
                     </div>
                 </div>
 
@@ -26471,8 +26471,7 @@ ${knowledgeContent.slice(0, 30000)}`;
 
         async function loadProfileLeaveBalance() {
             if (!currentUser) return;
-            const now = new Date();
-            const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            const month = hrmsShanghaiYYYYMM();
             const monthEl = document.getElementById('profile-leave-month');
             if (monthEl) monthEl.textContent = month;
             try {

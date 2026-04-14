@@ -11858,11 +11858,16 @@ function calcMonthlyAttendanceLeaveBankOffsetDays(state, employee, month, poolCa
   return Number(totalOffset.toFixed(2));
 }
 
-function calcEmployeeMonthlyCarryover(state, employee, month) {
+/**
+ * 滚动计算「目标月」月初累计池（不含目标月当月额度与消耗）。
+ * @param {{ ignoreEndCarryoverOverride?: boolean }} opts 为 true 时忽略目标月 carryover 人工覆盖（用于次月1日快照，避免把尚未审的覆盖写入上月闭合值）
+ */
+function calcEmployeeMonthlyCarryover(state, employee, month, opts) {
   const m = safeMonthOnly(month);
   const emp = employee && typeof employee === 'object' ? employee : null;
   const uname = String(emp?.username || '').trim();
   if (!m || !uname) return 0;
+  const ignoreEnd = !!(opts && opts.ignoreEndCarryoverOverride);
 
   const startMonth = resolveEmployeeLeaveCalcStartMonth(state, emp, m);
   let cur = startMonth;
@@ -11882,9 +11887,99 @@ function calcEmployeeMonthlyCarryover(state, employee, month) {
     cur = shiftMonth(cur, 1);
   }
   // 当月月初累计池：若本月已手动设置「截止上月累计假期」(mode=carryover)，以手动值为准；否则以系统滚动计算为准
-  const currentOv = getLeaveBalanceOverride(state, uname, m);
-  if (currentOv && currentOv.mode === 'carryover') return Number(currentOv.value.toFixed(2));
+  if (!ignoreEnd) {
+    const currentOv = getLeaveBalanceOverride(state, uname, m);
+    if (currentOv && currentOv.mode === 'carryover') return Number(currentOv.value.toFixed(2));
+  }
   return Number(carry.toFixed(2));
+}
+
+/** 读取「已闭合月份」上月末累计池快照（次月1日 06:00 上海时区写入） */
+function getLeaveCumulativeCloseSnapshot(state, username, closedMonth) {
+  const snaps = state?.leaveCumulativeCloseSnapshots && typeof state.leaveCumulativeCloseSnapshots === 'object'
+    ? state.leaveCumulativeCloseSnapshots
+    : {};
+  const k = leaveBalanceOverrideKey(username, closedMonth);
+  const raw = snaps[k];
+  if (raw == null) return null;
+  if (typeof raw === 'object' && raw !== null && Number.isFinite(Number(raw.value))) {
+    return { value: Number(raw.value), lockedAt: String(raw.lockedAt || ''), source: String(raw.source || 'system') };
+  }
+  const v = Number(raw);
+  if (Number.isFinite(v)) return { value: v, lockedAt: '', source: 'system' };
+  return null;
+}
+
+/**
+ * 业务口径（与「我的档案」累计假期展示一致）：
+ * 1）若当月已有人工 carryover（核实上月末池），以人工为准；
+ * 2）否则若有「上月」闭合快照（次月1日6点锁定），以快照为准，当月内不随日报回填抖动；
+ * 3）否则回退实时滚动计算（新系统或无快照月份）。
+ */
+function getLockedOpeningCarryForMonth(state, employee, monthM) {
+  const m = safeMonthOnly(monthM);
+  const emp = employee && typeof employee === 'object' ? employee : null;
+  const uname = String(emp?.username || '').trim();
+  if (!m || !uname) return 0;
+  const oNow = getLeaveBalanceOverride(state, uname, m);
+  if (oNow && String(oNow.mode || '').toLowerCase() === 'carryover' && Number.isFinite(Number(oNow.value))) {
+    return Number(Number(oNow.value).toFixed(2));
+  }
+  const prev = shiftMonth(m, -1);
+  if (prev) {
+    const snap = getLeaveCumulativeCloseSnapshot(state, uname, prev);
+    if (snap && Number.isFinite(snap.value)) return Number(snap.value.toFixed(2));
+  }
+  return Number(calcEmployeeMonthlyCarryover(state, emp, m).toFixed(2));
+}
+
+/**
+ * 为「已闭合自然月」写入上月末累计池快照（次月 1 日 06:00 上海时区由定时任务调用）。
+ * 写入值 = 次月月初池（公式滚动，且忽略次月 carryover 人工覆盖，避免把未审覆盖写进上月闭合快照）。
+ */
+async function runLeaveCumulativeCloseSnapshotForClosedMonth(closedMonth) {
+  const m = safeMonthOnly(closedMonth);
+  if (!m) return { ok: false, error: 'bad_month' };
+  const nextM = shiftMonth(m, 1);
+  if (!nextM) return { ok: false, error: 'bad_next' };
+
+  const state0 = (await getSharedState()) || {};
+  const emps = Array.isArray(state0?.employees) ? state0.employees : [];
+  const users = Array.isArray(state0?.users) ? state0.users : [];
+  const map = new Map();
+  users.forEach((u) => {
+    const k = String(u?.username || '').trim().toLowerCase();
+    if (!k || isLegacyTestUsername(k)) return;
+    if (!map.has(k)) map.set(k, { ...u, username: String(u?.username || '').trim() });
+  });
+  emps.forEach((e) => {
+    const k = String(e?.username || '').trim().toLowerCase();
+    if (!k || isLegacyTestUsername(k)) return;
+    map.set(k, { ...(map.get(k) || {}), ...e, username: String(e?.username || '').trim() });
+  });
+  const people = Array.from(map.values());
+
+  const prevSnaps = state0.leaveCumulativeCloseSnapshots && typeof state0.leaveCumulativeCloseSnapshots === 'object'
+    ? state0.leaveCumulativeCloseSnapshots
+    : {};
+  const snaps = { ...prevSnaps };
+  const lockedAt = hrmsNowISO();
+  let n = 0;
+  for (const p of people) {
+    const uname = String(p?.username || '').trim();
+    if (!uname) continue;
+    const val = calcEmployeeMonthlyCarryover(state0, p, nextM, { ignoreEndCarryoverOverride: true });
+    const kk = leaveBalanceOverrideKey(uname, m);
+    snaps[kk] = {
+      value: Number(Number(val).toFixed(2)),
+      lockedAt,
+      source: 'system_month_close',
+      closedMonth: m
+    };
+    n++;
+  }
+  await saveSharedState({ ...state0, leaveCumulativeCloseSnapshots: snaps });
+  return { ok: true, closedMonth: m, nextMonth: nextM, employees: n };
 }
 
 function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
@@ -11968,8 +12063,8 @@ function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
 
   usedLeave = Number((Number(usedLeave || 0)).toFixed(2));
 
-  // 月初「累计假期」池：calcEmployeeMonthlyCarryover 内已保证——有手动 carryover 覆盖则用手动，否则用系统滚动值
-  const cumulativeLeaveDays = calcEmployeeMonthlyCarryover(state, emp, m);
+  // 月初「累计假期」池：人工 carryover > 上月闭合快照 > 实时滚动（与我的档案、欠休展示一致）
+  const cumulativeLeaveDays = getLockedOpeningCarryForMonth(state, emp, m);
   const totalLeave = Number((baseLeave + annualLeave).toFixed(2));
   const monthRemaining = Number((totalLeave - usedLeave).toFixed(2));
   const computedRemaining = Number((cumulativeLeaveDays + totalLeave - usedLeave).toFixed(2));
@@ -15384,6 +15479,41 @@ app.listen(PORT, HOST, async () => {
       }
     }, 5 * 60 * 1000);
 
+    // ── 上月末「累计假期」池快照：上海时间每月 1 日 06:00–06:14 写入，供当月展示与公式解耦 ──
+    let _leaveCumulativeSnapshotDoneCurYm = '';
+    setInterval(async () => {
+      try {
+        const partsFmt = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Shanghai',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        });
+        const p = partsFmt.formatToParts(new Date());
+        const gv = (t) => p.find(x => x.type === t)?.value || '';
+        const y = gv('year');
+        const mo = gv('month');
+        const d = gv('day');
+        const h = Number(gv('hour'));
+        const mi = Number(gv('minute'));
+        if (d !== '01' || h !== 6 || mi >= 15) return;
+        const curYm = `${y}-${mo}`;
+        if (_leaveCumulativeSnapshotDoneCurYm === curYm) return;
+        const closedMonth = shiftMonth(curYm, -1);
+        if (!closedMonth) return;
+        const r = await runLeaveCumulativeCloseSnapshotForClosedMonth(closedMonth);
+        if (r?.ok) {
+          _leaveCumulativeSnapshotDoneCurYm = curYm;
+          console.log('[leave-cumulative-snapshot] locked closedMonth=', r.closedMonth, 'employees=', r.employees);
+        }
+      } catch (e) {
+        console.error('[leave-cumulative-snapshot] tick:', e?.message || e);
+      }
+    }, 60 * 1000);
+
     setInterval(() => {
       runMonthlyRecurringRewardTemplatesJob().catch((e) =>
         console.error('[recurring-reward] tick error:', e?.message || e)
@@ -15779,6 +15909,7 @@ app.get('/api/checkin/summary', authRequired, async (req, res) => {
         annualLeave: bal.annualLeave,
         usedLeave: bal.usedLeave,
         totalLeave: bal.totalLeave,
+        cumulativeLeaveDays: bal.cumulativeLeaveDays,
         computedRemaining: bal.computedRemaining,
         remaining: bal.remaining,
         overridden: !!bal.overridden,
