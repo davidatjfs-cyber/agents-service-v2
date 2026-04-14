@@ -11942,7 +11942,7 @@ function getLeaveCumulativeCloseSnapshot(state, username, closedMonth) {
 
 /**
  * 业务口径（与「我的档案」累计假期展示一致）：
- * 1）若当月已有人工 carryover（核实上月末池），以人工为准；
+ * 1）若当月已有人工 carryover（核实上月末池），以人工为准，且不再回退到公式滚动（当月内固定展示该值）；
  * 2）否则若有「上月」闭合快照（次月1日6点锁定），以快照为准，当月内不随日报回填抖动；
  * 3）否则回退实时滚动计算（新系统或无快照月份）。
  */
@@ -12107,6 +12107,7 @@ function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
   const overridden = !!override;
   const overrideMode = override?.mode || null;
   const overrideValue = override?.value ?? null;
+  const carryoverManualLock = !!(override && String(override.mode || '').trim().toLowerCase() === 'carryover');
   let remaining = computedRemaining;
   if (override && String(override.mode || '').trim().toLowerCase() === 'remaining' && Number.isFinite(Number(override.value))) {
     remaining = Number(Number(override.value).toFixed(2));
@@ -12140,6 +12141,8 @@ function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
     overridden,
     overrideValue: overridden ? Number(overrideValue) : null,
     overrideMode: overridden ? overrideMode : null,
+    /** 人事已手动校准「截止上月累计假期」：月初池以人工为准，当月内不按公式滚动重算该池（次月1日系统锁数后可对照核验） */
+    cumulativeLeaveManualLock: carryoverManualLock,
     weeklyDetails: weekDetails,
     lastAdjustment
   };
@@ -15962,6 +15965,7 @@ app.get('/api/checkin/summary', authRequired, async (req, res) => {
         computedRemaining: bal.computedRemaining,
         remaining: bal.remaining,
         overridden: !!bal.overridden,
+        cumulativeLeaveManualLock: !!bal.cumulativeLeaveManualLock,
         weeklyDetails: Array.isArray(bal.weeklyDetails) ? bal.weeklyDetails : [],
         lastAdjustment: bal.lastAdjustment || null
       };
@@ -16172,6 +16176,7 @@ app.get('/api/profile/attendance-overview', authRequired, async (req, res) => {
       username,
       name: myName || username,
       cumulativeLeaveDays: Number(cumulativeLeaveDays.toFixed(1)),
+      cumulativeLeaveManualLock: !!leaveBalance?.cumulativeLeaveManualLock,
       absentCount,
       lateCount,
       earlyLeaveCount,
@@ -16187,6 +16192,7 @@ app.get('/api/profile/attendance-overview', authRequired, async (req, res) => {
         computedRemaining: leaveBalance.computedRemaining,
         remaining: leaveBalance.remaining,
         overridden: !!leaveBalance.overridden,
+        cumulativeLeaveManualLock: !!leaveBalance.cumulativeLeaveManualLock,
         weeklyDetails: Array.isArray(leaveBalance.weeklyDetails) ? leaveBalance.weeklyDetails : [],
         lastAdjustment: leaveBalance.lastAdjustment || null
       } : null
@@ -16264,7 +16270,30 @@ app.post('/api/checkin/leave-balance', authRequired, async (req, res) => {
     };
     logs.unshift(rec);
 
-    await saveSharedState({ ...state, leaveBalanceOverrides: overrides, leaveBalanceAdjustments: logs.slice(0, 5000) });
+    const nextState = { ...state, leaveBalanceOverrides: overrides, leaveBalanceAdjustments: logs.slice(0, 5000) };
+    // 累计假期（carryover）人工校准 = 当月「月初累计池」；同步写入「上月末」闭合键，使所有读快照/人工的口径一致，且当月内不再依赖公式滚动该池（次月1日定时快照会覆盖上月键，便于对账）
+    if (mode === 'carryover') {
+      const prevM = shiftMonth(month, -1);
+      if (prevM) {
+        const prevSnaps = state.leaveCumulativeCloseSnapshots && typeof state.leaveCumulativeCloseSnapshots === 'object'
+          ? state.leaveCumulativeCloseSnapshots
+          : {};
+        const snapKey = leaveBalanceOverrideKey(targetUsername, prevM);
+        nextState.leaveCumulativeCloseSnapshots = {
+          ...prevSnaps,
+          [snapKey]: {
+            value: Number(Number(value).toFixed(2)),
+            lockedAt: hrmsNowISO(),
+            source: 'manual_carryover',
+            closedMonth: prevM,
+            openingMonth: month,
+            note: note || ''
+          }
+        };
+      }
+    }
+
+    await saveSharedState(nextState);
     return res.json({ ok: true, key, value: Number(value), adjustment: rec });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });

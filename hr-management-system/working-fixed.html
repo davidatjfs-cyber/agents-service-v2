@@ -11744,7 +11744,7 @@
                         </div>
                     </div>
                     <div style="margin-top: 8px; font-size: 10px; color: rgba(200,215,230,0.4); line-height: 1.5;">
-                        统计口径：日报排班 + 实际打卡 + 日报休息人员（缺勤/迟到/早退/休息在上海时区与门店班次窗口下统计）；本月余休按每月4天休息额度实时计算。「累计假期」为上月末锁定池（次月1日6:00落库），本格不随日报抖动；缺勤等其它指标在档案页约45秒自动刷新。人事核实上月请用「调整累计假期」。
+                        统计口径：日报排班 + 实际打卡 + 日报休息人员（缺勤/迟到/早退/休息在上海时区与门店班次窗口下统计）；本月余休按每月4天休息额度实时计算。「累计假期」优先人事「调整累计假期」：保存后以人工月初池为准，当月内不再按公式滚动重算该格；无人工时为上月末系统锁定（次月1日6:00上海时间）或公式滚动。缺勤等其它指标在档案页约45秒自动刷新。
                     </div>
                 </div>
 
@@ -36610,7 +36610,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                         <div class="rep-metric" style="grid-column:1/-1;"><div class="k">累计假期合计</div><div class="v" style="color:var(--rep-gold);">${fmt(cumulativeTotal, 2)}</div></div>
                     </div>
                 </div>
-                <p class="rep-filters__hint" style="margin:12px 0 0; font-size:11px; line-height:1.45; color:var(--rep-muted);">说明：本表按「薪资月份」整月统计，不受分析报表上方日期区间影响。「当月欠休合计」等假−休相关汇总随日报与休假每日实时重算（每次打开/刷新报表拉最新）。「累计假期」列与我的档案一致：优先人事核实值，否则为上月末系统锁定池（次月1日6:00上海时间写入）。有权限者可对单人做累计假期校准。</p>
+                <p class="rep-filters__hint" style="margin:12px 0 0; font-size:11px; line-height:1.45; color:var(--rep-muted);">说明：本表按「薪资月份」整月统计，不受分析报表上方日期区间影响。「当月欠休合计」等假−休相关汇总随日报与休假每日实时重算（每次打开/刷新报表拉最新）。「累计假期」列与我的档案一致：人事「调整累计假期」保存后以人工月初池为准、当月内不再公式滚动该列；否则为上月末系统锁定（次月1日6:00）或滚动计算。有权限者可对单人做累计假期校准。</p>
                 <div class="rep-pay-section-title">人员明细</div>
                 <div class="rep-pay-stack">
                     ${rows.length ? rows.map(r => {
