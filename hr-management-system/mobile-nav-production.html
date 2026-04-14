@@ -10,6 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
     <title>年年有喜管理系统</title>
     <style>
         /* Premium International UI Design */
@@ -5445,6 +5446,155 @@
         /* Daily Report - Mobile First */
         #daily-report-page {
             padding-top: 6px;
+            --drf-gold: #d4af37;
+            --drf-gold-glow: rgba(212, 175, 55, 0.22);
+            --drf-border: rgba(212, 175, 55, 0.14);
+            --drf-border-soft: rgba(255, 255, 255, 0.08);
+            --drf-text: #e9eef6;
+            --drf-muted: rgba(186, 198, 215, 0.58);
+            --drf-mono: "IBM Plex Mono", ui-monospace, monospace;
+            --drf-sans: "IBM Plex Sans", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+            font-family: var(--drf-sans);
+        }
+
+        #daily-report-page .dr-daily-page-head {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--drf-border-soft);
+        }
+
+        #daily-report-page .dr-daily-page-head__eyebrow {
+            display: block;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.22em;
+            color: var(--drf-gold);
+            opacity: 0.85;
+            margin-bottom: 4px;
+        }
+
+        #daily-report-page .dr-daily-page-head h2 {
+            margin: 0;
+            font-size: 1.35rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: var(--drf-text);
+        }
+
+        #daily-report-page .rep-filters {
+            position: relative;
+            border-radius: 20px;
+            padding: 18px 18px 16px;
+            margin-bottom: 18px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+            border: 1px solid var(--drf-border);
+            box-shadow:
+                0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+                0 20px 40px -28px rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(14px);
+        }
+
+        #daily-report-page .rep-filters::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: 20px;
+            pointer-events: none;
+            background: linear-gradient(125deg, rgba(212, 175, 55, 0.07), transparent 42%);
+        }
+
+        #daily-report-page .rep-filters__head {
+            position: relative;
+            margin-bottom: 14px;
+        }
+
+        #daily-report-page .rep-filters__eyebrow {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.2em;
+            color: var(--drf-gold);
+            opacity: 0.9;
+        }
+
+        #daily-report-page .rep-filters__title {
+            margin-top: 4px;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--drf-text);
+            letter-spacing: 0.02em;
+        }
+
+        #daily-report-page .rep-filters__hint {
+            margin-top: 6px;
+            font-size: 11px;
+            line-height: 1.45;
+            color: var(--drf-muted);
+        }
+
+        #daily-report-page .rep-filters__grid {
+            position: relative;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px 14px;
+        }
+
+        #daily-report-page .rep-filters__full {
+            grid-column: 1 / -1;
+        }
+
+        #daily-report-page .rep-filters__divider {
+            grid-column: 1 / -1;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            margin: 2px 0 4px;
+        }
+
+        #daily-report-page .rep-field label {
+            display: block;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--drf-muted) !important;
+            margin-bottom: 6px;
+        }
+
+        #daily-report-page .rep-filters .dr-date-input,
+        #daily-report-page .rep-filters .dr-store-select {
+            width: 100%;
+            padding: 12px 14px !important;
+            border-radius: 12px !important;
+            font-size: 14px !important;
+            font-family: var(--drf-mono) !important;
+            background: rgba(0, 0, 0, 0.35) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            color: var(--drf-text) !important;
+            color-scheme: dark;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        #daily-report-page .rep-filters .dr-date-input:focus,
+        #daily-report-page .rep-filters .dr-store-select:focus {
+            outline: none;
+            border-color: rgba(212, 175, 55, 0.45) !important;
+            box-shadow: 0 0 0 3px var(--drf-gold-glow);
+        }
+
+        #daily-report-page .rep-filters__actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+
+        #daily-report-page .rep-filters__actions .btn {
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 12px;
         }
 
         #daily-report-page .dr-shell {
@@ -5517,101 +5667,284 @@
             gap: 10px;
         }
 
+        /* ── 分析报表：金融级深色面板（IBM Plex + 香槟金点缀）── */
         #reports-page {
-            background: var(--apple-bg);
+            --rep-bg0: #06080c;
+            --rep-bg1: #0b0f16;
+            --rep-surface: rgba(255, 255, 255, 0.035);
+            --rep-border: rgba(212, 175, 55, 0.14);
+            --rep-border-soft: rgba(255, 255, 255, 0.08);
+            --rep-gold: #d4af37;
+            --rep-gold-glow: rgba(212, 175, 55, 0.22);
+            --rep-teal: #5eead4;
+            --rep-text: #e9eef6;
+            --rep-muted: rgba(186, 198, 215, 0.58);
+            --rep-mono: "IBM Plex Mono", ui-monospace, monospace;
+            --rep-sans: "IBM Plex Sans", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+            background:
+                radial-gradient(900px 520px at 100% -10%, rgba(45, 212, 191, 0.06), transparent 50%),
+                radial-gradient(700px 400px at -10% 20%, var(--rep-gold-glow), transparent 45%),
+                linear-gradient(165deg, var(--rep-bg0) 0%, var(--rep-bg1) 55%, #070a10 100%);
             min-height: calc(100vh - 120px);
             padding-top: 6px;
-            color: var(--apple-text);
+            color: var(--rep-text);
+            font-family: var(--rep-sans);
         }
 
         #reports-page .dr-shell {
-            max-width: 980px;
+            max-width: 720px;
             margin: 0 auto;
-            padding: 12px 12px 80px;
+            padding: 14px 14px 88px;
         }
 
         #reports-page .card {
             background: var(--apple-surface);
-            border: 1px solid rgba(255, 255, 255, 0.07);
-            box-shadow: 0 10px 30px -18px rgba(0, 0, 0, 0.45);
+            border: 1px solid var(--rep-border-soft);
+            box-shadow: 0 24px 48px -32px rgba(0, 0, 0, 0.65);
         }
 
         #reports-page .dr-list-title,
         #reports-page h4,
         #reports-page label {
-            color: var(--apple-text) !important;
+            color: var(--rep-text) !important;
+        }
+
+        #reports-page .rep-page-head {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--rep-border-soft);
+        }
+
+        #reports-page .rep-page-head h2 {
+            font-family: var(--rep-sans);
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            font-size: 1.35rem;
+            color: var(--rep-text);
+        }
+
+        #reports-page .rep-page-head__eyebrow {
+            display: block;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.22em;
+            color: var(--rep-gold);
+            opacity: 0.85;
+            margin-bottom: 4px;
+        }
+
+        #reports-page .rep-page-head__actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        #reports-page .rep-page-head__actions .btn {
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 12px;
+        }
+
+        #reports-page .rep-filters {
+            position: relative;
+            border-radius: 20px;
+            padding: 18px 18px 16px;
+            margin-bottom: 18px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+            border: 1px solid var(--rep-border);
+            box-shadow:
+                0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+                0 20px 40px -28px rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(14px);
+        }
+
+        #reports-page .rep-filters::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: 20px;
+            pointer-events: none;
+            background: linear-gradient(125deg, rgba(212, 175, 55, 0.07), transparent 42%);
+        }
+
+        #reports-page .rep-filters__head {
+            position: relative;
+            margin-bottom: 14px;
+        }
+
+        #reports-page .rep-filters__eyebrow {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.2em;
+            color: var(--rep-gold);
+            opacity: 0.9;
+        }
+
+        #reports-page .rep-filters__title {
+            margin-top: 4px;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--rep-text);
+            letter-spacing: 0.02em;
+        }
+
+        #reports-page .rep-filters__hint {
+            margin-top: 6px;
+            font-size: 11px;
+            line-height: 1.45;
+            color: var(--rep-muted);
+        }
+
+        #reports-page .rep-filters__grid {
+            position: relative;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px 14px;
+        }
+
+        #reports-page .rep-filters__full {
+            grid-column: 1 / -1;
+        }
+
+        #reports-page .rep-filters__divider {
+            grid-column: 1 / -1;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            margin: 2px 0 4px;
+        }
+
+        #reports-page .rep-field label {
+            display: block;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--rep-muted) !important;
+            margin-bottom: 6px;
         }
 
         #reports-page .dr-date-input,
         #reports-page .dr-store-select {
-            background: rgba(255, 255, 255, 0.10) !important;
-            border: 1px solid rgba(255, 255, 255, 0.20) !important;
-            color: var(--apple-text) !important;
+            width: 100%;
+            padding: 12px 14px !important;
+            border-radius: 12px !important;
+            font-size: 14px !important;
+            font-family: var(--rep-mono) !important;
+            background: rgba(0, 0, 0, 0.35) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            color: var(--rep-text) !important;
             color-scheme: dark;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        #reports-page .dr-date-input:focus,
+        #reports-page .dr-store-select:focus {
+            outline: none;
+            border-color: rgba(212, 175, 55, 0.45) !important;
+            box-shadow: 0 0 0 3px var(--rep-gold-glow);
         }
 
         #reports-page .btn.btn-secondary {
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.10);
-            color: var(--apple-text);
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: var(--rep-text);
+        }
+
+        #reports-page .rep-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 16px;
+            padding: 5px;
+            border-radius: 16px;
+            background: rgba(0, 0, 0, 0.28);
+            border: 1px solid var(--rep-border-soft);
+        }
+
+        #reports-page .rep-tab {
+            flex: 1;
+            padding: 11px 6px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            color: var(--rep-muted);
+            background: transparent;
+            transition: color 0.2s, background 0.2s, box-shadow 0.25s;
+        }
+
+        #reports-page .rep-tab--active {
+            color: #0a0c10 !important;
+            background: linear-gradient(135deg, #e8d48b, #c9a227) !important;
+            box-shadow: 0 8px 24px -8px rgba(212, 175, 55, 0.45);
         }
 
         #reports-page .rep-hero {
-            border-radius: 18px;
-            padding: 18px;
-            background: radial-gradient(1200px 400px at 10% 0%, rgba(59, 130, 246, 0.22), transparent 55%),
-                linear-gradient(135deg, #2563eb, #60a5fa);
-            color: rgba(255, 255, 255, 0.95);
-            border: 1px solid rgba(255, 255, 255, 0.18);
-            box-shadow: 0 18px 50px -28px rgba(37, 99, 235, 0.85);
+            border-radius: 20px;
+            padding: 20px;
+            background:
+                radial-gradient(800px 280px at 0% 0%, rgba(45, 212, 191, 0.12), transparent 55%),
+                linear-gradient(155deg, rgba(18, 26, 38, 0.95), rgba(8, 11, 18, 0.98));
+            color: var(--rep-text);
+            border: 1px solid var(--rep-border);
+            box-shadow: 0 28px 56px -36px rgba(0, 0, 0, 0.75);
         }
 
         #reports-page .rep-hero .meta {
-            color: rgba(255, 255, 255, 0.85);
+            color: var(--rep-muted);
             font-size: 12px;
-            font-weight: 700;
+            font-weight: 600;
+            font-family: var(--rep-mono);
         }
 
         #reports-page .rep-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 12px;
-            margin-top: 12px;
+            margin-top: 14px;
         }
 
         #reports-page .rep-metric {
-            background: rgba(255, 255, 255, 0.12);
-            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 14px;
-            padding: 12px;
-            backdrop-filter: blur(10px);
+            padding: 14px 12px;
+            backdrop-filter: blur(8px);
         }
 
         #reports-page .rep-metric .k {
-            font-size: 12px;
-            color: rgba(255, 255, 255, 0.82);
-            font-weight: 800;
+            font-size: 11px;
+            color: var(--rep-muted);
+            font-weight: 700;
+            letter-spacing: 0.06em;
         }
 
         #reports-page .rep-metric .v {
-            margin-top: 6px;
-            font-size: 18px;
-            font-weight: 900;
-            letter-spacing: 0.2px;
+            margin-top: 8px;
+            font-size: 19px;
+            font-weight: 700;
+            font-family: var(--rep-mono);
+            letter-spacing: 0.02em;
+            color: var(--rep-teal);
         }
 
         #reports-page .rep-progress {
             margin-top: 10px;
             height: 8px;
             border-radius: 999px;
-            background: rgba(255, 255, 255, 0.22);
+            background: rgba(255, 255, 255, 0.08);
             overflow: hidden;
         }
 
         #reports-page .rep-progress > div {
             height: 100%;
             width: 0;
-            background: linear-gradient(90deg, rgba(34, 197, 94, 0.98), rgba(16, 185, 129, 0.88));
+            background: linear-gradient(90deg, #34d399, var(--rep-teal));
             border-radius: 999px;
         }
 
@@ -5629,18 +5962,183 @@
         #reports-page .rep-table th {
             position: sticky;
             top: 0;
-            background: rgba(255, 255, 255, 0.06);
-            color: rgba(226, 232, 240, 0.75);
-            font-weight: 900;
+            background: rgba(8, 11, 18, 0.92);
+            color: var(--rep-muted);
+            font-weight: 700;
             text-align: left;
             padding: 10px 8px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+            border-bottom: 1px solid var(--rep-border-soft);
+            font-family: var(--rep-sans);
         }
 
         #reports-page .rep-table td {
             padding: 10px 8px;
-            border-top: 1px solid rgba(255, 255, 255, 0.06);
-            color: rgba(226, 232, 240, 0.92);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            color: rgba(232, 237, 245, 0.92);
+        }
+
+        /* 薪资表：手机优先卡片 */
+        #reports-page .rep-pay-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 14px;
+        }
+
+        #reports-page .rep-pay-card {
+            border-radius: 18px;
+            padding: 16px 16px 14px;
+            background: linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 16px 40px -28px rgba(0, 0, 0, 0.55);
+        }
+
+        #reports-page .rep-pay-card__top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        #reports-page .rep-pay-card__name {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--rep-text);
+            letter-spacing: 0.02em;
+        }
+
+        #reports-page .rep-pay-card__store {
+            display: block;
+            margin-top: 4px;
+            font-size: 12px;
+            color: var(--rep-muted);
+            font-weight: 500;
+        }
+
+        #reports-page .rep-pay-empty {
+            text-align: center;
+            padding: 28px 18px;
+            color: var(--rep-muted);
+            font-size: 14px;
+            font-weight: 500;
+            border: 1px dashed rgba(255, 255, 255, 0.12);
+            border-radius: 16px;
+            background: rgba(0, 0, 0, 0.15);
+        }
+
+        #reports-page .rep-pay-card__grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 12px;
+        }
+
+        #reports-page .rep-pay-cell {
+            padding: 10px 10px;
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.22);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        #reports-page .rep-pay-cell .k {
+            display: block;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            color: var(--rep-muted);
+            margin-bottom: 4px;
+        }
+
+        #reports-page .rep-pay-cell .v {
+            font-size: 14px;
+            font-weight: 600;
+            font-family: var(--rep-mono);
+            color: var(--rep-text);
+        }
+
+        #reports-page .rep-pay-cell--accent .v {
+            color: var(--rep-teal);
+            font-weight: 700;
+        }
+
+        #reports-page .rep-pay-cell--warn .v {
+            color: #fbbf24;
+        }
+
+        #reports-page .rep-pay-cell--pos .v {
+            color: #6ee7b7;
+        }
+
+        #reports-page .rep-pay-cell--neg .v {
+            color: #fca5a5;
+        }
+
+        #reports-page .rep-pay-card__actions {
+            margin-top: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        #reports-page .rep-pay-card__actions .btn {
+            font-size: 11px;
+            padding: 8px 12px;
+            border-radius: 10px;
+        }
+
+        #reports-page .rep-pay-total {
+            margin-top: 4px;
+            border-radius: 18px;
+            padding: 16px;
+            background: linear-gradient(135deg, rgba(212, 175, 55, 0.12), rgba(45, 212, 191, 0.08));
+            border: 1px solid var(--rep-border);
+        }
+
+        #reports-page .rep-pay-total__row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            color: var(--rep-muted);
+            margin-bottom: 6px;
+        }
+
+        #reports-page .rep-pay-total__amt {
+            font-size: 22px;
+            font-weight: 700;
+            font-family: var(--rep-mono);
+            color: var(--rep-gold);
+            letter-spacing: 0.02em;
+        }
+
+        #reports-page .rep-pay-section-title {
+            margin: 18px 0 10px;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.18em;
+            color: var(--rep-muted);
+        }
+
+        #reports-page .rep-payroll-audit-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+            padding: 12px 14px;
+            border-radius: 14px;
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        #reports-page .rep-payroll-audit-bar span {
+            font-weight: 700;
+            font-size: 12px;
+            font-family: var(--rep-mono);
+            color: var(--rep-muted);
         }
 
         @media (max-width: 700px) {
@@ -6132,29 +6630,44 @@
 
             <div id="daily-report-page" class="hidden">
                 <div class="dr-shell">
-                    <!-- 顶部标题栏 -->
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 16px;">
-                        <h2 style="margin:0; font-size: 20px; font-weight: 800;">营业日报</h2>
-                        <button class="btn" type="button" onclick="openDailyReportCreate()" style="padding: 10px 18px; font-size: 13px; border-radius: 10px;">+ 填报日报</button>
-                    </div>
-
-                    <!-- 门店选择 -->
-                    <div class="card" style="margin-bottom: 12px; padding: 14px 16px;">
-                        <div style="display:flex; align-items:center; gap: 10px;">
-                            <div style="width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, rgba(59,130,246,0.2), rgba(59,130,246,0.1)); display:flex; align-items:center; justify-content:center; font-size: 14px;">🏪</div>
-                            <select id="dr-store" class="dr-store-select" onchange="onDailyReportStoreChange()" style="flex:1; padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.12); color: #fff; font-size: 14px; font-weight: 600; -webkit-appearance: menulist; appearance: menulist;"></select>
-                            <button class="btn btn-secondary" type="button" onclick="loadDailyReportData()" style="padding: 8px 14px; font-size: 12px; border-radius: 8px;">刷新</button>
+                    <header class="dr-daily-page-head">
+                        <div>
+                            <span class="dr-daily-page-head__eyebrow">DAILY OPS</span>
+                            <h2>营业日报</h2>
                         </div>
-                    </div>
+                    </header>
+
+                    <section class="rep-filters" aria-label="营业日报检索条件">
+                        <div class="rep-filters__head">
+                            <div class="rep-filters__eyebrow">FILTERS</div>
+                            <div class="rep-filters__title">条件检索</div>
+                            <p class="rep-filters__hint">选择门店与日期范围加载列表；点击卡片查看或编辑。「填报日报」打开新建流程。</p>
+                        </div>
+                        <div class="rep-filters__grid">
+                            <div class="rep-filters__full rep-field">
+                                <label for="dr-store">门店范围</label>
+                                <select id="dr-store" class="dr-store-select" onchange="onDailyReportStoreChange()" style="-webkit-appearance:menulist; appearance:menulist;"></select>
+                            </div>
+                            <div class="rep-filters__divider"></div>
+                            <div class="rep-filters__full rep-field rep-filters__actions">
+                                <button class="btn btn-secondary" type="button" onclick="loadDailyReportData()">刷新列表</button>
+                                <button class="btn" type="button" onclick="openDailyReportCreate()" style="background:linear-gradient(135deg,#b45309,#d97706); border:none;">+ 填报日报</button>
+                            </div>
+                            <div class="rep-field">
+                                <label for="dr-list-start">开始日期</label>
+                                <input id="dr-list-start" type="date" class="dr-date-input" onchange="loadDailyReportData()" />
+                            </div>
+                            <div class="rep-field">
+                                <label for="dr-list-end">结束日期</label>
+                                <input id="dr-list-end" type="date" class="dr-date-input" onchange="loadDailyReportData()" />
+                            </div>
+                            <div class="rep-filters__full rep-field" style="display:flex; justify-content:flex-end;">
+                                <button class="btn btn-secondary" type="button" onclick="document.getElementById('dr-list-start').value=''; document.getElementById('dr-list-end').value=''; loadDailyReportData();">清除日期</button>
+                            </div>
+                        </div>
+                    </section>
 
                     <div id="dr-list-view">
-                        <!-- 日期筛选 -->
-                        <div style="display:flex; gap: 8px; align-items:center; margin-bottom: 14px; flex-wrap: wrap;">
-                            <input id="dr-list-start" type="date" class="dr-date-input" style="flex:1; min-width: 130px; padding: 10px 12px; border-radius: 10px; font-size: 14px; background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.25); color:#fff; color-scheme:dark;" onchange="loadDailyReportData()" />
-                            <span style="opacity:0.5; font-size: 12px;">至</span>
-                            <input id="dr-list-end" type="date" class="dr-date-input" style="flex:1; min-width: 130px; padding: 10px 12px; border-radius: 10px; font-size: 14px; background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.25); color:#fff; color-scheme:dark;" onchange="loadDailyReportData()" />
-                            <button class="btn btn-secondary" type="button" onclick="document.getElementById('dr-list-start').value=''; document.getElementById('dr-list-end').value=''; loadDailyReportData();" style="padding: 8px 12px; font-size: 12px; border-radius: 8px; white-space: nowrap;">清除</button>
-                        </div>
                         <div id="dr-missing-banner" style="display:none; padding: 12px 16px; border-radius: 12px; border: 1px solid rgba(239,68,68,0.25); background: rgba(239,68,68,0.08); margin-bottom: 12px; color: rgba(226,232,240,0.95); font-weight: 700; font-size: 13px;"></div>
                         <div id="dr-list" class="dr-list"></div>
                         <div id="dr-empty" class="dr-empty" style="display:none;">暂无日报。</div>
@@ -6920,43 +7433,51 @@
 
             <div id="reports-page" class="hidden">
                 <div class="dr-shell">
-                    <!-- 紧凑筛选栏 -->
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-                        <h2 style="margin:0; font-size:20px; font-weight:800;">分析报表</h2>
-                        <div style="display:flex; gap:6px; align-items:center;">
-                            <button class="btn btn-secondary" type="button" onclick="loadReportsData()" style="padding:8px 10px; font-size:12px; border-radius:8px;" title="刷新">🔄</button>
-                            <button id="rep-btn-csv" class="btn btn-secondary" type="button" onclick="exportCurrentReportCsv()" style="padding:8px 10px; font-size:12px; border-radius:8px; display:none;" title="下载CSV">📥 CSV</button>
-                            <button id="rep-btn-pdf" class="btn" type="button" onclick="exportCurrentReportPdf()" style="padding:8px 10px; font-size:12px; border-radius:8px; background:linear-gradient(135deg,#f97316,#fb923c); display:none;" title="导出PDF">📄 PDF</button>
-                        </div>
-                    </div>
-
-                    <!-- 门店+日期筛选 -->
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:14px; padding:14px;">
-                        <div style="grid-column:1/-1;">
-                            <label style="display:block; font-size:11px; font-weight:700; color:rgba(200,215,230,0.7); margin-bottom:4px;">门店</label>
-                            <select id="rep-store" class="dr-store-select" onchange="loadReportsData()" style="width:100%; padding:10px 12px; border-radius:10px; font-size:14px; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.18); color:#fff; -webkit-appearance:menulist; appearance:menulist;"></select>
-                        </div>
+                    <header class="rep-page-head">
                         <div>
-                            <label style="display:block; font-size:11px; font-weight:700; color:rgba(200,215,230,0.7); margin-bottom:4px;">开始日期</label>
-                            <input id="rep-start" type="date" class="dr-date-input" onchange="loadReportsData()" style="width:100%; padding:10px 12px; border-radius:10px; font-size:14px; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.18); color:#fff; color-scheme:dark;" />
+                            <span class="rep-page-head__eyebrow">INSIGHTS</span>
+                            <h2>分析报表</h2>
                         </div>
-                        <div>
-                            <label style="display:block; font-size:11px; font-weight:700; color:rgba(200,215,230,0.7); margin-bottom:4px;">结束日期</label>
-                            <input id="rep-end" type="date" class="dr-date-input" onchange="loadReportsData()" style="width:100%; padding:10px 12px; border-radius:10px; font-size:14px; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.18); color:#fff; color-scheme:dark;" />
+                        <div class="rep-page-head__actions">
+                            <button class="btn btn-secondary" type="button" onclick="loadReportsData()" title="刷新">刷新</button>
+                            <button id="rep-btn-csv" class="btn btn-secondary" type="button" onclick="exportCurrentReportCsv()" style="display:none;" title="下载 CSV">CSV</button>
+                            <button id="rep-btn-pdf" class="btn" type="button" onclick="exportCurrentReportPdf()" style="display:none; background:linear-gradient(135deg,#b45309,#d97706); border:none;" title="导出 PDF">PDF</button>
                         </div>
-                        <div style="grid-column:1/-1;">
-                            <label style="display:block; font-size:11px; font-weight:700; color:rgba(200,215,230,0.7); margin-bottom:4px;">薪资月份</label>
-                            <input id="rep-month" type="month" class="dr-date-input" onchange="loadReportsData()" style="width:100%; padding:10px 12px; border-radius:10px; font-size:14px; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.18); color:#fff; color-scheme:dark;" placeholder="薪资月份" />
-                        </div>
-                    </div>
+                    </header>
 
-                    <!-- Tab切换 -->
-                    <div style="display:flex; gap:0; margin-bottom:14px; background:rgba(255,255,255,0.06); border-radius:12px; padding:3px; border:1px solid rgba(255,255,255,0.08);">
-                        <button id="rep-tab-business" class="btn" type="button" onclick="showReportsTab('business'); loadReportsData();" style="flex:1; padding:10px 0; font-size:13px; font-weight:700; border-radius:10px; background:#2563eb; border:none;">业务分析表</button>
-                        <button id="rep-tab-attendance" class="btn btn-secondary" type="button" onclick="showReportsTab('attendance'); loadReportsData();" style="flex:1; padding:10px 0; font-size:13px; font-weight:700; border-radius:10px; border:none; background:transparent;">考勤表</button>
-                        <button id="rep-tab-payroll" class="btn btn-secondary" type="button" onclick="showReportsTab('payroll'); loadReportsData();" style="flex:1; padding:10px 0; font-size:13px; font-weight:700; border-radius:10px; border:none; background:transparent;">薪资表</button>
-                        <button id="rep-tab-turnover" class="btn btn-secondary" type="button" onclick="showReportsTab('turnover'); loadReportsData();" style="flex:1; padding:10px 0; font-size:13px; font-weight:700; border-radius:10px; border:none; background:transparent;">离职率</button>
-                    </div>
+                    <section class="rep-filters" aria-label="报表检索条件">
+                        <div class="rep-filters__head">
+                            <div class="rep-filters__eyebrow">FILTERS</div>
+                            <div class="rep-filters__title">条件检索</div>
+                            <p class="rep-filters__hint">门店与日期区间用于业务 / 考勤；「薪资月份」用于薪资表与离职率口径。</p>
+                        </div>
+                        <div class="rep-filters__grid">
+                            <div class="rep-filters__full rep-field">
+                                <label for="rep-store">门店范围</label>
+                                <select id="rep-store" class="dr-store-select" onchange="loadReportsData()" style="-webkit-appearance:menulist; appearance:menulist;"></select>
+                            </div>
+                            <div class="rep-filters__divider"></div>
+                            <div class="rep-field">
+                                <label for="rep-start">开始日期</label>
+                                <input id="rep-start" type="date" class="dr-date-input" onchange="loadReportsData()" />
+                            </div>
+                            <div class="rep-field">
+                                <label for="rep-end">结束日期</label>
+                                <input id="rep-end" type="date" class="dr-date-input" onchange="loadReportsData()" />
+                            </div>
+                            <div class="rep-filters__full rep-field">
+                                <label for="rep-month">薪资月份</label>
+                                <input id="rep-month" type="month" class="dr-date-input" onchange="loadReportsData()" />
+                            </div>
+                        </div>
+                    </section>
+
+                    <nav class="rep-tabs" role="tablist" aria-label="报表类型">
+                        <button id="rep-tab-business" class="rep-tab rep-tab--active" type="button" role="tab" aria-selected="true" onclick="showReportsTab('business'); loadReportsData();">业务</button>
+                        <button id="rep-tab-attendance" class="rep-tab" type="button" role="tab" aria-selected="false" onclick="showReportsTab('attendance'); loadReportsData();">考勤</button>
+                        <button id="rep-tab-payroll" class="rep-tab" type="button" role="tab" aria-selected="false" onclick="showReportsTab('payroll'); loadReportsData();">薪资</button>
+                        <button id="rep-tab-turnover" class="rep-tab" type="button" role="tab" aria-selected="false" onclick="showReportsTab('turnover'); loadReportsData();">离职</button>
+                    </nav>
 
                     <div id="rep-business" style="margin-bottom:18px;">
                         <div style="display:flex; gap:6px; margin-bottom:12px;">
@@ -6972,11 +7493,11 @@
                     </div>
 
                     <div id="rep-payroll" class="hidden" style="margin-bottom:18px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px;">
-                            <span id="rep-payroll-audit" style="font-weight:800; font-size:12px; color:rgba(200,215,230,0.6);">-</span>
-                            <button id="rep-payroll-audit-btn" class="btn btn-secondary" type="button" onclick="togglePayrollAudit()" style="padding:8px 12px; font-size:12px; border-radius:8px; display:none;">切换审核状态</button>
+                        <div class="rep-payroll-audit-bar">
+                            <span id="rep-payroll-audit">-</span>
+                            <button id="rep-payroll-audit-btn" class="btn btn-secondary" type="button" onclick="togglePayrollAudit()" style="display:none;">审核切换</button>
                         </div>
-                        <div id="rep-payroll-box" style="color:rgba(200,215,230,0.6);">加载中...</div>
+                        <div id="rep-payroll-box" style="color:rgba(186,198,215,0.55);">加载中...</div>
                     </div>
 
                     <div id="rep-turnover" class="hidden" style="margin-bottom:18px;">
@@ -26050,17 +26571,8 @@ ${knowledgeContent.slice(0, 30000)}`;
                 if (box) box.classList.toggle('hidden', x !== t);
                 const btn = document.getElementById('rep-tab-' + x);
                 if (btn) {
-                    if (x === t) {
-                        btn.className = 'btn';
-                        btn.style.background = '#2563eb';
-                        btn.style.color = '#fff';
-                        btn.style.boxShadow = '0 2px 8px rgba(37,99,235,0.25)';
-                    } else {
-                        btn.className = 'btn btn-secondary';
-                        btn.style.background = 'transparent';
-                        btn.style.color = 'rgba(200,215,230,0.75)';
-                        btn.style.boxShadow = 'none';
-                    }
+                    btn.classList.toggle('rep-tab--active', x === t);
+                    btn.setAttribute('aria-selected', x === t ? 'true' : 'false');
                 }
             });
         }
@@ -27012,76 +27524,79 @@ ${knowledgeContent.slice(0, 30000)}`;
                         const totalAmount = rows.reduce((s, r) => s + (Number(r?.amount) || 0), 0);
                         const totalAttDays = rows.reduce((s, r) => s + (Number(r?.attendanceDays) || 0), 0);
                         const titleStore = store || '全部门店';
+                        const rpCls = (n) => {
+                            const v = Number(n || 0);
+                            if (!Number.isFinite(v)) return '';
+                            return v >= 0 ? 'rep-pay-cell--pos' : 'rep-pay-cell--neg';
+                        };
+                        const subCls = (n) => {
+                            const v = Number(n || 0);
+                            if (!Number.isFinite(v)) return '';
+                            return v >= 0 ? 'rep-pay-cell--pos' : 'rep-pay-cell--neg';
+                        };
                         const html = `
-                            <div class="rep-hero" style="background: linear-gradient(135deg, #7c3aed, #a78bfa);">
+                            <div class="rep-hero">
                                 <div style="display:flex; justify-content: space-between; align-items:flex-start; gap: 12px; flex-wrap: wrap;">
                                     <div>
-                                        <div style="font-weight: 900; font-size: 16px;">${escapeHtml(titleStore)} 薪资汇总</div>
-                                        <div class="meta" style="margin-top: 6px;">月份：${escapeHtml(month || '')} · ${audited ? '已审核' : '未审核'}</div>
-                                        <div class="meta" style="margin-top: 6px;">日薪公式：月薪 ÷ (${Number(resp?.monthDays || 0)} - 4) = 月薪 ÷ ${Number(resp?.workDaysPerMonth || 0)}</div>
+                                        <div style="font-weight: 800; font-size: 15px; letter-spacing:0.04em;">${escapeHtml(titleStore)} · 薪资汇总</div>
+                                        <div class="meta" style="margin-top: 8px;">账期 ${escapeHtml(month || '')} · ${audited ? '已审核' : '未审核'}</div>
+                                        <div class="meta" style="margin-top: 4px;">计薪：月薪 ÷（${Number(resp?.monthDays || 0)} − 4）= 月薪 ÷ ${Number(resp?.workDaysPerMonth || 0)} 个工作日</div>
                                     </div>
                                 </div>
                                 <div class="rep-grid">
                                     <div class="rep-metric">
-                                        <div class="k">员工人数</div>
-                                        <div class="v">${rows.length} 人</div>
+                                        <div class="k">人数</div>
+                                        <div class="v">${rows.length}</div>
                                     </div>
                                     <div class="rep-metric">
-                                        <div class="k">出勤总计</div>
-                                        <div class="v">${totalAttDays.toFixed(1)} 天</div>
+                                        <div class="k">出勤合计</div>
+                                        <div class="v">${totalAttDays.toFixed(1)}<span style="font-size:12px;font-weight:600;opacity:0.85"> 天</span></div>
                                     </div>
-                                    <div class="rep-metric">
+                                    <div class="rep-metric" style="grid-column: 1 / -1;">
                                         <div class="k">应发总额</div>
-                                        <div class="v">¥${fmt(totalAmount)}</div>
+                                        <div class="v" style="color:var(--rep-gold);">¥${fmt(totalAmount)}</div>
                                     </div>
                                 </div>
                             </div>
-                            <div style="margin-top: 14px; font-size: 12px; color: rgba(200,215,230,0.75); font-weight: 800;">明细</div>
-                            <div class="rep-table" style="overflow-x:auto;">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>门店</th>
-                                            <th>员工</th>
-                                            <th style="text-align:right;">出勤(天)</th>
-                                            <th style="text-align:right;">月薪</th>
-                                            <th style="text-align:right;">日薪</th>
-                                            <th style="text-align:right;">基础应发</th>
-                                            <th style="text-align:right;">奖惩调整</th>
-                                            <th style="text-align:right;">补贴</th>
-                                            <th style="text-align:right;">应发</th>
-                                            <th>操作</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${rows.map(r => `
-                                            <tr>
-                                                <td>${escapeHtml(String(r?.store || ''))}</td>
-                                                <td>${escapeHtml(String(r?.name || r?.username || ''))}</td>
-                                                <td style="text-align:right;">${escapeHtml(String(r?.attendanceDays || 0))}</td>
-                                                <td style="text-align:right;">${fmt(r?.monthlySalary)}</td>
-                                                <td style="text-align:right;">${fmt(r?.dailyRate)}</td>
-                                                <td style="text-align:right; ${r?.baseAmountOverridden ? 'color:#fbbf24; font-weight:900;' : ''}">${fmt(r?.baseAmount)}</td>
-                                                <td style="text-align:right; color:${Number(r?.rewardPunishmentAdj || 0) >= 0 ? '#22c55e' : '#ef4444'}; font-weight: 800;">${Number(r?.rewardPunishmentAdj || 0) >= 0 ? '+' : ''}${fmt(r?.rewardPunishmentAdj)}</td>
-                                                <td style="text-align:right; color:${Number(r?.subsidy || 0) >= 0 ? '#60a5fa' : '#ef4444'}; font-weight: 800;">${Number(r?.subsidy || 0) >= 0 ? '+' : ''}${fmt(r?.subsidy)}</td>
-                                                <td style="text-align:right; font-weight: 900;">${fmt(r?.amount)}</td>
-                                                <td>${canEditPayroll ? `<div style="display:flex; gap:6px; flex-wrap:wrap;"><button class="btn btn-secondary" type="button" style="padding:4px 8px; font-size:12px;" onclick="editPayrollBaseAmount('${escapeHtml(String(r?.username || ''))}', '${escapeHtml(String(r?.store || ''))}', ${Number(r?.baseAmount || 0)})">改基础应发</button><button class="btn btn-secondary" type="button" style="padding:4px 8px; font-size:12px;" onclick="editPayrollSubsidy('${escapeHtml(String(r?.username || ''))}', '${escapeHtml(String(r?.store || ''))}', ${Number(r?.subsidy || 0)})">改补贴</button></div>` : '-'}</td>
-                                            </tr>
-                                        `).join('')}
-                                        <tr style="border-top: 1px solid rgba(255,255,255,0.1); font-weight: 900;">
-                                            <td>合计</td>
-                                            <td>${rows.length} 人</td>
-                                            <td style="text-align:right;">${totalAttDays.toFixed(1)}</td>
-                                            <td></td>
-                                            <td></td>
-                                            <td style="text-align:right;">${fmt(rows.reduce((s, r) => s + (Number(r?.baseAmount) || 0), 0))}</td>
-                                            <td style="text-align:right; color:${rows.reduce((s, r) => s + (Number(r?.rewardPunishmentAdj) || 0), 0) >= 0 ? '#22c55e' : '#ef4444'};">${rows.reduce((s, r) => s + (Number(r?.rewardPunishmentAdj) || 0), 0) >= 0 ? '+' : ''}${fmt(rows.reduce((s, r) => s + (Number(r?.rewardPunishmentAdj) || 0), 0))}</td>
-                                            <td style="text-align:right; color:${rows.reduce((s, r) => s + (Number(r?.subsidy) || 0), 0) >= 0 ? '#60a5fa' : '#ef4444'};">${rows.reduce((s, r) => s + (Number(r?.subsidy) || 0), 0) >= 0 ? '+' : ''}${fmt(rows.reduce((s, r) => s + (Number(r?.subsidy) || 0), 0))}</td>
-                                            <td style="text-align:right;">¥${fmt(totalAmount)}</td>
-                                            <td></td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+                            <div class="rep-pay-section-title">员工明细</div>
+                            <div class="rep-pay-stack">
+                                ${rows.length ? rows.map(r => {
+                                    const nm = escapeHtml(String(r?.name || r?.username || ''));
+                                    const st = escapeHtml(String(r?.store || ''));
+                                    const un = escapeHtml(String(r?.username || ''));
+                                    const sto = escapeHtml(String(r?.store || ''));
+                                    const baseWarn = r?.baseAmountOverridden ? ' rep-pay-cell--warn' : '';
+                                    const act = canEditPayroll
+                                        ? `<div class="rep-pay-card__actions"><button class="btn btn-secondary" type="button" onclick="editPayrollBaseAmount('${un}', '${sto}', ${Number(r?.baseAmount || 0)})">基础应发</button><button class="btn btn-secondary" type="button" onclick="editPayrollSubsidy('${un}', '${sto}', ${Number(r?.subsidy || 0)})">补贴</button></div>`
+                                        : '';
+                                    return `
+                                    <article class="rep-pay-card">
+                                        <div class="rep-pay-card__top">
+                                            <div>
+                                                <div class="rep-pay-card__name">${nm}</div>
+                                                <span class="rep-pay-card__store">${st || '—'}</span>
+                                            </div>
+                                        </div>
+                                        <div class="rep-pay-card__grid">
+                                            <div class="rep-pay-cell"><span class="k">出勤</span><span class="v">${escapeHtml(String(r?.attendanceDays ?? 0))}</span></div>
+                                            <div class="rep-pay-cell"><span class="k">月薪</span><span class="v">${fmt(r?.monthlySalary)}</span></div>
+                                            <div class="rep-pay-cell"><span class="k">日薪</span><span class="v">${fmt(r?.dailyRate)}</span></div>
+                                            <div class="rep-pay-cell${baseWarn}"><span class="k">基础应发</span><span class="v">${fmt(r?.baseAmount)}</span></div>
+                                            <div class="rep-pay-cell ${rpCls(r?.rewardPunishmentAdj)}"><span class="k">奖惩</span><span class="v">${Number(r?.rewardPunishmentAdj || 0) >= 0 ? '+' : ''}${fmt(r?.rewardPunishmentAdj)}</span></div>
+                                            <div class="rep-pay-cell ${subCls(r?.subsidy)}"><span class="k">补贴</span><span class="v">${Number(r?.subsidy || 0) >= 0 ? '+' : ''}${fmt(r?.subsidy)}</span></div>
+                                        </div>
+                                        <div class="rep-pay-cell rep-pay-cell--accent" style="margin-top:10px;border-radius:12px;">
+                                            <span class="k">实发应发</span>
+                                            <span class="v" style="font-size:18px;">¥${fmt(r?.amount)}</span>
+                                        </div>
+                                        ${act}
+                                    </article>`;
+                                }).join('') : '<div class="rep-pay-empty">该条件下暂无薪资明细</div>'}
+                            </div>
+                            <div class="rep-pay-total">
+                                <div class="rep-pay-total__row"><span>人数合计</span><span>${rows.length} 人</span></div>
+                                <div class="rep-pay-total__row"><span>出勤合计</span><span>${totalAttDays.toFixed(1)} 天</span></div>
+                                <div class="rep-pay-total__row" style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.1);"><span>应发总额</span><span class="rep-pay-total__amt">¥${fmt(totalAmount)}</span></div>
                             </div>
                         `;
                         if (box) box.innerHTML = html;
