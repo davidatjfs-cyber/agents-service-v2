@@ -11,9 +11,12 @@ set -euo pipefail
 ECS_HOST="${ECS_HOST:-root@47.100.96.30}"
 REMOTE_DIR="${REMOTE_DIR:-/opt/hrms/server}"
 LOCAL_SRC="$(cd "$(dirname "$0")/../hr-management-system/server" && pwd)"
+LOCAL_WEB="$(cd "$(dirname "$0")/../hr-management-system" && pwd)"
 DISABLE_SCHEDULED_CHECKLIST="${DISABLE_SCHEDULED_CHECKLIST:-1}"
 BITABLE_TASK_RESP_APP_ID="${BITABLE_TASK_RESP_APP_ID:-cli_a9fc0d13c838dcd6}"
 BITABLE_TASK_RESP_APP_SECRET="${BITABLE_TASK_RESP_APP_SECRET:-pRVuBmiWc0hzqP1YzZDqzGUPFlaProDN}"
+REMOTE_WEB_ROOT="${REMOTE_WEB_ROOT:-/opt/hrms}"
+REMOTE_WEB_ROOT_ALT="${REMOTE_WEB_ROOT_ALT:-/var/www/hrms}"
 
 echo ">>> node --check (local index.js + agents.js + bi-weekly-report.js)"
 node --check "${LOCAL_SRC}/index.js"
@@ -27,6 +30,27 @@ rsync -avz -e ssh \
   --exclude '.env' \
   --exclude '.env.*' \
   "${LOCAL_SRC}/" "${ECS_HOST}:${REMOTE_DIR}/"
+
+echo ">>> rsync web (nginx root) -> ${ECS_HOST}:${REMOTE_WEB_ROOT}/ (+ optional alt)"
+# Express `webRootDir` is `path.resolve(__dirname, '..')` relative to server/index.js,
+# which maps to `/opt/hrms` on ECS (NOT `/opt/hrms/server`). If we only rsync server/,
+# frontend HTML changes will never reach production.
+rsync -avz -e ssh \
+  "${LOCAL_WEB}/working-fixed.html" \
+  "${LOCAL_WEB}/mobile-nav-production.html" \
+  "${ECS_HOST}:${REMOTE_WEB_ROOT}/"
+
+# Keep legacy mirror paths in sync if they exist on the host (best-effort).
+ssh -o ConnectTimeout=60 "${ECS_HOST}" "bash -s" <<EOS2
+set -euo pipefail
+mkdir -p "${REMOTE_WEB_ROOT}/hr-management-system" || true
+cp -f "${REMOTE_WEB_ROOT}/working-fixed.html" "${REMOTE_WEB_ROOT}/hr-management-system/working-fixed.html" || true
+cp -f "${REMOTE_WEB_ROOT}/mobile-nav-production.html" "${REMOTE_WEB_ROOT}/hr-management-system/mobile-nav-production.html" || true
+if [[ -d "${REMOTE_WEB_ROOT_ALT}" ]]; then
+  cp -f "${REMOTE_WEB_ROOT}/working-fixed.html" "${REMOTE_WEB_ROOT_ALT}/working-fixed.html" || true
+  cp -f "${REMOTE_WEB_ROOT}/mobile-nav-production.html" "${REMOTE_WEB_ROOT_ALT}/mobile-nav-production.html" || true
+fi
+EOS2
 
 REMOTE_SCRIPT=$(cat <<'EOS'
 set -euo pipefail
