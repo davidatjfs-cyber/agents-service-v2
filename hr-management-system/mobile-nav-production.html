@@ -5667,6 +5667,468 @@
             gap: 10px;
         }
 
+        /* ── 请款管理：与分析报表同系金融面板 ── */
+        #payment-page {
+            --rep-bg0: #06080c;
+            --rep-bg1: #0b0f16;
+            --rep-border: rgba(212, 175, 55, 0.14);
+            --rep-border-soft: rgba(255, 255, 255, 0.08);
+            --rep-gold: #d4af37;
+            --rep-gold-glow: rgba(212, 175, 55, 0.22);
+            --rep-teal: #5eead4;
+            --rep-text: #e9eef6;
+            --rep-muted: rgba(186, 198, 215, 0.58);
+            --rep-mono: "IBM Plex Mono", ui-monospace, monospace;
+            --rep-sans: "IBM Plex Sans", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+            background:
+                radial-gradient(900px 520px at 100% -10%, rgba(45, 212, 191, 0.06), transparent 50%),
+                radial-gradient(700px 400px at -10% 20%, var(--rep-gold-glow), transparent 45%),
+                linear-gradient(165deg, var(--rep-bg0) 0%, var(--rep-bg1) 55%, #070a10 100%);
+            min-height: calc(100vh - 120px);
+            padding-top: 6px;
+            color: var(--rep-text);
+            font-family: var(--rep-sans);
+        }
+
+        #payment-page .dr-shell {
+            max-width: min(960px, 100%);
+            margin: 0 auto;
+            padding: 14px 14px 96px;
+        }
+
+        #payment-page .pay-page-head {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--rep-border-soft);
+        }
+
+        #payment-page .pay-page-head__eyebrow {
+            display: block;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.22em;
+            color: var(--rep-gold);
+            opacity: 0.85;
+            margin-bottom: 4px;
+        }
+
+        #payment-page .pay-page-head h2 {
+            margin: 0;
+            font-size: 1.35rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: var(--rep-text);
+        }
+
+        #payment-page .pay-page-head__actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        #payment-page .pay-page-head__actions .btn {
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 12px;
+        }
+
+        #payment-page .rep-filters {
+            position: relative;
+            border-radius: 20px;
+            padding: 18px 18px 16px;
+            margin-bottom: 18px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+            border: 1px solid var(--rep-border);
+            box-shadow:
+                0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+                0 20px 40px -28px rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(14px);
+        }
+
+        #payment-page .rep-filters::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: 20px;
+            pointer-events: none;
+            background: linear-gradient(125deg, rgba(212, 175, 55, 0.07), transparent 42%);
+        }
+
+        #payment-page .rep-filters__head {
+            position: relative;
+            margin-bottom: 14px;
+        }
+
+        #payment-page .rep-filters__eyebrow {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.2em;
+            color: var(--rep-gold);
+            opacity: 0.9;
+        }
+
+        #payment-page .rep-filters__title {
+            margin-top: 4px;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--rep-text);
+            letter-spacing: 0.02em;
+        }
+
+        #payment-page .rep-filters__hint {
+            margin-top: 6px;
+            font-size: 11px;
+            line-height: 1.45;
+            color: var(--rep-muted);
+        }
+
+        #payment-page .rep-filters__grid {
+            position: relative;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px 14px;
+        }
+
+        #payment-page .rep-filters__full {
+            grid-column: 1 / -1;
+        }
+
+        #payment-page .rep-filters__divider {
+            grid-column: 1 / -1;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            margin: 2px 0 4px;
+        }
+
+        #payment-page .rep-field label {
+            display: block;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--rep-muted) !important;
+            margin-bottom: 6px;
+        }
+
+        #payment-page .rep-filters .dr-date-input,
+        #payment-page .rep-filters select {
+            width: 100%;
+            padding: 12px 14px !important;
+            border-radius: 12px !important;
+            font-size: 14px !important;
+            font-family: var(--rep-mono) !important;
+            background: rgba(0, 0, 0, 0.35) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            color: var(--rep-text) !important;
+            color-scheme: dark;
+        }
+
+        #payment-page .rep-filters select {
+            -webkit-appearance: menulist;
+            appearance: menulist;
+        }
+
+        #payment-page .rep-filters .dr-date-input:focus,
+        #payment-page .rep-filters select:focus {
+            outline: none;
+            border-color: rgba(212, 175, 55, 0.45) !important;
+            box-shadow: 0 0 0 3px var(--rep-gold-glow);
+        }
+
+        #payment-page .rep-filters__toolbar {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        #payment-page .pay-admin-bar {
+            display: none;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+
+        #payment-page .pay-admin-bar .btn {
+            flex: 1;
+            min-width: 100px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 12px;
+        }
+
+        #payment-page .pay-export-panel {
+            display: none;
+            margin-bottom: 16px;
+            border-radius: 18px;
+            padding: 16px;
+            background: linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+            border: 1px solid var(--rep-border-soft);
+        }
+
+        #payment-page .pay-export-panel .rep-filters__grid {
+            margin-top: 10px;
+        }
+
+        #payment-page .rep-hero {
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 18px;
+            background:
+                radial-gradient(800px 280px at 0% 0%, rgba(45, 212, 191, 0.12), transparent 55%),
+                linear-gradient(155deg, rgba(18, 26, 38, 0.95), rgba(8, 11, 18, 0.98));
+            color: var(--rep-text);
+            border: 1px solid var(--rep-border);
+            box-shadow: 0 28px 56px -36px rgba(0, 0, 0, 0.75);
+        }
+
+        #payment-page .rep-hero .pay-hero-title {
+            font-weight: 800;
+            font-size: 14px;
+            letter-spacing: 0.06em;
+            color: var(--rep-muted);
+        }
+
+        #payment-page .rep-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 14px;
+        }
+
+        #payment-page .rep-metric {
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            padding: 14px 12px;
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.2s ease;
+        }
+
+        #payment-page .rep-metric:active {
+            transform: scale(0.98);
+        }
+
+        #payment-page .rep-metric .k {
+            font-size: 11px;
+            color: var(--rep-muted);
+            font-weight: 700;
+            letter-spacing: 0.06em;
+        }
+
+        #payment-page .rep-metric .v {
+            margin-top: 8px;
+            font-size: 17px;
+            font-weight: 700;
+            font-family: var(--rep-mono);
+            color: var(--rep-teal);
+        }
+
+        #payment-page .rep-metric--gold .v {
+            color: var(--rep-gold);
+        }
+
+        #payment-page .rep-pay-section-title {
+            margin: 18px 0 10px;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.18em;
+            color: var(--rep-muted);
+        }
+
+        #payment-page .rep-pay-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        #payment-page .rep-pay-card {
+            border-radius: 18px;
+            padding: 16px 16px 14px;
+            background: linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 16px 40px -28px rgba(0, 0, 0, 0.55);
+        }
+
+        #payment-page .rep-pay-card__top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        #payment-page .rep-pay-card__name {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--rep-text);
+        }
+
+        #payment-page .rep-pay-card__amt {
+            font-size: 18px;
+            font-weight: 700;
+            font-family: var(--rep-mono);
+            color: var(--rep-gold);
+            white-space: nowrap;
+        }
+
+        #payment-page .rep-pay-card__store {
+            display: block;
+            margin-top: 4px;
+            font-size: 12px;
+            color: var(--rep-muted);
+            font-weight: 500;
+        }
+
+        #payment-page .rep-pay-card__grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 12px;
+        }
+
+        #payment-page .rep-pay-cell {
+            padding: 10px 10px;
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.22);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        #payment-page .rep-pay-cell .k {
+            display: block;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            color: var(--rep-muted);
+            margin-bottom: 4px;
+        }
+
+        #payment-page .rep-pay-cell .v {
+            font-size: 13px;
+            font-weight: 600;
+            font-family: var(--rep-mono);
+            color: var(--rep-text);
+        }
+
+        #payment-page .rep-pay-card__actions {
+            margin-top: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        #payment-page .rep-pay-card__actions .btn {
+            font-size: 11px;
+            padding: 8px 12px;
+            border-radius: 10px;
+        }
+
+        #payment-page .pay-line-card--pending {
+            border-color: rgba(245, 158, 11, 0.35);
+        }
+
+        #payment-page .pay-line-card--approved {
+            border-color: rgba(52, 211, 153, 0.35);
+        }
+
+        #payment-page .pay-line-card--paid {
+            border-color: rgba(96, 165, 250, 0.35);
+        }
+
+        #payment-page .pay-line-card--rejected {
+            border-color: rgba(248, 113, 113, 0.4);
+        }
+
+        #payment-page .rep-pay-empty {
+            text-align: center;
+            padding: 28px 18px;
+            color: var(--rep-muted);
+            font-size: 14px;
+            border: 1px dashed rgba(255, 255, 255, 0.12);
+            border-radius: 16px;
+            background: rgba(0, 0, 0, 0.15);
+        }
+
+        #payment-page .pay-form-shell {
+            border-radius: 20px;
+            padding: 18px 18px 16px;
+            margin-bottom: 18px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+            border: 1px solid var(--rep-border);
+            box-shadow:
+                0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+                0 20px 40px -28px rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(14px);
+        }
+
+        #payment-page .pay-form-shell .form-label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--rep-muted) !important;
+        }
+
+        #payment-page .pay-form-shell .form-input,
+        #payment-page .pay-form-shell .form-textarea {
+            border-radius: 12px !important;
+            font-family: var(--rep-mono) !important;
+            background: rgba(0, 0, 0, 0.35) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            color: var(--rep-text) !important;
+            color-scheme: dark;
+        }
+
+        #payment-page .pay-form-shell select.form-input {
+            -webkit-appearance: menulist;
+            appearance: menulist;
+        }
+
+        #payment-page .pay-form-custom {
+            padding: 14px;
+            border-radius: 14px;
+            border: 1px dashed rgba(212, 175, 55, 0.28);
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        #payment-page .pay-form-sticky {
+            position: sticky;
+            bottom: 0;
+            z-index: 60;
+            margin-top: 14px;
+            padding: 12px 0;
+            background: linear-gradient(180deg, rgba(6, 8, 12, 0.2) 0%, rgba(6, 8, 12, 0.94) 70%);
+            backdrop-filter: blur(8px);
+        }
+
+        #payment-page .pay-back-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        #payment-page .pay-back-bar .pay-form-title {
+            font-weight: 800;
+            font-size: 17px;
+            color: var(--rep-text);
+            letter-spacing: 0.02em;
+        }
+
+        @media (max-width: 700px) {
+            #payment-page .rep-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         /* ── 分析报表：金融级深色面板（IBM Plex + 香槟金点缀）── */
         #reports-page {
             --rep-bg0: #06080c;
@@ -7278,79 +7740,101 @@
             </div>
 
             <div id="payment-page" class="hidden">
-                <!-- 顶部标题栏 -->
-                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 16px;">
-                    <h2 style="margin:0; font-size: 20px; font-weight: 800;">请款管理</h2>
-                    <div style="display:flex; gap: 8px; align-items:center;">
-                        <button class="btn btn-secondary" type="button" onclick="loadPaymentData()" style="padding: 8px 14px; font-size: 12px; border-radius: 8px;">刷新</button>
-                        <button class="btn" id="payment-create-btn" type="button" onclick="openPaymentCreate()" style="padding: 10px 18px; font-size: 13px; border-radius: 10px;">+ 新建请款</button>
+                <div class="dr-shell">
+                <header class="pay-page-head">
+                    <div>
+                        <span class="pay-page-head__eyebrow">DISBURSE</span>
+                        <h2>请款管理</h2>
                     </div>
-                </div>
+                    <div class="pay-page-head__actions">
+                        <button class="btn btn-secondary" type="button" onclick="loadPaymentData()">刷新</button>
+                        <button class="btn" id="payment-create-btn" type="button" onclick="openPaymentCreate()" style="background:linear-gradient(135deg,#b45309,#d97706); border:none;">+ 新建请款</button>
+                    </div>
+                </header>
 
                 <div id="payment-list-view">
-                    <!-- 请款统计卡片 -->
-                    <div class="card" style="margin-bottom: 14px; padding: 20px;">
-                        <div style="display:flex; align-items:center; gap: 10px; margin-bottom: 14px;">
-                            <div style="width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, rgba(249,115,22,0.2), rgba(249,115,22,0.1)); display:flex; align-items:center; justify-content:center; font-size: 16px;">📊</div>
-                            <span style="font-weight: 700; font-size: 15px;">请款统计</span>
-                        </div>
-                        <div id="payment-stats" style="color: rgba(200,215,230,0.85); font-size: 13px;">--</div>
+                    <div class="rep-hero">
+                        <div class="pay-hero-title">请款统计</div>
+                        <div id="payment-stats">--</div>
                     </div>
 
-                    <!-- 门店筛选 + 状态筛选 -->
-                    <div class="card" style="margin-bottom: 14px; padding: 16px;">
-                        <div style="display:flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px;">
-                            <select id="payment-filter-store" onchange="loadPaymentData()" style="flex:1; min-width: 140px; padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); font-size: 13px;"></select>
-                            <select id="payment-filter-status" onchange="loadPaymentData()" style="min-width: 110px; padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); font-size: 13px;">
-                                <option value="">全部</option>
-                                <option value="pending">待审批</option>
-                                <option value="approved">已审批</option>
-                                <option value="paid">已付款</option>
-                                <option value="rejected">已拒绝</option>
-                            </select>
+                    <section class="rep-filters" aria-label="请款检索条件">
+                        <div class="rep-filters__head">
+                            <div class="rep-filters__eyebrow">FILTERS</div>
+                            <div class="rep-filters__title">条件检索</div>
+                            <p class="rep-filters__hint">门店、状态与请款日期区间用于筛选列表；点击统计卡片可快速切换状态。</p>
                         </div>
-                        <div style="display:flex; gap: 8px; align-items:center; flex-wrap: wrap;">
-                            <input id="payment-filter-start" type="date" onchange="loadPaymentData()" style="flex:1; min-width: 120px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); font-size: 13px;" />
-                            <span style="opacity:0.5; font-size: 12px;">至</span>
-                            <input id="payment-filter-end" type="date" onchange="loadPaymentData()" style="flex:1; min-width: 120px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); font-size: 13px;" />
-                            <button class="btn btn-secondary" type="button" onclick="clearPaymentFilters()" style="padding: 8px 12px; font-size: 12px; border-radius: 8px; white-space: nowrap;">清除</button>
-                        </div>
-                    </div>
-
-                    <!-- 管理员操作区 -->
-                    <div id="payment-admin-actions" style="margin-bottom: 14px; display:none; gap: 8px; flex-wrap: wrap;">
-                        <button class="btn" type="button" onclick="openPaymentSettingsModal('basic')" style="flex:1; min-width: 100px; padding: 10px 14px; font-size: 13px; border-radius: 10px; background: linear-gradient(135deg, #f97316, #fb923c);">基础配置</button>
-                        <button class="btn" type="button" onclick="openPaymentSettingsModal('budget')" style="flex:1; min-width: 100px; padding: 10px 14px; font-size: 13px; border-radius: 10px; background: linear-gradient(135deg, #f97316, #fb923c);">预算管理</button>
-                        <button class="btn" type="button" onclick="openPaymentSettingsModal('flow')" style="flex:1; min-width: 100px; padding: 10px 14px; font-size: 13px; border-radius: 10px; background: linear-gradient(135deg, #3b82f6, #60a5fa);">审批流程配置</button>
-                    </div>
-
-                    <!-- 管理员导出区 -->
-                    <div id="payment-admin-export" style="margin-bottom: 14px; display:none;">
-                        <div class="card" style="padding: 16px;">
-                            <div style="font-weight: 700; font-size: 13px; margin-bottom: 10px;">导出请款单（仅管理员）</div>
-                            <div style="display:flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-                                <input id="payment-export-start" type="date" style="flex:1; min-width: 120px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); font-size: 13px;" />
-                                <span style="opacity:0.5; font-size: 12px;">至</span>
-                                <input id="payment-export-end" type="date" style="flex:1; min-width: 120px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); font-size: 13px;" />
-                                <button class="btn" type="button" onclick="exportPaymentsCsv()" style="padding: 10px 14px; font-size: 13px; border-radius: 10px;">下载 CSV</button>
+                        <div class="rep-filters__grid">
+                            <div class="rep-filters__full rep-field">
+                                <label for="payment-filter-store">门店范围</label>
+                                <select id="payment-filter-store" onchange="loadPaymentData()"></select>
                             </div>
-                            <div style="margin-top: 8px; font-size: 11px; color: rgba(200,215,230,0.65);">按"请款日期"筛选导出，包含全部状态。</div>
+                            <div class="rep-field">
+                                <label for="payment-filter-status">状态</label>
+                                <select id="payment-filter-status" onchange="loadPaymentData()">
+                                    <option value="">全部</option>
+                                    <option value="pending">待审批</option>
+                                    <option value="approved">已审批</option>
+                                    <option value="paid">已付款</option>
+                                    <option value="rejected">已拒绝</option>
+                                </select>
+                            </div>
+                            <div class="rep-filters__divider"></div>
+                            <div class="rep-field">
+                                <label for="payment-filter-start">开始日期</label>
+                                <input id="payment-filter-start" type="date" class="dr-date-input" onchange="loadPaymentData()" />
+                            </div>
+                            <div class="rep-field">
+                                <label for="payment-filter-end">结束日期</label>
+                                <input id="payment-filter-end" type="date" class="dr-date-input" onchange="loadPaymentData()" />
+                            </div>
+                            <div class="rep-filters__toolbar">
+                                <button class="btn btn-secondary" type="button" onclick="clearPaymentFilters()">清除条件</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <div id="payment-admin-actions" class="pay-admin-bar">
+                        <button class="btn" type="button" onclick="openPaymentSettingsModal('basic')" style="background:linear-gradient(135deg,#b45309,#d97706); border:none;">基础配置</button>
+                        <button class="btn" type="button" onclick="openPaymentSettingsModal('budget')" style="background:linear-gradient(135deg,#b45309,#d97706); border:none;">预算管理</button>
+                        <button class="btn btn-secondary" type="button" onclick="openPaymentSettingsModal('flow')">审批流程配置</button>
+                    </div>
+
+                    <div id="payment-admin-export" class="pay-export-panel">
+                        <div class="rep-filters__title" style="margin-top:0;">导出请款单（仅管理员）</div>
+                        <p class="rep-filters__hint">按请款日期筛选导出，包含全部状态。</p>
+                        <div class="rep-filters__grid">
+                            <div class="rep-field">
+                                <label for="payment-export-start">开始日期</label>
+                                <input id="payment-export-start" type="date" class="dr-date-input" />
+                            </div>
+                            <div class="rep-field">
+                                <label for="payment-export-end">结束日期</label>
+                                <input id="payment-export-end" type="date" class="dr-date-input" />
+                            </div>
+                            <div class="rep-filters__full rep-filters__toolbar">
+                                <button class="btn" type="button" onclick="exportPaymentsCsv()" style="background:linear-gradient(135deg,#b45309,#d97706); border:none;">下载 CSV</button>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- 请款列表 -->
-                    <div id="payment-list" style="margin-top: 0;"></div>
-                    <div id="payment-empty" style="margin-top: 20px; text-align:center; color: rgba(200,215,230,0.6); font-size: 13px; display:none;">暂无请款单</div>
+                    <div class="rep-pay-section-title">请款单列表</div>
+                    <div id="payment-list" class="rep-pay-stack"></div>
+                    <div id="payment-empty" class="rep-pay-empty" style="display:none;">暂无请款单</div>
                 </div>
 
                 <div id="payment-create-view" class="hidden">
-                    <!-- 创建请款单头部 -->
-                    <div style="display:flex; align-items:center; gap: 12px; margin-bottom: 16px;">
-                        <button class="btn btn-secondary" type="button" onclick="closePaymentCreate()" style="padding: 8px 14px; font-size: 13px; border-radius: 8px;">← 返回</button>
-                        <div style="font-weight: 800; font-size: 17px;">新建请款单</div>
+                    <div class="pay-back-bar">
+                        <button class="btn btn-secondary" type="button" onclick="closePaymentCreate()">← 返回</button>
+                        <div class="pay-form-title">新建请款单</div>
                     </div>
 
-                    <div class="card" style="padding: 20px;">
+                    <div class="pay-form-shell">
+                        <div class="rep-filters__head" style="margin-bottom:16px;">
+                            <div class="rep-filters__eyebrow">NEW REQUEST</div>
+                            <div class="rep-filters__title">请款单信息</div>
+                            <p class="rep-filters__hint">请如实填写金额与科目；常用付款对象可在基础配置中维护。</p>
+                        </div>
                         <div style="display: grid; grid-template-columns: 1fr; gap: 16px;">
                             <div class="form-group" style="margin-bottom:0;">
                                 <label class="form-label">请款日期</label>
@@ -7374,9 +7858,8 @@
                                     <option value="">-- 选择常用付款对象 --</option>
                                 </select>
                             </div>
-                            <!-- 临时付款信息手动输入区 -->
-                            <div id="pay-form-custom-payee-area" style="padding: 14px; border-radius: 12px; border: 1px dashed rgba(255,255,255,0.12); background: rgba(255,255,255,0.02);">
-                                <div style="font-weight: 700; font-size: 13px; margin-bottom: 10px; color: rgba(226,232,240,0.9);">付款信息（可手动填写）</div>
+                            <div id="pay-form-custom-payee-area" class="pay-form-custom">
+                                <div style="font-weight: 700; font-size: 12px; margin-bottom: 10px; letter-spacing:0.08em; color: var(--rep-gold);">付款信息（可手动填写）</div>
                                 <div style="display:grid; grid-template-columns: 1fr; gap: 10px;">
                                     <div class="form-group" style="margin-bottom:0;">
                                         <label class="form-label">收款户名</label>
@@ -7405,9 +7888,10 @@
                         <div id="pay-form-budget-hint" class="settings-hint" style="margin-top: 14px; display:none;"></div>
                     </div>
 
-                    <div style="position: sticky; bottom: 0; z-index: 60; margin-top: 14px; padding: 12px 0; background: linear-gradient(180deg, rgba(2,6,23,0.2) 0%, rgba(2,6,23,0.92) 70%); backdrop-filter: blur(8px);">
-                        <button class="btn" type="button" onclick="submitPaymentForm()" style="width: 100%; justify-content:center; padding: 14px 16px; font-size: 15px; font-weight: 700; border-radius: 12px;">提交请款单</button>
+                    <div class="pay-form-sticky">
+                        <button class="btn" type="button" onclick="submitPaymentForm()" style="width: 100%; justify-content:center; padding: 14px 16px; font-size: 15px; font-weight: 700; border-radius: 12px; background:linear-gradient(135deg,#e8d48b,#c9a227); border:none; color:#0a0c10;">提交请款单</button>
                     </div>
+                </div>
                 </div>
             </div>
 
@@ -13357,7 +13841,7 @@
             const start = String(document.getElementById('payment-filter-start')?.value || '').trim();
             const end = String(document.getElementById('payment-filter-end')?.value || '').trim();
 
-            box.innerHTML = '<div style="color:#888;padding:18px;text-align:center;">加载中...</div>';
+            box.innerHTML = '<div class="rep-pay-empty" style="margin-bottom:12px;">加载中…</div>';
             empty.style.display = 'none';
             if (stats) stats.textContent = '--';
 
@@ -13405,14 +13889,15 @@
             const pending = list.filter(x => String(x?.status || '') === 'pending').length;
             const approved = list.filter(x => String(x?.status || '') === 'approved').length;
             const paid = list.filter(x => String(x?.status || '') === 'paid').length;
-            const badgeStyle = 'padding: 10px 12px; border-radius: 12px; font-weight: 900; cursor: pointer; user-select: none; transition: opacity 0.15s;';
-            statsEl.innerHTML = `<div style="display:flex; gap: 12px; flex-wrap: wrap; align-items: center;">
-                <div style="${badgeStyle} background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06);" onclick="filterPaymentByStatus('')">总数 ${total}</div>
-                <div style="${badgeStyle} background: rgba(245,158,11,0.10); border: 1px solid rgba(245,158,11,0.20);" onclick="filterPaymentByStatus('pending')">待审批 ${pending}</div>
-                <div style="${badgeStyle} background: rgba(34,197,94,0.10); border: 1px solid rgba(34,197,94,0.20);" onclick="filterPaymentByStatus('approved')">已审核 ${approved}</div>
-                <div style="${badgeStyle} background: rgba(59,130,246,0.10); border: 1px solid rgba(59,130,246,0.20);" onclick="filterPaymentByStatus('paid')">已付款 ${paid}</div>
-                <div style="padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); font-weight: 900;">总金额 ¥${Number(sum || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}</div>
-            </div>`;
+            const sumFmt = Number(sum || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+            statsEl.innerHTML = `
+                <div class="rep-grid">
+                    <div class="rep-metric" onclick="filterPaymentByStatus('')"><div class="k">总数</div><div class="v">${total}</div></div>
+                    <div class="rep-metric" onclick="filterPaymentByStatus('pending')"><div class="k">待审批</div><div class="v">${pending}</div></div>
+                    <div class="rep-metric" onclick="filterPaymentByStatus('approved')"><div class="k">已审核</div><div class="v">${approved}</div></div>
+                    <div class="rep-metric" onclick="filterPaymentByStatus('paid')"><div class="k">已付款</div><div class="v">${paid}</div></div>
+                    <div class="rep-metric rep-metric--gold" style="grid-column:1/-1; cursor:default;"><div class="k">当前筛选金额合计</div><div class="v">¥${sumFmt}</div></div>
+                </div>`;
         }
 
         function filterPaymentByStatus(status) {
@@ -13453,34 +13938,38 @@
                 const amountText = Number.isFinite(amt) ? ('¥' + amt.toLocaleString('zh-CN', { maximumFractionDigits: 2 })) : '¥0.00';
                 const who = hrmsDisplayName(it?.applicant_username);
 
-                const statusColor = st === '待审批' ? 'rgba(245,158,11,0.10)' : (st === '已付款' ? 'rgba(59,130,246,0.10)' : (st === '已审核' ? 'rgba(34,197,94,0.10)' : 'rgba(239,68,68,0.10)'));
-                const borderColor = st === '待审批' ? '#f59e0b' : (st === '已付款' ? '#3b82f6' : (st === '已审核' ? '#22c55e' : '#ef4444'));
+                const rawSt = String(it?.status || '').trim();
+                const lineKey = ['pending', 'approved', 'paid', 'rejected'].includes(rawSt) ? rawSt : 'pending';
+                const lineClass = 'pay-line-card--' + lineKey;
 
                 const canPay = String(it?.type || '') === 'payment'
                     && String(it?.status || '') === 'approved'
                     && (String(currentUser?.role || '') === ROLES.CASHIER || String(currentUser?.role || '') === ROLES.HQ_MANAGER || String(currentUser?.role || '') === ROLES.HR_MANAGER || isAdminUser());
-                const payBtn = canPay ? `<button class="btn" type="button" onclick="payPaymentById('${escapeHtml(id)}')" style="padding: 8px 12px; background: #3b82f6;">付款</button>` : '';
+                const isPaid = String(it?.status || '') === 'paid';
+                const payBtn = canPay ? `<button class="btn" type="button" onclick="payPaymentById('${escapeHtml(id)}')" style="padding: 8px 12px; background: linear-gradient(135deg,#2563eb,#60a5fa); border:none;">付款</button>` : '';
+                const paidBadge = isPaid ? `<span class="btn btn-secondary" style="pointer-events:none; opacity:0.95;">已付款</span>` : '';
 
-                return `<div style="padding: 12px; border-radius: 12px; background: ${statusColor}; border-left: 4px solid ${borderColor}; margin-bottom: 10px; display:flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center;">
-                    <div style="min-width:0; flex: 1;">
-                        <div style="display:flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap;">
-                            <div style="font-weight: 900; color: rgba(226,232,240,0.95);">请款日期：${escapeHtml(date || '-')}</div>
-                            <div style="font-weight: 900; color: rgba(59,130,246,0.95);">${escapeHtml(amountText)}</div>
+                return `<article class="rep-pay-card pay-line-card ${lineClass}">
+                    <div class="rep-pay-card__top">
+                        <div style="min-width:0;">
+                            <div class="rep-pay-card__name">请款 · ${escapeHtml(date || '-')}</div>
+                            <span class="rep-pay-card__store">${escapeHtml(store || '—')} · ${escapeHtml(who || '—')}</span>
                         </div>
-                        <div style="margin-top: 8px; display:grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 12px; color: rgba(200,215,230,0.85);">
-                            <div>门店：<span style="color: rgba(226,232,240,0.92); font-weight: 800;">${escapeHtml(store || '-')}</span></div>
-                            <div>状态：<span style="color: rgba(226,232,240,0.92); font-weight: 800;">${escapeHtml(st || '-')}</span></div>
-                            <div>项目：<span style="color: rgba(226,232,240,0.92); font-weight: 800;">${escapeHtml(category || '-')}</span></div>
-                            <div>紧急程度：<span style="color: rgba(226,232,240,0.92); font-weight: 800;">${escapeHtml(urgency || '-')}</span></div>
-                            <div>提交人：<span style="color: rgba(226,232,240,0.92); font-weight: 800;">${escapeHtml(who || '-')}</span></div>
-                        </div>
-                        ${(p?.note || p?.description) ? `<div style="margin-top:6px; font-size:12px; color:rgba(200,215,230,0.85);">说明：<span style="color:rgba(226,232,240,0.92); font-weight:800;">${escapeHtml(String(p?.note || p?.description || ''))}</span></div>` : ''}
+                        <div class="rep-pay-card__amt">${escapeHtml(amountText)}</div>
                     </div>
-                    <div style="display:flex; gap: 10px; align-items:center;">
-                        <button class="btn btn-secondary" type="button" onclick="openApprovalDetailModal('${escapeHtml(id)}')" style="padding: 8px 12px;">查看</button>
+                    <div class="rep-pay-card__grid">
+                        <div class="rep-pay-cell"><span class="k">状态</span><span class="v">${escapeHtml(st || '-')}</span></div>
+                        <div class="rep-pay-cell"><span class="k">项目</span><span class="v">${escapeHtml(category || '-')}</span></div>
+                        <div class="rep-pay-cell"><span class="k">紧急</span><span class="v">${escapeHtml(urgency || '-')}</span></div>
+                        ${(p?.payeeName || p?.payee) ? `<div class="rep-pay-cell" style="grid-column:1/-1;"><span class="k">收款方</span><span class="v">${escapeHtml(p?.payeeName || p?.payee || '-')}</span></div>` : ''}
+                        ${(p?.note || p?.description) ? `<div class="rep-pay-cell" style="grid-column:1/-1;"><span class="k">说明</span><span class="v" style="font-size:12px;line-height:1.45;">${escapeHtml(String(p?.note || p?.description || ''))}</span></div>` : ''}
+                    </div>
+                    <div class="rep-pay-card__actions">
+                        ${paidBadge}
+                        <button class="btn btn-secondary" type="button" onclick="openApprovalDetailModal('${escapeHtml(id)}')">查看</button>
                         ${payBtn}
                     </div>
-                </div>`;
+                </article>`;
             }).join('');
         }
 
