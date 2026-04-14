@@ -1165,6 +1165,20 @@ export async function runAnomalyChecks(frequency, stores, options = {}) {
     }
   }
 
+  // Chairman: 趋势检测（weekly频率时追加）
+  if (frequency === 'weekly') {
+    try {
+      const { runTrendChecks } = await import('./chairman/trend-rules.js');
+      const trendResults = await runTrendChecks(stores);
+      for (const t of trendResults) {
+        results.push({ ...t, name: t.rule, source: 'chairman_trend' });
+      }
+      logger.info({ trendCount: trendResults.length }, 'Chairman trend checks done');
+    } catch (err) {
+      logger.warn({ err: err?.message }, 'Chairman trend checks failed (non-fatal)');
+    }
+  }
+
   return results;
 }
 

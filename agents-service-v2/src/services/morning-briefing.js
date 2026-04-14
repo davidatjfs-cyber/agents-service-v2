@@ -520,6 +520,15 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
     }
   } catch (e) { logger.warn({ err: e?.message, store }, 'briefing anomalies'); }
 
+  // Chairman 诊断段（≥2异常时LLM综合分析，否则简短摘要；失败不影响原有晨报）
+  try {
+    const { generateDiagnosis } = await import('./chairman/chairman-diagnosis.js');
+    const diagnosis = await generateDiagnosis(store, yesterday);
+    if (diagnosis) {
+      sections.push(`**🧠 经营诊断**\n${diagnosis}`);
+    }
+  } catch (e) { logger.warn({ err: e?.message, store }, 'chairman diagnosis in briefing failed'); }
+
   return sections.join('\n\n---\n\n');
 }
 

@@ -11,6 +11,9 @@ import { checkDbHealth } from './utils/db.js';
 import { checkRedisHealth } from './utils/queue.js';
 import { startAnomalyQueueWorker, getAnomalyQueueStats } from './services/anomaly-queue.js';
 import { authRequired, requireRole } from './middleware/auth.js';
+import { sendWeeklyReview } from './services/chairman/weekly-review.js';
+import { runTrendChecks } from './services/chairman/trend-rules.js';
+import { evaluateAllPendingOutcomes } from './services/chairman/decision-outcome-tracker.js';
 import { startRhythmScheduler, morningStandup, patrol, endOfDay, weeklyReport, monthlyEvaluation, dailyAttendanceReport } from './services/rhythm-engine.js';
 import { runAnomalyChecks, checkFoodSafetyFromMessage, runFoodSafetyDailyScan } from './services/anomaly-engine.js';
 import { calculateAllStoresKPI } from './services/kpi-calculator.js';
@@ -959,6 +962,21 @@ async function start() {
     );
   }, { timezone: 'Asia/Shanghai' });
   logger.info('Morning briefing cron scheduled at 07:30 Asia/Shanghai (fixed)');
+
+  // Chairman: 每周决策复盘 — 周一 08:00 Asia/Shanghai
+  cron.schedule('0 8 * * 1', () => {
+    runWithCronLog('weekly_review', () => sendWeeklyReview()).catch((e) =>
+      logger.warn({ err: e?.message }, 'weekly review cron error')
+    );
+    runWithCronLog('outcome_evaluation', () => evaluateAllPendingOutcomes()).catch((e) =>
+      logger.warn({ err: e?.message }, 'outcome evaluation cron error')
+    );
+  }, { timezone: 'Asia/Shanghai' });
+  logger.info('Chairman weekly review + outcome evaluation cron scheduled at Mon 08:00 Asia/Shanghai');
+
+  // Chairman: 趋势检测 — 与 anomaly engine 同频（跟随 runAnomalyChecks 调用时追加）
+  // 趋势检测在 anomaly-engine 的 web cron 处理中触发，不单独注册
+
   // 每日任务达成率：固定 08:20（Asia/Shanghai），与食安扫描 08:15 错开
   cron.schedule('20 8 * * *', () => {
     runWithCronLog('daily_task_completion_report', () => sendDailyTaskCompletionReport()).catch((e) =>

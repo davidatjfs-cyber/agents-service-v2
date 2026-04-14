@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": ".cursor/hooks/format.sh",
+        "timeout": 120
+      },
+      {
+        "command": ".cursor/hooks/lint.sh",
+        "timeout": 120
+      }
+    ],
+    "postToolUse": [
+      {
+        "command": ".cursor/hooks/test.sh",
+        "matcher": "Write",
+        "timeout": 300
+      }
+    ],
+    "afterShellExecution": [
+      {
+        "command": ".cursor/hooks/log.sh",
+        "timeout": 15
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": ".cursor/hooks/commit.sh",
+        "timeout": 90
+      }
+    ]
+  }
+}

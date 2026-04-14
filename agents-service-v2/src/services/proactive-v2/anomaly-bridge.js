@@ -164,6 +164,12 @@ async function handleTrigger(ctx) {
   } else {
     await dispatchToAgent('data_auditor', `分析异常: ${type} - ${store}`, ctx);
   }
+
+  // Chairman: 异常→培训联动（独立try，不影响原有流程）
+  try {
+    const { checkAndTriggerTraining } = await import('../chairman/training-trigger-rules.js');
+    await checkAndTriggerTraining(type, store, ctx.severity);
+  } catch (e) { /* silent */ }
 }
 
 export default {

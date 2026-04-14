@@ -1,5 +1,13 @@
 .DS_Store
-.cursor/
+# Cursor：仓库内共享 hooks 需纳入版本控制；其余仍忽略
+.cursor/*
+!.cursor/hooks.json
+!.cursor/hooks/
+!.cursor/hooks/*.sh
+!.cursor/skills/
+!.cursor/skills/**/*
+.cursor/hooks/shell-audit.logl
+.cursor/hooks/session-commit-hint.log
 *.log
 .env
 .env.*
