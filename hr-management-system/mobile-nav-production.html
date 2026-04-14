@@ -6741,12 +6741,55 @@
             margin-top: 14px;
         }
 
-        #reports-page .rep-pay-card {
+        #reports-page .rep-pay-card,
+        #reports-page details.rep-pay-card {
             border-radius: 18px;
             padding: 16px 16px 14px;
             background: linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
             border: 1px solid rgba(255, 255, 255, 0.1);
             box-shadow: 0 16px 40px -28px rgba(0, 0, 0, 0.55);
+        }
+
+        #reports-page details.rep-pay-card {
+            padding: 0;
+            overflow: hidden;
+        }
+
+        #reports-page details.rep-pay-card > summary.rep-row-details__summary {
+            list-style: none;
+            cursor: pointer;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 16px 16px 14px;
+            margin: 0;
+            user-select: none;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        #reports-page details.rep-pay-card > summary.rep-row-details__summary::-webkit-details-marker {
+            display: none;
+        }
+
+        #reports-page details.rep-pay-card:not([open]) > summary.rep-row-details__summary {
+            border-bottom: none;
+        }
+
+        #reports-page details.rep-pay-card > .rep-row-details__body {
+            padding: 0 16px 16px;
+        }
+
+        #reports-page details.rep-pay-card > summary .rep-row-details__chev {
+            flex-shrink: 0;
+            font-size: 10px;
+            opacity: 0.5;
+            margin-top: 4px;
+            transition: transform 0.2s ease;
+        }
+
+        #reports-page details.rep-pay-card:not([open]) > summary .rep-row-details__chev {
+            transform: rotate(-90deg);
         }
 
         #reports-page .rep-pay-card__top {
@@ -6897,73 +6940,81 @@
             color: var(--rep-muted);
         }
 
-        #points-page details.rep-collapse,
-        #reports-page details.rep-collapse {
-            border-radius: 16px;
+        #points-page details.rep-row-details,
+        #reports-page details.rep-row-details {
+            border-radius: 14px;
             border: 1px solid rgba(255, 255, 255, 0.08);
             background: rgba(255, 255, 255, 0.03);
         }
 
-        #points-page details.rep-collapse > summary,
-        #reports-page details.rep-collapse > summary {
+        #points-page details.rep-row-details > summary,
+        #reports-page details.rep-row-details > summary {
             list-style: none;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 10px;
-            padding: 12px 14px;
+            padding: 10px 12px;
             user-select: none;
             color: var(--rep-text);
             font-weight: 700;
-            font-size: 14px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            font-size: 13px;
         }
 
-        #points-page details.rep-collapse > summary::-webkit-details-marker,
-        #reports-page details.rep-collapse > summary::-webkit-details-marker {
+        #points-page details.rep-row-details > summary::-webkit-details-marker,
+        #reports-page details.rep-row-details > summary::-webkit-details-marker {
             display: none;
         }
 
-        #points-page details.rep-collapse .rep-collapse__left,
-        #reports-page details.rep-collapse .rep-collapse__left {
+        #points-page details.rep-row-details .rep-row-details__chev,
+        #reports-page details.rep-row-details .rep-row-details__chev {
+            flex-shrink: 0;
+            font-size: 10px;
+            opacity: 0.45;
+            transition: transform 0.2s ease;
+        }
+
+        #points-page details.rep-row-details:not([open]) .rep-row-details__chev,
+        #reports-page details.rep-row-details:not([open]) .rep-row-details__chev {
+            transform: rotate(-90deg);
+        }
+
+        #points-page details.rep-row-details .rep-row-details__body,
+        #reports-page details.rep-row-details .rep-row-details__body {
+            padding: 0 12px 12px;
+        }
+
+        #points-page details.rep-row-details .rep-row-details__sum-main {
             display: flex;
             flex-direction: column;
-            gap: 3px;
+            gap: 4px;
             min-width: 0;
             text-align: left;
         }
 
-        #points-page details.rep-collapse .rep-collapse__title,
-        #reports-page details.rep-collapse .rep-collapse__title {
-            font-size: 14px;
+        #points-page details.rep-row-details .rep-row-details__sum-title {
             font-weight: 800;
-            letter-spacing: 0.02em;
+            color: rgba(226, 232, 240, 0.95);
         }
 
-        #reports-page details.rep-collapse .rep-collapse__hint {
-            font-size: 11px;
+        #points-page details.rep-row-details .rep-row-details__sum-meta {
+            font-size: 12px;
             font-weight: 600;
-            color: var(--rep-muted);
-            letter-spacing: 0.03em;
+            color: rgba(200, 215, 230, 0.72);
         }
 
-        #points-page details.rep-collapse .rep-collapse__chev,
-        #reports-page details.rep-collapse .rep-collapse__chev {
+        #points-page details.rep-row-details .rep-row-details__sum-badge {
+            font-size: 12px;
+            font-weight: 700;
+            color: rgba(200, 215, 230, 0.88);
             flex-shrink: 0;
-            font-size: 10px;
-            opacity: 0.55;
-            transition: transform 0.2s ease;
         }
 
-        #points-page details.rep-collapse:not([open]) .rep-collapse__chev,
-        #reports-page details.rep-collapse:not([open]) .rep-collapse__chev {
-            transform: rotate(-90deg);
-        }
-
-        #points-page details.rep-collapse .rep-collapse__body,
-        #reports-page details.rep-collapse .rep-collapse__body {
-            padding: 12px 14px 14px;
+        #points-page #points-records-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
         @media (max-width: 700px) {
@@ -8316,17 +8367,12 @@
                     </div>
                 </section>
 
-                <details id="points-records-card" class="rep-collapse rep-collapse--points card" style="border-radius:16px; border:1px solid rgba(255,255,255,0.08); box-shadow: 0 12px 24px rgba(2,6,23,0.28);" open>
-                    <summary>
-                        <span class="rep-collapse__left">
-                            <span id="points-records-title" class="rep-collapse__title">我的积分记录</span>
-                        </span>
-                        <span class="rep-collapse__chev" aria-hidden="true">▼</span>
-                    </summary>
-                    <div class="rep-collapse__body">
-                        <div id="points-records-list"></div>
+                <div id="points-records-card" class="card" style="border-radius:16px; border:1px solid rgba(255,255,255,0.08); box-shadow: 0 12px 24px rgba(2,6,23,0.28); overflow:hidden;">
+                    <div style="padding:12px 14px; border-bottom:1px solid rgba(255,255,255,0.06); font-weight:800; font-size:14px; color:rgba(226,232,240,0.95);">
+                        <span id="points-records-title">我的积分记录</span>
                     </div>
-                </details>
+                    <div id="points-records-list" style="padding:12px 14px 14px;"></div>
+                </div>
                 </div>
             </div>
 
@@ -8720,22 +8766,11 @@
                     </div>
 
                     <div id="rep-payroll" class="hidden" style="margin-bottom:18px;">
-                        <details class="rep-collapse rep-collapse--reports" open>
-                            <summary>
-                                <span class="rep-collapse__left">
-                                    <span class="rep-collapse__title">薪资记录</span>
-                                    <span class="rep-collapse__hint">薪资月份口径 · 可折叠</span>
-                                </span>
-                                <span class="rep-collapse__chev" aria-hidden="true">▼</span>
-                            </summary>
-                            <div class="rep-collapse__body">
-                                <div class="rep-payroll-audit-bar">
-                                    <span id="rep-payroll-audit">-</span>
-                                    <button id="rep-payroll-audit-btn" class="btn btn-secondary" type="button" onclick="togglePayrollAudit()" style="display:none;">审核切换</button>
-                                </div>
-                                <div id="rep-payroll-box" style="color:rgba(186,198,215,0.55);">加载中...</div>
-                            </div>
-                        </details>
+                        <div class="rep-payroll-audit-bar">
+                            <span id="rep-payroll-audit">-</span>
+                            <button id="rep-payroll-audit-btn" class="btn btn-secondary" type="button" onclick="togglePayrollAudit()" style="display:none;">审核切换</button>
+                        </div>
+                        <div id="rep-payroll-box" style="color:rgba(186,198,215,0.55);">加载中...</div>
                     </div>
 
                     <div id="rep-turnover" class="hidden" style="margin-bottom:18px;">
@@ -13029,14 +13064,22 @@
                         const pts = Number(p?.points || 0);
                         const st = approvalStatusText(it?.status);
                         const createdAt = String(it?.created_at || it?.createdAt || '').slice(0, 19).replace('T', ' ');
-                        return `<div style="padding:10px 12px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); margin-bottom:8px;">
-                            <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
-                                <div style="font-weight:800; color:rgba(226,232,240,0.95);">${escapeHtml(itemName)} · ${pts}分</div>
-                                <div style="font-size:12px; color:rgba(200,215,230,0.85);">${escapeHtml(st)}</div>
+                        return `<details class="rep-row-details">
+                            <summary class="rep-row-details__summary" style="align-items:flex-start;">
+                                <span class="rep-row-details__sum-main">
+                                    <span class="rep-row-details__sum-title">${escapeHtml(itemName)} · ${pts}分</span>
+                                    <span class="rep-row-details__sum-meta">${escapeHtml(createdAt || '-')}</span>
+                                </span>
+                                <span style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                                    <span class="rep-row-details__sum-badge">${escapeHtml(st)}</span>
+                                    <span class="rep-row-details__chev" aria-hidden="true">▼</span>
+                                </span>
+                            </summary>
+                            <div class="rep-row-details__body">
+                                <div style="font-size:12px; color:rgba(200,215,230,0.65); margin-bottom:10px;">展开后可查看审批详情。</div>
+                                <button class="btn btn-secondary" type="button" style="padding:6px 10px; font-size:12px;" onclick="event.stopPropagation(); openApprovalDetailModal('${escapeHtml(String(it?.id || ''))}')">查看详情</button>
                             </div>
-                            <div style="margin-top:6px; font-size:12px; color:rgba(200,215,230,0.75);">${escapeHtml(createdAt || '-')}</div>
-                            <div style="margin-top:8px;"><button class="btn btn-secondary" style="padding:6px 10px; font-size:12px;" onclick="openApprovalDetailModal('${escapeHtml(String(it?.id || ''))}')">查看详情</button></div>
-                        </div>`;
+                        </details>`;
                     }).join('');
                 }
             } catch (e) {
@@ -13131,14 +13174,21 @@
                             const amount = Number(it?.amount || (pts * 0.5));
                             const dt = String(it?.approvedAt || it?.createdAt || '').slice(0, 19).replace('T', ' ');
                             const aid = String(it?.approvalId || '').trim();
-                            return `<div style="padding:10px 12px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); margin-top:8px;">
-                                <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
-                                    <div style="font-weight:800; color:rgba(226,232,240,0.95);">${escapeHtml(itemName)} · ${pts}分</div>
-                                    <div style="font-size:12px; color:#f59e0b; font-weight:800;">¥${amount.toFixed(2)}</div>
+                            return `<details class="rep-row-details">
+                                <summary class="rep-row-details__summary" style="align-items:flex-start;">
+                                    <span class="rep-row-details__sum-main">
+                                        <span class="rep-row-details__sum-title">${escapeHtml(itemName)} · ${pts}分</span>
+                                        <span class="rep-row-details__sum-meta">${escapeHtml(group.store || '-')}${dt ? ' · ' + escapeHtml(dt) : ''}</span>
+                                    </span>
+                                    <span style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                                        <span class="rep-row-details__sum-badge" style="color:#f59e0b;">¥${amount.toFixed(2)}</span>
+                                        <span class="rep-row-details__chev" aria-hidden="true">▼</span>
+                                    </span>
+                                </summary>
+                                <div class="rep-row-details__body">
+                                    ${aid ? `<button class="btn btn-secondary" type="button" style="padding:6px 10px; font-size:12px;" onclick="event.stopPropagation(); openApprovalDetailModal('${escapeHtml(aid)}')">查看审批详情</button>` : '<div style="font-size:12px;color:rgba(200,215,230,0.6);">无关联审批单</div>'}
                                 </div>
-                                <div style="margin-top:6px; font-size:12px; color:rgba(200,215,230,0.75);">${escapeHtml(group.store || '-')}${dt ? ' · ' + escapeHtml(dt) : ''}</div>
-                                ${aid ? `<div style="margin-top:8px;"><button class="btn btn-secondary" style="padding:6px 10px; font-size:12px;" onclick="openApprovalDetailModal('${escapeHtml(aid)}')">查看审批详情</button></div>` : ''}
-                            </div>`;
+                            </details>`;
                         }).join('');
                     return `<div style="padding:12px; border-radius:16px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.02); margin-bottom:12px;">
                         <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:center;">
@@ -13151,7 +13201,7 @@
                                 <div style="margin-top:4px; font-size:12px; color:#f59e0b; font-weight:800;">¥${Number(group.totalAmount || 0).toFixed(2)}</div>
                             </div>
                         </div>
-                        ${rows}
+                        <div style="display:flex; flex-direction:column; gap:8px; margin-top:10px;">${rows}</div>
                     </div>`;
                 }).join('');
             } catch (e) {
@@ -29015,30 +29065,37 @@ ${knowledgeContent.slice(0, 30000)}`;
                                     const sto = escapeHtml(String(r?.store || ''));
                                     const baseWarn = r?.baseAmountOverridden ? ' rep-pay-cell--warn' : '';
                                     const act = canEditPayroll
-                                        ? `<div class="rep-pay-card__actions"><button class="btn btn-secondary" type="button" onclick="editPayrollBaseAmount('${un}', '${sto}', ${Number(r?.baseAmount || 0)})">基础应发</button><button class="btn btn-secondary" type="button" onclick="editPayrollSubsidy('${un}', '${sto}', ${Number(r?.subsidy || 0)})">补贴</button></div>`
+                                        ? `<div class="rep-pay-card__actions"><button class="btn btn-secondary" type="button" onclick="event.stopPropagation(); editPayrollBaseAmount('${un}', '${sto}', ${Number(r?.baseAmount || 0)})">基础应发</button><button class="btn btn-secondary" type="button" onclick="event.stopPropagation(); editPayrollSubsidy('${un}', '${sto}', ${Number(r?.subsidy || 0)})">补贴</button></div>`
                                         : '';
                                     return `
-                                    <article class="rep-pay-card">
-                                        <div class="rep-pay-card__top">
-                                            <div>
+                                    <details class="rep-pay-card rep-row-details">
+                                        <summary class="rep-row-details__summary">
+                                            <div style="flex:1; min-width:0;">
                                                 <div class="rep-pay-card__name">${nm}</div>
                                                 <span class="rep-pay-card__store">${st || '—'}</span>
                                             </div>
+                                            <div style="text-align:right; flex-shrink:0;">
+                                                <div style="font-size:11px; color:var(--rep-muted); font-weight:700;">实发</div>
+                                                <div style="font-size:17px; font-weight:900; color:var(--rep-teal); font-family:var(--rep-mono);">¥${fmt(r?.amount)}</div>
+                                            </div>
+                                            <span class="rep-row-details__chev" aria-hidden="true">▼</span>
+                                        </summary>
+                                        <div class="rep-row-details__body">
+                                            <div class="rep-pay-card__grid">
+                                                <div class="rep-pay-cell"><span class="k">出勤</span><span class="v">${escapeHtml(String(r?.attendanceDays ?? 0))}</span></div>
+                                                <div class="rep-pay-cell"><span class="k">月薪</span><span class="v">${fmt(r?.monthlySalary)}</span></div>
+                                                <div class="rep-pay-cell"><span class="k">日薪</span><span class="v">${fmt(r?.dailyRate)}</span></div>
+                                                <div class="rep-pay-cell${baseWarn}"><span class="k">基础应发</span><span class="v">${fmt(r?.baseAmount)}</span></div>
+                                                <div class="rep-pay-cell ${rpCls(r?.rewardPunishmentAdj)}"><span class="k">奖惩</span><span class="v">${Number(r?.rewardPunishmentAdj || 0) >= 0 ? '+' : ''}${fmt(r?.rewardPunishmentAdj)}</span></div>
+                                                <div class="rep-pay-cell ${subCls(r?.subsidy)}"><span class="k">补贴</span><span class="v">${Number(r?.subsidy || 0) >= 0 ? '+' : ''}${fmt(r?.subsidy)}</span></div>
+                                            </div>
+                                            <div class="rep-pay-cell rep-pay-cell--accent" style="margin-top:10px;border-radius:12px;">
+                                                <span class="k">实发应发</span>
+                                                <span class="v" style="font-size:18px;">¥${fmt(r?.amount)}</span>
+                                            </div>
+                                            ${act}
                                         </div>
-                                        <div class="rep-pay-card__grid">
-                                            <div class="rep-pay-cell"><span class="k">出勤</span><span class="v">${escapeHtml(String(r?.attendanceDays ?? 0))}</span></div>
-                                            <div class="rep-pay-cell"><span class="k">月薪</span><span class="v">${fmt(r?.monthlySalary)}</span></div>
-                                            <div class="rep-pay-cell"><span class="k">日薪</span><span class="v">${fmt(r?.dailyRate)}</span></div>
-                                            <div class="rep-pay-cell${baseWarn}"><span class="k">基础应发</span><span class="v">${fmt(r?.baseAmount)}</span></div>
-                                            <div class="rep-pay-cell ${rpCls(r?.rewardPunishmentAdj)}"><span class="k">奖惩</span><span class="v">${Number(r?.rewardPunishmentAdj || 0) >= 0 ? '+' : ''}${fmt(r?.rewardPunishmentAdj)}</span></div>
-                                            <div class="rep-pay-cell ${subCls(r?.subsidy)}"><span class="k">补贴</span><span class="v">${Number(r?.subsidy || 0) >= 0 ? '+' : ''}${fmt(r?.subsidy)}</span></div>
-                                        </div>
-                                        <div class="rep-pay-cell rep-pay-cell--accent" style="margin-top:10px;border-radius:12px;">
-                                            <span class="k">实发应发</span>
-                                            <span class="v" style="font-size:18px;">¥${fmt(r?.amount)}</span>
-                                        </div>
-                                        ${act}
-                                    </article>`;
+                                    </details>`;
                                 }).join('') : '<div class="rep-pay-empty">该条件下暂无薪资明细</div>'}
                             </div>
                             <div class="rep-pay-total">
