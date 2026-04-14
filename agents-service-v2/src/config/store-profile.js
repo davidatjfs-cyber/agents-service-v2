@@ -65,9 +65,9 @@ const CACHE_TTL = 5 * 60 * 1000;
 async function loadProfilesFromDB() {
   try {
     const r = await query(
-      `SELECT config_value FROM hrms_state WHERE config_key = 'chairman_config'`
+      `SELECT data FROM hrms_state WHERE key = 'chairman_config'`
     );
-    const dbConfig = r.rows?.[0]?.config_value;
+    const dbConfig = r.rows?.[0]?.data;
     if (dbConfig && dbConfig.stores) {
       _cachedProfiles = { ...DEFAULT_PROFILES, ...dbConfig.stores };
       _cacheTime = Date.now();

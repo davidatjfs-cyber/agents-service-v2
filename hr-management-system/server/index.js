@@ -5642,7 +5642,7 @@ async function getPromotionTrackRecipients(state, track) {
 
 function normalizeApprovalType(input) {
   const t = String(input || '').trim().toLowerCase();
-  const allowed = ['onboarding', 'offboarding', 'leave', 'payment', 'reward_punishment', 'promotion', 'points'];
+  const allowed = ['onboarding', 'offboarding', 'leave', 'payment', 'reward_punishment', 'promotion', 'points', 'monthly_confirm'];
   if (!allowed.includes(t)) return '';
   return t;
 }
@@ -14723,7 +14723,7 @@ app.listen(PORT, HOST, async () => {
     }
 
     // 020-024: HRMS 全量字段 + 独立表迁移
-    for (const name of ['020_daily_reports_all_fields', '021_hrms_leave_records', '022_hrms_reward_punishment_records', '023_approval_requests_migration', '024_employees_table_migration', '025_daily_reports_holiday_switch']) {
+    for (const name of ['020_daily_reports_all_fields', '021_hrms_leave_records', '022_hrms_reward_punishment_records', '023_approval_requests_migration', '024_employees_table_migration', '025_daily_reports_holiday_switch', '027_backfill_hrms_leave_from_approvals']) {
       try {
         const mig = await import('fs').then(f => f.promises.readFile(new URL(`./migrations/${name}.sql`, import.meta.url), 'utf8'));
         await pool.query(mig);

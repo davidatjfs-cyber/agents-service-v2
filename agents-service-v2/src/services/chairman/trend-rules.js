@@ -28,9 +28,9 @@ async function getTrendConfig(store) {
   let storeOverrides = {};
   try {
     const r = await query(
-      `SELECT config_value FROM hrms_state WHERE config_key = 'chairman_config'`
+      `SELECT data FROM hrms_state WHERE key = 'chairman_config'`
     );
-    const cfg = r.rows?.[0]?.config_value;
+    const cfg = r.rows?.[0]?.data;
     if (cfg?.trend_rules) {
       const tr = cfg.trend_rules;
       if (tr.weekday_trend_consecutive_weeks != null) globalDefaults.weekday_trend_consecutive_weeks = tr.weekday_trend_consecutive_weeks;

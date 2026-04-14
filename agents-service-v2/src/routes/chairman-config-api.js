@@ -65,33 +65,8 @@ function getDefaultConfig() {
         target_daily_dineIn: { revenue: 23000, orders: 88, avgTicket: 260, turnover: 1.5 },
         target_daily_takeout: { revenue: 0, orders: 0, avgTicket: 0 },
         cost_structure: { foodCostRate: 0.32, laborCostRate: 0.20, rentCostRate: 0.18, targetProfitRate: 0.20 },
-      },
-      '洪潮大宁久光店': {
-        brand: '洪潮',
-        cuisine: '潮汕菜',
-        positioning: '中高端正餐',
-        targetCustomer: '商务宴请、品质家庭聚餐',
-        avgPrice: 260,
-        seats: 90,
-        tables: 20,
-        coreStrategy: '走质，客单价和包房利用率是核心',
-        bottleneck: '晚市包房利用率',
-        signatureProducts: '',
-        competitiveAdvantage: '',
-        serviceStyle: '精致服务型',
-        privateRooms: 4,
-        kitchenCapacity: '',
-        lowSeasonNote: '',
-        topDishes: [
-          { name: '卤鹅拼盘', price: 168, margin: 0.69 },
-          { name: '生腌膏蟹', price: 138, margin: 0.70 },
-          { name: '牛肉火锅', price: 258, margin: 0.68 },
-        ],
-        problemDishes: [],
-        target_daily: { revenue: 23000, orders: 88, avgTicket: 260, turnover: 1.5 },
-        cost_structure: { foodCostRate: 0.32, laborCostRate: 0.20, rentCostRate: 0.18, targetProfitRate: 0.20 },
-      },
-    },
+},
+     },
     trend_rules: {
       weekday_trend_consecutive_weeks: 3,
       meal_balance_threshold_medium: 0.30,
@@ -114,13 +89,13 @@ function getDefaultConfig() {
 export async function getChairmanConfig() {
   try {
     const r = await query(
-      `SELECT config_value FROM hrms_state WHERE config_key = $1`,
+      `SELECT data FROM hrms_state WHERE key = $1`,
       [CONFIG_KEY]
     );
-    if (r.rows?.[0]?.config_value) {
-      return typeof r.rows[0].config_value === 'string'
-        ? JSON.parse(r.rows[0].config_value)
-        : r.rows[0].config_value;
+    if (r.rows?.[0]?.data) {
+      return typeof r.rows[0].data === 'string'
+        ? JSON.parse(r.rows[0].data)
+        : r.rows[0].data;
     }
   } catch (e) {
     logger.warn({ err: e?.message }, 'Failed to load chairman config from DB, using defaults');
@@ -132,9 +107,9 @@ export async function saveChairmanConfig(config) {
   const value = typeof config === 'string' ? config : JSON.stringify(config);
   try {
     await query(
-      `INSERT INTO hrms_state (config_key, config_value, updated_at)
+      `INSERT INTO hrms_state (key, data, updated_at)
        VALUES ($1, $2::jsonb, NOW())
-       ON CONFLICT (config_key) DO UPDATE SET config_value = $2::jsonb, updated_at = NOW()`,
+       ON CONFLICT (key) DO UPDATE SET data = $2::jsonb, updated_at = NOW()`,
       [CONFIG_KEY, value]
     );
     return { ok: true };

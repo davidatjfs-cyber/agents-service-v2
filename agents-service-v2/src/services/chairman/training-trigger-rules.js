@@ -88,9 +88,9 @@ export async function checkAndTriggerTraining(anomalyKey, store, severity) {
 
   try {
     const r = await query(
-      `SELECT config_value FROM hrms_state WHERE config_key = 'chairman_config'`
+      `SELECT data FROM hrms_state WHERE key = 'chairman_config'`
     );
-    const cfg = r.rows?.[0]?.config_value;
+    const cfg = r.rows?.[0]?.data;
     if (cfg?.training_map?.[anomalyKey]) {
       trainingConfig = cfg.training_map[anomalyKey];
       // If brand-differentiated, find the matching brand entry

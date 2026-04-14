@@ -7555,6 +7555,17 @@
                             <option value="rejected">已拒绝</option>
                             <option value="returned">已退回</option>
                         </select>
+                        <select id="approvals-type-filter" onchange="loadApprovalsData()" title="按审批类型筛选" style="padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); max-width: 160px;">
+                            <option value="">全部类型</option>
+                            <option value="onboarding">入职</option>
+                            <option value="offboarding">离职</option>
+                            <option value="leave">休假</option>
+                            <option value="payment">请款</option>
+                            <option value="points">积分</option>
+                            <option value="reward_punishment">奖惩</option>
+                            <option value="promotion">晋升</option>
+                            <option value="monthly_confirm">月度考勤确认</option>
+                        </select>
                         <select id="approvals-date-field" onchange="loadApprovalsData()" title="日期筛选含义" style="padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); max-width: 200px;">
                             <option value="created">按申请日</option>
                             <option value="updated">按最后更新（含审批）</option>
@@ -10747,6 +10758,7 @@
             const approvedStartEl = document.getElementById('approvals-approved-start');
             const approvedEndEl = document.getElementById('approvals-approved-end');
             const dateFieldEl = document.getElementById('approvals-date-field');
+            const typeFilterEl = document.getElementById('approvals-type-filter');
             const searchEl = document.getElementById('approvals-search');
             try {
                 const role = String(currentUser?.role || '').trim();
@@ -10765,13 +10777,14 @@
             const approvedStart = String(approvedStartEl?.value || '').trim();
             const approvedEnd = String(approvedEndEl?.value || '').trim();
             const dateField = String(dateFieldEl?.value || 'created').trim();
+            const typeFilter = String(typeFilterEl?.value || '').trim();
             const search = String(searchEl?.value || '').trim();
             const lim = view === 'all' ? 500 : 200;
 
             box.innerHTML = '<div style="color:#888;padding:18px;text-align:center;">加载中...</div>';
             empty.style.display = 'none';
 
-            HRMS_API.getApprovals({ view: String(viewEl?.value || 'assigned'), status, dateStart: approvedStart, dateEnd: approvedEnd, dateField, search, limit: lim })
+            HRMS_API.getApprovals({ view: String(viewEl?.value || 'assigned'), status, type: typeFilter || undefined, dateStart: approvedStart, dateEnd: approvedEnd, dateField, search, limit: lim })
                 .then(resp => {
                     const items = Array.isArray(resp?.items) ? resp.items : [];
                     __APPROVALS_CACHE = items;
