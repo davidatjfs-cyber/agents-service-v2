@@ -34350,10 +34350,12 @@ ${knowledgeContent.slice(0, 30000)}`;
             if (__REP_TAB === 'leave-owed') {
                 const box = document.getElementById('rep-leave-owed-box');
                 if (box) box.innerHTML = '加载中...';
-                const recentMonths = repBuildRecentMonths(month, 3);
-                Promise.all(recentMonths.map(m => HRMS_API.getLeaveOwedReport({ month: m, store })))
-                    .then(list => {
-                        const merged = repMergeLeaveOwedMultiMonth(list, recentMonths);
+                const leaveMonth = /^\d{4}-\d{2}$/.test(String(month || '').trim())
+                    ? String(month || '').trim()
+                    : new Date().toISOString().slice(0, 7);
+                HRMS_API.getLeaveOwedReport({ month: leaveMonth, store })
+                    .then((resp) => {
+                        const merged = repMergeLeaveOwedMultiMonth([resp], [leaveMonth], { store });
                         try { window.__REP_LAST_LEAVE_OWED = merged; } catch (e) {}
                         renderLeaveOwedReport(merged, box);
                     })
@@ -34376,7 +34378,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             return out;
         }
 
-        function repMergeLeaveOwedMultiMonth(list, months) {
+        function repMergeLeaveOwedMultiMonth(list, months, meta = {}) {
             const reports = Array.isArray(list) ? list : [];
             const monthList = Array.isArray(months) ? months : [];
             const latest = reports[reports.length - 1] || {};
@@ -34417,34 +34419,30 @@ ${knowledgeContent.slice(0, 30000)}`;
                 let latestRemaining = 0;
                 const latestMonth = monthList[monthList.length - 1] || '';
                 if (latestMonth && r.monthly[latestMonth]) latestRemaining = Number(r.monthly[latestMonth].remaining || 0);
-                const owedTotal3 = monthList.reduce((s, m) => {
-                    const one = r.monthly[m];
-                    if (!one || !one.isOwed) return s;
-                    return Number((s + Math.abs(Number(one.remaining || 0))).toFixed(2));
-                }, 0);
+                const cumulativeLeaveDays = Number(r?.monthly?.[latestMonth]?.cumulativeLeaveDays || 0);
                 return {
                     ...r,
                     latestRemaining,
-                    owedTotal3,
-                    cumulativeLeaveDays: Number(r?.monthly?.[latestMonth]?.cumulativeLeaveDays || 0),
+                    cumulativeLeaveDays,
                     isOwedAny: monthList.some(m => Number(r?.monthly?.[m]?.remaining || 0) > 0)
                 };
             }).sort((a, b) => {
                 if (Number(a.isOwedAny) !== Number(b.isOwedAny)) return Number(b.isOwedAny) - Number(a.isOwedAny);
-                if (Number(a.owedTotal3 || 0) !== Number(b.owedTotal3 || 0)) return Number(b.owedTotal3 || 0) - Number(a.owedTotal3 || 0);
+                if (Number(a.latestRemaining || 0) !== Number(b.latestRemaining || 0)) return Number(b.latestRemaining || 0) - Number(a.latestRemaining || 0);
                 return String(a.name || a.username || '').localeCompare(String(b.name || b.username || ''), 'zh-Hans-CN');
             });
 
             const totals = rows.reduce((acc, r) => {
                 acc.people += 1;
                 if (r.isOwedAny) acc.owedPeople += 1;
-                acc.owedDays = Number((acc.owedDays + Number(r.owedTotal3 || 0)).toFixed(2));
+                acc.cumulativeLeaveDays = Number((acc.cumulativeLeaveDays + Number(r.cumulativeLeaveDays || 0)).toFixed(2));
+                acc.monthEndOwedDays = Number((acc.monthEndOwedDays + Math.max(0, Number(r.latestRemaining || 0))).toFixed(2));
                 return acc;
-            }, { people: 0, owedPeople: 0, owedDays: 0 });
+            }, { people: 0, owedPeople: 0, cumulativeLeaveDays: 0, monthEndOwedDays: 0 });
 
             return {
                 month: monthList[monthList.length - 1] || '',
-                store: String(latest?.store || ''),
+                store: String(meta?.store || latest?.store || ''),
                 canAdjust: !!latest?.canAdjust,
                 months: monthList,
                 totals,
@@ -34510,22 +34508,27 @@ ${knowledgeContent.slice(0, 30000)}`;
                 const one = row?.monthly?.[m] || {};
                 const diff = Number(one?.diff);
                 if (!Number.isFinite(diff)) return '<span style="color:rgba(200,215,230,0.55);">0</span>';
-                const text = (diff > 0 ? '+' : '') + (isMgr(row?.role) ? fmt(Math.round(diff), 0) : fmt(diff, 2));
+                const text = (diff > 0 ? '+' : '') + fmt(diff, 2);
                 const color = diff > 0 ? '#ef4444' : (diff < 0 ? '#22c55e' : 'rgba(200,215,230,0.65)');
                 return `<span style="color:${color}; font-weight:900;">${text}</span>`;
             };
 
+            const titleStore = String(resp?.store || '').trim() || '全部门店';
+            const statMonth = String(months[months.length - 1] || month || '').trim();
+            const cumulativeTotal = Number(totals?.cumulativeLeaveDays || 0);
+            const monthEndOwedTotal = Number(totals?.monthEndOwedDays || 0);
+
             const html = `
                 <div class="rep-hero" style="background: linear-gradient(135deg, #dc2626, #f97316);">
-                    <div style="font-weight:900; font-size:16px;">欠休报表</div>
-                    <div class="meta" style="margin-top:6px;">周期：${escapeHtml(months[0] || '')} ~ ${escapeHtml(months[months.length - 1] || '')} · 人员 ${fmtInt(totals.people)} · 欠休人数 ${fmtInt(totals.owedPeople)} · 欠休总天数 ${fmt(totals.owedDays, 2)}</div>
+                    <div style="font-weight:900; font-size:16px;">欠休报表 · ${escapeHtml(titleStore)}</div>
+                    <div class="meta" style="margin-top:6px;">统计月份：${escapeHtml(statMonth)} · 人员 ${fmtInt(totals.people)} · 欠休人数 ${fmtInt(totals.owedPeople)} · 累计假期合计 ${fmt(cumulativeTotal, 2)} · 期末欠休合计 ${fmt(monthEndOwedTotal, 2)}</div>
                     <div class="rep-grid" style="margin-top:10px;">
-                        <div class="rep-metric"><div class="k">覆盖月份</div><div class="v">${fmtInt(months.length)} 个月</div></div>
-                        <div class="rep-metric"><div class="k">欠休人数</div><div class="v">${fmtInt(totals.owedPeople)}</div></div>
-                        <div class="rep-metric"><div class="k">欠休总天数</div><div class="v">${fmt(totals.owedDays, 2)}</div></div>
+                        <div class="rep-metric"><div class="k">统计月份</div><div class="v">${escapeHtml(statMonth || '-')}</div></div>
+                        <div class="rep-metric"><div class="k">累计假期合计</div><div class="v">${fmt(cumulativeTotal, 2)}</div></div>
+                        <div class="rep-metric"><div class="k">期末欠休合计</div><div class="v">${fmt(monthEndOwedTotal, 2)}</div></div>
                     </div>
                 </div>
-                <div style="margin-top:12px; font-size:12px; color:rgba(200,215,230,0.72);">说明：累计假期=截止上月累计余休；当月假期天数固定为 4 天；月差值=当月假期天数-当月实际休息天数；期末欠休=累计假期+月差值。调整入口调整的是“累计假期”，并支持 0.5 天。</div>
+                <div style="margin-top:12px; font-size:12px; color:rgba(200,215,230,0.72);">说明：本表按“薪资月份”整月统计，不受上方日期区间影响。累计假期=截止上月累计余休；当月假期天数固定为 4 天；月差值=当月假期天数-当月实际休息与休假合计；期末欠休=累计假期+月差值。红色汇总里的“累计假期合计”=末列累计假期求和。</div>
                 <div class="rep-table" style="margin-top:12px; overflow-x:auto;">
                     <table>
                         <thead>
@@ -34556,9 +34559,9 @@ ${knowledgeContent.slice(0, 30000)}`;
                                     ${months.map(m => `<td style="text-align:right;">${owedCell(r, m)}</td>`).join('')}
                                     <td style="text-align:right;">${fmt(latestActualRest, 2)}</td>
                                     <td style="text-align:right;">${fmt(latestHolidayDays, 2)}</td>
-                                    <td style="text-align:right; font-weight:900; color:#fbbf24;">${fmt(r?.cumulativeLeaveDays || 0, 1)}</td>
+                                    <td style="text-align:right; font-weight:900; color:#fbbf24;">${fmt(r?.cumulativeLeaveDays || 0, 2)}</td>
                                     <td style="font-size:11px; line-height:1.5;">${adjText}</td>
-                                    <td>${canAdjust ? `<button class="btn btn-secondary" type="button" style="padding:4px 8px; font-size:12px;" onclick="repAdjustLeaveBalance('${escapeJsString(String(r?.username || ''))}', '${escapeJsString(latestM)}', ${latestHolidayDays})">调整</button>` : '-'}</td>
+                                    <td>${canAdjust ? `<button class="btn btn-secondary" type="button" style="padding:4px 8px; font-size:12px;" onclick="repAdjustLeaveBalance('${escapeJsString(String(r?.username || ''))}', '${escapeJsString(latestM)}', ${Number(r?.cumulativeLeaveDays || 0)})">调整</button>` : '-'}</td>
                                 </tr>`;
                             }).join('')}
                         </tbody>

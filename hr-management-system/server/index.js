@@ -5400,6 +5400,33 @@ async function dbFindEmployeeRecord(username) {
   }
 }
 
+async function dbListEmployeesForReports({ store, includeInactive }) {
+  try {
+    const params = [];
+    const where = [];
+    if (store) {
+      params.push(store);
+      where.push(`store = $${params.length}`);
+    }
+    if (!includeInactive) {
+      where.push(`coalesce(status, '') not in ('inactive', '离职')`);
+    }
+    const sql = `select username, name, role, store, department, position, status,
+                        join_date as "joinDate", created_at as "createdAt"
+                   from employees
+                   ${where.length ? ('where ' + where.join(' and ')) : ''}
+                  order by name asc, username asc`;
+    const r = await pool.query(sql, params);
+    return Array.isArray(r.rows) ? r.rows : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+async function stateOrDbFindUserRecord(state, username) {
+  return stateFindUserRecord(state, username) || await dbFindEmployeeRecord(username);
+}
+
 async function pickAdminUsername(state) {
   const users = Array.isArray(state?.users) ? state.users : [];
   const employees = Array.isArray(state?.employees) ? state.employees : [];
@@ -8857,7 +8884,10 @@ app.get('/api/reports/turnover', authRequired, async (req, res) => {
     const myStore = pickMyStoreFromState(state0, username);
     const store = role === 'store_manager' ? myStore : storeQ;
 
-    const allEmployees = Array.isArray(state0.employees) ? state0.employees : [];
+    let allEmployees = Array.isArray(state0.employees) ? state0.employees : [];
+    if (!allEmployees.length) {
+      allEmployees = await dbListEmployeesForReports({ store: store || '', includeInactive: true });
+    }
     const [yr, mo] = month.split('-').map(Number);
     const monthStart = new Date(yr, mo - 1, 1);
     const monthEnd = new Date(yr, mo, 0); // last day of month
@@ -9199,10 +9229,23 @@ app.get('/api/reports/attendance', authRequired, async (req, res) => {
       const where = 'where ' + conditions.join(' and ');
       const sql = `select c.* from checkin_records c ${where} order by c.check_time desc limit 5000`;
       const cr = await pool.query(sql, params);
+      const employeesList = Array.isArray(state0.employees) ? state0.employees : [];
+      const usersList = Array.isArray(state0.users) ? state0.users : [];
+      let dbNameByLower = null;
+      if (!employeesList.length && !usersList.length) {
+        const dbEmps = await dbListEmployeesForReports({ store, includeInactive: false });
+        dbNameByLower = new Map();
+        for (const e of dbEmps) {
+          const u = String(e?.username || '').trim().toLowerCase();
+          if (!u) continue;
+          dbNameByLower.set(u, String(e?.name || '').trim() || String(e?.username || '').trim());
+        }
+      }
       checkinDetails = (cr.rows || []).map(r => {
-        const emp = (Array.isArray(state0.employees) ? state0.employees : []).find(e => String(e?.username || '').toLowerCase() === String(r.username || '').toLowerCase());
-        const usr = (Array.isArray(state0.users) ? state0.users : []).find(e => String(e?.username || '').toLowerCase() === String(r.username || '').toLowerCase());
-        r.display_name = emp?.name || usr?.name || r.username;
+        const lower = String(r.username || '').trim().toLowerCase();
+        const emp = employeesList.find(e => String(e?.username || '').toLowerCase() === lower);
+        const usr = usersList.find(e => String(e?.username || '').toLowerCase() === lower);
+        r.display_name = emp?.name || usr?.name || (dbNameByLower ? dbNameByLower.get(lower) : null) || r.username;
         return r;
       });
     } catch (e) {}
@@ -9267,6 +9310,17 @@ app.get('/api/reports/payroll', authRequired, async (req, res) => {
       if (!u || isLegacyTestUsername(u)) return;
       if (!peopleByLower.has(u)) peopleByLower.set(u, { ...p, username: uRaw });
     });
+    // If hrms_state snapshot is empty (common on some installs), fall back to employees table
+    // so payroll/attendance-related reports don't silently drop everyone.
+    if (!peopleByLower.size) {
+      const dbEmps = await dbListEmployeesForReports({ store, includeInactive: false });
+      for (const p of dbEmps) {
+        const uRaw = String(p?.username || '').trim();
+        const u = uRaw.toLowerCase();
+        if (!u || isLegacyTestUsername(u)) continue;
+        if (!peopleByLower.has(u)) peopleByLower.set(u, { ...p, username: uRaw });
+      }
+    }
     const allPeople = Array.from(peopleByLower.values());
     const canonicalUsernameByLower = new Map();
     peopleByLower.forEach((p, u) => {
@@ -9671,10 +9725,15 @@ app.get('/api/reports/promotion-records', authRequired, async (req, res) => {
       [limit]
     );
 
-    let items = (r.rows || []).map((row) => {
-      const payload = row?.payload && typeof row.payload === 'object' ? row.payload : {};
+    const items = [];
+    for (const row of (r.rows || [])) {
+      let payload = row?.payload || {};
+      if (typeof payload === 'string') {
+        try { payload = JSON.parse(payload); } catch (_) { payload = {}; }
+      }
+      if (!payload || typeof payload !== 'object') payload = {};
       const applicantUser = String(row?.applicant_username || '').trim();
-      const applicant = stateFindUserRecord(state, applicantUser) || {};
+      const applicant = await stateOrDbFindUserRecord(state, applicantUser) || {};
       const chain = Array.isArray(row?.chain) ? row.chain : [];
       let approvedBy = '';
       let approvedAt = '';
@@ -9686,7 +9745,7 @@ app.get('/api/reports/promotion-records', authRequired, async (req, res) => {
           break;
         }
       }
-      return {
+      items.push({
         approvalId: String(row?.id || ''),
         applicantUsername: applicantUser,
         applicantName: String(applicant?.name || applicantUser).trim() || applicantUser,
@@ -9701,8 +9760,8 @@ app.get('/api/reports/promotion-records', authRequired, async (req, res) => {
         approvedBy,
         approvedAt: approvedAt || String(row?.updated_at || row?.created_at || ''),
         createdAt: String(row?.created_at || '')
-      };
-    });
+      });
+    }
 
     if (qStore) items = items.filter((x) => String(x?.store || '').trim() === qStore);
     if (qMonth) items = items.filter((x) => String(x?.approvedAt || '').slice(0, 7) === qMonth);
