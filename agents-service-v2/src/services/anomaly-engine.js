@@ -995,7 +995,9 @@ export async function runAnomalyChecks(frequency, stores, options = {}) {
   });
   const results = [];
 
-  for (const store of stores) {
+  for (const storeRaw of stores) {
+    const store = String(storeRaw || '').trim();
+    if (!store) continue;
     const brand = await getBrandForStore(store);
     for (const [ruleKey, ruleCfg] of ruleEntries) {
       const checkFn = CHECK_FN_MAP[ruleKey];
@@ -1085,10 +1087,8 @@ export async function runAnomalyChecks(frequency, stores, options = {}) {
             continue;
           }
 
-          await query(
-            `INSERT INTO anomaly_triggers (anomaly_key, store, brand, severity, trigger_date, trigger_value, threshold_value, assigned_role, notify_target_role)
-             VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9)`,
-            [
+          if (ruleKey === 'recharge_zero') {
+            const insParams = [
               ruleKey,
               store,
               brand,
@@ -1098,8 +1098,55 @@ export async function runAnomalyChecks(frequency, stores, options = {}) {
               JSON.stringify(result.threshold),
               ruleCfg.assign_to || 'store_manager',
               ruleCfg.notify_target_role || ruleCfg.assign_to || 'store_manager'
-            ]
-          );
+            ];
+            let ins;
+            try {
+              ins = await query(
+                `INSERT INTO anomaly_triggers (anomaly_key, store, brand, severity, trigger_date, trigger_value, threshold_value, assigned_role, notify_target_role)
+                 VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9)
+                 ON CONFLICT (anomaly_key, store, trigger_date) WHERE anomaly_key = 'recharge_zero' DO NOTHING
+                 RETURNING id`,
+                insParams
+              );
+            } catch (e) {
+              const em = String(e?.message || '');
+              if (!/42P10|no unique or exclusion constraint/i.test(em)) throw e;
+              const dupLate = await query(
+                `SELECT 1 FROM anomaly_triggers WHERE anomaly_key = 'recharge_zero' AND store = $1 AND trigger_date = $2::date LIMIT 1`,
+                [store, triggerDate]
+              );
+              if (dupLate.rows?.length) {
+                results.push({ store, rule: ruleKey, name: ruleCfg.name, ...result, skipped: 'duplicate_day' });
+                continue;
+              }
+              ins = await query(
+                `INSERT INTO anomaly_triggers (anomaly_key, store, brand, severity, trigger_date, trigger_value, threshold_value, assigned_role, notify_target_role)
+                 VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9)
+                 RETURNING id`,
+                insParams
+              );
+            }
+            if (!(ins.rows && ins.rows.length)) {
+              results.push({ store, rule: ruleKey, name: ruleCfg.name, ...result, skipped: 'duplicate_day' });
+              continue;
+            }
+          } else {
+            await query(
+              `INSERT INTO anomaly_triggers (anomaly_key, store, brand, severity, trigger_date, trigger_value, threshold_value, assigned_role, notify_target_role)
+               VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9)`,
+              [
+                ruleKey,
+                store,
+                brand,
+                result.severity,
+                triggerDate,
+                JSON.stringify(result.value),
+                JSON.stringify(result.threshold),
+                ruleCfg.assign_to || 'store_manager',
+                ruleCfg.notify_target_role || ruleCfg.assign_to || 'store_manager'
+              ]
+            );
+          }
           // deferred -> open 的场景：清理同触发日 pending_data，避免一条待数据一条正式并存造成统计混乱
           if (ruleKey === 'gross_margin') {
             await query(

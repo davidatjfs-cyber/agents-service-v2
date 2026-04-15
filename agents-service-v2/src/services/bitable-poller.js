@@ -158,7 +158,10 @@ function sleep(ms) {
  */
 function isTransientBitableFetchError(errText) {
   const s = String(errText || '');
-  return /1254607|data not ready|try again later|timeout|ECONNABORTED|ECONNRESET|ETIMEDOUT|socket hang up|EAI_AGAIN|429|502|503|504/i.test(s);
+  // 1255001 等为飞书侧「内部错误/序列化」类，官方建议稍后重试；与 1254607 同类不宜立刻按整表失败告警
+  return /1254607|1255001|1255002|1255003|1255004|1255005|1255040|1254200|internalerror|rpcerror|marshalerror|data not ready|try again later|timeout|ECONNABORTED|ECONNRESET|ETIMEDOUT|socket hang up|EAI_AGAIN|429|502|503|504/i.test(
+    s
+  );
 }
 
 /** 轮询在 getBitableRecords 用尽重试后仍失败 → 视为真失败，必须通知管理员（与飞书网页能否打开无关）。 */

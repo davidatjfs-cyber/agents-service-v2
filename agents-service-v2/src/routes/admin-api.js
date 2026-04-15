@@ -52,16 +52,29 @@ async function fetchAgentTaskLogsForDashboard24h() {
   }
 }
 
-/** 001 迁移版 anomaly_triggers 无 description/category，用 trigger_value 兼容 */
+/** 001 迁移版 anomaly_triggers 无 description/category；充值类用中文摘要 */
+const ANOMALY_DESC_EXPR = `CASE WHEN anomaly_key = 'recharge_zero' THEN
+  '判定营业日' || COALESCE(
+    NULLIF(trim(trigger_value->>'evaluated_business_day'), ''),
+    NULLIF(trim(trigger_value->>'evaluationYmd'), ''),
+    NULLIF(trim(trigger_value->>'dateToday'), ''),
+    trigger_date::text
+  ) || '：充值' || COALESCE(trigger_value->'today'->>'count', '0')
+  || '笔、金额¥' || COALESCE(trigger_value->'today'->>'amount', '0')
+  || '；自' || COALESCE(trigger_value->>'month_start', '（未知）')
+  || '起连续无充值' || COALESCE(trigger_value->>'consecutive_zero_days', '?')
+  || '日，扣绩效' || COALESCE(trigger_value->>'penalty_points', '?') || '分。'
+ELSE COALESCE(trigger_value::text, task_id::text, '') END`;
+
 const SQL_ANOMALY_DRILL = `SELECT anomaly_key, store, severity,
-  COALESCE(trigger_value::text, task_id, '') AS description,
+  ${ANOMALY_DESC_EXPR} AS description,
   trigger_date, status, anomaly_key AS category, created_at
   FROM anomaly_triggers WHERE trigger_date >= CURRENT_DATE - 7
   ORDER BY created_at DESC LIMIT 100`;
 
 const SQL_ANOMALY_ACTIVITY_DAY = `SELECT anomaly_key, store, severity, trigger_value, status,
   trigger_date::text AS trigger_date,
-  COALESCE(trigger_value::text, task_id, '') AS description, created_at
+  ${ANOMALY_DESC_EXPR} AS description, created_at
   FROM anomaly_triggers WHERE trigger_date = $1::date ORDER BY created_at DESC LIMIT 100`;
 
 /** 管理员或总部主管：手动关闭 master_tasks（测试 / 误报 / 下钻列表逐条关闭） */

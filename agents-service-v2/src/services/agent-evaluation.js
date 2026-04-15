@@ -12,6 +12,15 @@ import { logger } from '../utils/logger.js';
 
 const PLANNED_AGENTS = new Set(['procurement_advisor']);
 
+/** 已配置但当前产品未走「飞书→agents-service」主链路的 Agent：无消息属预期，非故障 */
+const IDLE_EXPECTED_AGENTS = new Set([
+  'chief_evaluator',
+  'train_advisor',
+  'appeal',
+  'marketing_planner',
+  'marketing_executor'
+]);
+
 /** 与飞书任务卡、催办、绩效一致的营运任务来源 */
 const OPS_TASK_SOURCES = `('random_inspection','scheduled_inspection','bi_anomaly','auto_collab')`;
 
@@ -161,7 +170,10 @@ export async function evaluateAgent(agentId) {
   if (isPlanned) {
     suggestions.push({ type: 'planned', reason: '该 Agent 已配置但尚未正式启用' });
   } else if (!isActive) {
-    suggestions.push({ type: 'inactive', reason: '近30天无活动记录，请确认配置是否正确' });
+    const idleReason = IDLE_EXPECTED_AGENTS.has(agentId)
+      ? '近30天无调用记录：该 Agent 多为「按需/预留」能力，未接入当前飞书主链路时属正常，不代表服务异常'
+      : '近30天无活动记录，请确认配置是否正确';
+    suggestions.push({ type: 'inactive', reason: idleReason });
   } else if (healthScore < 60) {
     suggestions.push({ type: 'low_response', reason: `综合得分偏低（成功率约${successRate}%），建议关注处理质量` });
   }
