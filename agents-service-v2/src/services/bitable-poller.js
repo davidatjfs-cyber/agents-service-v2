@@ -184,19 +184,25 @@ function notifyBitablePollFetchFailed(configKey, config, error) {
   });
 }
 
-async function getBitableTenantToken(configKey = 'ops_checklist') {
+const TOKEN_TTL_BUFFER_MS = 5 * 60 * 1000; // 5 min buffer before expiry
+
+async function getBitableTenantToken(configKey = 'ops_checklist', forceRefresh = false) {
   const config = BITABLE_CONFIGS[configKey];
   if (!config) return '';
-  const cached = _tokenCache.get(configKey);
-  if (cached && Date.now() < cached.expires) return cached.token;
+  if (!forceRefresh) {
+    const cached = _tokenCache.get(configKey);
+    // Use buffer: refresh 5 min before actual expiry to avoid edge-case 99991663
+    if (cached && Date.now() < cached.expires - TOKEN_TTL_BUFFER_MS) return cached.token;
+  }
   try {
     const resp = await axios.post(BASE_URL + '/auth/v3/tenant_access_token/internal', {
       app_id: config.appId, app_secret: config.appSecret
     }, { timeout: 10000 });
     const token = resp.data?.tenant_access_token || '';
-    const expires = Date.now() + (resp.data?.expire || 7000) * 1000;
+    const ttlSec = resp.data?.expire || 7000;
+    const expires = Date.now() + ttlSec * 1000;
     _tokenCache.set(configKey, { token, expires });
-    logger.info({ configKey }, 'bitable token refreshed');
+    logger.info({ configKey, forceRefresh, ttlSec }, 'bitable token refreshed');
     return token;
   } catch (e) {
     logger.error({ configKey, err: e?.message }, 'bitable token failed');
@@ -204,11 +210,20 @@ async function getBitableTenantToken(configKey = 'ops_checklist') {
   }
 }
 
+function evictTokenCache(configKey) {
+  _tokenCache.delete(configKey);
+}
+
+function isTokenAuthError(errText) {
+  const s = String(errText || '');
+  return /99991663|invalid access token|invalid.*token.*authori|token.*expired|token.*invalid/i.test(s);
+}
+
 // ── Fetch Records from Bitable API ──
 async function getBitableRecords(configKey, options = {}) {
   const config = BITABLE_CONFIGS[configKey];
   if (!config) return { ok: false, error: 'invalid_config' };
-  const token = await getBitableTenantToken(configKey);
+  let token = await getBitableTenantToken(configKey);
   if (!token) return { ok: false, error: 'no_token' };
   const { pageSize = 200, pageToken, filter } = options;
   const params = { page_size: pageSize, user_id_type: 'open_id' };
@@ -219,6 +234,7 @@ async function getBitableRecords(configKey, options = {}) {
 
   const maxAttempts = 6;
   let lastErr = 'unknown';
+  let tokenRefreshed = false;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -230,6 +246,16 @@ async function getBitableRecords(configKey, options = {}) {
       if (bizCode != null && Number(bizCode) !== 0) {
         const msg = String(resp.data?.msg || resp.data?.error || '').trim() || 'unknown';
         lastErr = `feishu_code_${bizCode}: ${msg}`;
+        // Token auth error (99991663): evict cached token and retry with a fresh one
+        if (isTokenAuthError(lastErr) && !tokenRefreshed) {
+          logger.warn({ configKey, bizCode, attempt }, 'bitable token auth error, evicting cache and refreshing token');
+          evictTokenCache(configKey);
+          token = await getBitableTenantToken(configKey, true);
+          if (token) {
+            tokenRefreshed = true;
+            continue;
+          }
+        }
         if (isTransientBitableFetchError(lastErr) && attempt < maxAttempts) {
           const delay = Math.min(20000, 2000 * attempt);
           logger.warn({ configKey, bizCode, attempt, delay }, 'bitable business code transient, retrying');
@@ -251,6 +277,16 @@ async function getBitableRecords(configKey, options = {}) {
       lastErr = detail
         ? `HTTP ${e.response?.status || '?'} ${typeof detail === 'object' ? JSON.stringify(detail).slice(0, 400) : String(detail)}`
         : String(e?.message || e);
+      // Token auth error in HTTP layer: evict cache and retry
+      if (isTokenAuthError(lastErr) && !tokenRefreshed) {
+        logger.warn({ configKey, attempt }, 'bitable HTTP token auth error, evicting cache and refreshing token');
+        evictTokenCache(configKey);
+        token = await getBitableTenantToken(configKey, true);
+        if (token) {
+          tokenRefreshed = true;
+          continue;
+        }
+      }
       if (isTransientBitableFetchError(lastErr) && attempt < maxAttempts) {
         const delay = Math.min(20000, 2000 * attempt);
         logger.warn({ configKey, attempt, delay, err: lastErr.slice(0, 300) }, 'bitable HTTP transient, retrying');
