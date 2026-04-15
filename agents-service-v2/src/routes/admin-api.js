@@ -511,6 +511,52 @@ r.get('/dashboard-detail/:type', authRequired, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e?.message }); }
 });
 
+/**
+ * 定时报告飞书投递明细（来自 report-delivery.js 落库）。
+ * 例：查某日考勤日报谁未送达 — GET /api/admin/report-delivery?run_ymd=2026-04-15&failures_only=1
+ */
+r.get('/admin/report-delivery', ...admin, async (req, res) => {
+  try {
+    const { getShanghaiNowClock } = await import('../utils/cron-run-monitor.js');
+    const jobKey = String(req.query?.job_key || 'daily_attendance_report').trim().slice(0, 120);
+    let runYmd = String(req.query?.run_ymd || '').trim().slice(0, 12);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(runYmd)) {
+      runYmd = getShanghaiNowClock().ymd;
+    }
+    const failuresOnly = String(req.query?.failures_only ?? '1').trim() === '1';
+    const lim = Math.min(500, Math.max(1, parseInt(String(req.query?.limit || '200'), 10) || 200));
+    const whereFail = failuresOnly ? 'AND s.ok = false' : '';
+    const r2 = await query(
+      `SELECT s.job_key, s.run_ymd, s.username, s.scope, s.ok, s.attempts, s.last_error,
+              s.updated_at,
+              u.name AS feishu_name,
+              u.role AS feishu_role,
+              u.store AS feishu_store,
+              u.open_id IS NOT NULL AND btrim(u.open_id) <> '' AS has_open_id
+       FROM agent_v2_scheduled_report_sends s
+       LEFT JOIN feishu_users u ON lower(trim(COALESCE(u.username,''))) = lower(trim(COALESCE(s.username,'')))
+       WHERE s.job_key = $1 AND s.run_ymd = $2 ${whereFail}
+       ORDER BY s.ok ASC, s.updated_at DESC
+       LIMIT ${lim}`,
+      [jobKey, runYmd]
+    );
+    const rows = r2.rows || [];
+    res.json({
+      jobKey,
+      runYmd,
+      failuresOnly,
+      count: rows.length,
+      items: rows,
+      note: 'ok=false 表示该用户在当日该任务下最终未成功送达（已重试）。若 has_open_id=false 多为未绑定飞书 open_id。'
+    });
+  } catch (e) {
+    if (/does not exist|relation.*agent_v2_scheduled_report_sends/i.test(String(e?.message || ''))) {
+      return res.status(404).json({ error: '表尚未创建（尚无定时报告投递记录）', detail: String(e?.message || e) });
+    }
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
 // ─── Bitable Polling Status & Manual Trigger ───
 r.get('/bitable-status', ...admin, async (req, res) => {
   const status = getBitableStatus();

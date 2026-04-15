@@ -361,11 +361,23 @@ async function ensureFeishuGenericRecordsTable() {
  * 与 HRMS LISTEN channel `bitable_records_updated` 对齐；payload 为 config_key 或兜底 table_id。
  */
 async function ensureFeishuGenericRecordsNotifyTrigger() {
+  // 注意：不能把 TG_OP 写在触发器 WHEN (...) 里 —— WHEN 是 SQL 表达式，会把 TG_OP 当成列名 tg_op 而报错。
+  // 插入/更新是否实质变化在函数体内用 TG_OP / OLD / NEW 判断。
   const fnSql = `
 CREATE OR REPLACE FUNCTION feishu_generic_records_bitable_notify() RETURNS trigger AS $$
 DECLARE
   pl text;
 BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    IF NOT (
+      OLD.fields IS DISTINCT FROM NEW.fields
+      OR OLD.raw IS DISTINCT FROM NEW.raw
+      OR OLD.config_key IS DISTINCT FROM NEW.config_key
+    ) THEN
+      RETURN NEW;
+    END IF;
+  END IF;
+
   pl := COALESCE(NULLIF(BTRIM(COALESCE(NEW.config_key, '')), ''), NULLIF(BTRIM(COALESCE(NEW.table_id, '')), ''));
   IF pl IS NULL OR pl = '' THEN
     RETURN NEW;
@@ -377,18 +389,7 @@ $$ LANGUAGE plpgsql`;
   const dropSql = 'DROP TRIGGER IF EXISTS trg_feishu_generic_records_bitable_notify ON feishu_generic_records';
   const trigBody = `
 AFTER INSERT OR UPDATE OF fields, raw, config_key ON feishu_generic_records
-FOR EACH ROW
-WHEN (
-  TG_OP = 'INSERT'
-  OR (
-    TG_OP = 'UPDATE'
-    AND (
-      OLD.fields IS DISTINCT FROM NEW.fields
-      OR OLD.raw IS DISTINCT FROM NEW.raw
-      OR OLD.config_key IS DISTINCT FROM NEW.config_key
-    )
-  )
-)`;
+FOR EACH ROW`;
   try {
     await pool.query(fnSql);
     await pool.query(dropSql);

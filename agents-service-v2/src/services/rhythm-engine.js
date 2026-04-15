@@ -561,7 +561,10 @@ export async function dailyAttendanceReport() {
   // 推送
   const { sendCard, sendText } = await import('./feishu-client.js');
   const runYmd = today;
-  let failedCount = 0;
+  /** 按接收人维度统计；仅当「至少应发 1 人且全员失败」时才抛错触发管理员飞书告警，避免个别人 open_id/网络问题误报整任务失败 */
+  let deliveryAttempted = 0;
+  let deliveryOk = 0;
+  let deliveryFailed = 0;
 
   // admin + hq_manager 收到所有门店
   const hq = await query(
@@ -569,6 +572,7 @@ export async function dailyAttendanceReport() {
      WHERE registered = true AND open_id IS NOT NULL AND role IN ('admin','hq_manager')`
   );
   for (const u of hq.rows || []) {
+    deliveryAttempted++;
     const deliver = await sendReportToRecipient({
       jobKey: 'daily_attendance_report',
       runYmd,
@@ -592,8 +596,10 @@ export async function dailyAttendanceReport() {
         return { ok: false, error: res?.error || textRes?.error || '' };
       }
     });
-    if (!deliver?.ok) {
-      failedCount++;
+    if (deliver?.ok) {
+      deliveryOk++;
+    } else {
+      deliveryFailed++;
       logger.warn({ username: u.username, err: deliver?.error }, 'attendance card push to HQ failed after retries');
     }
   }
@@ -616,6 +622,7 @@ export async function dailyAttendanceReport() {
         logger.warn({ store: sd.store, err: e?.message }, 'dailyAttendanceReport: parseStoreData failed');
       }
       for (const u of sms.rows) {
+        deliveryAttempted++;
         const deliver = await sendReportToRecipient({
           jobKey: 'daily_attendance_report',
           runYmd,
@@ -639,19 +646,36 @@ export async function dailyAttendanceReport() {
             return { ok: false, error: res?.error || textRes?.error || '' };
           }
         });
-        if (!deliver?.ok) {
-          failedCount++;
+        if (deliver?.ok) {
+          deliveryOk++;
+        } else {
+          deliveryFailed++;
           logger.warn({ username: u.username, store: sd.store, err: deliver?.error }, 'attendance card push to store failed after retries');
         }
       }
     }
   }
 
-  if (failedCount > 0) {
-    throw new Error(`daily attendance report has ${failedCount} failed recipients`);
+  if (deliveryAttempted > 0 && deliveryOk === 0) {
+    throw new Error(`daily attendance report: all ${deliveryAttempted} recipient deliveries failed`);
   }
-  logger.info({ hqPush: hq.rows?.length || 0, readyN, storeCount: stores.length }, 'daily attendance report pushed');
-  await logRhythm('daily_attendance', 'success', { storeCount: stores.length, storesWithData: readyN });
+  if (deliveryFailed > 0) {
+    logger.warn(
+      { deliveryFailed, deliveryOk, deliveryAttempted, readyN, storeCount: stores.length },
+      'daily attendance report: partial failures only (no admin Feishu alert; check logs / open_id for failed users)'
+    );
+  }
+  logger.info(
+    { hqPush: hq.rows?.length || 0, readyN, storeCount: stores.length, deliveryOk, deliveryFailed },
+    'daily attendance report pushed'
+  );
+  await logRhythm('daily_attendance', 'success', {
+    storeCount: stores.length,
+    storesWithData: readyN,
+    deliveryAttempted,
+    deliveryOk,
+    deliveryFailed
+  });
   return { ok: true, storeCount: stores.length, storesWithData: readyN };
 }
 

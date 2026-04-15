@@ -16051,7 +16051,7 @@ th { background: #f5f5f5; font-weight: 700; }
         const _defaultRoleModules = {
             [ROLES.EMPLOYEE]:           ['profile', 'attendance', 'exam', 'points', 'knowledge'],
             [ROLES.STORE_MANAGER]:      ['profile', 'attendance', 'exam', 'points', 'employees', 'daily-report', 'approvals', 'payment', 'knowledge', 'rewards', 'reports', 'agents'],
-            [ROLES.PRODUCTION_MANAGER]: ['profile', 'attendance', 'exam', 'points', 'knowledge', 'rewards', 'agents'],
+            [ROLES.PRODUCTION_MANAGER]: ['profile', 'attendance', 'exam', 'points', 'knowledge', 'rewards', 'forecast'],
             [ROLES.HQ_MANAGER]:         ['profile', 'attendance', 'exam', 'points', 'employees', 'daily-report', 'approvals', 'payment', 'knowledge', 'rewards', 'reports'],
             [ROLES.HR_MANAGER]:         ['profile', 'attendance', 'exam', 'points', 'employees', 'approvals', 'payment', 'knowledge', 'rewards', 'reports'],
             [ROLES.FRONT_MANAGER]:      ['profile', 'attendance', 'exam', 'points', 'daily-report', 'approvals', 'knowledge'],
@@ -16079,7 +16079,7 @@ th { background: #f5f5f5; font-weight: 700; }
             if (page === 'users' || page === 'stores' || page === 'roles' || page === 'settings') {
                 return hrmsIsRoleAdmin(role == null ? currentUser?.role : role);
             }
-            if (page === 'agents') {
+            if (page === 'forecast' || page === 'agents') {
                 return hrmsCanAccessSmartAssistant(role == null ? currentUser?.role : role);
             }
             const pages = getRoleModulePages(role == null ? currentUser?.role : role);
@@ -16091,7 +16091,7 @@ th { background: #f5f5f5; font-weight: 700; }
             const r = String(role || '').trim();
             if (r === ROLES.ADMIN) return ['profile', 'daily-report', 'reports', 'agents'];
             if (r === ROLES.STORE_MANAGER) return ['profile', 'attendance', 'daily-report', 'payment'];
-            if (r === ROLES.PRODUCTION_MANAGER) return ['profile', 'attendance', 'agents', 'rewards'];
+            if (r === ROLES.PRODUCTION_MANAGER) return ['profile', 'attendance', 'forecast', 'rewards'];
             if (r === ROLES.HQ_MANAGER) return ['profile', 'daily-report', 'approvals', 'reports'];
             if (r === ROLES.HR_MANAGER) return ['profile', 'attendance', 'approvals', 'reports'];
             if (r === ROLES.CASHIER) return ['profile', 'attendance', 'payment', 'exam'];
@@ -16510,6 +16510,9 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                 if (!canAccess) {
                     showNotification('仅店长、出品经理和总部角色可访问智能助手', 'warning');
                     pageName = getHomePageName();
+                } else if (String(currentUser?.role || '').trim() === ROLES.PRODUCTION_MANAGER) {
+                    window.location.href = '/forecast.html';
+                    return;
                 }
             }
 
@@ -19450,15 +19453,20 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 const ag = health.agents || {};
                 const as = health.agentsService || null;
                 const dbOk = health.database === true || health.database === 'ok';
-                const schedOk = ag.schedulerRunning === true;
+                const schedDelegated = ag.schedulingDelegated === true;
+                const schedOk = schedDelegated === true || ag.schedulerRunning === true;
+                const schedSub = schedDelegated ? '已委托V2' : '';
+                const schedTip = schedDelegated
+                    ? '未在 HRMS 本进程跑本地 Agent 定时调度（环境变量 DISABLE_AGENT_SCHEDULING），由 Agent V2 负责调度；红点不代表故障。'
+                    : 'HRMS 内 Agent 定时调度（巡检、数据推送等）是否已启动。';
                 const llmOk = ag.llmHealthy === true;
                 const dotCol = (ok) => (ok ? '#22c55e' : '#ef4444');
-                const chip = (ok, label, sub) =>
-                    `<span class="dc-chip" title=""><span class="dc-dot" style="background:${dotCol(ok)};"></span><span>${escapeHtml(label)}${sub ? '<span style="opacity:.72;font-weight:500;margin-left:4px;">' + escapeHtml(sub) + '</span>' : ''}</span></span>`;
+                const chip = (ok, label, sub, tip) =>
+                    `<span class="dc-chip" title="${tip ? escapeHtml(tip) : ''}"><span class="dc-dot" style="background:${dotCol(ok)};"></span><span>${escapeHtml(label)}${sub ? '<span style="opacity:.72;font-weight:500;margin-left:4px;">' + escapeHtml(sub) + '</span>' : ''}</span></span>`;
                 let chips = [
-                    chip(dbOk, '数据库', ''),
-                    chip(schedOk, '调度器', ''),
-                    chip(llmOk, 'LLM', '')
+                    chip(dbOk, '数据库', '', ''),
+                    chip(schedOk, '调度器', schedSub, schedTip),
+                    chip(llmOk, 'LLM', '', '')
                 ];
                 if (as && typeof as === 'object') {
                     const mp = as.mempalace;
@@ -38515,6 +38523,11 @@ ${knowledgeContent.slice(0, 30000)}`;
                 evt.preventDefault();
                 evt.stopPropagation();
             }
+
+            if (page === 'forecast') {
+                window.location.href = '/forecast.html';
+                return;
+            }
             
             // Update active state
             document.querySelectorAll('.mobile-nav-item').forEach(item => {
@@ -38578,8 +38591,8 @@ ${knowledgeContent.slice(0, 30000)}`;
                 { icon:'💎', label:'员工积分', page:'points' },
                 { icon:'⏰', label:'考勤打卡', page:'attendance' },
                 { icon:'📊', label:'分析报表', page:'reports', roles:['admin','hr_manager','hq_manager','store_manager'] },
-                // 智能助手：非管理员的店长/出品经理/总部营运（管理员走「数据中心」入口）
-                { icon:'📦', label:'智能助手', page:'agents', roles:['hq_manager','store_manager','store_production_manager'] },
+                // 智能助手：独立页 forecast（门店角色仅本店数据）；管理员走上方「数据中心」
+                { icon:'📦', label:'智能助手', href:'/forecast.html', roles:['hq_manager','store_manager','store_production_manager'] },
                 { icon:'⚙️', label:'系统设置', page:'settings', roles:['admin'] },
             ];
             const role = currentUser?.role || '';
@@ -38712,6 +38725,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 profile: { icon: '👤', label: '档案' },
                 attendance: { icon: '👤', label: '打卡' },
                 knowledge: { icon: '📚', label: '知识库' },
+                forecast: { icon: '📦', label: '智能助手' },
                 agents: { icon: '📦', label: '智能助手' },
                 exam: { icon: '📝', label: '考试' },
                 'daily-report': { icon: '📒', label: '日报' },
@@ -38719,7 +38733,8 @@ ${knowledgeContent.slice(0, 30000)}`;
                 approvals: { icon: '📋', label: '审批' },
                 reports: { icon: '📈', label: '报表' },
                 employees: { icon: '👥', label: '员工' },
-                points: { icon: '💎', label: '积分' }
+                points: { icon: '💎', label: '积分' },
+                rewards: { icon: '🏆', label: '奖惩' }
             };
 
             let roleMenu = getRoleBottomNavPages(role).slice(0, 4);

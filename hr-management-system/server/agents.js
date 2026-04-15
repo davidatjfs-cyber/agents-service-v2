@@ -11321,8 +11321,11 @@ export function trackLLMResult(ok) {
 }
 
 export function getAgentHealthStatus() {
+  const schedulingDelegated = process.env.DISABLE_AGENT_SCHEDULING === 'true';
   return {
     schedulerRunning: _schedulerStarted,
+    /** 为 true 时 HRMS 进程不跑本地 Agent 定时调度，由 Agent V2 承担；schedulerRunning 为 false 属预期 */
+    schedulingDelegated,
     consecutiveLLMErrors: _errorTracker.consecutiveLLMErrors,
     performanceMetrics: { ..._performanceMetrics },
     llmHealthy: _errorTracker.consecutiveLLMErrors < 5,
