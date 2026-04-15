@@ -134,6 +134,43 @@ function ymdAddDays(ymd, deltaDays) {
   return new Date(u).toISOString().slice(0, 10);
 }
 
+/** 上海日历日 + 小时（0–23），用于夜间同步归因 */
+function shanghaiYmdAndHourFromDate(createdAt) {
+  const d = createdAt instanceof Date ? createdAt : new Date(createdAt);
+  if (!Number.isFinite(d.getTime())) return { ymd: '', hour: 12 };
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false
+  }).formatToParts(d);
+  const y = parts.find((x) => x.type === 'year')?.value;
+  const mo = parts.find((x) => x.type === 'month')?.value;
+  const day = parts.find((x) => x.type === 'day')?.value;
+  const h = Number(parts.find((x) => x.type === 'hour')?.value);
+  const ymd = y && mo && day ? `${y}-${mo}-${day}` : '';
+  return { ymd, hour: Number.isFinite(h) ? h : 12 };
+}
+
+/**
+ * 开档/收档/原料（按行）：飞书「日期」列为空时 bitable 会回落到入库时间，凌晨 0–5 点（上海）
+ * 常见为「前一营业日」关账后补传 — 若不归到前一日，执行力会误判「当日全无档口记录」。
+ * 有明确日期列时仍完全尊重列值。
+ */
+function resolveKitchenReportBizYmd(fieldVal, createdAt) {
+  const raw = fieldVal;
+  const extDate = ext(raw);
+  const hasExplicitDate = !!String(extDate || '').trim();
+  const biz = resolveBitableBusinessYmd(raw, createdAt);
+  if (hasExplicitDate) return biz;
+  const { ymd, hour } = shanghaiYmdAndHourFromDate(createdAt);
+  if (!ymd) return biz;
+  if (hour >= 0 && hour < 6) return ymdAddDays(ymd, -1);
+  return ymd;
+}
+
 function shanghaiYmdFromCreatedAt(createdAt) {
   if (!createdAt) return '';
   const d = createdAt instanceof Date ? createdAt : new Date(createdAt);
@@ -219,14 +256,14 @@ export async function buildPmKitchenMapsForRange(displayStore, brandZh, startYmd
   for (const row of openR.rows || []) {
     const fields = row.agent_data?.fields || {};
     if (!storeMatchesRow(displayStore, fields.store)) continue;
-    const biz = resolveBitableBusinessYmd(fields.date, row.created_at);
+    const biz = resolveKitchenReportBizYmd(fields.date, row.created_at);
     const st = matchKitchenStation(fields.station, brandZh);
     if (st) addStation(openingByDate, biz, st);
   }
   for (const row of closeR.rows || []) {
     const fields = row.agent_data?.fields || {};
     if (!storeMatchesRow(displayStore, fields.store)) continue;
-    const biz = resolveBitableBusinessYmd(fields.date, row.created_at);
+    const biz = resolveKitchenReportBizYmd(fields.date, row.created_at);
     const st = matchKitchenStation(fields.station, brandZh);
     if (st) addStation(closingByDate, biz, st);
   }
@@ -235,7 +272,7 @@ export async function buildPmKitchenMapsForRange(displayStore, brandZh, startYmd
     if (!materialBrandMatches(ad, brandZh)) continue;
     const fields = ad.fields || {};
     if (!storeMatchesRow(displayStore, fields.store)) continue;
-    const biz = resolveBitableBusinessYmd(fields.date, row.created_at);
+    const biz = resolveKitchenReportBizYmd(fields.date, row.created_at);
     if (!biz || biz < startYmd || biz > endYmd) continue;
     materialByDate.set(biz, (materialByDate.get(biz) || 0) + 1);
   }
@@ -289,15 +326,15 @@ function collectDistinctBizDays(rows, displayStore, fieldDateKeys, startYmd, end
   for (const row of rows || []) {
     const fields = row.agent_data?.fields || {};
     if (!storeMatchesRow(displayStore, fields.store)) continue;
-    let biz = '';
+    let chosen = null;
     for (const k of fieldDateKeys) {
       const v = fields[k];
       if (v != null && String(v).trim() !== '') {
-        biz = resolveBitableBusinessYmd(v, row.created_at);
+        chosen = v;
         break;
       }
     }
-    if (!biz) biz = resolveBitableBusinessYmd(null, row.created_at);
+    const biz = resolveKitchenReportBizYmd(chosen, row.created_at);
     if (biz && biz >= startYmd && biz <= endYmd) days.add(biz);
   }
   return days.size;

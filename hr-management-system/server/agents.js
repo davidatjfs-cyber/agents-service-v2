@@ -7177,18 +7177,46 @@ function shanghaiYesterdayYmd() {
   return `${y}-${m}-${d}`;
 }
 
+/**
+ * daily_reports 门店名与飞书/配置简称并存（如「洪潮大宁久光店」↔「洪潮久光店」），
+ * 单一 LIKE 会漏行 → 误报「当日无充值」。此处用多模式 OR 聚合 SUM。
+ */
+function dailyReportStoreLikePatternsForSql(storeName) {
+  const raw = String(storeName || '').trim();
+  const out = new Set();
+  const add = (s) => {
+    const k = normalizeStoreKey(s);
+    if (k) out.add(`%${k}%`);
+  };
+  add(raw);
+  add(normalizeCanonicalStoreName(raw));
+  const n = normalizeStoreKey(raw);
+  if (/洪潮|久光|大宁/.test(n)) {
+    add('洪潮大宁久光店');
+    add('洪潮久光店');
+    add('洪潮');
+  }
+  if (/马己仙|音乐广场|大宁/.test(n)) {
+    add('马己仙上海音乐广场店');
+    add('马己仙大宁店');
+    add('马己仙');
+  }
+  return [...out];
+}
+
 /** 与 agents-service-v2 充值异常一致：以 PG daily_reports.recharge_* 为准，避免 state.dailyReports JSON 滞后或未同步导致误报「无充值」 */
 async function fetchRechargeFromDailyReportsPg(storeName, reportDate) {
   if (!storeName || !reportDate) return { cnt: 0, amt: 0 };
   try {
-    const like = normalizeStoreLike(storeName);
+    const pats = dailyReportStoreLikePatternsForSql(storeName);
+    if (!pats.length) return { cnt: 0, amt: 0 };
     const r = await pool().query(
       `SELECT COALESCE(SUM(COALESCE(recharge_count,0)), 0)::int AS cnt,
               COALESCE(SUM(COALESCE(recharge_amount,0)), 0)::numeric AS amt
        FROM daily_reports
        WHERE date = $1::date
-         AND lower(regexp_replace(coalesce(store,''), '\\s+', '', 'g')) LIKE $2`,
-      [reportDate, like]
+         AND lower(regexp_replace(coalesce(store,''), '\\s+', '', 'g')) LIKE ANY($2::text[])`,
+      [reportDate, pats]
     );
     const row = r.rows?.[0];
     return {
