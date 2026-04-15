@@ -9643,6 +9643,10 @@ const BITABLE_INITIAL_CATCHUP_MS = 8000;
 const BITABLE_LISTEN_HEALTH_MS = 45_000;
 const BITABLE_LISTEN_BACKOFF_MIN_MS = 2000;
 const BITABLE_LISTEN_BACKOFF_MAX_MS = 90_000;
+/** LISTEN 专用连接 keepalive 连续失败次数，达到阈值则触发加密 catchup（补偿可能丢的 NOTIFY） */
+const BITABLE_KEEPALIVE_FAIL_THRESHOLD = 3;
+/** 触发加密 catchup 时，在至多该时间内执行一轮（秒级抖动，避免与重连同时抢锁） */
+const BITABLE_AGGRESSIVE_CATCHUP_DEADLINE_MS = 28_000;
 
 let _bitablePollingInterval = null;
 let _bitablePollingInProgress = false;
@@ -9652,6 +9656,8 @@ let _bitableListenKeepaliveTimer = null;
 let _bitableListenReconnectTimer = null;
 let _bitableListenBackoffMs = BITABLE_LISTEN_BACKOFF_MIN_MS;
 const _bitableNotifyDebounceTimers = new Map();
+let _bitableListenKeepaliveFailStreak = 0;
+let _bitableAggressiveCatchupTimer = null;
 
 /** NOTIFY payload 为 config_key 或 table_id 时解析为 BITABLE_CONFIGS 的 key */
 function resolveBitableConfigKeyFromNotifyPayload(payload) {
@@ -9728,6 +9734,10 @@ async function startBitableListener() {
       clearTimeout(_bitableListenReconnectTimer);
       _bitableListenReconnectTimer = null;
     }
+    if (_bitableAggressiveCatchupTimer) {
+      clearTimeout(_bitableAggressiveCatchupTimer);
+      _bitableAggressiveCatchupTimer = null;
+    }
     if (_bitableListenKeepaliveTimer) {
       clearInterval(_bitableListenKeepaliveTimer);
       _bitableListenKeepaliveTimer = null;
@@ -9743,6 +9753,7 @@ async function startBitableListener() {
     await client.connect();
     await client.query('LISTEN bitable_records_updated');
     _bitableListenBackoffMs = BITABLE_LISTEN_BACKOFF_MIN_MS;
+    _bitableListenKeepaliveFailStreak = 0;
     client.on('notification', (msg) => {
       if (msg.channel === 'bitable_records_updated' && msg.payload) {
         console.log(`[bitable] PG NOTIFY received: payload=${msg.payload}`);
@@ -9774,8 +9785,17 @@ async function startBitableListener() {
         const c = _bitableListenClient;
         if (!c || c._ending) return;
         await c.query('SELECT 1');
+        _bitableListenKeepaliveFailStreak = 0;
       } catch (e) {
         console.error('[bitable] LISTEN keepalive failed:', e?.message);
+        _bitableListenKeepaliveFailStreak += 1;
+        if (_bitableListenKeepaliveFailStreak >= BITABLE_KEEPALIVE_FAIL_THRESHOLD) {
+          console.warn(
+            `[bitable] LISTEN keepalive failed ${BITABLE_KEEPALIVE_FAIL_THRESHOLD} times consecutively — scheduling aggressive catchup within ${BITABLE_AGGRESSIVE_CATCHUP_DEADLINE_MS}ms`
+          );
+          _bitableListenKeepaliveFailStreak = 0;
+          scheduleBitableAggressiveCatchup('listen_keepalive_degraded');
+        }
         try { _bitableListenClient?.end(); } catch (_) {}
       }
     }, BITABLE_LISTEN_HEALTH_MS);
@@ -9843,6 +9863,28 @@ async function runBitableCatchup() {
   } finally {
     _bitablePollingInProgress = false;
   }
+}
+
+/**
+ * LISTEN 连接不健康时：在约 30s 内额外跑一轮全量 DB catchup（与周期 catchup 独立，已防并发）。
+ * 若已有待执行的加密 catchup，不重复排队。
+ */
+function scheduleBitableAggressiveCatchup(reason) {
+  if (_bitableAggressiveCatchupTimer) {
+    console.log('[bitable] aggressive catchup already queued, skip:', reason);
+    return;
+  }
+  const delay = Math.min(
+    BITABLE_AGGRESSIVE_CATCHUP_DEADLINE_MS - 500,
+    1500 + Math.floor(Math.random() * 9000)
+  );
+  console.warn(`[bitable] aggressive catchup scheduled in ${delay}ms (${reason})`);
+  _bitableAggressiveCatchupTimer = setTimeout(() => {
+    _bitableAggressiveCatchupTimer = null;
+    runBitableCatchup()
+      .then(() => console.log('[bitable] aggressive catchup cycle complete'))
+      .catch((err) => console.error('[bitable] aggressive catchup error:', err?.message));
+  }, Math.max(800, delay));
 }
 
 async function processBitableRecordsFromDB(configKey) {
