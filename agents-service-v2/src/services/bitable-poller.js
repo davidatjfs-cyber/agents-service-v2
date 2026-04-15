@@ -394,22 +394,31 @@ export async function pollBitableTable(configKey) {
   }
 
   let newCount = 0;
+  let hrmsNotify = false;
   for (const record of allRecords) {
     const recordId = record.record_id;
     const dedupKey = `${config.appToken}_${config.tableId}_${recordId}`;
     const wasInDedupSet = !config.skipDedup && _processedIds.has(dedupKey);
 
     // Save to feishu_generic_records：每条每轮都 upsert（飞书侧可能仅改字段；旧逻辑用 dedup 跳过写入会导致缓存永不更新）
+    // RETURNING：仅当「新插入」或「fields/raw 相对库中确有变化」时才有行 → 再 pg_notify，避免每轮轮询刷屏且与 HRMS 去重逻辑一致
     try {
-      await query(
+      const insRes = await query(
         `INSERT INTO feishu_generic_records (app_token, table_id, record_id, config_key, fields, raw, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, NOW(), NOW())
          ON CONFLICT (app_token, table_id, record_id) DO UPDATE SET
            config_key = COALESCE(EXCLUDED.config_key, feishu_generic_records.config_key),
-           fields = EXCLUDED.fields, raw = EXCLUDED.raw, updated_at = NOW()`,
+           fields = EXCLUDED.fields,
+           raw = EXCLUDED.raw,
+           updated_at = NOW()
+         WHERE feishu_generic_records.fields IS DISTINCT FROM EXCLUDED.fields
+            OR feishu_generic_records.raw IS DISTINCT FROM EXCLUDED.raw
+         RETURNING record_id`,
         [config.appToken || '', config.tableId || '', recordId, configKey,
          JSON.stringify(record.fields || {}), JSON.stringify(record)]
       );
+      if ((insRes?.rowCount || 0) > 0) hrmsNotify = true;
+      // 与旧逻辑一致：按「本轮首次见到的 record_id」计数（与是否触发 NOTIFY 解耦）
       if (!config.skipDedup && !wasInDedupSet) newCount++;
     } catch (e) {
       if (!String(e?.message || '').includes('duplicate')) {
@@ -434,8 +443,8 @@ export async function pollBitableTable(configKey) {
     }
   }
 
-  if (newCount > 0) {
-    logger.info({ configKey, newCount, total: allRecords.length, skipDedup: !!config.skipDedup }, 'bitable new records');
+  if (hrmsNotify) {
+    logger.info({ configKey, newCount, total: allRecords.length, skipDedup: !!config.skipDedup }, 'bitable feishu_generic_records changed, pg_notify HRMS');
     try {
       await query(`SELECT pg_notify('bitable_records_updated', $1)`, [configKey]);
     } catch (e) {

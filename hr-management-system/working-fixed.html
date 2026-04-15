@@ -38386,9 +38386,9 @@ ${knowledgeContent.slice(0, 30000)}`;
                 await HRMS_API.request('/api/checkin/leave-balance', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, month, value: v, note })
+                    body: JSON.stringify({ username, month, value: v, mode: 'remaining', note })
                 });
-                showNotification('假期天数已更新', 'success');
+                showNotification('剩余假期已更新', 'success');
             } catch (e) {
                 showNotification('保存失败: ' + (e?.message || e), 'error');
             }

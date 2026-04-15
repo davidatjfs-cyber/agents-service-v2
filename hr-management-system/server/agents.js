@@ -5266,12 +5266,24 @@ const BITABLE_DEDUP_CLEAN_COUNT = 8000;
 let _bitableDedupsSeeded = false;
 
 // 启动时从数据库种子化dedup集合，避免重启后重复发送确认消息
+function _bitableRowUpdatedAtMs(record) {
+  const t = record?.updated_at ?? record?.created_at ?? record?.created_time;
+  if (!t) return 0;
+  const d = t instanceof Date ? t : new Date(t);
+  const ms = d.getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
 async function seedBitableDedup() {
   if (_bitableDedupsSeeded) return;
   _bitableDedupsSeeded = true;
   try {
     const r = await pool().query(
-      `SELECT DISTINCT record_id, table_id FROM feishu_generic_records WHERE created_at > NOW() - INTERVAL '30 days' LIMIT 50000`
+      `SELECT record_id, table_id, MAX(updated_at) AS updated_at
+       FROM feishu_generic_records
+       WHERE created_at > NOW() - INTERVAL '30 days'
+       GROUP BY record_id, table_id
+       LIMIT 50000`
     );
     const tableIdToConfigKeys = new Map();
     for (const [key, cfg] of Object.entries(BITABLE_CONFIGS)) {
@@ -5286,8 +5298,12 @@ async function seedBitableDedup() {
       if (!recordId) continue;
       const tableId = String(row?.table_id || '').trim();
       const configKeys = tableIdToConfigKeys.get(tableId) || fallbackKeys;
+      const rowMs = row?.updated_at ? new Date(row.updated_at).getTime() : 0;
+      const safeMs = Number.isFinite(rowMs) ? rowMs : 0;
       for (const key of configKeys) {
-        _bitableProcessedRecordIds.add(`${key}_${recordId}`);
+        const pk = `${key}_${recordId}`;
+        _bitableProcessedRecordIds.add(pk);
+        _bitableLastProcessedTime.set(pk, safeMs);
       }
     }
     console.log(`[bitable] seeded dedup set with ${_bitableProcessedRecordIds.size} keys from DB`);
@@ -9661,6 +9677,13 @@ async function startBitableListener() {
     return;
   }
   try {
+    if (_bitableListenClient) {
+      try {
+        _bitableListenClient.removeAllListeners();
+        await _bitableListenClient.end();
+      } catch (_) {}
+      _bitableListenClient = null;
+    }
     const client = new pgModule.Client({ connectionString });
     await client.connect();
     await client.query('LISTEN bitable_records_updated');
@@ -9673,12 +9696,15 @@ async function startBitableListener() {
       }
     });
     client.on('error', (err) => {
-      console.error('[bitable] LISTEN client error, reconnecting in 30s:', err?.message);
-      setTimeout(() => { client.connect().catch(() => {}); client.query('LISTEN bitable_records_updated').catch(() => {}); }, 30000);
+      console.error('[bitable] LISTEN client error:', err?.message);
+      try { client.end(); } catch (_) {}
     });
     client.on('end', () => {
+      if (_bitableListenClient === client) _bitableListenClient = null;
       console.log('[bitable] LISTEN client disconnected, reconnecting in 30s');
-      setTimeout(() => startBitableListener(), 30000);
+      setTimeout(() => {
+        startBitableListener().catch(e => console.error('[bitable] LISTEN reconnect failed:', e?.message));
+      }, 30000);
     });
     _bitableListenClient = client;
     console.log('[bitable] PG LISTEN setup complete for bitable_records_updated');
@@ -9702,7 +9728,8 @@ function startBitableFallbackPolling(intervalMs) {
 
 async function runBitableListenerHandler(configKey) {
   if (_bitablePollingInProgress) {
-    console.log('[bitable] handler already running, queuing', configKey);
+    console.log('[bitable] NOTIFY skipped — handler busy; 5min catchup will pick up:', configKey);
+    return;
   }
   _bitablePollingInProgress = true;
   try {
@@ -9761,7 +9788,13 @@ async function processBitableRecordsFromDB(configKey) {
     records = (result.rows || []).map(r => {
       const raw = (() => { try { return typeof r.raw === 'string' ? JSON.parse(r.raw) : (r.raw || {}); } catch { return {}; } })();
       const fields = (() => { try { return typeof r.fields === 'string' ? JSON.parse(r.fields) : (r.fields || {}); } catch { return {}; } })();
-      return { record_id: r.record_id, fields, ...raw };
+      return {
+        record_id: r.record_id,
+        fields,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+        ...raw
+      };
     });
   } catch (e) {
     console.error(`[bitable][${configKey}] query feishu_generic_records failed:`, e?.message);
@@ -9776,7 +9809,9 @@ async function processBitableRecordsFromDB(configKey) {
   for (const record of records) {
     const recordId = record.record_id;
     const processedKey = `${configKey}_${recordId}`;
-    if (_bitableProcessedRecordIds.has(processedKey)) continue;
+    const rowMs = _bitableRowUpdatedAtMs(record);
+    const seenMs = _bitableLastProcessedTime.get(processedKey);
+    if (seenMs != null && rowMs > 0 && rowMs <= seenMs) continue;
 
     const fields = record.fields || {};
     const submission = {
@@ -9795,13 +9830,6 @@ async function processBitableRecordsFromDB(configKey) {
 
     newSubmissions.push(submission);
     newRecords.push(record);
-    _bitableProcessedRecordIds.add(processedKey);
-    _bitableLastProcessedTime.set(processedKey, record.created_at || new Date());
-
-    if (_bitableProcessedRecordIds.size > BITABLE_DEDUP_MAX_KEYS) {
-      const oldestIds = Array.from(_bitableProcessedRecordIds).slice(0, BITABLE_DEDUP_CLEAN_COUNT);
-      oldestIds.forEach(id => { _bitableProcessedRecordIds.delete(id); _bitableLastProcessedTime.delete(id); });
-    }
   }
 
   if (newSubmissions.length === 0) return;
@@ -9824,6 +9852,17 @@ async function processBitableRecordsFromDB(configKey) {
         console.error(`[bitable] ops_checklist confirmation error:`, e?.message);
       }
       await new Promise(r => setImmediate(r));
+    }
+  }
+
+  for (const record of newRecords) {
+    const pk = `${configKey}_${record.record_id}`;
+    const rowMs = _bitableRowUpdatedAtMs(record);
+    _bitableProcessedRecordIds.add(pk);
+    _bitableLastProcessedTime.set(pk, rowMs > 0 ? rowMs : Date.now());
+    if (_bitableProcessedRecordIds.size > BITABLE_DEDUP_MAX_KEYS) {
+      const oldestIds = Array.from(_bitableProcessedRecordIds).slice(0, BITABLE_DEDUP_CLEAN_COUNT);
+      oldestIds.forEach(id => { _bitableProcessedRecordIds.delete(id); _bitableLastProcessedTime.delete(id); });
     }
   }
 }

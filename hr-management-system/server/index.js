@@ -2323,15 +2323,14 @@ app.get('/api/points/ranking', authRequired, async (req, res) => {
 
   try {
     const state0 = (await getSharedState()) || {};
-    const start = `${month}-01`;
-    const end = `${month}-31`;
+    const monthStart = `${month}-01`;
     const pointRows = await pool.query(
       `SELECT username, name, store, points, amount, approved_at
        FROM point_records
        WHERE approved_at >= $1::date
-         AND approved_at < ($2::date + interval '1 day')
+         AND approved_at < ($1::date + interval '1 month')
        ORDER BY approved_at DESC NULLS LAST, created_at DESC`,
-      [start, end]
+      [monthStart]
     );
     let list = (pointRows.rows || []).map((r) => ({
       username: r.username || '',
@@ -12217,8 +12216,12 @@ async function runLeaveCumulativeCloseSnapshotForClosedMonth(closedMonth) {
   for (const p of people) {
     const uname = String(p?.username || '').trim();
     if (!uname) continue;
-    const val = calcEmployeeMonthlyCarryover(state0, p, nextM, { ignoreEndCarryoverOverride: true });
     const kk = leaveBalanceOverrideKey(uname, m);
+    const prevSnap = prevSnaps[kk];
+    if (prevSnap && typeof prevSnap === 'object' && String(prevSnap.source || '') === 'manual_carryover') {
+      continue;
+    }
+    const val = calcEmployeeMonthlyCarryover(state0, p, nextM, { ignoreEndCarryoverOverride: true });
     snaps[kk] = {
       value: Number(Number(val).toFixed(2)),
       lockedAt,
@@ -12228,7 +12231,8 @@ async function runLeaveCumulativeCloseSnapshotForClosedMonth(closedMonth) {
     n++;
   }
   try {
-    await saveSharedState({ ...state0, leaveCumulativeCloseSnapshots: snaps });
+    // 必须用字段级原子合并：saveSharedState 全量写回会与 mergeSharedStateFields（如人工累计假期）并发竞态，导致覆盖丢失
+    await mergeSharedStateFields({ leaveCumulativeCloseSnapshots: snaps });
   } catch (e) {
     return { ok: false, error: String(e?.message || e), closedMonth: m };
   }
