@@ -192,6 +192,18 @@ function getShanghaiYmd() {
   return new Date().toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
 }
 
+/** 上海日历 YYYY-MM-DD 加减自然日 */
+function briefingYmdAddDays(ymd, deltaDays) {
+  const s = String(ymd || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return getShanghaiYmd();
+  const d = new Date(`${s}T12:00:00+08:00`);
+  if (!Number.isFinite(d.getTime())) return s;
+  const n = Number(deltaDays);
+  const delta = Number.isFinite(n) ? n : 0;
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
+}
+
 function recipientScope(user) {
   return user.role === 'admin' || user.role === 'hq_manager' ? '__all_stores__' : String(user.store || '').trim();
 }
@@ -492,8 +504,9 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
     }
   } catch (e) { logger.warn({ err: e?.message, store }, 'briefing bad_review'); }
 
-  // 5. 近3天异常（去重：同店同日同类型只保留最新一条；中文标签）
+  // 5. 近3天异常（锚定「昨日」：仅 [昨日-2, 昨日] 三个营业日；禁止未来 trigger_date 误入晨报）
   try {
+    const anomalyFrom = briefingYmdAddDays(yesterday, -2);
     const anomalies = await query(
       `SELECT anomaly_key, severity, trigger_date::date AS td
        FROM (
@@ -504,28 +517,30 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
                 ) AS rn
          FROM anomaly_triggers
          WHERE store ILIKE ANY($1::text[])
-           AND trigger_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::date - INTERVAL '3 days'
+           AND trigger_date::date >= $2::date
+           AND trigger_date::date <= $3::date
        ) sub
        WHERE rn = 1
        ORDER BY td DESC
        LIMIT 8`,
-      [briefingStoreSqlPatterns(store)]
+      [briefingStoreSqlPatterns(store), anomalyFrom, yesterday]
     );
     if (anomalies.rows?.length) {
       const aLines = anomalies.rows.map(a => {
         const name = ANOMALY_LABEL_ZH[a.anomaly_key] || a.anomaly_key;
         return `⚠️ ${name}（严重度：${severityZh(a.severity)}）· ${String(a.td).slice(0, 10)}`;
       });
-      sections.push(`**🚨 近3天异常提醒**\n${aLines.join('\n')}`);
+      sections.push(`**🚨 近3天异常提醒**（${anomalyFrom}～${yesterday}）\n\n${aLines.join('\n\n')}`);
     }
   } catch (e) { logger.warn({ err: e?.message, store }, 'briefing anomalies'); }
 
-  // Chairman 诊断段（≥2异常时LLM综合分析，否则简短摘要；失败不影响原有晨报）
+  // Chairman 诊断段（不与上文「近3天异常」逐条重复英文 key；失败不影响晨报）
   try {
     const { generateDiagnosis } = await import('./chairman/chairman-diagnosis.js');
     const diagnosis = await generateDiagnosis(store, yesterday);
     if (diagnosis) {
-      sections.push(`**🧠 经营诊断**\n${diagnosis}`);
+      // generateDiagnosis 各分支自带标题，避免重复「🧠 经营诊断」套娃
+      sections.push(String(diagnosis).trim());
     }
   } catch (e) { logger.warn({ err: e?.message, store }, 'chairman diagnosis in briefing failed'); }
 

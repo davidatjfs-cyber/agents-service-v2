@@ -56,6 +56,28 @@ function sourceLabelZh(s) {
   return m[String(s || '')] || String(s || '—');
 }
 
+/** 从任务标题等文本中提取首个 yyyy-mm-dd（用于展示「任务关联营业日」） */
+function extractFirstYmdFromText(s) {
+  const m = String(s || '').match(/(20\d{2})-(\d{1,2})-(\d{1,2})/);
+  if (!m) return '';
+  return `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}`;
+}
+
+function extractTaskBizYmdFromRow(row) {
+  const sd = row?.source_data && typeof row.source_data === 'object' ? row.source_data : {};
+  const fromJson =
+    sd.evaluationYmd ||
+    sd.evaluation_ymd ||
+    sd.trigger_date ||
+    sd.biz_date ||
+    sd.business_date ||
+    sd.report_date ||
+    sd.date;
+  const j = String(fromJson || '').trim().slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(j)) return j;
+  return extractFirstYmdFromText(row?.title || '') || extractFirstYmdFromText(row?.detail || '');
+}
+
 async function loadFeishuDisplayNameMap(usernames) {
   const unique = [...new Set((usernames || []).map((u) => String(u || '').trim().toLowerCase()).filter(Boolean))];
   if (!unique.length) return new Map();
@@ -86,7 +108,7 @@ function buildAttitudeFilingCard(title, bodyMd, template = 'blue') {
           {
             tag: 'plain_text',
             content:
-              '数据来源：master_tasks（昨日条数按 updated_at；「本月累计」按 dispatched_at 落在当月1日—统计日，与月度评级/performance-filing-counts 同一 SQL）· 每日08:05'
+              '数据来源：master_tasks（昨日条数按 updated_at 落在统计日内；「本月累计」按 dispatched_at 落在当月1日—统计日，与月度评级同一 SQL）。标题中的日期多为任务关联营业日，与 HR 备案更新时间可能不同，不代表漏备。 · 每日08:05'
           }
         ]
       }
@@ -111,23 +133,28 @@ async function buildHqBodyMarkdown(byStore, rows, bizYmd, nameMap, monthlyMap) {
   const total = rows.length;
   if (!total) {
     return `**备案类型**：工作态度备案（全系统昨日汇总）
+
 **统计日（上海）**：${bizYmd}
+
 **昨日备案条数**：**0** 条
 
 ✅ 昨日暂无工作态度相关备案记录。`;
   }
   let md = `**备案类型**：工作态度备案（全系统昨日汇总）
+
 **统计日（上海）**：${bizYmd}
+
 **昨日备案条数**：**${total}** 条
 
 **按门店汇总**
+
 `;
   const keys = [...byStore.keys()].sort((a, b) => String(a).localeCompare(String(b), 'zh-Hans-CN'));
   for (const k of keys) {
     const n = byStore.get(k)?.length || 0;
     md += `· **${k}**：${n} 条\n`;
   }
-  md += `\n**明细**（按更新时间；与执行力备案一致展示「本月累计」）\n`;
+  md += `\n**明细**（按 HR 备案状态更新时间；与执行力备案一致展示「本月累计」）\n\n`;
   for (const row of rows) {
     const st = String(row.store || '').trim() || '（未填门店）';
     const role = String(row.assignee_role || '').trim();
@@ -136,9 +163,15 @@ async function buildHqBodyMarkdown(byStore, rows, bizYmd, nameMap, monthlyMap) {
     const disp = resolvePerformanceReportDisplayName(st, role, un, raw);
     const title = String(row.title || '').slice(0, 160);
     const monthCnt = monthlyMap.get(un.toLowerCase()) ?? 0;
-    md += `· **${st}**｜${sourceLabelZh(row.source)}｜${title}\n`;
-    md += `  └ 责任人：**${disp}**（\`${un || '—'}\`）｜状态：${row.status || '—'}｜时间：${row.filed_at_sh || '—'}\n`;
-    md += `  └ **本月累计（工作态度备案）**：**${monthCnt}** 次（截至 **${bizYmd}**；全门店 distinct task_id，与月度评级同一 SQL）\n`;
+    const taskBiz = extractTaskBizYmdFromRow(row);
+    md += `· **${st}**｜${sourceLabelZh(row.source)}\n`;
+    md += `  · 摘要：${title}\n`;
+    md += `  · 责任人：**${disp}**（\`${un || '—'}\`）｜状态：${row.status || '—'}\n`;
+    md += `  · **HR 备案更新时间**：${row.filed_at_sh || '—'}（统计日 **${bizYmd}** 内 \`updated_at\`）\n`;
+    if (taskBiz) {
+      md += `  · **任务关联营业日**：**${taskBiz}**（来自标题/后台字段；**可与上一行日期不同**，表示任务针对该营业日，**不是**漏做 ${bizYmd} 的备案）\n`;
+    }
+    md += `  · **本月累计（工作态度备案）**：**${monthCnt}** 次（截至 **${bizYmd}**；全门店 distinct task_id）\n\n`;
   }
   return md;
 }
@@ -147,18 +180,25 @@ async function buildStoreBodyMarkdown(filtered, bizYmd, store, nameMap, monthlyM
   const n = filtered.length;
   if (!n) {
     return `**备案类型**：工作态度备案（本店昨日）
+
 **门店**：${store}
+
 **统计日（上海）**：${bizYmd}
+
 **昨日备案条数**：**0** 条
 
 ✅ 本店昨日暂无工作态度备案记录。`;
   }
   let md = `**备案类型**：工作态度备案（本店昨日）
+
 **门店**：${store}
+
 **统计日（上海）**：${bizYmd}
+
 **昨日备案条数**：**${n}** 条
 
 **明细**（与执行力备案一致含「本月累计」）
+
 `;
   for (const row of filtered) {
     const st = String(row.store || '').trim() || store;
@@ -168,9 +208,15 @@ async function buildStoreBodyMarkdown(filtered, bizYmd, store, nameMap, monthlyM
     const disp = resolvePerformanceReportDisplayName(st, role, un, raw);
     const title = String(row.title || '').slice(0, 160);
     const monthCnt = monthlyMap.get(un.toLowerCase()) ?? 0;
-    md += `· **${sourceLabelZh(row.source)}**｜${title}\n`;
-    md += `  └ 责任人：**${disp}**（\`${un || '—'}\`）｜状态：${row.status || '—'}｜时间：${row.filed_at_sh || '—'}\n`;
-    md += `  └ **本月累计（工作态度备案）**：**${monthCnt}** 次（截至 **${bizYmd}**；本店 distinct task_id，与月度评级同一 SQL）\n`;
+    const taskBiz = extractTaskBizYmdFromRow(row);
+    md += `· **${sourceLabelZh(row.source)}**\n`;
+    md += `  · 摘要：${title}\n`;
+    md += `  · 责任人：**${disp}**（\`${un || '—'}\`）｜状态：${row.status || '—'}\n`;
+    md += `  · **HR 备案更新时间**：${row.filed_at_sh || '—'}（统计日 **${bizYmd}** 内）\n`;
+    if (taskBiz) {
+      md += `  · **任务关联营业日**：**${taskBiz}**（与上一行不同**不代表漏备**）\n`;
+    }
+    md += `  · **本月累计（工作态度备案）**：**${monthCnt}** 次（截至 **${bizYmd}**；本店 distinct task_id）\n\n`;
   }
   return md;
 }
@@ -178,7 +224,8 @@ async function buildStoreBodyMarkdown(filtered, bizYmd, store, nameMap, monthlyM
 async function fetchYesterdayFilings(bizYmd) {
   const next = ymdAddDays(bizYmd, 1);
   const r = await query(
-    `SELECT task_id, store, assignee_username, assignee_role, title, source, resolution_code, status,
+    `SELECT task_id, store, assignee_username, assignee_role, title, detail, source, resolution_code, status,
+            source_data,
             to_char((updated_at AT TIME ZONE 'Asia/Shanghai'), 'YYYY-MM-DD HH24:MI') AS filed_at_sh
      FROM master_tasks
      WHERE COALESCE(hr_performance_recorded, false) = true

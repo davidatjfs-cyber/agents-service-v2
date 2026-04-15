@@ -93,12 +93,37 @@ export function expectedKitchenStationsForBrand(brandZh) {
   return [...KITCHEN_STATIONS_MAJIXIAN];
 }
 
-/** 将飞书「档口」文本归一到标准档口名（仅匹配当前品牌清单） */
+/** 将飞书「档口」文本归一到标准档口名（仅匹配当前品牌清单；长词优先，避免「水」误配） */
 export function matchKitchenStation(rawStation, brandZh) {
-  const s = String(rawStation || '').trim();
+  let s = String(rawStation || '').trim().replace(/[\s　\u200b]+/g, '');
   if (!s) return null;
-  for (const key of expectedKitchenStationsForBrand(brandZh)) {
+  // 去掉括号备注如「炒锅（早班）」
+  s = s.replace(/[（(][^)）]*[)）]/g, '').trim();
+  const keys = [...expectedKitchenStationsForBrand(brandZh)].sort((a, b) => b.length - a.length);
+  for (const key of keys) {
     if (s.includes(key)) return key;
+  }
+  const stripped = s.replace(/(档口|档|台|口|区|部门|组)$/g, '');
+  if (stripped && stripped !== s) {
+    for (const key of keys) {
+      if (stripped.includes(key)) return key;
+    }
+  }
+  // 常见异名（仍须在品牌清单内二次命中）
+  const alias = {
+    刺身台: '刺身',
+    刺身档: '刺身',
+    刺生: '刺身',
+    水吧台: '水吧',
+    炒灶: '炒锅',
+    卤味: '卤水',
+    卤菜: '卤水',
+    烧味档: '烧味',
+    烧腊: '烧味'
+  };
+  for (const [raw, canon] of Object.entries(alias)) {
+    if (!s.includes(raw)) continue;
+    if (keys.includes(canon)) return canon;
   }
   return null;
 }

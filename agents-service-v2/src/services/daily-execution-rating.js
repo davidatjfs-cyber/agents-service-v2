@@ -93,19 +93,33 @@ function evaluatePMExecution(reports) {
   const missingItems = [];
   if (!reports.opening) {
     missingItems.push('开档');
-    lines.push(
-      reports.missingOpeningStations?.length
-        ? `开档缺档口：${reports.missingOpeningStations.join('、')}`
-        : '开档：档口未齐（无法识别档口或记录不足）'
-    );
+    const missO = reports.missingOpeningStations || [];
+    const expO = reports.expectedStations || [];
+    if (missO.length && missO.length < expO.length) {
+      lines.push(`开档缺档口：**${missO.join('、')}**`);
+    } else if (missO.length && expO.length && missO.length === expO.length) {
+      lines.push(
+        `开档：在业务日未识别到任何与标准档口名一致的飞书记录（需 **${expO.join('、')}** 各 1 条）。` +
+          `若已填报，请检查飞书「档口」列是否含标准词（如「炒锅」「水吧」），勿用纯昵称。`
+      );
+    } else {
+      lines.push('开档：档口未齐（无法识别档口或记录不足）');
+    }
   }
   if (!reports.closing) {
     missingItems.push('收档');
-    lines.push(
-      reports.missingClosingStations?.length
-        ? `收档缺档口：${reports.missingClosingStations.join('、')}`
-        : '收档：档口未齐（无法识别档口或记录不足）'
-    );
+    const missC = reports.missingClosingStations || [];
+    const expC = reports.expectedStations || [];
+    if (missC.length && missC.length < expC.length) {
+      lines.push(`收档缺档口：**${missC.join('、')}**`);
+    } else if (missC.length && expC.length && missC.length === expC.length) {
+      lines.push(
+        `收档：在业务日未识别到任何与标准档口名一致的飞书记录（需 **${expC.join('、')}** 各 1 条）。` +
+          `若已填报，请核对「档口」列与标准名称是否一致。`
+      );
+    } else {
+      lines.push('收档：档口未齐（无法识别档口或记录不足）');
+    }
   }
   if (!reports.material) {
     missingItems.push('原料收货');
@@ -210,16 +224,19 @@ function buildFilingCard({ store, username, name, role, rating, missing, executi
 
   let missingMd = '';
   if (executionDetailLines && executionDetailLines.length > 0) {
-    missingMd = `\n**未达标项目**：${missing.join('/')}
-**明细**\n${executionDetailLines.map((l) => `· ${l}`).join('\n')}`;
+    missingMd = `\n\n**未达标项目**：${missing.join('/')}\n\n**明细**\n\n${executionDetailLines.map((l) => `· ${l}`).join('\n\n')}`;
   } else if (missing && missing.length > 0) {
-    missingMd = `\n**未达标项目**\n${missing.map((m) => `❌ ${m}`).join('\n')}`;
+    missingMd = `\n\n**未达标项目**\n\n${missing.map((m) => `· ${m}`).join('\n\n')}`;
   }
 
   const content = `**备案类型**：工作执行力备案（本次第 **${monthlyCount}** 次）
+
 **门店**：${store}
+
 **岗位**：${roleLabel} · ${name || username}
+
 **业务日期**：${date}
+
 **本月累计不合格次数**：**${monthlyCount}** 次（${monthYm}）${missingMd}`;
 
   return {
@@ -242,22 +259,36 @@ function buildAdminFilingCard(results, date) {
   const failedResults = results.filter(r => r.rating !== 'A');
   const monthYm = String(date).slice(0, 7);
 
-  let md = `**业务日期**：${date}\n**本次备案人数**：${failedResults.length}\n`;
+  let md = `**业务日期**：${date}
+
+**本次备案人数**：${failedResults.length}
+
+`;
 
   if (failedResults.length > 0) {
-    md += `\n**备案明细**（含本月累计次数）\n`;
+    md += `**备案明细**（含本月累计次数）
+
+`;
     for (const r of failedResults) {
       const roleLabel = r.role === 'store_manager' ? '店长' : '出品经理';
       const missItems = r.missing && r.missing.length > 0 ? r.missing.join('/') : '';
       const detailExtra =
         r.executionDetailLines && r.executionDetailLines.length > 0
-          ? `\n  └ ${r.executionDetailLines.join('；')}`
+          ? `\n\n  **明细**\n\n  ${r.executionDetailLines.map((x) => `· ${x}`).join('\n\n  ')}`
           : '';
       const monthCount = r.monthlyFilingCount != null ? r.monthlyFilingCount : '—';
-      md += `\n• **${r.store}** · ${roleLabel} ${r.name || r.username}：${missItems ? `未达标（${missItems}）` : '未达标'} | 本月累计 **${monthCount}** 次${detailExtra}`;
+      md += `---
+
+• **${r.store}** · ${roleLabel} **${r.name || r.username}**
+
+  · 未达标项：${missItems || '—'}
+
+  · 本月累计：**${monthCount}** 次${detailExtra}
+
+`;
     }
   } else {
-    md += `\n✅ 全部达标，无需备案`;
+    md += `✅ 全部达标，无需备案`;
   }
 
   return {
@@ -493,6 +524,7 @@ export async function runDailyExecutionRating(date) {
             materialCount: reports.materialCount,
             missingOpeningStations: reports.missingOpeningStations,
             missingClosingStations: reports.missingClosingStations,
+            expectedStations: reports.expectedStations,
             executionDetailLines
           };
 

@@ -10,6 +10,7 @@ import { logger } from '../../utils/logger.js';
 import { callLLM } from '../llm-provider.js';
 import { buildStoreProfilePromptBlock } from '../../config/store-profile.js';
 import { expandAgentStoreLabels } from '../../config/store-mapping.js';
+import { anomalyRuleLabelZh } from '../../utils/anomaly-labels.js';
 import { anomalyToScenario, matchTemplates, matchDBTemplates, formatTemplateOptions } from './action-templates.js';
 
 function storePats(store) {
@@ -37,11 +38,20 @@ async function getActiveAnomalies(store) {
      FROM anomaly_triggers
      WHERE store ILIKE ANY($1::text[])
        AND trigger_date >= $2::date
+       AND trigger_date::date <= $3::date
        AND COALESCE(status, '') NOT IN ('pending_data', 'superseded', 'resolved')
      ORDER BY trigger_date DESC`,
-    [storePats(store), threeDaysAgo]
+    [storePats(store), threeDaysAgo, today]
   );
   return r.rows || [];
+}
+
+function severityZhBrief(s) {
+  const x = String(s || '').toLowerCase();
+  if (x === 'high') return '高';
+  if (x === 'medium') return '中';
+  if (x === 'low') return '低';
+  return s || '';
 }
 
 /**
@@ -116,10 +126,14 @@ export async function generateDiagnosis(store, yesterday) {
         const dbSuccesses = await matchDBTemplates(scenario, store);
         templateText = formatTemplateOptions(templates, dbSuccesses) || '';
       }
-      return `**⚠️ 活跃异常**: ${a.anomaly_key}(${a.severity})\n${templateText}`;
+      // 晨报上文已有「近3天异常」中文列表，此处不再重复英文 anomaly_key
+      if (templateText && String(templateText).trim()) {
+        return `**🧠 经营诊断 · 处置参考**\n\n${templateText.trim()}\n\n_说明：异常类型与日期已列于晨报上文「近3天异常提醒」，此处仅补充处置模板。_`;
+      }
+      return null;
     }
 
-    return `**经营状态**: ✅ 正常\n${dataSection}`;
+    return `**🧠 经营诊断**\n\n**经营状态**：✅ 正常\n\n${dataSection}`;
 
   } catch (e) {
     logger.warn({ err: e?.message, store }, 'chairman diagnosis failed');
@@ -159,7 +173,12 @@ function buildDataSection(data, dishes) {
 
 function buildAnomalySection(anomalies) {
   if (!anomalies.length) return '';
-  return '异常: ' + anomalies.map(a => `${a.anomaly_key}(${a.severity}, ${String(a.trigger_date).slice(0, 10)})`).join('、');
+  return anomalies
+    .map(
+      (a) =>
+        `${anomalyRuleLabelZh(a.anomaly_key)}（严重度：${severityZhBrief(a.severity)}，${String(a.trigger_date).slice(0, 10)}）`
+    )
+    .join('；');
 }
 
 async function generateLLMDiagnosis(store, profileBlock, dataSection, anomalySection, anomalies, yesterday) {
@@ -170,14 +189,14 @@ async function generateLLMDiagnosis(store, profileBlock, dataSection, anomalySec
 ## ${store} ${yesterday} 数据
 ${dataSection}
 
-## 活跃异常 (${anomalies.length}个)
+## 活跃异常 (${anomalies.length}个，以下为中文摘要；晨报前文可能已列异常名，请勿再逐条复读）
 ${anomalySection}
 
 请输出：
 1. 一句话总结（含具体数据）
 2. 2-3条关联分析（为什么这些异常有关联）
 3. 每条分析不超过30字
-不要输出JSON，不要空话，必须引用具体数字。`;
+不要输出JSON，不要空话，必须引用具体数字；不要使用英文 anomaly_key（如 recharge_zero）。`;
 
   try {
     const llmResult = await callLLM(prompt, { purpose: 'chairman_diagnosis', temperature: 0.2, maxTokens: 400 });
@@ -192,12 +211,13 @@ ${anomalySection}
       if (formatted) templateText += '\n' + formatted;
     }
 
-    let result = `**🧠 经营诊断**\n${llmResult.slice(0, 500)}`;
-    if (templateText) result += '\n' + templateText;
+    let result = `**🧠 经营诊断**\n\n${llmResult.slice(0, 500)}`;
+    if (templateText) result += '\n\n' + templateText.trim();
+    result += '\n\n_说明：请勿与上文「近3天异常提醒」逐条对抄；以关联分析与可执行动作为主。_';
     return result;
   } catch (e) {
     logger.warn({ err: e?.message, store }, 'LLM diagnosis failed, fallback');
-    return `**活跃异常(${anomalies.length}个)**: ${anomalySection}`;
+    return `**活跃异常（${anomalies.length} 条）**\n${anomalySection}`;
   }
 }
 
