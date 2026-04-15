@@ -9637,31 +9637,78 @@ async function enforceUnifiedQualityGate({
   return { response: nextResponse, agentData: nextAgentData };
 }
 
+const BITABLE_NOTIFY_DEBOUNCE_MS = 300;
+const BITABLE_CATCHUP_INTERVAL_MS = 2 * 60 * 1000;
+const BITABLE_INITIAL_CATCHUP_MS = 8000;
+const BITABLE_LISTEN_HEALTH_MS = 45_000;
+const BITABLE_LISTEN_BACKOFF_MIN_MS = 2000;
+const BITABLE_LISTEN_BACKOFF_MAX_MS = 90_000;
+
 let _bitablePollingInterval = null;
 let _bitablePollingInProgress = false;
 let _bitableListenClient = null;
 let _bitableCatchupInterval = null;
+let _bitableListenKeepaliveTimer = null;
+let _bitableListenReconnectTimer = null;
+let _bitableListenBackoffMs = BITABLE_LISTEN_BACKOFF_MIN_MS;
+const _bitableNotifyDebounceTimers = new Map();
+
+/** NOTIFY payload 为 config_key 或 table_id 时解析为 BITABLE_CONFIGS 的 key */
+function resolveBitableConfigKeyFromNotifyPayload(payload) {
+  const p = String(payload || '').trim();
+  if (!p) return null;
+  if (BITABLE_CONFIGS[p]?.tableId) return p;
+  for (const [k, cfg] of Object.entries(BITABLE_CONFIGS)) {
+    if (cfg?.type === 'task_response') continue;
+    const tid = String(cfg?.tableId || '').trim();
+    if (tid && tid === p) return k;
+  }
+  return null;
+}
+
+/** 合并短时间内的重复 NOTIFY，降低 LISTEN 端突发与下游锁竞争 */
+function scheduleBitableNotifyProcessing(payloadRaw) {
+  const raw = String(payloadRaw || '').trim();
+  if (!raw) return;
+  const debounceKey = resolveBitableConfigKeyFromNotifyPayload(raw) || raw;
+  const prev = _bitableNotifyDebounceTimers.get(debounceKey);
+  if (prev) clearTimeout(prev);
+  _bitableNotifyDebounceTimers.set(
+    debounceKey,
+    setTimeout(() => {
+      _bitableNotifyDebounceTimers.delete(debounceKey);
+      const ck = resolveBitableConfigKeyFromNotifyPayload(raw);
+      if (!ck) {
+        console.warn('[bitable] NOTIFY payload not mapped to any BITABLE_CONFIGS (ignored):', raw);
+        return;
+      }
+      runBitableListenerHandler(ck).catch((e) =>
+        console.error(`[bitable] LISTEN handler error for ${ck}:`, e?.message)
+      );
+    }, BITABLE_NOTIFY_DEBOUNCE_MS)
+  );
+}
 
 export function startBitablePolling(intervalMs = 60000) {
   if (_bitablePollingInterval) {
     clearInterval(_bitablePollingInterval);
   }
 
-  console.log('[bitable] ⚡ Switched to PG LISTEN mode — Agent V2 handles Feishu polling, HRMS processes via NOTIFY');
+  console.log('[bitable] ⚡ PG LISTEN + DB trigger notify — Agent V2 writes feishu_generic_records, HRMS reacts on NOTIFY');
 
-  // 1. PG LISTEN: real-time processing when Agent writes new records
+  // 1. PG LISTEN: real-time processing when DB trigger fires (all writers: Agent / HRMS Webhook 等)
   startBitableListener();
 
-  // 2. Periodic catch-up: every 5 minutes, process any records that were missed by NOTIFY
+  // 2. Periodic catch-up：补偿 NOTIFY / LISTEN 丢失或处理失败（略缩短间隔以提高数据时效）
   if (_bitableCatchupInterval) clearInterval(_bitableCatchupInterval);
   _bitableCatchupInterval = setInterval(() => {
     runBitableCatchup().catch(e => console.error('[bitable] catchup error:', e?.message));
-  }, 5 * 60 * 1000);
+  }, BITABLE_CATCHUP_INTERVAL_MS);
 
-  // 3. Run initial catchup on startup (delay 15s to let Agent seed data first)
+  // 3. Run initial catchup on startup（略提前，尽快与库对齐）
   setTimeout(() => {
     runBitableCatchup().catch(e => console.error('[bitable] initial catchup error:', e?.message));
-  }, 15000);
+  }, BITABLE_INITIAL_CATCHUP_MS);
 
   // 4. Archive scheduler still needed
   startArchiveScheduler();
@@ -9677,6 +9724,14 @@ async function startBitableListener() {
     return;
   }
   try {
+    if (_bitableListenReconnectTimer) {
+      clearTimeout(_bitableListenReconnectTimer);
+      _bitableListenReconnectTimer = null;
+    }
+    if (_bitableListenKeepaliveTimer) {
+      clearInterval(_bitableListenKeepaliveTimer);
+      _bitableListenKeepaliveTimer = null;
+    }
     if (_bitableListenClient) {
       try {
         _bitableListenClient.removeAllListeners();
@@ -9687,12 +9742,11 @@ async function startBitableListener() {
     const client = new pgModule.Client({ connectionString });
     await client.connect();
     await client.query('LISTEN bitable_records_updated');
+    _bitableListenBackoffMs = BITABLE_LISTEN_BACKOFF_MIN_MS;
     client.on('notification', (msg) => {
       if (msg.channel === 'bitable_records_updated' && msg.payload) {
-        console.log(`[bitable] PG NOTIFY received: configKey=${msg.payload}`);
-        runBitableListenerHandler(msg.payload).catch(e =>
-          console.error(`[bitable] LISTEN handler error for ${msg.payload}:`, e?.message)
-        );
+        console.log(`[bitable] PG NOTIFY received: payload=${msg.payload}`);
+        scheduleBitableNotifyProcessing(msg.payload);
       }
     });
     client.on('error', (err) => {
@@ -9700,14 +9754,32 @@ async function startBitableListener() {
       try { client.end(); } catch (_) {}
     });
     client.on('end', () => {
+      if (_bitableListenKeepaliveTimer) {
+        clearInterval(_bitableListenKeepaliveTimer);
+        _bitableListenKeepaliveTimer = null;
+      }
       if (_bitableListenClient === client) _bitableListenClient = null;
-      console.log('[bitable] LISTEN client disconnected, reconnecting in 30s');
-      setTimeout(() => {
+      const delay = Math.min(Math.max(_bitableListenBackoffMs, BITABLE_LISTEN_BACKOFF_MIN_MS), BITABLE_LISTEN_BACKOFF_MAX_MS);
+      _bitableListenBackoffMs = Math.min(_bitableListenBackoffMs * 2, BITABLE_LISTEN_BACKOFF_MAX_MS);
+      console.log(`[bitable] LISTEN disconnected, reconnect in ${delay}ms (backoff max ${BITABLE_LISTEN_BACKOFF_MAX_MS}ms)`);
+      if (_bitableListenReconnectTimer) clearTimeout(_bitableListenReconnectTimer);
+      _bitableListenReconnectTimer = setTimeout(() => {
+        _bitableListenReconnectTimer = null;
         startBitableListener().catch(e => console.error('[bitable] LISTEN reconnect failed:', e?.message));
-      }, 30000);
+      }, delay);
     });
     _bitableListenClient = client;
-    console.log('[bitable] PG LISTEN setup complete for bitable_records_updated');
+    _bitableListenKeepaliveTimer = setInterval(async () => {
+      try {
+        const c = _bitableListenClient;
+        if (!c || c._ending) return;
+        await c.query('SELECT 1');
+      } catch (e) {
+        console.error('[bitable] LISTEN keepalive failed:', e?.message);
+        try { _bitableListenClient?.end(); } catch (_) {}
+      }
+    }, BITABLE_LISTEN_HEALTH_MS);
+    console.log('[bitable] PG LISTEN setup complete for bitable_records_updated (keepalive every ' + BITABLE_LISTEN_HEALTH_MS + 'ms)');
   } catch (e) {
     console.error('[bitable] PG LISTEN setup failed, falling back to polling:', e?.message);
     startBitableFallbackPolling(60000);
@@ -9726,15 +9798,19 @@ function startBitableFallbackPolling(intervalMs) {
   _bitablePollingInterval = setInterval(() => { runPollingOnce().catch(console.error); }, intervalMs);
 }
 
-async function runBitableListenerHandler(configKey) {
+async function runBitableListenerHandler(configKeyOrPayload) {
+  const configKey =
+    resolveBitableConfigKeyFromNotifyPayload(configKeyOrPayload) || String(configKeyOrPayload || '').trim();
+  if (!configKey || !BITABLE_CONFIGS[configKey]?.tableId) {
+    console.warn('[bitable] runBitableListenerHandler: unknown configKey / payload:', configKeyOrPayload);
+    return;
+  }
   if (_bitablePollingInProgress) {
-    console.log('[bitable] NOTIFY skipped — handler busy; 5min catchup will pick up:', configKey);
+    console.log('[bitable] NOTIFY skipped — handler busy; catchup will pick up:', configKey);
     return;
   }
   _bitablePollingInProgress = true;
   try {
-    const config = BITABLE_CONFIGS[configKey];
-    if (!config?.tableId) return;
     await seedBitableDedup();
     await processBitableRecordsFromDB(configKey);
   } catch (e) {

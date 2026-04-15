@@ -356,6 +356,58 @@ async function ensureFeishuGenericRecordsTable() {
   }
 }
 
+/**
+ * 库级 NOTIFY：凡写入 feishu_generic_records（含 HRMS Webhook / Agent 轮询）且 fields/raw/config_key 实质变化即通知，
+ * 与 HRMS LISTEN channel `bitable_records_updated` 对齐；payload 为 config_key 或兜底 table_id。
+ */
+async function ensureFeishuGenericRecordsNotifyTrigger() {
+  const fnSql = `
+CREATE OR REPLACE FUNCTION feishu_generic_records_bitable_notify() RETURNS trigger AS $$
+DECLARE
+  pl text;
+BEGIN
+  pl := COALESCE(NULLIF(BTRIM(COALESCE(NEW.config_key, '')), ''), NULLIF(BTRIM(COALESCE(NEW.table_id, '')), ''));
+  IF pl IS NULL OR pl = '' THEN
+    RETURN NEW;
+  END IF;
+  PERFORM pg_notify('bitable_records_updated', pl);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql`;
+  const dropSql = 'DROP TRIGGER IF EXISTS trg_feishu_generic_records_bitable_notify ON feishu_generic_records';
+  const trigBody = `
+AFTER INSERT OR UPDATE OF fields, raw, config_key ON feishu_generic_records
+FOR EACH ROW
+WHEN (
+  TG_OP = 'INSERT'
+  OR (
+    TG_OP = 'UPDATE'
+    AND (
+      OLD.fields IS DISTINCT FROM NEW.fields
+      OR OLD.raw IS DISTINCT FROM NEW.raw
+      OR OLD.config_key IS DISTINCT FROM NEW.config_key
+    )
+  )
+)`;
+  try {
+    await pool.query(fnSql);
+    await pool.query(dropSql);
+    try {
+      await pool.query(
+        `CREATE TRIGGER trg_feishu_generic_records_bitable_notify ${trigBody} EXECUTE FUNCTION feishu_generic_records_bitable_notify();`
+      );
+    } catch (e1) {
+      await pool.query(
+        `CREATE TRIGGER trg_feishu_generic_records_bitable_notify ${trigBody} EXECUTE PROCEDURE feishu_generic_records_bitable_notify();`
+      );
+    }
+    console.log('[schema] feishu_generic_records → pg_notify(bitable_records_updated) trigger ready');
+  } catch (e) {
+    console.error('[ensureFeishuGenericRecordsNotifyTrigger] Error:', e?.message || e);
+    throw e;
+  }
+}
+
 function stripAttachmentLikeFields(fields) {
   const src = fields && typeof fields === 'object' ? fields : {};
   const out = {};
@@ -15049,6 +15101,7 @@ if (String(process.env.HRMS_CLI_SYNC_TABLE_VISIT || '').trim() === '1') {
   (async () => {
     try {
       await ensureFeishuGenericRecordsTable();
+      await ensureFeishuGenericRecordsNotifyTrigger();
       await ensureTableVisitRecordsTable();
       const r = await runManualFeishuBitableSync({
         appToken: process.env.BITABLE_TABLEVISIT_APP_TOKEN || 'PTWrbUdcbarCshst0QncMoY7nKe',
@@ -15141,6 +15194,8 @@ app.listen(PORT, HOST, async () => {
     // Runtime migration: dedup unique index on agent_messages(record_id, content_type)
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_messages_record_content_uniq ON agent_messages (record_id, content_type) WHERE record_id IS NOT NULL AND record_id != ''`).catch(e => console.warn('[migration] dedup index:', e?.message));
     assertCriticalFunctions();
+    await ensureFeishuGenericRecordsTable();
+    await ensureFeishuGenericRecordsNotifyTrigger();
     // LLM健康检查 — 启动时验证所有大模型API可用，失败时飞书通知管理员
     verifyLLMHealth().then(h => {
       if (!h.allOk) console.error('[STARTUP] ⚠️ LLM health check FAILED — agents may be brainless!');
@@ -16938,6 +16993,9 @@ if (__ALLOW_SCHEMA_CHANGES__) {
   ensureOpsTasksTable();
   ensureFeishuSyncTable();
   ensureFeishuGenericRecordsTable();
+  ensureFeishuGenericRecordsNotifyTrigger().catch((e) =>
+    console.error('[startup] ensureFeishuGenericRecordsNotifyTrigger:', e?.message || e)
+  );
   ensureTableVisitRecordsTable();
   ensureDedupIndexes();
   startOpsTaskScheduler();
