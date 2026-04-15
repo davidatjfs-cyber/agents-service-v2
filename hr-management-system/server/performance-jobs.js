@@ -85,6 +85,10 @@ function prevMonthPeriod(cal) {
   return `${py}-${String(pm).padStart(2, '0')}`;
 }
 
+export function getExpectedMonthlyPerformancePeriodShanghai(now = new Date()) {
+  return prevMonthPeriod(shanghaiCalendar(now));
+}
+
 function monthDateRange(period) {
   const [yy, mm] = period.split('-').map((x) => parseInt(x, 10));
   const start = `${yy}-${String(mm).padStart(2, '0')}-01`;
@@ -130,6 +134,20 @@ function filterUsersForMonthlyPerformanceClose(rows) {
     }
   }
   return [...rest, ...[...majixianPmByStore.values()].map((x) => x.u)];
+}
+
+export async function countEligibleMonthlyPerformanceUsers() {
+  const users = await pool().query(
+    `SELECT username,
+            COALESCE(NULLIF(TRIM(name), ''), username) AS name,
+            TRIM(store) AS store,
+            role
+     FROM feishu_users
+     WHERE registered = true
+       AND role IN ('store_manager', 'store_production_manager')
+       AND TRIM(COALESCE(store, '')) <> ''`
+  );
+  return filterUsersForMonthlyPerformanceClose(users.rows || []).length;
 }
 
 function bizChannel(biz) {
@@ -562,13 +580,17 @@ export async function sendWeeklyDishOptimizationReport(weekStart, weekEnd) {
   console.log('[perf-jobs] dish WEEKLY cards sent', weekStart, weekEnd);
 }
 
-export function startHrmsPerformanceJobs() {
+export function startHrmsPerformanceJobs(options = {}) {
+  const onHeartbeat = typeof options?.onHeartbeat === 'function' ? options.onHeartbeat : null;
   if (String(process.env.DISABLE_HRMS_PERFORMANCE_JOBS || '').toLowerCase() === 'true') {
     console.log('[perf-jobs] DISABLE_HRMS_PERFORMANCE_JOBS=true — skipped');
     return;
   }
   setInterval(async () => {
     try {
+      if (onHeartbeat) {
+        await onHeartbeat('hrms_performance_jobs_tick');
+      }
       const cal = shanghaiCalendar();
       const { y, m, d, hour, minute } = cal;
       const slotBase = `${y}-${m}-${d}_${hour}`;

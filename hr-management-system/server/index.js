@@ -37,7 +37,9 @@ import { startSalesRawFolderImporter, runSalesRawFolderImportOnce, setSalesRawFo
 import {
   startHrmsPerformanceJobs,
   sendWeeklyDishOptimizationReport,
-  getLastCompletedWeekRangeShanghai
+  getLastCompletedWeekRangeShanghai,
+  getExpectedMonthlyPerformancePeriodShanghai,
+  countEligibleMonthlyPerformanceUsers
 } from './performance-jobs.js';
 import { startDailyFeishuSync, syncDishLibraryCosts, setFeishuSyncFailureNotifier } from './feishu-sync.js';
 import { calculateStoreRating, calculateEmployeeScore } from './new-scoring-model.js';
@@ -2253,20 +2255,43 @@ app.get('/api/points/records', authRequired, async (req, res) => {
     const state0 = (await getSharedState()) || {};
     const myStore = role === 'store_manager' ? String(pickMyStoreFromState(state0, username) || '').trim() : '';
     const effectiveStore = role === 'store_manager' ? myStore : store;
-    let list = Array.isArray(state0.pointRecords) ? state0.pointRecords.slice() : [];
+    const params = [];
+    const where = [];
+    if (start) {
+      params.push(start);
+      where.push(`approved_at >= $${params.length}::date`);
+    }
+    if (end) {
+      params.push(end);
+      where.push(`approved_at < ($${params.length}::date + interval '1 day')`);
+    }
+    if (name) {
+      params.push(`%${name}%`);
+      where.push(`(lower(coalesce(name, '')) LIKE $${params.length} OR lower(coalesce(username, '')) LIKE $${params.length})`);
+    }
+    const sql = `
+      SELECT id::text, approval_id, username, name, store, item_name, reason, points, amount, approved_at, approved_by
+      FROM point_records
+      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+      ORDER BY approved_at DESC NULLS LAST, created_at DESC
+    `;
+    let list = (await pool.query(sql, params)).rows.map((r) => ({
+      id: r.id,
+      approvalId: r.approval_id || '',
+      username: r.username || '',
+      name: r.name || '',
+      store: r.store || '',
+      itemName: r.item_name || '',
+      reason: r.reason || '',
+      points: Number(r.points) || 0,
+      amount: Number(r.amount) || 0,
+      approvedAt: r.approved_at ? String(r.approved_at) : '',
+      approvedBy: r.approved_by || ''
+    }));
     if (effectiveStore) {
       const want = canonicalizeStoreKeyForPoints(effectiveStore);
       list = list.filter(x => canonicalizeStoreKeyForPoints(x?.store) === want);
     }
-    if (name) {
-      list = list.filter(x => {
-        const n = String(x?.name || '').trim().toLowerCase();
-        const u = String(x?.username || '').trim().toLowerCase();
-        return n.includes(name) || u.includes(name);
-      });
-    }
-    if (start) list = list.filter(x => String(x?.approvedAt || x?.createdAt || '').slice(0, 10) >= start);
-    if (end) list = list.filter(x => String(x?.approvedAt || x?.createdAt || '').slice(0, 10) <= end);
 
     list.sort((a, b) => String(b?.approvedAt || b?.createdAt || '').localeCompare(String(a?.approvedAt || a?.createdAt || '')));
     const totalPoints = list.reduce((s, x) => s + (Number(x?.points || 0) || 0), 0);
@@ -2298,8 +2323,24 @@ app.get('/api/points/ranking', authRequired, async (req, res) => {
 
   try {
     const state0 = (await getSharedState()) || {};
-    let list = Array.isArray(state0.pointRecords) ? state0.pointRecords.slice() : [];
-    list = list.filter(x => String(x?.approvedAt || x?.createdAt || '').slice(0, 7) === month);
+    const start = `${month}-01`;
+    const end = `${month}-31`;
+    const pointRows = await pool.query(
+      `SELECT username, name, store, points, amount, approved_at
+       FROM point_records
+       WHERE approved_at >= $1::date
+         AND approved_at < ($2::date + interval '1 day')
+       ORDER BY approved_at DESC NULLS LAST, created_at DESC`,
+      [start, end]
+    );
+    let list = (pointRows.rows || []).map((r) => ({
+      username: r.username || '',
+      name: r.name || '',
+      store: r.store || '',
+      points: Number(r.points) || 0,
+      amount: Number(r.amount) || 0,
+      approvedAt: r.approved_at ? String(r.approved_at) : ''
+    }));
     if (store) {
       const want = canonicalizeStoreKeyForPoints(store);
       list = list.filter(x => canonicalizeStoreKeyForPoints(x?.store) === want);
@@ -2854,10 +2895,10 @@ app.post('/api/approvals', authRequired, async (req, res) => {
         }
 
         const recipients = uniqUsernames([currentAssignee]);
-        for (const u of recipients) {
-          nextState = addStateNotification(nextState, makeNotif(u, title, msg, { type: `${type}_request`, approvalId: item.id }));
-        }
-        await saveSharedState(nextState);
+        const notifs = recipients.map((u) =>
+          makeNotif(u, title, msg, { type: `${type}_request`, approvalId: item.id })
+        );
+        await appendNotifications(notifs);
 
         // 飞书通知：异步通知第一个审批人
         (async () => {
@@ -3761,8 +3802,6 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
           }
 
           // Notifications: read fresh state AFTER the atomic merge
-          const stateForNotif = (await getSharedState()) || {};
-          let stateWithNotif = stateForNotif;
           const totalPoints = rawItems ? rawItems.reduce((s, i) => s + (safeNumber(i.points) || 0), 0) : (safeNumber(updated.payload?.points) || 0);
           const subsidyLabel = Number((totalPoints * 0.5).toFixed(2));
           const itemLabel = rawItems && rawItems.length > 1
@@ -3770,32 +3809,28 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
             : String(updated.payload?.itemName || rawItems?.[0]?.reason || '积分事项').trim();
           const msg = `${applicantName}，你申请的"${itemLabel}"已通过审批，共获得${totalPoints}积分（折算¥${subsidyLabel.toFixed(2)}，已计入薪资补贴）。`;
           const recipients = uniqUsernames([applicantUser, applicantManager].filter(Boolean));
-          for (const u of recipients) {
-            stateWithNotif = addStateNotification(stateWithNotif, makeNotif(u, '积分申请已通过', msg, { type: 'points_result', approvalId }));
-          }
-          if (stateWithNotif !== stateForNotif) await saveSharedState(stateWithNotif);
+          await appendNotifications(recipients.map((u) =>
+            makeNotif(u, '积分申请已通过', msg, { type: 'points_result', approvalId })
+          ));
         }
 
         if (finalRejected) {
-          const stateForNotif = (await getSharedState()) || {};
-          let stateWithNotif = stateForNotif;
           const msg = `${applicantName}，你申请的积分申请因为${note || '相关原因'}未通过审批。`;
           const recipients = uniqUsernames([applicantUser, applicantManager].filter(Boolean));
-          for (const u of recipients) {
-            stateWithNotif = addStateNotification(stateWithNotif, makeNotif(u, '积分申请未通过', msg, { type: 'points_result', approvalId }));
-          }
-          await saveSharedState(stateWithNotif);
+          await appendNotifications(recipients.map((u) =>
+            makeNotif(u, '积分申请未通过', msg, { type: 'points_result', approvalId })
+          ));
         }
 
         if (String(updated.status || '') === 'pending' && nextAssignee) {
-          const stateForNotif = (await getSharedState()) || {};
           const totalPoints = rawItems ? rawItems.reduce((s, i) => s + (safeNumber(i.points) || 0), 0) : (safeNumber(updated.payload?.points) || 0);
           const itemLabel = rawItems && rawItems.length > 1
             ? `${rawItems.length}条积分事项（合计${totalPoints}分）`
             : String(updated.payload?.itemName || rawItems?.[0]?.reason || '积分事项').trim();
           const msg = `${applicantName} 提交了积分申请（${itemLabel}），需要您审批。`;
-          const stateWithNotif = addStateNotification(stateForNotif, makeNotif(nextAssignee, '积分申请待审批', msg, { type: 'points_request', approvalId }));
-          await saveSharedState(stateWithNotif);
+          await appendNotifications([
+            makeNotif(nextAssignee, '积分申请待审批', msg, { type: 'points_request', approvalId })
+          ]);
         }
       }
     } catch (e) {}
@@ -3813,7 +3848,6 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
         const mcStore = String(payload?.store || '').trim();
 
         if (String(updated.status || '') === 'approved' && confirmationId) {
-          let state = state0;
           const confirmations = Array.isArray(state.monthlyConfirmations) ? state.monthlyConfirmations : [];
           const mc = confirmations.find(c => c.id === confirmationId);
           if (mc) {
@@ -3821,8 +3855,8 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
             mc.approvedAt = hrmsNowISO();
             mc.history = mc.history || [];
             mc.history.push({ action: 'approved', by: 'system', at: hrmsNowISO() });
+            await mergeSharedStateFields({ monthlyConfirmations: [mc] }, { monthlyConfirmations: 'id' });
           }
-          state.monthlyConfirmations = confirmations;
 
           // Notify submitter
           const msg = `${mcMonth} ${mcStore || '全部门店'} 的月度考勤确认已通过审批。工资数据将自动生成。`;
@@ -3830,15 +3864,14 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
         }
 
         if (String(updated.status || '') === 'rejected' && confirmationId) {
-          let state = state0;
           const confirmations = Array.isArray(state.monthlyConfirmations) ? state.monthlyConfirmations : [];
           const mc = confirmations.find(c => c.id === confirmationId);
           if (mc) {
             mc.status = 'rejected';
             mc.history = mc.history || [];
             mc.history.push({ action: 'rejected', by: String(req.user?.username || ''), at: hrmsNowISO(), note });
+            await mergeSharedStateFields({ monthlyConfirmations: [mc] }, { monthlyConfirmations: 'id' });
           }
-          state.monthlyConfirmations = confirmations;
           const msg = `${mcMonth} ${mcStore || '全部门店'} 的月度考勤确认被驳回${note ? `：${note}` : ''}`;
           await appendNotifications([makeNotif(applicantUser, '月度考勤确认被驳回', msg, { type: 'monthly_confirm_result', approvalId: updated.id })]);
         }
@@ -5087,6 +5120,7 @@ async function saveSharedState(nextData) {
     ['default', JSON.stringify(nextData || {})]
   );
   schedulePayrollDomainSync();
+  scheduleLeaveDomainSync();
   // 全量双写：每次保存 state 时自动同步所有模块到独立 DB 表
   await dualWriteStateToDB(nextData || {});
 }
@@ -5147,6 +5181,7 @@ async function mergeSharedStateFields(patches, arrayIdFields = {}) {
     );
     if (updateResult.rowCount > 0) {
       schedulePayrollDomainSync();
+      scheduleLeaveDomainSync();
       return;
     }
     // If no row exists yet, insert
@@ -5155,6 +5190,7 @@ async function mergeSharedStateFields(patches, arrayIdFields = {}) {
       ['default', JSON.stringify(next)]
     );
     schedulePayrollDomainSync();
+    scheduleLeaveDomainSync();
     return;
   }
   throw new Error('mergeSharedStateFields: max retries exceeded');
@@ -5322,6 +5358,13 @@ function payrollDomainFieldEmpty(v) {
   return false;
 }
 
+function leaveDomainFieldEmpty(v) {
+  if (v === undefined || v === null) return true;
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === 'object') return Object.keys(v).length === 0;
+  return false;
+}
+
 /** 将当前 state 中的薪资相关字段写入独立表 hrms_payroll_domain（双写备份） */
 async function upsertPayrollDomainFromState(state) {
   if (!state || typeof state !== 'object') return;
@@ -5342,6 +5385,43 @@ async function upsertPayrollDomainFromState(state) {
   );
 }
 
+async function ensureLeaveDomainTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS hrms_leave_domain (
+      id TEXT PRIMARY KEY,
+      leave_balance_overrides JSONB DEFAULT '{}'::jsonb,
+      leave_balance_adjustments JSONB DEFAULT '[]'::jsonb,
+      leave_cumulative_close_snapshots JSONB DEFAULT '{}'::jsonb,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+}
+
+async function upsertLeaveDomainFromState(state) {
+  if (!state || typeof state !== 'object') return;
+  const overrides =
+    state.leaveBalanceOverrides && typeof state.leaveBalanceOverrides === 'object'
+      ? state.leaveBalanceOverrides
+      : {};
+  const adjustments = Array.isArray(state.leaveBalanceAdjustments) ? state.leaveBalanceAdjustments : [];
+  const snapshots =
+    state.leaveCumulativeCloseSnapshots && typeof state.leaveCumulativeCloseSnapshots === 'object'
+      ? state.leaveCumulativeCloseSnapshots
+      : {};
+  await pool.query(
+    `INSERT INTO hrms_leave_domain (
+       id, leave_balance_overrides, leave_balance_adjustments, leave_cumulative_close_snapshots, updated_at
+     )
+     VALUES ('default', $1::jsonb, $2::jsonb, $3::jsonb, NOW())
+     ON CONFLICT (id) DO UPDATE SET
+       leave_balance_overrides = EXCLUDED.leave_balance_overrides,
+       leave_balance_adjustments = EXCLUDED.leave_balance_adjustments,
+       leave_cumulative_close_snapshots = EXCLUDED.leave_cumulative_close_snapshots,
+       updated_at = NOW()`,
+    [JSON.stringify(overrides), JSON.stringify(adjustments), JSON.stringify(snapshots)]
+  );
+}
+
 function schedulePayrollDomainSync() {
   setImmediate(async () => {
     try {
@@ -5350,6 +5430,18 @@ function schedulePayrollDomainSync() {
     } catch (e) {
       console.error('[hrms_payroll_domain] async sync failed (non-fatal):', e?.message);
       void notifyAdminsDualWriteFailure('hrms_payroll_domain（异步薪资域双写）', e);
+    }
+  });
+}
+
+function scheduleLeaveDomainSync() {
+  setImmediate(async () => {
+    try {
+      const s = await getSharedState();
+      await upsertLeaveDomainFromState(s);
+    } catch (e) {
+      console.error('[hrms_leave_domain] async sync failed (non-fatal):', e?.message);
+      void notifyAdminsDualWriteFailure('hrms_leave_domain（异步欠休域双写）', e);
     }
   });
 }
@@ -5777,6 +5869,97 @@ async function appendNotifications(notifs) {
   const list = Array.isArray(notifs) ? notifs.filter(Boolean) : [];
   if (!list.length) return;
   await mergeSharedStateFields({ notifications: list }, { notifications: 'id' });
+}
+
+function systemAlertTitle(msg) {
+  const firstLine = String(msg || '').split(/\r?\n/).map(s => String(s || '').trim()).find(Boolean) || '';
+  return firstLine.slice(0, 120) || 'HRMS 系统告警';
+}
+
+async function insertHrmsUserNotifications(notifs) {
+  const list = Array.isArray(notifs) ? notifs.filter(Boolean) : [];
+  if (!list.length) return;
+  for (const n of list) {
+    const target = String(n?.targetUser || n?.targetUsername || n?.to || '').trim();
+    if (!target) continue;
+    await pool.query(
+      `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [
+        target,
+        String(n?.title || '').trim() || '通知',
+        String(n?.message || '').trim(),
+        String(n?.type || 'system_notice').trim(),
+        JSON.stringify(n?.meta || n?.data || {}),
+        n?.createdAt ? new Date(n.createdAt).toISOString() : hrmsNowISO()
+      ]
+    );
+  }
+}
+
+async function sendAdminSystemAlert(msg, options = {}) {
+  const text = String(msg || '').trim();
+  if (!text) return { recipients: [], feishuSent: 0, feishuFailed: 0 };
+
+  let recipients = uniqUsernames(Array.isArray(options?.usernames) ? options.usernames : []);
+  if (!recipients.length) {
+    const admins = await pool.query(
+      `SELECT username
+       FROM users
+       WHERE role IN ('admin','hq_manager','hr_manager')
+         AND status = 'active'
+       LIMIT 8`
+    );
+    recipients = uniqUsernames((admins.rows || []).map(r => r.username));
+  }
+  if (!recipients.length) return { recipients: [], feishuSent: 0, feishuFailed: 0 };
+
+  const title = String(options?.title || '').trim() || systemAlertTitle(text);
+  const notificationType = String(options?.notificationType || 'system_alert').trim();
+  const meta = options?.meta && typeof options.meta === 'object' ? options.meta : {};
+
+  if (options?.persistToHrms !== false) {
+    const notifs = recipients.map((username) => makeNotif(username, title, text, {
+      type: notificationType,
+      meta: {
+        source: 'admin_system_alert',
+        ...meta
+      }
+    }));
+    try {
+      await appendNotifications(notifs);
+      await insertHrmsUserNotifications(notifs);
+    } catch (e) {
+      console.error('[system-alert] persist company notification failed:', e?.message || e);
+    }
+  }
+
+  let feishuSent = 0;
+  let feishuFailed = 0;
+  for (const username of recipients) {
+    try {
+      let fu = await lookupFeishuUserByUsername(username);
+      let openId = String(fu?.open_id || '').trim();
+      if (!openId) {
+        const r = await pool.query(
+          `SELECT open_id FROM feishu_users WHERE lower(username)=lower($1) LIMIT 1`,
+          [username]
+        );
+        openId = String(r.rows?.[0]?.open_id || '').trim();
+      }
+      if (!openId) {
+        feishuFailed += 1;
+        continue;
+      }
+      const result = await sendLarkMessage(openId, text, { skipDedup: true });
+      if (result?.ok) feishuSent += 1;
+      else feishuFailed += 1;
+    } catch (e) {
+      feishuFailed += 1;
+    }
+  }
+
+  return { recipients, feishuSent, feishuFailed };
 }
 
 function uniqUsernames(list) {
@@ -6783,9 +6966,11 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
       items = items.filter(r => inDateRange(String(r?.date || '').trim(), start, end));
     }
 
-    // 合并 PostgreSQL daily_reports：已落库但未写入 hrms_state 的日期否则会从前端列表消失
+    // 合并 PostgreSQL daily_reports：默认列表场景也要补并最近已落库数据。
+    // 否则一旦 hrms_state.dailyReports 断档，前端会从某一天开始整段“消失”。
     let pgMergeStart = '';
     let pgMergeEnd = '';
+    let pgMergeLatestLimit = 0;
     if (date) {
       pgMergeStart = pgMergeEnd = date;
     } else if (start || end) {
@@ -6802,6 +6987,8 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
         pgMergeStart = pgMergeEnd;
         pgMergeEnd = s;
       }
+    } else {
+      pgMergeLatestLimit = Math.max(limit, 200);
     }
     if (pgMergeStart && pgMergeEnd) {
       try {
@@ -6832,6 +7019,38 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
         }
       } catch (e) {
         console.error('[daily-reports pg merge]', e?.message);
+      }
+    } else if (pgMergeLatestLimit > 0) {
+      try {
+        const args = [];
+        let sql = `
+          SELECT store, date, brand, actual_revenue, pre_discount_revenue, total_discount,
+                 dine_orders, dine_revenue, dine_traffic, efficiency, labor_total,
+                 actual_margin, gross_profit, dianping_rating, new_wechat_members, wechat_month_total,
+                 private_room_uses, operational_anomaly_note, delivery_pre_revenue, delivery_actual,
+                 delivery_orders, delivery_bad_reviews, budget, budget_rate, submitted, submitted_at, updated_at,
+                 recharge_count, recharge_amount,
+                 weather, segments, discount_dine, discount_delivery, categories, delivery_detail,
+                 bad_reviews_dianping, staff, schedule_next_day, photos, holiday_switch
+          FROM daily_reports
+          WHERE 1=1`;
+        if (store) {
+          sql += ` AND TRIM(store) = TRIM($1::text)`;
+          args.push(String(store).trim());
+        }
+        sql += ` ORDER BY date DESC, updated_at DESC NULLS LAST LIMIT $${args.length + 1}::int`;
+        args.push(pgMergeLatestLimit);
+        const pgR = await pool.query(sql, args);
+        const seen = new Set(items.map(i => dailyReportMergeKey(i.store, i.date)));
+        for (const row of pgR.rows) {
+          const k = dailyReportMergeKey(row.store, row.date);
+          if (!seen.has(k)) {
+            seen.add(k);
+            items.push(dailyReportItemFromPgRow(row));
+          }
+        }
+      } catch (e) {
+        console.error('[daily-reports pg merge latest]', e?.message);
       }
     }
     
@@ -9605,7 +9824,7 @@ app.post('/api/reports/payroll/audit', authRequired, async (req, res) => {
       auditedBy: username,
       auditedAt: hrmsNowISO()
     };
-    await saveSharedState({ ...state0, payrollAudits: auditMap });
+    await mergeSharedStateFields({ payrollAudits: auditMap });
     return res.json({ ok: true, audit: auditMap[auditKey] });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
@@ -12460,6 +12679,32 @@ function mergeEmployeesForStatePut(incomingEmployees, existingEmployees) {
   return out;
 }
 
+function mergeArrayByIdForStatePut(incomingItems, existingItems, idField = 'id') {
+  const inc = Array.isArray(incomingItems) ? incomingItems : [];
+  const ex = Array.isArray(existingItems) ? existingItems : [];
+  const norm = (v) => String(v || '').trim();
+  const exMap = new Map();
+  for (const e of ex) {
+    const k = norm(e?.[idField]);
+    if (k) exMap.set(k, e);
+  }
+  const seen = new Set();
+  const out = [];
+  for (const e of inc) {
+    const k = norm(e?.[idField]);
+    if (!k) continue;
+    seen.add(k);
+    const base = exMap.get(k) || {};
+    out.push({ ...base, ...e });
+  }
+  for (const e of ex) {
+    const k = norm(e?.[idField]);
+    if (!k || seen.has(k)) continue;
+    out.push(e);
+  }
+  return out;
+}
+
 app.put('/api/state', authRequired, async (req, res) => {
   if (String(req.user?.role || '') !== 'admin') {
     return res.status(403).json({ error: 'forbidden' });
@@ -12505,6 +12750,49 @@ app.put('/api/state', authRequired, async (req, res) => {
           data.payrollAdjustments && typeof data.payrollAdjustments === 'object' ? data.payrollAdjustments : {}
         );
       }
+      if (existingState.payrollAudits && typeof existingState.payrollAudits === 'object') {
+        data.payrollAudits = Object.assign(
+          {},
+          existingState.payrollAudits,
+          data.payrollAudits && typeof data.payrollAudits === 'object' ? data.payrollAudits : {}
+        );
+      }
+      if (existingState.leaveBalanceOverrides && typeof existingState.leaveBalanceOverrides === 'object') {
+        data.leaveBalanceOverrides = Object.assign(
+          {},
+          existingState.leaveBalanceOverrides,
+          data.leaveBalanceOverrides && typeof data.leaveBalanceOverrides === 'object' ? data.leaveBalanceOverrides : {}
+        );
+      }
+      if (existingState.leaveCumulativeCloseSnapshots && typeof existingState.leaveCumulativeCloseSnapshots === 'object') {
+        data.leaveCumulativeCloseSnapshots = Object.assign(
+          {},
+          existingState.leaveCumulativeCloseSnapshots,
+          data.leaveCumulativeCloseSnapshots && typeof data.leaveCumulativeCloseSnapshots === 'object'
+            ? data.leaveCumulativeCloseSnapshots
+            : {}
+        );
+      }
+      data.leaveBalanceAdjustments = mergeArrayByIdForStatePut(
+        data.leaveBalanceAdjustments,
+        existingState.leaveBalanceAdjustments,
+        'id'
+      );
+      data.monthlyConfirmations = mergeArrayByIdForStatePut(
+        data.monthlyConfirmations,
+        existingState.monthlyConfirmations,
+        'id'
+      );
+      data.salaryChangeHistory = mergeArrayByIdForStatePut(
+        data.salaryChangeHistory,
+        existingState.salaryChangeHistory,
+        'id'
+      );
+      data.leaveRecords = mergeArrayByIdForStatePut(
+        data.leaveRecords,
+        existingState.leaveRecords,
+        'id'
+      );
       // ─────────────────────────────────────────────────────────────────────────
 
       const existingStores = Array.isArray(existingState.stores) ? existingState.stores : [];
@@ -14329,6 +14617,48 @@ app.post('/api/feishu/send-test-message', authRequired, async (req, res) => {
   }
 });
 
+app.post('/api/admin/system-alert/test', authRequired, async (req, res) => {
+  const role = String(req.user?.role || '').trim();
+  if (!['admin', 'hq_manager', 'hr_manager'].includes(role)) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+
+  try {
+    const targetUsername = String(req.body?.username || '').trim();
+    if (!targetUsername) return res.status(400).json({ error: 'missing_username' });
+
+    const targetR = await pool.query(
+      `SELECT username, role
+       FROM users
+       WHERE lower(username) = lower($1)
+         AND role IN ('admin','hq_manager','hr_manager')
+       LIMIT 1`,
+      [targetUsername]
+    );
+    const target = targetR.rows?.[0] || null;
+    if (!target) return res.status(400).json({ error: 'target_user_not_admin' });
+
+    const message = String(
+      req.body?.message ||
+      `🧪 [HRMS] 管理员单人告警测试\n目标账号：${target.username}\n时间：${hrmsNowISO()}\n说明：用于验证飞书告警与 HRMS 公司通知链路是否同时生效。`
+    ).trim();
+
+    const result = await sendAdminSystemAlert(message, {
+      usernames: [target.username],
+      persistToHrms: true,
+      notificationType: 'system_alert_test',
+      meta: {
+        test: true,
+        createdBy: String(req.user?.username || '')
+      }
+    });
+    return res.json({ ok: true, ...result, targetUsername: target.username });
+  } catch (error) {
+    console.error('[admin system alert test] Error:', error);
+    return res.status(500).json({ error: 'server_error', message: String(error?.message || error) });
+  }
+});
+
 // Agent/API: 直接写入飞书多维表格（单条或批量）
 app.post('/api/agent/feishu-table-write', authRequired, async (req, res) => {
   const role = String(req.user?.role || '').trim();
@@ -14886,6 +15216,13 @@ app.listen(PORT, HOST, async () => {
       }
     }
 
+    try {
+      await ensureLeaveDomainTable();
+      console.log('[startup] hrms_leave_domain table ready');
+    } catch (e) {
+      console.error('[startup] hrms_leave_domain table init failed (non-fatal):', e?.message);
+    }
+
     // 启动时权威重建：每次启动都从 daily_reports 表完整重建 hrms_state.dailyReports
     // 策略：DB 是基础字段（营收/订单等）的权威来源；但明细字段（segments/categories/staff/photos/schedule_next_day/weather/discount/bad_reviews）
     //       DB 从未写入过，必须从 state 保留，否则每次重启明细数据全部丢失。
@@ -15067,6 +15404,40 @@ app.listen(PORT, HOST, async () => {
       await upsertPayrollDomainFromState(freshState);
     } catch (e) {
       console.error('[startup] 薪资域互备同步失败（非致命，不影响启动）:', e?.message);
+    }
+
+    // 欠休/累计假域双备：state 某字段空则从 hrms_leave_domain 回灌，再写回独立表
+    try {
+      const leaveDomainR = await pool.query(`SELECT * FROM hrms_leave_domain WHERE id = $1`, ['default']);
+      const row = leaveDomainR.rows?.[0];
+      if (row) {
+        let stateL = (await getSharedState()) || {};
+        let changed = false;
+        const pairs = [
+          ['leaveBalanceOverrides', 'leave_balance_overrides'],
+          ['leaveBalanceAdjustments', 'leave_balance_adjustments'],
+          ['leaveCumulativeCloseSnapshots', 'leave_cumulative_close_snapshots']
+        ];
+        for (const [sk, col] of pairs) {
+          const dbVal = row[col];
+          const stVal = stateL[sk];
+          if (leaveDomainFieldEmpty(stVal) && !leaveDomainFieldEmpty(dbVal)) {
+            stateL = { ...stateL, [sk]: dbVal };
+            changed = true;
+          }
+        }
+        if (changed) {
+          await pool.query(
+            `UPDATE hrms_state SET data = $2::jsonb, updated_at = NOW() WHERE key = $1`,
+            ['default', JSON.stringify(stateL)]
+          );
+          console.log('[startup] 欠休域从 hrms_leave_domain 回灌到 hrms_state');
+        }
+      }
+      const freshLeaveState = (await getSharedState()) || {};
+      await upsertLeaveDomainFromState(freshLeaveState);
+    } catch (e) {
+      console.error('[startup] 欠休域互备同步失败（非致命，不影响启动）:', e?.message);
     }
 
     // 启动时同步员工信息：把 hrms_state.employees 同步到 employees 独立表
@@ -15419,18 +15790,14 @@ app.listen(PORT, HOST, async () => {
       } catch (_) {}
     }
 
-    // 辅助：发飞书告警给所有 admin/hq_manager
+    // 辅助：给管理员发送系统告警，并同步写入 HRMS 公司通知
     async function sendSystemAlert(msg) {
       try {
-        const admins = await pool.query(
-          `SELECT username FROM users WHERE role IN ('admin','hq_manager','hr_manager') AND status = 'active' LIMIT 8`
-        );
-        for (const a of admins.rows) {
-          const fu = await lookupFeishuUserByUsername(a.username);
-          if (fu?.open_id) {
-            await sendLarkMessage(fu.open_id, msg, { skipDedup: true });
-          }
-        }
+        await sendAdminSystemAlert(msg, {
+          persistToHrms: true,
+          notificationType: 'system_alert',
+          meta: { source: 'monitor' }
+        });
       } catch (e) {
         console.error('[monitor] sendSystemAlert error:', e?.message);
       }
@@ -15463,6 +15830,113 @@ app.listen(PORT, HOST, async () => {
         console.error('[monitor] heartbeat check error:', e?.message);
       }
     }, 30 * 60 * 1000);
+
+    let _perfMonthlyMissingAlertKey = '';
+
+    // 核心数据每 10 分钟自愈回灌一次：即使 hrms_state 被旧快照污染，也会从权威表/独立域自动拉回
+    setInterval(async () => {
+      try {
+        await beatHeartbeat('critical_data_reconcile');
+        const stateNow = (await getSharedState()) || {};
+
+        // 1) 营业日报：若 state 最新日期落后于表最新日期，则整段重建
+        const drLatestR = await pool.query(`SELECT MAX(date)::text AS latest FROM daily_reports`);
+        const drLatest = String(drLatestR.rows?.[0]?.latest || '').trim();
+        const stateDrLatest = (Array.isArray(stateNow.dailyReports) ? stateNow.dailyReports : [])
+          .map(r => String(r?.date || '').slice(0, 10))
+          .filter(Boolean)
+          .sort()
+          .pop() || '';
+        if (drLatest && drLatest > stateDrLatest) {
+          const pgAll = await pool.query(`
+            SELECT store, date, brand, actual_revenue, pre_discount_revenue, total_discount,
+                   dine_orders, dine_revenue, dine_traffic, efficiency, labor_total,
+                   actual_margin, gross_profit, dianping_rating, new_wechat_members, wechat_month_total,
+                   private_room_uses, operational_anomaly_note, delivery_pre_revenue, delivery_actual,
+                   delivery_orders, delivery_bad_reviews, budget, budget_rate, submitted, submitted_at, updated_at,
+                   recharge_count, recharge_amount,
+                   weather, segments, discount_dine, discount_delivery, categories, delivery_detail,
+                   bad_reviews_dianping, staff, schedule_next_day, photos, holiday_switch
+            FROM daily_reports
+            ORDER BY date DESC
+          `);
+          const dbItems = pgAll.rows.map(row => dailyReportItemFromPgRow(row));
+          await mergeSharedStateFields({ dailyReports: dbItems }, { dailyReports: ['store', 'date'] });
+          await sendSystemAlert(`⚠️ [HRMS] 核心数据自愈：营业日报 state 最新日期 ${stateDrLatest || '无'} 落后于表 ${drLatest}，已自动回灌。`);
+        }
+
+        // 2) 积分：若 point_records 数量大于 state.pointRecords，则自动重建
+        const prCountR = await pool.query(`SELECT COUNT(*)::int AS c FROM point_records`);
+        const dbPrCount = Number(prCountR.rows?.[0]?.c || 0);
+        const statePrCount = Array.isArray(stateNow.pointRecords) ? stateNow.pointRecords.length : 0;
+        if (dbPrCount > statePrCount) {
+          const prRows = await pool.query(`
+            SELECT id::text, approval_id, username, name, store, item_name, reason, points, amount, approved_at, approved_by
+            FROM point_records
+            ORDER BY approved_at DESC NULLS LAST, created_at DESC
+          `);
+          const dbPrItems = prRows.rows.map(row => ({
+            id: row.id,
+            approvalId: row.approval_id || '',
+            username: row.username || '',
+            name: row.name || '',
+            store: row.store || '',
+            itemName: row.item_name || '',
+            reason: row.reason || '',
+            points: Number(row.points) || 0,
+            amount: Number(row.amount) || 0,
+            approvedAt: row.approved_at ? String(row.approved_at) : '',
+            approvedBy: row.approved_by || '',
+          }));
+          await mergeSharedStateFields({ pointRecords: dbPrItems }, { pointRecords: 'id' });
+          await sendSystemAlert(`⚠️ [HRMS] 核心数据自愈：积分记录 state=${statePrCount} 落后于表=${dbPrCount}，已自动回灌。`);
+        }
+
+        // 3) 绩效月结果：10 日关账窗口后，若应产出的月度绩效结果明显缺失，第一时间通知管理员。
+        const shParts = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Shanghai',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        }).formatToParts(new Date());
+        const shDay = Number(shParts.find((p) => p.type === 'day')?.value || '0');
+        if (shDay >= 10) {
+          const period = getExpectedMonthlyPerformancePeriodShanghai();
+          const eligibleCount = await countEligibleMonthlyPerformanceUsers().catch(() => 0);
+          if (eligibleCount > 0) {
+            const perfCountR = await pool.query(
+              `SELECT COUNT(*)::int AS c
+               FROM agent_scores
+               WHERE period = $1 AND score_model = 'new_model_monthly'`,
+              [period]
+            );
+            const actualCount = Number(perfCountR.rows?.[0]?.c || 0);
+            const minimumExpected = Math.max(1, Math.floor(eligibleCount * 0.8));
+            const alertKey = `${period}:${eligibleCount}:${actualCount}`;
+            if (actualCount < minimumExpected && _perfMonthlyMissingAlertKey !== alertKey) {
+              _perfMonthlyMissingAlertKey = alertKey;
+              await sendSystemAlert([
+                '🚨 [HRMS] 月度绩效结果缺失告警',
+                `周期：${period}`,
+                `应有人员（估算）：${eligibleCount}`,
+                `已写入结果：${actualCount}`,
+                '说明：月度绩效关账或结果写入可能未完成，员工端/管理端看到的绩效结果可能不完整。',
+                '请立即检查 hrms-service 日志中的 [perf-jobs]、agent_scores 表，以及每月 10 日关账任务执行情况。'
+              ].join('\n'));
+            }
+            if (actualCount >= minimumExpected) {
+              _perfMonthlyMissingAlertKey = '';
+            }
+          }
+        }
+
+        // 4) 欠休域 / 5) 薪资域：确保独立域始终跟随当前 state
+        await upsertLeaveDomainFromState((await getSharedState()) || {});
+        await upsertPayrollDomainFromState((await getSharedState()) || {});
+      } catch (e) {
+        console.error('[monitor] critical data reconcile error:', e?.message);
+      }
+    }, 10 * 60 * 1000);
 
     // ── P0-2: 每天 23:30 检查 sales_raw 数据完整性 ──────────────
     // 用 setInterval 每5分钟检查时间窗口
@@ -15626,7 +16100,9 @@ app.listen(PORT, HOST, async () => {
     // Weekly BI report (Monday 10:00 CST)
     startWeeklyReportScheduler();
 
-    startHrmsPerformanceJobs();
+    startHrmsPerformanceJobs({
+      onHeartbeat: beatHeartbeat
+    });
     startSalesRawFolderImporter();
   } catch (e) {
     console.error('[agents] init failed:', e?.message || e);
@@ -16270,7 +16746,10 @@ app.post('/api/checkin/leave-balance', authRequired, async (req, res) => {
     };
     logs.unshift(rec);
 
-    const nextState = { ...state, leaveBalanceOverrides: overrides, leaveBalanceAdjustments: logs.slice(0, 5000) };
+    const nextPatches = {
+      leaveBalanceOverrides: overrides,
+      leaveBalanceAdjustments: logs.slice(0, 5000)
+    };
     // 累计假期（carryover）人工校准 = 当月「月初累计池」；同步写入「上月末」闭合键，使所有读快照/人工的口径一致，且当月内不再依赖公式滚动该池（次月1日定时快照会覆盖上月键，便于对账）
     if (mode === 'carryover') {
       const prevM = shiftMonth(month, -1);
@@ -16279,7 +16758,7 @@ app.post('/api/checkin/leave-balance', authRequired, async (req, res) => {
           ? state.leaveCumulativeCloseSnapshots
           : {};
         const snapKey = leaveBalanceOverrideKey(targetUsername, prevM);
-        nextState.leaveCumulativeCloseSnapshots = {
+        nextPatches.leaveCumulativeCloseSnapshots = {
           ...prevSnaps,
           [snapKey]: {
             value: Number(Number(value).toFixed(2)),
@@ -16293,7 +16772,7 @@ app.post('/api/checkin/leave-balance', authRequired, async (req, res) => {
       }
     }
 
-    await saveSharedState(nextState);
+    await mergeSharedStateFields(nextPatches, { leaveBalanceAdjustments: 'id' });
     return res.json({ ok: true, key, value: Number(value), adjustment: rec });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
@@ -16369,12 +16848,11 @@ app.post('/api/checkin/monthly-confirm', authRequired, async (req, res) => {
     }
 
     confirmations.push(confirmation);
-    await saveSharedState({ ...state, monthlyConfirmations: confirmations });
+    await mergeSharedStateFields({ monthlyConfirmations: [confirmation] }, { monthlyConfirmations: 'id' });
 
     // Send notification to first approver
     if (chain.length > 0) {
-      const notifs = Array.isArray(state.notifications) ? state.notifications : [];
-      notifs.push({
+      await appendNotifications([{
         id: 'NOTIF-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
         type: 'monthly_confirm',
         targetUser: chain[0],
@@ -16382,8 +16860,7 @@ app.post('/api/checkin/monthly-confirm', authRequired, async (req, res) => {
         message: `${username} 提交了 ${month} ${store || '全部门店'} 的月度考勤确认，请审批。`,
         read: false,
         createdAt: hrmsNowISO()
-      });
-      await saveSharedState({ ...(await getSharedState()), notifications: notifs });
+      }]);
     }
 
     return res.json({ ok: true, confirmation });

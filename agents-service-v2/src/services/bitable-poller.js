@@ -158,15 +158,32 @@ function sleep(ms) {
  */
 function isTransientBitableFetchError(errText) {
   const s = String(errText || '');
-  // 1255001 等为飞书侧「内部错误/序列化」类，官方建议稍后重试；与 1254607 同类不宜立刻按整表失败告警
   return /1254607|1255001|1255002|1255003|1255004|1255005|1255040|1254200|internalerror|rpcerror|marshalerror|data not ready|try again later|timeout|ECONNABORTED|ECONNRESET|ETIMEDOUT|socket hang up|EAI_AGAIN|429|502|503|504/i.test(
     s
   );
 }
 
-/** 轮询在 getBitableRecords 用尽重试后仍失败 → 视为真失败，必须通知管理员（与飞书网页能否打开无关）。 */
+/** 1254607 specifically — "Data not ready, please try again later" — needs longer backoff than network errors */
+function isDataNotReadyError(errText) {
+  return /1254607|data not ready|try again later/i.test(String(errText || ''));
+}
+
+/** 1255001 InternalError — Feishu server ephemeral error, should retry with longer backoff */
+function isFeishuInternalError(errText) {
+  return /1255001|1255002|1255003|1255004|1255005|1255040|internalerror|rpcerror|marshalerror/i.test(String(errText || ''));
+}
+
+/** 轮询在 getBitableRecords 用尽重试后仍失败 → 视为真失败，必须通知管理员（与飞书网页能否打开无关）。
+ *  1254607 "Data not ready" 和 1255001 InternalError 是飞书API正常瞬态，重试后仍失败不告警（下次轮询会自动恢复）。 */
 function notifyBitablePollFetchFailed(configKey, config, error) {
   const err = String(error || '').trim() || 'unknown';
+
+  // 1254607 "Data not ready" and 1255001 InternalError are normal Feishu transients — suppress alert
+  if (isDataNotReadyError(err) || isFeishuInternalError(err)) {
+    logger.info({ configKey, err: err.slice(0, 200) }, 'bitable transient error suppressed (no alert)');
+    return;
+  }
+
   const urgent =
     err === 'no_token' ||
     err === 'invalid_config' ||
@@ -235,11 +252,15 @@ async function getBitableRecords(configKey, options = {}) {
   if (config.sortField) params.sort = config.sortField;
   else params.sort = JSON.stringify(['_id DESC']);
 
-  const maxAttempts = 6;
+  const MAX_RETRIES_NORMAL = 4;
+  const MAX_RETRIES_DATA_NOT_READY = 2;
+  let _isDataNotReady = false;
   let lastErr = 'unknown';
   let tokenRefreshed = false;
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  for (let attempt = 1; ; attempt++) {
+    const maxRetries = _isDataNotReady ? MAX_RETRIES_DATA_NOT_READY : MAX_RETRIES_NORMAL;
+    if (attempt > maxRetries) break;
     try {
       const resp = await axios.get(
         `${BASE_URL}/bitable/v1/apps/${config.appToken}/tables/${config.tableId}/records`,
@@ -259,9 +280,22 @@ async function getBitableRecords(configKey, options = {}) {
             continue;
           }
         }
-        if (isTransientBitableFetchError(lastErr) && attempt < maxAttempts) {
-          const delay = Math.min(20000, 2000 * attempt);
-          logger.warn({ configKey, bizCode, attempt, delay }, 'bitable business code transient, retrying');
+        if (isTransientBitableFetchError(lastErr)) {
+          _isDataNotReady = _isDataNotReady || isDataNotReadyError(lastErr);
+        const maxNow = _isDataNotReady ? MAX_RETRIES_DATA_NOT_READY : MAX_RETRIES_NORMAL;
+        if (attempt >= maxNow) {
+          logger.error({ configKey, bizCode, attempt, isDataNotReady: _isDataNotReady }, 'bitable fetch exhausted retries');
+          return { ok: false, error: lastErr };
+        }
+        const isDNR = isDataNotReadyError(lastErr);
+        const isInternal = isFeishuInternalError(lastErr);
+        // 1254607: 30s, 60s exponential | 1255001: 10s, 20s | others: 2s, 4s, 6s, 8s
+        const delay = isDNR
+          ? Math.min(120000, 30000 * Math.pow(2, attempt - 1))
+          : isInternal
+            ? Math.min(60000, 10000 * Math.pow(2, attempt - 1))
+            : Math.min(20000, 2000 * attempt);
+          logger.warn({ configKey, bizCode, attempt, delay, isDataNotReady: isDNR }, 'bitable business code transient, retrying');
           await sleep(delay);
           continue;
         }
@@ -290,9 +324,21 @@ async function getBitableRecords(configKey, options = {}) {
           continue;
         }
       }
-      if (isTransientBitableFetchError(lastErr) && attempt < maxAttempts) {
-        const delay = Math.min(20000, 2000 * attempt);
-        logger.warn({ configKey, attempt, delay, err: lastErr.slice(0, 300) }, 'bitable HTTP transient, retrying');
+      if (isTransientBitableFetchError(lastErr)) {
+        _isDataNotReady = _isDataNotReady || isDataNotReadyError(lastErr);
+        const maxNow = _isDataNotReady ? MAX_RETRIES_DATA_NOT_READY : MAX_RETRIES_NORMAL;
+        if (attempt >= maxNow) {
+          logger.error({ configKey, attempt, isDataNotReady: _isDataNotReady, err: lastErr.slice(0, 200) }, 'bitable HTTP fetch exhausted retries');
+          return { ok: false, error: lastErr };
+        }
+        const isDNR = isDataNotReadyError(lastErr);
+        const isInternal = isFeishuInternalError(lastErr);
+        const delay = isDNR
+          ? Math.min(120000, 30000 * Math.pow(2, attempt - 1))
+          : isInternal
+            ? Math.min(60000, 10000 * Math.pow(2, attempt - 1))
+            : Math.min(20000, 2000 * attempt);
+        logger.warn({ configKey, attempt, delay, isDataNotReady: isDNR || isInternal, err: lastErr.slice(0, 300) }, 'bitable HTTP transient, retrying');
         await sleep(delay);
         continue;
       }
@@ -322,7 +368,7 @@ async function seedDedup() {
   }
 }
 
-// ── Poll a single Bitable table ──
+// ── Poll a single table, non-blocking: yields to event loop between pages ──
 export async function pollBitableTable(configKey) {
   const config = BITABLE_CONFIGS[configKey];
   if (!config?.tableId) return;
@@ -343,6 +389,8 @@ export async function pollBitableTable(configKey) {
     if (!result.hasMore || !result.nextPageToken) break;
     pageToken = result.nextPageToken;
     page++;
+    // Yield to event loop between pages so webhook requests aren't starved
+    await new Promise(r => setImmediate(r));
   }
 
   let newCount = 0;
@@ -388,6 +436,11 @@ export async function pollBitableTable(configKey) {
 
   if (newCount > 0) {
     logger.info({ configKey, newCount, total: allRecords.length, skipDedup: !!config.skipDedup }, 'bitable new records');
+    try {
+      await query(`SELECT pg_notify('bitable_records_updated', $1)`, [configKey]);
+    } catch (e) {
+      logger.debug({ configKey, err: e?.message }, 'pg_notify bitable_records_updated skipped');
+    }
   }
 }
 
@@ -712,23 +765,44 @@ const POLL_ORDER = [
   'loss_report', 'actual_gross_margin', 'task_responses'
 ];
 
+const _lastPollTime = {};
+let _pollRunning = false;
+
 export async function pollAllBitableTables() {
   const featureFlags = await getConfig('feature_flags').catch(() => null) || {};
   if (featureFlags.bitable_polling === false) {
     logger.info('bitable polling disabled by feature flag');
     return;
   }
-  const known = new Set(POLL_ORDER);
-  const finalKeys = [
-    ...POLL_ORDER.filter(k => BITABLE_CONFIGS[k]),
-    ...Object.keys(BITABLE_CONFIGS).filter(k => !known.has(k) && BITABLE_CONFIGS[k]?.type !== 'task_response')
-  ];
-  for (const configKey of finalKeys) {
-    try {
-      await pollBitableTable(configKey);
-    } catch (e) {
-      logger.error({ configKey, err: e?.message }, 'bitable poll error');
+  // Prevent overlapping poll cycles
+  if (_pollRunning) {
+    logger.info('previous polling cycle still running, skip this tick');
+    return;
+  }
+  _pollRunning = true;
+  try {
+    const known = new Set(POLL_ORDER);
+    const finalKeys = [
+      ...POLL_ORDER.filter(k => BITABLE_CONFIGS[k]),
+      ...Object.keys(BITABLE_CONFIGS).filter(k => !known.has(k) && BITABLE_CONFIGS[k]?.type !== 'task_response')
+    ];
+    const now = Date.now();
+    for (const configKey of finalKeys) {
+      const config = BITABLE_CONFIGS[configKey];
+      const interval = config?.pollingInterval || 120000;
+      const lastTime = _lastPollTime[configKey] || 0;
+      if (now - lastTime < interval) continue; // skip if polled too recently
+      _lastPollTime[configKey] = now;
+      try {
+        await pollBitableTable(configKey);
+      } catch (e) {
+        logger.error({ configKey, err: e?.message }, 'bitable poll error');
+      }
+      // Yield to event loop between tables — critical for webhook responsiveness
+      await new Promise(r => setImmediate(r));
     }
+  } finally {
+    _pollRunning = false;
   }
 }
 

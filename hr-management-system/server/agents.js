@@ -4575,57 +4575,116 @@ async function getBitableTenantToken(configKey = 'ops_checklist') {
 // Bitable API Client
 // ─────────────────────────────────────────────
 
+function isDataNotReadyError(errText) {
+  return /1254607|data not ready|try again later/i.test(String(errText || ''));
+}
+
+function isFeishuInternalError(errText) {
+  return /1255001|1255002|1255003|1255004|1255005|1255040|internalerror|rpcerror|marshalerror/i.test(String(errText || ''));
+}
+
+function isTransientBitableError(errText) {
+  const s = String(errText || '');
+  return /1254607|1255001|1255002|1255003|1255004|1255005|1255040|1254200|internalerror|rpcerror|marshalerror|data not ready|try again later|timeout|ECONNABORTED|ECONNRESET|ETIMEDOUT|socket hang up|EAI_AGAIN|429|502|503|504/i.test(s);
+}
+
 export async function getBitableRecords(configKey = 'ops_checklist', options = {}) {
   const config = BITABLE_CONFIGS[configKey];
   if (!config) {
     console.error(`[bitable] invalid config key: ${configKey}`);
     return { ok: false, error: 'invalid_config' };
   }
-  
-  const token = await getBitableTenantToken(configKey);
-  if (!token) {
-    console.error(`[bitable][${configKey}] cannot get records: no token`);
-    return { ok: false, error: 'no_token' };
-  }
 
-  const { pageSize = 20, pageToken, filter, sort = [] } = options;
-  const params = {
-    page_size: pageSize,
-    user_id_type: 'open_id'
-  };
-  
-  if (pageToken) params.page_token = pageToken;
-  if (filter) params.filter = filter;
-  if (sort.length > 0) {
-    params.sort = JSON.stringify(sort);
-  } else if (config.sortField) {
-    params.sort = config.sortField;
-  } else {
-    params.sort = JSON.stringify(["_id DESC"]);
-  }
-  
-  
+  const MAX_RETRIES_NORMAL = 3;
+  const MAX_RETRIES_DATA_NOT_READY = 1;
+  let _isDataNotReady = false;
+  let lastErr = 'unknown';
 
-  try {
-    const resp = await axios.get(
-      `https://open.feishu.cn/open-apis/bitable/v1/apps/${config.appToken}/tables/${config.tableId}/records`,
-      {
-        headers: { 'Authorization': `Bearer ${token}` },
-        params,
-        timeout: 15000
+  for (let attempt = 1; ; attempt++) {
+    const maxRetries = _isDataNotReady ? MAX_RETRIES_DATA_NOT_READY : MAX_RETRIES_NORMAL;
+    if (attempt > maxRetries) break;
+
+    const token = await getBitableTenantToken(configKey);
+    if (!token) {
+      console.error(`[bitable][${configKey}] cannot get records: no token`);
+      return { ok: false, error: 'no_token' };
+    }
+
+    const { pageSize = 200, pageToken, filter, sort = [] } = options;
+    const params = {
+      page_size: pageSize,
+      user_id_type: 'open_id'
+    };
+
+    if (pageToken) params.page_token = pageToken;
+    if (filter) params.filter = filter;
+    if (sort.length > 0) {
+      params.sort = JSON.stringify(sort);
+    } else if (config.sortField) {
+      params.sort = config.sortField;
+    } else {
+      params.sort = JSON.stringify(["_id DESC"]);
+    }
+
+    try {
+      const resp = await axios.get(
+        `https://open.feishu.cn/open-apis/bitable/v1/apps/${config.appToken}/tables/${config.tableId}/records`,
+        {
+          headers: { 'Authorization': `Bearer ${token}` },
+          params,
+          timeout: 10000
+        }
+      );
+
+      const records = resp.data?.data?.items || [];
+      const hasMore = resp.data?.data?.has_more || false;
+      const nextPageToken = resp.data?.data?.page_token || '';
+      const total = resp.data?.data?.total || 0;
+
+      return { ok: true, records, hasMore, nextPageToken, total };
+    } catch (e) {
+      const errBody = e?.response?.data;
+      const bizCode = errBody?.code;
+      lastErr = String(e?.message || e);
+
+      if (bizCode || (errBody && typeof errBody === 'object')) {
+        const code = Number(bizCode);
+        if (bizCode === 1254607 || bizCode === '1254607' || /data not ready/i.test(String(errBody?.msg || ''))) {
+          _isDataNotReady = true;
+          if (attempt >= maxRetries) {
+            return { ok: false, error: '1254607_data_not_ready' };
+          }
+          await sleep(30000);
+          continue;
+        }
+        if (isTransientBitableError(String(bizCode) + ' ' + String(errBody?.msg || ''))) {
+          if (attempt >= maxRetries) {
+            return { ok: false, error: String(bizCode) };
+          }
+          const isInternal = isFeishuInternalError(String(bizCode));
+          const delay = isInternal ? Math.min(60000, 10000 * Math.pow(2, attempt - 1)) : Math.min(15000, 2000 * attempt);
+          await sleep(delay);
+          continue;
+        }
+        return { ok: false, error: String(bizCode || lastErr) };
       }
-    );
 
-    const records = resp.data?.data?.items || [];
-    const hasMore = resp.data?.data?.has_more || false;
-    const nextPageToken = resp.data?.data?.page_token || '';
-    const total = resp.data?.data?.total || 0;
+      if (isTransientBitableError(lastErr)) {
+        _isDataNotReady = _isDataNotReady || isDataNotReadyError(lastErr);
+        const maxNow = _isDataNotReady ? MAX_RETRIES_DATA_NOT_READY : MAX_RETRIES_NORMAL;
+        if (attempt >= maxNow) {
+          return { ok: false, error: lastErr };
+        }
+        const delay = _isDataNotReady ? 30000 : Math.min(15000, 2000 * attempt);
+        await sleep(delay);
+        continue;
+      }
 
-    return { ok: true, records, hasMore, nextPageToken, total };
-  } catch (e) {
-    console.error('[bitable] get records failed:', e?.response?.data || e?.message);
-    return { ok: false, error: String(e?.message || e) };
+      return { ok: false, error: lastErr };
+    }
   }
+
+  return { ok: false, error: lastErr };
 }
 
 export async function getBitableRecordImageDownloadUrl(configKey = 'ops_checklist', fileToken) {
@@ -5237,19 +5296,26 @@ async function seedBitableDedup() {
   }
 }
 
+const _bitableTransientErrors = new Set(['1254607_data_not_ready', '1254607', '1255001', '1255002', '1255003', '1255004', '1255005', '1255040', 'ETIMEDOUT', 'ECONNRESET', 'ECONNABORTED', 'timeout of 10000ms exceeded']);
+
 export async function pollBitableSubmissions(configKey = 'ops_checklist') {
   const cfg = BITABLE_CONFIGS[configKey];
-  if (!cfg?.tableId) { return; } // skip configs without a valid tableId
+  if (!cfg?.tableId) { return; }
   await seedBitableDedup();
   console.log(`[bitable][${configKey}] polling submissions...`);
-  
+
   const records = [];
   let pageToken = '';
   let page = 0;
   while (page < 20) {
     const result = await getBitableRecords(configKey, { pageSize: 200, pageToken });
     if (!result.ok) {
-      console.error(`[bitable][${configKey}] poll failed:`, result.error);
+      const isTransient = _bitableTransientErrors.has(result.error) || /data not ready|internalerror|timeout|ECONNRESET|socket hang up|1254607|1255001|1255002|1255003|1255004|1255005|1255040/i.test(String(result.error || ''));
+      if (isTransient) {
+        console.log(`[bitable][${configKey}] transient error, will retry next cycle: ${String(result.error).slice(0, 100)}`);
+      } else {
+        console.error(`[bitable][${configKey}] poll failed:`, result.error);
+      }
       return;
     }
     records.push(...(result.records || []));
@@ -5493,6 +5559,7 @@ export async function pollAllBitableSubmissions() {
     } catch (e) {
       console.error(`[bitable][${configKey}] poll error:`, e?.message);
     }
+    await new Promise(r => setImmediate(r));
   }
 }
 
@@ -5776,10 +5843,27 @@ export async function pollTaskResponseBitable() {
   console.log('[task_response] polling for responses...');
 
   try {
-    const result = await getBitableRecords('task_responses', { pageSize: 50 });
-    if (!result.ok) { console.error('[task_response] poll failed:', result.error); return; }
+    // Read from feishu_generic_records instead of Feishu API (Agent V2 handles polling)
+    const config = BITABLE_CONFIGS['task_responses'];
+    if (!config?.tableId) return;
 
-    const records = result.records || [];
+    const cutoff = new Date(Date.now() - 30 * 60 * 1000);
+    const result = await pool().query(
+      `SELECT record_id, fields, raw, created_at, updated_at
+       FROM feishu_generic_records
+       WHERE table_id = $1
+         AND (created_at > $2 OR updated_at > $2)
+       ORDER BY COALESCE(updated_at, created_at) DESC
+       LIMIT 100`,
+      [config.tableId, cutoff]
+    );
+
+    const records = (result.rows || []).map(r => {
+      const raw = (() => { try { return typeof r.raw === 'string' ? JSON.parse(r.raw) : (r.raw || {}); } catch { return {}; } })();
+      const fields = (() => { try { return typeof r.fields === 'string' ? JSON.parse(r.fields) : (r.fields || {}); } catch { return {}; } })();
+      return { record_id: r.record_id, fields, ...raw };
+    });
+
     let processed = 0;
 
     for (const record of records) {
@@ -9539,39 +9623,209 @@ async function enforceUnifiedQualityGate({
 
 let _bitablePollingInterval = null;
 let _bitablePollingInProgress = false;
+let _bitableListenClient = null;
+let _bitableCatchupInterval = null;
 
 export function startBitablePolling(intervalMs = 60000) {
   if (_bitablePollingInterval) {
     clearInterval(_bitablePollingInterval);
   }
-  
-  console.log('[bitable] starting multi-config polling with interval:', intervalMs, 'ms');
-  
-  const runPollingOnce = async () => {
-    if (_bitablePollingInProgress) {
-      console.log('[bitable] previous polling cycle still running, skip this tick');
-      return;
-    }
-    _bitablePollingInProgress = true;
-    try {
-      await pollAllBitableSubmissions();
-    } catch (e) {
-      console.error('[bitable] pollAllBitableSubmissions error:', e?.message || e);
-    } finally {
-      _bitablePollingInProgress = false;
-    }
-  };
 
-  // 立即执行一次
-  runPollingOnce().catch(console.error);
-  
-  // 设置定时器
-  _bitablePollingInterval = setInterval(() => {
-    runPollingOnce().catch(console.error);
-  }, intervalMs);
-  
-  // 启动归档定时任务（每天检查一次）
+  console.log('[bitable] ⚡ Switched to PG LISTEN mode — Agent V2 handles Feishu polling, HRMS processes via NOTIFY');
+
+  // 1. PG LISTEN: real-time processing when Agent writes new records
+  startBitableListener();
+
+  // 2. Periodic catch-up: every 5 minutes, process any records that were missed by NOTIFY
+  if (_bitableCatchupInterval) clearInterval(_bitableCatchupInterval);
+  _bitableCatchupInterval = setInterval(() => {
+    runBitableCatchup().catch(e => console.error('[bitable] catchup error:', e?.message));
+  }, 5 * 60 * 1000);
+
+  // 3. Run initial catchup on startup (delay 15s to let Agent seed data first)
+  setTimeout(() => {
+    runBitableCatchup().catch(e => console.error('[bitable] initial catchup error:', e?.message));
+  }, 15000);
+
+  // 4. Archive scheduler still needed
   startArchiveScheduler();
+}
+
+async function startBitableListener() {
+  let pgModule;
+  try { pgModule = await import('pg'); } catch (e) { pgModule = null; }
+  const connectionString = process.env.DATABASE_URL;
+  if (!pgModule || !connectionString) {
+    console.error('[bitable] No pg module or DATABASE_URL, cannot LISTEN — falling back to polling');
+    startBitableFallbackPolling(60000);
+    return;
+  }
+  try {
+    const client = new pgModule.Client({ connectionString });
+    await client.connect();
+    await client.query('LISTEN bitable_records_updated');
+    client.on('notification', (msg) => {
+      if (msg.channel === 'bitable_records_updated' && msg.payload) {
+        console.log(`[bitable] PG NOTIFY received: configKey=${msg.payload}`);
+        runBitableListenerHandler(msg.payload).catch(e =>
+          console.error(`[bitable] LISTEN handler error for ${msg.payload}:`, e?.message)
+        );
+      }
+    });
+    client.on('error', (err) => {
+      console.error('[bitable] LISTEN client error, reconnecting in 30s:', err?.message);
+      setTimeout(() => { client.connect().catch(() => {}); client.query('LISTEN bitable_records_updated').catch(() => {}); }, 30000);
+    });
+    client.on('end', () => {
+      console.log('[bitable] LISTEN client disconnected, reconnecting in 30s');
+      setTimeout(() => startBitableListener(), 30000);
+    });
+    _bitableListenClient = client;
+    console.log('[bitable] PG LISTEN setup complete for bitable_records_updated');
+  } catch (e) {
+    console.error('[bitable] PG LISTEN setup failed, falling back to polling:', e?.message);
+    startBitableFallbackPolling(60000);
+  }
+}
+
+function startBitableFallbackPolling(intervalMs) {
+  console.log('[bitable] ⚠️ Falling back to Feishu API polling (higher latency, more API calls)');
+  const runPollingOnce = async () => {
+    if (_bitablePollingInProgress) { console.log('[bitable] previous cycle still running, skip'); return; }
+    _bitablePollingInProgress = true;
+    try { await pollAllBitableSubmissions(); } catch (e) { console.error('[bitable] poll error:', e?.message); }
+    finally { _bitablePollingInProgress = false; }
+  };
+  runPollingOnce().catch(console.error);
+  _bitablePollingInterval = setInterval(() => { runPollingOnce().catch(console.error); }, intervalMs);
+}
+
+async function runBitableListenerHandler(configKey) {
+  if (_bitablePollingInProgress) {
+    console.log('[bitable] handler already running, queuing', configKey);
+  }
+  _bitablePollingInProgress = true;
+  try {
+    const config = BITABLE_CONFIGS[configKey];
+    if (!config?.tableId) return;
+    await seedBitableDedup();
+    await processBitableRecordsFromDB(configKey);
+  } catch (e) {
+    console.error(`[bitable] LISTEN handler error for ${configKey}:`, e?.message);
+  } finally {
+    _bitablePollingInProgress = false;
+  }
+}
+
+async function runBitableCatchup() {
+  if (_bitablePollingInProgress) {
+    console.log('[bitable] catchup skipped — handler already running');
+    return;
+  }
+  _bitablePollingInProgress = true;
+  try {
+    await seedBitableDedup();
+    const configKeys = Object.keys(BITABLE_CONFIGS).filter(k => BITABLE_CONFIGS[k]?.tableId && BITABLE_CONFIGS[k]?.type !== 'task_response');
+    for (const configKey of configKeys) {
+      try {
+        await processBitableRecordsFromDB(configKey);
+      } catch (e) {
+        console.error(`[bitable] catchup error for ${configKey}:`, e?.message);
+      }
+      await new Promise(r => setImmediate(r));
+    }
+    console.log('[bitable] catchup cycle complete');
+  } catch (e) {
+    console.error('[bitable] catchup cycle error:', e?.message);
+  } finally {
+    _bitablePollingInProgress = false;
+  }
+}
+
+async function processBitableRecordsFromDB(configKey) {
+  const config = BITABLE_CONFIGS[configKey];
+  if (!config?.tableId) return;
+
+  const cutoff = new Date(Date.now() - 30 * 60 * 1000);
+  let records;
+  try {
+    const result = await pool().query(
+      `SELECT record_id, fields, raw, created_at, updated_at
+       FROM feishu_generic_records
+       WHERE table_id = $1
+         AND (created_at > $2 OR updated_at > $2)
+       ORDER BY COALESCE(updated_at, created_at) DESC
+       LIMIT 500`,
+      [config.tableId, cutoff]
+    );
+    records = (result.rows || []).map(r => {
+      const raw = (() => { try { return typeof r.raw === 'string' ? JSON.parse(r.raw) : (r.raw || {}); } catch { return {}; } })();
+      const fields = (() => { try { return typeof r.fields === 'string' ? JSON.parse(r.fields) : (r.fields || {}); } catch { return {}; } })();
+      return { record_id: r.record_id, fields, ...raw };
+    });
+  } catch (e) {
+    console.error(`[bitable][${configKey}] query feishu_generic_records failed:`, e?.message);
+    return;
+  }
+
+  if (records.length === 0) return;
+
+  const newSubmissions = [];
+  const newRecords = [];
+
+  for (const record of records) {
+    const recordId = record.record_id;
+    const processedKey = `${configKey}_${recordId}`;
+    if (_bitableProcessedRecordIds.has(processedKey)) continue;
+
+    const fields = record.fields || {};
+    const submission = {
+      configKey,
+      recordId,
+      createdTime: record.created_time || record.created_at,
+      submitter: fields['提交人'] || '',
+      store: fields['所属门店'] || fields['门店'] || '',
+      checkType: fields['检查类型'] || '',
+      checkStatus: fields['检查状态'] || '',
+      checkRemark: fields['检查说明'] || '',
+      checkPhotos: fields['检查照片'] || [],
+      submitTime: fields['提交日期'] || record.created_time || record.created_at,
+      fields
+    };
+
+    newSubmissions.push(submission);
+    newRecords.push(record);
+    _bitableProcessedRecordIds.add(processedKey);
+    _bitableLastProcessedTime.set(processedKey, record.created_at || new Date());
+
+    if (_bitableProcessedRecordIds.size > BITABLE_DEDUP_MAX_KEYS) {
+      const oldestIds = Array.from(_bitableProcessedRecordIds).slice(0, BITABLE_DEDUP_CLEAN_COUNT);
+      oldestIds.forEach(id => { _bitableProcessedRecordIds.delete(id); _bitableLastProcessedTime.delete(id); });
+    }
+  }
+
+  if (newSubmissions.length === 0) return;
+  console.log(`[bitable][${configKey}] processed ${newSubmissions.length} new records from DB (via NOTIFY/catchup)`);
+
+  // 知识图谱
+  for (const record of newRecords) {
+    try { await extractRelationsFromBitableRecord(record, configKey); } catch (e) {}
+  }
+
+  // 业务处理
+  await processBitableData(configKey, newRecords);
+
+  // ops_checklist 确认消息
+  if (configKey === 'ops_checklist') {
+    for (const sub of newSubmissions) {
+      try {
+        await processChecklistConfirmation(sub);
+      } catch (e) {
+        console.error(`[bitable] ops_checklist confirmation error:`, e?.message);
+      }
+      await new Promise(r => setImmediate(r));
+    }
+  }
 }
 
 export function startArchiveScheduler() {
@@ -11155,6 +11409,7 @@ export function registerAgentRoutes(app, authRequired) {
 
   /** 数据中心精简看板：Agent 活动摘要 + 管理告警 + 定时任务 + 双写说明（与 Agent 控制台信息对齐） */
   app.get('/api/agents/data-center-brief', authRequired, async (req, res) => {
+    const username = String(req.user?.username || '').trim();
     const role = String(req.user?.role || '').trim();
     if (!['admin', 'hq_manager', 'hr_manager'].includes(role)) {
       return res.status(403).json({ error: 'forbidden' });
@@ -11166,11 +11421,13 @@ export function registerAgentRoutes(app, authRequired) {
     try {
       const [
         alertsR,
+        hrmsAlertsR,
         cronR,
         taskCntR,
         rhythmCntR,
         anomalyCntR,
         alertTodayR,
+        hrmsAlertTodayR,
         perfRollupR
       ] = await Promise.all([
         p
@@ -11179,6 +11436,22 @@ export function registerAgentRoutes(app, authRequired) {
              FROM agent_admin_alert_log
              ORDER BY sent_at DESC
              LIMIT 35`
+          )
+          .catch(() => ({ rows: [] })),
+        p
+          .query(
+            `SELECT id,
+                    'medium'::text AS priority,
+                    type AS alert_type,
+                    title,
+                    LEFT(message, 400) AS body_preview,
+                    created_at AS sent_at
+             FROM hrms_user_notifications
+             WHERE target_username = $1
+               AND type IN ('system_alert', 'system_alert_test')
+             ORDER BY created_at DESC
+             LIMIT 35`,
+            [username]
           )
           .catch(() => ({ rows: [] })),
         p
@@ -11213,6 +11486,16 @@ export function registerAgentRoutes(app, authRequired) {
           .catch(() => ({ rows: [{ c: 0 }] })),
         p
           .query(
+            `SELECT COUNT(*)::int AS c
+             FROM hrms_user_notifications
+             WHERE target_username = $1
+               AND type IN ('system_alert', 'system_alert_test')
+               AND DATE(timezone('Asia/Shanghai', created_at)) = $2::date`,
+            [username, summaryYmd]
+          )
+          .catch(() => ({ rows: [{ c: 0 }] })),
+        p
+          .query(
             `SELECT ROUND(AVG(total_score)::numeric, 1) AS avg_bi,
                     COUNT(*)::int AS rollup_rows
              FROM agent_scores
@@ -11234,13 +11517,15 @@ export function registerAgentRoutes(app, authRequired) {
           agentTaskLogs: Number(taskCntR.rows?.[0]?.c || 0),
           rhythmRuns: Number(rhythmCntR.rows?.[0]?.c || 0),
           anomalyTriggers: Number(anomalyCntR.rows?.[0]?.c || 0),
-          adminAlerts: Number(alertTodayR.rows?.[0]?.c || 0)
+          adminAlerts: Number(alertTodayR.rows?.[0]?.c || 0) + Number(hrmsAlertTodayR.rows?.[0]?.c || 0)
         },
         performanceRollup14d: {
           avgScore: perfRollupR.rows?.[0]?.avg_bi != null ? Number(perfRollupR.rows[0].avg_bi) : null,
           rowCount: Number(perfRollupR.rows?.[0]?.rollup_rows || 0)
         },
-        adminAlerts: alertsR.rows || [],
+        adminAlerts: [...(alertsR.rows || []), ...(hrmsAlertsR.rows || [])]
+          .sort((a, b) => String(b?.sent_at || '').localeCompare(String(a?.sent_at || '')))
+          .slice(0, 35),
         cronRuns: (cronR.rows || []).map((row) => ({
           ...row,
           job_label_zh: cronJobLabelZh(row.job_key)
@@ -11733,7 +12018,7 @@ export function registerAgentRoutes(app, authRequired) {
       const r = await pool().query(
         `SELECT id, title, message, type, meta, created_at
          FROM hrms_user_notifications
-         WHERE lower(target_username) = lower($1)
+         WHERE target_username = $1
          ORDER BY created_at DESC
          LIMIT $2`,
         [username, limit]
