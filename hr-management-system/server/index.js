@@ -404,6 +404,7 @@ WHEN (
     console.log('[schema] feishu_generic_records → pg_notify(bitable_records_updated) trigger ready');
   } catch (e) {
     console.error('[ensureFeishuGenericRecordsNotifyTrigger] Error:', e?.message || e);
+    void notifyAdminsDualWriteFailure('feishu_generic_records（NOTIFY 触发器安装/更新失败）', e);
     throw e;
   }
 }
