@@ -45,7 +45,6 @@ import { startDailyFeishuSync, syncDishLibraryCosts, setFeishuSyncFailureNotifie
 import { calculateStoreRating, calculateEmployeeScore } from './new-scoring-model.js';
 import { registerNewScoringRoutes } from './new-scoring-api.js';
 import { handleMarginMessage } from './margin-message-handler.js';
-import { setupMessaging } from './messaging.js';
 import { registerUploadStatusRoute } from './upload-status.js';
 import { ensureRAGSchema, ragQuery, ragMultiQuery, ragUpdateScope, ragStats } from './rag-tool.js';
 import { ensureTaskBoardSchema, checkTimeoutsAndEscalate, registerTaskBoardRoutes } from './task-board-api.js';
