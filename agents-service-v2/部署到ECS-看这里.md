@@ -1,9 +1,21 @@
 # 部署到 ECS（给非开发同事看的）
 
-## 为什么 AI（Cursor 里）不能帮你点部署？
+## 强制：每次更新 Agents Service V2 必须同步更新 `replyEngine`
 
-它**没有你的服务器密码/密钥**，也**不能从你家网络 SSH 登录阿里云**，所以**永远不能代替你执行** `ssh` 或 `rsync`。  
-能自动部署的只有：**GitHub Actions**（仓库里已写好 workflow）或 **你自己电脑上的脚本**。
+**规则**：只要本次发布改动了 `agents-service-v2` 下的业务代码、依赖、配置逻辑或任何会影响线上行为的内容，**必须在同一提交（或紧挨着的提交）里递增** `src/reply-engine-version.js` 中的 **`REPLY_ENGINE_BUILD`**（例如 `20260415A` → `20260415B`）。
+
+**原因**：生产验收与排障依赖 **`GET /health`** 返回的 **`replyEngine`** 与当前磁盘上的 `reply-engine-version.js` 一致；若只部署代码却忘记改构建号，**无法区分**「旧包未退」与「新包已上但无标识」，线上版本核对面板也会误导。
+
+**操作**：编辑 `agents-service-v2/src/reply-engine-version.js` → `commit` → 再执行本文「办法 A / 办法 B」部署 → 用 `curl .../health` 或管理端「线上版本核对」确认 `replyEngine` 已变。
+
+---
+
+## 开发机 / Cursor 能否代跑部署？
+
+- **可以**：当前电脑已对 ECS **配置好免密 SSH**（如 `export ECS_HOST=root@公网IP`）时，在本机项目里执行 **`bash agents-service-v2/scripts/deploy-agents-ecs.sh`** 与人工执行等价（脚本会 `rsync`、`npm install`、`pm2 restart`）。  
+- **不可以**：未配置密钥、或网络访问不到 ECS、或 CI Secrets 未配时，只能走 GitHub Actions 或请同事在本机执行。
+
+能自动部署的路径：**GitHub Actions**（`.github/workflows/safe-deployment.yml`）或 **本机脚本**（与 workflow 调用同一套 `deploy-agents-ecs.sh`）。
 
 ---
 
@@ -36,7 +48,7 @@ bash scripts/deploy-agents-ecs.sh
 curl -sS http://127.0.0.1:3101/health
 ```
 
-看里面的 **`replyEngine`** 是否已变成你当前代码里的版本（例如 `20260322K`）。
+看里面的 **`replyEngine`** 是否已变成你当前代码里 **`src/reply-engine-version.js`** 的版本（须与本次发布一并改过，见上文「强制」）。
 
 ---
 
@@ -186,3 +198,13 @@ curl -sS -X POST "http://127.0.0.1:3101/api/briefing/send-now" \
 ## 说明：谁会收到晨报？
 
 `sendMorningBriefing` 会给 **`feishu_users` 里已注册、且角色为** `store_manager` / `store_production_manager` / `hq_manager` / `admin` **的用户发飞书卡片**；总部账号会收到「全门店汇总」。
+
+---
+
+## 知识源增强文档放在哪？
+
+仓库根目录（与 `agents-service-v2` 同级）下的 **`doc/`** 里：
+
+- **`doc/RAG-Wiki-MemPalace-PG-增强实操.md`**（RAG / Wiki / MemPalace / PG 运维增强说明）
+
+**不在** `agents-service-v2/` 子目录内；若单独拆仓只保留 `agents-service-v2` 目录，请把该文件同步进拆仓后的 `docs/` 或随 monorepo 一起发布。

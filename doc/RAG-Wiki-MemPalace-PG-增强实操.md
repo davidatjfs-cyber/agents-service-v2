@@ -1,5 +1,7 @@
 # RAG / Wiki / MemPalace / PostgreSQL 知识能力增强实操
 
+**文件位置（重要）**：本文件在 **Git 仓库根目录** 的 **`doc/`** 下，路径为 **`doc/RAG-Wiki-MemPalace-PG-增强实操.md`**，与 **`agents-service-v2/`** 文件夹**同级**，**不属于** `agents-service-v2` 包内路径；部署 agents 服务时无需把本文件拷到 ECS，仅供人员阅读。
+
 本文面向运营与工程，与 `agents-service-v2` 代码及 **`GET /api/admin/knowledge-sources`**（管理端「知识源体检」）对齐。更短的路由与触发词摘要见：`agents-service-v2/docs/AGENT_KNOWLEDGE_TRIGGER_KEYWORDS.md`。
 
 ---
