@@ -42,7 +42,7 @@ function shanghaiTodayInputDate() {
 // ── State ──
 const AN = { master: 'Master调度中枢', data_auditor: '数据审计', ops_supervisor: '运营督导', chief_evaluator: '绩效考核', train_advisor: '培训顾问', appeal: '申诉处理', marketing_planner: '营销策划', marketing_executor: '营销执行', procurement_advisor: '采购建议' };
 let tab = 'dashboard';
-let S = { hl: {}, st: {}, fs: {}, agents: {}, rules: [], scores: {}, campaigns: [], templates: [], evalReport: {}, auditItems: [], cfgs: [], schedCfg: {}, anomalyCfg: {}, perfCfg: {}, ratingCfg: {}, kpiTargets: [], kbItems: [], memoryItems: [], featureFlags: {}, selectedAgent: 'data_auditor', activity: {}, activityDate: shanghaiTodayInputDate(), drillData: [], bitableStatus: {}, chairmanCfg: {}, chairmanTab: 'stores' };
+let S = { hl: {}, st: {}, fs: {}, agents: {}, rules: [], scores: {}, campaigns: [], templates: [], evalReport: {}, auditItems: [], cfgs: [], schedCfg: {}, anomalyCfg: {}, perfCfg: {}, ratingCfg: {}, kpiTargets: [], kbItems: [], memoryItems: [], knowledgeSources: null, knowledgeSourcesErr: '', featureFlags: {}, selectedAgent: 'data_auditor', activity: {}, activityDate: shanghaiTodayInputDate(), drillData: [], bitableStatus: {}, chairmanCfg: {}, chairmanTab: 'stores' };
 
 // ── DOM Helpers ──
 function $(id) { return document.getElementById(id); }
@@ -1555,9 +1555,72 @@ function viewKnowledge() {
 // ═══════════════════════════════════════════════════════
 // AGENT MEMORY (记忆系统)
 // ═══════════════════════════════════════════════════════
+/** 记忆页顶部：知识源体检（与下方「单 Agent 记忆流水」不同，见卡片内说明） */
+function renderKnowledgeSourcesCard() {
+  const ks = S.knowledgeSources;
+  const err = S.knowledgeSourcesErr;
+  const body = el('div', { className: 'text-sm text-gray-700 space-y-3' });
+  if (err) {
+    body.appendChild(el('p', { className: 'text-amber-700' }, '体检接口未加载：' + err));
+    body.appendChild(btn('重试', () => go('memory'), 'bg-amber-50 text-amber-800 text-sm px-3 py-1.5 rounded-lg border border-amber-200'));
+    return card('📡 知识源体检（RAG / Wiki / MemPalace / PG）', body);
+  }
+  if (!ks) {
+    body.appendChild(el('p', { className: 'text-gray-500' }, '正在加载…'));
+    return card('📡 知识源体检（RAG / Wiki / MemPalace / PG）', body);
+  }
+  const kb = ks.knowledgeBaseRag || {};
+  const wiki = ks.wikiMd || {};
+  const mp = ks.mempalace || {};
+  const mem7 = ks.agentMemoryPg || {};
+  const kg = ks.knowledgeGraphPg || {};
+  const env = ks.envHints || {};
+  const grid = el('div', { className: 'grid grid-cols-2 md:grid-cols-4 gap-3' });
+  const pill = (label, val, sub) => {
+    const d = el('div', { className: 'bg-slate-50 rounded-lg p-3 border border-slate-100' });
+    d.appendChild(el('div', { className: 'text-xs text-slate-500' }, label));
+    d.appendChild(el('div', { className: 'text-lg font-semibold text-slate-800' }, val));
+    if (sub) d.appendChild(el('div', { className: 'text-xs text-slate-400 mt-1' }, sub));
+    return d;
+  };
+  const kbScopes = Array.isArray(kb.byScope) ? kb.byScope.map((x) => (x.scope || '') + ':' + (x.cnt ?? 0)).join(' · ') : '';
+  grid.appendChild(pill('knowledge_base', String(kb.totalRows ?? '—'), kbScopes.slice(0, 120)));
+  grid.appendChild(pill('Wiki .md', String(wiki.mdCount ?? '—'), wiki.ok ? '目录可读' : '异常'));
+  const mpN = mp.inventory && mp.inventory.total != null ? String(mp.inventory.total) : '—';
+  grid.appendChild(pill('MemPalace', mp.reachable ? '可达' : '不可达', '条数 ' + mpN + (mp.enabled ? ' · 已启用' : ' · 未启用')));
+  grid.appendChild(pill('图谱关系行', String(kg.businessEntityRelationRows ?? (kg.error || '—')), 'business_entity_relations'));
+  grid.appendChild(pill('agent_memory(7d)', String(mem7.last7DaysTotal ?? '—'), '全 Agent 近7日'));
+  body.appendChild(grid);
+  const envRow = el('div', { className: 'flex flex-wrap gap-2 text-xs' });
+  envRow.appendChild(el('span', { className: 'px-2 py-0.5 rounded bg-gray-100' }, 'ENABLE_MEMPALACE=' + !!env.ENABLE_MEMPALACE));
+  envRow.appendChild(el('span', { className: 'px-2 py-0.5 rounded bg-gray-100' }, 'MEMPALACE_URL=' + !!env.MEMPALACE_URL_SET));
+  envRow.appendChild(el('span', { className: 'px-2 py-0.5 rounded bg-gray-100' }, '知识LLM排序=' + !!env.KNOWLEDGE_USE_DEEPSEEK));
+  body.appendChild(envRow);
+  if (Array.isArray(ks.checklist) && ks.checklist.length) {
+    const ol = el('ol', { className: 'list-decimal pl-5 text-xs text-gray-600 space-y-1' });
+    ks.checklist.forEach((line) => ol.appendChild(el('li', {}, line)));
+    body.appendChild(el('div', { className: 'mt-2' }, [el('div', { className: 'text-xs font-medium text-gray-700 mb-1' }, 'P0 自检要点'), ol]));
+  }
+  body.appendChild(el('p', { className: 'text-xs text-gray-500 border-t border-gray-100 pt-2 mt-2' },
+    '与下方列表的区别：下方是「当前选中 Agent」写入 agent_memory 的流水；本卡片是「全库/全目录」供给面是否健康（与是否选中 data_auditor 无关）。'));
+  body.appendChild(btn('刷新体检', async () => {
+    try {
+      S.knowledgeSources = await G('/api/admin/knowledge-sources');
+      S.knowledgeSourcesErr = '';
+      msg('已刷新知识源体检');
+      render();
+    } catch (e) {
+      msg(e.message || '刷新失败', true);
+    }
+  }, 'mt-2 bg-teal-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-teal-700'));
+  return card('📡 知识源体检（RAG / Wiki / MemPalace / PG）', body);
+}
+
 function viewMemory() {
   const w = el('div');
   w.appendChild(el('h2', { className: 'text-lg font-bold text-gray-900 mb-4' }, '🧠 Agent 记忆系统'));
+
+  w.appendChild(renderKnowledgeSourcesCard());
 
   // Agent selector
   const selRow = el('div', { className: 'flex items-center gap-3 mb-4' });
@@ -2544,7 +2607,31 @@ async function load(t) {
     if (t === 'marketing') { [S.campaigns, S.templates] = await Promise.all([(G('/api/campaigns').catch(e => { catchNonAuth(e); return { campaigns: [] }; })).then(r => r.campaigns || []), (G('/api/templates').catch(e => { catchNonAuth(e); return { templates: [] }; })).then(r => r.templates || [])]); }
     if (t === 'evaluation') { S.evalReport = await G('/api/agent-evaluation').catch(e => { catchNonAuth(e); return {}; }); }
     if (t === 'knowledge') { S.kbItems = (await G('/api/knowledge-base').catch(e => { catchNonAuth(e); return { items: [] }; })).items || []; }
-    if (t === 'memory') { S.memoryItems = (await G('/api/agent-memory/' + S.selectedAgent).catch(e => { catchNonAuth(e); return { memories: [] }; })).memories || []; }
+    if (t === 'memory') {
+      const [memRes, ksRes] = await Promise.all([
+        G('/api/agent-memory/' + S.selectedAgent).catch(e => { catchNonAuth(e); return { memories: [] }; }),
+        G('/api/admin/knowledge-sources').catch((e) => {
+          if (e?.message === 'auth') return { _err: 'auth' };
+          return { _err: e?.message || String(e) };
+        })
+      ]);
+      S.memoryItems = memRes.memories || [];
+      if (ksRes && ksRes._err) {
+        S.knowledgeSources = null;
+        S.knowledgeSourcesErr =
+          ksRes._err === 'auth'
+            ? '未登录或 token 失效'
+            : ksRes._err === 'Forbidden' || String(ksRes._err).includes('403')
+              ? '当前账号无权限（需 admin / hq_manager）'
+              : String(ksRes._err);
+      } else if (ksRes && ksRes.error) {
+        S.knowledgeSources = null;
+        S.knowledgeSourcesErr = String(ksRes.error);
+      } else {
+        S.knowledgeSources = ksRes;
+        S.knowledgeSourcesErr = '';
+      }
+    }
     if (t === 'flags') { S.featureFlags = (await G('/api/feature-flags').catch(e => { catchNonAuth(e); return { flags: {} }; })).flags || {}; }
     if (t === 'configs') { S.cfgs = (await G('/api/config').catch(e => { catchNonAuth(e); return { configs: [] }; })).configs || []; }
     if (t === 'audit') { S.auditItems = (await G('/api/audit-log?limit=50').catch(e => { catchNonAuth(e); return { log: [] }; })).log || []; }
