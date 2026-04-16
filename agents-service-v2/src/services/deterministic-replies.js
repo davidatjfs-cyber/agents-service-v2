@@ -35,6 +35,17 @@ function fmt(d) {
   return parts;
 }
 
+/** 上海日历 YYYY-MM-DD 减一天（供「今日桌访」补录口径） */
+function shanghaiYmdMinusOne(ymd) {
+  const m = String(ymd || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return '';
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const da = Number(m[3]);
+  const ms = Date.UTC(y, mo - 1, da) - 86400000;
+  return fmt(new Date(ms));
+}
+
 function toD(v) {
   // 强制按北京时间（Asia/Shanghai）输出 YYYY-MM-DD
   if (v instanceof Date) {
@@ -704,17 +715,24 @@ export function tableVisitSubheadingPeriod(startYmd, endYmd, _ctx) {
 
 function topN(map, n=5) { return Array.from(map.entries()).sort((a,b)=>b[1]-a[1]).slice(0,n); }
 
-/** 桌访是否落在查询时段：优先使用业务日期字段，仅当字段缺失或无法解析时才降级用入库时间。
- *  严禁用 OR 同时命中两个条件——否则今天同步入库的历史记录会被误计入今天。 */
+/** 桌访是否落在查询时段：优先业务日；缺失时再用入库日。
+ *  特例（仅「查询日=上海今天」单日）：营业日字段仍是「昨天」但记录今天才写入飞书/库（夜班补录），
+ *  用户问「今日桌访」应能看到——否则只有问「昨日」才有数，造成「昨天能查今天不能」的错觉。 */
 function visitRowInDateRange(row, start, end) {
   const f = row.fields && typeof row.fields === 'object' ? row.fields : {};
   const raw =
     f['日期'] ?? f['记录日期'] ?? f['提交时间'] ?? f['巡台日期'] ?? f['桌访日期'] ?? f['填表时间'];
+  const todayYmd = fmt(new Date());
   if (raw != null && String(raw).trim() !== '') {
     const dField = bitableDate(raw, row.created_at);
-    if (dField) return inRange(dField, start, end); // 业务日期解析成功 → 只用业务日期
+    if (dField && inRange(dField, start, end)) return true;
+    if (dField && start === end && String(start) === todayYmd) {
+      const yBiz = shanghaiYmdMinusOne(start);
+      const dCreated = toD(row.created_at);
+      if (yBiz && dField === yBiz && dCreated === start) return true;
+    }
+    if (dField) return false;
   }
-  // 业务日期字段缺失或无法解析 → 降级用入库时间
   const dCreated = toD(row.created_at);
   return !!(dCreated && inRange(dCreated, start, end));
 }
@@ -1112,6 +1130,16 @@ export async function fetchMergedTableVisitEntries(store, start, end) {
   if (!s || !start || !end) return [];
 
   let tvRows = [];
+  const todayYmd = fmt(new Date());
+  const lateNightBizSql =
+    start === end && String(start) === todayYmd
+      ? `
+      OR (
+        date IS NOT NULL
+        AND date = ($1::date - INTERVAL '1 day')
+        AND (timezone('Asia/Shanghai', created_at))::date = $1::date
+      )`
+      : '';
   const tvSql = (withSat, extraCols) => `
     SELECT id, feishu_record_id, date::text AS date, store,
            dissatisfaction_dish, unsatisfied_items, feedback${withSat ? ', satisfaction_level' : ''},
@@ -1121,6 +1149,7 @@ export async function fetchMergedTableVisitEntries(store, start, end) {
       (date IS NOT NULL AND date >= $1::date AND date <= $2::date)
       OR (date IS NULL AND (timezone('Asia/Shanghai', created_at))::date >= $1::date
           AND (timezone('Asia/Shanghai', created_at))::date <= $2::date)
+      ${lateNightBizSql}
     )
     ORDER BY date DESC NULLS LAST, created_at DESC
     LIMIT 20000`;
