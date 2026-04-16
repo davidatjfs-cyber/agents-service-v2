@@ -368,6 +368,12 @@ async function seedDedup() {
   }
 }
 
+function bitableMaxPages(configKey) {
+  if (configKey === 'table_visit') return 120;
+  if (configKey === 'opening_reports' || configKey === 'closing_reports') return 80;
+  return 20;
+}
+
 // ── Poll a single table, non-blocking: yields to event loop between pages ──
 export async function pollBitableTable(configKey) {
   const config = BITABLE_CONFIGS[configKey];
@@ -378,9 +384,10 @@ export async function pollBitableTable(configKey) {
   const allRecords = [];
   let pageToken = '';
   let page = 0;
-  // table_visit 已增长到远超 4000 行；20 * 200 会截断大表，导致部分门店“今日无数据”。
-  // 按不同表设置页上限：桌访放宽，其余保持较小值避免轮询过慢。
-  const maxPages = configKey === 'table_visit' ? 120 : 20;
+  let truncated = false;
+  // 大表会撞上固定页数上限，表现为“轮询成功但部分门店当天查不到数据”。
+  // 对桌访、开档、收档放宽页数；若仍 hit 上限且 has_more=true，则视为“疑似截断”并告警。
+  const maxPages = bitableMaxPages(configKey);
   while (page < maxPages) {
     const result = await getBitableRecords(configKey, { pageSize: 200, pageToken });
     if (!result.ok) {
@@ -390,6 +397,11 @@ export async function pollBitableTable(configKey) {
     }
     allRecords.push(...(result.records || []));
     if (!result.hasMore || !result.nextPageToken) break;
+    if (page + 1 >= maxPages) {
+      truncated = true;
+      logger.warn({ configKey, maxPages, fetched: allRecords.length }, 'bitable polling hit page cap; records may be truncated');
+      break;
+    }
     pageToken = result.nextPageToken;
     page++;
     // Yield to event loop between pages so webhook requests aren't starved
@@ -439,6 +451,23 @@ export async function pollBitableTable(configKey) {
 
   if (newCount > 0) {
     logger.info({ configKey, newCount, total: allRecords.length, skipDedup: !!config.skipDedup }, 'bitable new record ids this poll');
+  }
+  if (truncated) {
+    void notifyAdminsDataIssue({
+      alertType: 'bitable_poll_fetch_failed',
+      title: `飞书多维表同步可能被分页截断：${config?.name || configKey}`,
+      lines: [
+        `配置键：${configKey}`,
+        `表名：${config?.name || '-'}`,
+        `已抓取记录数：${allRecords.length}`,
+        `页上限：${maxPages}`,
+        '现象：本轮 has_more 仍为 true，但已到代码页上限，说明该表体量超过当前轮询窗口。',
+        '影响：部分门店/当天数据可能未进入 feishu_generic_records 与结构化表，导致助手查询显示“暂无数据”。'
+      ],
+      dedupeKey: `bitable_poll_truncated_${configKey}`,
+      priority: 'A',
+      dedupeHours: 2
+    }).catch(() => {});
   }
 }
 
