@@ -13242,11 +13242,19 @@
                 localStorage.removeItem('hrms_token');
             },
             async request(path, options) {
-                const url = (this.baseUrl() || '') + String(path || '');
-                const headers = { ...(options?.headers || {}) };
+                const opts = options || {};
+                let rel = String(path || '');
                 const token = this.token();
+                try {
+                    const isFd = typeof FormData !== 'undefined' && opts.body instanceof FormData;
+                    if (token && isFd && !/(?:[?&])(?:access_token|token)=/.test(rel)) {
+                        rel += (rel.indexOf('?') >= 0 ? '&' : '?') + 'access_token=' + encodeURIComponent(token);
+                    }
+                } catch (e) { /* ignore */ }
+                const url = (this.baseUrl() || '') + rel;
+                const headers = { ...(opts.headers || {}) };
                 if (token) headers['Authorization'] = 'Bearer ' + token;
-                const resp = await fetch(url, { ...(options || {}), headers });
+                const resp = await fetch(url, { ...opts, headers });
                 const text = await resp.text();
                 const data = hrmsSafeParseJson(text) || { raw: text };
                 if (!resp.ok) {

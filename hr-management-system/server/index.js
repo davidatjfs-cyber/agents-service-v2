@@ -45,6 +45,7 @@ import { startDailyFeishuSync, syncDishLibraryCosts, setFeishuSyncFailureNotifie
 import { calculateStoreRating, calculateEmployeeScore } from './new-scoring-model.js';
 import { registerNewScoringRoutes } from './new-scoring-api.js';
 import { handleMarginMessage } from './margin-message-handler.js';
+import { setupMessaging } from './messaging.js';
 import { registerUploadStatusRoute } from './upload-status.js';
 import { ensureRAGSchema, ragQuery, ragMultiQuery, ragUpdateScope, ragStats } from './rag-tool.js';
 import { ensureTaskBoardSchema, checkTimeoutsAndEscalate, registerTaskBoardRoutes } from './task-board-api.js';
@@ -12557,7 +12558,15 @@ function requireEnv() {
 
 async function authRequired(req, res, next) {
   const hdr = String(req.headers.authorization || '');
-  const token = hdr.startsWith('Bearer ') ? hdr.slice(7) : '';
+  let token = hdr.startsWith('Bearer ') ? String(hdr.slice(7) || '').trim() : '';
+  // 部分移动端 WebView 在 multipart/form-data 上传时可能丢失 Authorization；允许 query 兜底（与 FormData 同发）
+  if (!token) {
+    try {
+      token = String(req.query?.access_token || req.query?.token || '').trim();
+    } catch (e) {
+      token = '';
+    }
+  }
   if (!token) return res.status(401).json({ error: 'unauthorized' });
   if (!JWT_SECRET) return res.status(500).json({ error: 'server_config_error' });
   try {

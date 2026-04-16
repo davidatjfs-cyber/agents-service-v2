@@ -38,6 +38,7 @@ echo ">>> rsync web (nginx root) -> ${ECS_HOST}:${REMOTE_WEB_ROOT}/ (+ optional 
 rsync -avz -e ssh \
   "${LOCAL_WEB}/working-fixed.html" \
   "${LOCAL_WEB}/mobile-nav-production.html" \
+  "${LOCAL_WEB}/sw.js" \
   "${ECS_HOST}:${REMOTE_WEB_ROOT}/"
 
 # Keep legacy mirror paths in sync if they exist on the host (best-effort).
