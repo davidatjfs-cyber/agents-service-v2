@@ -12071,8 +12071,14 @@
                 return this.request('/api/knowledge/' + encodeURIComponent(String(id || '')), { method: 'DELETE' });
             },
             async uploadKnowledge(formData) {
-                const url = (this.baseUrl() || '') + '/api/knowledge';
+                let rel = '/api/knowledge';
                 const token = this.token();
+                try {
+                    if (token && !/(?:[?&])(?:access_token|token)=/.test(rel)) {
+                        rel += (rel.indexOf('?') >= 0 ? '&' : '?') + 'access_token=' + encodeURIComponent(token);
+                    }
+                } catch (e) { /* ignore */ }
+                const url = (this.baseUrl() || '') + rel;
 
                 return await new Promise((resolve, reject) => {
                     const xhr = new XMLHttpRequest();
@@ -12126,6 +12132,19 @@
                         const text = String(xhr.responseText || '');
                         const data = hrmsSafeParseJson(text) || { raw: text };
                         if (xhr.status >= 200 && xhr.status < 300) return resolve(data);
+                        if (xhr.status === 401 && String(data?.error || '') === 'session_replaced') {
+                            if (!window.__HRMS_SESSION_REPLACED_SHOWN) {
+                                window.__HRMS_SESSION_REPLACED_SHOWN = true;
+                                try { HRMS_API.clearToken(); } catch (e) {}
+                                try { isLoggedIn = false; currentUser = null; } catch (e) {}
+                                alert('您的账号已在其他设备登录，当前会话已失效，请重新登录');
+                                try { location.reload(); } catch (e) {}
+                            }
+                            const err = new Error('session_replaced');
+                            err.status = 401;
+                            err.data = data;
+                            return reject(err);
+                        }
                         const msg = String(data?.message || data?.error || ('HTTP ' + xhr.status));
                         const err = new Error(msg);
                         err.status = xhr.status;

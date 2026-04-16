@@ -21,6 +21,7 @@ const LOG_TABLE = 'agent_admin_alert_log';
 /** 飞书正文展示用中文类型（日志里仍用英文 alertType 便于检索） */
 const ALERT_TYPE_LABEL_ZH = {
   bitable_poll_fetch_failed: '飞书多维表轮询：拉取记录失败（整表未同步）',
+  bitable_poll_truncated: '飞书多维表轮询：命中分页上限且仍有更多数据（疑似截断）',
   bitable_material_store_parse_empty: '原料表轮询：门店列有值但解析为空',
   bitable_material_date_parse_empty: '原料表轮询：日期列有值但解析为空',
   material_agent_feishu_divergence: '原料数据：助手结果与飞书同步库不一致',
@@ -132,12 +133,6 @@ export async function notifyAdminsDataIssue(opts) {
       }
     }
 
-    await query(
-      `INSERT INTO ${TABLE} (dedupe_key, sent_at) VALUES ($1, NOW())
-       ON CONFLICT (dedupe_key) DO UPDATE SET sent_at = EXCLUDED.sent_at`,
-      [dedupeKey]
-    );
-
     const r = await query(
       `SELECT open_id, username FROM feishu_users
        WHERE registered = true AND open_id IS NOT NULL AND open_id <> ''
@@ -165,13 +160,32 @@ export async function notifyAdminsDataIssue(opts) {
     ].join('\n');
 
     const text = body.length > 3800 ? `${body.slice(0, 3700)}\n…(截断)` : body;
+    const recipients = r.rows || [];
     let sent = 0;
-    for (const row of r.rows || []) {
-      const res = await sendText(row.open_id, text, 'open_id');
-      if (res?.ok) sent++;
+    const trySendAll = async () => {
+      let n = 0;
+      for (const row of recipients) {
+        const res = await sendText(row.open_id, text, 'open_id');
+        if (res?.ok) n++;
+      }
+      return n;
+    };
+    sent = await trySendAll();
+    if (sent === 0 && recipients.length > 0) {
+      await new Promise((r) => setTimeout(r, 1600));
+      sent = await trySendAll();
     }
-    logger.info({ alertType, dedupeKey, recipients: (r.rows || []).length, sent }, 'admin data alert sent');
+    logger.info({ alertType, dedupeKey, recipients: recipients.length, sent }, 'admin data alert sent');
     if (sent > 0) {
+      try {
+        await query(
+          `INSERT INTO ${TABLE} (dedupe_key, sent_at) VALUES ($1, NOW())
+           ON CONFLICT (dedupe_key) DO UPDATE SET sent_at = EXCLUDED.sent_at`,
+          [dedupeKey]
+        );
+      } catch (dedupeErr) {
+        logger.warn({ err: dedupeErr?.message, dedupeKey }, 'admin data alert dedupe insert failed');
+      }
       try {
         await query(
           `INSERT INTO ${LOG_TABLE}
@@ -183,12 +197,36 @@ export async function notifyAdminsDataIssue(opts) {
             title.slice(0, 2000),
             text.slice(0, 12000),
             dedupeKey.slice(0, 320),
-            (r.rows || []).length,
+            recipients.length,
             sent
           ]
         );
       } catch (logErr) {
         logger.warn({ err: logErr?.message, dedupeKey }, 'admin alert log insert failed');
+      }
+    } else {
+      logger.warn(
+        { alertType, dedupeKey, recipients: recipients.length },
+        'admin data alert: zero successful sends (dedupe not updated; will retry after window or on next incident)'
+      );
+      try {
+        const failTitle = `${title.slice(0, 500)}【飞书送达失败】`;
+        const failBody = `${text}\n\n—\n【链路】recipient_count=${recipients.length} sent_count=0（已短窗重试一次，未刷新去重键）`;
+        await query(
+          `INSERT INTO ${LOG_TABLE}
+           (priority, alert_type, title, body, dedupe_key, recipient_count, sent_count)
+           VALUES ($1, $2, $3, $4, $5, $6, 0)`,
+          [
+            priority,
+            `${alertType}_delivery_failed`.slice(0, 96),
+            failTitle.slice(0, 2000),
+            failBody.slice(0, 12000),
+            (`${dedupeKey}_delivery_fail_${Date.now()}`).slice(0, 320),
+            recipients.length
+          ]
+        );
+      } catch (logErr2) {
+        logger.warn({ err: logErr2?.message, dedupeKey }, 'admin alert delivery-fail log insert failed');
       }
     }
     return { ok: sent > 0, sent };

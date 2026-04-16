@@ -584,9 +584,32 @@ async function apiFetch(url, opts = {}) {
     const headers = { ...(opts.headers || {}) };
     if (TOKEN) headers['Authorization'] = `Bearer ${TOKEN}`;
     if (!(opts.body instanceof FormData) && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
-    const resp = await fetch(API_BASE + url, { ...opts, headers });
-    if (!resp.ok) { const body = await resp.json().catch(() => ({})); throw new Error(body?.message || body?.error || `HTTP ${resp.status}`); }
-    return resp.json();
+    let path = String(url || '');
+    try {
+        const isFd = typeof FormData !== 'undefined' && opts.body instanceof FormData;
+        if (TOKEN && isFd && !/(?:[?&])(?:access_token|token)=/.test(path)) {
+            path += (path.indexOf('?') >= 0 ? '&' : '?') + 'access_token=' + encodeURIComponent(TOKEN);
+        }
+    } catch (e) { /* ignore */ }
+    const resp = await fetch(API_BASE + path, { ...opts, headers });
+    const rawText = await resp.text().catch(() => '');
+    let body = {};
+    try { body = rawText ? JSON.parse(rawText) : {}; } catch (_e) { body = { raw: rawText }; }
+    if (!resp.ok) {
+        if (resp.status === 401 && String(body?.error || '') === 'session_replaced') {
+            if (!window.__HRMS_SESSION_REPLACED_SHOWN) {
+                window.__HRMS_SESSION_REPLACED_SHOWN = true;
+                try { localStorage.removeItem('HRMS_API_TOKEN'); localStorage.removeItem('hrms_token'); } catch (e) {}
+                alert('您的账号已在其他设备登录，当前会话已失效，请重新登录');
+                try { location.reload(); } catch (e) {}
+            }
+            const err = new Error('session_replaced');
+            err.status = 401;
+            throw err;
+        }
+        throw new Error(body?.message || body?.error || `HTTP ${resp.status}`);
+    }
+    return body;
 }
 
 function syncStoreSelectors() {

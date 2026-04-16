@@ -1,5 +1,7 @@
 #!/bin/bash
-# 一键回滚到上一个版本
+# 一键回滚到上一个版本（依赖 latest.txt 与 agents_${LATEST}/hrms_${LATEST} 命名约定）。
+# 与 CI 对齐：deploy-hrms-server-ecs.sh / deploy-agents-ecs.sh 会在同目录写入按时间戳的 hrms_*.tar.gz、agents_*.tar.gz，
+# 并在健康检查失败时尝试就地解压最近一次备份（不依赖本脚本）。
 BACKUP_DIR="/opt/deploy-backups"
 LOG_FILE="$BACKUP_DIR/rollback_$(date +%Y%m%d_%H%M%S).log"
 

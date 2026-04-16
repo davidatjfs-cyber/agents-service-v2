@@ -3,6 +3,9 @@
 # 自动部署：push 到 main 且变更命中 paths 时部署；亦可手动「Run workflow」。
 # 本地手动：cd agents-service-v2 && bash scripts/deploy-safe.sh
 # 回滚：ssh root@47.100.96.30 '/opt/scripts/deploy-rollback.sh'
+# 部署前远端备份：AGENTS_BACKUP_BEFORE_DEPLOY=1（默认）→ /opt/deploy-backups/agents/agents_<时间>.tar.gz
+# AGENTS_DEPLOY_REQUIRE_BACKUP=0 可放宽；/health 无 replyEngine 时尝试 tar 回滚后再失败退出。
+# VERIFY_KNOWLEDGE_STRICT=1 时 verify-knowledge-llm-chain 失败会阻断发布（默认 0 仅 WARN）。
 #
 # Secrets: ECS_SSH_PRIVATE_KEY（必填）；可选 ECS_HOST（默认 root@47.100.96.30）
 # 仓库（若拆仓独立发布）：https://github.com/davidatjfs-cyber/agents-service-v2

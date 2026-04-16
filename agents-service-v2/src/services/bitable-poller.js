@@ -378,6 +378,7 @@ function bitableMaxPages(configKey) {
 export async function pollBitableTable(configKey) {
   const config = BITABLE_CONFIGS[configKey];
   if (!config?.tableId) return;
+  delete _lastPollSkipMeta[configKey];
   await seedDedup();
   logger.info({ configKey }, 'bitable polling...');
 
@@ -392,6 +393,7 @@ export async function pollBitableTable(configKey) {
     const result = await getBitableRecords(configKey, { pageSize: 200, pageToken });
     if (!result.ok) {
       logger.error({ configKey, error: result.error }, 'poll failed');
+      _lastPollMeta[configKey] = { ok: false, error: String(result.error || ''), at: Date.now() };
       notifyBitablePollFetchFailed(configKey, config, result.error);
       return;
     }
@@ -452,9 +454,17 @@ export async function pollBitableTable(configKey) {
   if (newCount > 0) {
     logger.info({ configKey, newCount, total: allRecords.length, skipDedup: !!config.skipDedup }, 'bitable new record ids this poll');
   }
+  _lastPollMeta[configKey] = {
+    ok: true,
+    at: Date.now(),
+    truncated,
+    recordsThisPoll: allRecords.length,
+    newCountThisPoll: newCount
+  };
+
   if (truncated) {
     void notifyAdminsDataIssue({
-      alertType: 'bitable_poll_fetch_failed',
+      alertType: 'bitable_poll_truncated',
       title: `飞书多维表同步可能被分页截断：${config?.name || configKey}`,
       lines: [
         `配置键：${configKey}`,
@@ -793,7 +803,27 @@ const POLL_ORDER = [
 ];
 
 const _lastPollTime = {};
+/** 每表最近一次轮询结果（供管理端「同步新鲜度」与排障） */
+const _lastPollMeta = {};
+/** 本轮 pollAll 因间隔未到而跳过拉取（与「同步坏了」区分） */
+const _lastPollSkipMeta = {};
 let _pollRunning = false;
+
+export function getBitableLastPollMeta() {
+  const keys = new Set([...Object.keys(_lastPollMeta), ...Object.keys(_lastPollSkipMeta)]);
+  const out = {};
+  for (const k of keys) {
+    const base = { ...(_lastPollMeta[k] || {}) };
+    const sk = _lastPollSkipMeta[k];
+    if (sk) {
+      base.pollSkipped = true;
+      base.skipAt = sk.skipAt;
+      base.skipReason = sk.reason;
+    }
+    out[k] = base;
+  }
+  return out;
+}
 
 export async function pollAllBitableTables() {
   const featureFlags = await getConfig('feature_flags').catch(() => null) || {};
@@ -818,7 +848,10 @@ export async function pollAllBitableTables() {
       const config = BITABLE_CONFIGS[configKey];
       const interval = config?.pollingInterval || 120000;
       const lastTime = _lastPollTime[configKey] || 0;
-      if (now - lastTime < interval) continue; // skip if polled too recently
+      if (now - lastTime < interval) {
+        _lastPollSkipMeta[configKey] = { skipAt: Date.now(), reason: 'polling_interval' };
+        continue;
+      }
       _lastPollTime[configKey] = now;
       try {
         await pollBitableTable(configKey);

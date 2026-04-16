@@ -23,6 +23,34 @@ node --check "${LOCAL_SRC}/index.js"
 node --check "${LOCAL_SRC}/agents.js"
 node --check "${LOCAL_SRC}/bi-weekly-report.js"
 
+# 部署前远端 tar 备份；HRMS_DEPLOY_REQUIRE_BACKUP=1（默认）时备份失败或未生成文件则阻断发布。
+# 健康检查失败时，远端会尝试用 HRMS_ROLLBACK_TGZ 解压回滚后再退出非 0。
+HRMS_ROLLBACK_TGZ=""
+HRMS_BACKUP_BEFORE_DEPLOY="${HRMS_BACKUP_BEFORE_DEPLOY:-1}"
+HRMS_DEPLOY_REQUIRE_BACKUP="${HRMS_DEPLOY_REQUIRE_BACKUP:-1}"
+if [[ "${HRMS_BACKUP_BEFORE_DEPLOY}" == "1" ]]; then
+  BAK_TS="$(date +%Y%m%d%H%M%S)"
+  HRMS_ROLLBACK_TGZ="/opt/deploy-backups/hrms/hrms_${BAK_TS}.tar.gz"
+  echo ">>> remote code backup -> ${HRMS_ROLLBACK_TGZ}"
+  if ! ssh -o ConnectTimeout=60 "${ECS_HOST}" bash -s <<EOF
+set -euo pipefail
+mkdir -p /opt/deploy-backups/hrms
+if [[ -d "${REMOTE_DIR}" ]] && [[ -f "${REMOTE_DIR}/index.js" || -f "${REMOTE_DIR}/package.json" ]]; then
+  tar czf "${HRMS_ROLLBACK_TGZ}" -C "${REMOTE_DIR}" \\
+    --exclude=node_modules --exclude=.git .
+fi
+EOF
+  then
+    echo "::error::HRMS 远端备份失败" >&2
+    HRMS_ROLLBACK_TGZ=""
+    if [[ "${HRMS_DEPLOY_REQUIRE_BACKUP}" == "1" ]]; then exit 1; fi
+  elif [[ -n "${HRMS_ROLLBACK_TGZ}" ]] && ! ssh -o ConnectTimeout=60 "${ECS_HOST}" "test -f '${HRMS_ROLLBACK_TGZ}'"; then
+    echo "::error::备份文件未生成（目录可能为空）: ${HRMS_ROLLBACK_TGZ}" >&2
+    HRMS_ROLLBACK_TGZ=""
+    if [[ "${HRMS_DEPLOY_REQUIRE_BACKUP}" == "1" ]]; then exit 1; fi
+  fi
+fi
+
 echo ">>> rsync -> ${ECS_HOST}:${REMOTE_DIR}/"
 rsync -avz -e ssh \
   --exclude 'node_modules' \
@@ -122,7 +150,24 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
   fi
   sleep 2
 done
-echo "::error::HRMS /api/health 未就绪（10 次重试），请 pm2 logs hrms-service"
+echo "::error::HRMS /api/health 未就绪（10 次重试）"
+RB="${HRMS_ROLLBACK_TGZ:-}"
+if [[ -n "$RB" ]] && [[ -f "$RB" ]]; then
+  echo ">>> canary 失败：尝试从部署前备份回滚 $RB"
+  pm2 delete hrms-service 2>/dev/null || true
+  sleep 1
+  cd "$REMOTE_DIR" || exit 1
+  tar xzf "$RB" --overwrite 2>/dev/null || true
+  (npm ci --omit=dev 2>/dev/null || npm install --omit=dev 2>/dev/null) || true
+  pm2 start ecosystem.config.cjs --update-env
+  sleep 5
+  if curl -sS -m 4 http://127.0.0.1:3000/api/health >/tmp/hrms_rb.txt 2>/dev/null; then
+    echo "::warning::回滚后 /api/health 已恢复；请检查本次发布内容与 pm2 日志"
+    head -c 400 /tmp/hrms_rb.txt
+    echo
+  fi
+fi
+echo "::error::HRMS /api/health 未就绪，请 pm2 logs hrms-service"
 curl -sS -m 5 http://127.0.0.1:3000/api/health | head -c 500 || true
 echo
 exit 1
@@ -130,6 +175,6 @@ EOS
 )
 
 ssh -o ConnectTimeout=60 "$ECS_HOST" \
-  "REMOTE_DIR='${REMOTE_DIR}' DISABLE_SCHEDULED_CHECKLIST='${DISABLE_SCHEDULED_CHECKLIST}' BITABLE_TASK_RESP_APP_ID='${BITABLE_TASK_RESP_APP_ID}' BITABLE_TASK_RESP_APP_SECRET='${BITABLE_TASK_RESP_APP_SECRET}' bash -s" <<< "$REMOTE_SCRIPT"
+  "REMOTE_DIR='${REMOTE_DIR}' DISABLE_SCHEDULED_CHECKLIST='${DISABLE_SCHEDULED_CHECKLIST}' BITABLE_TASK_RESP_APP_ID='${BITABLE_TASK_RESP_APP_ID}' BITABLE_TASK_RESP_APP_SECRET='${BITABLE_TASK_RESP_APP_SECRET}' HRMS_ROLLBACK_TGZ='${HRMS_ROLLBACK_TGZ}' bash -s" <<< "$REMOTE_SCRIPT"
 
 echo "Done."

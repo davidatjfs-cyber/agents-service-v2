@@ -18,6 +18,33 @@ else
   echo ">>> SKIP_VERIFY=1 — skipped local verify"
 fi
 
+# AGENTS_DEPLOY_REQUIRE_BACKUP=1（默认）时备份失败或未生成文件则阻断发布；健康检查失败时远端尝试 AGENTS_ROLLBACK_TGZ 回滚。
+AGENTS_ROLLBACK_TGZ=""
+AGENTS_BACKUP_BEFORE_DEPLOY="${AGENTS_BACKUP_BEFORE_DEPLOY:-1}"
+AGENTS_DEPLOY_REQUIRE_BACKUP="${AGENTS_DEPLOY_REQUIRE_BACKUP:-1}"
+if [[ "${AGENTS_BACKUP_BEFORE_DEPLOY}" == "1" ]]; then
+  BAK_TS="$(date +%Y%m%d%H%M%S)"
+  AGENTS_ROLLBACK_TGZ="/opt/deploy-backups/agents/agents_${BAK_TS}.tar.gz"
+  echo ">>> remote code backup -> ${AGENTS_ROLLBACK_TGZ}"
+  if ! ssh -o ConnectTimeout=60 "${ECS_HOST}" bash -s <<EOF
+set -euo pipefail
+mkdir -p /opt/deploy-backups/agents
+if [[ -d "${REMOTE_DIR}" ]] && [[ -f "${REMOTE_DIR}/package.json" ]]; then
+  tar czf "${AGENTS_ROLLBACK_TGZ}" -C "${REMOTE_DIR}" \\
+    --exclude=node_modules --exclude=.git .
+fi
+EOF
+  then
+    echo "::error::agents 远端备份失败" >&2
+    AGENTS_ROLLBACK_TGZ=""
+    if [[ "${AGENTS_DEPLOY_REQUIRE_BACKUP}" == "1" ]]; then exit 1; fi
+  elif [[ -n "${AGENTS_ROLLBACK_TGZ}" ]] && ! ssh -o ConnectTimeout=60 "${ECS_HOST}" "test -f '${AGENTS_ROLLBACK_TGZ}'"; then
+    echo "::error::备份文件未生成: ${AGENTS_ROLLBACK_TGZ}" >&2
+    AGENTS_ROLLBACK_TGZ=""
+    if [[ "${AGENTS_DEPLOY_REQUIRE_BACKUP}" == "1" ]]; then exit 1; fi
+  fi
+fi
+
 echo ">>> rsync -> ${ECS_HOST}:${REMOTE_DIR}/"
 rsync -avz -e ssh \
   --exclude 'node_modules' \
@@ -43,7 +70,7 @@ fi
 # 合并为一次 SSH：固定 PORT=3101（ecosystem.config.cjs），删 pm2 后再起；仅当 3101 仍被占才 fuser
 echo ">>> remote: npm install + pm2 ecosystem (3101) + health"
 ssh -o ConnectTimeout=60 "${ECS_HOST}" \
-  "BITABLE_TASK_RESP_APP_ID='${BITABLE_TASK_RESP_APP_ID}' BITABLE_TASK_RESP_APP_SECRET='${BITABLE_TASK_RESP_APP_SECRET}' bash -s" <<EOS
+  "BITABLE_TASK_RESP_APP_ID='${BITABLE_TASK_RESP_APP_ID}' BITABLE_TASK_RESP_APP_SECRET='${BITABLE_TASK_RESP_APP_SECRET}' AGENTS_ROLLBACK_TGZ='${AGENTS_ROLLBACK_TGZ}' bash -s" <<EOS
 set -euo pipefail
 cd "${REMOTE_DIR}"
 ensure_kv() {
@@ -117,11 +144,37 @@ sleep 6
 echo '--- health ---'
 H=\$(curl -sS -m 10 http://127.0.0.1:3101/health)
 echo "\$H"
-echo "\$H" | grep -q '"replyEngine"' || { echo 'ERROR: /health 无 replyEngine — ss -tlnp | grep 3101 查看占用' >&2; exit 1; }
+if ! echo "\$H" | grep -q '"replyEngine"'; then
+  echo 'ERROR: /health 无 replyEngine — 尝试回滚' >&2
+  RB="${AGENTS_ROLLBACK_TGZ:-}"
+  if [[ -n "\$RB" ]] && [[ -f "\$RB" ]]; then
+    pm2 delete agents-service-v2 2>/dev/null || true
+    sleep 1
+    cd "${REMOTE_DIR}" || exit 1
+    tar xzf "\$RB" --overwrite 2>/dev/null || true
+    (npm ci --omit=dev 2>/dev/null || npm install --omit=dev) || true
+    pm2 start ecosystem.config.cjs --update-env
+    sleep 6
+    H2=\$(curl -sS -m 10 http://127.0.0.1:3101/health)
+    echo "\$H2"
+    echo "\$H2" | grep -q '"replyEngine"' && echo 'WARN: 回滚后 /health 已恢复 replyEngine' >&2 || true
+  fi
+  exit 1
+fi
 echo '--- mempalace /health (disk persistence) ---'
 curl -sS -m 6 http://127.0.0.1:3001/health | grep -q '"persistence":"disk"' && echo 'OK: MemPalace persistence=disk' || echo 'WARN: MemPalace /health 未返回 persistence=disk（检查 pm2 mempalace-http）'
 echo '--- verify knowledge / DeepSeek→Ollama / wiki / mempalace ---'
-cd "${REMOTE_DIR}" && node scripts/verify-knowledge-llm-chain.mjs 2>&1 || echo 'WARN: verify-knowledge-llm-chain 退出非 0（见上 JSON）'
+VERIFY_KNOWLEDGE_STRICT="${VERIFY_KNOWLEDGE_STRICT:-0}"
+if cd "${REMOTE_DIR}" && node scripts/verify-knowledge-llm-chain.mjs 2>&1; then
+  echo 'OK: verify-knowledge-llm-chain'
+else
+  if [[ "${VERIFY_KNOWLEDGE_STRICT}" == "1" ]]; then
+    echo 'ERROR: verify-knowledge-llm-chain 失败且 VERIFY_KNOWLEDGE_STRICT=1，阻断发布' >&2
+    exit 1
+  else
+    echo 'WARN: verify-knowledge-llm-chain 退出非 0；设置 VERIFY_KNOWLEDGE_STRICT=1 可在 CI/发布中阻断' >&2
+  fi
+fi
 EOS
 echo ""
 echo "Done. replyEngine 应与 src/reply-engine-version.js 中 REPLY_ENGINE_BUILD 一致。"

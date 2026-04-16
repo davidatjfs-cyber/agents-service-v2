@@ -4,6 +4,8 @@
 # 本地手动：cd hr-management-system && bash scripts/deploy-hrms-safe.sh
 # 根目录一键：bash scripts/deploy-hrms-server-ecs.sh（仅服务端）+ scripts/deploy-hrms-frontend.sh（前端）
 # 回滚：ssh root@47.100.96.30 '/opt/scripts/deploy-rollback.sh'
+# 部署前远端备份：HRMS_BACKUP_BEFORE_DEPLOY=1（默认）→ /opt/deploy-backups/hrms/hrms_<时间>.tar.gz
+# HRMS_DEPLOY_REQUIRE_BACKUP=0 可放宽；健康失败时远端尝试用该 tar 回滚后再退出非 0。
 #
 # 数据加固（2026-04）：启动执行 migrations/014（employee_attendance_records、hrms_payroll_domain）；
 # 备份见 server/backup.sh（critical 含上述表）。详见 scripts/CURSOR_DEPLOYMENT_GUIDE.md。

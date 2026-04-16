@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { getConfig, getAllConfigs, upsertConfig, getConfigAuditLog } from '../services/config-service.js';
 import { authRequired, requireRole } from '../middleware/auth.js';
 import { query } from '../utils/db.js';
-import { getBitableStatus, pollAllBitableTables } from '../services/bitable-poller.js';
+import { getBitableStatus, pollAllBitableTables, getBitableLastPollMeta } from '../services/bitable-poller.js';
 import { logger } from '../utils/logger.js';
 import { getShanghaiYmdParts } from '../utils/anomaly-week-bounds.js';
 import { startRandomInspections } from '../services/random-inspection.js';
@@ -648,6 +648,56 @@ r.get('/admin/report-delivery', ...admin, async (req, res) => {
     if (/does not exist|relation.*agent_v2_scheduled_report_sends/i.test(String(e?.message || ''))) {
       return res.status(404).json({ error: '表尚未创建（尚无定时报告投递记录）', detail: String(e?.message || e) });
     }
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+function rowBitableSyncHealth(ck, dbRow, pm) {
+  return {
+    configKey: ck,
+    rowCount: dbRow ? Number(dbRow.row_count || 0) : 0,
+    lastRowUpdated: dbRow?.last_row_updated ?? null,
+    lastPollAt: pm?.at ? new Date(pm.at).toISOString() : null,
+    lastPollOk: pm?.ok,
+    lastPollTruncated: !!pm?.truncated,
+    lastPollError: pm?.error || null,
+    lastPollRecordCount: pm?.recordsThisPoll != null ? pm.recordsThisPoll : null,
+    lastPollNewIds: pm?.newCountThisPoll != null ? pm.newCountThisPoll : null,
+    pollSkipped: !!pm?.pollSkipped,
+    skipAt: pm?.skipAt ? new Date(pm.skipAt).toISOString() : null,
+    skipReason: pm?.skipReason || null
+  };
+}
+
+/**
+ * 多维表同步新鲜度：按 config_key 汇总 feishu_generic_records，并合并进程内最近一次轮询元数据。
+ * GET /api/admin/bitable-sync-health
+ */
+r.get('/admin/bitable-sync-health', ...admin, async (req, res) => {
+  try {
+    const meta = getBitableLastPollMeta();
+    const dbR = await query(`
+      SELECT COALESCE(NULLIF(TRIM(config_key), ''), '(unknown)') AS config_key,
+             COUNT(*)::int AS row_count,
+             MAX(updated_at) AS last_row_updated
+      FROM feishu_generic_records
+      GROUP BY 1
+      ORDER BY MAX(updated_at) DESC NULLS LAST
+      LIMIT 120
+    `);
+    const seen = new Set();
+    const tables = [];
+    for (const row of dbR.rows || []) {
+      const ck = String(row.config_key || '');
+      seen.add(ck);
+      tables.push(rowBitableSyncHealth(ck, row, meta[ck] || null));
+    }
+    for (const [ck, pm] of Object.entries(meta)) {
+      if (seen.has(ck)) continue;
+      tables.push(rowBitableSyncHealth(ck, null, pm));
+    }
+    res.json({ ok: true, generatedAt: new Date().toISOString(), tables });
+  } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
   }
 });

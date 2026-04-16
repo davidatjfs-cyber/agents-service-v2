@@ -12593,9 +12593,9 @@ async function authRequired(req, res, next) {
   }
 }
 
-function authRequiredOrQueryToken(req, res, next) {
+async function authRequiredOrQueryToken(req, res, next) {
   const hdr = String(req.headers.authorization || '');
-  let token = hdr.startsWith('Bearer ') ? hdr.slice(7) : '';
+  let token = hdr.startsWith('Bearer ') ? String(hdr.slice(7) || '').trim() : '';
   if (!token) {
     try {
       token = String(req.query?.token || req.query?.access_token || '').trim();
@@ -12608,6 +12608,19 @@ function authRequiredOrQueryToken(req, res, next) {
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     req.user = payload;
+    const nonce = String(payload.sn || '').trim();
+    const uname = String(payload.username || '').trim();
+    if (nonce && uname) {
+      try {
+        const r = await pool.query('select session_nonce from user_sessions where lower(username) = lower($1) limit 1', [uname]);
+        const stored = String(r.rows?.[0]?.session_nonce || '').trim();
+        if (stored && stored !== nonce) {
+          return res.status(401).json({ error: 'session_replaced', message: '您的账号已在其他设备登录，当前会话已失效' });
+        }
+      } catch (e) {
+        // DB error: allow through
+      }
+    }
     return next();
   } catch (e) {
     return res.status(401).json({ error: 'unauthorized' });

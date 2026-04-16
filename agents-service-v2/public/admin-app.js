@@ -42,7 +42,7 @@ function shanghaiTodayInputDate() {
 // ── State ──
 const AN = { master: 'Master调度中枢', data_auditor: '数据审计', ops_supervisor: '运营督导', chief_evaluator: '绩效考核', train_advisor: '培训顾问', appeal: '申诉处理', marketing_planner: '营销策划', marketing_executor: '营销执行', procurement_advisor: '采购建议' };
 let tab = 'dashboard';
-let S = { hl: {}, st: {}, fs: {}, agents: {}, rules: [], scores: {}, campaigns: [], templates: [], evalReport: {}, auditItems: [], cfgs: [], schedCfg: {}, anomalyCfg: {}, perfCfg: {}, ratingCfg: {}, kpiTargets: [], kbItems: [], memoryItems: [], knowledgeSources: null, knowledgeSourcesErr: '', featureFlags: {}, selectedAgent: 'data_auditor', activity: {}, activityDate: shanghaiTodayInputDate(), drillData: [], bitableStatus: {}, chairmanCfg: {}, chairmanTab: 'stores' };
+let S = { hl: {}, st: {}, fs: {}, bitableSyncHealth: null, agents: {}, rules: [], scores: {}, campaigns: [], templates: [], evalReport: {}, auditItems: [], cfgs: [], schedCfg: {}, anomalyCfg: {}, perfCfg: {}, ratingCfg: {}, kpiTargets: [], kbItems: [], memoryItems: [], knowledgeSources: null, knowledgeSourcesErr: '', featureFlags: {}, selectedAgent: 'data_auditor', activity: {}, activityDate: shanghaiTodayInputDate(), drillData: [], bitableStatus: {}, chairmanCfg: {}, chairmanTab: 'stores' };
 
 // ── DOM Helpers ──
 function $(id) { return document.getElementById(id); }
@@ -392,6 +392,62 @@ function viewDash() {
   svcRow.appendChild(svcCard('💬', '飞书', S.fs.configured, S.fs.configured ? (S.fs.hasToken ? 'Token有效' : '已配置/Token刷新中') : '未配置'));
   svcRow.appendChild(svcCard('🧠', 'LLM', true, '3 providers'));
   w.appendChild(svcRow);
+
+  if (S.bitableSyncHealth && Array.isArray(S.bitableSyncHealth.tables) && S.bitableSyncHealth.tables.length) {
+    const fmtIso = (x) => {
+      if (!x) return '—';
+      const s = String(x);
+      return s.length > 16 ? s.slice(0, 16).replace('T', ' ') : s;
+    };
+    w.appendChild(card('📡 飞书多维表同步新鲜度（feishu_generic_records + 轮询进程）', (() => {
+      const wrap = el('div', { className: 'text-xs overflow-x-auto' });
+      const tbl = el('table', { className: 'min-w-full border-collapse text-left' });
+      const thead = el('thead');
+      thead.appendChild(el('tr', { className: 'border-b border-gray-200 text-gray-500' }, [
+        el('th', { className: 'py-2 pr-3 font-medium' }, 'config_key'),
+        el('th', { className: 'py-2 pr-3 font-medium' }, '行数'),
+        el('th', { className: 'py-2 pr-3 font-medium' }, '库内最近更新'),
+        el('th', { className: 'py-2 pr-3 font-medium' }, '上轮询'),
+        el('th', { className: 'py-2 pr-3 font-medium' }, '间隔跳过'),
+        el('th', { className: 'py-2 pr-3 font-medium' }, '轮询状态')
+      ]));
+      tbl.appendChild(thead);
+      const tbody = el('tbody');
+      S.bitableSyncHealth.tables.slice(0, 40).forEach((it) => {
+        const pollOk = it.lastPollOk;
+        const trunc = it.lastPollTruncated;
+        const skipped = !!it.pollSkipped;
+        let stLabel = '—';
+        let stCls = 'text-gray-500';
+        if (skipped) {
+          stLabel = String(it.skipReason || 'interval').slice(0, 40);
+          stCls = 'text-slate-600';
+        } else if (pollOk === false) {
+          stLabel = String(it.lastPollError || '失败').slice(0, 80);
+          stCls = 'text-red-600 font-medium';
+        } else if (pollOk === true) {
+          stLabel = trunc ? '成功·疑似截断' : '成功';
+          stCls = trunc ? 'text-amber-700 font-medium' : 'text-green-700';
+        }
+        const skipCell = skipped
+          ? el('span', { className: 'text-amber-800' }, fmtIso(it.skipAt))
+          : el('span', { className: 'text-gray-400' }, '—');
+        tbody.appendChild(el('tr', { className: 'border-b border-gray-50' }, [
+          el('td', { className: 'py-1.5 pr-3 font-mono text-gray-800' }, it.configKey || '—'),
+          el('td', { className: 'py-1.5 pr-3' }, String(it.rowCount ?? '—')),
+          el('td', { className: 'py-1.5 pr-3 text-gray-600' }, fmtIso(it.lastRowUpdated)),
+          el('td', { className: 'py-1.5 pr-3 text-gray-600' }, fmtIso(it.lastPollAt)),
+          el('td', { className: 'py-1.5 pr-3 text-gray-600' }, skipCell),
+          el('td', { className: 'py-1.5 pr-3 ' + stCls }, stLabel)
+        ]));
+      });
+      tbl.appendChild(tbody);
+      wrap.appendChild(tbl);
+      wrap.appendChild(el('p', { className: 'text-gray-400 mt-2' },
+        '生成时间 ' + fmtIso(S.bitableSyncHealth.generatedAt) + ' · 完整列表见「数据源」或调用 GET /api/admin/bitable-sync-health'));
+      return wrap;
+    })()));
+  }
 
   // 零代码核对：等同 curl /health 里的关键字段（打开本页即可，无需命令行）
   const re = S.hl.replyEngine != null ? String(S.hl.replyEngine) : '—';
@@ -2577,7 +2633,18 @@ function viewDataSources() {
 // ═══════════════════════════════════════════════════════
 async function load(t) {
   try {
-    if (t === 'dashboard') { [S.hl, S.st, S.fs] = await Promise.all([G('/health').catch(e => { catchNonAuth(e); return {}; }), G('/api/system-stats').catch(e => { catchNonAuth(e); return { tasks: [], messages24h: 0, anomaliesToday: 0 }; }), G('/api/feishu/status').catch(e => { catchNonAuth(e); return {}; })]); }
+    if (t === 'dashboard') {
+      const [hl, st, fs, bsh] = await Promise.all([
+        G('/health').catch(e => { catchNonAuth(e); return {}; }),
+        G('/api/system-stats').catch(e => { catchNonAuth(e); return { tasks: [], messages24h: 0, anomaliesToday: 0 }; }),
+        G('/api/feishu/status').catch(e => { catchNonAuth(e); return {}; }),
+        G('/api/admin/bitable-sync-health').catch((e) => {
+          if (e?.message === 'auth') throw e;
+          return null;
+        })
+      ]);
+      S.hl = hl; S.st = st; S.fs = fs; S.bitableSyncHealth = bsh && !bsh.error ? bsh : null;
+    }
     if (t === 'agents') { S.agents = (await G('/api/agent-config').catch(e => { catchNonAuth(e); return { agents: {} }; })).agents || {}; }
     if (t === 'scheduled') {
       const [di, ri, rhy, sb] = await Promise.all([G('/api/config/daily_inspections').catch(catchNonAuth), G('/api/config/random_inspections').catch(catchNonAuth), G('/api/config/rhythm_schedule').catch(catchNonAuth), G('/api/stores-brands').catch(catchNonAuth)]);
