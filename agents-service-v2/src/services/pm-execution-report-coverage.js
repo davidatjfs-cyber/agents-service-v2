@@ -221,24 +221,33 @@ export async function buildPmKitchenMapsForRange(displayStore, brandZh, startYmd
 
   const [openR, closeR, matR] = await Promise.all([
     query(
-      `SELECT agent_data, created_at FROM agent_messages
-       WHERE content_type = 'opening_report'
-         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date
-         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date`,
+      `SELECT m.agent_data, m.created_at, g.fields AS gfields
+       FROM agent_messages m
+       LEFT JOIN feishu_generic_records g
+         ON g.record_id = m.record_id AND g.config_key = 'opening_reports'
+       WHERE m.content_type = 'opening_report'
+         AND (m.created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date
+         AND (m.created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date`,
       [caLo, caHi]
     ),
     query(
-      `SELECT agent_data, created_at FROM agent_messages
-       WHERE content_type = 'closing_report'
-         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date
-         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date`,
+      `SELECT m.agent_data, m.created_at, g.fields AS gfields
+       FROM agent_messages m
+       LEFT JOIN feishu_generic_records g
+         ON g.record_id = m.record_id AND g.config_key = 'closing_reports'
+       WHERE m.content_type = 'closing_report'
+         AND (m.created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date
+         AND (m.created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date`,
       [caLo, caHi]
     ),
     query(
-      `SELECT agent_data, created_at FROM agent_messages
-       WHERE content_type = 'material_report'
-         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date
-         AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date`,
+      `SELECT m.agent_data, m.created_at, g.fields AS gfields
+       FROM agent_messages m
+       LEFT JOIN feishu_generic_records g
+         ON g.record_id = m.record_id AND g.config_key LIKE 'material_%'
+       WHERE m.content_type = 'material_report'
+         AND (m.created_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date
+         AND (m.created_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date`,
       [caLo, caHi]
     )
   ]);
@@ -255,24 +264,35 @@ export async function buildPmKitchenMapsForRange(displayStore, brandZh, startYmd
 
   for (const row of openR.rows || []) {
     const fields = row.agent_data?.fields || {};
-    if (!storeMatchesRow(displayStore, fields.store)) continue;
-    const biz = resolveKitchenReportBizYmd(fields.date, row.created_at);
-    const st = matchKitchenStation(fields.station, brandZh);
+    const gf = row.gfields && typeof row.gfields === 'object' ? row.gfields : {};
+    const storeVal = ext(fields.store) || ext(gf['门店']);
+    if (!storeMatchesRow(displayStore, storeVal)) continue;
+    const dateVal = ext(fields.date) || ext(gf['记录日期'] || gf['提交时间'] || gf['日期']);
+    const biz = resolveKitchenReportBizYmd(dateVal || null, row.created_at);
+    const stationVal = ext(fields.station) || ext(gf['岗位'] || gf['档口']);
+    const st = matchKitchenStation(stationVal, brandZh);
     if (st) addStation(openingByDate, biz, st);
   }
   for (const row of closeR.rows || []) {
     const fields = row.agent_data?.fields || {};
-    if (!storeMatchesRow(displayStore, fields.store)) continue;
-    const biz = resolveKitchenReportBizYmd(fields.date, row.created_at);
-    const st = matchKitchenStation(fields.station, brandZh);
+    const gf = row.gfields && typeof row.gfields === 'object' ? row.gfields : {};
+    const storeVal = ext(fields.store) || ext(gf['门店']);
+    if (!storeMatchesRow(displayStore, storeVal)) continue;
+    const dateVal = ext(fields.date) || ext(gf['提交时间'] || gf['日期']);
+    const biz = resolveKitchenReportBizYmd(dateVal || null, row.created_at);
+    const stationVal = ext(fields.station) || ext(gf['档口']);
+    const st = matchKitchenStation(stationVal, brandZh);
     if (st) addStation(closingByDate, biz, st);
   }
   for (const row of matR.rows || []) {
     const ad = row.agent_data && typeof row.agent_data === 'object' ? row.agent_data : {};
     if (!materialBrandMatches(ad, brandZh)) continue;
     const fields = ad.fields || {};
-    if (!storeMatchesRow(displayStore, fields.store)) continue;
-    const biz = resolveKitchenReportBizYmd(fields.date, row.created_at);
+    const gf = row.gfields && typeof row.gfields === 'object' ? row.gfields : {};
+    const storeVal = ext(fields.store) || ext(gf['所属门店'] || gf['门店']);
+    if (!storeMatchesRow(displayStore, storeVal)) continue;
+    const dateVal = ext(fields.date) || ext(gf['收货日期'] || gf['日期']);
+    const biz = resolveKitchenReportBizYmd(dateVal || null, row.created_at);
     if (!biz || biz < startYmd || biz > endYmd) continue;
     materialByDate.set(biz, (materialByDate.get(biz) || 0) + 1);
   }
@@ -390,10 +410,13 @@ export async function countDistinctMaterialBizDays(displayStore, brandZh, startY
  */
 export async function getMajixianMeetingExecutionStatsForStore(displayStore, startYmd, endYmd) {
   const r = await query(
-    `SELECT agent_data, created_at FROM agent_messages
-     WHERE content_type = 'meeting_report'
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= ($1::date - $3::int)
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($2::date + $4::int)`,
+    `SELECT m.agent_data, m.created_at, g.fields AS gfields
+     FROM agent_messages m
+     LEFT JOIN feishu_generic_records g
+       ON g.record_id = m.record_id AND g.config_key = 'meeting_reports'
+     WHERE m.content_type = 'meeting_report'
+       AND (m.created_at AT TIME ZONE 'Asia/Shanghai')::date >= ($1::date - $3::int)
+       AND (m.created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($2::date + $4::int)`,
     [startYmd, endYmd, CREATED_AT_PAD_BEFORE_MONTH, CREATED_AT_PAD_AFTER_MONTH]
   );
   let totalMeetings = 0;
@@ -401,12 +424,12 @@ export async function getMajixianMeetingExecutionStatsForStore(displayStore, sta
   let unqualifiedMeetings = 0;
   for (const row of r.rows || []) {
     const fields = row.agent_data?.fields || {};
-    if (!storeMatchesRow(displayStore, fields.store)) continue;
+    const gf = row.gfields && typeof row.gfields === 'object' ? row.gfields : {};
+    const storeVal = ext(fields.store) || ext(gf['所属门店'] || gf['门店']);
+    if (!storeMatchesRow(displayStore, storeVal)) continue;
     const rawDate =
       normalizeMeetingDateCell(fields.date) ||
-      normalizeMeetingDateCell(fields['会议日期']) ||
-      normalizeMeetingDateCell(fields['例会日期']) ||
-      normalizeMeetingDateCell(fields['会议时间']) ||
+      normalizeMeetingDateCell(gf['例会日期'] || gf['记录日期'] || gf['提交时间'] || gf['日期']) ||
       '';
     let biz = resolveBitableBusinessYmd(rawDate || null, row.created_at);
     if (!rawDate) {
@@ -425,7 +448,7 @@ export async function getMajixianMeetingExecutionStatsForStore(displayStore, sta
     }
     if (!biz || biz < startYmd || biz > endYmd) continue;
     totalMeetings++;
-    const sc = parseMeetingScore(fields);
+    const sc = parseMeetingScore({ ...fields, ...gf });
     if (sc != null && sc >= 7) qualifiedMeetings++;
     else unqualifiedMeetings++;
   }
@@ -441,10 +464,13 @@ export async function getMajixianMeetingExecutionStatsForStore(displayStore, sta
  */
 export async function getMajixianMeetingDayEval(displayStore, dateYmd) {
   const r = await query(
-    `SELECT agent_data, created_at FROM agent_messages
-     WHERE content_type = 'meeting_report'
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= ($1::date - $2::int)
-       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($1::date + $3::int)`,
+    `SELECT m.agent_data, m.created_at, g.fields AS gfields
+     FROM agent_messages m
+     LEFT JOIN feishu_generic_records g
+       ON g.record_id = m.record_id AND g.config_key = 'meeting_reports'
+     WHERE m.content_type = 'meeting_report'
+       AND (m.created_at AT TIME ZONE 'Asia/Shanghai')::date >= ($1::date - $2::int)
+       AND (m.created_at AT TIME ZONE 'Asia/Shanghai')::date <= ($1::date + $3::int)`,
     [dateYmd, CREATED_AT_PAD_BEFORE_SINGLE_DAY, CREATED_AT_PAD_AFTER_SINGLE_DAY]
   );
   const acceptPrevDay =
@@ -453,33 +479,40 @@ export async function getMajixianMeetingDayEval(displayStore, dateYmd) {
 
   let latestExact = null;
   let latestExactTs = 0;
+  let latestExactGf = null;
   let latestPrev = null;
   let latestPrevTs = 0;
+  let latestPrevGf = null;
 
   for (const row of r.rows || []) {
     const fields = row.agent_data?.fields || {};
-    if (!storeMatchesRow(displayStore, fields.store)) continue;
+    const gf = row.gfields && typeof row.gfields === 'object' ? row.gfields : {};
+    const storeVal = ext(fields.store) || ext(gf['所属门店'] || gf['门店']);
+    if (!storeMatchesRow(displayStore, storeVal)) continue;
     const biz = meetingReportBizYmd(fields, row.created_at, dateYmd);
     const ts = new Date(row.created_at).getTime();
     if (biz === dateYmd) {
       if (ts >= latestExactTs) {
         latestExactTs = ts;
         latestExact = fields;
+        latestExactGf = gf;
       }
       continue;
     }
     if (acceptPrevDay && biz === prevYmd) {
-      const sc0 = parseMeetingScore(fields);
+      const sc0 = parseMeetingScore({ ...fields, ...gf });
       if (sc0 != null && sc0 >= 7 && ts >= latestPrevTs) {
         latestPrevTs = ts;
         latestPrev = fields;
+        latestPrevGf = gf;
       }
     }
   }
 
   const pick = latestExact || (acceptPrevDay ? latestPrev : null);
+  const pickGf = latestExact ? latestExactGf : latestPrevGf;
   if (!pick) return { submitted: false, score: null, qualified: false };
-  const sc = parseMeetingScore(pick);
+  const sc = parseMeetingScore({ ...pick, ...(pickGf || {}) });
   return {
     submitted: true,
     score: sc,

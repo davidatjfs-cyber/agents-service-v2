@@ -512,6 +512,101 @@ r.get('/dashboard-detail/:type', authRequired, async (req, res) => {
 });
 
 /**
+ * P0/P1：知识源「体检」— RAG 表、Wiki 目录、MemPalace、近期 agent_memory、可选知识图谱行数；不含密钥。
+ * GET /api/admin/knowledge-sources
+ */
+r.get('/admin/knowledge-sources', ...admin, async (req, res) => {
+  const out = {
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    checklist: [
+      'knowledge_base：HRMS 上传 PDF/文本后 train_advisor 才会在「<<< 文档」块中命中；扫描件需可复制文字。',
+      'Wiki：knowledge/wiki 下 .md 由 data_auditor 等高质量输出写入；train_advisor / data_auditor 的 buildExperienceBlock 会检索。',
+      'MemPalace：需 ENABLE_MEMPALACE=true 且进程可达；主要服务 marketing_planner 高分策略记忆。',
+      '触发词清单见仓库 agents-service-v2/docs/AGENT_KNOWLEDGE_TRIGGER_KEYWORDS.md'
+    ]
+  };
+  try {
+    const kbScopes = await query(
+      `SELECT COALESCE(NULLIF(TRIM(scope), ''), '(null)') AS scope, COUNT(*)::int AS cnt
+       FROM knowledge_base WHERE enabled IS DISTINCT FROM false
+       GROUP BY 1 ORDER BY cnt DESC`
+    ).catch(() => ({ rows: [] }));
+    const kbTotal = await query(
+      `SELECT COUNT(*)::int AS c, MAX(updated_at) AS last_updated FROM knowledge_base WHERE enabled IS DISTINCT FROM false`
+    ).catch(() => ({ rows: [{}] }));
+    out.knowledgeBaseRag = {
+      byScope: kbScopes.rows || [],
+      totalRows: Number(kbTotal.rows?.[0]?.c || 0),
+      lastUpdated: kbTotal.rows?.[0]?.last_updated || null
+    };
+  } catch (e) {
+    out.knowledgeBaseRag = { error: String(e?.message || e) };
+  }
+
+  try {
+    const memR = await query(
+      `SELECT agent_id, COUNT(*)::int AS cnt
+       FROM agent_memory
+       WHERE created_at > NOW() - INTERVAL '7 days'
+       GROUP BY agent_id
+       ORDER BY cnt DESC
+       LIMIT 24`
+    ).catch(() => ({ rows: [] }));
+    const memTotal = await query(
+      `SELECT COUNT(*)::int AS c FROM agent_memory WHERE created_at > NOW() - INTERVAL '7 days'`
+    ).catch(() => ({ rows: [{ c: 0 }] }));
+    out.agentMemoryPg = {
+      last7DaysTotal: Number(memTotal.rows?.[0]?.c || 0),
+      byAgentId: memR.rows || []
+    };
+  } catch (e) {
+    out.agentMemoryPg = { error: String(e?.message || e) };
+  }
+
+  try {
+    const ex = await query(`SELECT COUNT(*)::int AS c FROM agent_experience`).catch(() => ({ rows: [{ c: 0 }] }));
+    out.agentExperience = { totalRows: Number(ex.rows?.[0]?.c || 0) };
+  } catch (e) {
+    out.agentExperience = { error: String(e?.message || e) };
+  }
+
+  try {
+    const ber = await query(`SELECT COUNT(*)::int AS c FROM business_entity_relations`).catch(() => null);
+    if (ber && ber.rows?.length) {
+      out.knowledgeGraphPg = { businessEntityRelationRows: Number(ber.rows[0].c || 0) };
+    } else {
+      out.knowledgeGraphPg = { businessEntityRelationRows: 0, note: '表不存在或无行' };
+    }
+  } catch (e) {
+    out.knowledgeGraphPg = { error: String(e?.message || e), note: 'HRMS 知识图谱表可能未迁移到当前库' };
+  }
+
+  try {
+    const { probeWikiKnowledgeHealth } = await import('../services/knowledge/wiki-retriever.js');
+    out.wikiMd = probeWikiKnowledgeHealth();
+  } catch (e) {
+    out.wikiMd = { error: String(e?.message || e) };
+  }
+
+  try {
+    const { probeMemPalaceHealth } = await import('../services/memory-adapter.js');
+    out.mempalace = await probeMemPalaceHealth();
+  } catch (e) {
+    out.mempalace = { error: String(e?.message || e) };
+  }
+
+  out.envHints = {
+    ENABLE_MEMPALACE: process.env.ENABLE_MEMPALACE === 'true',
+    MEMPALACE_URL_SET: !!String(process.env.MEMPALACE_URL || '').trim(),
+    KNOWLEDGE_USE_DEEPSEEK: String(process.env.KNOWLEDGE_USE_DEEPSEEK || '').trim().toLowerCase() !== 'false',
+    WIKI_DATA_DIR_SET: !!String(process.env.WIKI_DATA_DIR || '').trim()
+  };
+
+  res.json(out);
+});
+
+/**
  * 定时报告飞书投递明细（来自 report-delivery.js 落库）。
  * 例：查某日考勤日报谁未送达 — GET /api/admin/report-delivery?run_ymd=2026-04-15&failures_only=1
  */

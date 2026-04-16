@@ -76,6 +76,9 @@ function canonicalTaskIdentity(task) {
   if (type === 'recharge_zero' || /充值异常/.test(title)) {
     return 'recharge_zero';
   }
+  if (type === 'tasting' || type.startsWith('custom_') || /试味/.test(title)) {
+    return `${source}::${type}::${task?.id || title}`;
+  }
   return `${source}::${type || title}`;
 }
 

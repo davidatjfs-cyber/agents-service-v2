@@ -497,7 +497,7 @@ async function processRecord(configKey, type, record, brand) {
     case 'closing_report':
       await upsertMsg('closing_report', '收档报告', {
         type: 'closing_report', recordId,
-        fields: { store: extractText(fields['门店']), date: extractText(fields['日期']),
+        fields: { store: extractText(fields['门店']), date: extractText(fields['提交时间'] || fields['日期']),
                   station: extractText(fields['档口']), responsible: extractText(fields['本档口值班负责人']),
                   inventory_check: extractText(fields['本档口库存检查']), cleaning_status: extractText(fields['本档口清洁卫生']),
                   equipment_status: extractText(fields['设备使用情况']), issues: extractText(fields['异常情况说明']) }
@@ -506,8 +506,8 @@ async function processRecord(configKey, type, record, brand) {
     case 'opening_report':
       await upsertMsg('opening_report', '开档报告', {
         type: 'opening_report', recordId,
-        fields: { store: extractText(fields['门店']), date: extractText(fields['日期']),
-                  station: extractText(fields['档口']), responsible: extractText(fields['本档口值班负责人']),
+        fields: { store: extractText(fields['门店']), date: extractText(fields['记录日期'] || fields['提交时间'] || fields['日期']),
+                  station: extractText(fields['岗位'] || fields['档口']), responsible: extractText(fields['本档口值班负责人']),
                   preparation_time: extractText(fields['开档时间']), cleaning_status: extractText(fields['本档口清洁卫生']),
                   equipment_status: extractText(fields['设备使用情况']), issues: extractText(fields['异常情况说明']) }
       });

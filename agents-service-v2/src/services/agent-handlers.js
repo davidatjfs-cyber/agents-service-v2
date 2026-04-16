@@ -2484,11 +2484,24 @@ async function handleTrainAdvisor(text, ctx) {
     } catch (e) { /* training_tasks may not exist */ }
   }
   if (!kbData && !trainingCtx) kbData = '\n[暂无匹配知识库记录]\n';
-  // P2: 记忆回调（知识问答优先用 KB，记忆仅作补充）
+  // P1：与 data_auditor 对齐，注入 Wiki 磁盘检索 + agent_memory 近期记录（buildExperienceBlock 内已 recall）
   try {
-    const mem = await recallMemories('train_advisor', '', text.slice(0, 30), 2);
-    if (mem.length) kbData += '\n[历史对话摘要] ' + mem.map((m) => m.content.slice(0, 60)).join('; ');
-  } catch (e) {}
+    const expBlock = await buildExperienceBlock({ agent: 'train_advisor', store, query: text });
+    if (expBlock && String(expBlock).trim()) {
+      kbData += `\n${expBlock.trim()}\n`;
+    } else {
+      try {
+        const mem = await recallMemories('train_advisor', store || '', text.slice(0, 30), 2);
+        if (mem.length) kbData += '\n[历史对话摘要] ' + mem.map((m) => m.content.slice(0, 60)).join('; ');
+      } catch (e2) { /* ignore */ }
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'train_advisor buildExperienceBlock skipped');
+    try {
+      const mem = await recallMemories('train_advisor', store || '', text.slice(0, 30), 2);
+      if (mem.length) kbData += '\n[历史对话摘要] ' + mem.map((m) => m.content.slice(0, 60)).join('; ');
+    } catch (e2) { /* ignore */ }
+  }
   const kbBlockPresent = kbData.includes('<<< 文档：');
   let sysPrompt = (await adminAgentPromptPrefix('train_advisor')) + `【角色定义】
 你是「培训与 SOP」岗位助手；用户已从 HRMS 上传菜单 PDF、各档口开档说明，你必须用**知识库原文**回答。
@@ -2500,7 +2513,8 @@ async function handleTrainAdvisor(text, ctx) {
 1) 下方若出现「<<< 文档：」开头的块，其中文字是唯一可信来源。你必须**直接引用、列举**其中的菜名、价格、步骤、时间、检查项；可分段排版，禁止改写为「行业通用流程」或教科书式空话。
 2) 若下方标注「空」或没有任何「<<< 文档：」块：只能如实说明**知识库未检索到可提取文字**，并提示检查 PDF 是否可复制文字、上传是否勾选品牌；**禁止**用常识编造一份「标准菜单/标准开档流程」冒充来自本系统。
 3) 回答首句须点明依据：例如「根据知识库文档《xxx》…」。若多条文档，按文档分段说明。
-4) 禁止输出「参考依据：餐饮行业…」这类与上传文件无关的泛化来源。
+4) 若下方出现「【历史经验（必须引用）】」且其中有条目：须在回答中概括至少一条（可简短），与知识库原文不冲突。
+5) 禁止输出「参考依据：餐饮行业…」这类与上传文件无关的泛化来源。
 
 【输出约束】
 - 有原文：尽量完整列出用户问到的菜单或开档事项（可较长）；缺数据处写「原文未提及」。
