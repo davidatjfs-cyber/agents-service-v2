@@ -29,8 +29,9 @@ export function feishuStoreSearchPatterns(hrmsStoreName) {
   add(`%${s}%`);
   const feishu = toFeishuStoreName(s);
   if (feishu && feishu !== s) add(`%${feishu}%`);
-  if (/马己仙/.test(s)) {
+  if (/马己仙|马已仙/.test(s)) {
     add('%马己仙%');
+    add('%马已仙%');
     add('%马己仙大宁%');
     add('%马己仙上海音乐%');
     add('%音乐广场%');

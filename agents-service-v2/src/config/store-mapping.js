@@ -22,10 +22,18 @@ function normKey(v) {
 }
 
 /**
+ * 人工录入/飞书昵称常见混用：「马已仙」(已) 与规范「马己仙」(己)
+ * 不入库则桌访 ILIKE、门店归一化会对不上 structured 表与 feishu_generic_records。
+ */
+export function normalizeStoreOcrTypos(s) {
+  return String(s || '').replace(/马已仙/g, '马己仙');
+}
+
+/**
  * 用户/绑定里的简称 → 与 daily_reports、结构化桌访对齐的规范店名
  */
 export function resolveAgentCanonicalStore(input) {
-  const s = String(input || '').trim();
+  const s = normalizeStoreOcrTypos(String(input || '').trim());
   if (!s) return s;
   if (/洪潮|洪潮门店|大宁久光/.test(s)) return '洪潮大宁久光店';
   if (/马己仙|马己仙门店|音乐广场/.test(s)) return '马己仙上海音乐广场店';
@@ -42,7 +50,7 @@ export function resolveAgentCanonicalStore(input) {
  * 桌访/日报匹配用：规范名 + 飞书简称 + 用户原样（避免「马己仙」对不上「马己仙大宁店」）
  */
 export function expandAgentStoreLabels(input) {
-  const raw = String(input || '').trim();
+  const raw = normalizeStoreOcrTypos(String(input || '').trim());
   const canon = resolveAgentCanonicalStore(raw);
   const out = new Set([raw, canon].filter(Boolean));
   const f1 = toFeishuStoreName(canon);
