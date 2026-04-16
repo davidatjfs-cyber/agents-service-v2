@@ -378,7 +378,10 @@ export async function pollBitableTable(configKey) {
   const allRecords = [];
   let pageToken = '';
   let page = 0;
-  while (page < 20) {
+  // table_visit 已增长到远超 4000 行；20 * 200 会截断大表，导致部分门店“今日无数据”。
+  // 按不同表设置页上限：桌访放宽，其余保持较小值避免轮询过慢。
+  const maxPages = configKey === 'table_visit' ? 120 : 20;
+  while (page < maxPages) {
     const result = await getBitableRecords(configKey, { pageSize: 200, pageToken });
     if (!result.ok) {
       logger.error({ configKey, error: result.error }, 'poll failed');
