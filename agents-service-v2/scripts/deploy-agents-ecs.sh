@@ -68,6 +68,8 @@ else
 fi
 
 # 合并为一次 SSH：固定 PORT=3101（ecosystem.config.cjs），删 pm2 后再起；仅当 3101 仍被占才 fuser
+# 未加引号 heredoc 会在本机展开 ${VERIFY_KNOWLEDGE_STRICT}；配合 set -u 必须先有默认值。
+VERIFY_KNOWLEDGE_STRICT="${VERIFY_KNOWLEDGE_STRICT:-0}"
 echo ">>> remote: npm install + pm2 ecosystem (3101) + health"
 ssh -o ConnectTimeout=60 "${ECS_HOST}" \
   "BITABLE_TASK_RESP_APP_ID='${BITABLE_TASK_RESP_APP_ID}' BITABLE_TASK_RESP_APP_SECRET='${BITABLE_TASK_RESP_APP_SECRET}' AGENTS_ROLLBACK_TGZ='${AGENTS_ROLLBACK_TGZ}' bash -s" <<EOS
