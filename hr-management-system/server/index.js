@@ -2684,6 +2684,18 @@ app.post('/api/approvals', authRequired, async (req, res) => {
       if (!applicantManager) {
         return res.status(400).json({ error: 'missing_manager' });
       }
+      const applicantFull = (await stateOrDbFindUserRecord(state, username)) || applicant || {};
+      const appStore = String(payload.store || applicantFull.store || '').trim();
+      if (appStore) payload.store = appStore;
+      payload.applicantName = String(applicantFull.name || payload.name || payload.applicantName || '').trim() || username;
+      payload.applicantPosition = String(applicantFull.position || payload.applicantPosition || payload.position || '').trim() || '';
+      payload.applicantDepartment = String(applicantFull.department || payload.applicantDepartment || '').trim() || '';
+      payload.applicantLevel = String(applicantFull.level || payload.applicantLevel || '').trim() || '';
+      const join0 = safeDateOnly(
+        applicantFull.joinDate || applicantFull.hireDate || applicantFull.startDate
+        || payload.applicantJoinDate || payload.joinDate || payload.hireDate || payload.entryDate
+      );
+      if (join0) payload.applicantJoinDate = join0;
     } else if (type === 'leave') {
       if (!applicantManager) {
         return res.status(400).json({ error: 'missing_manager' });
@@ -5653,13 +5665,19 @@ async function dbFindEmployeeRecord(username) {
   try {
     const r = await pool.query(
       `select username, name, role, store, department, position, status,
-              join_date as "joinDate", created_at as "createdAt"
+              join_date as "joinDate", created_at as "createdAt",
+              coalesce(extra_json, '{}'::jsonb) as "extraJson"
          from employees
         where lower(username) = lower($1)
         limit 1`,
       [u]
     );
-    return r.rows?.[0] || null;
+    const row = r.rows?.[0];
+    if (!row) return null;
+    const ex = row.extraJson && typeof row.extraJson === 'object' ? row.extraJson : {};
+    const { extraJson, ...rest } = row;
+    const levelFromExtra = ex.level != null && ex.level !== '' ? String(ex.level).trim() : '';
+    return { ...rest, level: levelFromExtra || String(rest.level || '').trim() };
   } catch (_) {
     return null;
   }

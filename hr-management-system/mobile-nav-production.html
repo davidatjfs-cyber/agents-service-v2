@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
     <title>年年有喜管理系统</title>
     <style>
         /* Premium International UI Design */
@@ -4096,6 +4096,160 @@
             background: rgba(255, 255, 255, 0.06) !important;
             border: 1px solid rgba(212, 175, 55, 0.35) !important;
             color: #e8d48b !important;
+        }
+
+        /* 员工档案弹窗：与分析报表一致的金边玻璃 + 手机大触控（不改字段，仅换壳） */
+        #employee-form-modal.emp-form-sheet {
+            --emp-gold: #d4af37;
+            --emp-gold-glow: rgba(212, 175, 55, 0.22);
+            --emp-border: rgba(212, 175, 55, 0.16);
+            --emp-text: #e9eef6;
+            --emp-muted: rgba(186, 198, 215, 0.62);
+            --emp-mono: "IBM Plex Mono", ui-monospace, monospace;
+            --emp-sans: "Instrument Sans", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+        }
+
+        #employee-form-modal .emp-form-sheet__dialog {
+            font-family: var(--emp-sans);
+            background: linear-gradient(165deg, rgba(18, 22, 34, 0.98), rgba(10, 14, 24, 0.99)) !important;
+            border: 1px solid var(--emp-border) !important;
+            box-shadow:
+                0 0 0 1px rgba(0, 0, 0, 0.45) inset,
+                0 28px 56px -32px rgba(0, 0, 0, 0.75) !important;
+        }
+
+        #employee-form-modal .emp-form-sheet__header {
+            position: relative;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 14px !important;
+        }
+
+        #employee-form-modal .emp-form-sheet__header::before {
+            content: "HRMS · EMPLOYEE";
+            display: block;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.22em;
+            color: var(--emp-gold);
+            opacity: 0.92;
+            margin-bottom: 6px;
+        }
+
+        #employee-form-modal .emp-form-modal-body {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            padding: 0 !important;
+            min-height: 0;
+        }
+
+        #employee-form-modal .emp-form-rep-panel {
+            position: relative;
+            flex: 1;
+            min-height: 0;
+            margin: 12px 14px 8px;
+            padding: 14px 14px 10px;
+            border-radius: 18px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+            border: 1px solid var(--emp-border);
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset, 0 18px 40px -28px rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(14px);
+            overflow: hidden;
+        }
+
+        #employee-form-modal .emp-form-rep-panel::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: 18px;
+            pointer-events: none;
+            background: linear-gradient(125deg, rgba(212, 175, 55, 0.09), transparent 42%);
+        }
+
+        #employee-form-modal .emp-form-rep-panel .ui-form-grid {
+            position: relative;
+            z-index: 1;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 14px 12px !important;
+            max-height: min(62dvh, 560px);
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 4px 2px 8px !important;
+        }
+
+        @media (min-width: 720px) {
+            #employee-form-modal .emp-form-rep-panel .ui-form-grid {
+                grid-template-columns: 1fr 1fr;
+                max-height: min(68dvh, 620px);
+            }
+        }
+
+        #employee-form-modal .ui-label {
+            font-size: 10px !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.12em !important;
+            text-transform: uppercase !important;
+            color: var(--emp-muted) !important;
+        }
+
+        #employee-form-modal .ui-form-group input:not([type="checkbox"]):not([type="file"]),
+        #employee-form-modal .ui-form-group select,
+        #employee-form-modal .ui-form-group textarea {
+            min-height: 48px !important;
+            padding: 12px 14px !important;
+            border-radius: 14px !important;
+            font-size: 16px !important;
+            font-family: var(--emp-mono) !important;
+            background: rgba(0, 0, 0, 0.38) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            color: var(--emp-text) !important;
+            color-scheme: dark;
+            box-sizing: border-box;
+        }
+
+        #employee-form-modal .ui-form-group input:focus,
+        #employee-form-modal .ui-form-group select:focus,
+        #employee-form-modal .ui-form-group textarea:focus {
+            outline: none !important;
+            border-color: rgba(212, 175, 55, 0.45) !important;
+            box-shadow: 0 0 0 3px var(--emp-gold-glow) !important;
+        }
+
+        #employee-form-modal .ui-segment {
+            border-radius: 14px !important;
+            padding: 4px !important;
+            gap: 6px !important;
+        }
+
+        #employee-form-modal .ui-seg-btn {
+            min-height: 46px !important;
+            font-size: 15px !important;
+            border-radius: 12px !important;
+        }
+
+        #employee-form-modal .emp-form-modal-footer {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px !important;
+            padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px)) !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+            background: rgba(12, 16, 26, 0.96);
+        }
+
+        #employee-form-modal .emp-form-modal-footer .btn,
+        #employee-form-modal .emp-form-modal-footer .btn-secondary {
+            width: 100% !important;
+            justify-content: center !important;
+            min-height: 50px !important;
+            font-size: 16px !important;
+            font-weight: 700 !important;
+            border-radius: 14px !important;
+        }
+
+        #employee-form-modal .emp-form-modal-footer .btn:not(.btn-secondary) {
+            background: linear-gradient(135deg, #b45309, #d97706) !important;
+            border: 1px solid rgba(212, 175, 55, 0.45) !important;
         }
 
         #rewards-page .rw-summary-grid {
@@ -10712,6 +10866,7 @@
                     </div>
                     <div class="ui-modal-footer" style="display:flex; justify-content:flex-end; gap:10px; padding: 12px 20px; border-top: 1px solid rgba(255,255,255,0.08);">
                         <button class="btn btn-secondary" type="button" onclick="closeApprovalDetailModal()">关闭</button>
+                        <button class="btn btn-secondary" id="approval-detail-export-pdf" type="button" style="display:none;" onclick="exportApprovalPdf()">📄 导出PDF</button>
                         <button class="btn" id="approval-detail-admin-delete" type="button" style="display:none; background: linear-gradient(135deg, #ef4444, #dc2626);" onclick="adminDeleteCurrentApproval()">删除</button>
                         <button class="btn" id="approval-detail-pay" type="button" style="display:none; background: linear-gradient(135deg, #3b82f6, #2563eb);" onclick="payCurrentApproval()">标记已付款</button>
                         <button class="btn btn-secondary" id="approval-detail-reject" type="button" style="display:none;" onclick="promptRejectApproval()">拒绝</button>
@@ -10929,7 +11084,7 @@
                             <button class="btn" onclick="showAddEmployeeModal()" id="add-emp-btn"><i>➕</i> 新增员工</button>
                             <button class="btn" onclick="showBatchImportModal()" id="batch-import-btn"><i>📥</i> 批量导入</button>
                             <button class="btn btn-secondary" onclick="downloadEmployeeImportTemplate()" id="emp-import-template-btn"><i>⬇️</i> 模板</button>
-                            <button class="btn" onclick="exportEmployees()" id="export-emp-btn"><i>📊</i> 导出</button>
+                            <button class="btn" onclick="exportEmployees()" id="export-emp-btn"><i>📄</i> 导出 PDF</button>
                         </div>
                     </header>
 
@@ -12334,9 +12489,9 @@
         </div>
     </div>
 
-    <div id="employee-form-modal" class="modal ui-modal">
-        <div class="modal-content" style="max-width: 860px;">
-            <div class="modal-header">
+    <div id="employee-form-modal" class="modal ui-modal emp-form-sheet">
+        <div class="modal-content emp-form-sheet__dialog" style="max-width: 860px;">
+            <div class="modal-header emp-form-sheet__header">
                 <div>
                     <h3 id="employee-form-title" class="ui-modal-title">员工信息</h3>
                     <div class="ui-modal-desc">请填写下方表格以创建新的员工档案</div>
@@ -12344,7 +12499,8 @@
                 <span id="employee-form-mode-badge" class="ui-modal-badge" style="display:none;">管理模式</span>
                 <button class="modal-close" onclick="closeEmployeeFormModal()">×</button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body emp-form-modal-body">
+                <div class="emp-form-rep-panel">
                 <div class="ui-form-grid">
                     <div class="ui-form-group">
                         <label class="ui-label">员工编号<span class="req">*</span></label>
@@ -12535,7 +12691,8 @@
                         </div>
                     </div>
                 </div>
-                <div class="ui-modal-footer">
+                </div>
+                <div class="ui-modal-footer emp-form-modal-footer">
                     <button class="btn btn-secondary" type="button" onclick="closeEmployeeFormModal()">取消</button>
                     <button class="btn" id="employee-form-save-btn" type="button" onclick="submitEmployeeForm()">保存</button>
                 </div>
@@ -15136,6 +15293,11 @@
                 if (payBtn) payBtn.style.display = 'none';
             }
 
+            const exportPdfBtn = document.getElementById('approval-detail-export-pdf');
+            if (exportPdfBtn) {
+                exportPdfBtn.style.display = String(item?.type || '') === 'offboarding' ? '' : 'none';
+            }
+
             modal.classList.add('show');
 
             HRMS_API.readApproval(key).then(() => {
@@ -15159,6 +15321,109 @@
                 b.style.border = sel ? '2px solid ' + (v === 'voluntary' ? '#ea580c' : '#7c3aed') : '2px solid transparent';
                 b.style.background = sel ? (v === 'voluntary' ? 'rgba(234,88,12,0.15)' : 'rgba(124,58,237,0.15)') : 'rgba(255,255,255,0.06)';
             });
+        }
+
+        function exportApprovalPdf() {
+            const item = __CURRENT_APPROVAL;
+            if (!item || String(item?.type || '') !== 'offboarding') { showNotification('仅离职单支持导出PDF', 'warning'); return; }
+            const payload = typeof item.payload === 'object' ? item.payload : {};
+            const chain = Array.isArray(item.chain) ? item.chain : [];
+            const statusMap = { pending: '审批中', approved: '已通过', rejected: '已拒绝' };
+            const statusLabel = statusMap[item.status] || item.status || '-';
+            const depTypeMap = { voluntary: '主动离职（辞职）', involuntary: '被动离职（劝退/裁员）' };
+            const depTypeLabel = depTypeMap[payload.departureType] || '-';
+            const createdAt = String(item.created_at || item.createdAt || '').slice(0, 19).replace('T', ' ') || '-';
+            const applicantName = String(item.applicant_name || '').trim()
+                || String(payload.applicantName || '').trim()
+                || String(payload.name || '').trim()
+                || hrmsDisplayName(item.applicant_username);
+            const applicantAccount = String(item.applicant_username || '').trim() || '-';
+            const storeDisp = String(payload.store || '').trim() || '-';
+            const positionDisp = String(payload.applicantPosition || payload.position || '').trim() || '-';
+            const levelDisp = String(payload.applicantLevel || payload.level || '').trim() || '-';
+            const joinDisp = String(payload.applicantJoinDate || payload.joinDate || payload.hireDate || '').trim() || '-';
+            const chainRows = chain.map((s, i) => {
+                const st = s.status === 'approved' ? '✅ 已通过' : s.status === 'rejected' ? '❌ 已拒绝' : s.status === 'pending' ? '⏳ 待审批' : '排队中';
+                const decided = s.decidedAt || s.decided_at;
+                const at = decided ? String(decided).slice(0, 16).replace('T', ' ') : '-';
+                const who = String(s.assignee_name || '').trim() || hrmsDisplayName(s.assignee);
+                return `<tr><td>${i + 1}</td><td>${escapeHtml(who)}</td><td>${st}</td><td>${at}</td><td>${escapeHtml(s.note || '')}</td></tr>`;
+            }).join('');
+
+            const printHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>离职申请单</title>
+<style>
+body { font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif; font-size: 13px; color: #1a1a1a; margin: 0; padding: 20px; }
+.pdf-title { text-align: center; font-size: 22px; font-weight: 900; letter-spacing: 4px; margin-bottom: 6px; }
+.pdf-sub { text-align: center; font-size: 12px; color: #666; margin-bottom: 24px; }
+.pdf-section { border: 1px solid #ccc; border-radius: 6px; margin-bottom: 18px; overflow: hidden; }
+.pdf-section-title { background: #f0f0f0; padding: 8px 14px; font-weight: 900; font-size: 13px; border-bottom: 1px solid #ccc; }
+.pdf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+.pdf-field { padding: 9px 14px; border-bottom: 1px solid #eee; }
+.pdf-field:nth-child(odd) { border-right: 1px solid #eee; }
+.pdf-label { font-size: 11px; color: #666; margin-bottom: 3px; }
+.pdf-value { font-weight: 700; }
+.pdf-full { grid-column: 1 / -1; padding: 9px 14px; border-bottom: 1px solid #eee; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th, td { border: 1px solid #ddd; padding: 7px 10px; text-align: left; }
+th { background: #f5f5f5; font-weight: 700; }
+.status-badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-weight: 700; font-size: 12px; }
+.status-pending { background: #fef3c7; color: #d97706; }
+.status-approved { background: #dcfce7; color: #16a34a; }
+.status-rejected { background: #fee2e2; color: #dc2626; }
+.sig-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; padding: 16px 14px 30px; }
+.sig-box { border-bottom: 1px solid #333; padding-bottom: 4px; min-height: 40px; }
+.sig-label { font-size: 11px; color: #666; margin-top: 6px; }
+@media print { body { padding: 10px; } }
+</style></head><body>
+<div class="pdf-title">离 职 申 请 单</div>
+<div class="pdf-sub">EMPLOYEE RESIGNATION APPLICATION · 编号：${escapeHtml(String(item.id || '-'))}</div>
+<div class="pdf-section">
+  <div class="pdf-section-title">基本信息</div>
+  <div class="pdf-grid">
+    <div class="pdf-field"><div class="pdf-label">申请人（姓名）</div><div class="pdf-value">${escapeHtml(applicantName)}</div></div>
+    <div class="pdf-field"><div class="pdf-label">登录账号</div><div class="pdf-value">${escapeHtml(applicantAccount)}</div></div>
+    <div class="pdf-field"><div class="pdf-label">所属门店</div><div class="pdf-value">${escapeHtml(storeDisp)}</div></div>
+    <div class="pdf-field"><div class="pdf-label">岗位</div><div class="pdf-value">${escapeHtml(positionDisp)}</div></div>
+    <div class="pdf-field"><div class="pdf-label">入职时间</div><div class="pdf-value">${escapeHtml(joinDisp)}</div></div>
+    <div class="pdf-field"><div class="pdf-label">员工级别</div><div class="pdf-value">${escapeHtml(levelDisp)}</div></div>
+    <div class="pdf-field"><div class="pdf-label">提交日期</div><div class="pdf-value">${escapeHtml(createdAt)}</div></div>
+    <div class="pdf-field"><div class="pdf-label">期望离职日期</div><div class="pdf-value">${escapeHtml(payload.resignDate || '-')}</div></div>
+    <div class="pdf-full"><div class="pdf-label">审批状态</div><div class="pdf-value"><span class="status-badge status-${item.status || 'pending'}">${escapeHtml(statusLabel)}</span></div></div>
+  </div>
+</div>
+<div class="pdf-section">
+  <div class="pdf-section-title">离职详情</div>
+  <div class="pdf-grid">
+    <div class="pdf-field"><div class="pdf-label">离职原因（分类）</div><div class="pdf-value">${escapeHtml(payload.reason || '-')}</div></div>
+    <div class="pdf-field"><div class="pdf-label">离职类型</div><div class="pdf-value">${escapeHtml(depTypeLabel)}</div></div>
+    <div class="pdf-field"><div class="pdf-label">是否与上级沟通</div><div class="pdf-value">${escapeHtml(payload.communicated || '-')}</div></div>
+    <div class="pdf-field"><div class="pdf-label">上级是否面谈</div><div class="pdf-value">${escapeHtml(payload.interviewed || '-')}</div></div>
+    <div class="pdf-field"><div class="pdf-label">直属上级是否同意</div><div class="pdf-value">${escapeHtml(payload.managerAgreed || '-')}</div></div>
+    <div class="pdf-full"><div class="pdf-label">具体说明</div><div style="margin-top:4px; white-space: pre-wrap; line-height:1.6;">${escapeHtml(payload.detail || '-')}</div></div>
+  </div>
+</div>
+<div class="pdf-section">
+  <div class="pdf-section-title">审批流程</div>
+  <table><thead><tr><th>步骤</th><th>审批人</th><th>状态</th><th>审批时间</th><th>备注</th></tr></thead>
+  <tbody>${chainRows}</tbody></table>
+</div>
+<div class="pdf-section">
+  <div class="pdf-section-title">签字确认</div>
+  <div class="sig-row">
+    <div><div class="sig-box"></div><div class="sig-label">申请人签字</div></div>
+    <div><div class="sig-box"></div><div class="sig-label">直属上级签字</div></div>
+    <div><div class="sig-box"></div><div class="sig-label">人事负责人签字</div></div>
+  </div>
+</div>
+<div style="text-align:right; font-size:11px; color:#999; margin-top:8px;">打印时间：${new Date().toLocaleString('zh-CN')} · HRMS 人力资源管理系统</div>
+</body></html>`;
+
+            const w = window.open('', '_blank', 'width=860,height=1100');
+            if (!w) { showNotification('弹窗被拦截，请允许本站弹窗后重试', 'warning'); return; }
+            w.document.write(printHtml);
+            w.document.close();
+            w.focus();
+            setTimeout(() => { try { w.print(); } catch (e) {} }, 400);
         }
 
         function decideApproval(approved, note) {
@@ -26778,7 +27043,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             })();
         }
         
-        // 导出功能
+        // 导出功能（与历史 CSV 列完全一致，通过打印另存为 PDF）
         function exportEmployees() {
             if (!isAdminUser()) {
                 showNotification('仅管理员可导出数据', 'warning');
@@ -26787,20 +27052,49 @@ ${knowledgeContent.slice(0, 30000)}`;
             const headers = ['员工编号', '账号', '密码', '姓名', '性别', '出生年月', '年龄', '身份证号码', '籍贯', '户籍所在地', '婚姻状况', '微信号', '角色', '所属门店', '直属上级账号', '部门', '岗位', '级别', '工资', '学历', '入职日期', '工资卡号公', '工资银行公', '工资卡号私', '工资银行私', '电话', '邮箱', '紧急联系人', '联系人电话', '联系人关系', '状态'];
             const keys = ['id', 'username', 'password', 'name', 'gender', 'birthday', '__ageDisp', 'idCardNumber', 'hometown', 'registeredResidence', 'maritalStatus', 'wechat', 'role', 'store', 'managerUsername', 'department', 'position', 'level', 'salary', 'education', 'joinDate', 'bankCardCompany', 'bankNameCompany', 'bankCardPersonal', 'bankNamePersonal', 'phone', 'email', 'emergencyContactName', 'emergencyContactPhone', 'emergencyContactRelation', 'status'];
             const employees = HRMS_STORE.getEmployees();
-            const lines = [];
-            lines.push(headers.join(','));
-            (employees || []).forEach(e => {
-                const row = keys.map(k => {
+            const th = headers.map(h => `<th>${escapeHtml(h)}</th>`).join('');
+            const trs = (employees || []).map(e => {
+                const tds = keys.map(k => {
+                    let v = '';
                     if (k === '__ageDisp') {
                         const age = empCalcAgeFromBirthday(e?.birthday);
-                        return hrmsEscapeCsvCell(age !== null ? `${age}` : '');
+                        v = age !== null ? `${age}` : '';
+                    } else {
+                        v = e?.[k] ?? '';
                     }
-                    return hrmsEscapeCsvCell(e?.[k] ?? '');
-                });
-                lines.push(row.join(','));
-            });
-            hrmsDownloadText(`employees_${new Date().toISOString().slice(0, 10)}.csv`, lines.join('\n'));
-            showNotification('已导出 CSV', 'success');
+                    return `<td>${escapeHtml(String(v))}</td>`;
+                }).join('');
+                return `<tr>${tds}</tr>`;
+            }).join('');
+            const title = `员工档案导出 · ${new Date().toISOString().slice(0, 10)}`;
+            const printHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+<style>
+@page { size: A4 landscape; margin: 8mm; }
+body { font-family: 'PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif; margin: 0; padding: 12px; color: #0f172a; }
+h1 { font-size: 15px; margin: 0 0 10px; letter-spacing: 0.06em; }
+.meta { font-size: 11px; color: #64748b; margin-bottom: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 8px; }
+th, td { border: 1px solid #cbd5e1; padding: 4px 5px; text-align: left; vertical-align: top; word-break: break-word; }
+th { background: #f1f5f9; font-weight: 800; }
+tr:nth-child(even) td { background: #fafafa; }
+.hint { margin-top: 10px; font-size: 11px; color: #64748b; }
+@media print { body { padding: 4px; } }
+</style></head><body>
+<h1>${escapeHtml(title)}</h1>
+<div class="meta">列与系统「员工导出」原 CSV 完全一致 · 共 ${(employees || []).length} 人 · HRMS</div>
+<table><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>
+<p class="hint">请在打印对话框中选择「另存为 PDF」。</p>
+</body></html>`;
+            const w = window.open('', '_blank', 'width=1200,height=900');
+            if (!w) {
+                showNotification('弹窗被拦截，请允许本站弹窗后重试', 'warning');
+                return;
+            }
+            w.document.write(printHtml);
+            w.document.close();
+            w.focus();
+            setTimeout(() => { try { w.print(); } catch (e) {} }, 400);
+            showNotification('已打开打印/PDF（列与导出 CSV 一致）', 'success');
         }
 
         function downloadEmployeeImportTemplate() {
