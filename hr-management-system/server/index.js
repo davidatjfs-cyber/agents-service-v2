@@ -2265,7 +2265,8 @@ app.post('/api/ai/chat-completions', authRequired, async (req, res) => {
   };
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 25000);
+  /** 出题/长上下文等场景上游常 >25s；过短会 502 + 浏览器 aborted */
+  const timer = setTimeout(() => controller.abort(), 120000);
   try {
     const upstream = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',

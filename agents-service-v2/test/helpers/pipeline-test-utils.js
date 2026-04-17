@@ -88,7 +88,11 @@ export async function runAgentAnalysisPipeline(text, ctx, opts = {}) {
   if (!opts.forceDataAuditor) {
     try {
       const det = await tryDeterministicReply(text, baseCtx);
-      if (det) return { source: 'deterministic', text: String(det), raw: null };
+      if (det) {
+        const textOut =
+          typeof det === 'string' ? det : JSON.stringify(det);
+        return { source: 'deterministic', text: textOut, raw: det };
+      }
     } catch {
       /* fall through */
     }

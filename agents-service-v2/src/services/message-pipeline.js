@@ -10,6 +10,7 @@ import { extractTimeRangeFromText } from './data-executor.js';
 import { analyzeMetricTree } from './analysis-engine.js';
 import {
   sendText,
+  sendCard,
   replyMsg,
   getFeishuUserName,
   getHrmsEmployeeName,
@@ -224,6 +225,88 @@ async function sendReplyWithFallback(ev, text, logTag = 'reply') {
   return { ok: false, channel: 'all_failed' };
 }
 
+/**
+ * 确定性回复投递：支持桌访等返回 { kind:'interactive', card, fallbackText } 时先发飞书卡片，失败再发文本。
+ * sessionTag 非空时不写幂等缓存（与会话分支历史行为一致）。
+ */
+async function deliverDeterministicHit(ev, detReply, ctx, store, t0, idemKey, traceId, sessionTag = '') {
+  const isInteractive =
+    detReply && typeof detReply === 'object' && detReply.kind === 'interactive' && detReply.card;
+  const fallbackBody = isInteractive
+    ? String(detReply.fallbackText || '').trim()
+    : String(detReply || '').trim();
+  if (!isInteractive && !fallbackBody) return null;
+  if (isInteractive && !detReply.card) return null;
+
+  const logSuffix = sessionTag ? ' (session)' : '';
+  const deliverBaseTag = sessionTag ? 'deterministic_session' : 'deterministic';
+
+  if (isInteractive) {
+    const uid = String(ev.userId || '').trim();
+    const cid = String(ev.chatId || '').trim();
+    const fullCard = { config: { wide_screen_mode: true }, ...(detReply.card || {}) };
+    let cardOk = false;
+    if (uid) {
+      const r = await sendCard(uid, fullCard, 'open_id');
+      cardOk = !!r?.ok;
+      if (!cardOk) {
+        logger.warn({ store, err: r?.error, code: r?.data?.code }, 'sendCard(open_id) failed, fallback text');
+      }
+    } else if (cid) {
+      const r = await sendCard(cid, fullCard, 'chat_id');
+      cardOk = !!r?.ok;
+      if (!cardOk) {
+        logger.warn({ store, err: r?.error, code: r?.data?.code }, 'sendCard(chat_id) failed, fallback text');
+      }
+    } else {
+      logger.warn({ store }, 'deterministic interactive: no userId/chatId, fallback text');
+    }
+    if (cardOk) {
+      const userQ = String(ev.text || '').trim();
+      if (userQ) {
+        const topic = `小年: | Magazine: ${userQ}`;
+        await sendReplyWithFallback(ev, topic, `${deliverBaseTag}_card_topic`).catch(() => {});
+      }
+      logger.info({ store, card: true }, `deterministic reply hit${logSuffix}`);
+      await logTaskResult(
+        { agent: 'deterministic', store, data: '[interactive] ' + fallbackBody.slice(0, 500) },
+        ctx,
+        Date.now() - t0
+      ).catch(() => {});
+      const result = {
+        ok: true,
+        route: 'deterministic',
+        agent: 'deterministic',
+        ms: Date.now() - t0,
+        evidence: true,
+        traceId,
+        deliverChannel: 'interactive',
+        ...(sessionTag ? { sessionBypass: true } : {})
+      };
+      if (idemKey && !sessionTag) await saveIdempotency(idemKey, result).catch(() => {});
+      return result;
+    }
+  }
+
+  const prefixed = '小年：' + (fallbackBody || '（空回复）');
+  logger.info({ store, detReplyLen: fallbackBody.length }, `deterministic reply hit${logSuffix}`);
+  const fbTag = isInteractive ? `${deliverBaseTag}_interactive_fallback` : deliverBaseTag;
+  const deliverDet = await sendReplyWithFallback(ev, prefixed, fbTag);
+  await logTaskResult({ agent: 'deterministic', store, data: fallbackBody }, ctx, Date.now() - t0).catch(() => {});
+  const result = {
+    ok: deliverDet.ok,
+    route: 'deterministic',
+    agent: 'deterministic',
+    ms: Date.now() - t0,
+    evidence: true,
+    traceId,
+    deliverChannel: deliverDet.channel,
+    ...(sessionTag ? { sessionBypass: true } : {})
+  };
+  if (deliverDet.ok && idemKey && !sessionTag) await saveIdempotency(idemKey, result).catch(() => {});
+  return result;
+}
+
 export async function processMessage(ev) {
   if (!ev.text) return { ok: false, reason: 'empty' };
   const traceId = ev.eventId || ev.messageId || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -273,21 +356,17 @@ export async function processMessage(ev) {
       // 数据类问题（原料/开收档/桌访等）必须走 DB 确定性回复；否则活跃会话会误走 LLM 导致「0条」等错答
       try {
         const detSession = await tryDeterministicReply(ev.text, ctx);
-        if (detSession) {
-          const prefixed = '小年：' + detSession;
-          const dS = await sendReplyWithFallback(ev, prefixed, 'deterministic_session');
-          await logTaskResult({ agent: 'deterministic', store: ctx.store, data: detSession }, ctx, Date.now() - t0).catch(() => {});
-          return {
-            ok: dS.ok,
-            route: 'deterministic',
-            agent: 'deterministic',
-            ms: Date.now() - t0,
-            evidence: true,
-            traceId,
-            deliverChannel: dS.channel,
-            sessionBypass: true
-          };
-        }
+        const dSession = await deliverDeterministicHit(
+          ev,
+          detSession,
+          ctx,
+          ctx.store,
+          t0,
+          idemKey,
+          traceId,
+          'session'
+        );
+        if (dSession) return dSession;
       } catch (e) {
         logger.warn({ err: e?.message, traceId }, 'session: deterministic pre-check failed, continue to agent');
       }
@@ -441,22 +520,12 @@ export async function processMessage(ev) {
     if (pipelineIntent !== 'analysis' && pipelineIntent !== 'strategy') {
       try {
         const detReply = await tryDeterministicReply(ev.text, ctx);
-        if (detReply) {
-          const prefixed = '小年：' + detReply;
-          logger.info({ store, detReplyLen: detReply.length }, 'deterministic reply hit (before planner)');
-          const deliverDet = await sendReplyWithFallback(ev, prefixed, 'deterministic');
-          await logTaskResult({ agent: 'deterministic', store, data: detReply }, ctx, Date.now() - t0).catch(() => {});
-          const result = {
-            ok: deliverDet.ok,
-            route: 'deterministic',
-            agent: 'deterministic',
-            ms: Date.now() - t0,
-            evidence: true,
-            traceId,
-            deliverChannel: deliverDet.channel
-          };
-          if (deliverDet.ok && idemKey) await saveIdempotency(idemKey, result).catch(() => {});
-          return result;
+        const delivered = await deliverDeterministicHit(ev, detReply, ctx, store, t0, idemKey, traceId, '');
+        if (delivered) {
+          const detLen =
+            typeof detReply === 'string' ? detReply.length : String(detReply?.fallbackText || '').length;
+          logger.info({ store, detReplyLen: detLen }, 'deterministic reply hit (before planner)');
+          return delivered;
         }
       } catch (detErr) {
         logger.warn({ err: detErr?.message }, 'deterministic reply error, continue to planner');

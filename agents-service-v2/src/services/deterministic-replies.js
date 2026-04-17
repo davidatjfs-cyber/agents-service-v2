@@ -1247,6 +1247,120 @@ export async function fetchMergedTableVisitEntries(store, start, end) {
   return [...byKey.values()];
 }
 
+/** 飞书卡片 lark_md 用：弱化破坏性字符，避免渲染异常 */
+function larkMdSoftEscape(t) {
+  return String(t || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function buildTableVisitOverviewInteractiveCard(payload) {
+  const {
+    storeDisplay,
+    periodWord,
+    total,
+    satisfiedCnt,
+    unsatisfiedLen,
+    dishSorted,
+    unsatisfied,
+    badFbSorted,
+    kpiMd,
+    userQuestion
+  } = payload;
+
+  const qLine = larkMdSoftEscape(userQuestion || '桌访查询');
+  const storeLine = larkMdSoftEscape(storeDisplay || '');
+
+  const dishLines = [];
+  if (dishSorted?.length) {
+    dishSorted.forEach(([d, c], i) => {
+      const dEsc = larkMdSoftEscape(d);
+      const ex = unsatisfied.find((e) => String(dissatisfactionDishFromMergedEntry(e) || '').includes(d));
+      const sampleRaw = ex?.fb ? (ex.fb.length > 22 ? `${ex.fb.slice(0, 22)}…` : ex.fb) : '';
+      const sample = larkMdSoftEscape(sampleRaw);
+      dishLines.push(`${i + 1}. **${dEsc}** · ${c} 次${sample ? ` · 反馈：${sample}` : ''}`);
+    });
+  } else {
+    dishLines.push('_本时段未记录明确不满意菜品。_');
+  }
+  const prodMd = dishLines.join('\n');
+
+  const reasonLines = [];
+  if (badFbSorted?.length) {
+    badFbSorted.forEach(([x, c], i) => {
+      reasonLines.push(`${i + 1}. **${larkMdSoftEscape(x)}** · ${c} 次`);
+    });
+  } else {
+    reasonLines.push('_未汇总到可统计的不满意原因文本。_');
+  }
+  const reasonMd = reasonLines.join('\n');
+
+  const kpiBlock = kpiMd ? larkMdSoftEscape(String(kpiMd).slice(0, 3500)) : '';
+
+  const elements = [
+    {
+      tag: 'div',
+      text: {
+        tag: 'lark_md',
+        content: `> **提问**\n${qLine}`
+      }
+    },
+    { tag: 'hr' },
+    {
+      tag: 'div',
+      text: {
+        tag: 'lark_md',
+        content: `**门店** ${storeLine}\n**周期** ${larkMdSoftEscape(periodWord)}\n**样本** ${total} 条\n**数据口径** 结构化表 + 飞书缓存（按记录去重）`
+      }
+    },
+    { tag: 'hr' },
+    {
+      tag: 'div',
+      text: {
+        tag: 'lark_md',
+        content: `**满意度**\n满意 **${satisfiedCnt}** 条　｜　有问题 **${unsatisfiedLen}** 条`
+      }
+    },
+    { tag: 'hr' },
+    {
+      tag: 'div',
+      text: { tag: 'lark_md', content: `**产品问题**（不满意记录 · 不满意菜品）` }
+    },
+    {
+      tag: 'div',
+      text: { tag: 'lark_md', content: prodMd.slice(0, 4000) }
+    },
+    { tag: 'hr' },
+    {
+      tag: 'div',
+      text: { tag: 'lark_md', content: `**不满意原因摘要**（字段：不满意的主要原因）` }
+    },
+    {
+      tag: 'div',
+      text: { tag: 'lark_md', content: reasonMd.slice(0, 4000) }
+    }
+  ];
+  if (kpiBlock) {
+    elements.push({ tag: 'hr' });
+    elements.push({
+      tag: 'div',
+      text: { tag: 'lark_md', content: `### 桌访经营指标\n${kpiBlock}` }
+    });
+  }
+
+  const headStore = String(storeDisplay || '').trim();
+  const headShort = headStore.length > 22 ? `${headStore.slice(0, 20)}…` : headStore;
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      template: 'orange',
+      title: { tag: 'plain_text', content: `桌访总结 · ${headShort || '门店'}` }
+    },
+    elements
+  };
+}
+
 async function buildTableVisitReply(store, text) {
   const q = String(text||'').trim(), s = String(store||'').trim();
   if (!s) return '';
@@ -1339,7 +1453,25 @@ async function buildTableVisitReply(store, text) {
       lines.push('', '────────────────', '', kpi);
     }
 
-    return lines.join('\n');
+    const storeTitle = resolveAgentCanonicalStore(s) || s;
+    const card = buildTableVisitOverviewInteractiveCard({
+      storeDisplay: storeTitle,
+      periodWord,
+      total: entries.length,
+      satisfiedCnt,
+      unsatisfiedLen: unsatisfied.length,
+      dishSorted,
+      unsatisfied,
+      badFbSorted,
+      kpiMd: kpi,
+      userQuestion: q
+    });
+
+    return {
+      kind: 'interactive',
+      card,
+      fallbackText: lines.join('\n')
+    };
   } catch(e) { return `桌访数据查询失败：${e?.message||'未知错误'}`; }
 }
 
@@ -1396,7 +1528,7 @@ async function buildClosingReportReply(store, text) {
         const submitted = dateMap[d];
         const missing = stations.filter(st => !submitted.has(st));
         if (missing.length === 0) {
-          lines.push(`\n📅 ${d}：✅ 全部已提交`);
+          lines.push(`\n📅 ${d}：✅ 全部已提交　｜　未提交档口：无`);
         } else {
           missTotal += missing.length;
           const missList = missing.map(st => {
@@ -1405,7 +1537,7 @@ async function buildClosingReportReply(store, text) {
             const uniquePeople = [...new Set(people)];
             return `${st}${uniquePeople.length ? ' ('+uniquePeople.join('/')+')' : ''}`;
           }).join('、');
-          lines.push(`\n📅 ${d}：缺失 ${missList}`);
+          lines.push(`\n📅 ${d}：缺失 ${missList}　｜　未提交档口：${missing.join('、')}`);
         }
       }
       lines.push(`\n共缺失 ${missTotal} 次收档提交`);
@@ -1420,7 +1552,7 @@ async function buildClosingReportReply(store, text) {
         const submitted = dateMap[d];
         const missing = stations.filter(st => !submitted.has(st));
         if (missing.length === 0) {
-          lines.push(`\n📅 ${d}：✅ 全部已提交`);
+          lines.push(`\n📅 ${d}：✅ 全部已提交　｜　未提交档口：无`);
         } else {
           missTotal += missing.length;
           const missList = missing.map(st => {
@@ -1429,7 +1561,7 @@ async function buildClosingReportReply(store, text) {
             const uniquePeople = [...new Set(people)];
             return `${st}${uniquePeople.length ? ' ('+uniquePeople.join('/')+')' : ''}`;
           }).join('、');
-          lines.push(`\n📅 ${d}：缺失 ${missList}`);
+          lines.push(`\n📅 ${d}：缺失 ${missList}　｜　未提交档口：${missing.join('、')}`);
         }
       }
       lines.push(`\n共缺失 ${missTotal} 次收档提交`);
@@ -1496,7 +1628,7 @@ async function buildOpeningReportReply(store, text) {
         const submitted = dateMap[d];
         const missing = stations.filter(st => !submitted.has(st));
         if (missing.length === 0) {
-          lines.push(`\n📅 ${d}：✅ 全部已提交`);
+          lines.push(`\n📅 ${d}：✅ 全部已提交　｜　未提交档口：无`);
         } else {
           missTotal += missing.length;
           const missList = missing.map(st => {
@@ -1507,13 +1639,45 @@ async function buildOpeningReportReply(store, text) {
             const uniquePeople = [...new Set(people)];
             return `${st}${uniquePeople.length ? ' ('+uniquePeople.join('/')+')' : ''}`;
           }).join('、');
-          lines.push(`\n📅 ${d}：缺失 ${missList}`);
+          lines.push(`\n📅 ${d}：缺失 ${missList}　｜　未提交档口：${missing.join('、')}`);
         }
       }
       lines.push(`\n共缺失 ${missTotal} 次开档提交`);
       return lines.join('\n');
     }
-    // Default: summary
+    // Default: per-date submission + 分布摘要（与收档展示口径对齐）
+    const datesOpen = Object.keys(dateMap).sort();
+    if (stations.length > 0 && datesOpen.length > 0) {
+      const lines = [`${p.label}开档提交情况（${s}）`, `已知岗位：${stations.join('、')}`];
+      let missTotal = 0;
+      for (const d of datesOpen) {
+        const submitted = dateMap[d];
+        const missing = stations.filter(st => !submitted.has(st));
+        if (missing.length === 0) {
+          lines.push(`\n📅 ${d}：✅ 全部已提交　｜　未提交档口：无`);
+        } else {
+          missTotal += missing.length;
+          const missList = missing.map(st => {
+            const people = rows.filter(x => {
+              const xst = ext(x.f['岗位']||x.f['档口']);
+              return xst === st;
+            }).map(x => ext(x.f['提交人']||x.f['姓名']||x.f['负责人'])).filter(Boolean);
+            const uniquePeople = [...new Set(people)];
+            return `${st}${uniquePeople.length ? ' ('+uniquePeople.join('/')+')' : ''}`;
+          }).join('、');
+          lines.push(`\n📅 ${d}：缺失 ${missList}　｜　未提交档口：${missing.join('、')}`);
+        }
+      }
+      lines.push(`\n共缺失 ${missTotal} 次开档提交`);
+      const stationTop = new Map();
+      rows.forEach(x => { const st = ext(x.f['岗位']||x.f['档口']); if (st) stationTop.set(st,(stationTop.get(st)||0)+1); });
+      const mealTop = new Map();
+      rows.forEach(x => { const m = ext(x.f['饭市']); if (m) mealTop.set(m,(mealTop.get(m)||0)+1); });
+      lines.push('', `- 开档记录：${rows.length}条`);
+      lines.push(`- 岗位分布：${topN(stationTop,5).map(([k,v])=>`${k}(${v})`).join('、')||'无'}`);
+      lines.push(`- 饭市分布：${Array.from(mealTop.entries()).map(([k,v])=>`${k}(${v})`).join('、')||'无'}`);
+      return lines.join('\n');
+    }
     const stationTop = new Map();
     rows.forEach(x => { const st = ext(x.f['岗位']||x.f['档口']); if (st) stationTop.set(st,(stationTop.get(st)||0)+1); });
     const mealTop = new Map();
@@ -1521,7 +1685,8 @@ async function buildOpeningReportReply(store, text) {
     return [`${p.label}开档报告（${s}）`,
       `- 开档记录：${rows.length}条`,
       `- 岗位分布：${topN(stationTop,5).map(([k,v])=>`${k}(${v})`).join('、')||'无'}`,
-      `- 饭市分布：${Array.from(mealTop.entries()).map(([k,v])=>`${k}(${v})`).join('、')||'无'}`
+      `- 饭市分布：${Array.from(mealTop.entries()).map(([k,v])=>`${k}(${v})`).join('、')||'无'}`,
+      `- 未提交档口：记录中缺少可对比的岗位字段，无法列出`
     ].join('\n');
   } catch(e) { return `开档报告查询失败：${e?.message||'未知错误'}`; }
 }
