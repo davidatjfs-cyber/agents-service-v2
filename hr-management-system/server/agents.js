@@ -4580,12 +4580,12 @@ function isDataNotReadyError(errText) {
 }
 
 function isFeishuInternalError(errText) {
-  return /1255001|1255002|1255003|1255004|1255005|1255040|internalerror|rpcerror|marshalerror/i.test(String(errText || ''));
+  return /1255001|1255002|1255003|1255004|1255005|1255040|feishu_code_2200|internal[\s_]?error|rpc[\s_]?error|marshal[\s_]?error/i.test(String(errText || ''));
 }
 
 function isTransientBitableError(errText) {
   const s = String(errText || '');
-  return /1254607|1255001|1255002|1255003|1255004|1255005|1255040|1254200|internalerror|rpcerror|marshalerror|data not ready|try again later|timeout|ECONNABORTED|ECONNRESET|ETIMEDOUT|socket hang up|EAI_AGAIN|429|502|503|504/i.test(s);
+  return /1254607|1255001|1255002|1255003|1255004|1255005|1255040|1254200|feishu_code_2200|internal[\s_]?error|rpc[\s_]?error|marshal[\s_]?error|data not ready|try again later|timeout|ECONNABORTED|ECONNRESET|ETIMEDOUT|socket hang up|EAI_AGAIN|429|502|503|504/i.test(s);
 }
 
 export async function getBitableRecords(configKey = 'ops_checklist', options = {}) {
