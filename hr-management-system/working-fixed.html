@@ -16717,6 +16717,28 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             event.target.value = '';
         }
         
+        /** 管理员登录后拉取 /api/health，磁盘紧张时弹窗（每日每级别最多一次） */
+        async function hrmsNotifyDiskPressureIfNeeded() {
+            try {
+                const r = await fetch('/api/health');
+                const h = await r.json().catch(() => null);
+                if (!h || !h.disk || h.disk.error) return;
+                const role = String(currentUser?.role || '').trim();
+                const priv = role === ROLES.ADMIN || role === ROLES.HQ_MANAGER || role === ROLES.HR_MANAGER;
+                if (!priv) return;
+                const lvl = String(h.disk.level || 'ok');
+                if (lvl !== 'warn' && lvl !== 'crit') return;
+                const day = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+                const key = 'hrms_disk_' + lvl + '_' + day;
+                try {
+                    if (sessionStorage.getItem(key)) return;
+                    sessionStorage.setItem(key, '1');
+                } catch (e) {}
+                const tail = `（根分区剩余约 ${h.disk.availGb} GiB / 共 ${h.disk.totalGb} GiB${h.databaseSizeGb != null ? `；当前库约 ${h.databaseSizeGb} GiB` : ''}）`;
+                showNotification(String(h.disk.message || '服务器磁盘空间紧张') + tail, lvl === 'crit' ? 'error' : 'warning');
+            } catch (e) {}
+        }
+
         // 登录函数
         async function doLogin(event) {
             event.preventDefault();
@@ -16790,6 +16812,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                 showPage(getHomePageName());
                 showNotification(`欢迎回来，${currentUser.name}！`, 'success');
                 updateDebug(`用户登录: ${currentUser.name} (${getRoleDisplayName(currentUser.role)})`);
+                try { hrmsNotifyDiskPressureIfNeeded(); } catch (e) {}
                 // 非阻塞加载角色模块和刷新
                 loadRoleModulesFromServer().catch(() => {});
                 try { refreshUnreadBadges(); } catch (e) {}
@@ -19302,65 +19325,6 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             }
         }
 
-                pdfjsLib.GlobalWorkerOptions.workerSrc = '/assets/vendor/pdfjs/pdf.worker.min.js';
-
-                const doc = await pdfjsLib.getDocument({ url: src }).promise;
-                let cur = 1;
-                const total = Math.max(1, Number(doc.numPages || 1) || 1);
-                const ctx = canvas.getContext('2d');
-
-             const renderPage = async (n) => {
-                     const pageNum = Math.max(1, Math.min(total, Number(n || 1) || 1));
-                     cur = pageNum;
-                     const page = await doc.getPage(pageNum);
-                     const wrapWidth = Math.max(320, Math.floor((canvasWrap.getBoundingClientRect?.().width || 0) - 20));
-                     const viewport1 = page.getViewport({ scale: 1 });
-                     const dpr = Math.max(1, window.devicePixelRatio || 1);
-                     const fitScale = wrapWidth > 0 ? (wrapWidth / Math.max(1, viewport1.width)) : 1.5;
-                     const renderScale = Math.max(1.0, Math.min(4.0, fitScale * dpr));
-                     const viewport = page.getViewport({ scale: renderScale });
-                     canvas.width = Math.floor(viewport.width);
-                     canvas.height = Math.floor(viewport.height);
-                     canvas.style.width = Math.floor(viewport.width / dpr) + 'px';
-                     canvas.style.height = Math.floor(viewport.height / dpr) + 'px';
-                     await page.render({ canvasContext: ctx, viewport }).promise;
-                    try {
-                        pageInfo.textContent = `第 ${cur} / ${total} 页（可翻页，或点“打开/下载”）`;
-                    } catch (e) {}
-                    try {
-                        btnPrev.disabled = cur <= 1;
-                        btnNext.disabled = cur >= total;
-                    } catch (e) {}
-                };
-
-                btnPrev.onclick = async () => {
-                    try { await renderPage(cur - 1); } catch (e) {}
-                };
-                btnNext.onclick = async () => {
-                    try { await renderPage(cur + 1); } catch (e) {}
-                };
-
-                try {
-                    btnPrev.disabled = total <= 1;
-                    btnNext.disabled = total <= 1;
-                } catch (e) {}
-
-                await renderPage(1);
-
-                done = true;
-                clearTimeout(tmr);
-                try {
-                    btnPrev.disabled = (Number(doc.numPages || 1) || 1) <= 1;
-                    btnNext.disabled = (Number(doc.numPages || 1) || 1) <= 1;
-                } catch (e) {}
-            } catch (e) {
-                console.error(e);
-                done = true;
-                clearTimeout(tmr);
-                fallbackToIframe('PDF 预览失败，已切换到内嵌打开（也可点“打开/下载”）');
-            }
-        }
-
         function kbDownloadKnowledge(itemId) {
             const id = String(itemId || '').trim();
             if (!id) return;
@@ -20001,6 +19965,21 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     chip(schedOk, '调度器', schedSub, schedTip),
                     chip(llmOk, 'LLM', '', '')
                 ];
+                if (health.disk && !health.disk.error && canBrief) {
+                    const d = health.disk;
+                    const dLvl = String(d.level || 'ok');
+                    const dOk = dLvl === 'ok' || dLvl === 'notice';
+                    const dSub = `${d.availGb}/${d.totalGb}GiB`;
+                    const dTip = d.message || '';
+                    chips.push(
+                        `<span class="dc-chip" title="${escapeHtml(dTip)}"><span class="dc-dot" style="background:${dotCol(dOk)};"></span><span>磁盘<span style="opacity:.72;font-weight:500;margin-left:4px;">${escapeHtml(dSub)}</span></span></span>`
+                    );
+                    if (health.databaseSizeGb != null) {
+                        chips.push(
+                            `<span class="dc-chip" title="PostgreSQL 当前库体积（约）"><span class="dc-dot" style="background:#22c55e;"></span><span>库<span style="opacity:.72;font-weight:500;margin-left:4px;">${escapeHtml(String(health.databaseSizeGb))}GiB</span></span></span>`
+                        );
+                    }
+                }
                 if (as && typeof as === 'object') {
                     const mp = as.mempalace;
                     const wk = as.wikiKnowledge;

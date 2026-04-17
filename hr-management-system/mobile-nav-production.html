@@ -14077,6 +14077,27 @@
             event.target.value = '';
         }
         
+        async function hrmsNotifyDiskPressureIfNeeded() {
+            try {
+                const r = await fetch('/api/health');
+                const h = await r.json().catch(() => null);
+                if (!h || !h.disk || h.disk.error) return;
+                const role = String(currentUser?.role || '').trim();
+                const priv = role === ROLES.ADMIN || role === ROLES.HQ_MANAGER || role === ROLES.HR_MANAGER;
+                if (!priv) return;
+                const lvl = String(h.disk.level || 'ok');
+                if (lvl !== 'warn' && lvl !== 'crit') return;
+                const day = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+                const key = 'hrms_disk_' + lvl + '_' + day;
+                try {
+                    if (sessionStorage.getItem(key)) return;
+                    sessionStorage.setItem(key, '1');
+                } catch (e) {}
+                const tail = `（根分区剩余约 ${h.disk.availGb} GiB / 共 ${h.disk.totalGb} GiB${h.databaseSizeGb != null ? `；当前库约 ${h.databaseSizeGb} GiB` : ''}）`;
+                showNotification(String(h.disk.message || '服务器磁盘空间紧张') + tail, lvl === 'crit' ? 'error' : 'warning');
+            } catch (e) {}
+        }
+
         // 登录函数
         async function doLogin(event) {
             event.preventDefault();
@@ -14151,6 +14172,7 @@
                 try { refreshUnreadBadges(); } catch (e) {}
                 showNotification(`欢迎回来，${currentUser.name}！`, 'success');
                 updateDebug(`用户登录: ${currentUser.name} (${getRoleDisplayName(currentUser.role)})`);
+                try { hrmsNotifyDiskPressureIfNeeded(); } catch (e) {}
             } catch (e) {
                 console.error(e);
                 const msg = String(e?.message || e);
