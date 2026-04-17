@@ -1786,30 +1786,324 @@
             color: rgba(255, 255, 255, 0.95);
         }
 
-        #flashcards-page {
+        /* —— AI 培训助手 / 自我测验：分析报表风（slate + 琥珀强调，与知识库 dc-* 一致） —— */
+        #kb-chat-modal .modal-content.kb-rpt-shell {
+            width: min(920px, calc(100% - 24px)) !important;
+            max-width: 920px !important;
+            max-height: calc(100vh - 32px) !important;
+            max-height: calc(100dvh - 32px) !important;
+            height: 85vh;
+            display: flex;
+            flex-direction: column;
+            margin: 16px auto !important;
+            background: linear-gradient(165deg, rgba(15, 23, 42, 0.98) 0%, rgba(2, 6, 23, 0.99) 42%, rgba(15, 23, 42, 0.97) 100%) !important;
+            border: 1px solid rgba(148, 163, 184, 0.14) !important;
+            border-radius: 18px !important;
+            box-shadow: 0 28px 60px -24px rgba(0, 0, 0, 0.65) !important;
+            overflow: hidden !important;
+            overflow-y: hidden !important;
+        }
+        #kb-chat-modal .kb-rpt-head {
+            flex-shrink: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 14px;
+            padding: 18px 22px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+            background: rgba(2, 6, 23, 0.55);
+        }
+        #kb-chat-modal .kb-rpt-kicker {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: rgba(245, 158, 11, 0.85);
+            margin-bottom: 6px;
+        }
+        #kb-chat-modal .kb-rpt-head h3 {
+            margin: 0;
+            font-size: 1.15rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: rgba(248, 250, 252, 0.96);
+            font-family: 'IBM Plex Sans', system-ui, sans-serif;
+        }
+        #kb-chat-modal .kb-rpt-sub {
+            margin: 8px 0 0;
+            font-size: 12px;
+            line-height: 1.5;
+            color: rgba(148, 163, 184, 0.9);
+            max-width: 36rem;
+        }
+        #kb-chat-modal .kb-rpt-close {
+            color: rgba(226, 232, 240, 0.85);
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            background: rgba(255, 255, 255, 0.04);
+        }
+        #kb-chat-modal .kb-rpt-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding: 0;
+            background: rgba(2, 6, 23, 0.35);
+        }
+        #kb-chat-modal .kb-rpt-panel {
+            padding: 14px 18px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+            background: rgba(15, 23, 42, 0.35);
+        }
+        #kb-chat-modal .kb-rpt-panel-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+        #kb-chat-modal .kb-rpt-panel-title {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            color: rgba(248, 250, 252, 0.92);
+        }
+        #kb-chat-modal .kb-rpt-hint {
+            margin-top: 4px;
+            font-size: 11px;
+            color: rgba(100, 116, 139, 0.95);
+        }
+        #kb-chat-modal .kb-rpt-panel-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        #kb-chat-modal .kb-rpt-chip {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            background: rgba(255, 255, 255, 0.04);
+            color: rgba(226, 232, 240, 0.88);
+            font-family: var(--dc-num, 'Outfit', system-ui, sans-serif);
+        }
+        #kb-chat-modal .kb-rpt-chip.kb-rpt-chip-on {
+            border-color: rgba(245, 158, 11, 0.35);
+            background: rgba(245, 158, 11, 0.12);
+            color: rgba(253, 230, 138, 0.98);
+        }
+        #kb-chat-modal .kb-rpt-btn-ghost {
+            padding: 6px 12px;
+            font-size: 12px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            color: rgba(226, 232, 240, 0.9);
+        }
+        #kb-chat-modal #kb-chat-source-container.kb-rpt-chip-scroll {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            max-height: 104px;
+            overflow-y: auto;
+            padding: 2px 0 4px;
+        }
+        #kb-chat-modal .kb-chat-source-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: border-color 0.18s ease, background 0.18s ease;
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            background: rgba(2, 6, 23, 0.4);
+            color: rgba(226, 232, 240, 0.88);
+            font-family: 'IBM Plex Sans', system-ui, sans-serif;
+        }
+        #kb-chat-modal .kb-chat-source-chip.selected {
+            border-color: rgba(245, 158, 11, 0.45);
+            background: rgba(245, 158, 11, 0.1);
+            color: rgba(253, 230, 138, 0.98);
+        }
+        #kb-chat-modal .kb-src-name {
+            max-width: min(320px, 56vw);
+            text-align: left;
+            line-height: 1.35;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            word-break: break-word;
+        }
+        #kb-chat-modal .kb-src-cat {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            color: rgba(148, 163, 184, 0.85);
+            flex-shrink: 0;
+        }
+        #kb-chat-modal #kb-chat-messages.kb-rpt-thread {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        #kb-chat-modal .kb-rpt-welcome {
+            text-align: center;
+            padding: 36px 20px;
+            border-radius: 14px;
+            border: 1px dashed rgba(148, 163, 184, 0.18);
+            background: rgba(2, 6, 23, 0.35);
+            color: rgba(148, 163, 184, 0.95);
+        }
+        #kb-chat-modal .kb-rpt-welcome .kb-rpt-welcome-title {
+            margin-top: 10px;
+            font-size: 15px;
+            font-weight: 700;
+            color: rgba(248, 250, 252, 0.94);
+        }
+        #kb-chat-modal .kb-rpt-welcome-actions {
+            margin-top: 16px;
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        #kb-chat-modal .kb-rpt-composer {
+            padding: 12px 16px;
+            border-top: 1px solid rgba(148, 163, 184, 0.12);
+            background: rgba(15, 23, 42, 0.55);
+            flex-shrink: 0;
+        }
+        #kb-chat-modal .kb-rpt-composer-inner {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+        #kb-chat-modal #kb-chat-input.kb-rpt-input {
+            flex: 1;
+            padding: 12px 14px;
+            border-radius: 12px;
+            resize: none;
+            font-size: 14px;
+            min-height: 44px;
+            max-height: 120px;
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            background: rgba(2, 6, 23, 0.55);
+            color: rgba(248, 250, 252, 0.96);
+            font-family: 'IBM Plex Sans', system-ui, sans-serif;
+        }
+        #kb-chat-modal #kb-chat-input.kb-rpt-input::placeholder {
+            color: rgba(100, 116, 139, 0.95);
+        }
+        #kb-chat-modal #kb-chat-send-btn.kb-rpt-send {
+            padding: 12px 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(245, 158, 11, 0.35);
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.95), rgba(217, 119, 6, 0.88));
+            color: #0f172a;
+            font-weight: 700;
+        }
+        #kb-chat-modal #kb-chat-status {
+            margin-top: 6px;
+            font-size: 11px;
+            color: rgba(148, 163, 184, 0.85);
+        }
+        #kb-chat-modal .kb-rpt-turn {
+            display: flex;
+        }
+        #kb-chat-modal .kb-rpt-turn-user {
+            justify-content: flex-end;
+        }
+        #kb-chat-modal .kb-rpt-turn-assistant {
+            justify-content: flex-start;
+        }
+        #kb-chat-modal .kb-rpt-bubble {
+            max-width: 82%;
+            padding: 12px 16px;
+            border-radius: 14px;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: 'IBM Plex Sans', system-ui, sans-serif;
+        }
+        #kb-chat-modal .kb-rpt-bubble-user {
+            border: 1px solid rgba(245, 158, 11, 0.28);
+            background: rgba(245, 158, 11, 0.12);
+            color: rgba(254, 249, 195, 0.98);
+        }
+        #kb-chat-modal .kb-rpt-bubble-assistant {
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            background: rgba(255, 255, 255, 0.04);
+            color: rgba(226, 232, 240, 0.94);
+        }
+
+        #knowledge-page .kb-dc-item-title {
+            font-weight: 700;
+            font-size: 14px;
+            line-height: 1.4;
+            color: rgba(248, 250, 252, 0.96);
+            white-space: normal;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            word-break: break-word;
+        }
+        #knowledge-page .kb-dc-type-pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            background: rgba(255, 255, 255, 0.04);
+            color: rgba(253, 230, 138, 0.92);
+            font-family: var(--dc-num, 'Outfit', system-ui, sans-serif);
+            margin-right: 6px;
+        }
+        #knowledge-page .kb-dc-meta-sep {
+            color: rgba(100, 116, 139, 0.85);
+            margin: 0 4px;
+        }
+
+        #flashcards-page.kb-fc-rpt {
             padding-bottom: calc(var(--mobile-bottom-safe) + env(safe-area-inset-bottom, 0px));
+            font-family: 'IBM Plex Sans', system-ui, sans-serif;
         }
 
         #flashcards-page .kb-fc-layout {
             display: grid;
-            grid-template-columns: 360px 1fr;
-            gap: 16px;
+            grid-template-columns: 340px 1fr;
+            gap: 14px;
             align-items: start;
         }
 
         #flashcards-page .kb-fc-panel {
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255,255,255,0.10);
-            border-radius: 16px;
-            padding: 16px;
+            background: rgba(15, 23, 42, 0.42);
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            border-radius: 14px;
+            padding: 14px 16px;
             backdrop-filter: blur(10px);
         }
 
         #flashcards-page .kb-fc-panel h4 {
             margin: 0 0 12px;
-            font-size: 14px;
+            font-size: 11px;
             font-weight: 800;
-            color: rgba(255,255,255,0.92);
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: rgba(148, 163, 184, 0.88);
         }
 
         #flashcards-page .kb-fc-meta {
@@ -1821,13 +2115,14 @@
         }
 
         #flashcards-page .kb-fc-badge {
-            font-size: 12px;
+            font-size: 10px;
             font-weight: 800;
-            padding: 6px 10px;
+            padding: 4px 10px;
             border-radius: 999px;
-            border: 1px solid rgba(255,255,255,0.10);
-            background: rgba(245, 158, 11, 0.14);
+            border: 1px solid rgba(245, 158, 11, 0.22);
+            background: rgba(245, 158, 11, 0.1);
             color: rgba(253, 230, 138, 0.95);
+            letter-spacing: 0.06em;
         }
 
         #flashcards-page .kb-fc-progressbar {
@@ -1845,16 +2140,16 @@
         }
 
         #flashcards-page .kb-fc-card-shell {
-            min-height: 520px;
+            min-height: 500px;
             display: flex;
             flex-direction: column;
             overflow: hidden;
         }
 
         #flashcards-page .kb-fc-card-header {
-            padding: 14px 16px;
-            border-bottom: 1px solid rgba(255,255,255,0.10);
-            background: rgba(255,255,255,0.03);
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+            background: rgba(2, 6, 23, 0.35);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -1870,24 +2165,24 @@
         }
 
         #flashcards-page .kb-fc-card-footer {
-            padding: 16px 18px;
-            border-top: 1px solid rgba(255,255,255,0.10);
-            background: rgba(0,0,0,0.16);
+            padding: 14px 16px;
+            border-top: 1px solid rgba(148, 163, 184, 0.1);
+            background: rgba(15, 23, 42, 0.45);
         }
 
         #flashcards-page .kb-fc-question {
-            font-size: 18px;
-            line-height: 1.5;
-            font-weight: 700;
-            color: rgba(255,255,255,0.92);
+            font-size: 17px;
+            line-height: 1.55;
+            font-weight: 650;
+            color: rgba(248, 250, 252, 0.95);
             word-break: break-word;
             white-space: pre-wrap;
         }
 
         #flashcards-page .kb-fc-answer {
-            font-size: 14px;
-            line-height: 1.6;
-            color: rgba(255,255,255,0.82);
+            font-size: 13px;
+            line-height: 1.65;
+            color: rgba(203, 213, 225, 0.92);
             word-break: break-word;
             white-space: pre-wrap;
         }
@@ -1896,9 +2191,46 @@
             width: 100%;
             padding: 12px 12px;
             border-radius: 12px;
-            background: rgba(255,255,255,0.06);
-            border: 1px solid rgba(255,255,255,0.10);
-            color: rgba(255,255,255,0.92);
+            background: rgba(2, 6, 23, 0.45);
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            color: rgba(248, 250, 252, 0.95);
+        }
+        #flashcards-page .kb-fc-field label {
+            display: block;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: rgba(148, 163, 184, 0.88);
+            margin-bottom: 6px;
+        }
+        #flashcards-page .kb-fc-field select,
+        #flashcards-page .kb-fc-field input[type="number"] {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            background: rgba(2, 6, 23, 0.45);
+            color: rgba(248, 250, 252, 0.95);
+            font-size: 13px;
+        }
+        #flashcards-page .kb-fc-type-row label {
+            font-size: 12px;
+            color: rgba(226, 232, 240, 0.88);
+        }
+        #flashcards-page .kb-fc-actions .btn {
+            border-radius: 10px;
+        }
+        #flashcards-page .kb-fc-actions .btn:not(.btn-secondary) {
+            border: 1px solid rgba(245, 158, 11, 0.32);
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.95), rgba(217, 119, 6, 0.88));
+            color: #0f172a;
+            font-weight: 700;
+        }
+        #flashcards-page .kb-fc-actions .btn.btn-secondary {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            color: rgba(226, 232, 240, 0.9);
         }
 
         #flashcards-page .kb-fc-actions {
@@ -1923,7 +2255,7 @@
             }
 
             /* 知识库AI对话移动端适配 */
-            #kb-chat-modal .modal-content {
+            #kb-chat-modal .modal-content.kb-rpt-shell {
                 max-width: 100% !important;
                 height: 100vh !important;
                 height: 100dvh !important;
@@ -1931,29 +2263,20 @@
                 margin: 0 !important;
             }
 
-            #kb-chat-modal .modal-header {
+            #kb-chat-modal .kb-rpt-head {
                 padding: 12px 16px !important;
             }
 
-            #kb-chat-modal #kb-chat-source {
-                min-width: 100% !important;
-                max-height: 80px;
+            #kb-chat-modal #kb-chat-source-container.kb-rpt-chip-scroll {
+                max-height: 88px;
             }
 
-            #kb-chat-modal #kb-chat-messages {
+            #kb-chat-modal #kb-chat-messages.kb-rpt-thread {
                 padding: 12px !important;
             }
 
-            #kb-chat-modal #kb-chat-input {
+            #kb-chat-modal #kb-chat-input.kb-rpt-input {
                 font-size: 16px !important; /* 防止iOS缩放 */
-                color: #111827 !important;
-                caret-color: #111827 !important;
-                background: #ffffff !important;
-            }
-
-            #kb-chat-modal #kb-chat-input::placeholder {
-                color: #6b7280 !important;
-                opacity: 1 !important;
             }
 
         }
@@ -6876,15 +7199,6 @@
             flex: 1;
             min-width: 0;
         }
-        #knowledge-page .kb-dc-item-title {
-            font-weight: 700;
-            font-size: 14px;
-            line-height: 1.35;
-            color: rgba(248,250,252,0.96);
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
         #knowledge-page .kb-dc-item-meta {
             margin-top: 4px;
             font-size: 11px;
@@ -11196,52 +11510,48 @@
 
             <!-- 知识库AI对话弹窗 -->
             <div id="kb-chat-modal" class="modal">
-                <div class="modal-content" style="max-width: 900px; height: 85vh; display: flex; flex-direction: column;">
-                    <div class="modal-header" style="background: linear-gradient(135deg, #8b5cf6, #6366f1); flex-shrink: 0;">
-                        <div>
-                            <h3 style="color: white;">🎓 AI培训助手</h3>
-                            <div style="color: rgba(255,255,255,0.8); font-size: 12px;">基于知识库内容进行智能培训问答</div>
+                <div class="modal-content kb-rpt-shell">
+                    <div class="modal-header kb-rpt-head">
+                        <div class="kb-rpt-head-text">
+                            <div class="kb-rpt-kicker">培训 Intelligence</div>
+                            <h3>AI 培训助手</h3>
+                            <p class="kb-rpt-sub">基于所选 PDF / DOCX / TXT 要点作答；视频条目无逐字稿时会提示改选可读资料。</p>
                         </div>
-                        <button class="modal-close" onclick="closeKnowledgeChatModal()" style="color: white;">×</button>
+                        <button type="button" class="modal-close kb-rpt-close" onclick="closeKnowledgeChatModal()" aria-label="关闭">×</button>
                     </div>
-                    <div class="modal-body" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 0;">
-                        <!-- 知识库选择区 -->
-                        <div style="padding: 16px; background: linear-gradient(180deg, rgba(139, 92, 246, 0.12) 0%, rgba(139, 92, 246, 0.04) 100%); border-bottom: 1px solid rgba(139, 92, 246, 0.15);">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span style="font-size: 14px; font-weight: 600; color: #8b5cf6;">📚 选择培训资料</span>
-                                    <span id="kb-chat-selected-count" style="font-size: 11px; padding: 2px 8px; background: rgba(139, 92, 246, 0.2); border-radius: 10px; color: #8b5cf6;">已选 0 项</span>
+                    <div class="modal-body kb-rpt-body">
+                        <section class="kb-rpt-panel">
+                            <div class="kb-rpt-panel-row">
+                                <div>
+                                    <div class="kb-rpt-panel-title">资料范围</div>
+                                    <div class="kb-rpt-hint">点击切换；可多选合并上下文</div>
                                 </div>
-                                <button class="btn btn-secondary" type="button" onclick="clearKnowledgeChatHistory()" style="padding: 6px 12px; font-size: 12px;">🗑️ 清空对话</button>
-                            </div>
-                            <div id="kb-chat-source-container" style="display: flex; flex-wrap: wrap; gap: 8px; max-height: 100px; overflow-y: auto; padding: 4px 0;"></div>
-                            <div style="margin-top: 8px; font-size: 11px; color: #888;">💡 点击选择资料，AI将基于所选内容进行培训问答</div>
-                        </div>
-                        
-                        <!-- 对话区域 -->
-                        <div id="kb-chat-messages" style="flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
-                            <div class="kb-chat-welcome" style="text-align: center; padding: 40px 20px; color: #888;">
-                                <div style="font-size: 48px; margin-bottom: 16px;">🎓</div>
-                                <div style="font-size: 16px; font-weight: 600; color: #666;">欢迎使用AI培训助手</div>
-                                <div style="margin-top: 8px; font-size: 13px;">选择培训资料后，可以向我提问任何相关问题</div>
-                                <div style="margin-top: 16px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
-                                    <button class="btn btn-secondary" style="font-size: 12px; padding: 8px 12px;" onclick="insertKbChatSuggestion('请总结这份资料的主要内容')">📝 总结内容</button>
-                                    <button class="btn btn-secondary" style="font-size: 12px; padding: 8px 12px;" onclick="insertKbChatSuggestion('这份资料的关键要点有哪些？')">🎯 关键要点</button>
-                                    <button class="btn btn-secondary" style="font-size: 12px; padding: 8px 12px;" onclick="insertKbChatSuggestion('帮我出几道测试题检验学习效果')">📋 出测试题</button>
+                                <div class="kb-rpt-panel-actions">
+                                    <span id="kb-chat-selected-count" class="kb-rpt-chip">已选 0 项</span>
+                                    <button class="btn btn-secondary kb-rpt-btn-ghost" type="button" onclick="clearKnowledgeChatHistory()">清空对话</button>
                                 </div>
                             </div>
-                        </div>
-                        
-                        <!-- 输入区域 -->
-                        <div style="padding: 12px 16px; border-top: 1px solid #eee; background: #fafafa; flex-shrink: 0;">
-                            <div style="display: flex; gap: 10px; align-items: flex-end;">
-                                <textarea id="kb-chat-input" placeholder="输入您的问题..." style="flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 12px; resize: none; font-size: 14px; min-height: 44px; max-height: 120px;" rows="1" onkeydown="handleKbChatKeydown(event)"></textarea>
-                                <button class="btn" id="kb-chat-send-btn" onclick="sendKnowledgeChatMessage()" style="padding: 12px 20px; background: linear-gradient(135deg, #8b5cf6, #6366f1);">
-                                    发送
-                                </button>
+                            <div id="kb-chat-source-container" class="kb-rpt-chip-scroll"></div>
+                        </section>
+                        <div id="kb-chat-messages" class="kb-rpt-thread">
+                            <div class="kb-rpt-welcome kb-chat-welcome">
+                                <div style="font-size: 40px; line-height: 1; opacity: 0.9;">🎓</div>
+                                <div class="kb-rpt-welcome-title">欢迎使用 AI 培训助手</div>
+                                <div style="margin-top: 8px; font-size: 13px;">选择资料后提问；建议先用快捷指令建立上下文。</div>
+                                <div class="kb-rpt-welcome-actions">
+                                    <button class="btn btn-secondary kb-rpt-btn-ghost" type="button" onclick="insertKbChatSuggestion('请总结这份资料的主要内容')">总结内容</button>
+                                    <button class="btn btn-secondary kb-rpt-btn-ghost" type="button" onclick="insertKbChatSuggestion('这份资料的关键要点有哪些？')">关键要点</button>
+                                    <button class="btn btn-secondary kb-rpt-btn-ghost" type="button" onclick="insertKbChatSuggestion('帮我出几道测试题检验学习效果')">出测试题</button>
+                                </div>
                             </div>
-                            <div id="kb-chat-status" style="margin-top: 6px; font-size: 11px; color: #999;"></div>
                         </div>
+                        <footer class="kb-rpt-composer">
+                            <div class="kb-rpt-composer-inner">
+                                <textarea id="kb-chat-input" class="kb-rpt-input" placeholder="输入您的问题…" rows="1" onkeydown="handleKbChatKeydown(event)"></textarea>
+                                <button type="button" class="btn kb-rpt-send" id="kb-chat-send-btn" onclick="sendKnowledgeChatMessage()">发送</button>
+                            </div>
+                            <div id="kb-chat-status"></div>
+                        </footer>
                     </div>
                 </div>
             </div>
@@ -11320,7 +11630,7 @@
                 </div>
             </div>
 
-            <div id="flashcards-page" class="hidden">
+            <div id="flashcards-page" class="hidden kb-fc-rpt">
                 <div class="page-header" style="margin-bottom: 14px;">
                     <h2>自我测验</h2>
                     <div style="display:flex; gap:10px;">
@@ -11329,53 +11639,53 @@
                 </div>
                 <div class="kb-fc-layout">
                     <aside class="kb-fc-panel">
-                        <h4>配置选项</h4>
-                        <div class="form-group" style="margin-bottom: 15px;">
-                            <label style="color: #666; font-size: 12px;">选择知识资料</label>
-                            <select id="kb-fc-source" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px;"></select>
-                            <div style="margin-top: 8px; color:#999; font-size: 12px;">仅 PDF/DOCX/TXT 支持生成闪卡。</div>
+                        <h4>测验配置</h4>
+                        <div class="form-group kb-fc-field" style="margin-bottom: 15px;">
+                            <label>知识资料</label>
+                            <select id="kb-fc-source"></select>
+                            <div style="margin-top: 8px; color:rgba(148,163,184,0.9); font-size: 12px;">仅 PDF / DOCX / TXT 可生成题目。</div>
                         </div>
 
                         <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                            <div class="form-group" style="margin-bottom: 0;">
-                                <label style="color: #666; font-size: 12px;">题目数量</label>
-                                <input id="kb-fc-count" type="number" min="5" max="80" value="20" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px;">
+                            <div class="form-group kb-fc-field" style="margin-bottom: 0;">
+                                <label>题目数量</label>
+                                <input id="kb-fc-count" type="number" min="5" max="80" value="20">
                             </div>
-                            <div class="form-group" style="margin-bottom: 0;">
-                                <label style="color: #666; font-size: 12px;">练习模式</label>
-                                <select id="kb-fc-mode" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px;">
+                            <div class="form-group kb-fc-field" style="margin-bottom: 0;">
+                                <label>练习模式</label>
+                                <select id="kb-fc-mode">
                                     <option value="all" selected>随机练习</option>
                                     <option value="wrong">错题回顾</option>
                                 </select>
                             </div>
                         </div>
 
-                        <div style="margin-top: 12px;">
-                            <label style="color: #666; font-size: 12px;">题型设置</label>
-                            <div style="margin-top: 8px; display:flex; gap: 8px; flex-wrap: wrap;">
-                                <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:rgba(226,232,240,0.9);"><input id="kb-fc-type-single" type="checkbox" checked> 单选</label>
-                                <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:rgba(226,232,240,0.9);"><input id="kb-fc-type-tf" type="checkbox" checked> 判断</label>
-                                <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:rgba(226,232,240,0.9);"><input id="kb-fc-type-blank" type="checkbox" checked> 填空</label>
+                        <div class="kb-fc-field" style="margin-top: 12px;">
+                            <label>题型</label>
+                            <div class="kb-fc-type-row" style="margin-top: 8px; display:flex; gap: 10px; flex-wrap: wrap;">
+                                <label><input id="kb-fc-type-single" type="checkbox" checked> 单选</label>
+                                <label><input id="kb-fc-type-tf" type="checkbox" checked> 判断</label>
+                                <label><input id="kb-fc-type-blank" type="checkbox" checked> 填空</label>
                             </div>
                         </div>
 
-                        <div style="margin-top: 12px; display:flex; gap: 10px; flex-wrap: wrap;">
+                        <div class="kb-fc-actions" style="margin-top: 14px;">
                             <button class="btn" type="button" onclick="generateKnowledgeFlashcards()">生成题目</button>
                             <button class="btn btn-secondary" type="button" onclick="startKnowledgeFlashcards()">开始练习</button>
                             <button class="btn btn-secondary" type="button" onclick="resetKnowledgeFlashcardsProgress()">重置进度</button>
                         </div>
 
-                        <div id="kb-fc-status" style="margin-top: 12px; color:#777; font-size: 12px;"></div>
+                        <div id="kb-fc-status" style="margin-top: 12px; color:rgba(148,163,184,0.9); font-size: 12px;"></div>
 
-                        <div class="kb-fc-panel" style="margin-top: 12px; padding: 12px;">
+                        <div class="kb-fc-panel" style="margin-top: 12px;">
                             <div class="kb-fc-meta">
                                 <span class="kb-fc-badge">练习统计</span>
-                                <span id="kb-fc-session-stats" style="font-size: 12px; color: rgba(255,255,255,0.75);">答题 0 · 正确率 0%</span>
+                                <span id="kb-fc-session-stats" style="font-size: 12px; color: rgba(226,232,240,0.82);">答题 0 · 正确率 0%</span>
                             </div>
                             <div class="kb-fc-progressbar" style="margin-top: 10px;"><div></div></div>
                         </div>
 
-                        <div class="kb-fc-panel" style="margin-top: 12px; padding: 12px;">
+                        <div class="kb-fc-panel" style="margin-top: 12px;">
                             <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
                                 <span class="kb-fc-badge">历史记录</span>
                                 <button class="btn btn-secondary" type="button" style="padding: 6px 10px; font-size: 12px;" onclick="clearKnowledgeFlashcardHistory()">清空</button>
@@ -11387,7 +11697,7 @@
                     <main class="kb-fc-panel kb-fc-card-shell">
                         <div class="kb-fc-card-header">
                             <div style="display:flex; gap: 12px; align-items:center; flex-wrap: wrap;">
-                                <div id="kb-fc-progress" style="color: rgba(255,255,255,0.68); font-size: 12px;"></div>
+                                <div id="kb-fc-progress" style="color: rgba(148,163,184,0.9); font-size: 12px;"></div>
                             </div>
                             <button class="btn btn-secondary" type="button" onclick="flipKnowledgeFlashcard()">翻面</button>
                         </div>
@@ -11402,12 +11712,12 @@
                                     <div id="kb-fc-input-box" style="display:none; margin-top: 10px;">
                                         <input id="kb-fc-input" class="kb-fc-input" type="text" placeholder="输入你的答案">
                                     </div>
-                                    <div id="kb-fc-judge" style="margin-top: 10px; color:#666; font-size: 12px;"></div>
+                                    <div id="kb-fc-judge" style="margin-top: 10px; color:rgba(148,163,184,0.9); font-size: 12px;"></div>
                                 </div>
                             </div>
 
-                            <div id="kb-fc-empty" style="display:block; color: rgba(255,255,255,0.72); font-size: 13px; padding: 10px 2px;">
-                                请先点击“生成题目”，然后点击“开始练习”。
+                            <div id="kb-fc-empty" style="display:block; color: rgba(148,163,184,0.92); font-size: 13px; padding: 10px 2px;">
+                                请先生成题目，再开始练习。
                             </div>
                         </div>
 
@@ -11933,7 +12243,6 @@
                         <div class="kb-dc-viewer-head">
                             <h3>👁️ 查看内容</h3>
                             <div class="kb-dc-viewer-actions">
-                                <button class="btn btn-secondary" id="knowledge-download-btn" type="button" style="display:none;">⬇️ 下载</button>
                                 <button class="btn btn-danger" id="knowledge-delete-btn" type="button" style="display:none;">🗑️ 删除</button>
                                 <button class="btn btn-secondary" id="knowledge-back-btn" type="button" onclick="kbBackToList()" style="display:none;">← 返回</button>
                             </div>
@@ -11947,8 +12256,6 @@
                         <div id="knowledge-viewer-body" class="kb-dc-viewer-body"></div>
                         <div id="knowledge-viewer-toolbar" class="kb-dc-bottom-bar">
                             <button class="btn btn-secondary" id="kb-toolbar-back" type="button">返回</button>
-                            <button class="btn" id="kb-toolbar-open" type="button">打开</button>
-                            <button class="btn btn-secondary" id="kb-toolbar-download" type="button">下载</button>
                             <button class="btn btn-danger" id="kb-toolbar-delete" type="button" style="display:none;">删除</button>
                         </div>
                     </div>
@@ -20247,14 +20554,12 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             const hint = document.getElementById('knowledge-viewer-hint');
             const body = document.getElementById('knowledge-viewer-body');
             const backBtn = document.getElementById('knowledge-back-btn');
-            const downloadBtn = document.getElementById('knowledge-download-btn');
             if (header) header.style.display = 'none';
             if (title) title.textContent = '';
             if (meta) meta.textContent = '';
             if (hint) hint.style.display = '';
             if (body) body.innerHTML = '';
             if (backBtn) backBtn.style.display = 'none';
-            if (downloadBtn) downloadBtn.style.display = 'none';
 
             try {
                 const tb = document.getElementById('knowledge-viewer-toolbar');
@@ -20341,30 +20646,10 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             pageInfo.className = 'kb-pdf-page-indicator';
             pageInfo.textContent = 'PDF 加载中...';
 
-            const openBtn = document.createElement('a');
-            openBtn.className = 'btn btn-secondary';
-            openBtn.textContent = '打开/下载';
-            openBtn.href = src;
-            openBtn.target = '_blank';
-            openBtn.rel = 'noopener noreferrer';
-
-            const downloadBtn = document.createElement('a');
-            downloadBtn.className = 'btn';
-            downloadBtn.textContent = '下载';
-            downloadBtn.href = src;
-            downloadBtn.target = '_blank';
-            downloadBtn.rel = 'noopener noreferrer';
-            try { downloadBtn.download = 'knowledge.pdf'; } catch (e) {}
-
             left.appendChild(btnPrev);
             left.appendChild(pageInfo);
             left.appendChild(btnNext);
             toolbar.appendChild(left);
-            const right = document.createElement('div');
-            right.style.cssText = 'display:flex;gap:10px;align-items:center;';
-            right.appendChild(openBtn);
-            right.appendChild(downloadBtn);
-            toolbar.appendChild(right);
 
             const canvasWrap = document.createElement('div');
             canvasWrap.className = 'kb-pdf-canvas-wrap';
@@ -20460,50 +20745,6 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             }
         }
 
-        function kbDownloadKnowledge(itemId) {
-            const id = String(itemId || '').trim();
-            if (!id) return;
-            const items = HRMS_STORE.getKnowledge();
-            const item = (items || []).find(x => String(x?.id || '') === id);
-            if (!item) {
-                showNotification('未找到资料', 'error');
-                return;
-            }
-            if (!isAdminUser() && !knowledgeItemMatchesUser(item, currentUser)) {
-                showNotification('无权限查看该资料', 'warning');
-                return;
-            }
-
-            const base = String(HRMS_API.baseUrl() || window.location?.origin || '').replace(/\/$/, '');
-            const token = String(HRMS_API.token() || '').trim();
-            if (!token) {
-                showNotification('登录已失效，请重新登录后再下载', 'warning');
-                return;
-            }
-            const src = `${base}/api/knowledge/${encodeURIComponent(id)}/file?token=${encodeURIComponent(token)}`;
-
-            if (!src) {
-                showNotification('无法生成文件访问链接，请重新登录后重试。', 'warning');
-                return;
-            }
-
-            try {
-                const a = document.createElement('a');
-                a.href = src;
-                a.target = '_blank';
-                a.rel = 'noopener';
-                try {
-                    const fn = String(item?.fileName || item?.title || 'download');
-                    a.download = fn;
-                } catch (e) {}
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-            } catch (e) {
-                try { window.open(src, '_blank', 'noopener'); } catch (e2) {}
-            }
-        }
-
         function openKnowledgeItem(itemId) {
             const id = String(itemId || '').trim();
             if (!id) return;
@@ -20529,18 +20770,12 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             const hint = document.getElementById('knowledge-viewer-hint');
             const body = document.getElementById('knowledge-viewer-body');
             const backBtn = document.getElementById('knowledge-back-btn');
-            const downloadBtn = document.getElementById('knowledge-download-btn');
-
             try {
                 const tb = document.getElementById('knowledge-viewer-toolbar');
                 const btnBack = document.getElementById('kb-toolbar-back');
-                const btnOpen = document.getElementById('kb-toolbar-open');
-                const btnDownload = document.getElementById('kb-toolbar-download');
                 const btnDel = document.getElementById('kb-toolbar-delete');
                 if (tb) tb.style.display = '';
                 if (btnBack) btnBack.onclick = () => kbBackToList();
-                if (btnOpen) btnOpen.onclick = () => kbOpenKnowledgeInNewTab(id);
-                if (btnDownload) btnDownload.onclick = () => kbDownloadKnowledge(id);
                 if (btnDel) {
                     if (isAdminUser()) {
                         btnDel.style.display = '';
@@ -20553,10 +20788,6 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
 
             if (header) header.style.display = '';
             if (backBtn) backBtn.style.display = '';
-            if (downloadBtn) {
-                downloadBtn.style.display = '';
-                downloadBtn.onclick = () => kbDownloadKnowledge(id);
-            }
             if (hint) hint.style.display = 'none';
             if (title) title.textContent = String(item.title || '');
             if (meta) {
@@ -20630,50 +20861,6 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             docFrame.className = 'kb-doc-frame';
             docFrame.src = src;
             body.appendChild(docFrame);
-        }
-
-        function kbOpenKnowledgeInNewTab(itemId) {
-            const id = String(itemId || '').trim();
-            if (!id) return;
-            const items = HRMS_STORE.getKnowledge();
-            const item = (items || []).find(x => String(x?.id || '') === id);
-            if (!item) {
-                showNotification('未找到资料', 'error');
-                return;
-            }
-            if (!isAdminUser() && !knowledgeItemMatchesUser(item, currentUser)) {
-                showNotification('无权限查看该资料', 'warning');
-                return;
-            }
-
-            const base = String(HRMS_API.baseUrl() || window.location?.origin || '').replace(/\/$/, '');
-            const token = String(HRMS_API.token() || '').trim();
-            if (!token) {
-                showNotification('登录已失效，请重新登录后再打开', 'warning');
-                return;
-            }
-            const src = `${base}/api/knowledge/${encodeURIComponent(id)}/file?token=${encodeURIComponent(token)}`;
-
-            if (!src) {
-                showNotification('无法生成文件访问链接，请重新登录后重试。', 'warning');
-                return;
-            }
-
-            try {
-                window.open(src, '_blank', 'noopener');
-            } catch (e) {
-                try {
-                    const a = document.createElement('a');
-                    a.href = src;
-                    a.target = '_blank';
-                    a.rel = 'noopener';
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                } catch (e2) {
-                    showNotification('打开失败', 'error');
-                }
-            }
         }
 
         function renderBiSourcePresetDatalist() {
@@ -20907,15 +21094,14 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 const t = String(it?.type || 'doc');
                 const badge = t === 'video' ? '视频' : (t === 'pdf' ? 'PDF' : (t === 'img' ? '图片' : '文档'));
                 const icon = t === 'video' ? '🎬' : (t === 'pdf' ? '📄' : (t === 'img' ? '🖼️' : '📝'));
-                const meta = [String(it?.category || ''), it?.size ? formatFileSize(it.size) : ''].filter(Boolean).join(' · ');
+                const metaRest = [String(it?.category || ''), it?.size ? formatFileSize(it.size) : ''].filter(Boolean).join(' · ');
                 return `
                     <div class="kb-dc-item" onclick="openKnowledgeItem('${escapeHtml(id)}')">
                         <div class="kb-dc-item-icon" data-type="${escapeHtml(t)}">${icon}</div>
                         <div class="kb-dc-item-body">
                             <div class="kb-dc-item-title">${escapeHtml(String(it?.title || ''))}</div>
-                            <div class="kb-dc-item-meta">${escapeHtml(meta)}</div>
+                            <div class="kb-dc-item-meta"><span class="kb-dc-type-pill">${escapeHtml(badge)}</span>${metaRest ? `<span class="kb-dc-meta-sep">·</span>${escapeHtml(metaRest)}` : ''}</div>
                         </div>
-                        <div class="kb-dc-item-badge">${escapeHtml(badge)}</div>
                     </div>
                 `;
             }).join('');
@@ -20936,9 +21122,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                                 <div class="kb-dc-item-icon" data-type="${escapeHtml(t)}">${icon}</div>
                                 <div class="kb-dc-item-body">
                                     <div class="kb-dc-item-title">${escapeHtml(title)}</div>
-                                    <div class="kb-dc-item-meta">${escapeHtml(category)} · ${escapeHtml(size)} · ${escapeHtml(createdAt)}</div>
+                                    <div class="kb-dc-item-meta"><span class="kb-dc-type-pill">${escapeHtml(badge)}</span><span class="kb-dc-meta-sep">·</span>${escapeHtml(category)} · ${escapeHtml(size)} · ${escapeHtml(createdAt)}</div>
                                 </div>
-                                <div class="kb-dc-item-badge">${escapeHtml(badge)}</div>
                             </div>
                         `;
                     }).join('');
@@ -20996,8 +21181,9 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                             brandId: String(brandRef.brandId || 'all'),
                             brandName: String(brandRef.brandName || '全部品牌'),
                             audience: { type: 'all' },
-                            fileId: filePath,
-                            fileName: filePath,
+                            // file_path 是磁盘路径，不是 IndexedDB 的 fileId；留空避免 readKnowledgeItemBlob 误查库
+                            fileId: '',
+                            fileName: String(r?.title || filePath || ''),
                             mimeType: String(r?.file_type || ''),
                             size: Number(r?.file_size || 0),
                             createdAt,
@@ -22193,13 +22379,10 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 const name = it.title || it.name || '未命名';
                 const isSelected = kbChatSelectedSources.has(it.id);
                 const typeIcon = it.type === 'pdf' ? '📄' : it.type === 'doc' ? '📝' : '📃';
-                return `<button type="button" class="kb-chat-source-chip ${isSelected ? 'selected' : ''}" 
-                    data-id="${escapeHtml(it.id)}" 
-                    onclick="toggleKbChatSource('${escapeHtml(it.id)}')"
-                    style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 20px; font-size: 12px; cursor: pointer; transition: all 0.2s; border: 1px solid ${isSelected ? '#8b5cf6' : 'rgba(139, 92, 246, 0.3)'}; background: ${isSelected ? 'rgba(139, 92, 246, 0.2)' : 'rgba(255,255,255,0.05)'}; color: ${isSelected ? '#8b5cf6' : '#aaa'};">
-                    <span>${typeIcon}</span>
-                    <span style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(name)}</span>
-                    <span style="font-size: 10px; opacity: 0.7;">${escapeHtml(cat)}</span>
+                return `<button type="button" class="kb-chat-source-chip ${isSelected ? 'selected' : ''}" data-id="${escapeHtml(it.id)}" onclick="toggleKbChatSource('${escapeHtml(it.id)}')">
+                    <span class="kb-src-ic" aria-hidden="true">${typeIcon}</span>
+                    <span class="kb-src-name">${escapeHtml(name)}</span>
+                    <span class="kb-src-cat">${escapeHtml(cat)}</span>
                 </button>`;
             }).join('');
 
@@ -22220,8 +22403,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             if (countEl) {
                 const count = kbChatSelectedSources.size;
                 countEl.textContent = `已选 ${count} 项`;
-                countEl.style.background = count > 0 ? 'rgba(34, 197, 94, 0.2)' : 'rgba(139, 92, 246, 0.2)';
-                countEl.style.color = count > 0 ? '#22c55e' : '#8b5cf6';
+                countEl.classList.toggle('kb-rpt-chip-on', count > 0);
             }
         }
 
@@ -22249,14 +22431,14 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             const messagesEl = document.getElementById('kb-chat-messages');
             if (messagesEl) {
                 messagesEl.innerHTML = `
-                    <div class="kb-chat-welcome" style="text-align: center; padding: 40px 20px; color: #888;">
-                        <div style="font-size: 48px; margin-bottom: 16px;">🎓</div>
-                        <div style="font-size: 16px; font-weight: 600; color: #666;">欢迎使用AI培训助手</div>
-                        <div style="margin-top: 8px; font-size: 13px;">选择培训资料后，可以向我提问任何相关问题</div>
-                        <div style="margin-top: 16px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
-                            <button class="btn btn-secondary" style="font-size: 12px; padding: 8px 12px;" onclick="insertKbChatSuggestion('请总结这份资料的主要内容')">📝 总结内容</button>
-                            <button class="btn btn-secondary" style="font-size: 12px; padding: 8px 12px;" onclick="insertKbChatSuggestion('这份资料的关键要点有哪些？')">🎯 关键要点</button>
-                            <button class="btn btn-secondary" style="font-size: 12px; padding: 8px 12px;" onclick="insertKbChatSuggestion('帮我出几道测试题检验学习效果')">📋 出测试题</button>
+                    <div class="kb-rpt-welcome kb-chat-welcome">
+                        <div style="font-size: 40px; line-height: 1; opacity: 0.9;">🎓</div>
+                        <div class="kb-rpt-welcome-title">欢迎使用 AI 培训助手</div>
+                        <div style="margin-top: 8px; font-size: 13px;">选择资料后提问；建议先用快捷指令建立上下文。</div>
+                        <div class="kb-rpt-welcome-actions">
+                            <button type="button" class="btn btn-secondary kb-rpt-btn-ghost" onclick="insertKbChatSuggestion('请总结这份资料的主要内容')">总结内容</button>
+                            <button type="button" class="btn btn-secondary kb-rpt-btn-ghost" onclick="insertKbChatSuggestion('这份资料的关键要点有哪些？')">关键要点</button>
+                            <button type="button" class="btn btn-secondary kb-rpt-btn-ghost" onclick="insertKbChatSuggestion('帮我出几道测试题检验学习效果')">出测试题</button>
                         </div>
                     </div>
                 `;
@@ -22273,15 +22455,10 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             if (welcome) welcome.remove();
 
             const msgDiv = document.createElement('div');
-            msgDiv.style.cssText = role === 'user' 
-                ? 'display: flex; justify-content: flex-end;'
-                : 'display: flex; justify-content: flex-start;';
+            msgDiv.className = 'kb-rpt-turn kb-rpt-turn-' + (role === 'user' ? 'user' : 'assistant');
 
             const bubble = document.createElement('div');
-            bubble.style.cssText = role === 'user'
-                ? 'max-width: 80%; padding: 12px 16px; border-radius: 18px 18px 4px 18px; background: linear-gradient(135deg, #8b5cf6, #6366f1); color: white; font-size: 14px; line-height: 1.6; white-space: pre-wrap;'
-                : 'max-width: 80%; padding: 12px 16px; border-radius: 18px 18px 18px 4px; background: #f3f4f6; color: #333; font-size: 14px; line-height: 1.6; white-space: pre-wrap;';
-            
+            bubble.className = 'kb-rpt-bubble kb-rpt-bubble-' + (role === 'user' ? 'user' : 'assistant');
             bubble.textContent = content;
             msgDiv.appendChild(bubble);
             messagesEl.appendChild(msgDiv);
@@ -22297,42 +22474,17 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             let combinedText = '';
 
             for (const id of itemIds) {
-                const item = items.find(it => it.id === id);
+                const item = items.find(it => String(it.id) === String(id));
                 if (!item) continue;
-
                 try {
-                    const blob = await readKnowledgeItemBlob(item);
-                    if (!blob) continue;
-
                     const type = String(item.type || '').toLowerCase();
-                    let text = '';
-
-                    if (type === 'txt') {
-                        text = await blob.text();
-                    } else if (type === 'pdf') {
-                        const ok = await ensurePdfJsLoaded();
-                        if (ok && typeof pdfjsLib !== 'undefined') {
-                            pdfjsLib.GlobalWorkerOptions.workerSrc = '/assets/vendor/pdfjs/pdf.worker.min.js';
-                            const arrayBuffer = await blob.arrayBuffer();
-                            const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-                            const pages = [];
-                            for (let i = 1; i <= Math.min(doc.numPages, 50); i++) {
-                                const page = await doc.getPage(i);
-                                const content = await page.getTextContent();
-                                pages.push(content.items.map(x => x.str).join(' '));
-                            }
-                            text = pages.join('\n\n');
-                        }
-                    } else if (type === 'doc') {
-                        if (typeof mammoth !== 'undefined') {
-                            const arrayBuffer = await blob.arrayBuffer();
-                            const result = await mammoth.extractRawText({ arrayBuffer });
-                            text = result.value || '';
-                        }
+                    if (type === 'video') {
+                        combinedText += `\n\n【${item.title || item.name || '视频资料'}】\n（该条目为视频文件，暂无逐字文本；请改选 PDF/DOCX/TXT 进行深度问答。）`;
+                        continue;
                     }
-
-                    if (text.trim()) {
-                        combinedText += `\n\n【${item.title || item.name || '资料'}】\n${text.slice(0, 15000)}`;
+                    const text = await extractTextFromKnowledgeItem(item);
+                    if (text && String(text).trim()) {
+                        combinedText += `\n\n【${item.title || item.name || '资料'}】\n${String(text).slice(0, 15000)}`;
                     }
                 } catch (e) {
                     console.error('读取知识库内容失败:', e);
@@ -22408,62 +22560,19 @@ ${knowledgeContent.slice(0, 30000)}`;
         }
 
         async function callKnowledgeChatAPI(systemPrompt, history) {
-            // 使用系统LLM配置（自动使用预设或用户配置）
-            const llm = getEffectiveLlmConfig();
-            const baseUrl = llm.baseUrl;
-            const apiKey = llm.apiKey;
-            const model = llm.model;
-            
-            if (baseUrl && apiKey) {
-                try {
-                    const messages = [
-                        { role: 'system', content: systemPrompt },
-                        ...history.slice(-10) // 保留最近10条对话
-                    ];
-
-                    const data = await callLlmViaServer(messages, { max_tokens: 2000, temperature: 0.7 });
-                    return data.choices?.[0]?.message?.content || '无法获取回复';
-                } catch (e) {
-                    console.error('AI API调用失败:', e);
-                    // 如果API失败，回退到本地模式
-                    return generateLocalKnowledgeResponse(systemPrompt, history) + '\n\n（注：AI API调用失败，已使用本地关键词匹配）';
-                }
+            // 与闪卡/系统其它 AI 一致：统一走服务端 /api/ai/chat-completions（DeepSeek 等由系统预设或设置页配置）
+            const messages = [
+                { role: 'system', content: systemPrompt },
+                ...history.slice(-10)
+            ];
+            try {
+                const data = await callLlmViaServer(messages, { max_tokens: 2200, temperature: 0.35 });
+                return data.choices?.[0]?.message?.content || '无法获取回复';
+            } catch (e) {
+                console.error('AI API调用失败:', e);
+                const hint = String(e?.message || e || '');
+                throw new Error(`AI 服务不可用（${hint || '请检查网络与系统设置中的 LLM'}）。培训助手需使用云端大模型，请确认已配置有效 API。`);
             }
-
-            // 如果没有配置API，使用本地模拟回复
-            return generateLocalKnowledgeResponse(systemPrompt, history);
-        }
-
-        function generateLocalKnowledgeResponse(systemPrompt, history) {
-            const lastQuestion = history[history.length - 1]?.content || '';
-            const knowledgeContent = systemPrompt.split('【知识库内容】')[1] || '';
-            
-            // 简单的关键词匹配回复
-            const keywords = lastQuestion.split(/[\s，。？！、]+/).filter(w => w.length > 1);
-            const relevantSentences = [];
-            
-            const sentences = knowledgeContent.split(/[。！？\n]+/).filter(s => s.trim().length > 10);
-            
-            for (const sentence of sentences) {
-                for (const keyword of keywords) {
-                    if (sentence.includes(keyword)) {
-                        relevantSentences.push(sentence.trim());
-                        break;
-                    }
-                }
-                if (relevantSentences.length >= 5) break;
-            }
-
-            if (relevantSentences.length > 0) {
-                return `根据知识库内容，以下是相关信息：\n\n${relevantSentences.map((s, i) => `${i + 1}. ${s}`).join('\n\n')}\n\n如需更详细的解答，建议配置AI API以获得更智能的回复。`;
-            }
-
-            if (lastQuestion.includes('总结') || lastQuestion.includes('概述')) {
-                const preview = sentences.slice(0, 3).join('。');
-                return `根据知识库内容概述：\n\n${preview}...\n\n如需更完整的总结，建议配置AI API。`;
-            }
-
-            return `抱歉，我在知识库中没有找到与"${lastQuestion}"直接相关的内容。\n\n您可以尝试：\n1. 换一种方式提问\n2. 选择其他知识资料\n3. 配置AI API以获得更智能的回答`;
         }
 
         let __BRANDS_CACHE = [];
@@ -24240,18 +24349,21 @@ ${knowledgeContent.slice(0, 30000)}`;
         }
 
         async function readKnowledgeItemBlob(item) {
-            const fileId = item?.fileId;
-            if (!fileId) return null;
-            try {
-                const row = await HRMS_FILE_DB.getFile(fileId);
-                if (row?.blob) return row.blob;
-            } catch (e) {}
-            try {
-                await new Promise(r => setTimeout(r, 120));
-                const row2 = await HRMS_FILE_DB.getFile(fileId);
-                if (row2?.blob) return row2.blob;
-            } catch (e) {
-                // fallthrough to cloud fetch
+            const rawKey = item?.fileId;
+            // PG 同步项把 file_path 误塞进 fileId 时，IndexedDB 查不到；应走下方 /api/knowledge/:id/file
+            const blobDbKey = rawKey && !String(rawKey).includes('/') && !String(rawKey).includes('\\')
+                ? String(rawKey).trim()
+                : '';
+            if (blobDbKey) {
+                try {
+                    const row = await HRMS_FILE_DB.getFile(blobDbKey);
+                    if (row?.blob) return row.blob;
+                } catch (e) {}
+                try {
+                    await new Promise(r => setTimeout(r, 120));
+                    const row2 = await HRMS_FILE_DB.getFile(blobDbKey);
+                    if (row2?.blob) return row2.blob;
+                } catch (e) {}
             }
 
             try {
@@ -24267,7 +24379,6 @@ ${knowledgeContent.slice(0, 30000)}`;
             }
 
             try {
-                if (String(item?.source || '') !== 'cloud') return null;
                 const id = String(item?.id || '').trim();
                 if (!id) return null;
                 const baseUrl = String(HRMS_API.baseUrl() || '').replace(/\/$/, '');
@@ -24387,176 +24498,21 @@ ${knowledgeContent.slice(0, 30000)}`;
             return '';
         }
 
-        function ruleBasedGenerateFlashcards(text, count) {
-            const max = Math.min(80, Math.max(5, Number(count || 20)));
-            const seed = hrmsMakeRunSeed('flash_rule');
-            const rng = hrmsSeededRng(seed);
-            const raw = String(text || '');
-            const cleaned = raw
-                .replace(/\r/g, '\n')
-                .replace(/[ \t\f\v]+/g, ' ')
-                .replace(/\n{3,}/g, '\n\n')
-                .trim();
-
-            const lines = cleaned.split(/\n+/).map(s => String(s || '').trim()).filter(Boolean);
-            const sentenceCandidates = [];
-            for (let i = 0; i < lines.length; i += 1) {
-                const line = lines[i];
-                if (!line) continue;
-                if (/^(第\s*\d+\s*(页|章|节)|目录|目\s*录|contents|table\s*of\s*contents)/i.test(line)) continue;
-                if (line.length < 12) continue;
-                if (/^(\d+\s*\.|\d+\s*、|[一二三四五六七八九十]+\s*[、.])/i.test(line)) {
-                    // keep, but still try to split if it's very long
-                }
-                const parts = line.split(/(?<=[。！？!\?；;])\s*/).map(s => s.trim()).filter(Boolean);
-                for (const p of parts) {
-                    if (p.length >= 12 && p.length <= 360) sentenceCandidates.push(p);
-                }
-            }
-
-            const uniq = [];
-            const seen = new Set();
-            for (const s of sentenceCandidates) {
-                const key = s.replace(/\s+/g, '').slice(0, 160);
-                if (!key) continue;
-                if (seen.has(key)) continue;
-                seen.add(key);
-                uniq.push(s);
-            }
-
-            hrmsShuffleInPlace(uniq, rng);
-
-            const pickKeyword = (s) => {
-                const candidates = [];
-                const chinese = s.match(/[\u4e00-\u9fa5]{2,10}/g) || [];
-                for (const w of chinese) {
-                    if (w.length < 2 || w.length > 8) continue;
-                    if (/^(根据|可以|进行|以及|并且|同时|如果|因为|所以|然后|需要|必须|应该|不得|禁止|注意)$/.test(w)) continue;
-                    candidates.push(w);
-                }
-                const numbers = s.match(/\d+(?:\.\d+)?(?:\s*%|\s*(?:元|分钟|小时|天|项|次|份|人|店|页|章|节))?/g) || [];
-                for (const n of numbers) {
-                    if (String(n).length >= 2 && String(n).length <= 10) candidates.push(String(n));
-                }
-                candidates.sort((a, b) => b.length - a.length);
-                return candidates[0] || '';
-            };
-
-            const makeCloze = (s) => {
-                const answer = pickKeyword(s);
-                if (!answer) return null;
-                const escaped = answer.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const re = new RegExp(escaped);
-                const qRaw = s.replace(re, '____');
-                const q = qRaw.length > 240 ? qRaw.slice(0, 240) + '…' : qRaw;
-                return { q, answer };
-            };
-
-            const ruleVerbsRe = /(必须|不得|禁止|严禁|不可)/;
-            const extractRules = (arr) => {
-                const out = [];
-                for (const s of arr) {
-                    if (!ruleVerbsRe.test(s)) continue;
-                    const m = s.match(ruleVerbsRe);
-                    const verb = m ? m[1] : '';
-                    const after = verb ? s.split(verb).slice(1).join(verb) : '';
-                    const tail = String(after || '').replace(/^[\s:：，,。.;；]+/, '').trim();
-                    if (!tail) continue;
-                    // Prefer a short, gradable phrase after the rule verb.
-                    const phrase = tail.slice(0, 24).replace(/[\s。；;！!？?]+.*$/, '').trim();
-                    const ans = phrase || tail.slice(0, 12).trim();
-                    if (!ans || ans.length < 2 || ans.length > 24) continue;
-                    const blanked = s.replace(ans, '____');
-                    out.push({ verb, q: blanked, answer: ans });
-                    if (out.length >= 20) break;
-                }
-                return out;
-            };
-
-            const list = [];
-            const base = Date.now();
-            for (let i = 0; i < uniq.length && list.length < max; i += 1) {
-                const s = uniq[i];
-                const cloze = makeCloze(s);
-                if (!cloze) continue;
-                if (!cloze.q.includes('____')) continue;
-                if (cloze.answer.length > 20) continue;
-                list.push({
-                    id: 'fc_rule_' + base + '_' + list.length,
-                    type: 'blank',
-                    q: `填空：${cloze.q}`,
-                    options: [],
-                    answer: cloze.answer
-                });
-            }
-
-            // If cloze extraction is insufficient, try turning explicit rules into cloze cards.
-            if (list.length < Math.min(max, 8)) {
-                const rules = extractRules(uniq);
-                for (const r of rules) {
-                    if (list.length >= max) break;
-                    const q = String(r.q || '').trim();
-                    const a = String(r.answer || '').trim();
-                    if (!q || !a) continue;
-                    if (a.length > 24) continue;
-                    if (!q.includes('____')) continue;
-                    list.push({
-                        id: 'fc_rule_' + base + '_' + list.length,
-                        type: 'blank',
-                        q: `规定填空：${q}`,
-                        options: [],
-                        answer: a
-                    });
-                }
-            }
-
-            // Quality-first: do NOT pad with generic prompts.
-            // If nothing usable was extracted, return a tiny fallback set.
-            if (!list.length) {
-                const fallbackLine = uniq.find(s => s && s.length >= 12) || '';
-                if (fallbackLine) {
-                    const k = pickKeyword(fallbackLine) || '';
-                    if (k) {
-                        const qRaw = fallbackLine.replace(new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), '____');
-                        return [{
-                            id: 'fc_rule_' + base + '_0',
-                            type: 'blank',
-                            q: `填空：${qRaw.length > 240 ? (qRaw.slice(0, 240) + '…') : qRaw}`,
-                            options: [],
-                            answer: k
-                        }];
-                    }
-                }
-                return [];
-            }
-
-            // Return only high-quality cloze cards (may be fewer than requested).
-            return list.slice(0, max);
-        }
-
         async function aiGenerateFlashcards(text, count, meta) {
-            // 使用系统LLM配置（自动使用预设或用户配置）
-            const llm = getEffectiveLlmConfig();
-            const baseUrl = llm.baseUrl;
-            const apiKey = llm.apiKey;
-            const model = normalizeLlmModelName(llm.model);
-            if (!baseUrl || !apiKey || !model) {
-                return ruleBasedGenerateFlashcards(text, count);
-            }
             const n = Math.min(80, Math.max(5, Number(count || 20)));
             const metaTitle = String(meta?.title || '').trim();
             const metaType = String(meta?.type || '').trim();
-            const prompt = `你是企业内训“资料理解与记忆”的出题老师。你的任务：严格基于给定资料内容生成自测闪卡题。\n\n资料信息：\n- 标题：${metaTitle || '（未知）'}\n- 类型：${metaType || '（未知）'}\n\n出题要求（非常重要）：\n- 只能使用资料中明确出现的信息出题与作答；禁止编造或引入资料外知识。\n- 如果资料内容不足以支持某题，请跳过，不要硬凑。\n- 避免泛泛提问：不要出现“概括/谈谈/如何理解/为什么重要”等作文题。\n- 优先考核：关键结论、数据/指标、定义、对比关系、原因-结果、范围/口径、注意事项。\n- 可判分：答案必须唯一且简短（建议 <= 20 字）；不要给长段落答案。\n- 禁止水题：single 的选项中禁止出现“以上都是/都对/都错/以上均是/以上全是”。\n\n题型比例建议：blank 占 50%-70%，single 与 tf 用于核对关键点。\n\n输出格式要求：\n- 只输出严格 JSON 数组，不要输出多余文字\n- 每项字段：id,type,q,options,answer\n- type 仅允许：single / tf / blank\n- single: options 为 4 个选项，且 answer 必须出现在 options 内\n- tf: options 固定为 [\"正确\",\"错误\"]，answer 为其中一个\n- blank: options 为空数组，answer 为标准答案字符串（短、可背诵）\n\n资料正文：\n${String(text || '').slice(0, 6000)}`;
+            const prompt = `你是企业内训“资料理解与记忆”的出题老师。你的任务：严格基于给定资料内容生成自测闪卡题。\n\n资料信息：\n- 标题：${metaTitle || '（未知）'}\n- 类型：${metaType || '（未知）'}\n\n出题要求（非常重要）：\n- 只能使用资料中明确出现的信息出题与作答；禁止编造或引入资料外知识。\n- 如果资料内容不足以支持某题，请跳过，不要硬凑。\n- 避免泛泛提问：不要出现“概括/谈谈/如何理解/为什么重要”等作文题。\n- 优先考核：关键结论、数据/指标、定义、对比关系、原因-结果、范围/口径、注意事项。\n- 可判分：答案必须唯一且简短（建议 <= 20 字）；不要给长段落答案。\n- 题干 q 须为通顺完整的中文书面句；禁止在汉字之间插入空格；填空用 ____ 占位且整句仍可读。\n- 禁止水题：single 的选项中禁止出现“以上都是/都对/都错/以上均是/以上全是”。\n\n题型比例建议：blank 占 50%-70%，single 与 tf 用于核对关键点。\n\n输出格式要求：\n- 只输出严格 JSON 数组，不要输出多余文字\n- 每项字段：id,type,q,options,answer\n- type 仅允许：single / tf / blank\n- single: options 为 4 个选项，且 answer 必须出现在 options 内\n- tf: options 固定为 [\"正确\",\"错误\"]，answer 为其中一个\n- blank: options 为空数组，answer 为标准答案字符串（短、可背诵）\n\n资料正文：\n${String(text || '').slice(0, 12000)}`;
 
             let data = null;
             try {
                 data = await callLlmViaServer([{ role: 'user', content: prompt }], {
-                    max_tokens: 1200,
-                    temperature: 0.3
+                    max_tokens: 2200,
+                    temperature: 0.25
                 });
             } catch (e) {
                 console.error('AI flashcards error:', e);
-                return ruleBasedGenerateFlashcards(text, count);
+                throw new Error('AI 出题失败：' + String(e?.message || e));
             }
             const content = data?.choices?.[0]?.message?.content || '';
             const extracted = extractJsonArrayFromText(content);
@@ -24604,9 +24560,8 @@ ${knowledgeContent.slice(0, 30000)}`;
                 return true;
             });
 
-            // If the model returned too many low-quality cards, fallback to rule-based to avoid bad UX.
-            if (cards.length < Math.max(3, Math.floor(n * 0.5))) {
-                return ruleBasedGenerateFlashcards(text, count);
+            if (cards.length < Math.max(3, Math.floor(n * 0.35))) {
+                throw new Error('大模型返回题目过少或格式异常，请重试；若持续失败请检查 LLM 配置与资料是否含可读文本');
             }
             const seed = hrmsMakeRunSeed('flash_ai');
             const rng = hrmsSeededRng(seed);
@@ -24857,7 +24812,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             } catch (e) {
                 console.error(e);
                 if (status) status.textContent = '生成失败：' + String(e?.message || e);
-                showNotification('生成失败', 'error');
+                showNotification('生成失败：' + String(e?.message || e), 'error');
             }
         }
 

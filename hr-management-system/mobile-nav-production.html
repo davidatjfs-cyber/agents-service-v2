@@ -10907,7 +10907,6 @@
                         <div style="display:flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
                             <h4 style="margin: 0;">查看内容</h4>
                             <div style="display: flex; gap: 8px;">
-                                <button class="btn btn-secondary" id="knowledge-download-btn" type="button" style="display:none;">⬇️ 下载</button>
                                 <button class="btn btn-danger" id="knowledge-delete-btn" type="button" style="display:none;">🗑️ 删除</button>
                                 <button class="btn btn-secondary" id="knowledge-back-btn" type="button" onclick="kbBackToList()" style="display:none;">返回列表</button>
                             </div>
@@ -10952,8 +10951,6 @@
                         <div id="knowledge-viewer-body" style="margin-top: 12px;"></div>
                         <div id="knowledge-viewer-toolbar" style="margin-top: 12px; gap: 10px; padding: 10px; background: rgba(10, 10, 11, 0.92); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px;">
                             <button class="btn btn-secondary" id="kb-toolbar-back" type="button">返回</button>
-                            <button class="btn" id="kb-toolbar-open" type="button">打开</button>
-                            <button class="btn btn-secondary" id="kb-toolbar-download" type="button">下载</button>
                             <button class="btn btn-danger" id="kb-toolbar-delete" type="button" style="display:none;">删除</button>
                         </div>
                     </div>
@@ -17733,14 +17730,12 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             const hint = document.getElementById('knowledge-viewer-hint');
             const body = document.getElementById('knowledge-viewer-body');
             const backBtn = document.getElementById('knowledge-back-btn');
-            const downloadBtn = document.getElementById('knowledge-download-btn');
             if (header) header.style.display = 'none';
             if (title) title.textContent = '';
             if (meta) meta.textContent = '';
             if (hint) hint.style.display = '';
             if (body) body.innerHTML = '';
             if (backBtn) backBtn.style.display = 'none';
-            if (downloadBtn) downloadBtn.style.display = 'none';
 
             try {
                 const tb = document.getElementById('knowledge-viewer-toolbar');
@@ -17837,32 +17832,10 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             pageInfo.className = 'kb-pdf-page-indicator';
             pageInfo.textContent = 'PDF 加载中...';
 
-            const openBtn = document.createElement('a');
-            openBtn.className = 'btn btn-secondary';
-            openBtn.textContent = '打开/下载';
-            openBtn.href = src;
-            openBtn.target = '_blank';
-            openBtn.rel = 'noopener noreferrer';
-
-            const downloadBtn = document.createElement('a');
-            downloadBtn.className = 'btn';
-            downloadBtn.textContent = '下载';
-            downloadBtn.href = src;
-            downloadBtn.target = '_blank';
-            downloadBtn.rel = 'noopener noreferrer';
-            try { downloadBtn.download = 'knowledge.pdf'; } catch (e) {}
-
             left.appendChild(btnPrev);
             left.appendChild(pageInfo);
             left.appendChild(btnNext);
             toolbar.appendChild(left);
-            const right = document.createElement('div');
-            right.style.display = 'flex';
-            right.style.gap = '10px';
-            right.style.alignItems = 'center';
-            right.appendChild(openBtn);
-            right.appendChild(downloadBtn);
-            toolbar.appendChild(right);
 
             const canvasWrap = document.createElement('div');
             canvasWrap.style.padding = '10px';
@@ -17974,51 +17947,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 console.error(e);
                 done = true;
                 if (tmr) clearTimeout(tmr);
-                fallbackToIframe('PDF 预览失败，已切换到内嵌打开（也可点“打开/下载”）');
-            }
-        }
-
-        function kbDownloadKnowledge(itemId) {
-            const id = String(itemId || '').trim();
-            if (!id) return;
-            const items = HRMS_STORE.getKnowledge();
-            const item = (items || []).find(x => String(x?.id || '') === id);
-            if (!item) {
-                showNotification('未找到资料', 'error');
-                return;
-            }
-            if (!isAdminUser() && !knowledgeItemMatchesUser(item, currentUser)) {
-                showNotification('无权限查看该资料', 'warning');
-                return;
-            }
-
-            const base = String(HRMS_API.baseUrl() || window.location?.origin || '').replace(/\/$/, '');
-            const token = String(HRMS_API.token() || '').trim();
-            if (!token) {
-                showNotification('登录已失效，请重新登录后再下载', 'warning');
-                return;
-            }
-            const src = `${base}/api/knowledge/${encodeURIComponent(id)}/file?token=${encodeURIComponent(token)}`;
-
-            if (!src) {
-                showNotification('无法生成文件访问链接，请重新登录后重试。', 'warning');
-                return;
-            }
-
-            try {
-                const a = document.createElement('a');
-                a.href = src;
-                a.target = '_blank';
-                a.rel = 'noopener';
-                try {
-                    const fn = String(item?.fileName || item?.title || 'download');
-                    a.download = fn;
-                } catch (e) {}
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-            } catch (e) {
-                try { window.open(src, '_blank', 'noopener'); } catch (e2) {}
+                fallbackToIframe('PDF 预览失败，已切换到内嵌阅读');
             }
         }
 
@@ -18047,18 +17976,13 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             const hint = document.getElementById('knowledge-viewer-hint');
             const body = document.getElementById('knowledge-viewer-body');
             const backBtn = document.getElementById('knowledge-back-btn');
-            const downloadBtn = document.getElementById('knowledge-download-btn');
 
             try {
                 const tb = document.getElementById('knowledge-viewer-toolbar');
                 const btnBack = document.getElementById('kb-toolbar-back');
-                const btnOpen = document.getElementById('kb-toolbar-open');
-                const btnDownload = document.getElementById('kb-toolbar-download');
                 const btnDel = document.getElementById('kb-toolbar-delete');
                 if (tb) tb.style.display = '';
                 if (btnBack) btnBack.onclick = () => kbBackToList();
-                if (btnOpen) btnOpen.onclick = () => kbOpenKnowledgeInNewTab(id);
-                if (btnDownload) btnDownload.onclick = () => kbDownloadKnowledge(id);
                 if (btnDel) {
                     if (isAdminUser()) {
                         btnDel.style.display = '';
@@ -18071,10 +17995,6 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
 
             if (header) header.style.display = '';
             if (backBtn) backBtn.style.display = '';
-            if (downloadBtn) {
-                downloadBtn.style.display = '';
-                downloadBtn.onclick = () => kbDownloadKnowledge(id);
-            }
             if (hint) hint.style.display = 'none';
             if (title) title.textContent = String(item.title || '');
             if (meta) {
@@ -18129,50 +18049,6 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             }
 
             body.innerHTML = `<iframe title="doc" style="width:100%; height: 560px; border: 0; border-radius: 12px; background: rgba(255,255,255,0.03);" src="${escapeHtml(src)}"></iframe>`;
-        }
-
-        function kbOpenKnowledgeInNewTab(itemId) {
-            const id = String(itemId || '').trim();
-            if (!id) return;
-            const items = HRMS_STORE.getKnowledge();
-            const item = (items || []).find(x => String(x?.id || '') === id);
-            if (!item) {
-                showNotification('未找到资料', 'error');
-                return;
-            }
-            if (!isAdminUser() && !knowledgeItemMatchesUser(item, currentUser)) {
-                showNotification('无权限查看该资料', 'warning');
-                return;
-            }
-
-            const base = String(HRMS_API.baseUrl() || window.location?.origin || '').replace(/\/$/, '');
-            const token = String(HRMS_API.token() || '').trim();
-            if (!token) {
-                showNotification('登录已失效，请重新登录后再打开', 'warning');
-                return;
-            }
-            const src = `${base}/api/knowledge/${encodeURIComponent(id)}/file?token=${encodeURIComponent(token)}`;
-
-            if (!src) {
-                showNotification('无法生成文件访问链接，请重新登录后重试。', 'warning');
-                return;
-            }
-
-            try {
-                window.open(src, '_blank', 'noopener');
-            } catch (e) {
-                try {
-                    const a = document.createElement('a');
-                    a.href = src;
-                    a.target = '_blank';
-                    a.rel = 'noopener';
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                } catch (e2) {
-                    showNotification('打开失败', 'error');
-                }
-            }
         }
 
         function renderKnowledgeList() {
@@ -18244,8 +18120,6 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         const createdAt = it?.createdAt ? String(it.createdAt).slice(0, 10) : '-';
                         const act = `
                             <button class="btn" type="button" style="padding:10px 14px;font-size:14px;" onclick="openKnowledgeItem('${escapeHtml(id)}')">查看</button>
-                            <button class="btn btn-secondary" type="button" style="padding:10px 14px;font-size:14px;" onclick="kbOpenKnowledgeInNewTab('${escapeHtml(id)}')">打开</button>
-                            <button class="btn btn-secondary" type="button" style="padding:10px 14px;font-size:14px;" onclick="kbDownloadKnowledge('${escapeHtml(id)}')">下载</button>
                         `;
                         return `
                             <div class="kb-card">
@@ -18305,8 +18179,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                             category: String(r?.category || ''),
                             type,
                             audience: { type: 'all' },
-                            fileId: filePath,
-                            fileName: filePath,
+                            fileId: '',
+                            fileName: String(r?.title || filePath || ''),
                             mimeType: String(r?.file_type || ''),
                             size: Number(r?.file_size || 0),
                             createdAt,
@@ -18839,42 +18713,17 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             let combinedText = '';
 
             for (const id of itemIds) {
-                const item = items.find(it => it.id === id);
+                const item = items.find(it => String(it.id) === String(id));
                 if (!item) continue;
-
                 try {
-                    const blob = await readKnowledgeItemBlob(item);
-                    if (!blob) continue;
-
                     const type = String(item.type || '').toLowerCase();
-                    let text = '';
-
-                    if (type === 'txt') {
-                        text = await blob.text();
-                    } else if (type === 'pdf') {
-                        const ok = await ensurePdfJsLoaded();
-                        if (ok && typeof pdfjsLib !== 'undefined') {
-                            pdfjsLib.GlobalWorkerOptions.workerSrc = '/assets/vendor/pdfjs/pdf.worker.min.js';
-                            const arrayBuffer = await blob.arrayBuffer();
-                            const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-                            const pages = [];
-                            for (let i = 1; i <= Math.min(doc.numPages, 50); i++) {
-                                const page = await doc.getPage(i);
-                                const content = await page.getTextContent();
-                                pages.push(content.items.map(x => x.str).join(' '));
-                            }
-                            text = pages.join('\n\n');
-                        }
-                    } else if (type === 'doc') {
-                        if (typeof mammoth !== 'undefined') {
-                            const arrayBuffer = await blob.arrayBuffer();
-                            const result = await mammoth.extractRawText({ arrayBuffer });
-                            text = result.value || '';
-                        }
+                    if (type === 'video') {
+                        combinedText += `\n\n【${item.title || item.name || '视频资料'}】\n（该条目为视频文件，暂无逐字文本；请改选 PDF/DOCX/TXT 进行深度问答。）`;
+                        continue;
                     }
-
-                    if (text.trim()) {
-                        combinedText += `\n\n【${item.title || item.name || '资料'}】\n${text.slice(0, 15000)}`;
+                    const text = await extractTextFromKnowledgeItem(item);
+                    if (text && String(text).trim()) {
+                        combinedText += `\n\n【${item.title || item.name || '资料'}】\n${String(text).slice(0, 15000)}`;
                     }
                 } catch (e) {
                     console.error('读取知识库内容失败:', e);
@@ -18961,62 +18810,18 @@ ${knowledgeContent.slice(0, 30000)}`;
         }
 
         async function callKnowledgeChatAPI(systemPrompt, history) {
-            // 使用系统LLM配置（自动使用预设或用户配置）
-            const llm = getEffectiveLlmConfig();
-            const baseUrl = llm.baseUrl;
-            const apiKey = llm.apiKey;
-            const model = llm.model;
-            
-            if (baseUrl && apiKey) {
-                try {
-                    const messages = [
-                        { role: 'system', content: systemPrompt },
-                        ...history.slice(-10) // 保留最近10条对话
-                    ];
-
-                    const data = await callLlmViaServer(messages, { max_tokens: 2000, temperature: 0.7 });
-                    return data.choices?.[0]?.message?.content || '无法获取回复';
-                } catch (e) {
-                    console.error('AI API调用失败:', e);
-                    // 如果API失败，回退到本地模式
-                    return generateLocalKnowledgeResponse(systemPrompt, history) + '\n\n（注：AI API调用失败，已使用本地关键词匹配）';
-                }
+            const messages = [
+                { role: 'system', content: systemPrompt },
+                ...history.slice(-10)
+            ];
+            try {
+                const data = await callLlmViaServer(messages, { max_tokens: 2200, temperature: 0.35 });
+                return data.choices?.[0]?.message?.content || '无法获取回复';
+            } catch (e) {
+                console.error('AI API调用失败:', e);
+                const hint = String(e?.message || e || '');
+                throw new Error(`AI 服务不可用（${hint || '请检查网络与系统设置中的 LLM'}）。培训助手需使用云端大模型，请确认已配置有效 API。`);
             }
-
-            // 如果没有配置API，使用本地模拟回复
-            return generateLocalKnowledgeResponse(systemPrompt, history);
-        }
-
-        function generateLocalKnowledgeResponse(systemPrompt, history) {
-            const lastQuestion = history[history.length - 1]?.content || '';
-            const knowledgeContent = systemPrompt.split('【知识库内容】')[1] || '';
-            
-            // 简单的关键词匹配回复
-            const keywords = lastQuestion.split(/[\s，。？！、]+/).filter(w => w.length > 1);
-            const relevantSentences = [];
-            
-            const sentences = knowledgeContent.split(/[。！？\n]+/).filter(s => s.trim().length > 10);
-            
-            for (const sentence of sentences) {
-                for (const keyword of keywords) {
-                    if (sentence.includes(keyword)) {
-                        relevantSentences.push(sentence.trim());
-                        break;
-                    }
-                }
-                if (relevantSentences.length >= 5) break;
-            }
-
-            if (relevantSentences.length > 0) {
-                return `根据知识库内容，以下是相关信息：\n\n${relevantSentences.map((s, i) => `${i + 1}. ${s}`).join('\n\n')}\n\n如需更详细的解答，建议配置AI API以获得更智能的回复。`;
-            }
-
-            if (lastQuestion.includes('总结') || lastQuestion.includes('概述')) {
-                const preview = sentences.slice(0, 3).join('。');
-                return `根据知识库内容概述：\n\n${preview}...\n\n如需更完整的总结，建议配置AI API。`;
-            }
-
-            return `抱歉，我在知识库中没有找到与"${lastQuestion}"直接相关的内容。\n\n您可以尝试：\n1. 换一种方式提问\n2. 选择其他知识资料\n3. 配置AI API以获得更智能的回答`;
         }
 
         // ========== Agent 监控中心 (Feishu-First) ==========
@@ -19347,18 +19152,20 @@ ${knowledgeContent.slice(0, 30000)}`;
         }
 
         async function readKnowledgeItemBlob(item) {
-            const fileId = item?.fileId;
-            if (!fileId) return null;
-            try {
-                const row = await HRMS_FILE_DB.getFile(fileId);
-                if (row?.blob) return row.blob;
-            } catch (e) {}
-            try {
-                await new Promise(r => setTimeout(r, 120));
-                const row2 = await HRMS_FILE_DB.getFile(fileId);
-                if (row2?.blob) return row2.blob;
-            } catch (e) {
-                // fallthrough to cloud fetch
+            const rawKey = item?.fileId;
+            const blobDbKey = rawKey && !String(rawKey).includes('/') && !String(rawKey).includes('\\')
+                ? String(rawKey).trim()
+                : '';
+            if (blobDbKey) {
+                try {
+                    const row = await HRMS_FILE_DB.getFile(blobDbKey);
+                    if (row?.blob) return row.blob;
+                } catch (e) {}
+                try {
+                    await new Promise(r => setTimeout(r, 120));
+                    const row2 = await HRMS_FILE_DB.getFile(blobDbKey);
+                    if (row2?.blob) return row2.blob;
+                } catch (e) {}
             }
 
             try {
@@ -19374,7 +19181,6 @@ ${knowledgeContent.slice(0, 30000)}`;
             }
 
             try {
-                if (String(item?.source || '') !== 'cloud') return null;
                 const id = String(item?.id || '').trim();
                 if (!id) return null;
                 const baseUrl = String(HRMS_API.baseUrl() || '').replace(/\/$/, '');
@@ -19494,176 +19300,21 @@ ${knowledgeContent.slice(0, 30000)}`;
             return '';
         }
 
-        function ruleBasedGenerateFlashcards(text, count) {
-            const max = Math.min(80, Math.max(5, Number(count || 20)));
-            const seed = hrmsMakeRunSeed('flash_rule');
-            const rng = hrmsSeededRng(seed);
-            const raw = String(text || '');
-            const cleaned = raw
-                .replace(/\r/g, '\n')
-                .replace(/[ \t\f\v]+/g, ' ')
-                .replace(/\n{3,}/g, '\n\n')
-                .trim();
-
-            const lines = cleaned.split(/\n+/).map(s => String(s || '').trim()).filter(Boolean);
-            const sentenceCandidates = [];
-            for (let i = 0; i < lines.length; i += 1) {
-                const line = lines[i];
-                if (!line) continue;
-                if (/^(第\s*\d+\s*(页|章|节)|目录|目\s*录|contents|table\s*of\s*contents)/i.test(line)) continue;
-                if (line.length < 12) continue;
-                if (/^(\d+\s*\.|\d+\s*、|[一二三四五六七八九十]+\s*[、.])/i.test(line)) {
-                    // keep, but still try to split if it's very long
-                }
-                const parts = line.split(/(?<=[。！？!\?；;])\s*/).map(s => s.trim()).filter(Boolean);
-                for (const p of parts) {
-                    if (p.length >= 12 && p.length <= 360) sentenceCandidates.push(p);
-                }
-            }
-
-            const uniq = [];
-            const seen = new Set();
-            for (const s of sentenceCandidates) {
-                const key = s.replace(/\s+/g, '').slice(0, 160);
-                if (!key) continue;
-                if (seen.has(key)) continue;
-                seen.add(key);
-                uniq.push(s);
-            }
-
-            hrmsShuffleInPlace(uniq, rng);
-
-            const pickKeyword = (s) => {
-                const candidates = [];
-                const chinese = s.match(/[\u4e00-\u9fa5]{2,10}/g) || [];
-                for (const w of chinese) {
-                    if (w.length < 2 || w.length > 8) continue;
-                    if (/^(根据|可以|进行|以及|并且|同时|如果|因为|所以|然后|需要|必须|应该|不得|禁止|注意)$/.test(w)) continue;
-                    candidates.push(w);
-                }
-                const numbers = s.match(/\d+(?:\.\d+)?(?:\s*%|\s*(?:元|分钟|小时|天|项|次|份|人|店|页|章|节))?/g) || [];
-                for (const n of numbers) {
-                    if (String(n).length >= 2 && String(n).length <= 10) candidates.push(String(n));
-                }
-                candidates.sort((a, b) => b.length - a.length);
-                return candidates[0] || '';
-            };
-
-            const makeCloze = (s) => {
-                const answer = pickKeyword(s);
-                if (!answer) return null;
-                const escaped = answer.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const re = new RegExp(escaped);
-                const qRaw = s.replace(re, '____');
-                const q = qRaw.length > 240 ? qRaw.slice(0, 240) + '…' : qRaw;
-                return { q, answer };
-            };
-
-            const ruleVerbsRe = /(必须|不得|禁止|严禁|不可)/;
-            const extractRules = (arr) => {
-                const out = [];
-                for (const s of arr) {
-                    if (!ruleVerbsRe.test(s)) continue;
-                    const m = s.match(ruleVerbsRe);
-                    const verb = m ? m[1] : '';
-                    const after = verb ? s.split(verb).slice(1).join(verb) : '';
-                    const tail = String(after || '').replace(/^[\s:：，,。.;；]+/, '').trim();
-                    if (!tail) continue;
-                    // Prefer a short, gradable phrase after the rule verb.
-                    const phrase = tail.slice(0, 24).replace(/[\s。；;！!？?]+.*$/, '').trim();
-                    const ans = phrase || tail.slice(0, 12).trim();
-                    if (!ans || ans.length < 2 || ans.length > 24) continue;
-                    const blanked = s.replace(ans, '____');
-                    out.push({ verb, q: blanked, answer: ans });
-                    if (out.length >= 20) break;
-                }
-                return out;
-            };
-
-            const list = [];
-            const base = Date.now();
-            for (let i = 0; i < uniq.length && list.length < max; i += 1) {
-                const s = uniq[i];
-                const cloze = makeCloze(s);
-                if (!cloze) continue;
-                if (!cloze.q.includes('____')) continue;
-                if (cloze.answer.length > 20) continue;
-                list.push({
-                    id: 'fc_rule_' + base + '_' + list.length,
-                    type: 'blank',
-                    q: `填空：${cloze.q}`,
-                    options: [],
-                    answer: cloze.answer
-                });
-            }
-
-            // If cloze extraction is insufficient, try turning explicit rules into cloze cards.
-            if (list.length < Math.min(max, 8)) {
-                const rules = extractRules(uniq);
-                for (const r of rules) {
-                    if (list.length >= max) break;
-                    const q = String(r.q || '').trim();
-                    const a = String(r.answer || '').trim();
-                    if (!q || !a) continue;
-                    if (a.length > 24) continue;
-                    if (!q.includes('____')) continue;
-                    list.push({
-                        id: 'fc_rule_' + base + '_' + list.length,
-                        type: 'blank',
-                        q: `规定填空：${q}`,
-                        options: [],
-                        answer: a
-                    });
-                }
-            }
-
-            // Quality-first: do NOT pad with generic prompts.
-            // If nothing usable was extracted, return a tiny fallback set.
-            if (!list.length) {
-                const fallbackLine = uniq.find(s => s && s.length >= 12) || '';
-                if (fallbackLine) {
-                    const k = pickKeyword(fallbackLine) || '';
-                    if (k) {
-                        const qRaw = fallbackLine.replace(new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), '____');
-                        return [{
-                            id: 'fc_rule_' + base + '_0',
-                            type: 'blank',
-                            q: `填空：${qRaw.length > 240 ? (qRaw.slice(0, 240) + '…') : qRaw}`,
-                            options: [],
-                            answer: k
-                        }];
-                    }
-                }
-                return [];
-            }
-
-            // Return only high-quality cloze cards (may be fewer than requested).
-            return list.slice(0, max);
-        }
-
         async function aiGenerateFlashcards(text, count, meta) {
-            // 使用系统LLM配置（自动使用预设或用户配置）
-            const llm = getEffectiveLlmConfig();
-            const baseUrl = llm.baseUrl;
-            const apiKey = llm.apiKey;
-            const model = normalizeLlmModelName(llm.model);
-            if (!baseUrl || !apiKey || !model) {
-                return ruleBasedGenerateFlashcards(text, count);
-            }
             const n = Math.min(80, Math.max(5, Number(count || 20)));
             const metaTitle = String(meta?.title || '').trim();
             const metaType = String(meta?.type || '').trim();
-            const prompt = `你是企业内训“资料理解与记忆”的出题老师。你的任务：严格基于给定资料内容生成自测闪卡题。\n\n资料信息：\n- 标题：${metaTitle || '（未知）'}\n- 类型：${metaType || '（未知）'}\n\n出题要求（非常重要）：\n- 只能使用资料中明确出现的信息出题与作答；禁止编造或引入资料外知识。\n- 如果资料内容不足以支持某题，请跳过，不要硬凑。\n- 避免泛泛提问：不要出现“概括/谈谈/如何理解/为什么重要”等作文题。\n- 优先考核：关键结论、数据/指标、定义、对比关系、原因-结果、范围/口径、注意事项。\n- 可判分：答案必须唯一且简短（建议 <= 20 字）；不要给长段落答案。\n- 禁止水题：single 的选项中禁止出现“以上都是/都对/都错/以上均是/以上全是”。\n\n题型比例建议：blank 占 50%-70%，single 与 tf 用于核对关键点。\n\n输出格式要求：\n- 只输出严格 JSON 数组，不要输出多余文字\n- 每项字段：id,type,q,options,answer\n- type 仅允许：single / tf / blank\n- single: options 为 4 个选项，且 answer 必须出现在 options 内\n- tf: options 固定为 [\"正确\",\"错误\"]，answer 为其中一个\n- blank: options 为空数组，answer 为标准答案字符串（短、可背诵）\n\n资料正文：\n${String(text || '').slice(0, 6000)}`;
+            const prompt = `你是企业内训“资料理解与记忆”的出题老师。你的任务：严格基于给定资料内容生成自测闪卡题。\n\n资料信息：\n- 标题：${metaTitle || '（未知）'}\n- 类型：${metaType || '（未知）'}\n\n出题要求（非常重要）：\n- 只能使用资料中明确出现的信息出题与作答；禁止编造或引入资料外知识。\n- 如果资料内容不足以支持某题，请跳过，不要硬凑。\n- 避免泛泛提问：不要出现“概括/谈谈/如何理解/为什么重要”等作文题。\n- 优先考核：关键结论、数据/指标、定义、对比关系、原因-结果、范围/口径、注意事项。\n- 可判分：答案必须唯一且简短（建议 <= 20 字）；不要给长段落答案。\n- 题干 q 须为通顺完整的中文书面句；禁止在汉字之间插入空格；填空用 ____ 占位且整句仍可读。\n- 禁止水题：single 的选项中禁止出现“以上都是/都对/都错/以上均是/以上全是”。\n\n题型比例建议：blank 占 50%-70%，single 与 tf 用于核对关键点。\n\n输出格式要求：\n- 只输出严格 JSON 数组，不要输出多余文字\n- 每项字段：id,type,q,options,answer\n- type 仅允许：single / tf / blank\n- single: options 为 4 个选项，且 answer 必须出现在 options 内\n- tf: options 固定为 [\"正确\",\"错误\"]，answer 为其中一个\n- blank: options 为空数组，answer 为标准答案字符串（短、可背诵）\n\n资料正文：\n${String(text || '').slice(0, 12000)}`;
 
             let data = null;
             try {
                 data = await callLlmViaServer([{ role: 'user', content: prompt }], {
-                    max_tokens: 1200,
-                    temperature: 0.3
+                    max_tokens: 2200,
+                    temperature: 0.25
                 });
             } catch (e) {
                 console.error('AI flashcards error:', e);
-                return ruleBasedGenerateFlashcards(text, count);
+                throw new Error('AI 出题失败：' + String(e?.message || e));
             }
             const content = data?.choices?.[0]?.message?.content || '';
             const extracted = extractJsonArrayFromText(content);
@@ -19679,11 +19330,9 @@ ${knowledgeContent.slice(0, 30000)}`;
                 let normalizedType = type;
                 if (normalizedType !== 'single' && normalizedType !== 'tf' && normalizedType !== 'blank') normalizedType = 'blank';
 
-                // Normalize TF options
                 let normalizedOptions = options;
                 if (normalizedType === 'tf') normalizedOptions = ['正确', '错误'];
 
-                // Ensure single has 4 options; otherwise degrade to blank
                 if (normalizedType === 'single') {
                     const uniq = Array.from(new Set(normalizedOptions));
                     if (uniq.length !== 4) normalizedType = 'blank';
@@ -19699,21 +19348,16 @@ ${knowledgeContent.slice(0, 30000)}`;
                 };
             }).filter(x => {
                 if (!x.q || !x.answer) return false;
-
-                // Filter trivial/banned option patterns
                 if ((x.type === 'single') && Array.isArray(x.options)) {
                     if (x.options.some(op => bannedOptionRe.test(op))) return false;
                     if (!x.options.includes(x.answer)) return false;
                 }
-
-                // Prefer short, gradable answers for process memorization
                 if (x.type === 'blank' && x.answer.length > 80) return false;
                 return true;
             });
 
-            // If the model returned too many low-quality cards, fallback to rule-based to avoid bad UX.
-            if (cards.length < Math.max(3, Math.floor(n * 0.5))) {
-                return ruleBasedGenerateFlashcards(text, count);
+            if (cards.length < Math.max(3, Math.floor(n * 0.35))) {
+                throw new Error('大模型返回题目过少或格式异常，请重试；若持续失败请检查 LLM 配置与资料是否含可读文本');
             }
             const seed = hrmsMakeRunSeed('flash_ai');
             const rng = hrmsSeededRng(seed);
@@ -19931,7 +19575,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             } catch (e) {
                 console.error(e);
                 if (status) status.textContent = '生成失败：' + String(e?.message || e);
-                showNotification('生成失败', 'error');
+                showNotification('生成失败：' + String(e?.message || e), 'error');
             }
         }
 
