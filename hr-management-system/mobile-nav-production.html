@@ -5294,6 +5294,139 @@
             color: rgba(255, 255, 255, 0.4);
         }
 
+        /* 日报员工多选弹窗 · 与组织字典壳体同系 */
+        #dr-staff-modal .modal-content.dr-staff-modal-content {
+            max-width: min(560px, 96vw);
+            width: 100%;
+            max-height: min(88vh, 720px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        #dr-staff-modal .modal-body {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            padding: 0 16px 10px;
+        }
+
+        .dr-staff-shell {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            border: 1px solid rgba(96, 165, 250, 0.22);
+            border-radius: 14px;
+            padding: 10px 10px 12px;
+            background: linear-gradient(165deg, rgba(30, 58, 138, 0.16) 0%, rgba(12, 12, 16, 0.96) 46%);
+        }
+
+        .dr-staff-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .dr-staff-toolbar__kbd {
+            font-family: 'IBM Plex Mono', ui-monospace, monospace;
+            font-size: 10px;
+            letter-spacing: 0.18em;
+            color: #bfdbfe;
+            padding: 4px 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(96, 165, 250, 0.35);
+            background: rgba(0, 0, 0, 0.25);
+        }
+
+        .dr-staff-toolbar__hint {
+            font-size: 11px;
+            color: rgba(200, 215, 230, 0.62);
+            line-height: 1.35;
+            flex: 1;
+            text-align: right;
+        }
+
+        #dr-staff-modal .dr-staff-select-all-btn {
+            width: 100%;
+            justify-content: center;
+            padding: 11px 14px;
+            border-radius: 11px;
+            font-weight: 700;
+            border: 1px solid rgba(59, 130, 246, 0.35);
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.55), rgba(59, 130, 246, 0.35));
+            color: #f8fafc;
+        }
+
+        #dr-staff-modal .dr-staff-pick-scroll {
+            flex: 1;
+            min-height: 120px;
+            max-height: min(46vh, 360px);
+            overflow-y: auto;
+            padding: 2px 4px 6px 0;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .dr-staff-pick-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 10px;
+            margin-bottom: 8px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+            transition: border-color 0.15s ease, background 0.15s ease;
+        }
+
+        .dr-staff-pick-row:hover {
+            border-color: rgba(250, 204, 21, 0.25);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .dr-staff-pick-row__main {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            min-width: 0;
+            flex: 1;
+        }
+
+        .dr-staff-pick-row__chk {
+            width: 22px;
+            height: 22px;
+            border-radius: 7px;
+            border: 2px solid rgba(200, 215, 230, 0.4);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            color: #fff;
+            background: transparent;
+        }
+
+        .dr-staff-pick-row__chk.is-on {
+            border-color: rgba(96, 165, 250, 0.95);
+            background: rgba(96, 165, 250, 0.95);
+        }
+
+        .dr-staff-pick-row__day {
+            padding: 9px 14px;
+            font-size: 13px;
+            font-weight: 700;
+            border-radius: 10px;
+            border: 1px solid rgba(249, 115, 22, 0.45);
+            background: rgba(249, 115, 22, 0.18);
+            color: #fdba74;
+            min-height: 40px;
+        }
+
         /* Role Config Modal Styles */
         .role-config-grid {
             display: grid;
@@ -6530,13 +6663,108 @@
             font-size: 13px;
         }
 
+        #daily-report-page .dr-hr-slab {
+            margin-bottom: 18px;
+            border-radius: 16px;
+            border: 1px solid var(--drf-border);
+            background: linear-gradient(155deg, rgba(212, 175, 55, 0.07) 0%, rgba(8, 10, 14, 0.92) 42%);
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset, 0 18px 40px -24px rgba(0, 0, 0, 0.55);
+            overflow: hidden;
+        }
+
+        #daily-report-page .dr-hr-slab__toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+            padding: 10px 14px 8px;
+            border-bottom: 1px solid var(--drf-border-soft);
+        }
+
+        #daily-report-page .dr-hr-slab__kbd {
+            font-family: var(--drf-mono);
+            font-size: 10px;
+            letter-spacing: 0.16em;
+            color: #fde68a;
+            padding: 4px 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(251, 191, 36, 0.32);
+            background: rgba(0, 0, 0, 0.28);
+        }
+
+        #daily-report-page .dr-hr-slab__hint {
+            font-size: 11px;
+            color: var(--drf-muted);
+            line-height: 1.4;
+            flex: 1;
+            text-align: right;
+        }
+
+        #daily-report-page .dr-hr-slab__body {
+            padding: 14px 14px 16px;
+        }
+
+        #daily-report-page .dr-hr-slab__title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 15px;
+            font-weight: 800;
+            color: var(--drf-text);
+            letter-spacing: 0.02em;
+        }
+
+        #daily-report-page .dr-hr-slab__icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #daily-report-page .dr-hr-slab__section {
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        #daily-report-page .dr-hr-slab__section:first-of-type {
+            margin-top: 0;
+            padding-top: 0;
+            border-top: none;
+        }
+
+        #daily-report-page .dr-hr-slab__rowhd {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #daily-report-page .dr-hr-slab__rowhd span {
+            font-weight: 800;
+            color: rgba(241, 245, 249, 0.95);
+            font-size: 13px;
+        }
+
         #daily-report-page .dr-report-card {
-            padding: 14px;
-            border-radius: 18px;
-            border: 1px solid rgba(255,255,255,0.08);
-            background: rgba(255,255,255,0.03);
-            margin-bottom: 12px;
+            padding: 0;
+            border-radius: 16px;
+            border: 1px solid var(--drf-border);
+            background: linear-gradient(165deg, rgba(255, 255, 255, 0.04) 0%, rgba(2, 6, 23, 0.55) 55%);
+            margin-bottom: 14px;
             cursor: pointer;
+            overflow: hidden;
+            box-shadow: 0 12px 32px -20px rgba(0, 0, 0, 0.65);
+        }
+
+        #daily-report-page .dr-report-card__in {
+            padding: 14px 14px 10px;
         }
 
         #daily-report-page .dr-report-head {
@@ -6544,6 +6772,30 @@
             justify-content: space-between;
             align-items: center;
             gap: 10px;
+        }
+
+        #daily-report-page .dr-report-metrics {
+            margin-top: 0;
+            padding: 10px 12px 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.07);
+            background: rgba(0, 0, 0, 0.2);
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px 14px;
+            font-size: 12px;
+            font-family: var(--drf-mono);
+        }
+
+        #daily-report-page .dr-report-metrics .dm-lab {
+            color: var(--drf-muted);
+            font-family: var(--drf-sans);
+            font-size: 11px;
+            letter-spacing: 0.06em;
+        }
+
+        #daily-report-page .dr-report-metrics .dm-val {
+            font-weight: 800;
+            text-align: right;
         }
 
         /* ── 请款管理：与分析报表同系金融面板 ── */
@@ -8019,20 +8271,22 @@
 
 
         #daily-report-page .dr-report-date {
-            font-weight: 900;
-            font-size: 16px;
-            color: rgba(226,232,240,0.95);
+            font-family: var(--drf-sans);
+            font-weight: 800;
+            font-size: 15px;
+            letter-spacing: 0.03em;
+            color: var(--drf-text);
         }
 
         #daily-report-page .dr-report-arrow {
-            color: rgba(200,215,230,0.8);
-            font-size: 18px;
+            color: rgba(250, 204, 21, 0.65);
+            font-size: 22px;
             font-weight: 900;
         }
 
         #daily-report-page .dr-report-sub {
             margin-top: 8px;
-            color: rgba(200,215,230,0.78);
+            color: var(--drf-muted);
             font-size: 12px;
             display: flex;
             gap: 8px;
@@ -8042,6 +8296,8 @@
 
         #daily-report-page .dr-report-kpis {
             margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 10px;
@@ -8050,20 +8306,23 @@
         #daily-report-page .dr-kpi {
             border-radius: 14px;
             padding: 12px;
-            background: rgba(0,0,0,0.10);
-            border: 1px solid rgba(255,255,255,0.06);
+            background: rgba(0, 0, 0, 0.22);
+            border: 1px solid rgba(255, 255, 255, 0.07);
         }
 
         #daily-report-page .dr-kpi .k {
-            color: rgba(200,215,230,0.78);
-            font-size: 12px;
+            color: var(--drf-muted);
+            font-size: 10px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
         }
 
         #daily-report-page .dr-kpi .v {
             margin-top: 8px;
-            font-weight: 900;
-            font-size: 18px;
-            color: rgba(226,232,240,0.95);
+            font-family: var(--drf-mono);
+            font-weight: 800;
+            font-size: 19px;
+            color: rgba(226, 232, 240, 0.96);
         }
 
         #daily-report-page .dr-report-meta {
@@ -8823,83 +9082,101 @@
                     </div>
                 </div>
 
-                <div class="card" style="margin-bottom: 18px;">
-                    <div class="card-icon blue">🧑‍🍳</div>
-                    <h4>今日实际出勤</h4>
-                    <div style="margin-top: 12px;">
-                        <div style="display:flex; justify-content: space-between; align-items:center; gap: 10px;">
-                            <div style="font-weight: 900;">☀️ 早班上班人员</div>
-                            <button class="btn btn-secondary" type="button" onclick="addDailyReportStaffRow('front', event)" style="padding: 8px 12px;">添加</button>
-                        </div>
-                        <div id="dr-front-staff" style="margin-top: 10px; color: rgba(200,215,230,0.78);">暂无人员</div>
-                        <div style="margin-top: 12px;">
-                            <label style="color:#666;font-size:12px;">早班休息人员（多人用逗号分隔）</label>
-                            <input id="dr-front-rest" placeholder="请输入休息人员姓名" style="width:100%; padding:12px;">
-                        </div>
-                        <div style="margin-top: 12px;">
-                            <label style="color:#666;font-size:12px;">早班支援人员（多人用逗号分隔）</label>
-                            <input id="dr-front-support" placeholder="请输入支援人员姓名" style="width:100%; padding:12px;">
-                        </div>
+                <div class="dr-hr-slab">
+                    <div class="dr-hr-slab__toolbar">
+                        <span class="dr-hr-slab__kbd">ATTN</span>
+                        <span class="dr-hr-slab__hint">今日实际出勤 · 早班 / 午班分段维护，与员工多选弹窗联动</span>
                     </div>
-                    <div style="margin-top: 16px; border-top: 1px solid rgba(200,215,230,0.18); padding-top: 14px;">
-                        <div style="display:flex; justify-content: space-between; align-items:center; gap: 10px;">
-                            <div style="font-weight: 900;">🌙 午班上班人员</div>
-                            <button class="btn btn-secondary" type="button" onclick="addDailyReportStaffRow('kitchen', event)" style="padding: 8px 12px;">添加</button>
+                    <div class="dr-hr-slab__body">
+                        <div class="dr-hr-slab__title">
+                            <span class="dr-hr-slab__icon" aria-hidden="true">🧑‍🍳</span>
+                            <span>今日实际出勤</span>
                         </div>
-                        <div id="dr-kitchen-staff" style="margin-top: 10px; color: rgba(200,215,230,0.78);">暂无人员</div>
-                        <div style="margin-top: 12px;">
-                            <label style="color:#666;font-size:12px;">午班休息人员（多人用逗号分隔）</label>
-                            <input id="dr-kitchen-rest" placeholder="请输入休息人员姓名" style="width:100%; padding:12px;">
+                        <div class="dr-hr-slab__section">
+                            <div class="dr-hr-slab__rowhd">
+                                <span>☀️ 早班上班人员</span>
+                                <button class="btn btn-secondary" type="button" onclick="addDailyReportStaffRow('front', event)" style="padding: 8px 12px;">添加</button>
+                            </div>
+                            <div id="dr-front-staff" style="margin-top: 10px; color: rgba(200,215,230,0.78);">暂无人员</div>
+                            <div style="margin-top: 12px;">
+                                <label style="color:#666;font-size:12px;">早班休息人员（多人用逗号分隔）</label>
+                                <input id="dr-front-rest" placeholder="请输入休息人员姓名" style="width:100%; padding:12px;">
+                            </div>
+                            <div style="margin-top: 12px;">
+                                <label style="color:#666;font-size:12px;">早班支援人员（多人用逗号分隔）</label>
+                                <input id="dr-front-support" placeholder="请输入支援人员姓名" style="width:100%; padding:12px;">
+                            </div>
                         </div>
-                        <div style="margin-top: 12px;">
-                            <label style="color:#666;font-size:12px;">午班支援人员（多人用逗号分隔）</label>
-                            <input id="dr-kitchen-support" placeholder="请输入支援人员姓名" style="width:100%; padding:12px;">
+                        <div class="dr-hr-slab__section">
+                            <div class="dr-hr-slab__rowhd">
+                                <span>🌙 午班上班人员</span>
+                                <button class="btn btn-secondary" type="button" onclick="addDailyReportStaffRow('kitchen', event)" style="padding: 8px 12px;">添加</button>
+                            </div>
+                            <div id="dr-kitchen-staff" style="margin-top: 10px; color: rgba(200,215,230,0.78);">暂无人员</div>
+                            <div style="margin-top: 12px;">
+                                <label style="color:#666;font-size:12px;">午班休息人员（多人用逗号分隔）</label>
+                                <input id="dr-kitchen-rest" placeholder="请输入休息人员姓名" style="width:100%; padding:12px;">
+                            </div>
+                            <div style="margin-top: 12px;">
+                                <label style="color:#666;font-size:12px;">午班支援人员（多人用逗号分隔）</label>
+                                <input id="dr-kitchen-support" placeholder="请输入支援人员姓名" style="width:100%; padding:12px;">
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="card" style="margin-bottom: 18px;">
-                    <div class="card-icon green">📅</div>
-                    <h4>第二天排班</h4>
-                    <div style="margin-top: 12px;">
-                        <div style="display:flex; justify-content: space-between; align-items:center; gap: 10px;">
-                            <div style="font-weight: 900;">☀️ 早班排班人员</div>
-                            <button class="btn btn-secondary" type="button" onclick="addDailyReportScheduleShiftRow('morning', event)" style="padding: 8px 12px;">添加</button>
+                <div class="dr-hr-slab">
+                    <div class="dr-hr-slab__toolbar">
+                        <span class="dr-hr-slab__kbd">NEXT</span>
+                        <span class="dr-hr-slab__hint">第二天排班 · 早/午班与全员排班分区，人效随营业额预估联动</span>
+                    </div>
+                    <div class="dr-hr-slab__body">
+                        <div class="dr-hr-slab__title">
+                            <span class="dr-hr-slab__icon" aria-hidden="true">📅</span>
+                            <span>第二天排班</span>
                         </div>
-                        <div id="dr-schedule-morning-staff" style="margin-top: 10px; color: rgba(200,215,230,0.78);">暂无人员</div>
-                    </div>
-                    <div style="margin-top: 16px; border-top: 1px solid rgba(200,215,230,0.18); padding-top: 14px;">
-                        <div style="display:flex; justify-content: space-between; align-items:center; gap: 10px;">
-                            <div style="font-weight: 900;">🌙 午班排班人员</div>
-                            <button class="btn btn-secondary" type="button" onclick="addDailyReportScheduleShiftRow('afternoon', event)" style="padding: 8px 12px;">添加</button>
-                        </div>
-                        <div id="dr-schedule-afternoon-staff" style="margin-top: 10px; color: rgba(200,215,230,0.78);">暂无人员</div>
-                    </div>
-                    <div style="margin-top: 12px; display:flex; justify-content: space-between; align-items:center; gap: 10px;">
-                        <div style="font-weight: 900;">全部排班人员</div>
-                        <button class="btn btn-secondary" type="button" onclick="addDailyReportSchedulePlanRow(event)" style="padding: 8px 12px;">添加</button>
-                    </div>
-                    <div id="dr-schedule-staff" style="margin-top: 10px; color: rgba(200,215,230,0.78);">暂无排班人员</div>
-                    <div style="margin-top: 12px;">
-                        <label style="color:#666;font-size:12px;">明天折前营业额预估（元）</label>
-                        <input id="dr-tomorrow-gross" type="number" inputmode="decimal" placeholder="请输入明天折前营业额预估" style="width:100%; padding:12px;" oninput="syncDailyReportComputed()">
-                        <div id="dr-schedule-eff-box" class="dr-schedule-eff" style="visibility:hidden;">
-                            <div style="display:flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap;">
-                                <div>
-                                    <div style="font-size: 12px; color: rgba(200,215,230,0.78); font-weight: 900;">排班人效值</div>
-                                    <div id="dr-schedule-eff" class="v">¥0</div>
-                                </div>
-                                <div style="text-align:right; color: rgba(200,215,230,0.85); font-size: 12px;">
-                                    <div>排班人数：<span id="dr-schedule-people" style="font-weight: 900; color: rgba(226,232,240,0.95);">0人</span></div>
-                                    <div style="margin-top: 6px;">预估营业额：<span id="dr-schedule-gross" style="font-weight: 900; color: rgba(226,232,240,0.95);">¥0.00</span></div>
-                                </div>
+                        <div class="dr-hr-slab__section">
+                            <div class="dr-hr-slab__rowhd">
+                                <span>☀️ 早班排班人员</span>
+                                <button class="btn btn-secondary" type="button" onclick="addDailyReportScheduleShiftRow('morning', event)" style="padding: 8px 12px;">添加</button>
                             </div>
-                            <div style="margin-top: 10px; color: rgba(200,215,230,0.78); font-size: 12px;">提示：人效值 = 折前营业额预估 / 排班人数，帮助您判断排班是否合理</div>
+                            <div id="dr-schedule-morning-staff" style="margin-top: 10px; color: rgba(200,215,230,0.78);">暂无人员</div>
                         </div>
-                    </div>
-                    <div style="margin-top: 12px;">
-                        <label style="color:#666;font-size:12px;">排班备注</label>
-                        <textarea id="dr-schedule-remark" rows="4" placeholder="请输入排班备注信息" style="width:100%; padding:12px; resize: vertical;"></textarea>
+                        <div class="dr-hr-slab__section">
+                            <div class="dr-hr-slab__rowhd">
+                                <span>🌙 午班排班人员</span>
+                                <button class="btn btn-secondary" type="button" onclick="addDailyReportScheduleShiftRow('afternoon', event)" style="padding: 8px 12px;">添加</button>
+                            </div>
+                            <div id="dr-schedule-afternoon-staff" style="margin-top: 10px; color: rgba(200,215,230,0.78);">暂无人员</div>
+                        </div>
+                        <div class="dr-hr-slab__section">
+                            <div class="dr-hr-slab__rowhd">
+                                <span>全部排班人员</span>
+                                <button class="btn btn-secondary" type="button" onclick="addDailyReportSchedulePlanRow(event)" style="padding: 8px 12px;">添加</button>
+                            </div>
+                            <div id="dr-schedule-staff" style="margin-top: 10px; color: rgba(200,215,230,0.78);">暂无排班人员</div>
+                        </div>
+                        <div style="margin-top: 12px;">
+                            <label style="color:#666;font-size:12px;">明天折前营业额预估（元）</label>
+                            <input id="dr-tomorrow-gross" type="number" inputmode="decimal" placeholder="请输入明天折前营业额预估" style="width:100%; padding:12px;" oninput="syncDailyReportComputed()">
+                            <div id="dr-schedule-eff-box" class="dr-schedule-eff" style="visibility:hidden;">
+                                <div style="display:flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap;">
+                                    <div>
+                                        <div style="font-size: 12px; color: rgba(200,215,230,0.78); font-weight: 900;">排班人效值</div>
+                                        <div id="dr-schedule-eff" class="v">¥0</div>
+                                    </div>
+                                    <div style="text-align:right; color: rgba(200,215,230,0.85); font-size: 12px;">
+                                        <div>排班人数：<span id="dr-schedule-people" style="font-weight: 900; color: rgba(226,232,240,0.95);">0人</span></div>
+                                        <div style="margin-top: 6px;">预估营业额：<span id="dr-schedule-gross" style="font-weight: 900; color: rgba(226,232,240,0.95);">¥0.00</span></div>
+                                    </div>
+                                </div>
+                                <div style="margin-top: 10px; color: rgba(200,215,230,0.78); font-size: 12px;">提示：人效值 = 折前营业额预估 / 排班人数，帮助您判断排班是否合理</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 12px;">
+                            <label style="color:#666;font-size:12px;">排班备注</label>
+                            <textarea id="dr-schedule-remark" rows="4" placeholder="请输入排班备注信息" style="width:100%; padding:12px; resize: vertical;"></textarea>
+                        </div>
                     </div>
                 </div>
 
@@ -8977,12 +9254,20 @@
                     <div class="rep-filters__head">
                         <div class="rep-filters__eyebrow">LOOKUP</div>
                         <div class="rep-filters__title">记录查询</div>
-                        <p class="rep-filters__hint">按门店、员工与时间范围筛选积分流水；字段与经营分析报表检索区一致。</p>
+                        <p class="rep-filters__hint">按门店、状态、员工与日期筛选；与经营分析报表检索区同一套面板语言。</p>
                     </div>
                     <div class="rep-filters__grid" style="grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));">
                         <div class="rep-field">
                             <label for="points-admin-store">门店</label>
                             <select id="points-admin-store" class="form-input"></select>
+                        </div>
+                        <div class="rep-field">
+                            <label for="points-admin-record-status">状态</label>
+                            <select id="points-admin-record-status" class="form-input">
+                                <option value="approved">已审批（已入账）</option>
+                                <option value="pending">未审批</option>
+                                <option value="applied">已申请（全流程）</option>
+                            </select>
                         </div>
                         <div class="rep-field">
                             <label for="points-admin-name">员工</label>
@@ -9003,6 +9288,7 @@
                     <div id="points-admin-query-summary" style="display:none; margin-top:12px; padding:12px 14px; border-radius:12px; border:1px solid rgba(250,204,21,0.25); background:rgba(250,204,21,0.06);">
                         <div style="font-size:12px; font-weight:800; color:rgba(250,204,21,0.95); margin-bottom:8px;">查询结果汇总</div>
                         <div style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px; font-size:13px; color:rgba(226,232,240,0.92);">
+                            <div id="points-admin-sum-store-row" style="grid-column:1/-1; font-size:12px; color:rgba(200,215,230,0.88); padding-bottom:4px; border-bottom:1px solid rgba(255,255,255,0.06);">门店：<span id="points-admin-sum-store">—</span></div>
                             <div>合计积分：<span id="points-admin-sum-points" style="font-weight:900; color:#facc15;">0</span></div>
                             <div>折算金额：<span id="points-admin-sum-amount" style="font-weight:900; color:#f59e0b;">¥0.00</span></div>
                             <div>记录条数：<span id="points-admin-sum-count" style="font-weight:800;">0</span></div>
@@ -9581,17 +9867,23 @@
             </div>
 
             <div id="dr-staff-modal" class="modal ui-modal">
-                <div class="modal-content" style="max-width: 620px;">
+                <div class="modal-content dr-staff-modal-content">
                     <div class="modal-header">
                         <div>
-                            <h3 class="ui-modal-title">选择员工</h3>
-                            <div class="ui-modal-desc">支持批量选择，一次添加多位员工</div>
+                            <h3 class="ui-modal-title" id="dr-staff-modal-title">选择员工</h3>
+                            <div class="ui-modal-desc" id="dr-staff-modal-desc">支持批量选择，一次添加多位员工。</div>
                         </div>
                         <button class="modal-close" onclick="closeDailyReportStaffModal()">×</button>
                     </div>
                     <div class="modal-body">
-                        <button id="dr-staff-select-all" class="btn" type="button" onclick="toggleDailyReportStaffSelectAll()" style="width:100%; justify-content:center; padding: 12px 14px; background: #2563eb;">全选</button>
-                        <div id="dr-staff-pick-list" style="margin-top: 12px; max-height: 60vh; overflow:auto; padding-right: 4px;"></div>
+                        <div class="dr-staff-shell">
+                            <div class="dr-staff-toolbar">
+                                <span class="dr-staff-toolbar__kbd">HR</span>
+                                <span class="dr-staff-toolbar__hint" id="dr-staff-modal-hint">点选左侧勾选 · 橙色按钮切换半天/全天</span>
+                            </div>
+                            <button id="dr-staff-select-all" class="btn dr-staff-select-all-btn" type="button" onclick="toggleDailyReportStaffSelectAll()">全选</button>
+                            <div id="dr-staff-pick-list" class="dr-staff-pick-scroll"></div>
+                        </div>
                         <div class="ui-modal-footer">
                             <button class="btn btn-secondary" type="button" onclick="closeDailyReportStaffModal()">取消</button>
                             <button class="btn" type="button" onclick="confirmDailyReportStaffModal()">添加所选</button>
@@ -13093,6 +13385,7 @@
                 if (p.name) q.set('name', String(p.name));
                 if (p.start) q.set('start', String(p.start));
                 if (p.end) q.set('end', String(p.end));
+                if (p.recordStatus) q.set('recordStatus', String(p.recordStatus));
                 const qs = q.toString();
                 return this.request('/api/points/records' + (qs ? ('?' + qs) : ''), { method: 'GET' });
             },
@@ -13735,7 +14028,17 @@
             const isScopedView = isAdminView || isStoreManagerView;
             if (applyCard) applyCard.style.display = isEmployee ? '' : 'none';
             if (adminFilterCard) adminFilterCard.style.display = isScopedView ? '' : 'none';
-            if (recordsTitleEl) recordsTitleEl.textContent = isAdminView ? '积分记录（全门店）' : (isStoreManagerView ? '积分记录（本门店）' : '我的积分记录');
+            if (recordsTitleEl) {
+                if (isAdminView) {
+                    const ss = document.getElementById('points-admin-store');
+                    const lab = ss && !ss.disabled ? String(ss.options[ss.selectedIndex]?.textContent || ss.value || '').trim() : '';
+                    recordsTitleEl.textContent = lab && lab !== '全部门店' ? `积分记录（${lab}）` : '积分记录（全部门店）';
+                } else if (isStoreManagerView) {
+                    recordsTitleEl.textContent = `积分记录（${String(currentUser?.store || '').trim() || '本门店'}）`;
+                } else {
+                    recordsTitleEl.textContent = '我的积分记录';
+                }
+            }
 
             if (isScopedView) {
                 const stores = (HRMS_STORE.getStores ? HRMS_STORE.getStores() : []) || [];
@@ -13756,6 +14059,10 @@
                         storeSel.disabled = false;
                     }
                 }
+                try {
+                    const stSel = document.getElementById('points-admin-record-status');
+                    if (stSel && !String(stSel.value || '').trim()) stSel.value = 'approved';
+                } catch (e) {}
                 await queryPointsAdminRecords();
                 return;
             }
@@ -13832,17 +14139,27 @@
             const listEl = document.getElementById('points-records-list');
             const monthPointsEl = document.getElementById('points-month-points');
             const monthAmountEl = document.getElementById('points-month-amount');
+            const recordsTitleEl = document.getElementById('points-records-title');
             if (!listEl) return;
             const role = String(currentUser?.role || '').trim();
             const isStoreManagerView = role === ROLES.STORE_MANAGER;
-            const selectedStore = String(document.getElementById('points-admin-store')?.value || '').trim();
+            const isAdminView = role === ROLES.ADMIN || role === ROLES.HR_MANAGER || role === ROLES.HQ_MANAGER;
+            const storeSel = document.getElementById('points-admin-store');
+            const selectedStore = String(storeSel?.value || '').trim();
             const store = isStoreManagerView ? String(currentUser?.store || '').trim() : selectedStore;
+            const storeLabel = (() => {
+                if (isStoreManagerView) return String(currentUser?.store || '').trim() || '本门店';
+                if (!storeSel || storeSel.disabled) return store || '—';
+                const t = String(storeSel.options[storeSel.selectedIndex]?.textContent || '').trim();
+                return t || '—';
+            })();
             const name = String(document.getElementById('points-admin-name')?.value || '').trim();
             const start = String(document.getElementById('points-admin-start')?.value || '').trim();
             const end = String(document.getElementById('points-admin-end')?.value || '').trim();
+            const recordStatus = String(document.getElementById('points-admin-record-status')?.value || 'approved').trim() || 'approved';
             try {
                 listEl.innerHTML = '<div style="color:rgba(200,215,230,0.75);">加载中...</div>';
-                const resp = await HRMS_API.getPointRecords({ store, name, start, end });
+                const resp = await HRMS_API.getPointRecords({ store, name, start, end, recordStatus });
                 const items = Array.isArray(resp?.items) ? resp.items : [];
                 const sm = resp?.summary && typeof resp.summary === 'object' ? resp.summary : null;
                 const sumPts = sm && Number.isFinite(Number(sm.totalPoints)) ? Number(sm.totalPoints) : items.reduce((s, x) => s + (Number(x?.points || 0) || 0), 0);
@@ -13854,11 +14171,16 @@
                 const sa = document.getElementById('points-admin-sum-amount');
                 const sc = document.getElementById('points-admin-sum-count');
                 const spe = document.getElementById('points-admin-sum-people');
-                if (sumBox) sumBox.style.display = items.length ? '' : 'none';
+                const sStore = document.getElementById('points-admin-sum-store');
+                if (sumBox) sumBox.style.display = '';
                 if (sp) sp.textContent = String(sumPts);
                 if (sa) sa.textContent = '¥' + sumAmt.toFixed(2);
                 if (sc) sc.textContent = String(sumCnt);
                 if (spe) spe.textContent = String(sumPeople);
+                if (sStore) sStore.textContent = storeLabel;
+                if (recordsTitleEl && (isAdminView || isStoreManagerView)) {
+                    recordsTitleEl.textContent = storeLabel && storeLabel !== '全部门店' ? `积分记录（${storeLabel}）` : '积分记录（全部门店）';
+                }
                 const nowMonth = hrmsShanghaiYYYYMM();
                 const monthPoints = items
                     .filter(x => String(x?.approvedAt || x?.createdAt || '').slice(0, 7) === nowMonth)
@@ -13897,6 +14219,8 @@
                     return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN');
                 });
                 listEl.innerHTML = groupedList.map(group => {
+                    const stSet = new Set((Array.isArray(group.items) ? group.items : []).map(x => String(x?.store || '').trim()).filter(Boolean));
+                    const gStoreLabel = stSet.size <= 1 ? (group.store || [...stSet][0] || '—') : ([...stSet].slice(0, 2).join('、') + (stSet.size > 2 ? ' 等' + stSet.size + '店' : ''));
                     const rows = (Array.isArray(group.items) ? group.items : [])
                         .slice()
                         .sort((a, b) => String(b?.approvedAt || b?.createdAt || '').localeCompare(String(a?.approvedAt || a?.createdAt || '')))
@@ -13905,12 +14229,14 @@
                             const pts = Number(it?.points || 0);
                             const amount = Number(it?.amount || (pts * 0.5));
                             const dt = String(it?.approvedAt || it?.createdAt || '').slice(0, 19).replace('T', ' ');
-                            const aid = String(it?.approvalId || '').trim();
+                            const aid = String(it?.approvalId || it?.id || '').trim();
+                            const rowStore = String(it?.store || '').trim() || '—';
+                            const st = String(it?.recordStatusZh || '已审批').trim();
                             return `<details class="rep-row-details">
                                 <summary class="rep-row-details__summary" style="align-items:flex-start;">
                                     <span class="rep-row-details__sum-main">
                                         <span class="rep-row-details__sum-title">${escapeHtml(itemName)} · ${pts}分</span>
-                                        <span class="rep-row-details__sum-meta">${escapeHtml(group.store || '-')}${dt ? ' · ' + escapeHtml(dt) : ''}</span>
+                                        <span class="rep-row-details__sum-meta">门店：${escapeHtml(rowStore)} · 状态：${escapeHtml(st)}${dt ? ' · ' + escapeHtml(dt) : ''}</span>
                                     </span>
                                     <span style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
                                         <span class="rep-row-details__sum-badge" style="color:#f59e0b;">¥${amount.toFixed(2)}</span>
@@ -13926,7 +14252,7 @@
                         <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:center;">
                             <div>
                                 <div style="font-weight:900; color:rgba(226,232,240,0.96); font-size:16px;">${escapeHtml(group.name || group.username || '-')}</div>
-                                <div style="margin-top:4px; font-size:12px; color:rgba(200,215,230,0.7);">${escapeHtml(group.store || '-')} · ${group.items.length}条记录</div>
+                                <div style="margin-top:4px; font-size:12px; color:rgba(200,215,230,0.7);">门店：${escapeHtml(gStoreLabel)} · ${group.items.length}条记录</div>
                             </div>
                             <div style="text-align:right;">
                                 <div style="font-size:13px; color:#facc15; font-weight:900;">${Number(group.totalPoints || 0)}分</div>
@@ -13938,6 +14264,7 @@
                 }).join('');
             } catch (e) {
                 listEl.innerHTML = '<div style="color:#ef4444;">加载失败：' + escapeHtml(String(e?.message || e)) + '</div>';
+                try { const sumBox = document.getElementById('points-admin-query-summary'); if (sumBox) sumBox.style.display = 'none'; } catch (_e) {}
             }
         }
 
@@ -27809,21 +28136,19 @@ ${knowledgeContent.slice(0, 30000)}`;
                 const pos = escapeHtml(String(u?.position || '').trim());
                 const day = Number(u?.days || 1);
                 const dayText = day === 0.5 ? '半天' : '全天';
-                const chkStyle = checked
-                    ? 'width:22px;height:22px;border-radius:7px;border:2px solid rgba(96,165,250,0.95);background:rgba(96,165,250,0.95);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;'
-                    : 'width:22px;height:22px;border-radius:7px;border:2px solid rgba(200,215,230,0.4);background:transparent;flex-shrink:0;';
+                const chkCls = checked ? 'dr-staff-pick-row__chk is-on' : 'dr-staff-pick-row__chk';
                 const chkInner = checked ? '✓' : '';
                 return `
-                    <div class="dr-staff-row" onclick="toggleDailyReportStaffPick(${idx})" style="cursor:pointer;padding:14px 4px;">
-                        <div style="display:flex; gap: 14px; align-items:center; min-width:0; flex:1;">
-                            <div style="${chkStyle}">${chkInner}</div>
+                    <div class="dr-staff-pick-row dr-staff-row" onclick="toggleDailyReportStaffPick(${idx})">
+                        <div class="dr-staff-pick-row__main">
+                            <div class="${chkCls}">${chkInner}</div>
                             <div style="min-width:0; flex:1;">
-                                <div class="dr-staff-name" style="font-size:16px;">${nm}</div>
+                                <div class="dr-staff-name" style="font-size:15px;">${nm}</div>
                                 <div class="dr-staff-meta">${pos ? ('岗位：' + pos) : ''}</div>
                             </div>
                         </div>
                         <div class="dr-staff-actions" onclick="event.stopPropagation();">
-                            <button class="btn" type="button" onclick="toggleDailyReportStaffPickDays(${idx})" style="padding: 10px 16px; font-size:14px; background: #f97316; min-height:44px;">${escapeHtml(dayText)}</button>
+                            <button type="button" class="dr-staff-pick-row__day" onclick="toggleDailyReportStaffPickDays(${idx})">${escapeHtml(dayText)}</button>
                         </div>
                     </div>
                 `;
@@ -27843,6 +28168,26 @@ ${knowledgeContent.slice(0, 30000)}`;
             const modal = document.getElementById('dr-staff-modal');
             if (!modal) return;
             __DR_STAFF_MODAL_KIND = String(kind || '').trim() || 'front';
+            const k = __DR_STAFF_MODAL_KIND;
+            const cap = {
+                front: { title: '选择员工 · 前厅上班', desc: '今日实际出勤：勾选后加入前厅上班名单，可切换半天/全天。', hint: '与前厅「添加」联动 · 可批量勾选' },
+                kitchen: { title: '选择员工 · 厨房上班', desc: '今日实际出勤：勾选后加入厨房上班名单。', hint: '与厨房「添加」联动 · 可批量勾选' },
+                rest: { title: '选择员工 · 当日休息', desc: '将人员记入当日休息名单（半天/全天在确认后生效）。', hint: '与休息「添加」联动' },
+                schedule_front: { title: '选择员工 · 前厅排班', desc: '第二天排班：加入明日前厅排班名单。', hint: '与排班前厅「添加」联动' },
+                schedule_kitchen: { title: '选择员工 · 厨房排班', desc: '第二天排班：加入明日厨房排班名单。', hint: '与排班厨房「添加」联动' },
+                schedule_morning: { title: '选择员工 · 早班排班', desc: '第二天排班：加入明日早班排班名单。', hint: '与早班排班「添加」联动' },
+                schedule_afternoon: { title: '选择员工 · 午班排班', desc: '第二天排班：加入明日午班排班名单。', hint: '与午班排班「添加」联动' },
+                schedule: { title: '选择员工 · 排班', desc: '批量勾选加入排班名单。', hint: '排班人员选择' }
+            };
+            const meta = cap[k] || cap.front;
+            try {
+                const t = document.getElementById('dr-staff-modal-title');
+                const d = document.getElementById('dr-staff-modal-desc');
+                const h = document.getElementById('dr-staff-modal-hint');
+                if (t) t.textContent = meta.title;
+                if (d) d.textContent = meta.desc;
+                if (h) h.textContent = meta.hint;
+            } catch (e) {}
             __DR_STAFF_ANCHOR = ev?.currentTarget || ev?.target || null;
             const users = drGetPickableUsers();
             __DR_STAFF_PICK_LIST = users.map(u => ({
@@ -28653,6 +28998,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 const weather = escapeHtml(String(r?.data?.weather || '').trim());
                 const holidayMark = !!(r?.data?.holiday_switch ?? r?.data?.holidaySwitch);
                 const submittedAt = String(r?.submittedAt || r?.submitted_at || '').trim();
+                const submitterName = escapeHtml(String(r?.submitterName || '').trim());
                 const submittedBadge = submittedAt ? '<span style="margin-left:6px; font-size:10px; padding:2px 7px; border-radius:99px; background:rgba(34,197,94,0.15); color:#22c55e; font-weight:800;">已提交</span>' : '<span style="margin-left:6px; font-size:10px; padding:2px 7px; border-radius:99px; background:rgba(245,158,11,0.15); color:#f59e0b; font-weight:800;">草稿</span>';
                 const actual = Number(r?.data?.actual || 0);
                 const budget = Number(r?.data?.budget || 0);
@@ -28670,34 +29016,35 @@ ${knowledgeContent.slice(0, 30000)}`;
 
                 return `
                     <div class="dr-report-card" onclick="openDailyReport('${safeStore}', '${safeDate}')">
-                        <div class="dr-report-head">
-                            <div class="dr-report-date">${title}${submittedBadge}</div>
-                            <div class="dr-report-arrow">›</div>
-                        </div>
-                        <div class="dr-report-sub">
-                            <span style="color:#60a5fa; font-weight:800;">🏬 ${store}</span>
-                            ${weather ? `<span style="color:rgba(200,215,230,0.7);">·</span><span style="color:rgba(200,215,230,0.7);">${weather}</span>` : ''}
-                            ${holidayMark ? `<span style="margin-left:6px; font-size:10px; padding:2px 7px; border-radius:99px; background:rgba(249,115,22,0.18); color:#fb923c; font-weight:800;">休</span>` : ''}
-                        </div>
-
-                        <div class="dr-report-kpis">
-                            <div class="dr-kpi">
-                                <div class="k">今日实收</div>
-                                <div class="v" style="color:#f1f5f9;">${fmtMoney(actual)}</div>
+                        <div class="dr-report-card__in">
+                            <div class="dr-report-head">
+                                <div class="dr-report-date">${title}${submittedBadge}</div>
+                                <div class="dr-report-arrow">›</div>
                             </div>
-                            <div class="dr-kpi">
-                                <div class="k">达成率</div>
-                                <div class="v" style="color:${rateColor};">${drFmtPct(rate)}</div>
+                            <div class="dr-report-sub">
+                                <span style="color:#93c5fd; font-weight:800;">🏬 ${store}</span>
+                                ${submitterName ? `<span style="color:rgba(200,215,230,0.7);">·</span><span style="color:rgba(200,215,230,0.7);">👤 ${submitterName}</span>` : ''}
+                                ${weather ? `<span style="color:rgba(200,215,230,0.7);">·</span><span style="color:rgba(200,215,230,0.7);">${weather}</span>` : ''}
+                                ${holidayMark ? `<span style="margin-left:6px; font-size:10px; padding:2px 7px; border-radius:99px; background:rgba(249,115,22,0.18); color:#fb923c; font-weight:800;">休</span>` : ''}
+                            </div>
+                            <div class="dr-report-kpis">
+                                <div class="dr-kpi">
+                                    <div class="k">今日实收</div>
+                                    <div class="v" style="color:#f1f5f9;">${fmtMoney(actual)}</div>
+                                </div>
+                                <div class="dr-kpi">
+                                    <div class="k">达成率</div>
+                                    <div class="v" style="color:${rateColor};">${drFmtPct(rate)}</div>
+                                </div>
                             </div>
                         </div>
-
-                        <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; font-size:12px;">
-                            <div style="display:flex; justify-content:space-between;"><span style="color:rgba(200,215,230,0.65);">折前营业额</span><span style="font-weight:800; color:#93c5fd;">${fmtMoney(gross)}</span></div>
-                            <div style="display:flex; justify-content:space-between;"><span style="color:rgba(200,215,230,0.65);">总折扣</span><span style="font-weight:800; color:#f87171;">${fmtMoney(discount)}</span></div>
-                            <div style="display:flex; justify-content:space-between;"><span style="color:rgba(200,215,230,0.65);">堂食</span><span style="font-weight:800; color:#34d399;">${fmtMoney(dineRev)}</span></div>
-                            <div style="display:flex; justify-content:space-between;"><span style="color:rgba(200,215,230,0.65);">人效</span><span style="font-weight:800; color:#60a5fa;">¥${escapeHtml(Number.isFinite(eff) ? fmtInt(eff) : '0')}</span></div>
-                            <div style="display:flex; justify-content:space-between;"><span style="color:rgba(200,215,230,0.65);">饿了么</span><span style="font-weight:800; color:#38bdf8;">${fmtMoney(elemeRev)}</span></div>
-                            <div style="display:flex; justify-content:space-between;"><span style="color:rgba(200,215,230,0.65);">美团</span><span style="font-weight:800; color:#fb923c;">${fmtMoney(meituanRev)}</span></div>
+                        <div class="dr-report-metrics">
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;"><span class="dm-lab">折前营业额</span><span class="dm-val" style="color:#93c5fd;">${fmtMoney(gross)}</span></div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;"><span class="dm-lab">总折扣</span><span class="dm-val" style="color:#f87171;">${fmtMoney(discount)}</span></div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;"><span class="dm-lab">堂食</span><span class="dm-val" style="color:#34d399;">${fmtMoney(dineRev)}</span></div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;"><span class="dm-lab">人效</span><span class="dm-val" style="color:#60a5fa;">¥${escapeHtml(Number.isFinite(eff) ? fmtInt(eff) : '0')}</span></div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;"><span class="dm-lab">饿了么</span><span class="dm-val" style="color:#38bdf8;">${fmtMoney(elemeRev)}</span></div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;"><span class="dm-lab">美团</span><span class="dm-val" style="color:#fb923c;">${fmtMoney(meituanRev)}</span></div>
                         </div>
                     </div>
                 `;

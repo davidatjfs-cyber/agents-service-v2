@@ -2295,6 +2295,53 @@ app.post('/api/ai/chat-completions', authRequired, async (req, res) => {
   }
 });
 
+function normalizePointsAdminRecordStatus(raw) {
+  const s = String(raw || '').trim().toLowerCase();
+  if (s === 'pending' || s === '未审批') return 'pending';
+  if (s === 'applied' || s === '已申请' || s === 'submitted') return 'applied';
+  return 'approved';
+}
+
+function mapApprovalRowToPointsAdminItem(row) {
+  const p = row.payload && typeof row.payload === 'object' ? row.payload : {};
+  const rawItems = Array.isArray(p.items) ? p.items : [];
+  let pts = Number(p.totalPoints);
+  if (!Number.isFinite(pts) || pts < 0) pts = Number(p.points) || 0;
+  if ((!pts || pts === 0) && rawItems.length) {
+    pts = rawItems.reduce((acc, it) => acc + (Number(it?.points) || 0), 0);
+  }
+  const st = String(row.status || '').trim().toLowerCase();
+  let recordStatusZh = '已申请';
+  if (st === 'pending') recordStatusZh = '未审批';
+  else if (st === 'approved') recordStatusZh = '已审批';
+  else if (st === 'rejected') recordStatusZh = '已驳回';
+  else if (st === 'returned') recordStatusZh = '已退回';
+  const applicantName = String(p.applicantName || '').trim();
+  const apprUser = String(row.applicant_username || '').trim();
+  const ts = row.created_at ? String(row.created_at) : '';
+  const approvedAt =
+    st === 'approved'
+      ? String(row.executed_at || row.updated_at || '')
+      : '';
+  return {
+    id: String(row.id || ''),
+    sourceType: 'points_approval',
+    approvalId: String(row.id || ''),
+    username: apprUser,
+    name: applicantName || apprUser,
+    store: String(p.store || '').trim(),
+    itemName: String(p.itemName || '').trim() || '积分申请',
+    reason: String(p.reason || '').trim(),
+    points: Number(pts) || 0,
+    amount: Number(((Number(pts) || 0) * 0.5).toFixed(2)),
+    approvedAt,
+    approvedBy: '',
+    createdAt: ts,
+    recordStatusZh,
+    approvalStatus: st
+  };
+}
+
 app.get('/api/points/records', authRequired, async (req, res) => {
   const username = String(req.user?.username || '').trim();
   const role = String(req.user?.role || '').trim();
@@ -2305,50 +2352,91 @@ app.get('/api/points/records', authRequired, async (req, res) => {
   const name = String(req.query?.name || '').trim().toLowerCase();
   const start = safeDateOnly(req.query?.start);
   const end = safeDateOnly(req.query?.end);
+  const recordStatus = normalizePointsAdminRecordStatus(req.query?.recordStatus || req.query?.status);
 
   try {
     const state0 = (await getSharedState()) || {};
     const myStore = role === 'store_manager' ? String(pickMyStoreFromState(state0, username) || '').trim() : '';
     const effectiveStore = role === 'store_manager' ? myStore : store;
-    const params = [];
-    const where = [];
-    if (start) {
-      params.push(start);
-      where.push(`approved_at >= $${params.length}::date`);
-    }
-    if (end) {
-      params.push(end);
-      where.push(`approved_at < ($${params.length}::date + interval '1 day')`);
-    }
-    if (name) {
-      params.push(`%${name}%`);
-      where.push(`(lower(coalesce(name, '')) LIKE $${params.length} OR lower(coalesce(username, '')) LIKE $${params.length})`);
-    }
-    const sql = `
+
+    let list = [];
+
+    if (recordStatus === 'approved') {
+      const params = [];
+      const where = [];
+      if (start) {
+        params.push(start);
+        where.push(`approved_at >= $${params.length}::date`);
+      }
+      if (end) {
+        params.push(end);
+        where.push(`approved_at < ($${params.length}::date + interval '1 day')`);
+      }
+      if (name) {
+        params.push(`%${name}%`);
+        where.push(`(lower(coalesce(name, '')) LIKE $${params.length} OR lower(coalesce(username, '')) LIKE $${params.length})`);
+      }
+      const sql = `
       SELECT id::text, approval_id, username, name, store, item_name, reason, points, amount, approved_at, approved_by
       FROM point_records
       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
       ORDER BY approved_at DESC NULLS LAST, created_at DESC
     `;
-    let list = (await pool.query(sql, params)).rows.map((r) => ({
-      id: r.id,
-      approvalId: r.approval_id || '',
-      username: r.username || '',
-      name: r.name || '',
-      store: r.store || '',
-      itemName: r.item_name || '',
-      reason: r.reason || '',
-      points: Number(r.points) || 0,
-      amount: Number(r.amount) || 0,
-      approvedAt: r.approved_at ? String(r.approved_at) : '',
-      approvedBy: r.approved_by || ''
-    }));
-    if (effectiveStore) {
-      const want = canonicalizeStoreKeyForPoints(effectiveStore);
-      list = list.filter(x => canonicalizeStoreKeyForPoints(x?.store) === want);
+      list = (await pool.query(sql, params)).rows.map((r) => ({
+        id: r.id,
+        sourceType: 'point_record',
+        recordStatusZh: '已审批',
+        approvalId: r.approval_id || '',
+        username: r.username || '',
+        name: r.name || '',
+        store: r.store || '',
+        itemName: r.item_name || '',
+        reason: r.reason || '',
+        points: Number(r.points) || 0,
+        amount: Number(r.amount) || 0,
+        approvedAt: r.approved_at ? String(r.approved_at) : '',
+        approvedBy: r.approved_by || '',
+        createdAt: ''
+      }));
+      if (effectiveStore) {
+        const want = canonicalizeStoreKeyForPoints(effectiveStore);
+        list = list.filter(x => canonicalizeStoreKeyForPoints(x?.store) === want);
+      }
+      list.sort((a, b) => String(b?.approvedAt || '').localeCompare(String(a?.approvedAt || '')));
+    } else {
+      const params2 = [];
+      const where2 = [`type = 'points'`];
+      if (recordStatus === 'pending') {
+        where2.push(`lower(status) = 'pending'`);
+      }
+      if (start) {
+        params2.push(start);
+        where2.push(`(timezone('Asia/Shanghai', created_at))::date >= $${params2.length}::date`);
+      }
+      if (end) {
+        params2.push(end);
+        where2.push(`(timezone('Asia/Shanghai', created_at))::date <= $${params2.length}::date`);
+      }
+      if (name) {
+        params2.push(`%${name}%`);
+        where2.push(`(lower(coalesce(applicant_username, '')) like $${params2.length} OR lower(payload::text) like $${params2.length})`);
+      }
+      const sql2 = `
+        SELECT id, status, applicant_username, payload, created_at, updated_at, executed_at
+        FROM approval_requests
+        WHERE ${where2.join(' AND ')}
+        ORDER BY created_at DESC
+        LIMIT 3000
+      `;
+      const rows = (await pool.query(sql2, params2)).rows || [];
+      list = rows.map(mapApprovalRowToPointsAdminItem);
+      if (effectiveStore) {
+        const want = canonicalizeStoreKeyForPoints(effectiveStore);
+        list = list.filter(x => canonicalizeStoreKeyForPoints(x?.store) === want);
+      }
+      list.sort((a, b) => String(b?.createdAt || '').localeCompare(String(a?.createdAt || '')));
     }
 
-    list.sort((a, b) => String(b?.approvedAt || b?.createdAt || '').localeCompare(String(a?.approvedAt || a?.createdAt || '')));
     const totalPoints = list.reduce((s, x) => s + (Number(x?.points || 0) || 0), 0);
     const totalAmount = Number((totalPoints * 0.5).toFixed(2));
     const uniqueUsernames = new Set(
@@ -2361,7 +2449,8 @@ app.get('/api/points/records', authRequired, async (req, res) => {
         totalPoints,
         totalAmount,
         recordCount: list.length,
-        employeeCount: uniqueUsernames.size
+        employeeCount: uniqueUsernames.size,
+        recordStatus: recordStatus === 'pending' ? '未审批' : (recordStatus === 'applied' ? '已申请' : '已审批')
       }
     });
   } catch (e) {
