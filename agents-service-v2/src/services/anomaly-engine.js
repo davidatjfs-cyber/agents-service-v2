@@ -1016,17 +1016,6 @@ export async function runAnomalyChecks(frequency, stores, options = {}) {
               : null) ||
             shanghaiTodayYmd();
 
-          if (ruleKey === 'recharge_zero') {
-            const dup = await query(
-              `SELECT 1 FROM anomaly_triggers WHERE anomaly_key = 'recharge_zero' AND store = $1 AND trigger_date = $2::date LIMIT 1`,
-              [store, triggerDate]
-            );
-            if (dup.rows?.length) {
-              results.push({ store, rule: ruleKey, name: ruleCfg.name, ...result, skipped: 'duplicate_day' });
-              continue;
-            }
-          }
-
           const isDeferred = !!result.deferred;
 
           // 月维度（毛利率、月营收达成）：同一统计期只正式落库/通知一次，防止错误调度重复派单
@@ -1087,47 +1076,30 @@ export async function runAnomalyChecks(frequency, stores, options = {}) {
             continue;
           }
 
-          if (ruleKey === 'recharge_zero') {
-            const insParams = [
-              ruleKey,
-              store,
-              brand,
-              result.severity,
-              triggerDate,
-              JSON.stringify(result.value),
-              JSON.stringify(result.threshold),
-              ruleCfg.assign_to || 'store_manager',
-              ruleCfg.notify_target_role || ruleCfg.assign_to || 'store_manager'
-            ];
-            // Use upsert with partial unique index (anomaly_key, store, trigger_date) WHERE anomaly_key = 'recharge_zero'
-            const ins = await query(
-              `INSERT INTO anomaly_triggers (anomaly_key, store, brand, severity, trigger_date, trigger_value, threshold_value, assigned_role, notify_target_role)
-               VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9)
-               ON CONFLICT (anomaly_key, store, trigger_date) WHERE anomaly_key = 'recharge_zero' DO NOTHING
-               RETURNING id`,
-              insParams
-            );
-            if (!(ins.rows && ins.rows.length)) {
-              results.push({ store, rule: ruleKey, name: ruleCfg.name, ...result, skipped: 'duplicate_day' });
-              continue;
-            }
-          } else {
-            await query(
-              `INSERT INTO anomaly_triggers (anomaly_key, store, brand, severity, trigger_date, trigger_value, threshold_value, assigned_role, notify_target_role)
-               VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9)`,
-              [
-                ruleKey,
-                store,
-                brand,
-                result.severity,
-                triggerDate,
-                JSON.stringify(result.value),
-                JSON.stringify(result.threshold),
-                ruleCfg.assign_to || 'store_manager',
-                ruleCfg.notify_target_role || ruleCfg.assign_to || 'store_manager'
-              ]
-            );
+          // Use upsert with unique index (anomaly_key, store, trigger_date) for ALL anomaly types
+          const insParams = [
+            ruleKey,
+            store,
+            brand,
+            result.severity,
+            triggerDate,
+            JSON.stringify(result.value),
+            JSON.stringify(result.threshold),
+            ruleCfg.assign_to || 'store_manager',
+            ruleCfg.notify_target_role || ruleCfg.assign_to || 'store_manager'
+          ];
+          const ins = await query(
+            `INSERT INTO anomaly_triggers (anomaly_key, store, brand, severity, trigger_date, trigger_value, threshold_value, assigned_role, notify_target_role)
+             VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9)
+             ON CONFLICT (anomaly_key, store, trigger_date) DO NOTHING
+             RETURNING id`,
+            insParams
+          );
+          if (!(ins.rows && ins.rows.length)) {
+            results.push({ store, rule: ruleKey, name: ruleCfg.name, ...result, skipped: 'duplicate_day' });
+            continue;
           }
+
           // deferred -> open 的场景：清理同触发日 pending_data，避免一条待数据一条正式并存造成统计混乱
           if (ruleKey === 'gross_margin') {
             await query(
