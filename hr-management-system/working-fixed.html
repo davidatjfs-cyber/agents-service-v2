@@ -5836,6 +5836,513 @@
             }
         }
 
+        /* ═══════════════════════════════════════════════════════
+           Knowledge Base — dc-v2 Design System
+           ═══════════════════════════════════════════════════════ */
+        #knowledge-page {
+            --dc-ink: rgba(248,250,252,0.96);
+            --dc-muted: rgba(148,163,184,0.88);
+            --dc-faint: rgba(100,116,139,0.95);
+            --dc-line: rgba(148,163,184,0.14);
+            --dc-glow: rgba(245,158,11,0.14);
+            --dc-num: 'Outfit', ui-rounded, system-ui, sans-serif;
+            --dc-amber: rgba(245,158,11,0.92);
+        }
+
+        #knowledge-page .kb-dc-hero {
+            position: relative;
+            padding: 22px 0 18px;
+            margin-bottom: 4px;
+            border-bottom: 1px solid var(--dc-line);
+        }
+        #knowledge-page .kb-dc-hero::before {
+            content: '';
+            position: absolute;
+            inset: -8px -12px auto;
+            height: 120px;
+            pointer-events: none;
+            z-index: 0;
+            background: radial-gradient(ellipse 80% 70% at 20% 0%, rgba(245,158,11,0.12), transparent 55%),
+                        radial-gradient(ellipse 60% 50% at 90% 20%, rgba(56,189,248,0.08), transparent 50%);
+        }
+        #knowledge-page .kb-dc-hero > * { position: relative; z-index: 1; }
+        #knowledge-page .kb-dc-eyebrow {
+            font-size: 10px;
+            letter-spacing: 0.22em;
+            font-weight: 600;
+            color: rgba(245,158,11,0.75);
+            margin: 0 0 6px;
+            text-transform: uppercase;
+        }
+        #knowledge-page .kb-dc-hero-title {
+            margin: 0;
+            font-size: clamp(1.55rem, 4.2vw, 2rem);
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            color: var(--dc-ink);
+            line-height: 1.15;
+        }
+        #knowledge-page .kb-dc-hero-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 14px;
+        }
+        #knowledge-page .kb-dc-hero-actions .btn {
+            border-radius: 999px;
+            padding: 10px 22px;
+            font-size: 13px;
+            font-weight: 600;
+            border: 1px solid rgba(245,158,11,0.35);
+            background: linear-gradient(145deg, rgba(245,158,11,0.18), rgba(245,158,11,0.06));
+            color: #fde68a;
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.2) inset, 0 8px 24px -10px rgba(245,158,11,0.35);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        #knowledge-page .kb-dc-hero-actions .btn:active { transform: scale(0.98); }
+        #knowledge-page .kb-dc-hero-actions .btn-secondary {
+            border: 1px solid rgba(148,163,184,0.22);
+            background: rgba(255,255,255,0.06);
+            color: #e2e8f0;
+            box-shadow: none;
+        }
+        #knowledge-page .kb-dc-hero-actions .btn-secondary:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        #knowledge-page .kb-dc-search-bar {
+            position: relative;
+            margin-top: 16px;
+        }
+        #knowledge-page .kb-dc-search-bar input {
+            width: 100%;
+            padding: 12px 16px 12px 42px;
+            border-radius: 14px;
+            border: 1px solid rgba(148,163,184,0.18);
+            background: rgba(2,6,23,0.55);
+            color: var(--dc-ink);
+            font-size: 14px;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        #knowledge-page .kb-dc-search-bar input:focus {
+            outline: none;
+            border-color: rgba(245,158,11,0.45);
+            box-shadow: 0 0 0 3px rgba(245,158,11,0.12);
+        }
+        #knowledge-page .kb-dc-search-bar input::placeholder { color: var(--dc-faint); }
+        #knowledge-page .kb-dc-search-bar::before {
+            content: '🔍';
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 14px;
+            pointer-events: none;
+        }
+
+        #knowledge-page .kb-dc-layout {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 20px;
+            align-items: start;
+        }
+
+        #knowledge-page .kb-dc-panel {
+            border-radius: 18px;
+            overflow: hidden;
+            background: linear-gradient(180deg, rgba(24,28,40,0.55), rgba(15,23,42,0.42));
+            border: 1px solid var(--dc-line);
+            box-shadow: 0 20px 50px -28px rgba(0,0,0,0.55);
+        }
+
+        #knowledge-page .kb-dc-panel-head {
+            padding: 16px 18px 14px;
+            border-bottom: 1px solid rgba(148,163,184,0.1);
+        }
+        #knowledge-page .kb-dc-panel-head h3 {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            color: var(--dc-ink);
+        }
+        #knowledge-page .kb-dc-panel-body {
+            padding: 14px 18px 18px;
+        }
+
+        #knowledge-page .kb-dc-filter-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        #knowledge-page .kb-dc-filter-row:last-child { margin-bottom: 0; }
+        #knowledge-page .kb-dc-filter-row select {
+            flex: 1;
+            min-width: 0;
+            padding: 9px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(148,163,184,0.18);
+            background: rgba(2,6,23,0.55);
+            color: rgba(226,232,240,0.92);
+            font-size: 13px;
+            appearance: none;
+            -webkit-appearance: none;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        #knowledge-page .kb-dc-filter-row select:focus {
+            border-color: rgba(245,158,11,0.4);
+            outline: none;
+        }
+
+        #knowledge-page .kb-dc-tab-bar {
+            display: flex;
+            gap: 6px;
+            padding: 5px;
+            border-radius: 999px;
+            background: rgba(2,6,23,0.45);
+            border: 1px solid rgba(148,163,184,0.12);
+            margin-bottom: 14px;
+        }
+        #knowledge-page .kb-dc-tab-bar .btn,
+        #knowledge-page .kb-dc-tab-bar .btn-secondary {
+            border-radius: 999px !important;
+            padding: 7px 16px !important;
+            font-size: 12px !important;
+            font-weight: 600 !important;
+            border: none !important;
+            box-shadow: none !important;
+            transition: all 0.2s ease;
+        }
+        #knowledge-page .kb-dc-tab-bar .btn {
+            background: rgba(245,158,11,0.88) !important;
+            color: #000 !important;
+        }
+        #knowledge-page .kb-dc-tab-bar .btn-secondary {
+            background: transparent !important;
+            color: rgba(148,163,184,0.9) !important;
+        }
+        #knowledge-page .kb-dc-tab-bar .btn-secondary:hover {
+            color: #e2e8f0 !important;
+            background: rgba(255,255,255,0.06) !important;
+        }
+
+        #knowledge-page .kb-dc-item {
+            display: flex;
+            gap: 14px;
+            align-items: center;
+            padding: 14px 16px;
+            border-radius: 14px;
+            border: 1px solid rgba(148,163,184,0.08);
+            background: rgba(2,6,23,0.35);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        #knowledge-page .kb-dc-item:hover {
+            border-color: rgba(148,163,184,0.18);
+            background: rgba(2,6,23,0.5);
+            transform: translateX(3px);
+        }
+        #knowledge-page .kb-dc-item:active {
+            transform: scale(0.99);
+        }
+        #knowledge-page .kb-dc-item + .kb-dc-item {
+            margin-top: 8px;
+        }
+
+        #knowledge-page .kb-dc-item-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 20px;
+        }
+        #knowledge-page .kb-dc-item-icon[data-type="pdf"] {
+            background: linear-gradient(135deg, rgba(239,68,68,0.2), rgba(239,68,68,0.08));
+            border: 1px solid rgba(239,68,68,0.2);
+        }
+        #knowledge-page .kb-dc-item-icon[data-type="video"] {
+            background: linear-gradient(135deg, rgba(56,189,248,0.2), rgba(56,189,248,0.08));
+            border: 1px solid rgba(56,189,248,0.2);
+        }
+        #knowledge-page .kb-dc-item-icon[data-type="img"] {
+            background: linear-gradient(135deg, rgba(34,197,94,0.2), rgba(34,197,94,0.08));
+            border: 1px solid rgba(34,197,94,0.2);
+        }
+        #knowledge-page .kb-dc-item-icon[data-type="doc"] {
+            background: linear-gradient(135deg, rgba(245,158,11,0.2), rgba(245,158,11,0.08));
+            border: 1px solid rgba(245,158,11,0.2);
+        }
+
+        #knowledge-page .kb-dc-item-body {
+            flex: 1;
+            min-width: 0;
+        }
+        #knowledge-page .kb-dc-item-title {
+            font-weight: 700;
+            font-size: 14px;
+            line-height: 1.35;
+            color: rgba(248,250,252,0.96);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        #knowledge-page .kb-dc-item-meta {
+            margin-top: 4px;
+            font-size: 11px;
+            color: rgba(148,163,184,0.88);
+        }
+
+        #knowledge-page .kb-dc-item-badge {
+            flex-shrink: 0;
+            font-size: 10px;
+            font-weight: 800;
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(148,163,184,0.12);
+            background: rgba(255,255,255,0.04);
+            color: rgba(226,232,240,0.9);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        #knowledge-page .kb-dc-viewer {
+            border-radius: 18px;
+            background: linear-gradient(180deg, rgba(24,28,40,0.55), rgba(15,23,42,0.42));
+            border: 1px solid var(--dc-line);
+            box-shadow: 0 20px 50px -28px rgba(0,0,0,0.55);
+            padding: 22px;
+            min-height: 420px;
+        }
+        #knowledge-page .kb-dc-viewer-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding-bottom: 14px;
+            border-bottom: 1px solid rgba(148,163,184,0.1);
+        }
+        #knowledge-page .kb-dc-viewer-head h3 {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--dc-ink);
+            letter-spacing: 0.06em;
+        }
+        #knowledge-page .kb-dc-viewer-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        #knowledge-page .kb-dc-viewer-meta-bar {
+            display: none;
+            margin-top: 14px;
+            padding: 12px 16px;
+            border-radius: 14px;
+            border: 1px solid rgba(148,163,184,0.1);
+            background: rgba(2,6,23,0.38);
+        }
+        #knowledge-page .kb-dc-viewer-meta-bar .dc-vtitle {
+            font-weight: 700;
+            font-size: 15px;
+            color: rgba(248,250,252,0.96);
+        }
+        #knowledge-page .kb-dc-viewer-meta-bar .dc-vmeta {
+            margin-top: 6px;
+            font-size: 12px;
+            color: rgba(148,163,184,0.88);
+        }
+
+        #knowledge-page .kb-dc-viewer-hint {
+            margin-top: 60px;
+            text-align: center;
+            color: var(--dc-faint);
+            font-size: 14px;
+        }
+        #knowledge-page .kb-dc-viewer-hint::before {
+            content: '📄';
+            display: block;
+            font-size: 48px;
+            margin-bottom: 14px;
+            opacity: 0.4;
+        }
+
+        #knowledge-page .kb-dc-viewer-body {
+            margin-top: 16px;
+        }
+
+        #knowledge-page .kb-dc-bottom-bar {
+            display: none;
+            margin-top: 16px;
+            padding: 12px 16px;
+            border-radius: 16px;
+            background: rgba(10,10,11,0.92);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.06);
+            gap: 10px;
+        }
+
+        #knowledge-page .kb-pdf-shell.kb-dc-panel {
+            border-radius: 14px;
+            overflow: hidden;
+            background: linear-gradient(180deg, rgba(24,28,40,0.55), rgba(15,23,42,0.42));
+            border: 1px solid var(--dc-line);
+            box-shadow: 0 20px 50px -28px rgba(0,0,0,0.55);
+        }
+        #knowledge-page .kb-dc-bar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background: rgba(2,6,23,0.45);
+            border-bottom: 1px solid rgba(148,163,184,0.1);
+        }
+        #knowledge-page .kb-pdf-canvas-wrap {
+            padding: 16px;
+            display: flex;
+            justify-content: center;
+            background: rgba(2,6,23,0.2);
+        }
+        #knowledge-page .kb-pdf-canvas {
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 4px 20px -4px rgba(0,0,0,0.4);
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: high-quality;
+        }
+        #knowledge-page .kb-pdf-fallback-frame {
+            display: none;
+            width: 100%;
+            height: 75dvh;
+            border: 0;
+            border-radius: 8px;
+            background: #fff;
+        }
+        #knowledge-page .kb-pdf-page-indicator {
+            color: var(--dc-muted) !important;
+            font-size: 13px;
+            font-family: var(--dc-num);
+        }
+
+        #knowledge-page .kb-img-viewer {
+            display: flex;
+            justify-content: center;
+            padding: 16px;
+            border-radius: 14px;
+            background: rgba(2,6,23,0.35);
+            border: 1px solid rgba(148,163,184,0.08);
+        }
+        #knowledge-page .kb-img-viewer img {
+            max-width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 8px 32px -8px rgba(0,0,0,0.5);
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: high-quality;
+        }
+
+        #knowledge-page .kb-video-viewer {
+            border-radius: 14px;
+            overflow: hidden;
+            background: #000;
+            border: 1px solid rgba(148,163,184,0.1);
+        }
+        #knowledge-page .kb-video-viewer video {
+            width: 100%;
+            max-height: 520px;
+            display: block;
+        }
+
+        #knowledge-page .kb-doc-frame {
+            width: 100%;
+            height: 600px;
+            border: 0;
+            border-radius: 14px;
+            background: #fff;
+            box-shadow: 0 8px 32px -8px rgba(0,0,0,0.4);
+        }
+
+        #knowledge-page .kb-dc-list-scroll {
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 65vh;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        #knowledge-page .kb-dc-list-scroll::-webkit-scrollbar { width: 4px; }
+        #knowledge-page .kb-dc-list-scroll::-webkit-scrollbar-track { background: transparent; }
+        #knowledge-page .kb-dc-list-scroll::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.2); border-radius: 4px; }
+
+        #knowledge-page .kb-dc-empty {
+            text-align: center;
+            color: var(--dc-faint);
+            padding: 32px 12px;
+            font-size: 13px;
+        }
+
+        #knowledge-page .kb-dc-section-label {
+            font-size: 11px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            font-weight: 700;
+            color: rgba(148,163,184,0.6);
+            margin: 14px 0 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(148,163,184,0.08);
+        }
+
+        #knowledge-page .kb-dc-reset-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(148,163,184,0.18);
+            background: rgba(255,255,255,0.04);
+            color: rgba(148,163,184,0.88);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        #knowledge-page .kb-dc-reset-btn:hover {
+            background: rgba(255,255,255,0.08);
+            color: #e2e8f0;
+        }
+
+        @media (max-width: 768px) {
+            #knowledge-page .kb-dc-layout {
+                grid-template-columns: 1fr !important;
+                gap: 14px !important;
+            }
+            #knowledge-page .kb-dc-viewer {
+                padding: 16px;
+            }
+            #knowledge-page .kb-dc-bottom-bar {
+                display: flex !important;
+                position: sticky;
+                bottom: 0;
+                z-index: 60;
+            }
+            #knowledge-page .kb-dc-bottom-bar .btn,
+            #knowledge-page .kb-dc-bottom-bar .btn-secondary,
+            #knowledge-page .kb-dc-bottom-bar .btn-danger {
+                flex: 1 1 auto;
+                justify-content: center;
+                padding: 12px 14px;
+                font-size: 14px;
+                border-radius: 14px;
+            }
+        }
+
         /* Daily Report - Mobile First */
         #daily-report-page {
             padding-top: 6px;
@@ -10231,122 +10738,82 @@
             </div>
 
             <div id="knowledge-page" class="hidden">
-                <div class="kb-mobile-header">
-                    <div class="kb-mobile-titlebar">
-                        <div class="kb-mobile-title">知识库</div>
-                        <div style="display:flex; gap: 10px; align-items:center;">
-                            <button class="kb-mobile-iconbtn" type="button" aria-label="通知">🔔</button>
-                            <button class="kb-mobile-iconbtn" type="button" aria-label="我的">👤</button>
+                <div class="kb-dc-hero">
+                    <div class="kb-dc-eyebrow">KNOWLEDGE BASE</div>
+                    <div class="kb-dc-hero-title">知识库</div>
+                    <div class="kb-dc-hero-actions">
+                        <button class="btn" id="btn-knowledge-upload" onclick="openKnowledgeUploadModal()">📤 上传内容</button>
+                        <button class="btn btn-secondary" id="btn-knowledge-flashcards" onclick="openKnowledgeFlashcardsModal()">🃏 自我测验</button>
+                        <button class="btn btn-secondary" id="btn-knowledge-chat" onclick="openKnowledgeChatModal()">🎓 AI培训</button>
+                    </div>
+                    <div class="kb-dc-search-bar">
+                        <input id="knowledge-search" type="text" placeholder="搜索知识点、文档、视频..." onkeyup="renderKnowledgeList()">
+                    </div>
+                </div>
+
+                <div id="knowledge-layout" class="kb-dc-layout">
+                    <div class="kb-dc-panel" id="knowledge-list-card">
+                        <div class="kb-dc-panel-head">
+                            <h3>📚 内容列表</h3>
                         </div>
-                    </div>
-                    <div class="kb-mobile-actions">
-                        <button class="btn" id="btn-knowledge-upload" onclick="openKnowledgeUploadModal()"><i>📤</i> 上传内容</button>
-                        <button class="btn btn-secondary" id="btn-knowledge-flashcards" onclick="openKnowledgeFlashcardsModal()"><i>🃏</i> 自我测验模块</button>
-                        <button class="btn btn-secondary" id="btn-knowledge-chat" onclick="openKnowledgeChatModal()" style="background: linear-gradient(135deg, #8b5cf6, #6366f1);"><i>🎓</i> AI培训</button>
-                    </div>
-                </div>
-
-                <div class="kb-mobile-sticky-search">
-                    <input id="knowledge-search" type="text" class="kb-mobile-search" placeholder="搜索知识点、文档、视频..." onkeyup="renderKnowledgeList()">
-                </div>
-
-                <div id="knowledge-layout" class="kb-layout" style="display: grid; grid-template-columns: 340px 1fr; gap: 18px; align-items: start;">
-                    <div class="card" id="knowledge-list-card">
-                        <div class="card-icon blue">📚</div>
-                        <h4>内容列表</h4>
-                        <div style="margin-top: 12px; display:flex; flex-direction: column; gap: 10px;">
-                            <div id="kb-category-bar" style="display:flex; gap: 8px; flex-wrap: wrap;"></div>
-                            <div id="knowledge-tabs" style="display:flex; gap: 10px; flex-wrap: wrap;">
+                        <div class="kb-dc-panel-body">
+                            <div id="kb-category-bar" class="kb-dc-tab-bar" style="margin-bottom:10px;"></div>
+                            <div id="knowledge-tabs" class="kb-dc-tab-bar">
                                 <button class="btn" id="kb-tab-all" type="button" onclick="setKnowledgeTab('all')">全部</button>
                                 <button class="btn btn-secondary" id="kb-tab-video" type="button" onclick="setKnowledgeTab('video')">视频</button>
                                 <button class="btn btn-secondary" id="kb-tab-doc" type="button" onclick="setKnowledgeTab('doc')">文档</button>
                             </div>
-                            <div id="kb-admin-filters" style="display:flex; flex-direction: column; gap: 10px;">
-                                <div style="display:flex; gap: 10px; flex-wrap: wrap;">
-                                    <select id="knowledge-filter-audience" onchange="renderKnowledgeList()" style="flex:1; padding: 10px; border: 1px solid #ddd; border-radius: 10px;">
+                            <div id="kb-admin-filters">
+                                <div class="kb-dc-filter-row">
+                                    <select id="knowledge-filter-audience" onchange="renderKnowledgeList()">
                                         <option value="mine">与我相关</option>
                                         <option value="all">全量（管理员）</option>
                                     </select>
                                 </div>
-                                <div style="display:flex; gap: 10px; flex-wrap: wrap;">
-                                    <select id="knowledge-filter-store" onchange="renderKnowledgeList()" style="flex:1; padding: 10px; border: 1px solid #ddd; border-radius: 10px;">
+                                <div class="kb-dc-filter-row">
+                                    <select id="knowledge-filter-store" onchange="renderKnowledgeList()">
                                         <option value="">全部门店</option>
                                     </select>
-                                    <select id="knowledge-filter-position" onchange="renderKnowledgeList()" style="flex:1; padding: 10px; border: 1px solid #ddd; border-radius: 10px;">
+                                    <select id="knowledge-filter-position" onchange="renderKnowledgeList()">
                                         <option value="">全部岗位</option>
                                     </select>
                                 </div>
-                                <div style="display:flex; gap: 10px; flex-wrap: wrap;">
-                                    <select id="knowledge-filter-brand" onchange="renderKnowledgeList()" style="flex:1; padding: 10px; border: 1px solid #ddd; border-radius: 10px;">
+                                <div class="kb-dc-filter-row">
+                                    <select id="knowledge-filter-brand" onchange="renderKnowledgeList()">
                                         <option value="">全部品牌</option>
                                     </select>
                                 </div>
+                                <div style="display:flex; justify-content: flex-end; margin-top:4px;">
+                                    <button class="kb-dc-reset-btn" type="button" onclick="resetKnowledgeFilters()">重置筛选</button>
+                                </div>
                             </div>
-                            <div style="display:flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end;">
-                                <button class="btn btn-secondary" type="button" onclick="resetKnowledgeFilters()" style="white-space: nowrap;">重置</button>
-                            </div>
-                            <div class="kb-list-header">
-                                <div class="kb-list-label">最近更新</div>
-                                <button class="kb-list-action" type="button" onclick="setKnowledgeTab('all')">查看全部</button>
-                            </div>
-                            <div style="margin-top: 8px;">
-                                <input id="knowledge-recent-search" type="text" class="search-box" placeholder="搜索标题/文件名/分类/类型..." oninput="renderKnowledgeList()" style="width: 100%;">
+                            <div class="kb-dc-section-label">最近更新</div>
+                            <div style="margin-top:6px;">
+                                <input id="knowledge-recent-search" type="text" style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid rgba(148,163,184,0.18);background:rgba(2,6,23,0.45);color:rgba(248,250,252,0.96);font-size:13px;" placeholder="搜索标题/文件名/分类/类型..." oninput="renderKnowledgeList()">
                             </div>
                             <div id="knowledge-cards"></div>
-                            <div id="knowledge-list" style="margin-top: 6px; display:flex; flex-direction: column; gap: 10px; max-height: 68vh; overflow:auto; padding-right: 4px;"></div>
-                            <div id="knowledge-list-empty" style="color:#777; font-size: 12px; display:none;">暂无可查看内容。</div>
+                            <div id="knowledge-list" class="kb-dc-list-scroll"></div>
+                            <div id="knowledge-list-empty" class="kb-dc-empty" style="display:none;">暂无可查看内容。</div>
                         </div>
                     </div>
 
-                    <div class="card" id="knowledge-viewer" style="min-height: 420px;" oncontextmenu="return false;">
-                        <div class="card-icon green">👁️</div>
-                        <div style="display:flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
-                            <h4 style="margin: 0;">查看内容</h4>
-                            <div style="display: flex; gap: 8px;">
+                    <div class="kb-dc-viewer" id="knowledge-viewer" oncontextmenu="return false;">
+                        <div class="kb-dc-viewer-head">
+                            <h3>👁️ 查看内容</h3>
+                            <div class="kb-dc-viewer-actions">
                                 <button class="btn btn-secondary" id="knowledge-download-btn" type="button" style="display:none;">⬇️ 下载</button>
                                 <button class="btn btn-danger" id="knowledge-delete-btn" type="button" style="display:none;">🗑️ 删除</button>
-                                <button class="btn btn-secondary" id="knowledge-back-btn" type="button" onclick="kbBackToList()" style="display:none;">返回列表</button>
+                                <button class="btn btn-secondary" id="knowledge-back-btn" type="button" onclick="kbBackToList()" style="display:none;">← 返回</button>
                             </div>
                         </div>
-                        <div id="knowledge-viewer-header" style="margin-top: 10px; display:none; padding: 10px; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; background: rgba(255,255,255,0.04);">
-                            <div id="knowledge-viewer-title" style="font-weight: 600; color: #fff;"></div>
-                            <div id="knowledge-viewer-meta" style="margin-top: 6px; color: rgba(255,255,255,0.5); font-size: 12px;"></div>
+                        <div id="knowledge-viewer-header" class="kb-dc-viewer-meta-bar">
+                            <div id="knowledge-viewer-title" class="dc-vtitle"></div>
+                            <div id="knowledge-viewer-meta" class="dc-vmeta"></div>
                         </div>
-                        <div id="knowledge-viewer-hint" style="margin-top: 12px; color:#666;">请选择左侧内容进行查看。</div>
-                        <!-- 专注度监控面板 -->
-                        <div id="attn-monitor-bar" style="display:none; margin-top:10px; padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03);">
-                            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-                                <div style="display:flex; align-items:center; gap:10px;">
-                                    <div id="attn-camera-preview" style="width:64px; height:48px; border-radius:8px; overflow:hidden; background:#000; position:relative; flex-shrink:0;">
-                                        <video id="attn-video" autoplay playsinline muted style="width:100%; height:100%; object-fit:cover; transform:scaleX(-1);"></video>
-                                        <canvas id="attn-canvas" style="display:none;"></canvas>
-                                        <div id="attn-no-cam" style="display:none; position:absolute; inset:0; align-items:center; justify-content:center; font-size:18px;">📷</div>
-                                    </div>
-                                    <div>
-                                        <div style="font-size:12px; font-weight:800; color:rgba(226,232,240,0.92);">专注度监控 <span id="attn-status-dot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#666; vertical-align:middle; margin-left:4px;"></span></div>
-                                        <div style="font-size:11px; color:rgba(200,215,230,0.7); margin-top:2px;" id="attn-status-text">未启动</div>
-                                    </div>
-                                </div>
-                                <div style="display:flex; align-items:center; gap:8px;">
-                                    <div style="text-align:center;">
-                                        <div style="font-size:22px; font-weight:900; color:rgba(34,197,94,0.95);" id="attn-score-display">--</div>
-                                        <div style="font-size:10px; color:rgba(200,215,230,0.6);">专注分</div>
-                                    </div>
-                                    <div style="width:60px; height:6px; background:rgba(255,255,255,0.08); border-radius:3px; overflow:hidden;">
-                                        <div id="attn-score-bar" style="width:0%; height:100%; background:linear-gradient(90deg,#ef4444,#eab308,#22c55e); border-radius:3px; transition:width 0.5s;"></div>
-                                    </div>
-                                    <button id="attn-toggle-btn" class="btn btn-secondary" type="button" onclick="attnToggleMonitor()" style="font-size:11px; padding:6px 12px; border-radius:8px;">开启监控</button>
-                                </div>
-                            </div>
-                            <div id="attn-detail-row" style="display:none; margin-top:8px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.06); gap:16px; font-size:11px; color:rgba(200,215,230,0.6); flex-wrap:wrap;">
-                                <span>👁️ 视线：<b id="attn-d-gaze" style="color:rgba(226,232,240,0.85);">--</b></span>
-                                <span>🧑 人脸：<b id="attn-d-face" style="color:rgba(226,232,240,0.85);">--</b></span>
-                                <span>⏱️ 时长：<b id="attn-d-duration" style="color:rgba(226,232,240,0.85);">0:00</b></span>
-                                <span>📊 平均：<b id="attn-d-avg" style="color:rgba(226,232,240,0.85);">--</b></span>
-                            </div>
-                        </div>
-                        <div id="knowledge-viewer-body" style="margin-top: 12px;"></div>
-                        <div id="knowledge-viewer-toolbar" style="margin-top: 12px; gap: 10px; padding: 10px; background: rgba(10, 10, 11, 0.92); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px;">
+                        <div id="knowledge-viewer-hint" class="kb-dc-viewer-hint">请选择左侧内容进行查看</div>
+                        <div id="attn-monitor-bar" style="display:none;"></div>
+                        <div id="knowledge-viewer-body" class="kb-dc-viewer-body"></div>
+                        <div id="knowledge-viewer-toolbar" class="kb-dc-bottom-bar">
                             <button class="btn btn-secondary" id="kb-toolbar-back" type="button">返回</button>
                             <button class="btn" id="kb-toolbar-open" type="button">打开</button>
                             <button class="btn btn-secondary" id="kb-toolbar-download" type="button">下载</button>
@@ -18700,22 +19167,12 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             bodyEl.innerHTML = '';
 
             const wrap = document.createElement('div');
-            wrap.className = 'kb-pdf-shell';
-            wrap.style.borderRadius = '12px';
-            wrap.style.overflow = 'hidden';
+            wrap.className = 'kb-pdf-shell kb-dc-panel';
 
             const toolbar = document.createElement('div');
-            toolbar.className = 'kb-pdf-toolbar';
-            toolbar.style.display = 'flex';
-            toolbar.style.gap = '10px';
-            toolbar.style.alignItems = 'center';
-            toolbar.style.justifyContent = 'space-between';
-            toolbar.style.padding = '10px';
-
+            toolbar.className = 'kb-pdf-toolbar kb-dc-bar';
             const left = document.createElement('div');
-            left.style.display = 'flex';
-            left.style.gap = '10px';
-            left.style.alignItems = 'center';
+            left.style.cssText = 'display:flex;gap:10px;align-items:center;';
 
             const btnPrev = document.createElement('button');
             btnPrev.className = 'btn btn-secondary';
@@ -18753,53 +19210,38 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             left.appendChild(btnNext);
             toolbar.appendChild(left);
             const right = document.createElement('div');
-            right.style.display = 'flex';
-            right.style.gap = '10px';
-            right.style.alignItems = 'center';
+            right.style.cssText = 'display:flex;gap:10px;align-items:center;';
             right.appendChild(openBtn);
             right.appendChild(downloadBtn);
             toolbar.appendChild(right);
 
             const canvasWrap = document.createElement('div');
-            canvasWrap.style.padding = '10px';
+            canvasWrap.className = 'kb-pdf-canvas-wrap';
 
             const canvas = document.createElement('canvas');
             canvas.className = 'kb-pdf-canvas';
-            canvas.style.width = '100%';
-            canvas.style.borderRadius = '10px';
-            canvas.style.background = 'rgba(255,255,255,0.03)';
-            canvasWrap.appendChild(canvas);
 
             const frame = document.createElement('iframe');
             frame.title = 'pdf';
             frame.src = src;
-            frame.style.width = '100%';
-            frame.style.height = '75dvh';
-            frame.style.border = '0';
-            frame.style.borderRadius = '10px';
-            frame.style.background = 'rgba(255,255,255,0.03)';
-            frame.style.display = 'none';
-            canvasWrap.appendChild(frame);
+            frame.className = 'kb-pdf-fallback-frame';
 
+            canvasWrap.appendChild(canvas);
+            canvasWrap.appendChild(frame);
             wrap.appendChild(toolbar);
             wrap.appendChild(canvasWrap);
             bodyEl.appendChild(wrap);
 
             const fallbackToIframe = (msg) => {
-                try {
-                    if (msg) pageInfo.textContent = msg;
-                } catch (e) {}
-                try {
-                    canvas.style.display = 'none';
-                    frame.style.display = '';
-                } catch (e) {}
+                try { if (msg) pageInfo.textContent = msg; } catch (e) {}
+                try { canvas.style.display = 'none'; frame.style.display = ''; } catch (e) {}
             };
 
             let done = false;
             const tmr = setTimeout(() => {
                 if (done) return;
                 done = true;
-                fallbackToIframe('PDF 预览超时，已切换到内嵌打开（也可点“打开/下载”）');
+                fallbackToIframe('PDF 预览超时，已切换到内嵌打开');
             }, 6500);
 
             try {
@@ -18807,7 +19249,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 if (!ok || typeof pdfjsLib === 'undefined') {
                     done = true;
                     clearTimeout(tmr);
-                    fallbackToIframe('PDF 预览组件未加载，已切换到内嵌打开（也可点“打开/下载”）');
+                    fallbackToIframe('PDF 预览组件未加载，已切换到内嵌打开');
                     return;
                 }
 
@@ -18816,19 +19258,72 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 const doc = await pdfjsLib.getDocument({ url: src }).promise;
                 let cur = 1;
                 const total = Math.max(1, Number(doc.numPages || 1) || 1);
-                const ctx = canvas.getContext('2d');
 
                 const renderPage = async (n) => {
                     const pageNum = Math.max(1, Math.min(total, Number(n || 1) || 1));
                     cur = pageNum;
                     const page = await doc.getPage(pageNum);
-                    const wrapWidth = Math.max(320, Math.floor((canvasWrap.getBoundingClientRect?.().width || 0) - 20));
-                    const viewport1 = page.getViewport({ scale: 1 });
-                    const scale = wrapWidth > 0 ? (wrapWidth / Math.max(1, viewport1.width)) : 1.2;
-                    const viewport = page.getViewport({ scale: Math.max(0.8, Math.min(2.2, scale)) });
+                    const wrapWidth = Math.max(320, Math.floor((canvasWrap.getBoundingClientRect?.().width || 0) - 8));
+                    const vp1 = page.getViewport({ scale: 1 });
+                    const dpr = Math.max(1, window.devicePixelRatio || 1);
+                    const fitScale = wrapWidth > 0 ? (wrapWidth / Math.max(1, vp1.width)) : 1.5;
+                    const renderScale = Math.max(1.0, Math.min(dpr * 2, fitScale * dpr));
+                    const viewport = page.getViewport({ scale: renderScale });
+
                     canvas.width = Math.floor(viewport.width);
                     canvas.height = Math.floor(viewport.height);
+                    const cssW = Math.floor(viewport.width / dpr);
+                    const cssH = Math.floor(viewport.height / dpr);
+                    canvas.style.width = cssW + 'px';
+                    canvas.style.height = cssH + 'px';
+                    canvas.style.maxWidth = '100%';
+
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
                     await page.render({ canvasContext: ctx, viewport }).promise;
+                    try { pageInfo.textContent = `第 ${cur} / ${total} 页`; } catch (e) {}
+                    try { btnPrev.disabled = cur <= 1; btnNext.disabled = cur >= total; } catch (e) {}
+                };
+
+                btnPrev.onclick = async () => { try { await renderPage(cur - 1); } catch (e) {} };
+                btnNext.onclick = async () => { try { await renderPage(cur + 1); } catch (e) {} };
+                try { btnPrev.disabled = total <= 1; btnNext.disabled = total <= 1; } catch (e) {}
+
+                await renderPage(1);
+
+                done = true;
+                clearTimeout(tmr);
+                try { btnPrev.disabled = total <= 1; btnNext.disabled = total <= 1; } catch (e) {}
+            } catch (e) {
+                console.error(e);
+                done = true;
+                clearTimeout(tmr);
+                fallbackToIframe('PDF 预览失败，已切换到内嵌打开');
+            }
+        }
+
+                pdfjsLib.GlobalWorkerOptions.workerSrc = '/assets/vendor/pdfjs/pdf.worker.min.js';
+
+                const doc = await pdfjsLib.getDocument({ url: src }).promise;
+                let cur = 1;
+                const total = Math.max(1, Number(doc.numPages || 1) || 1);
+                const ctx = canvas.getContext('2d');
+
+             const renderPage = async (n) => {
+                     const pageNum = Math.max(1, Math.min(total, Number(n || 1) || 1));
+                     cur = pageNum;
+                     const page = await doc.getPage(pageNum);
+                     const wrapWidth = Math.max(320, Math.floor((canvasWrap.getBoundingClientRect?.().width || 0) - 20));
+                     const viewport1 = page.getViewport({ scale: 1 });
+                     const dpr = Math.max(1, window.devicePixelRatio || 1);
+                     const fitScale = wrapWidth > 0 ? (wrapWidth / Math.max(1, viewport1.width)) : 1.5;
+                     const renderScale = Math.max(1.0, Math.min(4.0, fitScale * dpr));
+                     const viewport = page.getViewport({ scale: renderScale });
+                     canvas.width = Math.floor(viewport.width);
+                     canvas.height = Math.floor(viewport.height);
+                     canvas.style.width = Math.floor(viewport.width / dpr) + 'px';
+                     canvas.style.height = Math.floor(viewport.height / dpr) + 'px';
+                     await page.render({ canvasContext: ctx, viewport }).promise;
                     try {
                         pageInfo.textContent = `第 ${cur} / ${total} 页（可翻页，或点“打开/下载”）`;
                     } catch (e) {}
@@ -19004,11 +19499,26 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             }
 
             if (type === 'video') {
-                body.innerHTML = `<video controls style="width:100%; max-height: 520px; background:#000; border-radius: 12px;" src="${escapeHtml(src)}"></video>`;
+                const vWrap = document.createElement('div');
+                vWrap.className = 'kb-video-viewer';
+                const v = document.createElement('video');
+                v.controls = true;
+                v.src = src;
+                v.preload = 'metadata';
+                vWrap.appendChild(v);
+                body.appendChild(vWrap);
                 return;
             }
             if (type === 'img') {
-                body.innerHTML = `<img alt="" style="max-width:100%; border-radius: 12px;" src="${escapeHtml(src)}" />`;
+                const imgWrap = document.createElement('div');
+                imgWrap.className = 'kb-img-viewer';
+                const img = document.createElement('img');
+                img.alt = '';
+                img.src = src;
+                img.loading = 'quality';
+                img.decoding = 'async';
+                imgWrap.appendChild(img);
+                body.appendChild(imgWrap);
                 return;
             }
             if (type === 'pdf') {
@@ -19016,7 +19526,11 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 return;
             }
 
-            body.innerHTML = `<iframe title="doc" style="width:100%; height: 560px; border: 0; border-radius: 12px; background: rgba(255,255,255,0.03);" src="${escapeHtml(src)}"></iframe>`;
+            const docFrame = document.createElement('iframe');
+            docFrame.title = 'doc';
+            docFrame.className = 'kb-doc-frame';
+            docFrame.src = src;
+            body.appendChild(docFrame);
         }
 
         function kbOpenKnowledgeInNewTab(itemId) {
@@ -19293,14 +19807,16 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 const id = String(it?.id || '');
                 const t = String(it?.type || 'doc');
                 const badge = t === 'video' ? '视频' : (t === 'pdf' ? 'PDF' : (t === 'img' ? '图片' : '文档'));
+                const icon = t === 'video' ? '🎬' : (t === 'pdf' ? '📄' : (t === 'img' ? '🖼️' : '📝'));
                 const meta = [String(it?.category || ''), it?.size ? formatFileSize(it.size) : ''].filter(Boolean).join(' · ');
                 return `
-                    <div class="kb-item" style="cursor:pointer;" onclick="openKnowledgeItem('${escapeHtml(id)}')">
-                        <div style="display:flex; justify-content: space-between; gap: 10px; align-items:flex-start;">
-                            <div style="font-weight: 900; line-height: 1.3;">${escapeHtml(String(it?.title || ''))}</div>
-                            <span class="tag">${escapeHtml(badge)}</span>
+                    <div class="kb-dc-item" onclick="openKnowledgeItem('${escapeHtml(id)}')">
+                        <div class="kb-dc-item-icon" data-type="${escapeHtml(t)}">${icon}</div>
+                        <div class="kb-dc-item-body">
+                            <div class="kb-dc-item-title">${escapeHtml(String(it?.title || ''))}</div>
+                            <div class="kb-dc-item-meta">${escapeHtml(meta)}</div>
                         </div>
-                        <div style="margin-top: 6px; color: rgba(200,215,230,0.78); font-size: 12px;">${escapeHtml(meta)}</div>
+                        <div class="kb-dc-item-badge">${escapeHtml(badge)}</div>
                     </div>
                 `;
             }).join('');
@@ -19312,28 +19828,18 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         const title = String(it?.title || '').trim() || '-';
                         const t = String(it?.type || 'doc');
                         const badge = t === 'video' ? '视频' : (t === 'pdf' ? 'PDF' : (t === 'img' ? '图片' : '文档'));
+                        const icon = t === 'video' ? '🎬' : (t === 'pdf' ? '📄' : (t === 'img' ? '🖼️' : '📝'));
                         const category = String(it?.category || '').trim() || '-';
                         const size = it?.size ? formatFileSize(it.size) : '-';
                         const createdAt = it?.createdAt ? String(it.createdAt).slice(0, 10) : '-';
-                        const act = `
-                            <button class="btn" type="button" style="padding:10px 14px;font-size:14px;" onclick="openKnowledgeItem('${escapeHtml(id)}')">查看</button>
-                            <button class="btn btn-secondary" type="button" style="padding:10px 14px;font-size:14px;" onclick="kbOpenKnowledgeInNewTab('${escapeHtml(id)}')">打开</button>
-                            <button class="btn btn-secondary" type="button" style="padding:10px 14px;font-size:14px;" onclick="kbDownloadKnowledge('${escapeHtml(id)}')">下载</button>
-                        `;
                         return `
-                            <div class="kb-card">
-                                <div class="kb-card-head">
-                                    <div style="min-width:0;">
-                                        <div class="kb-card-title">${escapeHtml(title)}</div>
-                                        <div class="kb-card-meta">${escapeHtml(createdAt)}</div>
-                                    </div>
-                                    <div class="kb-card-badge">${escapeHtml(badge)}</div>
+                            <div class="kb-dc-item" style="margin:8px 0;" onclick="openKnowledgeItem('${escapeHtml(id)}')">
+                                <div class="kb-dc-item-icon" data-type="${escapeHtml(t)}">${icon}</div>
+                                <div class="kb-dc-item-body">
+                                    <div class="kb-dc-item-title">${escapeHtml(title)}</div>
+                                    <div class="kb-dc-item-meta">${escapeHtml(category)} · ${escapeHtml(size)} · ${escapeHtml(createdAt)}</div>
                                 </div>
-                                <div class="kb-card-body">
-                                    <div class="kb-card-item"><div class="k">分类</div><div class="v">${escapeHtml(category)}</div></div>
-                                    <div class="kb-card-item"><div class="k">大小</div><div class="v">${escapeHtml(size)}</div></div>
-                                </div>
-                                <div class="kb-card-actions">${act}</div>
+                                <div class="kb-dc-item-badge">${escapeHtml(badge)}</div>
                             </div>
                         `;
                     }).join('');
