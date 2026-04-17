@@ -917,20 +917,17 @@ export async function checkFoodSafety(store, textContent = '') {
 }
 
 async function commitFoodSafetyTrigger(store, triggerDate, { detail, value }) {
-  const dup = await query(
-    `SELECT 1 FROM anomaly_triggers WHERE anomaly_key = 'food_safety' AND store = $1 AND trigger_date = $2::date LIMIT 1`,
-    [store, triggerDate]
-  );
-  if (dup.rows?.length) {
-    return { skipped: 'duplicate_store_day' };
-  }
-
   const brand = await getBrandForStore(store);
-  await query(
+  const ins = await query(
     `INSERT INTO anomaly_triggers (anomaly_key, store, brand, severity, trigger_date, trigger_value, threshold_value, assigned_role, notify_target_role)
-     VALUES ('food_safety', $1, $2, 'high', $3::date, $4, $5, 'hq_manager', 'store_manager,store_production_manager,hq_manager,admin')`,
+     VALUES ('food_safety', $1, $2, 'high', $3::date, $4, $5, 'hq_manager', 'store_manager,store_production_manager,hq_manager,admin')
+     ON CONFLICT (anomaly_key, store, trigger_date) DO NOTHING
+     RETURNING id`,
     [store, brand, triggerDate, JSON.stringify(value), JSON.stringify({ high: '任何食安关键词命中' })]
   );
+  if (!(ins.rows && ins.rows.length)) {
+    return { skipped: 'duplicate_store_day' };
+  }
   logger.error(
     { store, keywords: value.matchedKeywords, triggerDate, evidenceCount: value.evidence?.length || 0 },
     '🚨 FOOD SAFETY ALERT'
@@ -1058,7 +1055,17 @@ export async function runAnomalyChecks(frequency, stores, options = {}) {
             if (!dupPending.rows?.length) {
               await query(
                 `INSERT INTO anomaly_triggers (anomaly_key, store, brand, severity, trigger_date, trigger_value, threshold_value, assigned_role, notify_target_role, status)
-                 VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9, 'pending_data')`,
+                 VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9, 'pending_data')
+                 ON CONFLICT (anomaly_key, store, trigger_date) DO UPDATE SET
+                   brand = EXCLUDED.brand,
+                   severity = EXCLUDED.severity,
+                   trigger_value = EXCLUDED.trigger_value,
+                   threshold_value = EXCLUDED.threshold_value,
+                   assigned_role = EXCLUDED.assigned_role,
+                   notify_target_role = EXCLUDED.notify_target_role,
+                   status = 'pending_data',
+                   updated_at = NOW()
+                 WHERE anomaly_triggers.status = 'pending_data'`,
                 [
                   ruleKey,
                   store,
@@ -1091,7 +1098,19 @@ export async function runAnomalyChecks(frequency, stores, options = {}) {
           const ins = await query(
             `INSERT INTO anomaly_triggers (anomaly_key, store, brand, severity, trigger_date, trigger_value, threshold_value, assigned_role, notify_target_role)
              VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9)
-             ON CONFLICT (anomaly_key, store, trigger_date) DO NOTHING
+             ON CONFLICT (anomaly_key, store, trigger_date) DO UPDATE SET
+               brand = EXCLUDED.brand,
+               severity = EXCLUDED.severity,
+               trigger_value = EXCLUDED.trigger_value,
+               threshold_value = EXCLUDED.threshold_value,
+               assigned_role = EXCLUDED.assigned_role,
+               notify_target_role = EXCLUDED.notify_target_role,
+               status = CASE
+                 WHEN anomaly_triggers.status IN ('pending_data', 'superseded') THEN 'open'
+                 ELSE anomaly_triggers.status
+               END,
+               updated_at = NOW()
+             WHERE anomaly_triggers.status IN ('pending_data', 'superseded')
              RETURNING id`,
             insParams
           );

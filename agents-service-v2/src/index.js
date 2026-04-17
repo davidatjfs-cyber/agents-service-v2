@@ -1071,14 +1071,42 @@ async function start() {
                   [store, triggerDate]
                 );
                 if (!dupFinal.rows?.length) {
-                  await dbQuery(
-                    `INSERT INTO anomaly_triggers (anomaly_key, store, brand, severity, trigger_date, trigger_value, threshold_value, assigned_role, notify_target_role) VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9)`,
-                    ['gross_margin', store, brand || null, result.severity, triggerDate, JSON.stringify(result.value), JSON.stringify(result.threshold), 'store_production_manager', 'kitchen_manager']
+                  const insGm = await dbQuery(
+                    `INSERT INTO anomaly_triggers (anomaly_key, store, brand, severity, trigger_date, trigger_value, threshold_value, assigned_role, notify_target_role)
+                     VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9)
+                     ON CONFLICT (anomaly_key, store, trigger_date) DO NOTHING
+                     RETURNING id`,
+                    [
+                      'gross_margin',
+                      store,
+                      brand || null,
+                      result.severity,
+                      triggerDate,
+                      JSON.stringify(result.value),
+                      JSON.stringify(result.threshold),
+                      'store_production_manager',
+                      'kitchen_manager'
+                    ]
                   );
-                  const { enqueueNotifyJob, enqueueCollabJob } = await import('./services/anomaly-queue.js');
-                  enqueueNotifyJob({ store, brand, ruleKey: 'gross_margin', severity: result.severity, detail: result.detail, value: result.value }).catch(() => {});
-                  enqueueCollabJob({ ruleKey: 'gross_margin', store, severity: result.severity, detail: result.detail, value: result.value }).catch(() => {});
-                  logger.warn({ anomaly: 'gross_margin', store, severity: result.severity }, 'Gross margin anomaly triggered (10th)');
+                  if (insGm.rows?.length) {
+                    const { enqueueNotifyJob, enqueueCollabJob } = await import('./services/anomaly-queue.js');
+                    enqueueNotifyJob({
+                      store,
+                      brand,
+                      ruleKey: 'gross_margin',
+                      severity: result.severity,
+                      detail: result.detail,
+                      value: result.value
+                    }).catch(() => {});
+                    enqueueCollabJob({
+                      ruleKey: 'gross_margin',
+                      store,
+                      severity: result.severity,
+                      detail: result.detail,
+                      value: result.value
+                    }).catch(() => {});
+                    logger.warn({ anomaly: 'gross_margin', store, severity: result.severity }, 'Gross margin anomaly triggered (10th)');
+                  }
                 }
               }
             } catch (e) {

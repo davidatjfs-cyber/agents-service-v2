@@ -83,7 +83,7 @@ async function recordTrigger(anomaly) {
         anomaly_key, store, severity, trigger_value,
         trigger_date, created_at
       ) VALUES ($1, $2, $3, $4, CURRENT_DATE, NOW())
-      ON CONFLICT DO NOTHING
+      ON CONFLICT (anomaly_key, store, trigger_date) DO NOTHING
     `;
 
     await query(sql, [type, store, severity, JSON.stringify(value || {})]);

@@ -2943,38 +2943,69 @@
             }
 
             /* 系统设置页面移动端 */
-            #settings-page .settings-grid {
-                grid-template-columns: 1fr !important;
-                gap: 16px;
+            #settings-page .settings-report-shell {
+                padding: 4px 0 0;
             }
 
-            #settings-page .settings-card {
-                padding: 16px;
+            #settings-page .settings-rep-head {
+                padding: 16px 14px 14px;
+                margin-bottom: 12px;
+            }
+
+            #settings-page .settings-rep-toc {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                gap: 8px;
+                padding-bottom: 6px;
+                margin-bottom: 12px;
+                scrollbar-width: none;
+            }
+
+            #settings-page .settings-rep-toc::-webkit-scrollbar {
+                display: none;
+            }
+
+            #settings-page .settings-rep-toc__link {
+                flex: 0 0 auto;
+            }
+
+            #settings-page .settings-rep-sec {
+                padding: 14px 14px 16px;
+                scroll-margin-top: 72px;
             }
 
             #settings-page {
-                padding-bottom: 96px;
+                padding-bottom: 88px;
             }
 
-            #settings-mobile-toolbar {
+            #settings-page .settings-rep-mtoolbar {
                 position: sticky;
                 bottom: 0;
                 z-index: 60;
                 display: flex !important;
-                gap: 10px;
-                flex-wrap: wrap;
-                margin: 16px -16px -16px;
-                padding: 12px 16px;
-                background: rgba(10, 10, 11, 0.92);
-                backdrop-filter: blur(12px);
-                border-top: 1px solid rgba(255,255,255,0.06);
+                gap: 8px;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                margin: 12px -12px -12px;
+                padding: 10px 12px;
+                background: rgba(10, 10, 11, 0.94);
+                backdrop-filter: blur(14px);
+                border-top: 1px solid rgba(192, 132, 252, 0.22);
                 border-radius: 0 0 12px 12px;
+                scrollbar-width: none;
             }
 
-            #settings-mobile-toolbar .btn,
-            #settings-mobile-toolbar .btn-secondary {
-                flex: 1 1 46%;
-                justify-content: center;
+            #settings-page .settings-rep-mtoolbar::-webkit-scrollbar {
+                display: none;
+            }
+
+            #settings-page .settings-rep-mtoolbar .btn,
+            #settings-page .settings-rep-mtoolbar .btn-secondary {
+                flex: 0 0 auto;
+                padding: 10px 14px;
+                font-size: 12px;
+                border-radius: 10px;
                 white-space: nowrap;
             }
 
@@ -3740,38 +3771,132 @@
             }
         }
 
-        /* Settings Page - Apple Style */
-        #settings-page .settings-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-            gap: 24px;
+        /* 系统设置 · 分析报表式（高密度、分区导航、IBM Plex） */
+        #settings-page .settings-report-shell {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 8px 4px 28px;
+            font-family: 'IBM Plex Sans', 'Noto Sans SC Local', system-ui, sans-serif;
         }
 
-        #settings-page .settings-card {
-            background: rgba(44, 44, 46, 0.5);
-            border: 1px solid rgba(255, 255, 255, 0.06);
+        #settings-page .settings-rep-head {
+            border: 1px solid rgba(192, 132, 252, 0.28);
             border-radius: var(--radius-lg);
-            padding: 24px;
+            padding: 20px 22px 18px;
+            margin-bottom: 18px;
+            background:
+                linear-gradient(135deg, rgba(88, 28, 135, 0.22) 0%, rgba(9, 9, 11, 0.92) 48%, rgba(9, 9, 11, 0.98) 100%),
+                repeating-linear-gradient(0deg, transparent, transparent 22px, rgba(255, 255, 255, 0.02) 22px, rgba(255, 255, 255, 0.02) 23px);
+            box-shadow: 0 18px 48px -28px rgba(0, 0, 0, 0.75);
         }
 
-        #settings-page .settings-card-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
+        #settings-page .settings-rep-head__eyebrow {
+            font-family: 'IBM Plex Mono', ui-monospace, monospace;
+            font-size: 11px;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: #e9d5ff;
+            margin-bottom: 8px;
+        }
+
+        #settings-page .settings-rep-head__title {
+            font-family: 'Outfit', 'IBM Plex Sans', sans-serif;
+            font-size: clamp(22px, 3.2vw, 28px);
+            font-weight: 700;
+            color: #fafafa;
+            margin: 0 0 6px 0;
+            letter-spacing: -0.02em;
+        }
+
+        #settings-page .settings-rep-head__desc {
+            margin: 0;
+            font-size: var(--type-sm);
+            color: rgba(226, 232, 240, 0.72);
+            line-height: 1.55;
+        }
+
+        #settings-page .settings-rep-toc {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 10px;
+            margin: 0 0 18px 0;
+            padding: 0 2px;
+        }
+
+        #settings-page .settings-rep-toc__link {
+            font-family: 'IBM Plex Mono', ui-monospace, monospace;
+            font-size: 11px;
+            padding: 7px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(251, 191, 36, 0.35);
+            color: #fde68a;
+            text-decoration: none;
+            background: rgba(15, 15, 18, 0.85);
+            transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+        }
+
+        #settings-page .settings-rep-toc__link:hover {
+            background: rgba(245, 158, 11, 0.12);
+            border-color: rgba(251, 191, 36, 0.55);
+            transform: translateY(-1px);
+        }
+
+        #settings-page .settings-rep-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        #settings-page .settings-rep-sec {
+            border: 1px solid rgba(255, 255, 255, 0.09);
+            border-radius: var(--radius-lg);
+            padding: 18px 20px 20px;
+            background: rgba(16, 16, 20, 0.88);
+            scroll-margin-top: 88px;
+        }
+
+        #settings-page .settings-rep-sec__bar {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            margin-bottom: 14px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+        }
+
+        #settings-page .settings-rep-sec__no {
+            flex-shrink: 0;
+            min-width: 40px;
+            height: 40px;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            font-size: 22px;
-            margin-bottom: 16px;
+            border-radius: 10px;
+            font-family: 'IBM Plex Mono', ui-monospace, monospace;
+            font-size: 12px;
+            font-weight: 600;
+            color: #fbbf24;
+            border: 1px solid rgba(251, 191, 36, 0.35);
+            background: rgba(245, 158, 11, 0.08);
         }
 
-        #settings-page .settings-card h4 {
+        #settings-page .settings-rep-sec__title {
+            margin: 0 0 4px 0;
             font-size: var(--type-lg);
-            font-weight: 600;
-            color: #fff;
-            margin: 0 0 20px 0;
+            font-weight: 700;
+            color: #f8fafc;
+            letter-spacing: -0.01em;
+        }
+
+        #settings-page .settings-rep-sec__lede {
+            margin: 0;
+            font-size: var(--type-xs);
+            color: rgba(200, 215, 230, 0.65);
+            line-height: 1.45;
+        }
+
+        #settings-page .settings-rep-sec__body .settings-form {
+            margin-top: 0;
         }
 
         #settings-page .settings-form {
@@ -3822,6 +3947,10 @@
             gap: 12px;
             margin-top: 20px;
             grid-column: 1 / -1;
+        }
+
+        #settings-page .settings-rep-mtoolbar {
+            display: none;
         }
 
         /* Employees page — clean minimal mobile-first */
@@ -11758,26 +11887,33 @@
                 <div id="builtin-roles-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:16px;"></div>
             </div>
 
-            <!-- 系统设置页面 -->
+            <!-- 系统设置页面 · 分析报表式分区 -->
             <div id="settings-page" class="hidden">
-                <div class="page-header">
-                    <h2>系统设置</h2>
-                </div>
-                
-                <div class="settings-grid">
-                    <div class="settings-card" style="display:none;">
-                        <div class="settings-card-icon">💾</div>
-                        <h4>数据管理</h4>
-                        <div class="settings-actions" style="margin-top: 0;">
-                            <button class="btn" onclick="exportSystemData()">导出数据(JSON)</button>
-                            <button class="btn btn-secondary" onclick="triggerImportSystemData()">导入数据(JSON)</button>
-                            <input id="import-system-data" type="file" accept="application/json" style="display:none" onchange="handleImportSystemData(event)">
+                <div class="settings-report-shell">
+                    <header class="settings-rep-head">
+                        <div class="settings-rep-head__eyebrow">SYSTEM · CONFIG</div>
+                        <h2 class="settings-rep-head__title">系统设置</h2>
+                        <p class="settings-rep-head__desc">主数据与业务参数分区陈列；手机端顶部可横向滑动目录，底部为快捷跳转条。</p>
+                    </header>
+                    <nav class="settings-rep-toc" aria-label="设置分区">
+                        <a class="settings-rep-toc__link" href="#llm-settings-card">01 AI</a>
+                        <a class="settings-rep-toc__link" href="#org-dict-settings-card">02 字典</a>
+                        <a class="settings-rep-toc__link" href="#stores-settings-card">03 门店</a>
+                        <a class="settings-rep-toc__link" href="#brands-settings-card">04 品牌</a>
+                        <a class="settings-rep-toc__link" href="#monthly-target-settings-card">05 目标</a>
+                        <a class="settings-rep-toc__link" href="#approval-flow-settings-card">06 审批</a>
+                        <a class="settings-rep-toc__link" href="#points-rule-settings-card">07 积分</a>
+                    </nav>
+                    <div class="settings-rep-stack">
+                    <section id="llm-settings-card" class="settings-rep-sec">
+                        <div class="settings-rep-sec__bar">
+                            <div class="settings-rep-sec__no">01</div>
+                            <div>
+                                <h3 class="settings-rep-sec__title">AI 出题配置</h3>
+                                <p class="settings-rep-sec__lede">大模型 Base URL / Model / Key，与连接自检、错误日志。</p>
+                            </div>
                         </div>
-                    </div>
-
-                    <div class="settings-card" id="llm-settings-card">
-                        <div class="settings-card-icon">🤖</div>
-                        <h4>AI出题配置</h4>
+                        <div class="settings-rep-sec__body">
                         <div class="settings-form">
                             <div>
                                 <label class="settings-label">Base URL</label>
@@ -11803,60 +11939,16 @@
                                 <textarea id="llm-last-error" readonly class="settings-input" style="min-height: 80px; font-family: ui-monospace, monospace; font-size: 12px;"></textarea>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="settings-card" id="feishu-sync-card">
-                        <div class="settings-card-icon">🔄</div>
-                        <h4>飞书多维表格同步</h4>
-                        <div class="settings-form">
-                            <div>
-                                <label class="settings-label">飞书 App ID</label>
-                                <input id="feishu-app-id" type="text" class="settings-input" placeholder="cli_xxxxxxxxx">
-                            </div>
-                            <div>
-                                <label class="settings-label">飞书 App Secret</label>
-                                <input id="feishu-app-secret" type="password" class="settings-input" placeholder="xxxxxxxx">
-                            </div>
-                            <div>
-                                <label class="settings-label">多维表格 App Token</label>
-                                <input id="feishu-app-token" type="text" class="settings-input" placeholder="bascxxxxxxxx">
-                            </div>
-                            <div>
-                                <label class="settings-label">数据表 ID</label>
-                                <input id="feishu-table-id" type="text" class="settings-input" placeholder="tblxxxxxxxx">
-                            </div>
-                            <div class="settings-hint">
-                                配置飞书多维表格Webhook实时同步。获取方式：飞书开放平台 → 应用详情 → 凭证与基础信息
-                            </div>
-                            <div class="settings-actions">
-                                <button class="btn" onclick="saveFeishuSettings()">保存配置</button>
-                                <button class="btn btn-secondary" onclick="testFeishuConnection()">连接校验</button>
-                                <button class="btn btn-secondary" onclick="triggerManualFeishuSync()">手动同步</button>
-                            </div>
                         </div>
-                        
-                        <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
-                            <h5 style="font-size: 14px; font-weight: 600; color: #fff; margin: 0 0 12px 0;">同步状态监控</h5>
-                            <div class="settings-actions" style="margin-bottom: 16px;">
-                                <button class="btn btn-secondary" onclick="loadFeishuSyncStatus()">刷新状态</button>
-                                <select id="feishu-status-filter" class="settings-input" style="width: auto; margin: 0;" onchange="loadFeishuSyncStatus()">
-                                    <option value="">全部状态</option>
-                                    <option value="pending">待处理</option>
-                                    <option value="success">成功</option>
-                                    <option value="failed">失败</option>
-                                </select>
-                            </div>
-                            <div id="feishu-sync-status-list" style="max-height: 300px; overflow-y: auto;">
-                                <div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.4); font-size: 13px;">
-                                    暂无同步记录
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    </section>
 
-                    <div class="settings-card" style="display:none;">
-                        <div class="settings-card-icon">⚙️</div>
-                        <h4>基础设置</h4>
+                    <div class="settings-rep-hidden" style="display:none!important" aria-hidden="true">
+                        <div class="settings-actions" style="margin-top: 0; margin-bottom: 12px;">
+                            <button type="button" class="btn" onclick="exportSystemData()">导出数据(JSON)</button>
+                            <button type="button" class="btn btn-secondary" onclick="triggerImportSystemData()">导入数据(JSON)</button>
+                            <input id="import-system-data" type="file" accept="application/json" style="display:none" onchange="handleImportSystemData(event)">
+                        </div>
+                        <div class="settings-hint" style="margin:0 0 8px;font-weight:600;color:rgba(226,232,240,0.88)">基础设置</div>
                         <div class="settings-form">
                             <div>
                                 <label class="settings-label">系统名称</label>
@@ -11874,11 +11966,7 @@
                                 <button class="btn" type="button" onclick="saveBasicSettings()">保存设置</button>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="settings-card" style="display:none;">
-                        <div class="settings-card-icon">🔐</div>
-                        <h4>安全设置</h4>
+                        <div class="settings-hint" style="margin:16px 0 8px;font-weight:600;color:rgba(226,232,240,0.88)">安全设置</div>
                         <div class="settings-form">
                             <div class="settings-form-full">
                                 <label class="settings-label">密码复杂度</label>
@@ -11909,11 +11997,7 @@
                                 <button class="btn" type="button" onclick="saveSecuritySettings()">保存设置</button>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="settings-card" style="display:none;">
-                        <div class="settings-card-icon">📧</div>
-                        <h4>通知设置</h4>
+                        <div class="settings-hint" style="margin:16px 0 8px;font-weight:600;color:rgba(226,232,240,0.88)">通知设置</div>
                         <div class="settings-form">
                             <div>
                                 <label class="settings-label">邮件通知</label>
@@ -11932,108 +12016,124 @@
                         </div>
                     </div>
 
-                    <div class="settings-card" id="org-dict-settings-card">
-                        <div class="settings-card-icon">🧩</div>
-                        <h4>组织字典维护</h4>
-                        <div class="settings-hint" style="margin-top: 0; margin-bottom: 16px;">维护部门、岗位、级别等下拉选项</div>
-                        <div class="settings-actions" style="margin-top: 0;">
-                            <button class="btn" type="button" onclick="openOrgDictModal()">维护字典</button>
-                        </div>
-                    </div>
-
-                    <div class="settings-card" id="stores-settings-card">
-                        <div class="settings-card-icon">🏪</div>
-                        <h4>门店管理</h4>
-                        <div class="settings-hint" style="margin-top: 0; margin-bottom: 16px;">维护门店信息与状态</div>
-                        <div class="settings-actions" style="margin-top: 0;">
-                            <button class="btn" type="button" onclick="showPage('stores')">进入门店管理</button>
-                        </div>
-                    </div>
-
-                    <div class="settings-card" id="role-modules-settings-card">
-                        <div class="settings-card-icon">🔑</div>
-                        <h4>角色模块权限</h4>
-                        <div class="settings-hint" style="margin-top:0;margin-bottom:12px;">自定义每个角色可访问的功能模块（管理员拥有全部权限）</div>
-                        <div id="role-modules-grid" style="max-height:480px;overflow-y:auto;"></div>
-                        <div class="settings-actions" style="margin-top:12px;">
-                            <button class="btn" type="button" onclick="saveRoleModulesConfig()">保存权限配置</button>
-                            <button class="btn btn-secondary" type="button" onclick="resetRoleModulesConfig()">恢复默认</button>
-                        </div>
-                    </div>
-
-                    <div class="settings-card" id="dedup-settings-card">
-                        <div class="settings-card-icon">🔄</div>
-                        <h4>数据去重</h4>
-                        <div class="settings-hint" style="margin-top:0;margin-bottom:12px;">查看各数据表记录数及重复数据，一键清理重复记录</div>
-                        <div id="dedup-stats-content" style="font-size:13px;color:rgba(200,215,230,0.85);margin-bottom:12px;">点击下方按钮查看统计...</div>
-                        <div class="settings-actions" style="margin-top:0;">
-                            <button class="btn btn-secondary" type="button" onclick="loadDedupStats()">查看统计</button>
-                            <button class="btn" type="button" onclick="runDedupCleanup()">清理重复数据</button>
-                        </div>
-                    </div>
-
-                    <div class="settings-card" id="brands-settings-card" onclick="openBrandSettingsModal()" style="cursor:pointer;">
-                        <div class="settings-card-icon">🏷️</div>
-                        <h4>品牌设置</h4>
-                        <div class="settings-hint" style="margin-top: 0; margin-bottom: 12px;">维护品牌及品牌级配置（SOP要点、绩效权重）。</div>
-                        <div id="brands-settings-summary" style="margin-bottom: 12px; font-size: 12px; color: rgba(200,215,230,0.85);">-</div>
-                        <div class="settings-actions" style="margin-top: 0;">
-                            <button class="btn" type="button" onclick="openBrandSettingsModal()">维护品牌</button>
-                        </div>
-                    </div>
-
-                    <div class="settings-card" id="monthly-target-settings-card">
-                        <div class="settings-card-icon">🎯</div>
-                        <h4>目标管理</h4>
-                        <div class="settings-hint" style="margin-top: 0; margin-bottom: 16px;">维护每月目标（实收/充值/堂食/外卖等）</div>
-                        <div class="settings-actions" style="margin-top: 0;">
-                            <button class="btn" type="button" onclick="openMonthlyTargetsModal()">维护目标</button>
-                        </div>
-                    </div>
-
-                    <div class="settings-card" id="approval-flow-settings-card">
-                        <div class="settings-card-icon">🔁</div>
-                        <h4>审批流程设置</h4>
-                        <div class="settings-hint" style="margin-top: 0; margin-bottom: 16px;">配置不同申请的审批链路（例如：直属上级 → 总部管理 → 管理员）</div>
-                        <div id="approval-flow-summary" style="margin-bottom: 12px; font-size: 12px; color: rgba(200,215,230,0.85);"></div>
-                        <div class="settings-actions" style="margin-top: 0;">
-                            <button class="btn" type="button" onclick="openApprovalFlowModal()">配置流程</button>
-                        </div>
-                    </div>
-
-                    <div class="settings-card" id="points-rule-settings-card">
-                        <div class="settings-card-icon">💎</div>
-                        <h4>积分事项设置</h4>
-                        <div class="settings-hint" style="margin-top: 0; margin-bottom: 12px;">按门店配置“杰出工作表现”与积分值（1分=¥0.5）</div>
-                        <div class="settings-form" style="grid-template-columns: 1fr 1fr 120px; align-items:end;">
+                    <section id="org-dict-settings-card" class="settings-rep-sec">
+                        <div class="settings-rep-sec__bar">
+                            <div class="settings-rep-sec__no">02</div>
                             <div>
-                                <label class="settings-label">门店</label>
-                                <select id="points-rule-store" class="settings-input"></select>
-                            </div>
-                            <div>
-                                <label class="settings-label">事项名称</label>
-                                <input id="points-rule-item" class="settings-input" type="text" placeholder="如：高峰主动补位">
-                            </div>
-                            <div>
-                                <label class="settings-label">积分</label>
-                                <input id="points-rule-points" class="settings-input" type="number" min="1" step="1" placeholder="5">
+                                <h3 class="settings-rep-sec__title">组织字典</h3>
+                                <p class="settings-rep-sec__lede">部门、岗位、级别等下拉选项的主数据维护。</p>
                             </div>
                         </div>
-                        <div class="settings-actions" style="margin-top:10px;">
-                            <button class="btn" type="button" onclick="addPointRuleItem()">新增事项</button>
-                            <button class="btn btn-secondary" type="button" onclick="loadPointRulesSettings()">刷新列表</button>
+                        <div class="settings-rep-sec__body">
+                            <div class="settings-actions" style="margin-top: 0;">
+                                <button class="btn" type="button" onclick="openOrgDictModal()">打开字典维护</button>
+                            </div>
                         </div>
-                        <div id="points-rule-list" style="margin-top:10px;"></div>
+                    </section>
+
+                    <section id="stores-settings-card" class="settings-rep-sec">
+                        <div class="settings-rep-sec__bar">
+                            <div class="settings-rep-sec__no">03</div>
+                            <div>
+                                <h3 class="settings-rep-sec__title">门店</h3>
+                                <p class="settings-rep-sec__lede">门店档案、营业状态与绑定信息。</p>
+                            </div>
+                        </div>
+                        <div class="settings-rep-sec__body">
+                            <div class="settings-actions" style="margin-top: 0;">
+                                <button class="btn" type="button" onclick="showPage('stores')">进入门店管理</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="brands-settings-card" class="settings-rep-sec">
+                        <div class="settings-rep-sec__bar">
+                            <div class="settings-rep-sec__no">04</div>
+                            <div>
+                                <h3 class="settings-rep-sec__title">品牌</h3>
+                                <p class="settings-rep-sec__lede">品牌主档、SOP 要点与绩效权重。</p>
+                            </div>
+                        </div>
+                        <div class="settings-rep-sec__body">
+                            <div id="brands-settings-summary" style="margin-bottom: 12px; font-size: 12px; color: rgba(200,215,230,0.85);">-</div>
+                            <div class="settings-actions" style="margin-top: 0;">
+                                <button class="btn" type="button" onclick="openBrandSettingsModal()">维护品牌</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="monthly-target-settings-card" class="settings-rep-sec">
+                        <div class="settings-rep-sec__bar">
+                            <div class="settings-rep-sec__no">05</div>
+                            <div>
+                                <h3 class="settings-rep-sec__title">目标管理</h3>
+                                <p class="settings-rep-sec__lede">每月实收 / 充值 / 堂食 / 外卖等目标口径。</p>
+                            </div>
+                        </div>
+                        <div class="settings-rep-sec__body">
+                            <div class="settings-actions" style="margin-top: 0;">
+                                <button class="btn" type="button" onclick="openMonthlyTargetsModal()">维护目标</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="approval-flow-settings-card" class="settings-rep-sec">
+                        <div class="settings-rep-sec__bar">
+                            <div class="settings-rep-sec__no">06</div>
+                            <div>
+                                <h3 class="settings-rep-sec__title">审批流程</h3>
+                                <p class="settings-rep-sec__lede">按申请类型配置审批链路与顺序。</p>
+                            </div>
+                        </div>
+                        <div class="settings-rep-sec__body">
+                            <div id="approval-flow-summary" style="margin-bottom: 12px; font-size: 12px; color: rgba(200,215,230,0.85);"></div>
+                            <div class="settings-actions" style="margin-top: 0;">
+                                <button class="btn" type="button" onclick="openApprovalFlowModal()">配置流程</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="points-rule-settings-card" class="settings-rep-sec">
+                        <div class="settings-rep-sec__bar">
+                            <div class="settings-rep-sec__no">07</div>
+                            <div>
+                                <h3 class="settings-rep-sec__title">积分事项</h3>
+                                <p class="settings-rep-sec__lede">按门店维护「杰出工作表现」事项与分值（1 分 = ¥0.5）。</p>
+                            </div>
+                        </div>
+                        <div class="settings-rep-sec__body">
+                            <div class="settings-form" style="grid-template-columns: 1fr 1fr 120px; align-items:end;">
+                                <div>
+                                    <label class="settings-label">门店</label>
+                                    <select id="points-rule-store" class="settings-input"></select>
+                                </div>
+                                <div>
+                                    <label class="settings-label">事项名称</label>
+                                    <input id="points-rule-item" class="settings-input" type="text" placeholder="如：高峰主动补位">
+                                </div>
+                                <div>
+                                    <label class="settings-label">积分</label>
+                                    <input id="points-rule-points" class="settings-input" type="number" min="1" step="1" placeholder="5">
+                                </div>
+                            </div>
+                            <div class="settings-actions" style="margin-top:10px;">
+                                <button class="btn" type="button" onclick="addPointRuleItem()">新增事项</button>
+                                <button class="btn btn-secondary" type="button" onclick="loadPointRulesSettings()">刷新列表</button>
+                            </div>
+                            <div id="points-rule-list" style="margin-top:10px;"></div>
+                        </div>
+                    </section>
                     </div>
                 </div>
 
-                <div id="settings-mobile-toolbar" style="display:none;">
-                    <button class="btn btn-secondary" type="button" onclick="hrmsScrollToSettingsCard('llm-settings-card')">AI配置</button>
+                <div id="settings-mobile-toolbar" class="settings-rep-mtoolbar" style="display:none;">
+                    <button class="btn btn-secondary" type="button" onclick="hrmsScrollToSettingsCard('llm-settings-card')">AI</button>
+                    <button class="btn btn-secondary" type="button" onclick="hrmsScrollToSettingsCard('org-dict-settings-card')">字典</button>
                     <button class="btn btn-secondary" type="button" onclick="showPage('stores')">门店</button>
                     <button class="btn btn-secondary" type="button" onclick="openBrandSettingsModal()">品牌</button>
-                    <button class="btn btn-secondary" type="button" onclick="openOrgDictModal()">岗位/部门/级别</button>
                     <button class="btn btn-secondary" type="button" onclick="openMonthlyTargetsModal()">目标</button>
-                    <button class="btn" type="button" onclick="openApprovalFlowModal()">流程</button>
+                    <button class="btn btn-secondary" type="button" onclick="openApprovalFlowModal()">审批</button>
+                    <button class="btn" type="button" onclick="hrmsScrollToSettingsCard('points-rule-settings-card')">积分</button>
                 </div>
             </div>
 
@@ -17266,7 +17366,6 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                     break;
                 case 'settings':
                     loadSettingsData();
-                    renderRoleModulesGrid();
                     break;
             }
         }
@@ -28005,19 +28104,21 @@ ${knowledgeContent.slice(0, 30000)}`;
             container.innerHTML = html;
         }
 
-        // 页面加载时初始化飞书配置
+        // 页面加载时初始化飞书配置（设置页已下线飞书表单时跳过，避免空节点报错）
         document.addEventListener('DOMContentLoaded', function() {
-            // 从localStorage加载飞书配置
+            const feApp = document.getElementById('feishu-app-id');
+            if (!feApp) return;
             const savedConfig = localStorage.getItem('feishuConfig');
             const feishuConfig = savedConfig ? JSON.parse(savedConfig) : {};
-            
-            if (feishuConfig.appId) document.getElementById('feishu-app-id').value = feishuConfig.appId;
-            if (feishuConfig.appSecret) document.getElementById('feishu-app-secret').value = feishuConfig.appSecret;
-            if (feishuConfig.appToken) document.getElementById('feishu-app-token').value = feishuConfig.appToken;
-            if (feishuConfig.tableId) document.getElementById('feishu-table-id').value = feishuConfig.tableId;
-            
-            // 加载同步状态
-            if (document.getElementById('settings-page') && !document.getElementById('settings-page').classList.contains('hidden')) {
+            const feSec = document.getElementById('feishu-app-secret');
+            const feTok = document.getElementById('feishu-app-token');
+            const feTbl = document.getElementById('feishu-table-id');
+            if (feishuConfig.appId) feApp.value = feishuConfig.appId;
+            if (feishuConfig.appSecret && feSec) feSec.value = feishuConfig.appSecret;
+            if (feishuConfig.appToken && feTok) feTok.value = feishuConfig.appToken;
+            if (feishuConfig.tableId && feTbl) feTbl.value = feishuConfig.tableId;
+            const sp = document.getElementById('settings-page');
+            if (sp && !sp.classList.contains('hidden')) {
                 loadFeishuSyncStatus();
             }
         });
