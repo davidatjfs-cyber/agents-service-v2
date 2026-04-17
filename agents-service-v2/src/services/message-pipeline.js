@@ -242,6 +242,11 @@ async function deliverDeterministicHit(ev, detReply, ctx, store, t0, idemKey, tr
   const deliverBaseTag = sessionTag ? 'deterministic_session' : 'deterministic';
 
   if (isInteractive) {
+    const userQ = String(ev.text || '').trim();
+    if (userQ) {
+      const topic = `小年: | Magazine: ${userQ}`;
+      await sendReplyWithFallback(ev, topic, `${deliverBaseTag}_card_topic`).catch(() => {});
+    }
     const uid = String(ev.userId || '').trim();
     const cid = String(ev.chatId || '').trim();
     const fullCard = { config: { wide_screen_mode: true }, ...(detReply.card || {}) };
@@ -262,11 +267,6 @@ async function deliverDeterministicHit(ev, detReply, ctx, store, t0, idemKey, tr
       logger.warn({ store }, 'deterministic interactive: no userId/chatId, fallback text');
     }
     if (cardOk) {
-      const userQ = String(ev.text || '').trim();
-      if (userQ) {
-        const topic = `小年: | Magazine: ${userQ}`;
-        await sendReplyWithFallback(ev, topic, `${deliverBaseTag}_card_topic`).catch(() => {});
-      }
       logger.info({ store, card: true }, `deterministic reply hit${logSuffix}`);
       await logTaskResult(
         { agent: 'deterministic', store, data: '[interactive] ' + fallbackBody.slice(0, 500) },
