@@ -9445,6 +9445,15 @@
                 grid-template-columns: 1fr !important;
             }
 
+            /* 日报编辑（手机）：取消分段面板内部 max-height/滚动，交给 .content 统一纵向滚动，避免 iOS 嵌套滚动「拖不动」、厨房/休息被误判裁切 */
+            #daily-report-page #dr-edit-view .dr-report-panel {
+                max-height: none !important;
+                overflow: visible;
+            }
+            #daily-report-page #dr-edit-view .dr-hr-slab {
+                overflow: visible;
+            }
+
             /* Search box full width */
             .search-box {
                 width: 100% !important;
@@ -34992,12 +35001,43 @@ ${knowledgeContent.slice(0, 30000)}`;
             try { return (typeof window !== 'undefined' && window.event) ? window.event : null; } catch (e) { return null; }
         }
 
+        /** 日结单预览/打印用：根相对路径拼 API 基址（与 fetch 同源逻辑一致），避免历史数据只有 /uploads/... 时 img 指向错误源 */
+        function drResolveDailyReportPhotoSrc(pathStr) {
+            const raw = String(pathStr || '').trim();
+            if (!raw) return '';
+            if (/^(?:https?:)?\/\//i.test(raw) || /^data:/i.test(raw) || /^blob:/i.test(raw)) return raw;
+            const base = (typeof HRMS_API !== 'undefined' && HRMS_API.baseUrl)
+                ? String(HRMS_API.baseUrl() || '').replace(/\/$/, '')
+                : '';
+            let p = raw.replace(/\\/g, '/');
+            if (!p.startsWith('/')) p = '/' + p.replace(/^\.+\//, '');
+            return (base || '') + p;
+        }
+
         function drNormalizeDailyReportPhotoUrl(item) {
             if (item == null) return '';
-            if (typeof item === 'string') return String(item).trim();
+            if (typeof item === 'string') {
+                const s = String(item).trim();
+                if (!s) return '';
+                if (/^(?:https?:)?\/\//i.test(s) || /^data:/i.test(s) || /^blob:/i.test(s)) return s;
+                if (s.startsWith('/uploads/') || s.startsWith('uploads/')) return s.startsWith('/') ? s : '/' + s;
+                if (!s.includes('/') && /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(s)) return '/uploads/' + s;
+                return s;
+            }
             if (typeof item === 'object') {
-                const u = item.url || item.href || item.src || item.path || item.photoUrl || item.fileUrl;
+                const o = item;
+                const u = o.url || o.href || o.src || o.path || o.photoUrl || o.fileUrl
+                    || o.photo || o.image || o.imageUrl || o.file || o.filepath || o.file_path;
                 if (u) return String(u).trim();
+                const fn = o.filename || o.fileName || o.name;
+                if (fn) {
+                    const f = String(fn).trim().replace(/^\/+/, '');
+                    if (!f) return '';
+                    if (/^(?:https?:)?\/\//i.test(f) || /^data:/i.test(f) || /^blob:/i.test(f)) return f;
+                    if (f.startsWith('uploads/')) return '/' + f;
+                    if (f.startsWith('/uploads/')) return f;
+                    return '/uploads/' + f;
+                }
             }
             return '';
         }
@@ -35063,10 +35103,11 @@ ${knowledgeContent.slice(0, 30000)}`;
             }
             box.innerHTML = list.map((u, idx) => {
                 const srcRaw = drNormalizeDailyReportPhotoUrl(u);
-                const src = escapeHtml(srcRaw);
+                const srcDisp = drResolveDailyReportPhotoSrc(srcRaw);
+                const src = escapeHtml(srcDisp);
                 return `
                     <div style="position: relative; width: 96px; height: 96px; border-radius: 12px; overflow:hidden; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.03);">
-                        <img alt="" src="${src}" style="width: 100%; height: 100%; object-fit: cover;" />
+                        <img alt="" src="${src}" loading="lazy" decoding="async" referrerpolicy="no-referrer" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'" />
                         <button class="btn btn-secondary" type="button" onclick="removeDailyReportPhoto(${idx})" style="position:absolute; top: 6px; right: 6px; padding: 4px 8px; font-size: 12px; border-radius: 999px;">×</button>
                     </div>
                 `;
