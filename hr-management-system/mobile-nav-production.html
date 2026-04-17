@@ -5294,6 +5294,142 @@
             color: rgba(255, 255, 255, 0.4);
         }
 
+        /* 请款配置 / 预算 / 流程 / 审批详情 · 组织字典式壳体 */
+        #payment-basic-modal .pay-dict-modal-content,
+        #payment-budget-modal .pay-dict-modal-content,
+        #payment-flow-modal .pay-dict-modal-content,
+        #approval-detail-modal .pay-dict-modal-content {
+            max-width: min(980px, 96vw);
+            width: 100%;
+            max-height: min(92vh, 100dvh - env(safe-area-inset-bottom, 0px));
+            display: flex;
+            flex-direction: column;
+        }
+
+        #approval-detail-modal .pay-dict-modal-content {
+            max-width: min(860px, 96vw);
+        }
+
+        #payment-basic-modal .pay-dict-modal-body,
+        #payment-budget-modal .pay-dict-modal-body,
+        #payment-flow-modal .pay-dict-modal-body,
+        #approval-detail-modal .pay-dict-modal-body {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            padding: 0 18px 10px;
+        }
+
+        .pay-dict-shell {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            border: 1px solid rgba(212, 175, 55, 0.22);
+            border-radius: 14px;
+            padding: 12px 12px 14px;
+            background: linear-gradient(165deg, rgba(212, 175, 55, 0.1) 0%, rgba(12, 12, 16, 0.96) 42%);
+        }
+
+        .pay-dict-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .pay-dict-toolbar__kbd {
+            font-family: "IBM Plex Mono", ui-monospace, monospace;
+            font-size: 10px;
+            letter-spacing: 0.18em;
+            color: #fde68a;
+            padding: 4px 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(251, 191, 36, 0.32);
+            background: rgba(0, 0, 0, 0.28);
+        }
+
+        .pay-dict-toolbar__hint {
+            font-size: 11px;
+            color: rgba(200, 215, 230, 0.62);
+            line-height: 1.35;
+            flex: 1;
+            text-align: right;
+        }
+
+        .pay-dict-seg {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 2px;
+            scrollbar-width: none;
+        }
+
+        .pay-dict-seg::-webkit-scrollbar {
+            display: none;
+        }
+
+        .pay-dict-seg__btn {
+            flex: 0 0 auto;
+            border: 1px solid rgba(251, 191, 36, 0.28);
+            background: rgba(10, 10, 12, 0.85);
+            color: #fde68a;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 8px 14px;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+
+        .pay-dict-seg__btn.active {
+            background: rgba(245, 158, 11, 0.16);
+            border-color: rgba(251, 191, 36, 0.55);
+            color: #fffbeb;
+        }
+
+        .pay-dict-panels {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .pay-dict-panel {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+            min-height: 0;
+            gap: 10px;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .pay-dict-panel.is-active {
+            display: flex;
+        }
+
+        .pay-dict-scroll {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 2px 2px 8px;
+        }
+
+        .pay-dict-innercard {
+            margin-top: 12px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(0, 0, 0, 0.2);
+            padding: 12px 14px 14px;
+        }
+
+
         /* 日报员工多选弹窗 · 与组织字典壳体同系 */
         #dr-staff-modal .modal-content.dr-staff-modal-content {
             max-width: min(560px, 96vw);
@@ -8349,6 +8485,120 @@
             backdrop-filter: blur(10px);
         }
 
+        /* 日报编辑 · 分析报表壳体 + 分段（对齐组织字典交互） */
+        #daily-report-page .dr-report-shell {
+            border: 1px solid var(--drf-border);
+            border-radius: 16px;
+            padding: 12px 12px 14px;
+            margin-bottom: 16px;
+            background: linear-gradient(155deg, rgba(212, 175, 55, 0.09) 0%, rgba(8, 10, 14, 0.94) 48%);
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset, 0 18px 48px -28px rgba(0, 0, 0, 0.55);
+        }
+
+        #daily-report-page .dr-report-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        #daily-report-page .dr-report-toolbar__kbd {
+            font-family: var(--drf-mono);
+            font-size: 10px;
+            letter-spacing: 0.18em;
+            color: #fde68a;
+            padding: 4px 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(251, 191, 36, 0.32);
+            background: rgba(0, 0, 0, 0.28);
+        }
+
+        #daily-report-page .dr-report-toolbar__hint {
+            font-size: 11px;
+            color: var(--drf-muted);
+            line-height: 1.35;
+            flex: 1;
+            text-align: right;
+        }
+
+        #daily-report-page .dr-report-seg {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 4px;
+            margin-bottom: 10px;
+            scrollbar-width: none;
+        }
+
+        #daily-report-page .dr-report-seg::-webkit-scrollbar {
+            display: none;
+        }
+
+        #daily-report-page .dr-report-seg__btn {
+            flex: 0 0 auto;
+            border: 1px solid rgba(251, 191, 36, 0.28);
+            background: rgba(10, 10, 12, 0.85);
+            color: #fde68a;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 8px 12px;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+
+        #daily-report-page .dr-report-seg__btn.active {
+            background: rgba(245, 158, 11, 0.16);
+            border-color: rgba(251, 191, 36, 0.55);
+            color: #fffbeb;
+        }
+
+        #daily-report-page .dr-report-panels {
+            position: relative;
+        }
+
+        #daily-report-page .dr-report-panel {
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            max-height: min(72vh, calc(100dvh - 260px));
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 2px 1px 6px;
+        }
+
+        #daily-report-page .dr-report-panel.is-active {
+            display: flex;
+        }
+
+        #daily-report-page .dr-rep-panel-card {
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(0, 0, 0, 0.22);
+            padding: 12px 14px 14px;
+        }
+
+        #daily-report-page .dr-rep-panel-card--sm {
+            padding: 10px 12px 12px;
+        }
+
+        #daily-report-page .dr-rep-block-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            font-size: 13px;
+            font-weight: 800;
+            color: rgba(241, 245, 249, 0.96);
+            letter-spacing: 0.02em;
+            margin-bottom: 2px;
+        }
+
+
         #daily-report-page .dr-date-weather-grid {
             margin-top: 12px;
             display: grid;
@@ -8509,7 +8759,9 @@
 
         /* Daily report specific: make all card inputs uniform */
         #daily-report-page .card input,
-        #daily-report-page .card select {
+        #daily-report-page .card select,
+        #daily-report-page .dr-rep-panel-card input,
+        #daily-report-page .dr-rep-panel-card select {
             border-radius: var(--input-radius) !important;
             min-height: 46px;
             font-size: 16px !important;
@@ -8579,11 +8831,13 @@
             }
 
             /* Daily report: single column grids on mobile */
-            #daily-report-page .card div[style*="grid-template-columns: repeat(2"] {
+            #daily-report-page .card div[style*="grid-template-columns: repeat(2"],
+            #daily-report-page .dr-rep-panel-card div[style*="grid-template-columns: repeat(2"] {
                 grid-template-columns: 1fr !important;
             }
 
-            #daily-report-page .card div[style*="grid-template-columns: 1fr 1fr"] {
+            #daily-report-page .card div[style*="grid-template-columns: 1fr 1fr"],
+            #daily-report-page .dr-rep-panel-card div[style*="grid-template-columns: 1fr 1fr"] {
                 grid-template-columns: 1fr !important;
             }
 
@@ -8813,12 +9067,24 @@
                             </div>
                         </div>
 
-                        <div class="card" style="margin-bottom: 18px;">
-                            <div class="card-icon orange">🗓️</div>
-                            <h4 style="display:flex; justify-content: space-between; align-items:center; gap: 10px;">
+                        <div class="dr-report-shell">
+                            <div class="dr-report-toolbar">
+                                <span class="dr-report-toolbar__kbd">OPS</span>
+                                <span class="dr-report-toolbar__hint">分析报表版式 · 分段聚焦 · 减少单屏信息堆叠</span>
+                            </div>
+                            <div class="dr-report-seg" role="tablist" aria-label="日报分区">
+                                <button type="button" class="dr-report-seg__btn active" data-drtab="meta" onclick="setDailyReportEditorTab('meta')">环境</button>
+                                <button type="button" class="dr-report-seg__btn" data-drtab="revenue" onclick="setDailyReportEditorTab('revenue')">营业·折扣·达成</button>
+                                <button type="button" class="dr-report-seg__btn" data-drtab="channels" onclick="setDailyReportEditorTab('channels')">品类·外卖</button>
+                                <button type="button" class="dr-report-seg__btn" data-drtab="reputation" onclick="setDailyReportEditorTab('reputation')">口碑·目标</button>
+                                <button type="button" class="dr-report-seg__btn" data-drtab="people" onclick="setDailyReportEditorTab('people')">人力·附件</button>
+                            </div>
+                            <div class="dr-report-panels">
+                                <div id="dr-tab-meta" class="dr-report-panel is-active" role="tabpanel">
+                        <div class="dr-rep-panel-card">                            <div class="dr-rep-block-title">
                                 <span>营业日期</span>
                                 <span style="font-size: 12px; color: rgba(200,215,230,0.78);">更适合手机操作</span>
-                            </h4>
+                            </div>
                             <div class="dr-date-weather-grid">
                                 <div>
                                     <label style="color: #666; font-size: 12px;">日期<span class="req">*</span></label>
@@ -8845,10 +9111,9 @@
                                 <div style="margin-top: 6px; font-size: 11px; color: rgba(200,215,230,0.65); line-height: 1.45;">周六、周日或国定假日营业时勾选，便于报表与绩效区分口径；与天气一并保存并同步数据库。</div>
                             </div>
                         </div>
-
-                <div class="card" style="margin-bottom: 18px;">
-                    <div class="card-icon green">📊</div>
-                    <h4>今日营业数据</h4>
+                                </div>
+                                <div id="dr-tab-revenue" class="dr-report-panel" role="tabpanel">
+                <div class="dr-rep-panel-card">                    <div class="dr-rep-block-title">今日营业数据</div>
                     <div style="margin-top: 12px; display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px 18px;">
                         <div>
                             <label style="color: #666; font-size: 12px;">预算折前营业额（元）<span class="req">*</span></label>
@@ -8929,9 +9194,7 @@
                     </div>
                 </div>
 
-                <div class="card" style="margin-bottom: 18px;">
-                    <div class="card-icon orange">🏷️</div>
-                    <h4>折扣情况</h4>
+                <div class="dr-rep-panel-card">                    <div class="dr-rep-block-title">折扣情况</div>
                     <div style="margin-top: 12px; display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px 18px;">
                         <div style="grid-column: 1 / -1;">
                             <label style="color: #666; font-size: 12px;">今日总折扣金额（元）</label>
@@ -8952,9 +9215,7 @@
                     </div>
                 </div>
 
-                <div class="card" style="margin-bottom: 18px;">
-                    <div class="card-icon green">🎯</div>
-                    <h4>本月目标达成（自动统计）</h4>
+                <div class="dr-rep-panel-card">                    <div class="dr-rep-block-title">本月目标达成（自动统计）</div>
                     <div style="margin-top: 12px; display:grid; grid-template-columns: 1fr 1fr; gap: 10px 18px;">
                         <div style="color: rgba(200,215,230,0.85);">本月目标实收营业额：<span id="dr-month-target-actual" style="font-weight: 900; color: rgba(34,197,94,0.95);">¥800,000</span></div>
                         <div style="text-align:right; color: rgba(200,215,230,0.85);">本月折前营业额：<span id="dr-month-gross" style="font-weight: 900; color: rgba(34,197,94,0.95);">¥0</span></div>
@@ -8963,9 +9224,7 @@
                     </div>
                 </div>
 
-                <div class="card" style="margin-bottom: 18px;">
-                    <div class="card-icon blue">🍽️</div>
-                    <h4>堂食达成数据（自动统计）</h4>
+                <div class="dr-rep-panel-card">                    <div class="dr-rep-block-title">堂食达成数据（自动统计）</div>
                     <div style="margin-top: 12px; display:grid; grid-template-columns: 1fr 1fr; gap: 10px 18px;">
                         <div style="color: rgba(200,215,230,0.85);">堂食客流量目标：<span id="dr-month-dine-traffic-target" style="font-weight: 900; color: rgba(34,197,94,0.95);">未设置</span></div>
                         <div style="text-align:right; color: rgba(200,215,230,0.85);">本月累计客流量：<span id="dr-month-dine-traffic" style="font-weight: 900; color: rgba(34,197,94,0.95);">0人</span></div>
@@ -8979,10 +9238,9 @@
                         <div style="color: rgba(200,215,230,0.85);">本月平均堂食人均：<span id="dr-month-dine-avg-person" style="font-weight: 900; color: rgba(34,197,94,0.95);">¥0.00</span></div>
                     </div>
                 </div>
-
-                <div class="card" style="margin-bottom: 18px;">
-                    <div class="card-icon purple">🧋</div>
-                    <h4>各品类销售</h4>
+                                </div>
+                                <div id="dr-tab-channels" class="dr-report-panel" role="tabpanel">
+                <div class="dr-rep-panel-card">                    <div class="dr-rep-block-title">各品类销售</div>
                     <div style="margin-top: 12px;">
                         <div style="margin-bottom: 14px;">
                             <div style="font-weight: 900;">水吧销售</div>
@@ -9019,9 +9277,7 @@
                     </div>
                 </div>
 
-                <div class="card" style="margin-bottom: 18px;">
-                    <div class="card-icon blue">🛵</div>
-                    <h4>外卖数据</h4>
+                <div class="dr-rep-panel-card">                    <div class="dr-rep-block-title">外卖数据</div>
                     <div style="margin-top: 12px;">
                         <div style="font-weight: 900;">饿了么</div>
                         <div style="margin-top: 10px; display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px 18px;">
@@ -9051,17 +9307,14 @@
                         </div>
                     </div>
                 </div>
-
-                <div class="card" style="margin-bottom: 18px;">
-                    <div class="card-icon orange">⚠️</div>
-                    <h4>今日营运异常报备</h4>
+                                </div>
+                                <div id="dr-tab-reputation" class="dr-report-panel" role="tabpanel">
+                <div class="dr-rep-panel-card">                    <div class="dr-rep-block-title">今日营运异常报备</div>
                     <p style="margin:8px 0 10px; font-size:12px; color:rgba(200,215,230,0.85); line-height:1.45;">请填写当日影响营运的重要事件（如设备故障、严重客诉、临时停售等）；无则留空。内容将出现在次日晨报「营运异常报备」中。</p>
                     <textarea id="dr-operational-anomaly" rows="4" maxlength="4000" placeholder="例如：设备故障、严重客诉等…" style="width:100%; padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,0.2); background:rgba(0,0,0,0.2); color:#fff; font-size:14px; resize:vertical; box-sizing:border-box;"></textarea>
                 </div>
 
-                <div class="card" style="margin-bottom: 18px;">
-                    <div class="card-icon red">⭐</div>
-                    <h4>差评统计</h4>
+                <div class="dr-rep-panel-card">                    <div class="dr-rep-block-title">差评统计</div>
                     <div style="margin-top: 12px; display:grid; grid-template-columns: 1fr; gap: 12px;">
                         <div><label style="color:#666;font-size:12px;">大众点评差评数量</label><input id="dr-bad-dianping" type="number" placeholder="请输入差评数量" style="width:100%; padding:12px;"></div>
                         <div><label style="color:#666;font-size:12px;">美团外卖差评数量</label><input id="dr-bad-meituan" type="number" placeholder="请输入差评数量" style="width:100%; padding:12px;"></div>
@@ -9069,9 +9322,7 @@
                     </div>
                 </div>
 
-                <div class="card" style="margin-bottom: 18px;">
-                    <div class="card-icon green">💳</div>
-                    <h4>充值统计</h4>
+                <div class="dr-rep-panel-card">                    <div class="dr-rep-block-title">充值统计</div>
                     <div style="margin-top: 12px; display:grid; grid-template-columns: 1fr; gap: 12px;">
                         <div><label style="color:#666;font-size:12px;">今日充值笔数</label><input id="dr-recharge-count" type="number" placeholder="请输入充值笔数" style="width:100%; padding:12px;" oninput="syncDailyReportComputed()"></div>
                         <div><label style="color:#666;font-size:12px;">今日充值金额（元）</label><input id="dr-recharge-amt" type="number" inputmode="decimal" placeholder="请输入充值金额" style="width:100%; padding:12px;" oninput="syncDailyReportComputed()"></div>
@@ -9081,7 +9332,8 @@
                         <div style="font-size: 12px; color: rgba(200,215,230,0.78);">充值目标由管理员在目标管理中设置当前门店：<span id="dr-recharge-target-store">-</span></div>
                     </div>
                 </div>
-
+                                </div>
+                                <div id="dr-tab-people" class="dr-report-panel" role="tabpanel">
                 <div class="dr-hr-slab">
                     <div class="dr-hr-slab__toolbar">
                         <span class="dr-hr-slab__kbd">ATTN</span>
@@ -9180,9 +9432,7 @@
                     </div>
                 </div>
 
-                <div class="card" style="margin-bottom: 18px;">
-                    <div class="card-icon orange">📷</div>
-                    <h4>上传日结单</h4>
+                <div class="dr-rep-panel-card">                    <div class="dr-rep-block-title">上传日结单</div>
                     <input id="dr-photo-input" type="file" accept="image/*" multiple style="display:none;" onchange="handleDailyReportPhotoSelect(event)">
                     <button id="dr-photo-upload-btn" class="btn" type="button" onclick="triggerDailyReportPhotoSelect()" style="width:100%; justify-content:center; padding: 14px 16px; background: linear-gradient(135deg, #f97316, #fb923c);">
                         上传日结单照片
@@ -9190,6 +9440,9 @@
                     <div style="margin-top: 10px; color: rgba(200,215,230,0.78); font-size: 12px;">请上传日结单照片（最多9张）</div>
                     <div id="dr-photos-preview" style="margin-top: 12px; display:flex; gap: 10px; flex-wrap: wrap;"></div>
                 </div>
+                                </div>
+                            </div>
+                        </div>
 
                 <div style="display:flex; flex-direction: column; gap: 12px; margin-bottom: 18px;">
                     <button id="dr-save-draft-btn" class="btn" type="button" onclick="saveDailyReportDraft()" style="width:100%; justify-content:center; padding: 14px 16px;">保存草稿</button>
@@ -9307,7 +9560,7 @@
             </div>
 
             <div id="payment-basic-modal" class="modal ui-modal">
-                <div class="modal-content" style="max-width: 960px;">
+                <div class="modal-content pay-dict-modal-content">
                     <div class="modal-header">
                         <div>
                             <h3 class="ui-modal-title">请款基础配置</h3>
@@ -9315,9 +9568,21 @@
                         </div>
                         <button class="modal-close" onclick="closePaymentBasicModal()">×</button>
                     </div>
-                    <div class="modal-body">
+                    <div class="modal-body pay-dict-modal-body">
+                        <div class="pay-dict-shell">
+                            <div class="pay-dict-toolbar">
+                                <span class="pay-dict-toolbar__kbd">PAY</span>
+                                <span class="pay-dict-toolbar__hint">分段维护 · 与「组织字典维护」一致的壳体</span>
+                            </div>
+                            <div class="pay-dict-seg" role="tablist" aria-label="请款基础分区">
+                                <button type="button" class="pay-dict-seg__btn active" data-pbs-tab="subjects" onclick="setPaymentBasicTab('subjects')">科目</button>
+                                <button type="button" class="pay-dict-seg__btn" data-pbs-tab="payees" onclick="setPaymentBasicTab('payees')">收款方</button>
+                                <button type="button" class="pay-dict-seg__btn" data-pbs-tab="urgency" onclick="setPaymentBasicTab('urgency')">紧急程度</button>
+                            </div>
+                            <div class="pay-dict-panels">
+                                <div id="pbs-panel-subjects" class="pay-dict-panel is-active" role="tabpanel">
                         <!-- 板块一：科目管理 -->
-                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 18px; margin-bottom: 16px;">
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 18px; margin-bottom: 0;">
                             <div style="font-weight: 900; font-size: 15px; margin-bottom: 4px; display:flex; align-items:center; gap:8px;">
                                 <span style="display:inline-block; width:4px; height:18px; border-radius:2px; background:#2563eb;"></span>
                                 请款科目管理
@@ -9352,9 +9617,10 @@
                                 </div>
                             </div>
                         </div>
-
+                                </div>
+                                <div id="pbs-panel-payees" class="pay-dict-panel" role="tabpanel">
                         <!-- 板块二：常用付款信息 -->
-                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 18px; margin-bottom: 16px;">
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 18px; margin-bottom: 0;">
                             <div style="font-weight: 900; font-size: 15px; margin-bottom: 4px; display:flex; align-items:center; gap:8px;">
                                 <span style="display:inline-block; width:4px; height:18px; border-radius:2px; background:#16a34a;"></span>
                                 常用付款信息
@@ -9379,7 +9645,8 @@
                             </div>
                             <div id="pbs-payee-details" style="margin-top: 6px;"></div>
                         </div>
-
+                                </div>
+                                <div id="pbs-panel-urgency" class="pay-dict-panel" role="tabpanel">
                         <!-- 紧急程度 -->
                         <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 18px;">
                             <div style="font-weight: 900; font-size: 15px; margin-bottom: 4px; display:flex; align-items:center; gap:8px;">
@@ -9392,6 +9659,9 @@
                             </div>
                             <div id="pbs-urgencies" style="margin-top: 10px;"></div>
                         </div>
+                                </div>
+                            </div>
+                        </div>
 
                         <div id="payment-basic-modal-status" class="settings-hint" style="margin-top: 12px;"></div>
                     </div>
@@ -9403,7 +9673,7 @@
             </div>
 
             <div id="payment-budget-modal" class="modal ui-modal">
-                <div class="modal-content" style="max-width: 980px;">
+                <div class="modal-content pay-dict-modal-content">
                     <div class="modal-header">
                         <div>
                             <h3 class="ui-modal-title">请款预算管理</h3>
@@ -9411,7 +9681,13 @@
                         </div>
                         <button class="modal-close" onclick="closePaymentBudgetModal()">×</button>
                     </div>
-                    <div class="modal-body">
+                    <div class="modal-body pay-dict-modal-body">
+                        <div class="pay-dict-shell">
+                            <div class="pay-dict-toolbar">
+                                <span class="pay-dict-toolbar__kbd">BUDGET</span>
+                                <span class="pay-dict-toolbar__hint">上方维护单笔 · 下方列表按门店/月份筛选</span>
+                            </div>
+                            <div class="pay-dict-scroll">
                         <div class="settings-form">
                             <div class="settings-form-full">
                                 <label class="settings-label">新增/更新预算</label>
@@ -9437,7 +9713,7 @@
                             </div>
                         </div>
 
-                        <div class="card" style="margin-top: 14px;">
+                        <div class="pay-dict-innercard">
                             <div style="display:flex; justify-content: space-between; align-items:center; gap: 10px; flex-wrap: wrap;">
                                 <div style="font-weight: 900;">预算列表</div>
                                 <div style="display:flex; gap: 10px; align-items:center; flex-wrap: wrap;">
@@ -9449,6 +9725,8 @@
                             <div id="pb-empty" style="margin-top: 12px; color:#777; font-size: 12px; display:none;">暂无预算记录。</div>
                         </div>
 
+                            </div>
+                        </div>
                         <div id="payment-budget-modal-status" class="settings-hint" style="margin-top: 12px;"></div>
                     </div>
                     <div class="ui-modal-footer" style="display:flex; justify-content:flex-end; gap:10px; padding: 12px 20px; border-top: 1px solid rgba(255,255,255,0.08);">
@@ -10244,7 +10522,7 @@
             </div>
 
             <div id="payment-flow-modal" class="modal ui-modal">
-                <div class="modal-content" style="max-width: 860px;">
+                <div class="modal-content pay-dict-modal-content">
                     <div class="modal-header">
                         <div>
                             <h3 class="ui-modal-title">请款审批流程配置</h3>
@@ -10252,7 +10530,13 @@
                         </div>
                         <button class="modal-close" onclick="closePaymentFlowModal()">×</button>
                     </div>
-                    <div class="modal-body">
+                    <div class="modal-body pay-dict-modal-body">
+                        <div class="pay-dict-shell">
+                            <div class="pay-dict-toolbar">
+                                <span class="pay-dict-toolbar__kbd">FLOW</span>
+                                <span class="pay-dict-toolbar__hint">按门店配置审批链与出纳 · 保存后对新单生效</span>
+                            </div>
+                            <div class="pay-dict-scroll">
                         <div class="settings-form">
                             <div class="settings-form-full">
                                 <label class="settings-label">选择门店</label>
@@ -10270,6 +10554,8 @@
                                 <label class="settings-label">付款人（出纳）</label>
                                 <select id="pf-cashier" class="settings-input"></select>
                                 <div class="settings-hint" style="margin-top: 8px;">说明：审批人全部通过后，请款单会进入「已审批」，由出纳/管理员标记「已付款」。</div>
+                            </div>
+                        </div>
                             </div>
                         </div>
                         <div id="payment-flow-modal-status" class="settings-hint" style="margin-top: 12px;"></div>
@@ -16158,6 +16444,7 @@
             renderPaymentPayeeDetails();
 
             if (statusEl) statusEl.textContent = '';
+            try { setPaymentBasicTab('subjects'); } catch (e) {}
             modal.classList.add('show');
         }
 
@@ -27909,6 +28196,35 @@ ${knowledgeContent.slice(0, 30000)}`;
             }
         }
 
+
+        function setDailyReportEditorTab(tab) {
+            try {
+                const key = String(tab || 'meta').trim();
+                const ok = ['meta', 'revenue', 'channels', 'reputation', 'people'];
+                const k = ok.includes(key) ? key : 'meta';
+                document.querySelectorAll('#dr-edit-view .dr-report-seg__btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.getAttribute('data-drtab') === k);
+                });
+                document.querySelectorAll('#dr-edit-view .dr-report-panel').forEach(p => {
+                    p.classList.toggle('is-active', p.id === 'dr-tab-' + k);
+                });
+            } catch (e) {}
+        }
+
+        function setPaymentBasicTab(tab) {
+            try {
+                const key = String(tab || 'subjects').trim();
+                const ok = ['subjects', 'payees', 'urgency'];
+                const k = ok.includes(key) ? key : 'subjects';
+                document.querySelectorAll('#payment-basic-modal .pay-dict-seg__btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.getAttribute('data-pbs-tab') === k);
+                });
+                document.querySelectorAll('#payment-basic-modal .pay-dict-panel').forEach(p => {
+                    p.classList.toggle('is-active', p.id === 'pbs-panel-' + k);
+                });
+            } catch (e) {}
+        }
+
         function drIsEditing() {
             const edit = document.getElementById('dr-edit-view');
             return !!(edit && !edit.classList.contains('hidden'));
@@ -27919,6 +28235,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             const edit = document.getElementById('dr-edit-view');
             if (list) list.classList.add('hidden');
             if (edit) edit.classList.remove('hidden');
+            try { setDailyReportEditorTab('meta'); } catch (e) {}
         }
 
         function showDailyReportList() {
