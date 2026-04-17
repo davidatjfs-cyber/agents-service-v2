@@ -8,6 +8,21 @@ ALLOW_NO_DB_BACKUP="${ALLOW_NO_DB_BACKUP:-false}"
 
 mkdir -p "$BACKUP_DIR/agents" "$BACKUP_DIR/hrms" "$BACKUP_DIR/database"
 
+# 根分区可用过低时先裁剪旧备份（仅靠 mtime+10 在频繁部署 + 大库 dump 时会堆积满盘，曾导致 PostgreSQL 崩溃无法登录）
+avail_kb() { df -Pk / 2>/dev/null | tail -1 | awk '{print $4}'; }
+prune_backups_by_count() {
+  local keep_hrms_tar="${1:-8}"
+  local keep_db_sql="${2:-6}"
+  (cd "$BACKUP_DIR/hrms" 2>/dev/null && ls -1t hrms_*.tar.gz 2>/dev/null | tail -n +$((keep_hrms_tar + 1)) | xargs -r rm -f)
+  (cd "$BACKUP_DIR/hrms" 2>/dev/null && ls -1t hrms_*.sql hrms_schema_*.sql 2>/dev/null | tail -n +$((keep_db_sql + 1)) | xargs -r rm -f)
+  (cd "$BACKUP_DIR/database" 2>/dev/null && ls -1t hrms_*.sql hrms_schema_*.sql 2>/dev/null | tail -n +$((keep_db_sql + 1)) | xargs -r rm -f)
+}
+PRE_AVAIL=$(avail_kb)
+if [ "${PRE_AVAIL:-0}" -lt 3145728 ]; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠️ 根分区可用不足约 3GiB（${PRE_AVAIL} KiB），紧急按数量裁剪旧 HRMS/DB 备份..." | tee -a "$LOG_FILE"
+  prune_backups_by_count 4 3
+fi
+
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] 开始部署前备份..." | tee -a "$LOG_FILE"
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] 备份agents代码..." | tee -a "$LOG_FILE"
@@ -129,6 +144,13 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] 清理旧备份..." | tee -a "$LOG_FILE"
 find "$BACKUP_DIR/agents" -name "*.tar.gz" -mtime +10 -delete 2>/dev/null
 find "$BACKUP_DIR/hrms" -name "*.tar.gz" -mtime +10 -delete 2>/dev/null
 find "$BACKUP_DIR/database" -name "*.sql" -mtime +10 -delete 2>/dev/null
+# 按数量上限保留（防止 10 天内高频部署 + 大体积 pg_dump 占满磁盘）
+prune_backups_by_count 8 6
+POST_AVAIL=$(avail_kb)
+if [ "${POST_AVAIL:-0}" -lt 1048576 ]; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠️ 清理后根分区仍不足约 1GiB，进一步只保留最新 3 份 HRMS tar 与 2 份 SQL" | tee -a "$LOG_FILE"
+  prune_backups_by_count 3 2
+fi
 
 echo "$TIMESTAMP" > "$BACKUP_DIR/latest.txt"
 echo "✅ 最新备份标记: $TIMESTAMP" | tee -a "$LOG_FILE"
