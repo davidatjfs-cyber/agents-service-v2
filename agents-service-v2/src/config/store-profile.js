@@ -12,6 +12,8 @@ import { resolveAgentCanonicalStore } from './store-mapping.js';
 const DEFAULT_PROFILES = {
   '马己仙上海音乐广场店': {
     brand: '马己仙',
+    /** 飞书开档/收档「应提交档口」清单（与店内约定一致，用于缺失判断；勿仅从当日记录推断） */
+    expectedShiftStations: ['煲仔', '砧板', '水吧', '炒锅', '烧味'],
     cuisine: '粤菜',
     positioning: '大众正餐',
     targetCustomer: '周边白领、家庭聚餐',
@@ -35,6 +37,7 @@ const DEFAULT_PROFILES = {
   },
   '洪潮大宁久光店': {
     brand: '洪潮',
+    expectedShiftStations: ['煲仔', '卤水', '砧板', '刺身', '炒锅', '水吧'],
     cuisine: '潮汕菜',
     positioning: '中高端正餐',
     targetCustomer: '商务宴请、品质家庭聚餐',
@@ -69,7 +72,13 @@ async function loadProfilesFromDB() {
     );
     const dbConfig = r.rows?.[0]?.data;
     if (dbConfig && dbConfig.stores) {
-      _cachedProfiles = { ...DEFAULT_PROFILES, ...dbConfig.stores };
+      const dbStores = dbConfig.stores && typeof dbConfig.stores === 'object' ? dbConfig.stores : {};
+      const merged = {};
+      const keys = new Set([...Object.keys(DEFAULT_PROFILES), ...Object.keys(dbStores)]);
+      for (const key of keys) {
+        merged[key] = { ...(DEFAULT_PROFILES[key] || {}), ...(dbStores[key] || {}) };
+      }
+      _cachedProfiles = merged;
       _cacheTime = Date.now();
       return _cachedProfiles;
     }

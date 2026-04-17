@@ -11,6 +11,7 @@ import {
   normalizeAgentMaterialBrand,
   resolveAgentCanonicalStore
 } from '../config/store-mapping.js';
+import { getStoreProfileAsync } from '../config/store-profile.js';
 import { notifyAdminsDataIssue } from './admin-data-alert.js';
 import { detectAnalysisIntent } from './analysis-intent.js';
 import { parseFeishuRatioOrPercentString, formatPercentDisplay } from '../utils/feishu-percent.js';
@@ -1475,6 +1476,31 @@ async function buildTableVisitReply(store, text) {
   } catch(e) { return `桌访数据查询失败：${e?.message||'未知错误'}`; }
 }
 
+/** 开档/收档缺失判断：优先门店画像 expectedShiftStations；否则退化为记录中出现过的档口 */
+async function resolveShiftStationsForStore(storeLabel, recordStationSet) {
+  const canon = String(resolveAgentCanonicalStore(storeLabel) || storeLabel || '').trim();
+  const from = Array.from(recordStationSet || []).map((x) => String(x || '').trim()).filter(Boolean);
+  let cfg = [];
+  try {
+    const prof = await getStoreProfileAsync(canon);
+    if (prof && Array.isArray(prof.expectedShiftStations)) {
+      cfg = prof.expectedShiftStations.map((x) => String(x || '').trim()).filter(Boolean);
+    }
+  } catch (_e) {
+    /* ignore */
+  }
+  const baseline = cfg.length ? cfg : from;
+  let header = '';
+  if (cfg.length) {
+    header = `应档口（店内配置·${cfg.length}）：${cfg.join('、')}`;
+  } else if (from.length) {
+    header = `已知岗位（来自记录·${from.length}）：${from.join('、')}`;
+  } else {
+    header = '（暂无档口基数：未配置 expectedShiftStations 且无档口字段）';
+  }
+  return { baseline, header, fromRecords: from };
+}
+
 // ── 3. Closing Report (收档) ─────────────────────────
 
 async function buildClosingReportReply(store, text) {
@@ -1518,11 +1544,13 @@ async function buildClosingReportReply(store, text) {
         }
       }
     }
-    const stations = Array.from(stationSet);
+    const shiftResolved = await resolveShiftStationsForStore(s, stationSet);
+    const stations = shiftResolved.baseline;
+    const stationsHeader = shiftResolved.header;
     const wantWhoMissed = /(谁没|没收档|缺失|漏)/.test(q);
     if (wantWhoMissed && stations.length > 0) {
       const dates = Object.keys(dateMap).sort();
-      const lines = [`${p.label}收档提交情况（${s}）`, `已知岗位：${stations.join('、')}`];
+      const lines = [`${p.label}收档提交情况（${s}）`, stationsHeader];
       let missTotal = 0;
       for (const d of dates) {
         const submitted = dateMap[d];
@@ -1546,7 +1574,7 @@ async function buildClosingReportReply(store, text) {
     // Default: per-date view showing which stations submitted / missed
     const dates = Object.keys(dateMap).sort();
     if (stations.length > 0 && dates.length > 0) {
-      const lines = [`${p.label}收档提交情况（${s}）`, `已知岗位：${stations.join('、')}`];
+      const lines = [`${p.label}收档提交情况（${s}）`, stationsHeader];
       let missTotal = 0;
       for (const d of dates) {
         const submitted = dateMap[d];
@@ -1618,11 +1646,13 @@ async function buildOpeningReportReply(store, text) {
         }
       }
     }
-    const stations = Array.from(stationSet);
+    const shiftResolvedOpen = await resolveShiftStationsForStore(s, stationSet);
+    const stations = shiftResolvedOpen.baseline;
+    const stationsHeader = shiftResolvedOpen.header;
     const wantWhoMissed = /(谁没|没开档|缺失|漏)/.test(q);
     if (wantWhoMissed && stations.length > 0) {
       const dates = Object.keys(dateMap).sort();
-      const lines = [`${p.label}开档提交情况（${s}）`, `已知岗位：${stations.join('、')}`];
+      const lines = [`${p.label}开档提交情况（${s}）`, stationsHeader];
       let missTotal = 0;
       for (const d of dates) {
         const submitted = dateMap[d];
@@ -1648,7 +1678,7 @@ async function buildOpeningReportReply(store, text) {
     // Default: per-date submission + 分布摘要（与收档展示口径对齐）
     const datesOpen = Object.keys(dateMap).sort();
     if (stations.length > 0 && datesOpen.length > 0) {
-      const lines = [`${p.label}开档提交情况（${s}）`, `已知岗位：${stations.join('、')}`];
+      const lines = [`${p.label}开档提交情况（${s}）`, stationsHeader];
       let missTotal = 0;
       for (const d of datesOpen) {
         const submitted = dateMap[d];

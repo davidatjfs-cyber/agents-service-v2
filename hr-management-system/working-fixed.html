@@ -7792,6 +7792,198 @@
             text-align: right;
         }
 
+        /* ── 待审批：与请款/营业日报同系（简洁、拇指友好） ── */
+        #approvals-page {
+            --ap-bg0: #06080c;
+            --ap-bg1: #0b0f16;
+            --ap-border: rgba(212, 175, 55, 0.14);
+            --ap-border-soft: rgba(255, 255, 255, 0.08);
+            --ap-gold: #d4af37;
+            --ap-gold-glow: rgba(212, 175, 55, 0.2);
+            --ap-text: #e9eef6;
+            --ap-muted: rgba(186, 198, 215, 0.62);
+            --ap-sans: "IBM Plex Sans", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+            background:
+                radial-gradient(720px 420px at 100% 0%, rgba(212, 175, 55, 0.07), transparent 52%),
+                radial-gradient(640px 380px at 0% 30%, rgba(94, 234, 212, 0.05), transparent 48%),
+                linear-gradient(165deg, var(--ap-bg0) 0%, var(--ap-bg1) 55%, #070a10 100%);
+            min-height: calc(100vh - 120px);
+            padding-top: 6px;
+            color: var(--ap-text);
+            font-family: var(--ap-sans);
+        }
+
+        #approvals-page .ap-shell {
+            max-width: min(960px, 100%);
+            margin: 0 auto;
+            padding: 14px 14px 110px;
+        }
+
+        #approvals-page .ap-page-head {
+            margin-bottom: 14px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--ap-border-soft);
+        }
+
+        #approvals-page .ap-page-head__eyebrow {
+            display: block;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.22em;
+            color: var(--ap-gold);
+            opacity: 0.88;
+            margin-bottom: 4px;
+        }
+
+        #approvals-page .ap-page-head h2 {
+            margin: 0;
+            font-size: 1.35rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+        }
+
+        #approvals-page .ap-page-head__desc {
+            margin: 8px 0 0;
+            font-size: 13px;
+            line-height: 1.45;
+            color: var(--ap-muted);
+        }
+
+        #approvals-page .ap-filters {
+            position: relative;
+            border-radius: 18px;
+            padding: 16px 14px 14px;
+            margin-bottom: 16px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+            border: 1px solid var(--ap-border);
+            box-shadow:
+                0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+                0 18px 36px -26px rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(12px);
+        }
+
+        #approvals-page .ap-filters__grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 12px;
+        }
+
+        @media (max-width: 520px) {
+            #approvals-page .ap-filters__grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        #approvals-page .ap-filters label.ap-lab {
+            display: block;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--ap-muted);
+            margin-bottom: 6px;
+        }
+
+        #approvals-page .ap-filters select,
+        #approvals-page .ap-filters input[type="date"],
+        #approvals-page .ap-filters input[type="text"] {
+            width: 100%;
+            min-height: 46px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(255, 255, 255, 0.92);
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        #approvals-page .ap-filters__row-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            margin-top: 4px;
+        }
+
+        #approvals-page .ap-filters__row-actions .btn,
+        #approvals-page .ap-filters__row-actions .btn-secondary {
+            min-height: 46px;
+            padding: 0 16px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 13px;
+        }
+
+        #approvals-page .ap-list-card {
+            border-radius: 18px;
+            padding: 14px 14px 12px;
+            border: 1px solid var(--ap-border-soft);
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        #approvals-page .ap-list-card h4 {
+            margin: 0 0 4px;
+            font-size: 15px;
+            font-weight: 800;
+        }
+
+        #approvals-page .ap-hint {
+            margin-top: 6px;
+            font-size: 12px;
+            line-height: 1.45;
+            color: var(--ap-muted);
+        }
+
+        #approvals-page .ap-row {
+            padding: 14px 14px;
+            border-radius: 14px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        #approvals-page .ap-row__title {
+            font-weight: 900;
+            font-size: 15px;
+            letter-spacing: 0.02em;
+        }
+
+        #approvals-page .ap-row__meta {
+            margin-top: 6px;
+            font-size: 12px;
+            line-height: 1.45;
+            color: var(--ap-muted);
+        }
+
+        #approvals-page .ap-row__actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        #approvals-page .ap-row__actions .btn-secondary {
+            min-height: 44px;
+            padding: 0 16px;
+            border-radius: 12px;
+            font-weight: 700;
+        }
+
+        #approvals-page .ap-type-group {
+            margin: 18px 0 8px;
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            color: rgba(233, 238, 246, 0.95);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 6px;
+        }
+
         /* ── 请款管理：与分析报表同系金融面板 ── */
         #payment-page {
             --rep-bg0: #06080c;
@@ -11933,55 +12125,81 @@
             </div>
 
             <div id="approvals-page" class="hidden">
-                <div class="page-header" style="display:flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
-                    <div>
-                        <h2 style="margin: 0;">待审批</h2>
-                        <div style="margin-top: 6px; color:#777; font-size: 12px;">查看待我处理的审批，以及我发起的流程</div>
-                    </div>
-                    <div style="display:flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                        <select id="approvals-view" onchange="loadApprovalsData()" style="padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9);">
-                            <option value="assigned">待我审批</option>
-                            <option value="created">我发起的</option>
-                            <option value="approved">我审批过的</option>
-                            <option value="all">全部（管理层）</option>
-                        </select>
-                        <select id="approvals-status" onchange="loadApprovalsData()" style="padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9);">
-                            <option value="">全部状态</option>
-                            <option value="pending">待处理</option>
-                            <option value="approved">已通过</option>
-                            <option value="paid">已付款</option>
-                            <option value="rejected">已拒绝</option>
-                            <option value="returned">已退回</option>
-                        </select>
-                        <select id="approvals-type-filter" onchange="loadApprovalsData()" title="按审批类型筛选" style="padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); max-width: 160px;">
-                            <option value="">全部类型</option>
-                            <option value="onboarding">入职</option>
-                            <option value="offboarding">离职</option>
-                            <option value="leave">休假</option>
-                            <option value="payment">请款</option>
-                            <option value="points">积分</option>
-                            <option value="reward_punishment">奖惩</option>
-                            <option value="promotion">晋升</option>
-                            <option value="monthly_confirm">月度考勤确认</option>
-                        </select>
-                        <select id="approvals-date-field" onchange="loadApprovalsData()" title="日期筛选含义" style="padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); max-width: 200px;">
-                            <option value="created">按申请日</option>
-                            <option value="updated">按最后更新（含审批）</option>
-                        </select>
-                        <input id="approvals-approved-start" type="date" onchange="loadApprovalsData()" style="padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); color-scheme:dark;" placeholder="开始日期" />
-                        <input id="approvals-approved-end" type="date" onchange="loadApprovalsData()" style="padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); color-scheme:dark;" placeholder="结束日期" />
-                        <input id="approvals-search" type="text" onkeydown="if(event.key==='Enter') loadApprovalsData()" style="padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); min-width: 120px;" placeholder="申请人/关键字" />
-                        <button class="btn btn-secondary" id="approvals-bulk-approve-btn" type="button" onclick="bulkApproveSelectedApprovals()" style="padding: 10px 14px; display:none;">批量通过</button>
-                        <button class="btn btn-secondary" type="button" onclick="loadApprovalsData()" style="padding: 10px 14px;">刷新</button>
-                    </div>
-                </div>
+                <div class="ap-shell">
+                    <header class="ap-page-head">
+                        <span class="ap-page-head__eyebrow">WORKFLOW</span>
+                        <h2>待审批</h2>
+                        <p class="ap-page-head__desc">待我处理、我发起的与历史记录；筛选器为大触控目标，便于单手操作。</p>
+                    </header>
 
-                <div class="card">
-                    <div class="card-icon orange">🧾</div>
-                    <h4 style="margin: 0;">审批列表</h4>
-                    <div id="approvals-hint" style="margin-top: 10px; color:#777; font-size: 12px;">进入记录即视为已读；未读数量会显示在左侧导航。「按申请日」对应提交时间；「按最后更新」对应记录更新时间（审批通过/驳回/退回等会更新）。管理层「全部」视图按审批类型分组。</div>
-                    <div id="approvals-list" style="margin-top: 12px;"></div>
-                    <div id="approvals-empty" style="margin-top: 12px; color:#777; font-size: 12px; display:none;">暂无审批记录。</div>
+                    <section class="ap-filters" aria-label="审批筛选">
+                        <div class="ap-filters__grid">
+                            <div>
+                                <label class="ap-lab" for="approvals-view">视图</label>
+                                <select id="approvals-view" onchange="loadApprovalsData()">
+                                    <option value="assigned">待我审批</option>
+                                    <option value="created">我发起的</option>
+                                    <option value="approved">我审批过的</option>
+                                    <option value="all">全部（管理层）</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="ap-lab" for="approvals-status">状态</label>
+                                <select id="approvals-status" onchange="loadApprovalsData()">
+                                    <option value="">全部状态</option>
+                                    <option value="pending">待处理</option>
+                                    <option value="approved">已通过</option>
+                                    <option value="paid">已付款</option>
+                                    <option value="rejected">已拒绝</option>
+                                    <option value="returned">已退回</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="ap-lab" for="approvals-type-filter">类型</label>
+                                <select id="approvals-type-filter" onchange="loadApprovalsData()" title="按审批类型筛选">
+                                    <option value="">全部类型</option>
+                                    <option value="onboarding">入职</option>
+                                    <option value="offboarding">离职</option>
+                                    <option value="leave">休假</option>
+                                    <option value="payment">请款</option>
+                                    <option value="points">积分</option>
+                                    <option value="reward_punishment">奖惩</option>
+                                    <option value="promotion">晋升</option>
+                                    <option value="monthly_confirm">月度考勤确认</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="ap-lab" for="approvals-date-field">日期含义</label>
+                                <select id="approvals-date-field" onchange="loadApprovalsData()" title="日期筛选含义">
+                                    <option value="created">按申请日</option>
+                                    <option value="updated">按最后更新（含审批）</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="ap-lab" for="approvals-approved-start">开始日期</label>
+                                <input id="approvals-approved-start" type="date" onchange="loadApprovalsData()" style="color-scheme: dark;" placeholder="开始日期" />
+                            </div>
+                            <div>
+                                <label class="ap-lab" for="approvals-approved-end">结束日期</label>
+                                <input id="approvals-approved-end" type="date" onchange="loadApprovalsData()" style="color-scheme: dark;" placeholder="结束日期" />
+                            </div>
+                            <div style="grid-column: 1 / -1;">
+                                <label class="ap-lab" for="approvals-search">搜索</label>
+                                <input id="approvals-search" type="text" onkeydown="if(event.key==='Enter') loadApprovalsData()" placeholder="申请人 / 关键字" />
+                            </div>
+                        </div>
+                        <div class="ap-filters__row-actions">
+                            <button class="btn btn-secondary" id="approvals-bulk-approve-btn" type="button" onclick="bulkApproveSelectedApprovals()" style="display:none;">批量通过</button>
+                            <button class="btn btn-secondary" type="button" onclick="loadApprovalsData()">刷新</button>
+                        </div>
+                    </section>
+
+                    <section class="ap-list-card" aria-label="审批列表">
+                        <h4>审批列表</h4>
+                        <div id="approvals-hint" class="ap-hint">进入记录即视为已读；未读数量显示在导航。「按申请日」为提交时间；「按最后更新」含审批操作时间。管理层「全部」按类型分组。</div>
+                        <div id="approvals-list" style="margin-top: 12px;"></div>
+                        <div id="approvals-empty" class="ap-hint" style="display:none; text-align:center; padding: 24px 8px;">暂无审批记录。</div>
+                    </section>
                 </div>
             </div>
 
@@ -16039,7 +16257,7 @@
             const search = String(searchEl?.value || '').trim();
             const lim = view === 'all' ? 500 : 200;
 
-            box.innerHTML = '<div style="color:#888;padding:18px;text-align:center;">加载中...</div>';
+            box.innerHTML = '<div class="ap-hint" style="padding:22px;text-align:center;">加载中…</div>';
             empty.style.display = 'none';
 
             HRMS_API.getApprovals({ view: String(viewEl?.value || 'assigned'), status, type: typeFilter || undefined, dateStart: approvedStart, dateEnd: approvedEnd, dateField, search, limit: lim })
@@ -16108,16 +16326,16 @@
                 const checkbox = canBulk
                     ? `<label style="display:flex; align-items:center; gap:6px; font-size:12px; color:rgba(200,215,230,0.78);"><input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleApprovalSelection('${escapeHtml(id)}', this.checked)">批量</label>`
                     : '';
-                const btn = `<button class="btn btn-secondary" type="button" onclick="openApprovalDetailModal('${escapeHtml(id)}')" style="padding: 8px 12px;">查看</button>`;
-                const act = canAct ? '<span style="color: rgba(245,158,11,0.95); font-weight: 800; font-size: 12px;">待你处理</span>' : '';
+                const btn = `<button class="btn btn-secondary" type="button" onclick="openApprovalDetailModal('${escapeHtml(id)}')">查看</button>`;
+                const act = canAct ? '<span style="color: rgba(245,158,11,0.95); font-weight: 800; font-size: 12px; margin-left:6px;">待你处理</span>' : '';
 
                 return `
-                    <div style="padding: 12px; border-radius: 12px; background: ${statusColor}; border-left: 4px solid ${borderColor}; margin-bottom: 10px; display:flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center; flex-wrap: wrap;">
+                    <div class="ap-row" style="background: ${statusColor}; border-left: 4px solid ${borderColor};">
                         <div style="min-width:0; flex: 1;">
-                            <div style="font-weight: 900; color: rgba(226,232,240,0.95);">${escapeHtml(type)} · ${escapeHtml(st)} ${act}</div>
-                            <div style="margin-top: 6px; font-size: 12px; color: rgba(200,215,230,0.78);">${escapeHtml(meta || '')}</div>
+                            <div class="ap-row__title" style="color: rgba(226,232,240,0.96);">${escapeHtml(type)} · ${escapeHtml(st)}${act}</div>
+                            <div class="ap-row__meta">${escapeHtml(meta || '')}</div>
                         </div>
-                        <div style="display:flex; gap: 10px; align-items:center;">${checkbox}${btn}</div>
+                        <div class="ap-row__actions">${checkbox}${btn}</div>
                     </div>
                 `;
             };
@@ -16135,7 +16353,7 @@
                 const emitType = (tk) => {
                     const sub = buckets.get(tk);
                     if (!sub || !sub.length) return;
-                    parts.push(`<div style="margin:18px 0 8px; font-size:13px;color:rgba(200,215,230,0.92);font-weight:800;border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:6px;">${escapeHtml(approvalTypeText(tk))} <span style="opacity:0.65;font-weight:600;">（${sub.length}）</span></div>`);
+                    parts.push(`<div class="ap-type-group">${escapeHtml(approvalTypeText(tk))} <span style="opacity:0.65;font-weight:600;">（${sub.length}）</span></div>`);
                     sub.forEach((row) => parts.push(approvalCardHtml(row)));
                     buckets.delete(tk);
                 };
@@ -39148,37 +39366,196 @@ ${knowledgeContent.slice(0, 30000)}`;
             }
         }
 
+        function buildDailyReportPrintHtml(payload) {
+            const esc = (s) => escapeHtml(String(s ?? ''));
+            const p = payload && typeof payload === 'object' ? payload : {};
+            const store = esc(p.store || '');
+            const date = esc(p.date || '');
+            const d = p.data && typeof p.data === 'object' ? p.data : {};
+            const tr = (k, v) =>
+                `<tr><th style="text-align:left;padding:7px 10px;border:1px solid #e5e7eb;background:#f8fafc;width:30%;font-size:12px;">${k}</th><td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:12px;">${v}</td></tr>`;
+            const tblOpen = '<table style="width:100%;border-collapse:collapse;margin:0 0 14px;">';
+            const tblClose = '</table>';
+            const sec = (title, inner) => `<h2 style="font-size:15px;margin:18px 0 8px;border-bottom:2px solid #111827;padding-bottom:4px;">${title}</h2>${inner}`;
+            const fmtM = (n) => esc(drFmtMoney(n));
+            const fmtN = (n) => {
+                const v = Number(n || 0);
+                return esc(Number.isFinite(v) ? String(v) : '0');
+            };
+            const staffLine = (list) => {
+                const arr = Array.isArray(list) ? list : [];
+                const t = arr
+                    .map((x) => {
+                        const nm = String(x?.name || x?.username || '').trim() || '—';
+                        const days = Number(x?.days || 0);
+                        const suf =
+                            Number.isFinite(days) && days > 0 && days !== 1 ? `（${days} 人天）` : '';
+                        return esc(nm) + suf;
+                    })
+                    .filter(Boolean)
+                    .join('、');
+                return t || '—';
+            };
+            const st = d.staff && typeof d.staff === 'object' ? d.staff : {};
+            const seg = d.segments && typeof d.segments === 'object' ? d.segments : {};
+            const dine = d.dine && typeof d.dine === 'object' ? d.dine : {};
+            const disc = d.discount && typeof d.discount === 'object' ? d.discount : {};
+            const cat = d.categories && typeof d.categories === 'object' ? d.categories : {};
+            const del = d.delivery && typeof d.delivery === 'object' ? d.delivery : {};
+            const ele = del.eleme && typeof del.eleme === 'object' ? del.eleme : {};
+            const mt = del.meituan && typeof del.meituan === 'object' ? del.meituan : {};
+            const bad = d.badReviews && typeof d.badReviews === 'object' ? d.badReviews : {};
+            const rech = d.recharge && typeof d.recharge === 'object' ? d.recharge : {};
+            const sch = d.scheduleNextDay && typeof d.scheduleNextDay === 'object' ? d.scheduleNextDay : {};
+            const photos = Array.isArray(d.photos) ? d.photos : [];
+
+            let body = '';
+            body += sec(
+                '基础与营收',
+                `${tblOpen}
+                ${tr('门店', store)}
+                ${tr('日期', date)}
+                ${tr('天气', esc(d.weather || ''))}
+                ${tr('节假日开关', d.holiday_switch || d.holidaySwitch ? '是' : '否')}
+                ${tr('预算（折前）', fmtM(d.budget))}
+                ${tr('今日折前营业额', fmtM(d.gross))}
+                ${tr('今日实收营业额', fmtM(d.actual))}
+                ${tr('预算达成（折前/预算）', d.budgetRate != null ? esc(drFmtPct(Number(d.budgetRate))) : '—')}
+                ${tr('人力合计（前厅+后厨人天）', fmtN(d.laborTotal))}
+                ${tr('人均产出（折前/人力）', d.efficiency != null ? fmtM(d.efficiency) : '—')}
+                ${tr('今日营运异常报备', esc((d.operational_anomaly_note || '').trim() || '（无）'))}
+                ${tblClose}`
+            );
+
+            body += sec(
+                '分段与堂食',
+                `${tblOpen}
+                ${tr('午市', fmtM(seg.noon))}
+                ${tr('下午茶', fmtM(seg.afternoon))}
+                ${tr('晚市', fmtM(seg.night))}
+                ${tr('堂食营业额', fmtM(dine.revenue))}
+                ${tr('堂食单数', fmtN(dine.orders))}
+                ${tr('堂食客流', fmtN(dine.traffic))}
+                ${tr('桌均', fmtM(dine.avgTable))}
+                ${tr('人均', fmtM(dine.avgPerson))}
+                ${tblClose}`
+            );
+
+            body += sec(
+                '折扣',
+                `${tblOpen}
+                ${tr('折扣合计', fmtM(disc.total))}
+                ${tr('堂食折扣', fmtM(disc.dine))}
+                ${tr('外卖折扣', fmtM(disc.delivery))}
+                ${tblClose}`
+            );
+
+            const catRows = ['water', 'soup', 'roast', 'wok'].map((key) => {
+                const lab = { water: '水吧酒水', soup: '炖汤', roast: '烧味', wok: '炒锅' }[key] || key;
+                const o = cat[key] && typeof cat[key] === 'object' ? cat[key] : {};
+                return tr(lab + '（额/量）', `${fmtM(o.amt)} / ${fmtN(o.qty)}`);
+            });
+            body += sec('品类结构', `${tblOpen}${catRows.join('')}${tblClose}`);
+
+            body += sec(
+                '外卖平台',
+                `${tblOpen}
+                ${tr('饿了么（单/流水/实收/目标）', `${fmtN(ele.orders)} / ${fmtM(ele.revenue)} / ${fmtM(ele.actual)} / ${fmtM(ele.targetRevenue)}`)}
+                ${tr('美团（单/流水/实收/目标）', `${fmtN(mt.orders)} / ${fmtM(mt.revenue)} / ${fmtM(mt.actual)} / ${fmtM(mt.targetRevenue)}`)}
+                ${tblClose}`
+            );
+
+            body += sec(
+                '口碑',
+                `${tblOpen}
+                ${tr('点评差评', fmtN(bad.dianping))}
+                ${tr('美团差评', fmtN(bad.meituan))}
+                ${tr('饿了么差评', fmtN(bad.eleme))}
+                ${tblClose}`
+            );
+
+            body += sec(
+                '充值',
+                `${tblOpen}
+                ${tr('充值笔数', fmtN(rech.count))}
+                ${tr('充值金额', fmtM(rech.amount))}
+                ${tblClose}`
+            );
+
+            body += sec(
+                '人力',
+                `${tblOpen}
+                ${tr('前厅上班', staffLine(st.front))}
+                ${tr('后厨上班', staffLine(st.kitchen))}
+                ${tr('休息/支援（前厅）', staffLine(st.restStaff || st.frontRestStaff))}
+                ${tr('前厅支援说明', esc(st.frontSupport || ''))}
+                ${tr('后厨支援说明', esc(st.kitchenSupport || ''))}
+                ${tblClose}`
+            );
+
+            body += sec(
+                '次日排班与预估',
+                `${tblOpen}
+                ${tr('次日预估折前', fmtM(sch.tomorrowGrossEstimate))}
+                ${tr('排班备注', esc(sch.remark || ''))}
+                ${tr('排班人员（合并）', staffLine(sch.staff))}
+                ${tr('排班·前厅', staffLine(sch.frontStaff))}
+                ${tr('排班·后厨', staffLine(sch.kitchenStaff))}
+                ${tblClose}`
+            );
+
+            const photoBlock =
+                photos.length > 0
+                    ? `<ol style="margin:0;padding-left:18px;font-size:11px;word-break:break-all;">${photos
+                          .map((u) => `<li style="margin:4px 0;"><a href="${esc(u)}">${esc(u)}</a></li>`)
+                          .join('')}</ol>`
+                    : '<p style="color:#64748b;font-size:12px;">（无附件图片 URL）</p>';
+            body += sec('日结照片 / 附件链接', photoBlock);
+
+            return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>营业日报 ${store} ${date}</title>
+<style>
+  @media print { @page { size: A4; margin: 12mm; } }
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;padding:16px;color:#111;font-size:13px;line-height:1.45;}
+  h1{font-size:20px;margin:0 0 12px;}
+  .hint{color:#64748b;font-size:12px;margin-top:16px;}
+</style></head><body>
+<h1>营业日报</h1>
+${body}
+<p class="hint">提示：在打印对话框中选择「另存为 PDF」。若某段为「—」表示当前表单该字段为空。</p>
+</body></html>`;
+        }
+
         function exportDailyReportPdf() {
             try {
                 const store = String(document.getElementById('dr-store')?.value || '').trim();
                 const date = String(document.getElementById('dr-date')?.value || '').trim();
-                const gross = drGetNum('dr-gross');
-                const actual = drGetNum('dr-actual');
-                const opNote = String(document.getElementById('dr-operational-anomaly')?.value || '').trim();
-                const opEsc = opNote.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                if (!store || !date) {
+                    showNotification('请先选择门店与日期', 'warning');
+                    return;
+                }
+                let payload = null;
+                try {
+                    payload = buildDailyReportPayload();
+                } catch (e) {
+                    payload = { store, date, data: {} };
+                }
                 const w = window.open('', '_blank');
                 if (!w) {
                     showNotification('请允许弹窗以导出 PDF', 'warning');
                     return;
                 }
-                const html = `
-                    <html><head><meta charset="UTF-8"><title>营业日报 ${store} ${date}</title>
-                    <style>body{font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Arial; padding: 18px;} h1{font-size:18px;} .k{color:#555;} .v{font-weight:700;} .row{margin:10px 0;}</style>
-                    </head><body>
-                    <h1>营业日报</h1>
-                    <div class="row"><span class="k">门店：</span><span class="v">${store}</span></div>
-                    <div class="row"><span class="k">日期：</span><span class="v">${date}</span></div>
-                    <div class="row"><span class="k">折前营业额：</span><span class="v">${gross}</span></div>
-                    <div class="row"><span class="k">实收营业额：</span><span class="v">${actual}</span></div>
-                    <div class="row"><span class="k">今日营运异常报备：</span><span class="v">${opEsc || '（无）'}</span></div>
-                    <div class="row" style="margin-top:18px;color:#777;">提示：浏览器打印时选择“另存为 PDF”。</div>
-                    </body></html>
-                `;
+                const html = buildDailyReportPrintHtml(payload);
                 w.document.open();
                 w.document.write(html);
                 w.document.close();
                 w.focus();
-                w.print();
+                setTimeout(() => {
+                    try {
+                        w.print();
+                    } catch (e2) {
+                        /* ignore */
+                    }
+                }, 450);
             } catch (e) {
                 showNotification('导出失败：' + String(e?.message || e), 'error');
             }
