@@ -2154,10 +2154,11 @@
             color: rgba(255,255,255,0.38);
         }
 
-        /* PDF viewer toolbar dark style */
+        /* PDF viewer：与报表系一致的金边玻璃面板 */
         .kb-pdf-shell {
-            border: 1px solid rgba(255,255,255,0.10) !important;
-            background: rgba(0,0,0,0.25) !important;
+            border: 1px solid rgba(212, 175, 55, 0.22) !important;
+            background: linear-gradient(165deg, rgba(6, 8, 12, 0.92), rgba(15, 20, 30, 0.88)) !important;
+            box-shadow: 0 18px 40px -24px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(0, 0, 0, 0.35) inset !important;
         }
 
         .kb-pdf-canvas {
@@ -5840,6 +5841,12 @@
            Knowledge Base — dc-v2 Design System
            ═══════════════════════════════════════════════════════ */
         #knowledge-page {
+            --rep-bg0: #06080c;
+            --rep-bg1: #0b0f16;
+            --rep-gold: #d4af37;
+            --rep-gold-glow: rgba(212, 175, 55, 0.22);
+            --rep-border-soft: rgba(255, 255, 255, 0.08);
+            --rep-sans: "IBM Plex Sans", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
             --dc-ink: rgba(248,250,252,0.96);
             --dc-muted: rgba(148,163,184,0.88);
             --dc-faint: rgba(100,116,139,0.95);
@@ -5847,6 +5854,28 @@
             --dc-glow: rgba(245,158,11,0.14);
             --dc-num: 'Outfit', ui-rounded, system-ui, sans-serif;
             --dc-amber: rgba(245,158,11,0.92);
+            background:
+                radial-gradient(900px 520px at 100% -10%, rgba(45, 212, 191, 0.06), transparent 50%),
+                radial-gradient(700px 400px at -10% 20%, var(--rep-gold-glow), transparent 45%),
+                linear-gradient(165deg, var(--rep-bg0) 0%, var(--rep-bg1) 55%, #070a10 100%);
+            min-height: calc(100vh - 100px);
+            padding-top: 6px;
+            color: var(--dc-ink);
+            font-family: var(--rep-sans);
+        }
+
+        #knowledge-page .kb-knowledge-shell {
+            max-width: 1120px;
+            margin: 0 auto;
+            padding: 14px 18px 48px;
+        }
+
+        #knowledge-page .kb-dc-hero-sub {
+            margin: 8px 0 0;
+            font-size: 12px;
+            line-height: 1.5;
+            color: rgba(186, 198, 215, 0.62);
+            max-width: 56ch;
         }
 
         #knowledge-page .kb-dc-hero {
@@ -6190,11 +6219,11 @@
         }
 
         #knowledge-page .kb-pdf-shell.kb-dc-panel {
-            border-radius: 14px;
+            border-radius: 18px;
             overflow: hidden;
-            background: linear-gradient(180deg, rgba(24,28,40,0.55), rgba(15,23,42,0.42));
-            border: 1px solid var(--dc-line);
-            box-shadow: 0 20px 50px -28px rgba(0,0,0,0.55);
+            background: linear-gradient(165deg, rgba(6, 8, 12, 0.92), rgba(15, 20, 30, 0.88));
+            border: 1px solid rgba(212, 175, 55, 0.22);
+            box-shadow: 0 24px 48px -32px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
         }
         #knowledge-page .kb-dc-bar {
             display: flex;
@@ -10738,9 +10767,11 @@
             </div>
 
             <div id="knowledge-page" class="hidden">
+                <div class="dr-shell kb-knowledge-shell">
                 <div class="kb-dc-hero">
                     <div class="kb-dc-eyebrow">KNOWLEDGE BASE</div>
                     <div class="kb-dc-hero-title">知识库</div>
+                    <p class="kb-dc-hero-sub">制度、培训与标准的统一查阅入口（与分析报表同系视觉）</p>
                     <div class="kb-dc-hero-actions">
                         <button class="btn" id="btn-knowledge-upload" onclick="openKnowledgeUploadModal()">📤 上传内容</button>
                         <button class="btn btn-secondary" id="btn-knowledge-flashcards" onclick="openKnowledgeFlashcardsModal()">🃏 自我测验</button>
@@ -10820,6 +10851,7 @@
                             <button class="btn btn-danger" id="kb-toolbar-delete" type="button" style="display:none;">删除</button>
                         </div>
                     </div>
+                </div>
                 </div>
             </div>
 
@@ -19261,22 +19293,29 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             };
 
             let done = false;
-            const tmr = setTimeout(() => {
-                if (done) return;
-                done = true;
-                fallbackToIframe('PDF 预览超时，已切换到内嵌打开');
-            }, 6500);
+            let tmr = null;
+            const armPdfTimeout = (ms, msg) => {
+                try {
+                    if (tmr) clearTimeout(tmr);
+                } catch (e) {}
+                tmr = setTimeout(() => {
+                    if (done) return;
+                    done = true;
+                    fallbackToIframe(msg);
+                }, ms);
+            };
 
             try {
                 const ok = await ensurePdfJsLoaded();
                 if (!ok || typeof pdfjsLib === 'undefined') {
                     done = true;
-                    clearTimeout(tmr);
+                    if (tmr) clearTimeout(tmr);
                     fallbackToIframe('PDF 预览组件未加载，已切换到内嵌打开');
                     return;
                 }
 
                 pdfjsLib.GlobalWorkerOptions.workerSrc = '/assets/vendor/pdfjs/pdf.worker.min.js';
+                armPdfTimeout(55000, 'PDF 预览超时，已切换到内嵌打开');
 
                 const doc = await pdfjsLib.getDocument({ url: src }).promise;
                 let cur = 1;
@@ -19315,12 +19354,12 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 await renderPage(1);
 
                 done = true;
-                clearTimeout(tmr);
+                if (tmr) clearTimeout(tmr);
                 try { btnPrev.disabled = total <= 1; btnNext.disabled = total <= 1; } catch (e) {}
             } catch (e) {
                 console.error(e);
                 done = true;
-                clearTimeout(tmr);
+                if (tmr) clearTimeout(tmr);
                 fallbackToIframe('PDF 预览失败，已切换到内嵌打开');
             }
         }

@@ -2018,10 +2018,11 @@
             color: rgba(255,255,255,0.38);
         }
 
-        /* PDF viewer toolbar dark style */
+        /* PDF viewer：与报表系一致的金边玻璃面板 */
         .kb-pdf-shell {
-            border: 1px solid rgba(255,255,255,0.10) !important;
-            background: rgba(0,0,0,0.25) !important;
+            border: 1px solid rgba(212, 175, 55, 0.22) !important;
+            background: linear-gradient(165deg, rgba(6, 8, 12, 0.92), rgba(15, 20, 30, 0.88)) !important;
+            box-shadow: 0 18px 40px -24px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(0, 0, 0, 0.35) inset !important;
         }
 
         .kb-pdf-canvas {
@@ -5499,14 +5500,165 @@
 
         #knowledge-list-card select {
             width: 100%;
+            padding: 11px 12px;
+            border-radius: 12px;
+            font-family: var(--rep-mono, ui-monospace, monospace);
+            font-size: 13px;
+            background: rgba(0, 0, 0, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: var(--rep-text, rgba(248, 250, 252, 0.96));
+            color-scheme: dark;
         }
 
-        /* Knowledge page: minimal Notion/Apple style */
+        #knowledge-list-card select:focus {
+            outline: none;
+            border-color: rgba(212, 175, 55, 0.45);
+            box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.22);
+        }
+
+        #knowledge-page #kb-admin-filters select {
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            background: rgba(0, 0, 0, 0.35) !important;
+            color: rgba(248, 250, 252, 0.96) !important;
+        }
+
+        /* 知识库：与分析报表同系的金融级深色面板（IBM Plex + 香槟金） */
         #knowledge-page {
-            --kb-border: var(--apple-border);
-            --kb-muted: var(--apple-muted);
-            --kb-bg: var(--apple-surface);
-            --kb-subtle: rgba(255,255,255,0.04);
+            --rep-bg0: #06080c;
+            --rep-bg1: #0b0f16;
+            --rep-surface: rgba(255, 255, 255, 0.035);
+            --rep-border: rgba(212, 175, 55, 0.14);
+            --rep-border-soft: rgba(255, 255, 255, 0.08);
+            --rep-gold: #d4af37;
+            --rep-gold-glow: rgba(212, 175, 55, 0.22);
+            --rep-teal: #5eead4;
+            --rep-text: #e9eef6;
+            --rep-muted: rgba(186, 198, 215, 0.58);
+            --rep-mono: "IBM Plex Mono", ui-monospace, monospace;
+            --rep-sans: "IBM Plex Sans", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+            --kb-border: var(--rep-border-soft);
+            --kb-muted: var(--rep-muted);
+            --kb-bg: var(--rep-surface);
+            --kb-subtle: rgba(255, 255, 255, 0.04);
+            background:
+                radial-gradient(900px 520px at 100% -10%, rgba(45, 212, 191, 0.06), transparent 50%),
+                radial-gradient(700px 400px at -10% 20%, var(--rep-gold-glow), transparent 45%),
+                linear-gradient(165deg, var(--rep-bg0) 0%, var(--rep-bg1) 55%, #070a10 100%);
+            min-height: calc(100vh - 120px);
+            padding-top: 6px;
+            color: var(--rep-text);
+            font-family: var(--rep-sans);
+        }
+
+        #knowledge-page .kb-knowledge-shell {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 14px 14px 88px;
+        }
+
+        #knowledge-page .rep-page-head {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--rep-border-soft);
+        }
+
+        #knowledge-page .rep-page-head h2 {
+            font-family: var(--rep-sans);
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            font-size: 1.35rem;
+            color: var(--rep-text);
+            margin: 0;
+        }
+
+        #knowledge-page .kb-rep-sub {
+            margin: 6px 0 0;
+            font-size: 12px;
+            line-height: 1.45;
+            color: var(--rep-muted);
+            max-width: 52ch;
+        }
+
+        #knowledge-page .rep-filters {
+            position: relative;
+            border-radius: 20px;
+            padding: 18px 18px 16px;
+            margin-bottom: 18px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+            border: 1px solid var(--rep-border);
+            box-shadow:
+                0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+                0 20px 40px -28px rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(14px);
+        }
+
+        #knowledge-page .rep-filters::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: 20px;
+            pointer-events: none;
+            background: linear-gradient(125deg, rgba(212, 175, 55, 0.07), transparent 42%);
+        }
+
+        #knowledge-page .rep-filters__head {
+            position: relative;
+            margin-bottom: 14px;
+        }
+
+        #knowledge-page .rep-filters__eyebrow {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.2em;
+            color: var(--rep-gold);
+            opacity: 0.9;
+        }
+
+        #knowledge-page .rep-filters__title {
+            margin-top: 4px;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--rep-text);
+            letter-spacing: 0.02em;
+        }
+
+        #knowledge-page .rep-filters__hint {
+            margin-top: 6px;
+            font-size: 11px;
+            line-height: 1.45;
+            color: var(--rep-muted);
+        }
+
+        #knowledge-page .rep-field label {
+            display: block;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--rep-muted) !important;
+            margin-bottom: 6px;
+        }
+
+        #knowledge-page .kb-rep-search-input {
+            width: 100%;
+            padding: 12px 14px !important;
+            border-radius: 12px !important;
+            font-size: 14px !important;
+            font-family: var(--rep-mono) !important;
+            background: rgba(0, 0, 0, 0.35) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            color: var(--rep-text) !important;
+            color-scheme: dark;
+        }
+
+        #knowledge-page .kb-rep-search-input:focus {
+            outline: none;
+            border-color: rgba(212, 175, 55, 0.45) !important;
+            box-shadow: 0 0 0 3px var(--rep-gold-glow);
         }
 
         #knowledge-page .page-header {
@@ -5520,9 +5672,9 @@
         }
 
         #knowledge-page .card {
-            background: var(--kb-bg);
-            border: 1px solid var(--kb-border);
-            box-shadow: none;
+            background: var(--apple-surface);
+            border: 1px solid var(--rep-border-soft);
+            box-shadow: 0 24px 48px -32px rgba(0, 0, 0, 0.65);
             padding: 18px;
         }
 
@@ -5535,6 +5687,7 @@
 
         #knowledge-page h4 {
             font-weight: 700;
+            color: var(--rep-text) !important;
         }
 
         #knowledge-list-card h4 {
@@ -5549,8 +5702,8 @@
         }
 
         #knowledge-list-card .search-box:focus {
-            border-color: rgba(245, 158, 11, 0.55);
-            box-shadow: 0 0 0 4px var(--apple-ring);
+            border-color: rgba(212, 175, 55, 0.45);
+            box-shadow: 0 0 0 3px var(--rep-gold-glow);
         }
 
         #knowledge-tabs {
@@ -5563,7 +5716,7 @@
         }
 
         #knowledge-tabs button.btn-secondary {
-            color: rgba(0,0,0,0.60);
+            color: rgba(255, 255, 255, 0.72);
         }
 
         #kb-category-bar {
@@ -9574,25 +9727,44 @@
             </div>
 
             <div id="knowledge-page" class="hidden">
-                <div class="kb-mobile-header">
-                    <div class="kb-mobile-titlebar">
-                        <div class="kb-mobile-title">知识库</div>
-                        <div style="display:flex; gap: 10px; align-items:center;">
-                            <button class="kb-mobile-iconbtn" type="button" aria-label="通知">🔔</button>
-                            <button class="kb-mobile-iconbtn" type="button" aria-label="我的">👤</button>
+                <div class="dr-shell kb-knowledge-shell">
+                    <header class="rep-page-head kb-mobile-header">
+                        <div>
+                            <span class="rep-page-head__eyebrow">KNOWLEDGE BASE</span>
+                            <h2>知识库</h2>
+                            <p class="kb-rep-sub">制度、培训与标准的统一查阅入口</p>
                         </div>
-                    </div>
-                    <div class="kb-mobile-actions">
-                        <button class="btn" id="btn-knowledge-upload" onclick="openKnowledgeUploadModal()"><i>📤</i> 上传内容</button>
-                        <button class="btn btn-secondary" id="btn-knowledge-flashcards" onclick="openKnowledgeFlashcardsModal()"><i>🃏</i> 自我测验</button>
-                        <button class="btn btn-secondary" id="btn-knowledge-chat" onclick="openKnowledgeChatModal()" style="background: linear-gradient(135deg, #8b5cf6, #6366f1);"><i>🤝</i> 部门分身</button>
-                        <button class="btn btn-secondary" id="btn-agent-monitor" onclick="openAgentMonitorModal()" style="background: linear-gradient(135deg, #0f766e, #0ea5a0);"><i>🤖</i> Agent监控</button>
-                    </div>
-                </div>
+                        <div class="rep-page-head__actions">
+                            <button class="btn btn-secondary" type="button" aria-label="通知" style="min-width:40px;padding:8px 10px;border-radius:10px;">🔔</button>
+                            <button class="btn btn-secondary" type="button" aria-label="我的" style="min-width:40px;padding:8px 10px;border-radius:10px;">👤</button>
+                        </div>
+                    </header>
 
-                <div class="kb-mobile-sticky-search">
-                    <input id="knowledge-search" type="text" class="kb-mobile-search" placeholder="搜索知识点、文档、视频..." onkeyup="renderKnowledgeList()">
-                </div>
+                    <section class="rep-filters kb-rep-workspace" aria-label="知识库常用操作">
+                        <div class="rep-filters__head">
+                            <div class="rep-filters__eyebrow">WORKSPACE</div>
+                            <div class="rep-filters__title">常用入口</div>
+                            <p class="rep-filters__hint">上传资料、自我测验、部门分身与 Agent 监控</p>
+                        </div>
+                        <div class="kb-mobile-actions" style="display:flex;flex-wrap:wrap;gap:10px;">
+                            <button class="btn" id="btn-knowledge-upload" onclick="openKnowledgeUploadModal()"><i>📤</i> 上传内容</button>
+                            <button class="btn btn-secondary" id="btn-knowledge-flashcards" onclick="openKnowledgeFlashcardsModal()"><i>🃏</i> 自我测验</button>
+                            <button class="btn btn-secondary" id="btn-knowledge-chat" onclick="openKnowledgeChatModal()" style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.35), rgba(99, 102, 241, 0.28)); border: 1px solid rgba(167, 139, 250, 0.35);"><i>🤝</i> 部门分身</button>
+                            <button class="btn btn-secondary" id="btn-agent-monitor" onclick="openAgentMonitorModal()" style="background: linear-gradient(135deg, rgba(15, 118, 110, 0.4), rgba(14, 165, 160, 0.28)); border: 1px solid rgba(45, 212, 191, 0.28);"><i>🤖</i> Agent监控</button>
+                        </div>
+                    </section>
+
+                    <section class="rep-filters kb-mobile-sticky-search" aria-label="知识库搜索">
+                        <div class="rep-filters__head">
+                            <div class="rep-filters__eyebrow">SEARCH</div>
+                            <div class="rep-filters__title">全局检索</div>
+                            <p class="rep-filters__hint">匹配标题、文件名、分类与知识点</p>
+                        </div>
+                        <div class="rep-filters__full rep-field">
+                            <label for="knowledge-search">关键词</label>
+                            <input id="knowledge-search" type="text" class="dr-date-input kb-rep-search-input" placeholder="搜索知识点、文档、视频..." onkeyup="renderKnowledgeList()" style="width:100%;">
+                        </div>
+                    </section>
 
                 <div id="knowledge-layout" class="kb-layout" style="display: grid; grid-template-columns: 340px 1fr; gap: 18px; align-items: start;">
                     <div class="card" id="knowledge-list-card">
@@ -9692,6 +9864,7 @@
                             <button class="btn btn-danger" id="kb-toolbar-delete" type="button" style="display:none;">删除</button>
                         </div>
                     </div>
+                </div>
                 </div>
             </div>
 
@@ -16574,22 +16747,30 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             };
 
             let done = false;
-            const tmr = setTimeout(() => {
-                if (done) return;
-                done = true;
-                fallbackToIframe('PDF 预览超时，已切换到内嵌打开（也可点“打开/下载”）');
-            }, 6500);
+            let tmr = null;
+            const armPdfTimeout = (ms, msg) => {
+                try {
+                    if (tmr) clearTimeout(tmr);
+                } catch (e) {}
+                tmr = setTimeout(() => {
+                    if (done) return;
+                    done = true;
+                    fallbackToIframe(msg);
+                }, ms);
+            };
 
             try {
                 const ok = await ensurePdfJsLoaded();
                 if (!ok || typeof pdfjsLib === 'undefined') {
                     done = true;
-                    clearTimeout(tmr);
+                    if (tmr) clearTimeout(tmr);
                     fallbackToIframe('PDF 预览组件未加载，已切换到内嵌打开（也可点“打开/下载”）');
                     return;
                 }
 
                 pdfjsLib.GlobalWorkerOptions.workerSrc = '/assets/vendor/pdfjs/pdf.worker.min.js';
+                // 超时须在 pdf.js 加载之后再计时：移动端拉脚本常 >6.5s，否则会误报超时
+                armPdfTimeout(55000, 'PDF 预览超时，已切换到内嵌打开（也可点“打开/下载”）');
 
                 const doc = await pdfjsLib.getDocument({ url: src }).promise;
                 let cur = 1;
@@ -16631,7 +16812,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 await renderPage(1);
 
                 done = true;
-                clearTimeout(tmr);
+                if (tmr) clearTimeout(tmr);
                 try {
                     btnPrev.disabled = (Number(doc.numPages || 1) || 1) <= 1;
                     btnNext.disabled = (Number(doc.numPages || 1) || 1) <= 1;
@@ -16639,7 +16820,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             } catch (e) {
                 console.error(e);
                 done = true;
-                clearTimeout(tmr);
+                if (tmr) clearTimeout(tmr);
                 fallbackToIframe('PDF 预览失败，已切换到内嵌打开（也可点“打开/下载”）');
             }
         }
