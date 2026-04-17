@@ -523,9 +523,7 @@ async function checkIfNewStore(store, period) {
 
 // 获取月度实际营业额
 async function getMonthlyActualRevenue(store, period) {
-  const [year, month] = period.split('-');
-  const startDate = `${year}-${month}-01`;
-  const endDate = `${year}-${month}-31`;
+  const { startDate, endDate } = periodDateRange(period);
   const pats = scoringStoreAggregateIlikePatterns(store);
 
   const result = await pool().query(`
@@ -613,9 +611,7 @@ async function saveEmployeeScore(store, username, role, period, scoreData) {
 
 // 获取厨房报告数量
 async function getKitchenReportsCount(store, period, reportType) {
-  const [year, month] = period.split('-');
-  const startDate = `${year}-${month}-01`;
-  const endDate = `${year}-${month}-31`;
+  const { startDate, endDate } = periodDateRange(period);
   const keys = scoringStoreExactKeys(store);
   if (!keys.length) return 0;
 
@@ -631,9 +627,7 @@ async function getKitchenReportsCount(store, period, reportType) {
 
 // 获取原料收货报告数量
 async function getMaterialReceivingReportsCount(store, period) {
-  const [year, month] = period.split('-');
-  const startDate = `${year}-${month}-01`;
-  const endDate = `${year}-${month}-31`;
+  const { startDate, endDate } = periodDateRange(period);
   const keys = scoringStoreExactKeys(store);
   if (!keys.length) return 0;
 
@@ -649,9 +643,7 @@ async function getMaterialReceivingReportsCount(store, period) {
 
 // 获取门店例会报告
 async function getStoreMeetingReports(store, period) {
-  const [year, month] = period.split('-');
-  const startDate = `${year}-${month}-01`;
-  const endDate = `${year}-${month}-31`;
+  const { startDate, endDate } = periodDateRange(period);
   const keys = scoringStoreExactKeys(store);
   if (!keys.length) return [];
 
@@ -673,9 +665,7 @@ async function getStoreMeetingReports(store, period) {
 async function getIncompleteTaskCount(username, period) {
   const un = String(username || '').trim();
   if (!un) return 0;
-  const [year, month] = period.split('-');
-  const startDate = `${year}-${month}-01`;
-  const endDate = `${year}-${month}-31`;
+  const { startDate, endDate } = periodDateRange(period);
   const sources = ['random_inspection', 'scheduled_inspection', 'bi_anomaly', 'auto_collab', 'data_auditor'];
   try {
     const result = await pool().query(
@@ -816,10 +806,10 @@ function parseJsonArrayMaybe(v) {
 
 // 计算零异常加分
 async function calculateExceptionBonus(username, period) {
-  // 检查该用户在period期间是否有异常
+  // 检查该用户在period期间是否有异常；使用上海时区转换，避免跨月归属错误
   const result = await pool().query(`
     SELECT COUNT(*) as count FROM agent_issues 
-    WHERE assignee_username = $1 AND created_at >= $2 AND created_at <= $3
+    WHERE assignee_username = $1 AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $2::date AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $3::date
   `, [username, `${period}-01`, `${period}-31`]);
   
   const exceptionCount = Number(result.rows[0]?.count || 0);
@@ -869,10 +859,10 @@ function getMaxTriggers(frequency, period) {
 
 // 计算异常扣分
 async function calculateExceptionDeduction(username, period) {
-  // 按类别+严重度分组查询
+  // 按类别+严重度分组查询；使用上海时区转换，避免跨月归属错误
   const result = await pool().query(`
     SELECT category, severity, COUNT(*) as count FROM agent_issues 
-    WHERE assignee_username = $1 AND created_at >= $2 AND created_at <= $3
+    WHERE assignee_username = $1 AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $2::date AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $3::date
     GROUP BY category, severity
   `, [username, `${period}-01`, `${period}-31`]);
   
@@ -895,9 +885,7 @@ async function calculateExceptionDeduction(username, period) {
 
 // 获取企微会员每月新增数量（洪潮店长执行力评级用）
 async function getMonthlyNewWechatMembers(store, period) {
-  const [year, month] = period.split('-');
-  const startDate = `${year}-${month}-01`;
-  const endDate = `${year}-${month}-31`;
+  const { startDate, endDate } = periodDateRange(period);
   
   try {
     const pats = scoringStoreAggregateIlikePatterns(store);

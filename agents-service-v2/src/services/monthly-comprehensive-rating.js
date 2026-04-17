@@ -125,7 +125,7 @@ function getDaysInMonth(period) {
 async function getMonthlyPerformanceScore(username, period) {
   const [year, month] = period.split('-');
   const startDate = `${year}-${month}-01`;
-  const endDate = `${year}-${month}-31`;
+  const endDate = `${year}-${month}-${String(getDaysInMonth(period)).padStart(2, '0')}`;
   const monthKey = `${year}${month}`;
 
   const result = await query(
@@ -165,7 +165,7 @@ async function getMonthlyPerformanceScore(username, period) {
 async function getAttitudeRating(username, period) {
   const [year, month] = period.split('-');
   const startDate = `${year}-${month}-01`;
-  const endDate = `${year}-${month}-31`;
+  const endDate = `${year}-${month}-${String(getDaysInMonth(period)).padStart(2, '0')}`;
 
   const sources = ['random_inspection', 'scheduled_inspection', 'bi_anomaly', 'auto_collab', 'data_auditor'];
 
@@ -233,7 +233,7 @@ async function getPMExecutionRating(store, brand, period) {
 async function getHongchaoManagerExecutionRating(store, period) {
   const [year, month] = period.split('-');
   const startDate = `${year}-${month}-01`;
-  const endDate = `${year}-${month}-31`;
+  const endDate = `${year}-${month}-${String(getDaysInMonth(period)).padStart(2, '0')}`;
 
   const pats = aggregateIlikePatternsForStoreName(store);
   const result = await query(
@@ -406,7 +406,7 @@ async function getStoreRating(store, period) {
   // 如果没有 store_ratings 记录，从 daily_reports 计算
   const [year, month] = period.split('-');
   const startDate = `${year}-${month}-01`;
-  const endDate = `${year}-${month}-31`;
+  const endDate = `${year}-${month}-${String(getDaysInMonth(period)).padStart(2, '0')}`;
 
   const revenueResult = await query(
     `SELECT COALESCE(SUM(actual_revenue), 0) as actual
