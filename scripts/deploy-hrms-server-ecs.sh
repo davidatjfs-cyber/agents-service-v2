@@ -79,6 +79,24 @@ if [[ -d "${REMOTE_WEB_ROOT_ALT}" ]]; then
   cp -f "${REMOTE_WEB_ROOT}/working-fixed.html" "${REMOTE_WEB_ROOT_ALT}/working-fixed.html" || true
   cp -f "${REMOTE_WEB_ROOT}/mobile-nav-production.html" "${REMOTE_WEB_ROOT_ALT}/mobile-nav-production.html" || true
 fi
+
+# nginx root=/opt/hrms 时，浏览器请求 /uploads/* 映射到磁盘 /opt/hrms/uploads/*；
+# Multer 与 Express.static 实际写入的是 /opt/hrms/server/uploads/*。
+# 若两者不一致，营业日报「日结单」等图片在域名下会 404（直连 :3000 却正常）——用符号链接对齐。
+UP_REAL="${REMOTE_WEB_ROOT}/server/uploads"
+UP_WEB="${REMOTE_WEB_ROOT}/uploads"
+mkdir -p "$UP_REAL"
+if [[ -L "$UP_WEB" ]]; then
+  rm -f "$UP_WEB"
+elif [[ -d "$UP_WEB" ]]; then
+  if find "$UP_WEB" -mindepth 1 -print -quit | grep -q .; then
+    mv "$UP_WEB" "${UP_WEB}.bak.$(date +%s)"
+  else
+    rmdir "$UP_WEB" 2>/dev/null || mv "$UP_WEB" "${UP_WEB}.bak.$(date +%s)"
+  fi
+fi
+ln -sfn "$UP_REAL" "$UP_WEB"
+echo ">>> OK: Web 根 uploads 已指向真实目录: $UP_WEB -> $UP_REAL"
 EOS2
 
 REMOTE_SCRIPT=$(cat <<'EOS'

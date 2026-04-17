@@ -35052,6 +35052,43 @@ ${knowledgeContent.slice(0, 30000)}`;
             return out.slice(0, 9);
         }
 
+        /** 从日报条目各字段收集日结单 URL（兼容 PG/state 不同嵌套、{urls:[]} 等） */
+        function drCollectPhotosFromReport(raw, r) {
+            const acc = [];
+            function walk(v) {
+                if (v == null) return;
+                if (Array.isArray(v)) {
+                    v.forEach(walk);
+                    return;
+                }
+                if (typeof v === 'object') {
+                    if (Array.isArray(v.urls)) walk(v.urls);
+                    if (Array.isArray(v.items)) walk(v.items);
+                    if (Array.isArray(v.paths)) walk(v.paths);
+                    if (Array.isArray(v.photos)) walk(v.photos);
+                }
+                const one = drNormalizeDailyReportPhotoUrl(v);
+                if (one) acc.push(one);
+            }
+            const rawObj = raw && typeof raw === 'object' ? raw : {};
+            const rObj = r && typeof r === 'object' ? r : {};
+            walk(rawObj.photos);
+            walk(rObj.photos);
+            walk(rawObj.dailyReportPhotos);
+            walk(rawObj.statementPhotos);
+            walk(rawObj.dayEndPhotos);
+            walk(rawObj.attachments);
+            const seen = new Set();
+            const out = [];
+            acc.forEach((u) => {
+                const n = drNormalizeDailyReportPhotoUrl(u);
+                if (!n || seen.has(n)) return;
+                seen.add(n);
+                out.push(n);
+            });
+            return out.slice(0, 9);
+        }
+
         function addDailyReportStaffRow(kind, ev) {
             const k = String(kind || '').trim();
             const pev = drCoalescePointerEvent(ev);
@@ -35107,7 +35144,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 const src = escapeHtml(srcDisp);
                 return `
                     <div style="position: relative; width: 96px; height: 96px; border-radius: 12px; overflow:hidden; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.03);">
-                        <img alt="" src="${src}" loading="lazy" decoding="async" referrerpolicy="no-referrer" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'" />
+                        <img alt="日结单" src="${src}" loading="lazy" decoding="async" referrerpolicy="no-referrer" style="width: 100%; height: 100%; object-fit: cover;" />
                         <button class="btn btn-secondary" type="button" onclick="removeDailyReportPhoto(${idx})" style="position:absolute; top: 6px; right: 6px; padding: 4px 8px; font-size: 12px; border-radius: 999px;">×</button>
                     </div>
                 `;
@@ -35913,7 +35950,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             const raw = r.data && typeof r.data === 'object' ? r.data : {};
             const data = {
                 ...raw,
-                photos: drNormalizeDailyReportPhotosArr(raw.photos ?? r.photos)
+                photos: drNormalizeDailyReportPhotosArr(drCollectPhotosFromReport(raw, r))
             };
             __DR_CURRENT_REPORT = r;
             try { showDailyReportEditor(); } catch (e) {}

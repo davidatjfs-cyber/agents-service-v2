@@ -38,6 +38,22 @@ ssh -o ConnectTimeout=30 "$ECS_HOST" bash -s <<'REMOTE'
 set -euo pipefail
 REMOTE_DIR="/opt/hrms"
 
+# 与 deploy-hrms-server-ecs.sh 一致：nginx root=/opt/hrms 时 /uploads 必须指向 server/uploads
+UP_REAL="/opt/hrms/server/uploads"
+UP_WEB="/opt/hrms/uploads"
+mkdir -p "$UP_REAL"
+if [[ -L "$UP_WEB" ]]; then
+  rm -f "$UP_WEB"
+elif [[ -d "$UP_WEB" ]]; then
+  if find "$UP_WEB" -mindepth 1 -print -quit | grep -q .; then
+    mv "$UP_WEB" "${UP_WEB}.bak.$(date +%s)"
+  else
+    rmdir "$UP_WEB" 2>/dev/null || mv "$UP_WEB" "${UP_WEB}.bak.$(date +%s)"
+  fi
+fi
+ln -sfn "$UP_REAL" "$UP_WEB"
+echo "  OK: $UP_WEB -> $UP_REAL"
+
 # Ensure nginx returns no-cache for HTML files (prevents HTTP cache layer from
 # serving stale HTML, which would defeat the SW network-first strategy)
 NGINX_CONF="/etc/nginx/sites-enabled/hrms"
