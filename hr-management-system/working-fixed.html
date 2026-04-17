@@ -9168,6 +9168,11 @@
             display: flex;
         }
 
+        /* 人力·附件区块字段多：避免 max-height 过矮导致「厨房/休息」被裁切误以为缺失 */
+        #daily-report-page #dr-tab-people.dr-report-panel {
+            max-height: min(88vh, calc(100dvh - 180px));
+        }
+
         #daily-report-page .dr-rep-panel-card {
             border-radius: 14px;
             border: 1px solid rgba(255, 255, 255, 0.08);
@@ -35176,6 +35181,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             const store = String(document.getElementById('dr-store')?.value || '').trim();
             const listStart = String(document.getElementById('dr-list-start')?.value || '').trim();
             const listEnd = String(document.getElementById('dr-list-end')?.value || '').trim();
+            const listDate = String(listStart || listEnd || '').trim();
             const listEl = document.getElementById('dr-list');
             const emptyEl = document.getElementById('dr-empty');
             const banner = document.getElementById('dr-missing-banner');
@@ -35214,7 +35220,9 @@ ${knowledgeContent.slice(0, 30000)}`;
                         return;
                     }
                     if (date && store) {
-                        const one = allItems.find(x => String(x?.date || '') === date && String(x?.store || '') === store) || null;
+                        const one = allItems.find(x =>
+                            String(x?.date || '').trim() === date && String(x?.store || '').trim() === store
+                        ) || null;
                         if (one) fillDailyReportForm(one);
                         else {
                             try {
@@ -35568,6 +35576,33 @@ ${knowledgeContent.slice(0, 30000)}`;
 
             drRebuildScheduleStaff();
 
+            const prevData = (__DR_CURRENT_REPORT && __DR_CURRENT_REPORT.data && typeof __DR_CURRENT_REPORT.data === 'object')
+                ? __DR_CURRENT_REPORT.data
+                : {};
+            const prevStaff = (prevData.staff && typeof prevData.staff === 'object') ? { ...prevData.staff } : {};
+            const prevSch = (prevData.scheduleNextDay && typeof prevData.scheduleNextDay === 'object')
+                ? { ...prevData.scheduleNextDay }
+                : {};
+            const staff = {
+                ...prevStaff,
+                front: staffFront,
+                kitchen: staffKitchen,
+                restStaff: staffRest,
+                frontRestStaff: staffRest,
+                frontSupport: String(document.getElementById('dr-front-support')?.value || '').trim(),
+                kitchenSupport: String(document.getElementById('dr-kitchen-support')?.value || '').trim()
+            };
+            const scheduleNextDay = {
+                ...prevSch,
+                staff: Array.isArray(__DR_SCHEDULE_STAFF) ? __DR_SCHEDULE_STAFF.slice() : [],
+                frontStaff: Array.isArray(__DR_SCHEDULE_FRONT_STAFF) ? __DR_SCHEDULE_FRONT_STAFF.slice() : [],
+                kitchenStaff: Array.isArray(__DR_SCHEDULE_KITCHEN_STAFF) ? __DR_SCHEDULE_KITCHEN_STAFF.slice() : [],
+                morningStaff: Array.isArray(__DR_SCHEDULE_FRONT_STAFF) ? __DR_SCHEDULE_FRONT_STAFF.slice() : [],
+                afternoonStaff: Array.isArray(__DR_SCHEDULE_KITCHEN_STAFF) ? __DR_SCHEDULE_KITCHEN_STAFF.slice() : [],
+                tomorrowGrossEstimate: drGetNum('dr-tomorrow-gross'),
+                remark: String(document.getElementById('dr-schedule-remark')?.value || '').trim()
+            };
+
             const data = {
                 weather: String(document.getElementById('dr-weather')?.value || '').trim(),
                 holiday_switch: !!document.getElementById('dr-holiday-switch')?.checked,
@@ -35632,25 +35667,9 @@ ${knowledgeContent.slice(0, 30000)}`;
                 target_margin: drGetNum('dr-target-margin'),
                 dianping_rating: drGetNum('dr-dianping-rating'),
                 private_room_uses: drGetNum('dr-private-room-uses'),
-                staff: {
-                    front: staffFront,
-                    kitchen: staffKitchen,
-                    restStaff: staffRest,
-                    frontRestStaff: staffRest,
-                    frontSupport: String(document.getElementById('dr-front-support')?.value || '').trim(),
-                    kitchenRestStaff: [],
-                    kitchenSupport: String(document.getElementById('dr-kitchen-support')?.value || '').trim()
-                },
-                scheduleNextDay: {
-                    staff: Array.isArray(__DR_SCHEDULE_STAFF) ? __DR_SCHEDULE_STAFF.slice() : [],
-                    frontStaff: Array.isArray(__DR_SCHEDULE_FRONT_STAFF) ? __DR_SCHEDULE_FRONT_STAFF.slice() : [],
-                    kitchenStaff: Array.isArray(__DR_SCHEDULE_KITCHEN_STAFF) ? __DR_SCHEDULE_KITCHEN_STAFF.slice() : [],
-                    morningStaff: Array.isArray(__DR_SCHEDULE_FRONT_STAFF) ? __DR_SCHEDULE_FRONT_STAFF.slice() : [],
-                    afternoonStaff: Array.isArray(__DR_SCHEDULE_KITCHEN_STAFF) ? __DR_SCHEDULE_KITCHEN_STAFF.slice() : [],
-                    tomorrowGrossEstimate: drGetNum('dr-tomorrow-gross'),
-                    remark: String(document.getElementById('dr-schedule-remark')?.value || '').trim()
-                },
-                photos: Array.isArray(__DR_PHOTOS) ? __DR_PHOTOS.slice() : []
+                staff,
+                scheduleNextDay,
+                photos: drNormalizeDailyReportPhotosArr(__DR_PHOTOS)
             };
 
             return { date, store, data };
@@ -35850,7 +35869,11 @@ ${knowledgeContent.slice(0, 30000)}`;
 
         function fillDailyReportForm(report) {
             const r = report && typeof report === 'object' ? report : {};
-            const data = r.data && typeof r.data === 'object' ? r.data : {};
+            const raw = r.data && typeof r.data === 'object' ? r.data : {};
+            const data = {
+                ...raw,
+                photos: drNormalizeDailyReportPhotosArr(raw.photos ?? r.photos)
+            };
             __DR_CURRENT_REPORT = r;
             try { showDailyReportEditor(); } catch (e) {}
             try {

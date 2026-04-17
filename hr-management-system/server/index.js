@@ -6877,6 +6877,55 @@ function dailyReportItemFromPgRow(row) {
   };
 }
 
+/** 合并日报明细数组：优先采用非空的一方；均有值时取条数更多的一方（便于用 PG 恢复被 state 截断的 staff/photos） */
+function mergeDailyReportDetailArrays(prevArr, nextArr) {
+  const a = Array.isArray(prevArr) ? prevArr : [];
+  const b = Array.isArray(nextArr) ? nextArr : [];
+  if (!a.length) return b;
+  if (!b.length) return a;
+  return b.length >= a.length ? b : a;
+}
+
+/**
+ * 同一门店+日期：将 PostgreSQL daily_reports 行与 hrms_state 中已有条目合并，
+ * 避免 state 中缺 staff/scheduleNextDay/photos 时盖住 PG 完整数据。
+ */
+function mergeDailyReportItemWithPgRow(existingItem, pgRow) {
+  const pgItem = dailyReportItemFromPgRow(pgRow);
+  const ed = existingItem?.data && typeof existingItem.data === 'object' ? existingItem.data : {};
+  const pd = pgItem?.data && typeof pgItem.data === 'object' ? pgItem.data : {};
+  const merged = { ...ed, ...pd };
+  const pes = ed.staff && typeof ed.staff === 'object' ? ed.staff : {};
+  const pgs = pd.staff && typeof pd.staff === 'object' ? pd.staff : {};
+  const STAFF_ARR_KEYS = ['front', 'kitchen', 'restStaff', 'frontRestStaff', 'kitchenRestStaff'];
+  merged.staff = { ...pes, ...pgs };
+  STAFF_ARR_KEYS.forEach((k) => {
+    merged.staff[k] = mergeDailyReportDetailArrays(pes[k], pgs[k]);
+  });
+  const esc = ed.scheduleNextDay && typeof ed.scheduleNextDay === 'object' ? ed.scheduleNextDay : {};
+  const psc = pd.scheduleNextDay && typeof pd.scheduleNextDay === 'object' ? pd.scheduleNextDay : {};
+  merged.scheduleNextDay = { ...esc, ...psc };
+  ['staff', 'frontStaff', 'kitchenStaff', 'morningStaff', 'afternoonStaff'].forEach((k) => {
+    merged.scheduleNextDay[k] = mergeDailyReportDetailArrays(esc[k], psc[k]);
+  });
+  merged.photos = mergeDailyReportDetailArrays(ed.photos, pd.photos);
+  const tsPick = (a, b) => {
+    const ta = Date.parse(a) || 0;
+    const tb = Date.parse(b) || 0;
+    return tb >= ta ? b : a;
+  };
+  return {
+    ...existingItem,
+    store: String(existingItem?.store || pgItem.store || '').trim(),
+    date: String(existingItem?.date || pgItem.date || '').trim(),
+    data: merged,
+    updatedAt: tsPick(existingItem?.updatedAt, pgItem?.updatedAt),
+    submittedAt: existingItem?.submittedAt || existingItem?.submitted_at || pgItem.submittedAt,
+    submitted: !!(existingItem?.submitted ?? existingItem?.submitted_at ?? pgItem.submitted),
+    _mergedFromPostgres: true
+  };
+}
+
 /** 重算当月各日报行的 wechat_month_total（按日 running sum，修复「累计=当日」及补录后不一致） */
 async function recalcWechatMonthTotalsForStoreMonth(pool, store, anchorDate) {
   const st = String(store || '').trim();
@@ -7152,13 +7201,11 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
           args.push(String(store).trim());
         }
         const pgR = await pool.query(sql, args);
-        const seen = new Set(items.map(i => dailyReportMergeKey(i.store, i.date)));
         for (const row of pgR.rows) {
           const k = dailyReportMergeKey(row.store, row.date);
-          if (!seen.has(k)) {
-            seen.add(k);
-            items.push(dailyReportItemFromPgRow(row));
-          }
+          const idx = items.findIndex(i => dailyReportMergeKey(i.store, i.date) === k);
+          if (idx < 0) items.push(dailyReportItemFromPgRow(row));
+          else items[idx] = mergeDailyReportItemWithPgRow(items[idx], row);
         }
       } catch (e) {
         console.error('[daily-reports pg merge]', e?.message);
@@ -7184,13 +7231,11 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
         sql += ` ORDER BY date DESC, updated_at DESC NULLS LAST LIMIT $${args.length + 1}::int`;
         args.push(pgMergeLatestLimit);
         const pgR = await pool.query(sql, args);
-        const seen = new Set(items.map(i => dailyReportMergeKey(i.store, i.date)));
         for (const row of pgR.rows) {
           const k = dailyReportMergeKey(row.store, row.date);
-          if (!seen.has(k)) {
-            seen.add(k);
-            items.push(dailyReportItemFromPgRow(row));
-          }
+          const idx = items.findIndex(i => dailyReportMergeKey(i.store, i.date) === k);
+          if (idx < 0) items.push(dailyReportItemFromPgRow(row));
+          else items[idx] = mergeDailyReportItemWithPgRow(items[idx], row);
         }
       } catch (e) {
         console.error('[daily-reports pg merge latest]', e?.message);

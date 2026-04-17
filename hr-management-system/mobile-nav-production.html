@@ -8574,6 +8574,10 @@
             display: flex;
         }
 
+        #daily-report-page #dr-tab-people.dr-report-panel {
+            max-height: min(88vh, calc(100dvh - 180px));
+        }
+
         #daily-report-page .dr-rep-panel-card {
             border-radius: 14px;
             border: 1px solid rgba(255, 255, 255, 0.08);
@@ -9337,7 +9341,7 @@
                 <div class="dr-hr-slab">
                     <div class="dr-hr-slab__toolbar">
                         <span class="dr-hr-slab__kbd">ATTN</span>
-                        <span class="dr-hr-slab__hint">今日实际出勤 · 早班 / 午班分段维护，与员工多选弹窗联动</span>
+                        <span class="dr-hr-slab__hint">今日实际出勤 · 分段维护前厅 / 厨房 / 休息，与「选择员工」弹窗联动</span>
                     </div>
                     <div class="dr-hr-slab__body">
                         <div class="dr-hr-slab__title">
@@ -9346,33 +9350,33 @@
                         </div>
                         <div class="dr-hr-slab__section">
                             <div class="dr-hr-slab__rowhd">
-                                <span>☀️ 早班上班人员</span>
+                                <span>前厅上班人员</span>
                                 <button class="btn btn-secondary" type="button" onclick="addDailyReportStaffRow('front')" style="padding: 8px 12px;">添加</button>
                             </div>
                             <div id="dr-front-staff" style="margin-top: 10px; color: rgba(200,215,230,0.78);">暂无人员</div>
                             <div style="margin-top: 12px;">
-                                <label style="color:#666;font-size:12px;">早班休息人员（多人用逗号分隔）</label>
-                                <input id="dr-front-rest" placeholder="请输入休息人员姓名" style="width:100%; padding:12px;">
-                            </div>
-                            <div style="margin-top: 12px;">
-                                <label style="color:#666;font-size:12px;">早班支援人员（多人用逗号分隔）</label>
+                                <label style="color:#666;font-size:12px;">前厅支援人员（多人用逗号分隔）</label>
                                 <input id="dr-front-support" placeholder="请输入支援人员姓名" style="width:100%; padding:12px;">
                             </div>
                         </div>
                         <div class="dr-hr-slab__section">
                             <div class="dr-hr-slab__rowhd">
-                                <span>🌙 午班上班人员</span>
+                                <span>厨房上班人员</span>
                                 <button class="btn btn-secondary" type="button" onclick="addDailyReportStaffRow('kitchen')" style="padding: 8px 12px;">添加</button>
                             </div>
                             <div id="dr-kitchen-staff" style="margin-top: 10px; color: rgba(200,215,230,0.78);">暂无人员</div>
                             <div style="margin-top: 12px;">
-                                <label style="color:#666;font-size:12px;">午班休息人员（多人用逗号分隔）</label>
-                                <input id="dr-kitchen-rest" placeholder="请输入休息人员姓名" style="width:100%; padding:12px;">
-                            </div>
-                            <div style="margin-top: 12px;">
-                                <label style="color:#666;font-size:12px;">午班支援人员（多人用逗号分隔）</label>
+                                <label style="color:#666;font-size:12px;">厨房支援人员（多人用逗号分隔）</label>
                                 <input id="dr-kitchen-support" placeholder="请输入支援人员姓名" style="width:100%; padding:12px;">
                             </div>
+                        </div>
+                        <div class="dr-hr-slab__section">
+                            <div class="dr-hr-slab__rowhd">
+                                <span>当日休息人员</span>
+                                <button class="btn btn-secondary" type="button" onclick="addDailyReportStaffRow('rest')" style="padding: 8px 12px;">添加</button>
+                            </div>
+                            <div id="dr-rest-staff" style="margin-top: 10px; color: rgba(200,215,230,0.78);">暂无人员</div>
+                            <div style="margin-top: 6px; font-size: 11px; color: rgba(200,215,230,0.6);">休息人员按半天/全天统一管理，不再区分早班/午班</div>
                         </div>
                     </div>
                 </div>
@@ -9380,7 +9384,7 @@
                 <div class="dr-hr-slab">
                     <div class="dr-hr-slab__toolbar">
                         <span class="dr-hr-slab__kbd">NEXT</span>
-                        <span class="dr-hr-slab__hint">第二天排班 · 早/午班与全员排班分区，人效随营业额预估联动</span>
+                        <span class="dr-hr-slab__hint">第二天排班 · 前厅与厨房分开维护，系统自动汇总人数与人效</span>
                     </div>
                     <div class="dr-hr-slab__body">
                         <div class="dr-hr-slab__title">
@@ -9389,25 +9393,19 @@
                         </div>
                         <div class="dr-hr-slab__section">
                             <div class="dr-hr-slab__rowhd">
-                                <span>☀️ 早班排班人员</span>
-                                <button class="btn btn-secondary" type="button" onclick="addDailyReportScheduleShiftRow('morning')" style="padding: 8px 12px;">添加</button>
+                                <span>前厅排班人员</span>
+                                <button class="btn btn-secondary" type="button" onclick="addDailyReportScheduleDeptRow('front')" style="padding: 8px 12px;">添加</button>
                             </div>
-                            <div id="dr-schedule-morning-staff" style="margin-top: 10px; color: rgba(200,215,230,0.78);">暂无人员</div>
+                            <div id="dr-schedule-front-staff" style="margin-top: 10px; color: rgba(200,215,230,0.78);">暂无人员</div>
                         </div>
                         <div class="dr-hr-slab__section">
                             <div class="dr-hr-slab__rowhd">
-                                <span>🌙 午班排班人员</span>
-                                <button class="btn btn-secondary" type="button" onclick="addDailyReportScheduleShiftRow('afternoon')" style="padding: 8px 12px;">添加</button>
+                                <span>厨房排班人员</span>
+                                <button class="btn btn-secondary" type="button" onclick="addDailyReportScheduleDeptRow('kitchen')" style="padding: 8px 12px;">添加</button>
                             </div>
-                            <div id="dr-schedule-afternoon-staff" style="margin-top: 10px; color: rgba(200,215,230,0.78);">暂无人员</div>
+                            <div id="dr-schedule-kitchen-staff" style="margin-top: 10px; color: rgba(200,215,230,0.78);">暂无人员</div>
                         </div>
-                        <div class="dr-hr-slab__section">
-                            <div class="dr-hr-slab__rowhd">
-                                <span>全部排班人员</span>
-                                <button class="btn btn-secondary" type="button" onclick="addDailyReportSchedulePlanRow()" style="padding: 8px 12px;">添加</button>
-                            </div>
-                            <div id="dr-schedule-staff" style="margin-top: 10px; color: rgba(200,215,230,0.78);">暂无排班人员</div>
-                        </div>
+                        <div style="margin-top: 12px; font-size: 12px; color: rgba(200,215,230,0.78);">系统将自动汇总前厅+厨房作为总排班人数。</div>
                         <div style="margin-top: 12px;">
                             <label style="color:#666;font-size:12px;">明天折前营业额预估（元）</label>
                             <input id="dr-tomorrow-gross" type="number" inputmode="decimal" placeholder="请输入明天折前营业额预估" style="width:100%; padding:12px;" oninput="syncDailyReportComputed()">
@@ -28108,9 +28106,10 @@ ${knowledgeContent.slice(0, 30000)}`;
         let __DR_LAST_LIST = [];
         let __DR_FRONT_STAFF = [];
         let __DR_KITCHEN_STAFF = [];
+        let __DR_REST_STAFF = [];
         let __DR_SCHEDULE_STAFF = [];
-        let __DR_SCHEDULE_MORNING_STAFF = [];
-        let __DR_SCHEDULE_AFTERNOON_STAFF = [];
+        let __DR_SCHEDULE_FRONT_STAFF = [];
+        let __DR_SCHEDULE_KITCHEN_STAFF = [];
         let __DR_PHOTOS = [];
         let __DR_STAFF_MODAL_KIND = '';
         let __DR_STAFF_PICK_LIST = [];
@@ -28295,9 +28294,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 drSetValue('dr-bad-eleme', '');
                 drSetValue('dr-recharge-count', '');
                 drSetValue('dr-recharge-amt', '');
-                drSetValue('dr-front-rest', '');
                 drSetValue('dr-front-support', '');
-                drSetValue('dr-kitchen-rest', '');
                 drSetValue('dr-kitchen-support', '');
                 drSetValue('dr-tomorrow-gross', '');
                 drSetValue('dr-schedule-remark', '');
@@ -28352,10 +28349,31 @@ ${knowledgeContent.slice(0, 30000)}`;
         }
 
         function drRenderStaff(kind) {
-            const boxId = kind === 'kitchen' ? 'dr-kitchen-staff' : (kind === 'schedule' ? 'dr-schedule-staff' : (kind === 'schedule_morning' ? 'dr-schedule-morning-staff' : (kind === 'schedule_afternoon' ? 'dr-schedule-afternoon-staff' : 'dr-front-staff')));
+            const k = String(kind || '').trim() || 'front';
+            const boxId = kind === 'kitchen'
+                ? 'dr-kitchen-staff'
+                : (k === 'rest'
+                    ? 'dr-rest-staff'
+                    : (k === 'schedule_front'
+                        ? 'dr-schedule-front-staff'
+                        : (k === 'schedule_kitchen'
+                            ? 'dr-schedule-kitchen-staff'
+                        : (kind === 'schedule'
+                            ? 'dr-schedule-staff'
+                            : 'dr-front-staff'))));
             const box = document.getElementById(boxId);
             if (!box) return;
-            const list = kind === 'kitchen' ? __DR_KITCHEN_STAFF : (kind === 'schedule' ? __DR_SCHEDULE_STAFF : (kind === 'schedule_morning' ? __DR_SCHEDULE_MORNING_STAFF : (kind === 'schedule_afternoon' ? __DR_SCHEDULE_AFTERNOON_STAFF : __DR_FRONT_STAFF)));
+            const list = kind === 'kitchen'
+                ? __DR_KITCHEN_STAFF
+                : (k === 'rest'
+                    ? __DR_REST_STAFF
+                    : (k === 'schedule_front'
+                        ? __DR_SCHEDULE_FRONT_STAFF
+                        : (k === 'schedule_kitchen'
+                            ? __DR_SCHEDULE_KITCHEN_STAFF
+                        : (kind === 'schedule'
+                            ? __DR_SCHEDULE_STAFF
+                            : __DR_FRONT_STAFF))));
             if (!Array.isArray(list) || !list.length) {
                 box.innerHTML = '暂无人员';
                 return;
@@ -28395,26 +28413,73 @@ ${knowledgeContent.slice(0, 30000)}`;
             const k = String(kind || '').trim();
             const i = Number(idx);
             if (!Number.isFinite(i) || i < 0) return;
-            const list = k === 'kitchen' ? __DR_KITCHEN_STAFF : (k === 'schedule' ? __DR_SCHEDULE_STAFF : (k === 'schedule_morning' ? __DR_SCHEDULE_MORNING_STAFF : (k === 'schedule_afternoon' ? __DR_SCHEDULE_AFTERNOON_STAFF : __DR_FRONT_STAFF)));
+            const list = k === 'kitchen'
+                ? __DR_KITCHEN_STAFF
+                : (k === 'rest'
+                    ? __DR_REST_STAFF
+                    : (k === 'schedule_front'
+                        ? __DR_SCHEDULE_FRONT_STAFF
+                        : (k === 'schedule_kitchen'
+                            ? __DR_SCHEDULE_KITCHEN_STAFF
+                        : (k === 'schedule'
+                            ? __DR_SCHEDULE_STAFF
+                            : __DR_FRONT_STAFF))));
             if (!Array.isArray(list) || !list[i]) return;
             const cur = Number(list[i]?.days || 1);
             const next = (cur === 1) ? 0.5 : 1;
             list[i] = { ...(list[i] || {}), days: next };
             drRenderStaff(k);
+            if (k === 'schedule_front' || k === 'schedule_kitchen') drRebuildScheduleStaff();
             syncDailyReportComputed();
+        }
+
+        function drRebuildScheduleStaff() {
+            const src = []
+                .concat(Array.isArray(__DR_SCHEDULE_FRONT_STAFF) ? __DR_SCHEDULE_FRONT_STAFF : [])
+                .concat(Array.isArray(__DR_SCHEDULE_KITCHEN_STAFF) ? __DR_SCHEDULE_KITCHEN_STAFF : []);
+            const seen = new Set();
+            const merged = [];
+            src.forEach((x) => {
+                const u = String(x?.user || '').trim();
+                const n = String(x?.name || '').trim();
+                const key = (u || n).toLowerCase();
+                if (!key || seen.has(key)) return;
+                seen.add(key);
+                merged.push({ user: u, name: n, days: Number(x?.days || 1) === 0.5 ? 0.5 : 1 });
+            });
+            __DR_SCHEDULE_STAFF = merged;
+        }
+
+        function drMergeUniqueStaffLists() {
+            const lists = Array.from(arguments);
+            const seen = new Set();
+            const out = [];
+            lists.forEach((arr) => {
+                (Array.isArray(arr) ? arr : []).forEach((x) => {
+                    const u = String(x?.user || '').trim();
+                    const n = String(x?.name || '').trim();
+                    const key = (u || n).toLowerCase();
+                    if (!key || seen.has(key)) return;
+                    seen.add(key);
+                    out.push({ user: u, name: n, days: Number(x?.days || 1) === 0.5 ? 0.5 : 1 });
+                });
+            });
+            return out;
         }
 
         function drResetStaffState() {
             __DR_FRONT_STAFF = [];
             __DR_KITCHEN_STAFF = [];
+            __DR_REST_STAFF = [];
             __DR_SCHEDULE_STAFF = [];
-            __DR_SCHEDULE_MORNING_STAFF = [];
-            __DR_SCHEDULE_AFTERNOON_STAFF = [];
+            __DR_SCHEDULE_FRONT_STAFF = [];
+            __DR_SCHEDULE_KITCHEN_STAFF = [];
             drRenderStaff('front');
             drRenderStaff('kitchen');
+            drRenderStaff('rest');
             drRenderStaff('schedule');
-            drRenderStaff('schedule_morning');
-            drRenderStaff('schedule_afternoon');
+            drRenderStaff('schedule_front');
+            drRenderStaff('schedule_kitchen');
         }
 
         function drGetPickableUsers() {
@@ -28614,12 +28679,15 @@ ${knowledgeContent.slice(0, 30000)}`;
             picked.forEach(p => {
                 const item = { user: p.username, name: p.name, days: (p.days === 0.5 ? 0.5 : 1) };
                 if (k === 'kitchen') pushUnique(__DR_KITCHEN_STAFF, item);
+                else if (k === 'rest') pushUnique(__DR_REST_STAFF, item);
                 else if (k === 'schedule') pushUnique(__DR_SCHEDULE_STAFF, item);
-                else if (k === 'schedule_morning') pushUnique(__DR_SCHEDULE_MORNING_STAFF, item);
-                else if (k === 'schedule_afternoon') pushUnique(__DR_SCHEDULE_AFTERNOON_STAFF, item);
+                else if (k === 'schedule_front') pushUnique(__DR_SCHEDULE_FRONT_STAFF, item);
+                else if (k === 'schedule_kitchen') pushUnique(__DR_SCHEDULE_KITCHEN_STAFF, item);
                 else pushUnique(__DR_FRONT_STAFF, item);
             });
+            if (k === 'schedule_front' || k === 'schedule_kitchen') drRebuildScheduleStaff();
             drRenderStaff(k);
+            if (k === 'schedule_front' || k === 'schedule_kitchen') drRenderStaff('schedule');
             closeDailyReportStaffModal();
             syncDailyReportComputed();
         }
@@ -28676,16 +28744,22 @@ ${knowledgeContent.slice(0, 30000)}`;
         }
 
         function addDailyReportStaffRow(kind, ev) {
-            openDailyReportStaffModal(String(kind) === 'kitchen' ? 'kitchen' : 'front', drCoalescePointerEvent(ev));
+            const k = String(kind || '').trim();
+            const pev = drCoalescePointerEvent(ev);
+            if (k === 'kitchen' || k === 'rest') {
+                openDailyReportStaffModal(k, pev);
+                return;
+            }
+            openDailyReportStaffModal('front', pev);
         }
 
-        function addDailyReportScheduleShiftRow(shift, ev) {
-            const kind = shift === 'morning' ? 'schedule_morning' : 'schedule_afternoon';
+        function addDailyReportScheduleDeptRow(dept, ev) {
+            const kind = String(dept || '').trim() === 'kitchen' ? 'schedule_kitchen' : 'schedule_front';
             openDailyReportStaffModal(kind, drCoalescePointerEvent(ev));
         }
 
         function addDailyReportSchedulePlanRow(ev) {
-            openDailyReportStaffModal('schedule', drCoalescePointerEvent(ev));
+            openDailyReportStaffModal('schedule_front', drCoalescePointerEvent(ev));
         }
 
         function removeDailyReportStaffItem(kind, idx) {
@@ -28693,11 +28767,14 @@ ${knowledgeContent.slice(0, 30000)}`;
             const i = Number(idx);
             if (!Number.isFinite(i) || i < 0) return;
             if (k === 'kitchen') __DR_KITCHEN_STAFF.splice(i, 1);
+            else if (k === 'rest') __DR_REST_STAFF.splice(i, 1);
             else if (k === 'schedule') __DR_SCHEDULE_STAFF.splice(i, 1);
-            else if (k === 'schedule_morning') __DR_SCHEDULE_MORNING_STAFF.splice(i, 1);
-            else if (k === 'schedule_afternoon') __DR_SCHEDULE_AFTERNOON_STAFF.splice(i, 1);
+            else if (k === 'schedule_front') __DR_SCHEDULE_FRONT_STAFF.splice(i, 1);
+            else if (k === 'schedule_kitchen') __DR_SCHEDULE_KITCHEN_STAFF.splice(i, 1);
             else __DR_FRONT_STAFF.splice(i, 1);
+            if (k === 'schedule_front' || k === 'schedule_kitchen') drRebuildScheduleStaff();
             drRenderStaff(k || 'front');
+            if (k === 'schedule_front' || k === 'schedule_kitchen') drRenderStaff('schedule');
             syncDailyReportComputed();
         }
 
@@ -28788,6 +28865,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             const store = String(document.getElementById('dr-store')?.value || '').trim();
             const listStart = String(document.getElementById('dr-list-start')?.value || '').trim();
             const listEnd = String(document.getElementById('dr-list-end')?.value || '').trim();
+            const listDate = String(listStart || listEnd || '').trim();
             const listEl = document.getElementById('dr-list');
             const emptyEl = document.getElementById('dr-empty');
             const banner = document.getElementById('dr-missing-banner');
@@ -28826,7 +28904,9 @@ ${knowledgeContent.slice(0, 30000)}`;
                         return;
                     }
                     if (date && store) {
-                        const one = allItems.find(x => String(x?.date || '') === date && String(x?.store || '') === store) || null;
+                        const one = allItems.find(x =>
+                            String(x?.date || '').trim() === date && String(x?.store || '').trim() === store
+                        ) || null;
                         if (one) fillDailyReportForm(one);
                         else {
                             try {
@@ -28869,9 +28949,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                                 drSetValue('dr-bad-eleme', '');
                                 drSetValue('dr-recharge-count', '');
                                 drSetValue('dr-recharge-amt', '');
-                                drSetValue('dr-front-rest', '');
                                 drSetValue('dr-front-support', '');
-                                drSetValue('dr-kitchen-rest', '');
                                 drSetValue('dr-kitchen-support', '');
                                 drSetValue('dr-tomorrow-gross', '');
                                 drSetValue('dr-schedule-remark', '');
@@ -28980,10 +29058,9 @@ ${knowledgeContent.slice(0, 30000)}`;
             try {
                 const box = document.getElementById('dr-schedule-eff-box');
                 const gross2 = drGetNum('dr-tomorrow-gross');
+                drRebuildScheduleStaff();
                 const schedulePeople = Array.isArray(__DR_SCHEDULE_STAFF) ? __DR_SCHEDULE_STAFF.length : 0;
-                const morningPeople = Array.isArray(__DR_SCHEDULE_MORNING_STAFF) ? __DR_SCHEDULE_MORNING_STAFF.length : 0;
-                const afternoonPeople = Array.isArray(__DR_SCHEDULE_AFTERNOON_STAFF) ? __DR_SCHEDULE_AFTERNOON_STAFF.length : 0;
-                const people = schedulePeople + morningPeople + afternoonPeople;
+                const people = schedulePeople;
                 const eff2 = (gross2 > 0 && people > 0) ? (gross2 / people) : 0;
                 drSetText('dr-schedule-people', `${people}人`);
                 drSetText('dr-schedule-gross', drFmtMoney(gross2));
@@ -29145,8 +29222,38 @@ ${knowledgeContent.slice(0, 30000)}`;
 
             const staffFront = Array.isArray(__DR_FRONT_STAFF) ? __DR_FRONT_STAFF.slice() : [];
             const staffKitchen = Array.isArray(__DR_KITCHEN_STAFF) ? __DR_KITCHEN_STAFF.slice() : [];
+            const staffRest = Array.isArray(__DR_REST_STAFF) ? __DR_REST_STAFF.slice() : [];
             const laborTotal = drSumStaff(staffFront) + drSumStaff(staffKitchen);
             const efficiency = laborTotal > 0 ? (gross / laborTotal) : null;
+
+            drRebuildScheduleStaff();
+
+            const prevData = (__DR_CURRENT_REPORT && __DR_CURRENT_REPORT.data && typeof __DR_CURRENT_REPORT.data === 'object')
+                ? __DR_CURRENT_REPORT.data
+                : {};
+            const prevStaff = (prevData.staff && typeof prevData.staff === 'object') ? { ...prevData.staff } : {};
+            const prevSch = (prevData.scheduleNextDay && typeof prevData.scheduleNextDay === 'object')
+                ? { ...prevData.scheduleNextDay }
+                : {};
+            const staff = {
+                ...prevStaff,
+                front: staffFront,
+                kitchen: staffKitchen,
+                restStaff: staffRest,
+                frontRestStaff: staffRest,
+                frontSupport: String(document.getElementById('dr-front-support')?.value || '').trim(),
+                kitchenSupport: String(document.getElementById('dr-kitchen-support')?.value || '').trim()
+            };
+            const scheduleNextDay = {
+                ...prevSch,
+                staff: Array.isArray(__DR_SCHEDULE_STAFF) ? __DR_SCHEDULE_STAFF.slice() : [],
+                frontStaff: Array.isArray(__DR_SCHEDULE_FRONT_STAFF) ? __DR_SCHEDULE_FRONT_STAFF.slice() : [],
+                kitchenStaff: Array.isArray(__DR_SCHEDULE_KITCHEN_STAFF) ? __DR_SCHEDULE_KITCHEN_STAFF.slice() : [],
+                morningStaff: Array.isArray(__DR_SCHEDULE_FRONT_STAFF) ? __DR_SCHEDULE_FRONT_STAFF.slice() : [],
+                afternoonStaff: Array.isArray(__DR_SCHEDULE_KITCHEN_STAFF) ? __DR_SCHEDULE_KITCHEN_STAFF.slice() : [],
+                tomorrowGrossEstimate: drGetNum('dr-tomorrow-gross'),
+                remark: String(document.getElementById('dr-schedule-remark')?.value || '').trim()
+            };
 
             const data = {
                 weather: String(document.getElementById('dr-weather')?.value || '').trim(),
@@ -29204,22 +29311,9 @@ ${knowledgeContent.slice(0, 30000)}`;
                     count: drGetNum('dr-recharge-count'),
                     amount: drGetNum('dr-recharge-amt')
                 },
-                staff: {
-                    front: staffFront,
-                    kitchen: staffKitchen,
-                    frontRest: String(document.getElementById('dr-front-rest')?.value || '').trim(),
-                    frontSupport: String(document.getElementById('dr-front-support')?.value || '').trim(),
-                    kitchenRest: String(document.getElementById('dr-kitchen-rest')?.value || '').trim(),
-                    kitchenSupport: String(document.getElementById('dr-kitchen-support')?.value || '').trim()
-                },
-                scheduleNextDay: {
-                    staff: Array.isArray(__DR_SCHEDULE_STAFF) ? __DR_SCHEDULE_STAFF.slice() : [],
-                    morningStaff: Array.isArray(__DR_SCHEDULE_MORNING_STAFF) ? __DR_SCHEDULE_MORNING_STAFF.slice() : [],
-                    afternoonStaff: Array.isArray(__DR_SCHEDULE_AFTERNOON_STAFF) ? __DR_SCHEDULE_AFTERNOON_STAFF.slice() : [],
-                    tomorrowGrossEstimate: drGetNum('dr-tomorrow-gross'),
-                    remark: String(document.getElementById('dr-schedule-remark')?.value || '').trim()
-                },
-                photos: Array.isArray(__DR_PHOTOS) ? __DR_PHOTOS.slice() : []
+                staff,
+                scheduleNextDay,
+                photos: drNormalizeDailyReportPhotosArr(__DR_PHOTOS)
             };
 
             return { date, store, data };
@@ -29418,7 +29512,11 @@ ${knowledgeContent.slice(0, 30000)}`;
 
         function fillDailyReportForm(report) {
             const r = report && typeof report === 'object' ? report : {};
-            const data = r.data && typeof r.data === 'object' ? r.data : {};
+            const raw = r.data && typeof r.data === 'object' ? r.data : {};
+            const data = {
+                ...raw,
+                photos: drNormalizeDailyReportPhotosArr(raw.photos ?? r.photos)
+            };
             __DR_CURRENT_REPORT = r;
             try { showDailyReportEditor(); } catch (e) {}
             try {
@@ -29467,9 +29565,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 drSetValue('dr-bad-eleme', data?.badReviews?.eleme);
                 drSetValue('dr-recharge-count', data?.recharge?.count);
                 drSetValue('dr-recharge-amt', data?.recharge?.amount);
-                drSetValue('dr-front-rest', data?.staff?.frontRest);
                 drSetValue('dr-front-support', data?.staff?.frontSupport);
-                drSetValue('dr-kitchen-rest', data?.staff?.kitchenRest);
                 drSetValue('dr-kitchen-support', data?.staff?.kitchenSupport);
                 drSetValue('dr-tomorrow-gross', data?.scheduleNextDay?.tomorrowGrossEstimate);
                 drSetValue('dr-schedule-remark', data?.scheduleNextDay?.remark);
@@ -29493,17 +29589,42 @@ ${knowledgeContent.slice(0, 30000)}`;
                     return { user: u, name: n, days: (Number.isFinite(days) ? days : 1) };
                 });
             };
+            const normRestStaff = (arr, textFallback) => {
+                const list = normStaff(arr);
+                if (list.length) return list;
+                const raw = String(textFallback || '').trim();
+                if (!raw) return [];
+                const parts = raw.split(/[，,、;；\n\r\t\s\/|]+/).map(x => String(x || '').trim()).filter(Boolean);
+                if (!parts.length) return [];
+                const users = (HRMS_STORE.getUsers ? (HRMS_STORE.getUsers() || []) : [])
+                    .concat(HRMS_STORE.getEmployees ? (HRMS_STORE.getEmployees() || []) : []);
+                return parts.map((name) => {
+                    const matched = users.find(u => String(u?.name || '').trim() === name) || null;
+                    const uname = String(matched?.username || '').trim();
+                    return { user: uname, name, days: 1 };
+                });
+            };
             __DR_FRONT_STAFF = normStaff(data?.staff?.front);
             __DR_KITCHEN_STAFF = normStaff(data?.staff?.kitchen);
-            __DR_SCHEDULE_STAFF = normStaff(data?.scheduleNextDay?.staff);
-            __DR_SCHEDULE_MORNING_STAFF = normStaff(data?.scheduleNextDay?.morningStaff);
-            __DR_SCHEDULE_AFTERNOON_STAFF = normStaff(data?.scheduleNextDay?.afternoonStaff);
+            __DR_REST_STAFF = drMergeUniqueStaffLists(
+                normRestStaff(data?.staff?.restStaff, ''),
+                normRestStaff(data?.staff?.frontRestStaff, data?.staff?.frontRest),
+                normRestStaff(data?.staff?.kitchenRestStaff, data?.staff?.kitchenRest)
+            );
+            __DR_SCHEDULE_FRONT_STAFF = normStaff(data?.scheduleNextDay?.frontStaff);
+            __DR_SCHEDULE_KITCHEN_STAFF = normStaff(data?.scheduleNextDay?.kitchenStaff);
+            if (!__DR_SCHEDULE_FRONT_STAFF.length && !__DR_SCHEDULE_KITCHEN_STAFF.length) {
+                __DR_SCHEDULE_FRONT_STAFF = normStaff(data?.scheduleNextDay?.morningStaff);
+                __DR_SCHEDULE_KITCHEN_STAFF = normStaff(data?.scheduleNextDay?.afternoonStaff);
+            }
+            drRebuildScheduleStaff();
             __DR_PHOTOS = drNormalizeDailyReportPhotosArr(data?.photos);
             drRenderStaff('front');
             drRenderStaff('kitchen');
+            drRenderStaff('rest');
             drRenderStaff('schedule');
-            drRenderStaff('schedule_morning');
-            drRenderStaff('schedule_afternoon');
+            drRenderStaff('schedule_front');
+            drRenderStaff('schedule_kitchen');
             renderDailyReportPhotos();
             syncDailyReportComputed();
             try { applyDailyReportEditorPermissions(); } catch (e) {}
