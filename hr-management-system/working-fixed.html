@@ -25188,6 +25188,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             if (confirmBtn) confirmBtn.disabled = false;
             if (cancelBtn) cancelBtn.disabled = false;
             populateKnowledgeBrandOptions('all');
+            try { populateKnowledgeAudienceOptions(); } catch (e) {}
             syncKnowledgeUploadFields();
             modal.style.display = 'flex';
         }
@@ -25231,22 +25232,33 @@ ${knowledgeContent.slice(0, 30000)}`;
 
         function populateKnowledgeAudienceOptions() {
             const storeSel = document.getElementById('knowledge-upload-audience-store');
+            const posSel = document.getElementById('knowledge-upload-audience-position');
+            const prevStore = storeSel ? String(storeSel.value || '').trim() : '';
+            const prevPos = posSel ? String(posSel.value || '').trim() : '';
+
             if (storeSel) {
                 const stores = (HRMS_STORE.getStores ? HRMS_STORE.getStores() : [])
                     .filter(s => String(s?.status || 'active') === 'active');
                 const names = new Set();
                 (stores || []).forEach(s => s && s.name && names.add(s.name));
-                // Only allow active stores to appear in dropdown.
                 const list = Array.from(names).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b), 'zh-Hans-CN'));
-                storeSel.innerHTML = list.map(n => `<option value="${n}">${n}</option>`).join('');
+                let html = '<option value="">请选择门店</option>';
+                html += list.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+                storeSel.innerHTML = html;
+                if (prevStore && list.includes(prevStore)) storeSel.value = prevStore;
             }
 
-            const posSel = document.getElementById('knowledge-upload-audience-position');
             if (posSel) {
-                const users = HRMS_STORE.getUsers();
-                const positions = Array.from(new Set((users || []).map(u => String(u?.position || '').trim()).filter(Boolean)))
-                    .sort((a, b) => String(a).localeCompare(String(b), 'zh-Hans-CN'));
-                posSel.innerHTML = positions.map(p => `<option value="${p}">${p}</option>`).join('');
+                const users = (HRMS_STORE.getUsers ? HRMS_STORE.getUsers() : []) || [];
+                const emps = (HRMS_STORE.getEmployees ? HRMS_STORE.getEmployees() : []) || [];
+                const positions = Array.from(new Set([
+                    ...users.map(u => String(u?.position || '').trim()),
+                    ...emps.map(e => String(e?.position || '').trim())
+                ].filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), 'zh-Hans-CN'));
+                let html = '<option value="">请选择岗位</option>';
+                html += positions.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+                posSel.innerHTML = html;
+                if (prevPos && positions.includes(prevPos)) posSel.value = prevPos;
             }
         }
 
@@ -25258,6 +25270,9 @@ ${knowledgeContent.slice(0, 30000)}`;
             const boxPos = document.getElementById('knowledge-upload-audience-position-box');
             if (boxStore) boxStore.style.display = audType === 'store' ? '' : 'none';
             if (boxPos) boxPos.style.display = audType === 'position' ? '' : 'none';
+            if (audType === 'store' || audType === 'position') {
+                try { populateKnowledgeAudienceOptions(); } catch (e) {}
+            }
 
             const tagsEl = document.getElementById('knowledge-upload-agent-tags');
             const tags = getKnowledgeAgentTags(agent);
