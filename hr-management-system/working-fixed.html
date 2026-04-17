@@ -5286,43 +5286,122 @@
             display: none;
         }
 
-        /* Org Dict Modal Styles */
-        .org-dict-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 16px;
+        /* 组织字典弹窗 · 分段切换 + 单屏聚焦（替代多卡片堆叠） */
+        #org-dict-modal .modal-content.org-dict-modal-content {
+            max-width: min(560px, 96vw);
+            width: 100%;
+            max-height: min(88vh, 720px);
+            display: flex;
+            flex-direction: column;
         }
 
-        .org-dict-card {
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 12px;
-            padding: 16px;
+        #org-dict-modal .modal-body {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            padding: 0 18px 8px;
         }
 
-        .org-dict-card-header {
+        .org-dict-shell {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            border: 1px solid rgba(192, 132, 252, 0.22);
+            border-radius: 14px;
+            padding: 12px 12px 14px;
+            background: linear-gradient(165deg, rgba(88, 28, 135, 0.14) 0%, rgba(12, 12, 16, 0.96) 42%);
+        }
+
+        .org-dict-toolbar {
             display: flex;
             align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .org-dict-toolbar__kbd {
+            font-family: 'IBM Plex Mono', ui-monospace, monospace;
+            font-size: 10px;
+            letter-spacing: 0.18em;
+            color: #e9d5ff;
+            padding: 4px 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(167, 139, 250, 0.35);
+            background: rgba(0, 0, 0, 0.25);
+        }
+
+        .org-dict-toolbar__hint {
+            font-size: 11px;
+            color: rgba(200, 215, 230, 0.62);
+            line-height: 1.35;
+            flex: 1;
+            text-align: right;
+        }
+
+        .org-dict-seg {
+            display: flex;
             gap: 8px;
-            margin-bottom: 12px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 2px;
+            scrollbar-width: none;
         }
 
-        .org-dict-card-header h4 {
-            margin: 0;
-            font-size: 14px;
-            font-weight: 600;
-            color: #fff;
+        .org-dict-seg::-webkit-scrollbar {
+            display: none;
         }
 
-        .org-dict-icon {
-            font-size: 18px;
+        .org-dict-seg__btn {
+            flex: 0 0 auto;
+            border: 1px solid rgba(251, 191, 36, 0.28);
+            background: rgba(10, 10, 12, 0.85);
+            color: #fde68a;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 8px 14px;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+
+        .org-dict-seg__btn.active {
+            background: rgba(245, 158, 11, 0.16);
+            border-color: rgba(251, 191, 36, 0.55);
+            color: #fffbeb;
+        }
+
+        .org-dict-panels {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .org-dict-panel {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+            min-height: 0;
+            gap: 10px;
+        }
+
+        .org-dict-panel.is-active {
+            display: flex;
         }
 
         .org-dict-list {
-            min-height: 80px;
-            max-height: 150px;
+            flex: 1;
+            min-height: 120px;
+            max-height: min(42vh, 320px);
             overflow-y: auto;
-            margin-bottom: 12px;
+            padding: 8px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            background: rgba(0, 0, 0, 0.22);
             display: flex;
             flex-wrap: wrap;
             gap: 6px;
@@ -5510,9 +5589,295 @@
             accent-color: #f59e0b;
         }
 
-        @media (max-width: 600px) {
-            .org-dict-grid {
+        /* 月度目标弹窗 · 报表分区 */
+        #monthly-targets-modal .modal-content.mt-modal-content {
+            max-width: min(640px, 96vw);
+            width: 100%;
+            max-height: min(92vh, 800px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        #monthly-targets-modal .mt-modal-body {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 0 16px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .mt-slab {
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            padding: 12px 14px 14px;
+            background: rgba(18, 18, 22, 0.92);
+        }
+
+        .mt-slab__head {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .mt-slab__no {
+            flex-shrink: 0;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            font-family: 'IBM Plex Mono', ui-monospace, monospace;
+            font-size: 11px;
+            font-weight: 700;
+            color: #fbbf24;
+            border: 1px solid rgba(251, 191, 36, 0.35);
+            background: rgba(245, 158, 11, 0.08);
+        }
+
+        .mt-slab__title {
+            font-size: 14px;
+            font-weight: 800;
+            color: rgba(248, 250, 252, 0.96);
+            margin: 0 0 2px 0;
+        }
+
+        .mt-slab__sub {
+            margin: 0;
+            font-size: 11px;
+            color: rgba(200, 215, 230, 0.58);
+            line-height: 1.4;
+        }
+
+        .mt-params-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 12px;
+        }
+
+        @media (max-width: 520px) {
+            .mt-params-grid {
                 grid-template-columns: 1fr;
+            }
+        }
+
+        .mt-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .mt-field__l {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: rgba(200, 215, 230, 0.65);
+        }
+
+        .mt-input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 10px 11px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(248, 250, 252, 0.95);
+            font-size: 14px;
+        }
+
+        .mt-params-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .mt-addbar {
+            display: flex;
+            gap: 8px;
+            align-items: stretch;
+            flex-wrap: wrap;
+            margin-bottom: 8px;
+        }
+
+        .mt-addbar select {
+            flex: 1 1 160px;
+            min-width: 0;
+            padding: 10px 11px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(248, 250, 252, 0.92);
+            font-size: 13px;
+        }
+
+        .mt-addbar .btn-secondary {
+            flex: 0 0 auto;
+            white-space: nowrap;
+            padding: 10px 14px;
+            font-weight: 700;
+        }
+
+        .mt-fields {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .mt-field-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 11px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .mt-field-row__meta {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .mt-field-row__label {
+            font-size: 13px;
+            font-weight: 700;
+            color: rgba(248, 250, 252, 0.95);
+        }
+
+        .mt-field-row__hint {
+            font-size: 11px;
+            color: rgba(200, 215, 230, 0.52);
+            margin-top: 2px;
+        }
+
+        .mt-field-row__input {
+            width: 112px;
+            flex-shrink: 0;
+            padding: 9px 10px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.06);
+            color: rgba(248, 250, 252, 0.95);
+            font-size: 14px;
+            font-weight: 700;
+            text-align: right;
+        }
+
+        .mt-field-row__remove {
+            flex-shrink: 0;
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: rgba(239, 68, 68, 0.75);
+            font-size: 16px;
+            padding: 6px 8px;
+            border-radius: 8px;
+        }
+
+        .mt-empty {
+            padding: 20px 8px;
+            text-align: center;
+            font-size: 12px;
+            color: rgba(200, 215, 230, 0.48);
+            border-radius: 10px;
+            border: 1px dashed rgba(255, 255, 255, 0.08);
+            background: rgba(0, 0, 0, 0.15);
+        }
+
+        .mt-registry {
+            max-height: min(32vh, 260px);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 12px;
+            color: rgba(200, 215, 230, 0.88);
+        }
+
+        .mt-reg-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 10px 11px;
+            border-radius: 11px;
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .mt-reg-row__main {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .mt-reg-row__ym {
+            font-weight: 800;
+            color: rgba(248, 250, 252, 0.95);
+        }
+
+        .mt-reg-row__store {
+            margin-left: 6px;
+            color: rgba(96, 165, 250, 0.92);
+            font-weight: 600;
+        }
+
+        .mt-reg-row__sum {
+            margin-top: 4px;
+            font-size: 11px;
+            color: rgba(200, 215, 230, 0.72);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px 0;
+        }
+
+        .mt-reg-row__del {
+            flex-shrink: 0;
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: rgba(239, 68, 68, 0.65);
+            font-size: 15px;
+            padding: 4px 6px;
+        }
+
+        .mt-registry-empty {
+            text-align: center;
+            padding: 18px 8px;
+            color: rgba(200, 215, 230, 0.45);
+            font-size: 12px;
+        }
+
+        .mt-modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+            padding: 12px 18px 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(8, 8, 10, 0.96);
+        }
+
+        .mt-modal-actions .btn,
+        .mt-modal-actions .btn-secondary {
+            min-width: 108px;
+            justify-content: center;
+        }
+
+        @media (max-width: 420px) {
+            .mt-field-row {
+                flex-wrap: wrap;
+            }
+
+            .mt-field-row__input {
+                width: 100%;
+                text-align: left;
             }
         }
 
@@ -10152,53 +10517,70 @@
             </div>
 
             <div id="monthly-targets-modal" class="modal ui-modal">
-                <div class="modal-content" style="max-width: 900px;">
+                <div class="modal-content mt-modal-content">
                     <div class="modal-header">
                         <div>
-                            <h3 class="ui-modal-title">🎯 目标管理</h3>
-                            <div class="ui-modal-desc">按门店 + 月份灵活设置目标项，日报将自动统计达成率</div>
+                            <h3 class="ui-modal-title">目标管理</h3>
+                            <div class="ui-modal-desc">报表式分区：先锁定「月份 × 门店」，再编辑目标项，底部统一保存。</div>
                         </div>
                         <button class="modal-close" onclick="closeMonthlyTargetsModal()">×</button>
                     </div>
-                    <div class="modal-body" style="padding: 0;">
-                        <div style="padding: 20px 24px; border-bottom: 1px solid rgba(255,255,255,0.06);">
-                            <div style="display:flex; flex-direction:column; gap:10px;">
+                    <div class="modal-body mt-modal-body">
+                        <section class="mt-slab mt-slab--params">
+                            <div class="mt-slab__head">
+                                <span class="mt-slab__no">A</span>
                                 <div>
-                                    <label style="font-size:11px; font-weight:700; color:rgba(200,215,230,0.7);">月份</label>
-                                    <input id="mt-ym" type="month" style="margin-top:4px; width:100%; padding:9px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.06); color:rgba(226,232,240,0.95); font-size:14px; box-sizing:border-box;" />
+                                    <div class="mt-slab__title">筛选条件</div>
+                                    <p class="mt-slab__sub">与日报达成率统计口径对齐的门店与月份。</p>
                                 </div>
+                            </div>
+                            <div class="mt-params-grid">
+                                <label class="mt-field">
+                                    <span class="mt-field__l">月份</span>
+                                    <input id="mt-ym" class="mt-input" type="month" />
+                                </label>
+                                <label class="mt-field">
+                                    <span class="mt-field__l">门店</span>
+                                    <select id="mt-store" class="mt-input"></select>
+                                </label>
+                            </div>
+                            <div class="mt-params-actions">
+                                <button class="btn btn-secondary" type="button" onclick="loadMonthlyTargetsIntoForm()">加载已有目标</button>
+                            </div>
+                        </section>
+
+                        <section class="mt-slab mt-slab--edit">
+                            <div class="mt-slab__head">
+                                <span class="mt-slab__no">B</span>
                                 <div>
-                                    <label style="font-size:11px; font-weight:700; color:rgba(200,215,230,0.7);">门店</label>
-                                    <select id="mt-store" style="margin-top:4px; width:100%; padding:9px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.06); color:rgba(226,232,240,0.95); font-size:14px; box-sizing:border-box; -webkit-appearance:menulist; appearance:menulist;"></select>
+                                    <div class="mt-slab__title">目标项编辑</div>
+                                    <p class="mt-slab__sub">从下拉选择指标后加入列表，填写目标值。</p>
                                 </div>
                             </div>
-                            <div style="margin-top:12px; display:flex; gap:10px;">
-                                <button class="btn" type="button" onclick="loadMonthlyTargetsIntoForm()" style="padding:9px 18px; font-size:13px; border-radius:10px;">加载已有目标</button>
+                            <div class="mt-addbar">
+                                <select id="mt-add-field">
+                                    <option value="">选择目标项…</option>
+                                </select>
+                                <button class="btn btn-secondary" type="button" onclick="mtAddTargetField()">＋ 加入</button>
                             </div>
-                        </div>
+                            <div id="mt-dynamic-fields" class="mt-fields"></div>
+                            <div id="mt-no-fields" class="mt-empty">请从上方下拉选择目标项，点击「加入」添加到编辑区。</div>
+                        </section>
 
-                        <div style="padding: 20px 24px;">
-                            <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-bottom:14px;">
-                                <div style="font-weight:800; font-size:15px; color:rgba(226,232,240,0.95);">目标项</div>
-                                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                                    <select id="mt-add-field" style="padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.06); color:rgba(226,232,240,0.9); font-size:13px; min-width:140px; flex:1 1 auto;">
-                                        <option value="">选择目标项…</option>
-                                    </select>
-                                    <button class="btn btn-secondary" type="button" onclick="mtAddTargetField()" style="padding:8px 14px; font-size:13px; border-radius:8px; white-space:nowrap; font-weight:700;">+ 添加</button>
+                        <section class="mt-slab mt-slab--registry">
+                            <div class="mt-slab__head">
+                                <span class="mt-slab__no">C</span>
+                                <div>
+                                    <div class="mt-slab__title">已维护目标登记</div>
+                                    <p class="mt-slab__sub">最近记录优先展示，可删除后重新录入。</p>
                                 </div>
                             </div>
-                            <div id="mt-dynamic-fields" style="display:grid; gap:10px;"></div>
-                            <div id="mt-no-fields" style="padding:28px 0; text-align:center; color:rgba(200,215,230,0.5); font-size:13px;">点击右上角「+ 添加」选择目标项</div>
-                        </div>
-
-                        <div style="padding: 16px 24px; border-top: 1px solid rgba(255,255,255,0.06); display:flex; gap:10px;">
-                            <button class="btn" type="button" onclick="saveMonthlyTargets()" style="padding:10px 24px; font-size:14px; border-radius:10px; font-weight:800;">保存目标</button>
-                        </div>
-
-                        <div style="padding: 0 24px 20px;">
-                            <div style="font-weight:800; font-size:14px; margin-bottom:10px; color:rgba(226,232,240,0.85);">已维护目标</div>
-                            <div id="mt-list" style="font-size:12px; color:rgba(200,215,230,0.85); max-height:260px; overflow-y:auto;"></div>
-                        </div>
+                            <div id="mt-list" class="mt-registry"></div>
+                        </section>
+                    </div>
+                    <div class="mt-modal-actions">
+                        <button class="btn btn-secondary" type="button" onclick="closeMonthlyTargetsModal()">关闭</button>
+                        <button class="btn" type="button" onclick="saveMonthlyTargets()">保存目标</button>
                     </div>
                 </div>
             </div>
@@ -12503,62 +12885,51 @@
     </div>
 
     <div id="org-dict-modal" class="modal ui-modal">
-        <div class="modal-content" style="max-width: 860px;">
+        <div class="modal-content org-dict-modal-content">
             <div class="modal-header">
                 <div>
                     <h3 class="ui-modal-title">组织字典维护</h3>
-                    <div class="ui-modal-desc">管理部门、岗位、级别、角色等下拉选项</div>
+                    <div class="ui-modal-desc">分段维护部门 / 岗位 / 级别，避免多卡片堆叠与长列表同屏拥挤。</div>
                 </div>
                 <button class="modal-close" onclick="closeOrgDictModal()">×</button>
             </div>
             <div class="modal-body">
-                <div class="org-dict-grid">
-                    <div class="org-dict-card">
-                        <div class="org-dict-card-header">
-                            <span class="org-dict-icon">🏢</span>
-                            <h4>部门</h4>
-                        </div>
-                        <div id="org-dict-departments" class="org-dict-list"></div>
-                        <div class="org-dict-input-row">
-                            <input id="org-dict-department-input" placeholder="新增部门">
-                            <button class="btn btn-secondary" type="button" onclick="addOrgDictItem('departments')">添加</button>
-                        </div>
+                <div class="org-dict-shell">
+                    <div class="org-dict-toolbar">
+                        <span class="org-dict-toolbar__kbd">DICT</span>
+                        <span class="org-dict-toolbar__hint">切换标签只编辑一类 · 标签可横向滑动</span>
                     </div>
-                    <div class="org-dict-card">
-                        <div class="org-dict-card-header">
-                            <span class="org-dict-icon">💼</span>
-                            <h4>岗位</h4>
-                        </div>
-                        <div id="org-dict-positions" class="org-dict-list"></div>
-                        <div class="org-dict-input-row">
-                            <input id="org-dict-position-input" placeholder="新增岗位">
-                            <button class="btn btn-secondary" type="button" onclick="addOrgDictItem('positions')">添加</button>
-                        </div>
+                    <div class="org-dict-seg" role="tablist" aria-label="字典分类">
+                        <button type="button" class="org-dict-seg__btn active" data-od-tab="departments" onclick="setOrgDictTab('departments')">部门</button>
+                        <button type="button" class="org-dict-seg__btn" data-od-tab="positions" onclick="setOrgDictTab('positions')">岗位</button>
+                        <button type="button" class="org-dict-seg__btn" data-od-tab="levels" onclick="setOrgDictTab('levels')">级别</button>
                     </div>
-                    <div class="org-dict-card">
-                        <div class="org-dict-card-header">
-                            <span class="org-dict-icon">📊</span>
-                            <h4>级别</h4>
+                    <div class="org-dict-panels">
+                        <div id="org-dict-panel-departments" class="org-dict-panel is-active" role="tabpanel">
+                            <div id="org-dict-departments" class="org-dict-list"></div>
+                            <div class="org-dict-input-row">
+                                <input id="org-dict-department-input" placeholder="新增部门">
+                                <button class="btn btn-secondary" type="button" onclick="addOrgDictItem('departments')">添加</button>
+                            </div>
                         </div>
-                        <div id="org-dict-levels" class="org-dict-list"></div>
-                        <div class="org-dict-input-row">
-                            <input id="org-dict-level-input" placeholder="如 L1、P2、M3">
-                            <button class="btn btn-secondary" type="button" onclick="addOrgDictItem('levels')">添加</button>
+                        <div id="org-dict-panel-positions" class="org-dict-panel" role="tabpanel">
+                            <div id="org-dict-positions" class="org-dict-list"></div>
+                            <div class="org-dict-input-row">
+                                <input id="org-dict-position-input" placeholder="新增岗位">
+                                <button class="btn btn-secondary" type="button" onclick="addOrgDictItem('positions')">添加</button>
+                            </div>
                         </div>
-                    </div>
-                    <!-- 角色已由系统内置，不再允许自定义 -->
-                    <div class="org-dict-card" style="display:none;">
-                        <div class="org-dict-card-header">
-                            <span class="org-dict-icon">👤</span>
-                            <h4>角色</h4>
-                        </div>
-                        <div id="org-dict-roles" class="org-dict-list"></div>
-                        <div class="org-dict-input-row">
-                            <input id="org-dict-role-input" placeholder="新增角色">
-                            <button class="btn btn-secondary" type="button" onclick="addOrgDictItem('roles')">添加</button>
+                        <div id="org-dict-panel-levels" class="org-dict-panel" role="tabpanel">
+                            <div id="org-dict-levels" class="org-dict-list"></div>
+                            <div class="org-dict-input-row">
+                                <input id="org-dict-level-input" placeholder="如 L1、P2、M3">
+                                <button class="btn btn-secondary" type="button" onclick="addOrgDictItem('levels')">添加</button>
+                            </div>
                         </div>
                     </div>
                 </div>
+                <div id="org-dict-roles" style="display:none;" aria-hidden="true"></div>
+                <input id="org-dict-role-input" type="hidden" value="" />
 
                 <div class="ui-modal-footer">
                     <button class="btn btn-secondary" type="button" onclick="closeOrgDictModal()">取消</button>
@@ -27394,15 +27765,14 @@ ${knowledgeContent.slice(0, 30000)}`;
             container.innerHTML = __MT_ACTIVE_FIELDS.map((f, idx) => {
                 const meta = MT_FIELD_MAP[f.key] || { label: f.key, unit: '', group: '' };
                 const val = f.value != null ? f.value : '';
-                return `<div style="display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03);" data-mt-idx="${idx}">
-                    <div style="flex:1; min-width:0;">
-                        <div style="font-size:13px; font-weight:700; color:rgba(226,232,240,0.95);">${escapeHtml(meta.label)}</div>
-                        <div style="font-size:11px; color:rgba(200,215,230,0.5); margin-top:2px;">${escapeHtml(meta.group)} · ${escapeHtml(meta.unit)}</div>
+                return `<div class="mt-field-row" data-mt-idx="${idx}">
+                    <div class="mt-field-row__meta">
+                        <div class="mt-field-row__label">${escapeHtml(meta.label)}</div>
+                        <div class="mt-field-row__hint">${escapeHtml(meta.group)} · ${escapeHtml(meta.unit)}</div>
                     </div>
-                    <input type="number" inputmode="decimal" placeholder="目标值" value="${escapeHtml(String(val))}"
-                        style="width:140px; padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.06); color:rgba(226,232,240,0.95); font-size:14px; font-weight:700; text-align:right;"
+                    <input type="number" class="mt-field-row__input" inputmode="decimal" placeholder="目标值" value="${escapeHtml(String(val))}"
                         onchange="mtUpdateFieldValue(${idx}, this.value)" oninput="mtUpdateFieldValue(${idx}, this.value)" />
-                    <button type="button" onclick="mtRemoveField(${idx})" style="background:none; border:none; cursor:pointer; color:rgba(239,68,68,0.7); font-size:16px; padding:4px 6px; border-radius:8px;" title="移除">✕</button>
+                    <button type="button" class="mt-field-row__remove" onclick="mtRemoveField(${idx})" title="移除">✕</button>
                 </div>`;
             }).join('');
             mtPopulateFieldSelect();
@@ -27437,7 +27807,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             if (!el) return;
             const list = mtGetAll().slice();
             if (!list.length) {
-                el.innerHTML = '<div style="text-align:center; padding:16px 0; color:rgba(200,215,230,0.45);">暂无目标</div>';
+                el.innerHTML = '<div class="mt-registry-empty">暂无目标</div>';
                 return;
             }
             list.sort((a, b) => String(b?.ym || '').localeCompare(String(a?.ym || '')) || String(a?.store || '').localeCompare(String(b?.store || ''), 'zh-Hans-CN'));
@@ -27459,13 +27829,13 @@ ${knowledgeContent.slice(0, 30000)}`;
                 } else {
                     summary = '<span style="opacity:0.5;">无目标项</span>';
                 }
-                return `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 12px; border:1px solid rgba(255,255,255,0.06); border-radius:12px; margin-bottom:6px;">
-                    <div style="min-width:0; flex:1;">
-                        <span style="font-weight:800; color:rgba(226,232,240,0.95);">${ym}</span>
-                        <span style="margin-left:6px; color:rgba(96,165,250,0.9); font-weight:600;">${store}</span>
-                        <div style="margin-top:4px; font-size:11px; color:rgba(200,215,230,0.7); display:flex; flex-wrap:wrap; gap:2px 0;">${summary}</div>
+                return `<div class="mt-reg-row">
+                    <div class="mt-reg-row__main">
+                        <span class="mt-reg-row__ym">${ym}</span>
+                        <span class="mt-reg-row__store">${store}</span>
+                        <div class="mt-reg-row__sum">${summary}</div>
                     </div>
-                    <button type="button" onclick="mtDeleteTarget('${ym}','${store}')" style="background:none; border:none; cursor:pointer; color:rgba(239,68,68,0.6); font-size:13px; padding:4px 8px;" title="删除">🗑</button>
+                    <button type="button" class="mt-reg-row__del" onclick="mtDeleteTarget('${ym}','${store}')" title="删除">🗑</button>
                 </div>`;
             });
             el.innerHTML = lines.join('');
@@ -27590,6 +27960,27 @@ ${knowledgeContent.slice(0, 30000)}`;
             });
         }
 
+        function setOrgDictTab(tab) {
+            const t = String(tab || 'departments');
+            ['departments', 'positions', 'levels'].forEach((k) => {
+                document.querySelectorAll(`[data-od-tab="${k}"]`).forEach((btn) => {
+                    btn.classList.toggle('active', k === t);
+                });
+                const panel = document.getElementById(`org-dict-panel-${k}`);
+                if (panel) panel.classList.toggle('is-active', k === t);
+            });
+            const focusMap = {
+                departments: 'org-dict-department-input',
+                positions: 'org-dict-position-input',
+                levels: 'org-dict-level-input'
+            };
+            try {
+                const fid = focusMap[t] || focusMap.departments;
+                const inp = document.getElementById(fid);
+                if (inp && typeof inp.focus === 'function') inp.focus();
+            } catch (e) {}
+        }
+
         function openOrgDictModal() {
             if (!isAdminUser()) {
                 showNotification('仅管理员可维护字典', 'warning');
@@ -27598,6 +27989,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             const modal = document.getElementById('org-dict-modal');
             if (!modal) return;
             renderOrgDictModal();
+            setOrgDictTab('departments');
             modal.classList.add('show');
         }
 
@@ -27649,6 +28041,9 @@ ${knowledgeContent.slice(0, 30000)}`;
             hrmsSetOrgDict(dict);
             if (el) el.value = '';
             renderOrgDictModal();
+            if (type === 'departments' || type === 'positions' || type === 'levels') {
+                setOrgDictTab(type);
+            }
         }
 
         function removeOrgDictItem(type, idx) {
@@ -27659,6 +28054,9 @@ ${knowledgeContent.slice(0, 30000)}`;
             dict[type] = arr;
             hrmsSetOrgDict(dict);
             renderOrgDictModal();
+            if (type === 'departments' || type === 'positions' || type === 'levels') {
+                setOrgDictTab(type);
+            }
         }
 
         function saveOrgDictSettings() {
