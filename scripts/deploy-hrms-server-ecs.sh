@@ -37,7 +37,7 @@ set -euo pipefail
 mkdir -p /opt/deploy-backups/hrms
 if [[ -d "${REMOTE_DIR}" ]] && [[ -f "${REMOTE_DIR}/index.js" || -f "${REMOTE_DIR}/package.json" ]]; then
   tar czf "${HRMS_ROLLBACK_TGZ}" -C "${REMOTE_DIR}" \\
-    --exclude=node_modules --exclude=.git .
+    --exclude=node_modules --exclude=.git --exclude=uploads .
 fi
 EOF
   then
