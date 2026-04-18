@@ -67,28 +67,47 @@ async function shouldTrigger(anomaly) {
   }
 }
 
+function resolveTriggerDate(anomaly) {
+  const v = anomaly.value || {};
+  if (v.evaluationYmd) return v.evaluationYmd;
+  if (v.evaluated_business_day) return v.evaluated_business_day;
+  if (v.weekEnd) return v.weekEnd;
+  const today = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
+  return today;
+}
+
 async function recordTrigger(anomaly) {
   try {
     const store = anomaly.store;
     const type = anomalyKey(anomaly);
     const severity = anomaly.severity || 'medium';
     const value = anomaly.value;
+    const triggerDate = resolveTriggerDate(anomaly);
 
     if (!store || !type) return;
 
     memDedupe.set(memKey(store, type), Date.now());
 
+    const existing = await query(
+      `SELECT 1 FROM anomaly_triggers WHERE anomaly_key = $1 AND store = $2 AND trigger_date = $3::date LIMIT 1`,
+      [type, store, triggerDate]
+    );
+    if (existing.rows?.length) {
+      console.log(`[Proactive][Dedupe] Already exists: ${store}/${type} trigger_date=${triggerDate}, skip`);
+      return;
+    }
+
     const sql = `
       INSERT INTO anomaly_triggers (
         anomaly_key, store, severity, trigger_value,
         trigger_date, created_at
-      ) VALUES ($1, $2, $3, $4, CURRENT_DATE, NOW())
+      ) VALUES ($1, $2, $3, $4, $5::date, NOW())
       ON CONFLICT (anomaly_key, store, trigger_date) DO NOTHING
     `;
 
-    await query(sql, [type, store, severity, JSON.stringify(value || {})]);
+    await query(sql, [type, store, severity, JSON.stringify(value || {}), triggerDate]);
 
-    console.log(`[Proactive][Dedupe] Recorded proactive follow-up marker: ${store}/${type}`);
+    console.log(`[Proactive][Dedupe] Recorded proactive follow-up marker: ${store}/${type} trigger_date=${triggerDate}`);
   } catch (err) {
     console.error('[Proactive][Dedupe] Record error:', err?.message || err);
   }

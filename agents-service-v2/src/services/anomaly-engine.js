@@ -1003,15 +1003,33 @@ export async function runAnomalyChecks(frequency, stores, options = {}) {
       try {
         const result = await checkFn(store);
         if (result.triggered) {
-          const triggerDate =
-            result.value?.weekEnd ||
-            (ruleKey === 'recharge_zero' && result.value?.evaluationYmd
-              ? result.value.evaluationYmd
-              : null) ||
-            (ruleKey === 'revenue_achievement_monthly' || ruleKey === 'gross_margin'
-              ? shanghaiPrevCalendarMonthBounds().last
-              : null) ||
-            shanghaiTodayYmd();
+          let triggerDate;
+          if (ruleKey === 'recharge_zero') {
+            triggerDate = result.value?.evaluationYmd || result.value?.evaluated_business_day;
+            if (!triggerDate) {
+              logger.error({ store, ruleKey, value: result.value }, 'recharge_zero: evaluationYmd missing, cannot assign trigger_date');
+              results.push({ store, rule: ruleKey, name: ruleCfg.name, ...result, skipped: 'missing_eval_date' });
+              continue;
+            }
+          } else if (result.value?.weekEnd) {
+            triggerDate = result.value.weekEnd;
+          } else if (ruleKey === 'revenue_achievement_monthly' || ruleKey === 'gross_margin') {
+            triggerDate = shanghaiPrevCalendarMonthBounds().last;
+          } else {
+            triggerDate = shanghaiTodayYmd();
+          }
+
+          if (ruleKey === 'recharge_zero') {
+            const todaySh = shanghaiTodayYmd();
+            if (triggerDate >= todaySh) {
+              logger.error(
+                { store, ruleKey, triggerDate, todaySh, evaluationYmd: result.value?.evaluationYmd },
+                'recharge_zero: trigger_date >= today (should be yesterday business day), aborting'
+              );
+              results.push({ store, rule: ruleKey, name: ruleCfg.name, ...result, skipped: 'premature_trigger_date' });
+              continue;
+            }
+          }
 
           const isDeferred = !!result.deferred;
 
