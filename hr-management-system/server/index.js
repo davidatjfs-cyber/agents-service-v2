@@ -3517,46 +3517,51 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
 
         if ((finalApproved || finalRejected) && tp === 'offboarding') {
           const resignDate = safeDateOnly(updated.payload?.resignDate || updated.payload?.date || updated.payload?.resignationDate);
+          const todayWall = hrmsNowISO().slice(0, 10);
+          const todaySh = shanghaiTodayDateOnly();
           const title = finalApproved ? '离职申请已通过' : '离职申请被拒绝';
+          const disableNow = finalApproved && (!resignDate || (todaySh && resignDate && String(todaySh) >= String(resignDate)));
           const msg = finalApproved
-            ? `${applicantName} 离职申请已通过，离职日期：${resignDate || '-'}。届时账号将自动禁用。`
+            ? (disableNow
+              ? `${applicantName} 离职申请已通过，离职日期：${resignDate || todayWall}。系统已关闭 HRMS 登录、数据库账号与飞书绑定（registered）。`
+              : `${applicantName} 离职申请已通过，离职日期：${resignDate || '-'}。将于该日起自动关闭 HRMS 登录与飞书绑定（当前仍可登录至离职日前一日）。`)
             : `${applicantName} 离职申请被拒绝${note ? `：${note}` : ''}`;
           const recipients = finalApproved
             ? uniqUsernames([updated.applicant_username, applicantManager])
             : uniqUsernames([updated.applicant_username]);
-          for (const u of recipients) {
-            state = addStateNotification(state, makeNotif(u, title, msg, { type: 'offboarding_result', approvalId: updated.id }));
-          }
+          await appendNotifications(recipients.map((u) => makeNotif(u, title, msg, { type: 'offboarding_result', approvalId: updated.id })));
 
           if (finalApproved) {
-            const today = hrmsNowISO().slice(0, 10);
             const applicantUser = String(updated.applicant_username || '').trim();
-            const employees = Array.isArray(state.employees) ? state.employees : [];
-            const empIdx = employees.findIndex(e => String(e?.username || '').toLowerCase() === applicantUser.toLowerCase());
+            const employeesList = Array.isArray(state.employees) ? state.employees : [];
+            const empIdx = employeesList.findIndex(e => String(e?.username || '').toLowerCase() === applicantUser.toLowerCase());
+            const effectiveResign = resignDate || todayWall;
+            const patches = {};
+            const idFields = {};
             if (empIdx >= 0) {
-              const nextEmployees = employees.slice();
-              nextEmployees[empIdx] = {
-                ...nextEmployees[empIdx],
-                offboardingApproved: true,
-                offboardingDate: resignDate || today,
-                status: '离职'
-              };
+              const cur = employeesList[empIdx] || {};
+              const nextEmp = disableNow
+                ? { ...cur, offboardingApproved: true, offboardingDate: effectiveResign, status: '离职' }
+                : { ...cur, offboardingApproved: true, offboardingDate: effectiveResign };
+              const nextEmployees = employeesList.slice();
+              nextEmployees[empIdx] = nextEmp;
               state = { ...state, employees: nextEmployees };
+              patches.employees = [nextEmp];
+              idFields.employees = 'username';
             }
-            const users = Array.isArray(state.users) ? state.users : [];
-            const userIdx = users.findIndex(u2 => String(u2?.username || '').toLowerCase() === applicantUser.toLowerCase());
-            if (userIdx >= 0) {
-              const nextUsers = users.slice();
+            const usersList = Array.isArray(state.users) ? state.users : [];
+            const userIdx = usersList.findIndex(u2 => String(u2?.username || '').toLowerCase() === applicantUser.toLowerCase());
+            if (userIdx >= 0 && disableNow) {
+              const nextUsers = usersList.slice();
               nextUsers[userIdx] = { ...nextUsers[userIdx], status: '离职' };
               state = { ...state, users: nextUsers };
+              patches.users = [nextUsers[userIdx]];
+              idFields.users = 'username';
+            }
+            if (Object.keys(patches).length) {
+              await mergeSharedStateFields(patches, idFields);
             }
           }
-
-          // 原子合并，避免 saveSharedState 全量写回与并发请求互相覆盖
-          await mergeSharedStateFields(
-            { employees: state.employees, users: state.users },
-            { employees: 'username', users: 'username' }
-          );
         }
 
         // Intermediate step: notify next approver for offboarding
@@ -5336,6 +5341,21 @@ async function mergeSharedStateFields(patches, arrayIdFields = {}) {
       ['default', JSON.stringify(next)]
     );
     if (updateResult.rowCount > 0) {
+      if (Array.isArray(patches.employees) && patches.employees.length && arrayIdFields.employees === 'username') {
+        const mergedEmps = Array.isArray(next.employees) ? next.employees : [];
+        for (const item of patches.employees) {
+          const u = String(item?.username || '').trim();
+          if (!u) continue;
+          const rec = mergedEmps.find(e => String(e?.username || '').trim().toLowerCase() === u.toLowerCase());
+          if (rec) {
+            try {
+              await applyHrmsUserAccountGateFromEmployee(rec);
+            } catch (e) {
+              console.error('[mergeSharedStateFields][account-gate]', u, e?.message || e);
+            }
+          }
+        }
+      }
       schedulePayrollDomainSync();
       scheduleLeaveDomainSync();
       return;
@@ -5345,6 +5365,21 @@ async function mergeSharedStateFields(patches, arrayIdFields = {}) {
       `INSERT INTO hrms_state (key, data, updated_at) VALUES ($1, $2::jsonb, NOW()) ON CONFLICT (key) DO NOTHING`,
       ['default', JSON.stringify(next)]
     );
+    if (Array.isArray(patches.employees) && patches.employees.length && arrayIdFields.employees === 'username') {
+      const mergedEmps = Array.isArray(next.employees) ? next.employees : [];
+      for (const item of patches.employees) {
+        const u = String(item?.username || '').trim();
+        if (!u) continue;
+        const rec = mergedEmps.find(e => String(e?.username || '').trim().toLowerCase() === u.toLowerCase());
+        if (rec) {
+          try {
+            await applyHrmsUserAccountGateFromEmployee(rec);
+          } catch (e) {
+            console.error('[mergeSharedStateFields][account-gate]', u, e?.message || e);
+          }
+        }
+      }
+    }
     schedulePayrollDomainSync();
     scheduleLeaveDomainSync();
     return;
@@ -12741,6 +12776,14 @@ async function authRequired(req, res, next) {
       }
     }
 
+    try {
+      await assertEmployeeLoginAllowedByState(uname);
+    } catch (e) {
+      if (e && e.statusCode === 403) {
+        return res.status(403).json({ error: 'account_disabled', message: '账号已停用或已离职' });
+      }
+    }
+
     next();
   } catch (e) {
     return res.status(401).json({ error: 'unauthorized' });
@@ -12773,6 +12816,13 @@ async function authRequiredOrQueryToken(req, res, next) {
         }
       } catch (e) {
         // DB error: allow through
+      }
+    }
+    try {
+      await assertEmployeeLoginAllowedByState(uname);
+    } catch (e) {
+      if (e && e.statusCode === 403) {
+        return res.status(403).json({ error: 'account_disabled', message: '账号已停用或已离职' });
       }
     }
     return next();
@@ -12814,6 +12864,83 @@ function isInactiveStatus(input) {
   const v = String(input || '').trim().toLowerCase();
   if (!v) return false;
   return ['inactive', 'disabled', 'disable', 'off', '0', 'resigned', 'leave', 'left', '离职', '禁用', '停用'].includes(v);
+}
+
+/** 上海时区当天 YYYY-MM-DD（与 safeDateOnly / offboarding 日期比较口径一致） */
+function shanghaiTodayDateOnly() {
+  return shanghaiDateOnly(new Date());
+}
+
+/**
+ * 是否应对该员工关闭 HRMS 登录与飞书侧绑定（含：档案为离职类 / 离职审批已过生效日）
+ */
+function employeeAccountShouldDisable(emp) {
+  if (!emp || typeof emp !== 'object') return false;
+  if (isInactiveStatus(emp.status)) return true;
+  const ob =
+    emp.offboardingApproved === true
+    || String(emp.offboardingApproved || '').trim().toLowerCase() === 'true'
+    || String(emp.offboardingApproved || '').trim() === '1';
+  const d = safeDateOnly(emp.offboardingDate);
+  if (ob && d) {
+    const today = shanghaiTodayDateOnly();
+    if (today && d && String(today) >= String(d)) return true;
+  }
+  return false;
+}
+
+/**
+ * 根据员工档案同步：PostgreSQL users.is_active、飞书 feishu_users.registered、并作废现有 JWT（换 session nonce）
+ * 在 mergeSharedStateFields(employees)、PUT /api/state、离职定时任务等路径调用。
+ */
+async function applyHrmsUserAccountGateFromEmployee(emp) {
+  const uname = String(emp?.username || '').trim();
+  if (!uname || !DATABASE_URL) return;
+  const disable = employeeAccountShouldDisable(emp);
+  try {
+    if (disable) {
+      await pool.query(
+        'UPDATE users SET is_active = FALSE, updated_at = NOW() WHERE lower(username) = lower($1)',
+        [uname]
+      );
+      await pool.query(
+        'UPDATE feishu_users SET registered = FALSE, updated_at = NOW() WHERE lower(username) = lower($1)',
+        [uname]
+      );
+      const sn = randomUUID().replace(/-/g, '').slice(0, 16);
+      await storeSessionNonce(uname, sn);
+    } else {
+      await pool.query(
+        'UPDATE users SET is_active = TRUE, updated_at = NOW() WHERE lower(username) = lower($1)',
+        [uname]
+      );
+      await pool.query(
+        `UPDATE feishu_users
+            SET registered = TRUE,
+                role = $2,
+                store = $3,
+                name = $4,
+                updated_at = NOW()
+          WHERE lower(username) = lower($1)`,
+        [uname, String(emp.role || ''), String(emp.store || ''), String(emp.name || '')]
+      );
+    }
+  } catch (e) {
+    console.error('[account-gate]', uname, disable ? 'disable' : 'enable', e?.message || e);
+  }
+}
+
+async function assertEmployeeLoginAllowedByState(username) {
+  const un = String(username || '').trim();
+  if (!un) return;
+  const st = (await getSharedState().catch(() => null)) || {};
+  const rec = stateFindUserRecord(st, un);
+  if (!rec) return;
+  if (employeeAccountShouldDisable(rec)) {
+    const err = new Error('account_disabled');
+    err.statusCode = 403;
+    throw err;
+  }
 }
 
 function isUuid(input) {
@@ -13112,28 +13239,21 @@ app.put('/api/state', authRequired, async (req, res) => {
         void notifyAdminsDualWriteFailure('hrms_payroll_domain（PUT /api/state）', e);
       }
     });
-    // 同步 feishu_users：更新在职员工的 role/store/name，注销已删除/离职员工
+    // 同步 users.is_active、飞书 feishu_users.registered 与 JWT 失效策略（与 mergeSharedStateFields 一致）
     setImmediate(async () => {
       try {
         const emps = Array.isArray(data.employees) ? data.employees : [];
-        const inactiveStatuses = ['resigned','deleted','inactive','terminated','离职','已删除','已离职'];
         for (const emp of emps) {
-          const uname = String(emp.username || '').trim();
+          const uname = String(emp?.username || '').trim();
           if (!uname) continue;
-          const empStatus = String(emp.status || '').trim().toLowerCase();
-          if (inactiveStatuses.includes(empStatus)) {
-            // 注销已删除/离职员工的飞书绑定
-            await pool.query('UPDATE feishu_users SET registered=FALSE WHERE username=$1', [uname]);
-          } else {
-            // 同步在职员工的最新 role/store/name
-            await pool.query(
-              'UPDATE feishu_users SET role=$1, store=$2, name=$3, updated_at=NOW() WHERE username=$4',
-              [String(emp.role||''), String(emp.store||''), String(emp.name||''), uname]
-            );
+          try {
+            await applyHrmsUserAccountGateFromEmployee(emp);
+          } catch (e) {
+            console.error('[state][account-gate]', uname, e?.message || e);
           }
         }
       } catch (syncErr) {
-        console.error('[state] feishu_users sync error:', syncErr?.message);
+        console.error('[state] account gate sync error:', syncErr?.message);
       }
     });
     return res.json({ ok: true });
@@ -13794,6 +13914,9 @@ async function handleLogin(req, res) {
             const allState = (Array.isArray(sd.employees) ? sd.employees : []).concat(Array.isArray(sd.users) ? sd.users : []);
             const stateUser = allState.find(x => String(x?.username || '').trim().toLowerCase() === u.username.toLowerCase());
             if (stateUser) {
+              if (employeeAccountShouldDisable(stateUser)) {
+                return res.status(403).json({ error: 'user_inactive', message: '账号已停用或已离职' });
+              }
               const stateRole = normalizeRoleForJwt(stateUser.role);
               if (stateRole && stateRole !== 'store_employee') finalRole = stateRole;
               else if (stateRole) finalRole = stateRole;
@@ -13829,7 +13952,7 @@ async function handleLogin(req, res) {
       const all = employees.concat(users);
       const found = all.find(u => String(u?.username || '').trim().toLowerCase() === username.toLowerCase());
       if (found) {
-        if (isInactiveStatus(found.status)) return res.status(403).json({ error: 'user_inactive' });
+        if (employeeAccountShouldDisable(found)) return res.status(403).json({ error: 'user_inactive' });
         const pwd = String(found.password || '');
         if (pwd !== password) return res.status(401).json({ error: 'invalid_credentials' });
 
@@ -17301,14 +17424,39 @@ setInterval(() => {
         const idx = employees.findIndex(e => String(e?.username || '').toLowerCase() === empUsername.toLowerCase());
         if (idx < 0) continue;
         const old = employees[idx] || {};
+        const eff = safeDateOnly(it?.effective_date || it?.payload?.resignDate || it?.payload?.date);
         if (String(old.status || '') !== '离职' && String(old.status || '') !== 'inactive') {
-          employees[idx] = { ...old, status: '离职', resignedAt: dateOnly };
+          employees[idx] = {
+            ...old,
+            status: '离职',
+            resignedAt: dateOnly,
+            offboardingApproved: true,
+            offboardingDate: eff || old.offboardingDate || dateOnly
+          };
           changed = true;
         }
       }
 
       if (changed) {
         await saveSharedState({ ...state, employees });
+      }
+      try {
+        const stAfter = (await getSharedState()) || {};
+        const emList = Array.isArray(stAfter.employees) ? stAfter.employees : [];
+        for (const it of items) {
+          const empUsername = String(it?.payload?.username || it?.payload?.employeeUsername || it?.payload?.applicant || it?.applicant_username || '').trim();
+          if (!empUsername) continue;
+          const rec2 = emList.find(e => String(e?.username || '').toLowerCase() === empUsername.toLowerCase());
+          if (rec2) {
+            try {
+              await applyHrmsUserAccountGateFromEmployee(rec2);
+            } catch (ge) {
+              console.error('[offboarding-cron][account-gate]', empUsername, ge?.message || ge);
+            }
+          }
+        }
+      } catch (eGate) {
+        console.error('[offboarding-cron] account gate batch failed:', eGate?.message || eGate);
       }
 
       // Promotion training reminder: one day before session date
