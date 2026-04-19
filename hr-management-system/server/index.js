@@ -5155,26 +5155,40 @@ async function ensureLoginLogTable() {
 }
 
 async function recordLogin(username, sessionNonce, req) {
+  const key = String(username || '').trim().toLowerCase();
+  if (!key) return;
+  const ip = String(req.headers?.['x-forwarded-for'] || req.headers?.['x-real-ip'] || req.ip || '').split(',')[0].trim().slice(0, 45);
+  const ua = String(req.headers?.['user-agent'] || '').slice(0, 500);
+  let client;
   try {
-    const ip = String(req.headers?.['x-forwarded-for'] || req.headers?.['x-real-ip'] || req.ip || '').split(',')[0].trim().slice(0, 45);
-    const ua = String(req.headers?.['user-agent'] || '').slice(0, 500);
-    await pool.query(
+    client = await pool.connect();
+    await client.query('SET default_transaction_read_only = OFF');
+    await client.query(
       `insert into user_login_log (username, login_at, session_nonce, ip_address, user_agent) values ($1, now(), $2, $3, $4)`,
-      [String(username || '').trim().toLowerCase(), sessionNonce, ip, ua]
+      [key, sessionNonce, ip, ua]
     );
   } catch (e) {
     console.error('recordLogin failed:', e?.message || e);
+  } finally {
+    try { if (client) client.release(); } catch (_e) { /* ignore */ }
   }
 }
 
 async function recordLogout(username) {
+  const key = String(username || '').trim().toLowerCase();
+  if (!key) return;
+  let client;
   try {
-    await pool.query(
+    client = await pool.connect();
+    await client.query('SET default_transaction_read_only = OFF');
+    await client.query(
       `update user_login_log set logout_at = now() where username = $1 and logout_at is null`,
-      [String(username || '').trim().toLowerCase()]
+      [key]
     );
   } catch (e) {
     console.error('recordLogout failed:', e?.message || e);
+  } finally {
+    try { if (client) client.release(); } catch (_e) { /* ignore */ }
   }
 }
 
@@ -18112,12 +18126,16 @@ app.post('/api/auth/logout', authRequired, async (req, res) => {
 app.post('/api/auth/heartbeat', authRequired, async (req, res) => {
   const username = String(req.user?.username || '').trim();
   if (!username) return res.json({ ok: true });
+  let client;
   try {
-    await pool.query(
+    client = await pool.connect();
+    await client.query('SET default_transaction_read_only = OFF');
+    await client.query(
       `update user_login_log set logout_at = now() where username = $1 and logout_at is null`,
-      [username]
+      [username.toLowerCase()]
     );
   } catch (_e) { /* ignore heartbeat errors */ }
+  finally { try { if (client) client.release(); } catch (_e2) { /* ignore */ } }
   res.json({ ok: true });
 });
 
