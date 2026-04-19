@@ -16,6 +16,7 @@ import { runTrendChecks } from './services/chairman/trend-rules.js';
 import { evaluateAllPendingOutcomes } from './services/chairman/decision-outcome-tracker.js';
 import { startRhythmScheduler, morningStandup, patrol, endOfDay, weeklyReport, monthlyEvaluation, dailyAttendanceReport } from './services/rhythm-engine.js';
 import { sendUsageWeeklyReport } from './services/usage-weekly-report.js';
+import { sendFarewellNotifications } from './services/farewell-notification.js';
 import { runAnomalyChecks, checkFoodSafetyFromMessage, runFoodSafetyDailyScan } from './services/anomaly-engine.js';
 import { calculateAllStoresKPI } from './services/kpi-calculator.js';
 import {
@@ -999,6 +1000,15 @@ async function start() {
       logger.warn({ err: e?.message }, 'outcome evaluation cron error')
     );
   }, { timezone: 'Asia/Shanghai' });
+  logger.info('Chairman weekly review + outcome evaluation cron scheduled at Mon 08:00 Asia/Shanghai');
+
+  // 离职关怀：每天 08:00 检查离职前2天员工，发送道别通知
+  cron.schedule('0 8 * * *', () => {
+    runWithCronLog('farewell_notification', () => sendFarewellNotifications()).catch((e) =>
+      logger.warn({ err: e?.message }, 'farewell notification cron error')
+    );
+  }, { timezone: 'Asia/Shanghai' });
+  logger.info('Farewell notification cron scheduled at 08:00 Asia/Shanghai daily');
   logger.info('Chairman weekly review + outcome evaluation cron scheduled at Mon 08:00 Asia/Shanghai');
 
   // Chairman: 趋势检测 — 与 anomaly engine 同频（跟随 runAnomalyChecks 调用时追加）

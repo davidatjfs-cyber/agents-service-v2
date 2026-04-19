@@ -5505,17 +5505,17 @@ async function dualWriteStateToDB(state) {
               joinDate, birthday, salary, password, managerUsername, idCardNumber, bankCard,
               createdAt, updatedAt, ...rest } = emp;
       await pool.query(
-        `INSERT INTO employees (id, username, name, role, store, department, position, status,
-           gender, phone, email, join_date, birthday, salary, password_hash, manager_username,
-           id_card_number, bank_card, extra_json, created_at, updated_at)
+         `INSERT INTO employees (id, username, name, role, store, department, position, status,
+            gender, phone, email, join_date, birthday, salary, password_hash, manager_username,
+            id_card_number, bank_card, extra_json, created_at, updated_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
          ON CONFLICT (username) DO UPDATE SET
            name=EXCLUDED.name, role=EXCLUDED.role, store=EXCLUDED.store,
            department=EXCLUDED.department, position=EXCLUDED.position, status=EXCLUDED.status,
            gender=EXCLUDED.gender, phone=EXCLUDED.phone, email=EXCLUDED.email,
            join_date=EXCLUDED.join_date, birthday=EXCLUDED.birthday, salary=EXCLUDED.salary,
-           manager_username=EXCLUDED.manager_username, id_card_number=EXCLUDED.id_card_number,
-           bank_card=EXCLUDED.bank_card, extra_json=EXCLUDED.extra_json, updated_at=NOW()`,
+           password_hash=EXCLUDED.password_hash, manager_username=EXCLUDED.manager_username,
+           id_card_number=EXCLUDED.id_card_number, bank_card=EXCLUDED.bank_card, extra_json=EXCLUDED.extra_json, updated_at=NOW()`,
         [String(id || username), username,
          String(name || ''), String(role || ''), String(store || ''), String(department || ''),
          String(position || ''), String(status || 'active'), String(gender || ''),

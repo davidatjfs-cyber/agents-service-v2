@@ -30717,13 +30717,17 @@ ${knowledgeContent.slice(0, 30000)}`;
             // 根据当前用户角色过滤员工
             let filtered = employees;
             if (currentUser && currentUser.role === ROLES.STORE_MANAGER) {
-                // 门店店长只能看到自己门店的员工
+                // 门店店长只能看到自己门店的活跃员工（离职的看不到）
                 if (String(currentUser.store || '').trim()) {
-                    filtered = employees.filter(e => e.store === currentUser.store);
+                    filtered = employees.filter(e => e.store === currentUser.store && !isInactiveEmp(e));
+                } else {
+                    filtered = employees.filter(e => !isInactiveEmp(e));
                 }
-            } else if (currentUser && currentUser.role === ROLES.HQ_MANAGER) {
-                // 总部经理可以看到所有员工
+            } else if (currentUser && (currentUser.role === ROLES.HQ_MANAGER || currentUser.role === 'hr_manager')) {
+                // 总部营运、总部人事看不到离职员工
+                filtered = employees.filter(e => !isInactiveEmp(e));
             }
+            // 管理员可以看到所有员工（包括离职的）
 
             const parseJoinDateTs = (emp) => {
                 const jd = String(emp?.joinDate || emp?.hireDate || emp?.startDate || emp?.entryDate || emp?.onboardDate || emp?.joiningDate || '').trim();
@@ -31415,8 +31419,13 @@ ${knowledgeContent.slice(0, 30000)}`;
                 if (idEl) idEl.value = String(emp.id || '');
                 if (usernameEl) usernameEl.value = String(emp.username || '');
                 if (nameEl) nameEl.value = String(emp.name || '');
-                if (pwdEl) pwdEl.value = '';
-                if (pwdTipEl) pwdTipEl.textContent = '（留空=不修改）';
+                if (pwdEl) {
+                    const curPwd = String(emp.password || '');
+                    pwdEl.value = curPwd;
+                    pwdEl.type = 'password';
+                    pwdEl.placeholder = curPwd ? '已设置，留空=不修改' : '初始密码';
+                }
+                if (pwdTipEl) pwdTipEl.textContent = String(emp.password || '') ? '当前密码已设置，留空则不修改' : '请设置初始密码';
                 if (genderEl) genderEl.value = String(emp.gender || '');
                 if (birthdayEl) {
                     const raw = String(emp.birthday || '');
