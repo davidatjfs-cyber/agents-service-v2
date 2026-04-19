@@ -402,7 +402,8 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
          AND source = ANY($2::text[]) AND status = ANY($3::text[])
          AND NOT ((timezone('Asia/Shanghai', COALESCE(dispatched_at, created_at)))::date = $4::date)
          AND COALESCE(hr_performance_recorded, false) = false
-         AND dispatched_at >= CURRENT_DATE - INTERVAL '30 days'`
+         AND dispatched_at >= CURRENT_DATE - INTERVAL '30 days'`,
+      [storePats, BRIEFING_YESTERDAY_OPEN_SOURCES, BRIEFING_OPEN_STATUSES, yesterday]
     );
     const backlogTotal = parseInt(backlogCntR.rows[0]?.c || 0, 10);
 

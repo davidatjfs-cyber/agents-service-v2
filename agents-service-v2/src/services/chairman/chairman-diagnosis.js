@@ -199,8 +199,9 @@ ${anomalySection}
 不要输出JSON，不要空话，必须引用具体数字；不要使用英文 anomaly_key（如 recharge_zero）。`;
 
   try {
-    const llmResult = await callLLM(prompt, { purpose: 'chairman_diagnosis', temperature: 0.2, maxTokens: 400 });
-    if (!llmResult) return null;
+    const _raw = await callLLM(prompt, { purpose: 'chairman_diagnosis', temperature: 0.2, maxTokens: 400 });
+    if (!_raw) return null;
+    const llmResult = typeof _raw === 'string' ? _raw : (_raw.content || String(_raw));
 
     const scenarios = [...new Set(anomalies.map(a => anomalyToScenario(a.anomaly_key)).filter(Boolean))];
     let templateText = '';

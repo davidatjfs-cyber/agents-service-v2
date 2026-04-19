@@ -109,7 +109,7 @@ function buildAttitudeFilingCard(title, bodyMd, template = 'blue') {
           {
             tag: 'plain_text',
             content:
-              '数据来源：master_tasks（昨日条数按 updated_at 落在统计日内；「本月累计」按 dispatched_at 落在当月1日—统计日，与月度评级同一 SQL）。卡片首行「统计日」= 备案状态更新窗口日；每条「异常实际营业日」= 无充值/数据异常所指的营业日历日（与统计日可不同）。 · 每日08:05'
+              '数据来源：master_tasks（昨日条数按 dispatched_at 落在统计日内，与月度累计口径一致；「本月累计」按 dispatched_at 落在当月1日—统计日）。卡片首行「统计日」= 备案状态更新窗口日；每条「异常实际营业日」= 无充值/数据异常所指的营业日历日（与统计日可不同）。 · 每日08:05'
           }
         ]
       }
@@ -229,9 +229,9 @@ async function fetchYesterdayFilings(bizYmd) {
      FROM master_tasks
      WHERE COALESCE(hr_performance_recorded, false) = true
        AND source = ANY($1::text[])
-       AND (updated_at AT TIME ZONE 'Asia/Shanghai')::date >= $2::date
-       AND (updated_at AT TIME ZONE 'Asia/Shanghai')::date < $3::date
-     ORDER BY store NULLS LAST, updated_at`,
+       AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date >= $2::date
+       AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date < $3::date
+     ORDER BY store NULLS LAST, dispatched_at`,
     [ATTITUDE_SOURCES, bizYmd, next]
   );
   return r.rows || [];

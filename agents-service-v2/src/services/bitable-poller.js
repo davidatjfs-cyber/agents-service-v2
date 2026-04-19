@@ -158,7 +158,7 @@ function sleep(ms) {
  */
 function isTransientBitableFetchError(errText) {
   const s = String(errText || '');
-  return /1254607|1255001|1255002|1255003|1255004|1255005|1255040|1254200|feishu_code_2200|internal[\s_]?error|rpc[\s_]?error|marshal[\s_]?error|data not ready|try again later|timeout|ECONNABORTED|ECONNRESET|ETIMEDOUT|socket hang up|EAI_AGAIN|429|502|503|504/i.test(
+  return /1254002|1254607|1255001|1255002|1255003|1255004|1255005|1255040|1254200|feishu_code_2200|internal[\s_]?error|rpc[\s_]?error|marshal[\s_]?error|data not ready|try again later|timeout|ECONNABORTED|ECONNRESET|ETIMEDOUT|socket hang up|EAI_AGAIN|429|502|503|504/i.test(
     s
   );
 }
@@ -170,7 +170,7 @@ function isDataNotReadyError(errText) {
 
 /** 1255001 InternalError — Feishu server ephemeral error, should retry with longer backoff */
 function isFeishuInternalError(errText) {
-  return /1255001|1255002|1255003|1255004|1255005|1255040|feishu_code_2200|internal[\s_]?error|rpc[\s_]?error|marshal[\s_]?error/i.test(String(errText || ''));
+  return /1254002|1255001|1255002|1255003|1255004|1255005|1255040|feishu_code_2200|internal[\s_]?error|rpc[\s_]?error|marshal[\s_]?error/i.test(String(errText || ''));
 }
 
 /** 轮询在 getBitableRecords 用尽重试后仍失败 → 视为真失败，必须通知管理员（与飞书网页能否打开无关）。
