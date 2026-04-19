@@ -5102,8 +5102,12 @@ async function ensureApprovalTables() {
 }
 
 async function ensureUserSessionsTable() {
+  if (!DATABASE_URL) return;
+  let client;
   try {
-    await pool.query(
+    client = await pool.connect();
+    await client.query('SET default_transaction_read_only = OFF');
+    await client.query(
       `create table if not exists user_sessions (
         username varchar(100) primary key,
         session_nonce varchar(64) not null,
@@ -5112,6 +5116,12 @@ async function ensureUserSessionsTable() {
     );
   } catch (e) {
     console.error('ensureUserSessionsTable failed:', e);
+  } finally {
+    try {
+      if (client) client.release();
+    } catch (_e) {
+      /* ignore */
+    }
   }
 }
 
@@ -13911,14 +13921,15 @@ const LOCAL_TEST_ACCOUNTS = [
   { id: 1, username: 'admin', password: 'admin123', name: '系统管理员', role: 'admin' }
 ];
 
+/** @returns {Promise<boolean>} 是否已成功持久化（失败时不得签发 JWT，否则 sn 与库不一致 → 全站 401/session_replaced） */
 async function storeSessionNonce(uname, nonce) {
   const key = String(uname || '').trim().toLowerCase();
-  if (!key) return;
+  if (!key) return false;
   let client;
   try {
     client = await pool.connect();
     // configureDbSessionSafety 在 ENABLE_DB_WRITE!=true 时会把连接设为只读；
-    // 会话 nonce 必须写入，否则新 token 与库中旧 sn 不一致 → 立刻 401（表现为无法登录）。
+    // 会话 nonce 必须写入，否则新 token 与库中旧 sn 不一致 → 立刻 401（表现为「登录不了/一进系统就掉线」）。
     await client.query('SET default_transaction_read_only = OFF');
     await client.query(
       `insert into user_sessions (username, session_nonce, updated_at)
@@ -13926,8 +13937,10 @@ async function storeSessionNonce(uname, nonce) {
        on conflict (username) do update set session_nonce = $2, updated_at = now()`,
       [key, nonce]
     );
+    return true;
   } catch (e) {
     console.error('storeSessionNonce failed:', e?.message || e);
+    return false;
   } finally {
     try {
       if (client) client.release();
@@ -13985,7 +13998,14 @@ async function handleLogin(req, res) {
           }
         } catch (syncErr) {}
 
-        await storeSessionNonce(u.username, sn);
+        const persisted = await storeSessionNonce(u.username, sn);
+        if (!persisted) {
+          return res.status(503).json({
+            error: 'session_persist_failed',
+            message:
+              '无法写入登录会话（请确认数据库可写、已建表 user_sessions，且生产环境 ENABLE_DB_WRITE=true）。请勿重复尝试同一密码以免锁定误判。'
+          });
+        }
         const token = jwt.sign(
           { id: u.id, username: u.username, name: finalName, role: finalRole, sn },
           JWT_SECRET,
@@ -14022,7 +14042,14 @@ async function handleLogin(req, res) {
         const id = String(found.id || canonicalUsername);
         const name = String(found.name || found.real_name || found.realName || canonicalUsername);
         if (!JWT_SECRET) return res.status(500).json({ error: 'server_config_error' });
-        await storeSessionNonce(canonicalUsername, sn);
+        const persistedState = await storeSessionNonce(canonicalUsername, sn);
+        if (!persistedState) {
+          return res.status(503).json({
+            error: 'session_persist_failed',
+            message:
+              '无法写入登录会话（请确认数据库可写且已建表 user_sessions；生产需 ENABLE_DB_WRITE=true）。'
+          });
+        }
         const token = jwt.sign({ id, username: canonicalUsername, name, role, sn }, JWT_SECRET, { expiresIn: '7d' });
         recordLogin(canonicalUsername, sn, req);
         return res.json({ token, user: { id, username: canonicalUsername, name, role } });
@@ -14037,7 +14064,10 @@ async function handleLogin(req, res) {
     const localUser = LOCAL_TEST_ACCOUNTS.find(u => u.username === username && u.password === password);
     if (localUser) {
       if (!JWT_SECRET) return res.status(500).json({ error: 'server_config_error' });
-      await storeSessionNonce(localUser.username, sn);
+      const persistedLocal = await storeSessionNonce(localUser.username, sn);
+      if (!persistedLocal) {
+        return res.status(503).json({ error: 'session_persist_failed', message: '无法写入登录会话' });
+      }
       const token = jwt.sign(
         { id: localUser.id, username: localUser.username, name: localUser.name, role: localUser.role, sn },
         JWT_SECRET,
@@ -15571,6 +15601,8 @@ app.listen(PORT, HOST, async () => {
 
   // Initialize multi-agent system
   try {
+    // 登录会话表：必须在 ALLOW_SCHEMA_CHANGES 之外也能创建，否则 INSERT 失败 + 仍签发 JWT → 全站 session 校验失败
+    await ensureUserSessionsTable();
     // Runtime migration: 企微会员新增字段（避免旧库缺字段导致评分数据源为空）
     await pool.query(`ALTER TABLE daily_reports ADD COLUMN IF NOT EXISTS new_wechat_members INTEGER DEFAULT 0`);
     // Runtime migration: 知识库文件版本号

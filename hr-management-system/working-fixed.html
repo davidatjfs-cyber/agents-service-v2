@@ -15484,8 +15484,9 @@
             },
             async request(path, options) {
                 const opts = options || {};
+                const skipAuth = !!opts.skipAuth;
                 let rel = String(path || '');
-                const token = this.token();
+                const token = skipAuth ? '' : this.token();
                 try {
                     const isFd = typeof FormData !== 'undefined' && opts.body instanceof FormData;
                     if (token && isFd && !/(?:[?&])(?:access_token|token)=/.test(rel)) {
@@ -15495,7 +15496,8 @@
                 const url = (this.baseUrl() || '') + rel;
                 const headers = { ...(opts.headers || {}) };
                 if (token) headers['Authorization'] = 'Bearer ' + token;
-                const resp = await fetch(url, { ...opts, headers });
+                const { skipAuth: _hrmsSkipAuth, ...fetchOpts } = opts;
+                const resp = await fetch(url, { ...fetchOpts, headers });
                 const text = await resp.text();
                 const data = hrmsSafeParseJson(text) || { raw: text };
                 if (!resp.ok) {
@@ -15545,7 +15547,8 @@
                 const data = await this.request('/api/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
+                    body: JSON.stringify({ username, password }),
+                    skipAuth: true
                 });
                 try {
                     const t = String(data?.token || '').trim();
