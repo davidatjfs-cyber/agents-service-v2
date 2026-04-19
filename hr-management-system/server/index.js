@@ -14306,15 +14306,33 @@ app.put('/api/brands/:id', authRequired, async (req, res) => {
   }
 });
 
+function parseJsonStringArrayForAudience(raw) {
+  if (raw == null || raw === '') return [];
+  if (Array.isArray(raw)) return raw.map((x) => String(x || '').trim()).filter(Boolean);
+  const s = String(raw).trim();
+  if (!s) return [];
+  try {
+    const j = JSON.parse(s);
+    if (Array.isArray(j)) return j.map((x) => String(x || '').trim()).filter(Boolean);
+  } catch {
+    /* ignore */
+  }
+  return s.split(/[,，]/).map((x) => x.trim()).filter(Boolean);
+}
+
 function parseKnowledgeAudienceFromBody(body) {
   const t = String(body?.audienceType || body?.audience_type || 'all').trim().toLowerCase();
   if (t === 'store') {
-    const s = String(body?.audienceStore || body?.audience_store || '').trim();
-    return s ? { type: 'store', store: s } : { type: 'all' };
+    const stores = parseJsonStringArrayForAudience(body?.audienceStores ?? body?.audience_stores);
+    if (stores.length) return { type: 'store', stores };
+    const legacy = String(body?.audienceStore || body?.audience_store || '').trim();
+    return legacy ? { type: 'store', store: legacy, stores: [legacy] } : { type: 'all' };
   }
   if (t === 'position') {
-    const p = String(body?.audiencePosition || body?.audience_position || '').trim();
-    return p ? { type: 'position', position: p } : { type: 'all' };
+    const positions = parseJsonStringArrayForAudience(body?.audiencePositions ?? body?.audience_positions);
+    if (positions.length) return { type: 'position', positions };
+    const legacy = String(body?.audiencePosition || body?.audience_position || '').trim();
+    return legacy ? { type: 'position', position: legacy, positions: [legacy] } : { type: 'all' };
   }
   return { type: 'all' };
 }
@@ -14354,16 +14372,26 @@ function canViewerSeeKnowledgeAudience(viewer, audienceVal) {
   const t = String(a.type || 'all').toLowerCase();
   if (t === 'all' || !t) return true;
   if (t === 'store') {
-    const s = String(a.store || '').trim();
-    if (!s) return false;
-    return String(viewer.store || '').trim() === s;
+    const list = [];
+    if (Array.isArray(a.stores)) list.push(...a.stores.map((x) => String(x || '').trim()).filter(Boolean));
+    const legacy = String(a.store || '').trim();
+    if (legacy) list.push(legacy);
+    const uniq = [...new Set(list)];
+    if (!uniq.length) return false;
+    const vs = String(viewer.store || '').trim();
+    return uniq.some((s) => s === vs);
   }
   if (t === 'position') {
-    const p = String(a.position || '').trim();
-    if (!p) return false;
+    const list = [];
+    if (Array.isArray(a.positions)) list.push(...a.positions.map((x) => String(x || '').trim()).filter(Boolean));
+    const legacy = String(a.position || '').trim();
+    if (legacy) list.push(legacy);
+    const uniq = [...new Set(list)];
+    if (!uniq.length) return false;
     const vp = String(viewer.position || '').trim();
-    if (vp === p) return true;
-    if (p === '系统管理员' && String(viewer.role || '') === 'admin') return true;
+    const role = String(viewer.role || '');
+    if (uniq.some((p) => p === vp)) return true;
+    if (uniq.includes('系统管理员') && role === 'admin') return true;
     return false;
   }
   return true;
@@ -14598,13 +14626,20 @@ app.post('/api/knowledge', authRequired, knowledgeUpload.single('file'), async (
   (async () => {
     try {
       if (inserted?.id && localPath && fs.existsSync(localPath)) {
-        const ft0 = String(fileType || req.file?.mimetype || '');
-        if (/^image\//i.test(ft0)) {
+        const declaredType = String(req.body?.type || '').trim();
+        const mime0 = String(req.file?.mimetype || '').trim();
+        const origName = String(req.file?.originalname || '');
+        const looksLikeImage =
+          /^image\//i.test(mime0) ||
+          declaredType === 'img' ||
+          /\.(png|jpe?g|gif|webp|bmp|heic)$/i.test(origName);
+        if (looksLikeImage) {
           try {
             const { callVisionLLM } = await import('./agents.js');
             const vr = await callVisionLLM(
               localPath,
-              '请完整提取图片中的全部文字（含标题、表格、列表、备注），按阅读顺序输出，使用简体中文。'
+              '请完整提取图片中的全部文字（含标题、表格、列表、备注），按阅读顺序输出，使用简体中文。',
+              { maxTokens: 8192 }
             );
             if (vr?.ok && String(vr.content || '').trim()) {
               await pool.query('UPDATE knowledge_base SET content = $1, updated_at = now() WHERE id = $2', [

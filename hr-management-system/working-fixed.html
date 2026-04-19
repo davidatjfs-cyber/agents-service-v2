@@ -12168,13 +12168,13 @@
                             </div>
 
                             <div id="knowledge-upload-audience-store-box" class="ui-form-group" style="display:none;">
-                                <label class="ui-label">选择门店</label>
-                                <select id="knowledge-upload-audience-store"></select>
+                                <label class="ui-label">选择门店（可多选）</label>
+                                <div id="knowledge-upload-audience-store-list" class="kb-aud-check-list" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;"></div>
                             </div>
 
                             <div id="knowledge-upload-audience-position-box" class="ui-form-group" style="display:none;">
-                                <label class="ui-label">选择岗位</label>
-                                <select id="knowledge-upload-audience-position"></select>
+                                <label class="ui-label">选择岗位（可多选）</label>
+                                <div id="knowledge-upload-audience-position-list" class="kb-aud-check-list" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;"></div>
                             </div>
 
                             <div class="ui-form-group">
@@ -21005,15 +21005,23 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             const userStore = String(user.store || '').trim();
             const userPos = String(user.position || '').trim();
             if (t === 'store') {
-                const allow = String(audience.store || audience.value || '').trim();
-                if (!allow) return false;
-                return allow === userStore;
+                const list = [];
+                if (Array.isArray(audience.stores)) list.push(...audience.stores.map(x => String(x || '').trim()).filter(Boolean));
+                const legacy = String(audience.store || audience.value || '').trim();
+                if (legacy) list.push(legacy);
+                const uniq = [...new Set(list)];
+                if (!uniq.length) return false;
+                return uniq.some(s => s === userStore);
             }
             if (t === 'position') {
-                const allow = String(audience.position || audience.value || '').trim();
-                if (!allow) return false;
-                if (userPos === allow) return true;
-                if (allow === '系统管理员' && String(user.role || '') === ROLES.ADMIN) return true;
+                const list = [];
+                if (Array.isArray(audience.positions)) list.push(...audience.positions.map(x => String(x || '').trim()).filter(Boolean));
+                const legacy = String(audience.position || audience.value || '').trim();
+                if (legacy) list.push(legacy);
+                const uniq = [...new Set(list)];
+                if (!uniq.length) return false;
+                if (uniq.some(p => p === userPos)) return true;
+                if (uniq.includes('系统管理员') && String(user.role || '') === ROLES.ADMIN) return true;
                 return false;
             }
             return true;
@@ -21461,10 +21469,24 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 items = items.filter(it => knowledgeItemMatchesUser(it, currentUser));
             }
             if (storeVal) {
-                items = items.filter((it) => String(it?.audience?.store || '').trim() === storeVal);
+                items = items.filter((it) => {
+                    const aud = it?.audience || {};
+                    const list = [];
+                    if (Array.isArray(aud.stores)) list.push(...aud.stores.map(x => String(x || '').trim()).filter(Boolean));
+                    const legacy = String(aud.store || '').trim();
+                    if (legacy) list.push(legacy);
+                    return [...new Set(list)].includes(storeVal);
+                });
             }
             if (positionVal) {
-                items = items.filter((it) => String(it?.audience?.position || '').trim() === positionVal);
+                items = items.filter((it) => {
+                    const aud = it?.audience || {};
+                    const list = [];
+                    if (Array.isArray(aud.positions)) list.push(...aud.positions.map(x => String(x || '').trim()).filter(Boolean));
+                    const legacy = String(aud.position || '').trim();
+                    if (legacy) list.push(legacy);
+                    return [...new Set(list)].includes(positionVal);
+                });
             }
             if (brandVal) {
                 items = items.filter((it) => knowledgeItemMatchBrand(it, brandVal));
@@ -27207,24 +27229,27 @@ ${knowledgeContent.slice(0, 30000)}`;
         }
 
         function populateKnowledgeAudienceOptions() {
-            const storeSel = document.getElementById('knowledge-upload-audience-store');
-            const posSel = document.getElementById('knowledge-upload-audience-position');
-            const prevStore = storeSel ? String(storeSel.value || '').trim() : '';
-            const prevPos = posSel ? String(posSel.value || '').trim() : '';
+            const storeBox = document.getElementById('knowledge-upload-audience-store-list');
+            const posBox = document.getElementById('knowledge-upload-audience-position-list');
+            const prevStores = storeBox ? Array.from(storeBox.querySelectorAll('input[name="kb-aud-store"]:checked')).map(cb => String(cb.value || '').trim()).filter(Boolean) : [];
+            const prevPos = posBox ? Array.from(posBox.querySelectorAll('input[name="kb-aud-pos"]:checked')).map(cb => String(cb.value || '').trim()).filter(Boolean) : [];
 
-            if (storeSel) {
+            if (storeBox) {
                 const stores = (HRMS_STORE.getStores ? HRMS_STORE.getStores() : [])
                     .filter(s => String(s?.status || 'active') === 'active');
                 const names = new Set();
                 (stores || []).forEach(s => s && s.name && names.add(s.name));
                 const list = Array.from(names).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b), 'zh-Hans-CN'));
-                let html = '<option value="">请选择门店</option>';
-                html += list.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
-                storeSel.innerHTML = html;
-                if (prevStore && list.includes(prevStore)) storeSel.value = prevStore;
+                storeBox.innerHTML = list.map(n =>
+                    `<label class="kb-aud-check" style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;"><input type="checkbox" name="kb-aud-store" value="${escapeHtml(n)}"> <span>${escapeHtml(n)}</span></label>`
+                ).join('');
+                prevStores.forEach(v => {
+                    const inp = Array.from(storeBox.querySelectorAll('input[name="kb-aud-store"]')).find(i => String(i.value) === v);
+                    if (inp) inp.checked = true;
+                });
             }
 
-            if (posSel) {
+            if (posBox) {
                 const users = (HRMS_STORE.getUsers ? HRMS_STORE.getUsers() : []) || [];
                 const emps = (HRMS_STORE.getEmployees ? HRMS_STORE.getEmployees() : []) || [];
                 const fallbackPos = ['系统管理员', '总部营运', '店长', '出品经理', '前厅经理', '门店员工', '人事经理', '出纳', '区域经理'];
@@ -27233,10 +27258,13 @@ ${knowledgeContent.slice(0, 30000)}`;
                     ...emps.map(e => String(e?.position || '').trim()),
                     ...fallbackPos
                 ].filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), 'zh-Hans-CN'));
-                let html = '<option value="">请选择岗位</option>';
-                html += positions.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
-                posSel.innerHTML = html;
-                if (prevPos && positions.includes(prevPos)) posSel.value = prevPos;
+                posBox.innerHTML = positions.map(p =>
+                    `<label class="kb-aud-check" style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;"><input type="checkbox" name="kb-aud-pos" value="${escapeHtml(p)}"> <span>${escapeHtml(p)}</span></label>`
+                ).join('');
+                prevPos.forEach(v => {
+                    const inp = Array.from(posBox.querySelectorAll('input[name="kb-aud-pos"]')).find(i => String(i.value) === v);
+                    if (inp) inp.checked = true;
+                });
             }
         }
 
@@ -27284,10 +27312,24 @@ ${knowledgeContent.slice(0, 30000)}`;
             const t = ['all', 'store', 'position'].includes(audType) ? audType : 'all';
             const audience = { type: t };
             if (t === 'store') {
-                audience.store = (document.getElementById('knowledge-upload-audience-store')?.value || '').trim();
+                const storeBox = document.getElementById('knowledge-upload-audience-store-list');
+                const stores = storeBox
+                    ? Array.from(storeBox.querySelectorAll('input[name="kb-aud-store"]:checked')).map(cb => String(cb.value || '').trim()).filter(Boolean)
+                    : [];
+                if (stores.length) {
+                    audience.stores = stores;
+                    audience.store = stores[0];
+                }
             }
             if (t === 'position') {
-                audience.position = (document.getElementById('knowledge-upload-audience-position')?.value || '').trim();
+                const posBox = document.getElementById('knowledge-upload-audience-position-list');
+                const positions = posBox
+                    ? Array.from(posBox.querySelectorAll('input[name="kb-aud-pos"]:checked')).map(cb => String(cb.value || '').trim()).filter(Boolean)
+                    : [];
+                if (positions.length) {
+                    audience.positions = positions;
+                    audience.position = positions[0];
+                }
             }
             return audience;
         }
@@ -27392,20 +27434,28 @@ ${knowledgeContent.slice(0, 30000)}`;
 
             const audience = { type: audType };
             if (audType === 'store') {
-                const store = (document.getElementById('knowledge-upload-audience-store')?.value || '').trim();
-                if (!store) {
-                    showNotification('请选择门店', 'warning');
+                const storeBox = document.getElementById('knowledge-upload-audience-store-list');
+                const stores = storeBox
+                    ? Array.from(storeBox.querySelectorAll('input[name="kb-aud-store"]:checked')).map(cb => String(cb.value || '').trim()).filter(Boolean)
+                    : [];
+                if (!stores.length) {
+                    showNotification('请至少选择一个门店', 'warning');
                     return;
                 }
-                audience.store = store;
+                audience.stores = stores;
+                audience.store = stores[0];
             }
             if (audType === 'position') {
-                const position = (document.getElementById('knowledge-upload-audience-position')?.value || '').trim();
-                if (!position) {
-                    showNotification('请选择岗位', 'warning');
+                const posBox = document.getElementById('knowledge-upload-audience-position-list');
+                const positions = posBox
+                    ? Array.from(posBox.querySelectorAll('input[name="kb-aud-pos"]:checked')).map(cb => String(cb.value || '').trim()).filter(Boolean)
+                    : [];
+                if (!positions.length) {
+                    showNotification('请至少选择一个岗位', 'warning');
                     return;
                 }
-                audience.position = position;
+                audience.positions = positions;
+                audience.position = positions[0];
             }
 
             try {
@@ -27465,7 +27515,10 @@ ${knowledgeContent.slice(0, 30000)}`;
                             filePath: publicUrl,
                             size,
                             scope: kbScope,
-                            version: version || undefined
+                            version: version || undefined,
+                            audienceType: audience.type,
+                            ...(audience.type === 'store' && audience.stores?.length ? { audienceStores: audience.stores } : {}),
+                            ...(audience.type === 'position' && audience.positions?.length ? { audiencePositions: audience.positions } : {})
                         });
 
                         setKnowledgeUploadBusy(false);
@@ -27487,8 +27540,14 @@ ${knowledgeContent.slice(0, 30000)}`;
                         fd.append('scope', kbScope);
                         if (version) fd.append('version', version);
                         fd.append('audienceType', String(audience.type || 'all'));
-                        if (audience.type === 'store') fd.append('audienceStore', String(audience.store || ''));
-                        if (audience.type === 'position') fd.append('audiencePosition', String(audience.position || ''));
+                        if (audience.type === 'store') {
+                            fd.append('audienceStores', JSON.stringify(audience.stores || []));
+                            if (audience.store) fd.append('audienceStore', String(audience.store));
+                        }
+                        if (audience.type === 'position') {
+                            fd.append('audiencePositions', JSON.stringify(audience.positions || []));
+                            if (audience.position) fd.append('audiencePosition', String(audience.position));
+                        }
                         fd.append('file', file, file.name);
                         await HRMS_API.uploadKnowledge(fd);
 
@@ -27513,8 +27572,14 @@ ${knowledgeContent.slice(0, 30000)}`;
 
                     // Audience scope
                     fd.append('audienceType', String(audience.type || 'all'));
-                    if (audience.type === 'store') fd.append('audienceStore', String(audience.store || ''));
-                    if (audience.type === 'position') fd.append('audiencePosition', String(audience.position || ''));
+                    if (audience.type === 'store') {
+                        fd.append('audienceStores', JSON.stringify(audience.stores || []));
+                        if (audience.store) fd.append('audienceStore', String(audience.store));
+                    }
+                    if (audience.type === 'position') {
+                        fd.append('audiencePositions', JSON.stringify(audience.positions || []));
+                        if (audience.position) fd.append('audiencePosition', String(audience.position));
+                    }
                     fd.append('file', file, file.name);
 
                     await HRMS_API.uploadKnowledge(fd);

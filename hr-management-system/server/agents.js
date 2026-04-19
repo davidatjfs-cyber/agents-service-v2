@@ -3661,11 +3661,12 @@ export async function callLLM(messages, options = {}) {
   return { ok: false, error: 'all_providers_failed', content: '', providerHealth: getProviderHealthStatus() };
 }
 
-export async function callVisionLLM(imageUrl, prompt) {
+export async function callVisionLLM(imageUrl, prompt, opts = {}) {
   const model = getOpsVisionModel();
   const cfg = getLLMClientConfig(model, { forceProvider: 'doubao' });
   const apiKey = cfg.apiKey;
   if (!apiKey) return { ok: false, error: 'no_api_key', content: '' };
+  const maxTokens = Math.max(256, Math.min(16384, Number(opts.maxTokens ?? opts.max_tokens ?? 1500)));
   try {
     const content = [];
     if (Array.isArray(imageUrl)) {
@@ -3708,7 +3709,7 @@ export async function callVisionLLM(imageUrl, prompt) {
           {
             model: cfg.model,
             messages: [{ role: 'user', content }],
-            temperature: 0.2, max_tokens: 1500
+            temperature: 0.2, max_tokens: maxTokens
           },
           { headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 90000 }
         );

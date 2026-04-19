@@ -78,13 +78,18 @@ function appendKnowledgeAudienceSql(conds, vals, idx, viewer, skip) {
     OR (audience->>'type') = 'all'
     OR (
       (audience->>'type') = 'store'
-      AND trim(coalesce(audience->>'store','')) = $${idx}
+      AND (
+        trim(coalesce(audience->>'store','')) = $${idx}
+        OR (COALESCE(audience->'stores', '[]'::jsonb) @> jsonb_build_array($${idx}::text))
+      )
     )
     OR (
       (audience->>'type') = 'position'
       AND (
         trim(coalesce(audience->>'position','')) = $${idx + 1}
+        OR (COALESCE(audience->'positions', '[]'::jsonb) @> jsonb_build_array($${idx + 1}::text))
         OR (trim(coalesce(audience->>'position','')) = '系统管理员' AND $${idx + 2} = 'admin')
+        OR (COALESCE(audience->'positions', '[]'::jsonb) @> '["系统管理员"]'::jsonb AND $${idx + 2} = 'admin')
       )
     )
   )`);
