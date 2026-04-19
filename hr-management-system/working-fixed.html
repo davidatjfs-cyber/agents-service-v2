@@ -3083,19 +3083,37 @@
                 padding-bottom: max(32px, env(safe-area-inset-bottom, 0px));
             }
             .login-desk-surface {
-                opacity: 0.65;
+                opacity: 0.55;
             }
-            .login-lamp-unit,
+            /* 手机：台灯与显示器置于上方两侧（勿 display:none，与桌面主题一致） */
+            .login-lamp-unit {
+                left: 4%;
+                bottom: auto;
+                top: max(4px, env(safe-area-inset-top, 0px));
+                width: 112px;
+                animation: none;
+                z-index: 22;
+                filter: none;
+            }
             .login-monitor-unit {
-                display: none;
+                right: 4%;
+                bottom: auto;
+                top: max(12px, calc(env(safe-area-inset-top, 0px) + 8px));
+                width: 118px;
+                z-index: 22;
             }
             .login-light-cone {
-                opacity: 0.55;
-                animation: none;
-                left: -20%;
-                width: 140%;
+                top: 0;
+                left: -15%;
+                width: 130%;
+                height: 52%;
+                opacity: 0.58;
+                mix-blend-mode: normal;
+                animation: loginLightOn 1.4s cubic-bezier(0.22, 1, 0.36, 1) 0.1s forwards;
             }
             .login-card-3d {
+                z-index: 11;
+                padding-top: 52px;
                 animation: none;
                 transform: none;
             }
@@ -42190,7 +42208,7 @@ ${body}
             try {
                 if ('serviceWorker' in navigator) {
                     // Clean old caches, keep current version only
-                    const currentCache = 'hrms-pwa-v200';
+                    const currentCache = 'hrms-pwa-v236';
                     if (typeof caches !== 'undefined') {
                         caches.keys().then(keys => {
                             keys.forEach(k => { if (k !== currentCache) caches.delete(k); });

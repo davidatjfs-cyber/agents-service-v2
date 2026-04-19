@@ -9554,6 +9554,34 @@
                 font-size: 18px !important;
             }
         }
+
+        /* 登录页手机：台灯/显示器必须可见（层级、Safari 混合模式、底部导航遮挡） */
+        @media (max-width: 768px) {
+            body:has(#login:not(.hidden)) #mobile-nav {
+                display: none !important;
+            }
+            #login.login-scene .login-desk-stage {
+                isolation: isolate;
+            }
+            #login.login-scene .login-lamp-unit,
+            #login.login-scene .login-monitor-unit {
+                display: block !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+                filter: none !important;
+                -webkit-transform: translateZ(0);
+                transform: translateZ(0);
+                z-index: 22;
+                pointer-events: none;
+            }
+            #login.login-scene .login-light-cone {
+                z-index: 21;
+                mix-blend-mode: normal !important;
+            }
+            #login.login-scene .login-card-3d {
+                z-index: 11;
+            }
+        }
     </style>
 </head>
 <body>
@@ -33996,7 +34024,7 @@ ${body}
                     // Force clear old caches on every load
                     if (typeof caches !== 'undefined') {
                         caches.keys().then(keys => {
-                            keys.forEach(k => { if (k !== 'hrms-pwa-v141') caches.delete(k); });
+                            keys.forEach(k => { if (k !== 'hrms-pwa-v236') caches.delete(k); });
                         }).catch(() => {});
                     }
                     navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((reg) => {
