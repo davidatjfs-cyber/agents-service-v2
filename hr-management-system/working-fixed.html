@@ -150,10 +150,10 @@
         body:has(#login:not(.hidden)) {
             padding: 0;
             overflow-x: hidden;
-            background: #060608;
+            background: #06080c;
         }
         body:has(#login:not(.hidden))::before {
-            opacity: 0.25;
+            opacity: 0.08;
         }
 
         /* Subtle ambient glow - minimal */
@@ -172,7 +172,7 @@
             margin: 0 auto;
         }
 
-        #login.login-scene.container {
+        #login.login-rep.container {
             max-width: none;
             width: 100%;
             margin: 0;
@@ -1075,374 +1075,181 @@
             display: none !important;
         }
 
-        /* ── 登录：极简科技桌面 · 台灯照明 · 3D 玻璃卡片 ── */
-        .login-scene {
-            --login-warm: 255, 248, 232;
-            --login-cool: 210, 230, 255;
+        /* ── 登录页：与分析报表同系 · 高级简约（无台灯装饰）── */
+        #login.login-rep {
+            --lr-bg0: #06080c;
+            --lr-bg1: #0b0f16;
+            --lr-border: rgba(212, 175, 55, 0.14);
+            --lr-border-soft: rgba(255, 255, 255, 0.08);
+            --lr-gold: #d4af37;
+            --lr-gold-glow: rgba(212, 175, 55, 0.22);
+            --lr-text: #e9eef6;
+            --lr-muted: rgba(186, 198, 215, 0.58);
+            --lr-sans: "IBM Plex Sans", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+            --lr-mono: "IBM Plex Mono", ui-monospace, monospace;
+            box-sizing: border-box;
             min-height: 100vh;
             min-height: 100dvh;
+            min-height: -webkit-fill-available;
             display: flex;
-            align-items: stretch;
+            align-items: center;
             justify-content: center;
             position: relative;
-            overflow: hidden;
+            overflow-x: hidden;
+            padding: max(20px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+            font-family: var(--lr-sans);
+            color: var(--lr-text);
             background:
-                radial-gradient(ellipse 85% 55% at 50% 120%, rgba(30, 32, 38, 0.95) 0%, transparent 55%),
-                radial-gradient(ellipse 70% 45% at 18% 35%, rgba(var(--login-warm), 0.09) 0%, transparent 52%),
-                linear-gradient(180deg, #0b0b0e 0%, #050506 48%, #030304 100%);
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', sans-serif;
+                radial-gradient(900px 520px at 100% -10%, rgba(45, 212, 191, 0.06), transparent 50%),
+                radial-gradient(700px 400px at -10% 20%, var(--lr-gold-glow), transparent 45%),
+                linear-gradient(165deg, var(--lr-bg0) 0%, var(--lr-bg1) 55%, #070a10 100%);
         }
 
-        .login-desk-stage {
-            position: relative;
-            width: 100%;
-            max-width: 1200px;
-            margin: 0 auto;
-            min-height: 100vh;
-            min-height: 100dvh;
-            display: flex;
-            align-items: flex-end;
-            justify-content: center;
-            padding: clamp(24px, 5vh, 56px) clamp(20px, 4vw, 48px) clamp(32px, 6vh, 72px);
-            perspective: 1600px;
-        }
-
-        .login-desk-surface {
-            position: absolute;
-            left: 50%;
-            bottom: 0;
-            transform: translateX(-50%) rotateX(72deg);
-            transform-origin: 50% 100%;
-            width: 140%;
-            height: 55%;
-            background:
-                linear-gradient(105deg,
-                    rgba(250, 250, 252, 0.14) 0%,
-                    rgba(228, 230, 235, 0.09) 35%,
-                    rgba(200, 204, 212, 0.06) 70%,
-                    rgba(180, 184, 194, 0.05) 100%);
-            box-shadow:
-                0 -2px 0 rgba(255, 255, 255, 0.06),
-                inset 0 1px 0 rgba(255, 255, 255, 0.04);
-            border-radius: 3px;
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        .login-desk-surface::after {
-            content: '';
-            position: absolute;
-            inset: -2%;
-            background: radial-gradient(ellipse 50% 35% at 50% 0%, rgba(var(--login-warm), 0.07), transparent 70%);
-            opacity: 0.9;
-        }
-
-        .login-cinematic-fog {
+        #login.login-rep .login-rep-noise {
             position: absolute;
             inset: 0;
-            background: radial-gradient(ellipse 90% 60% at 50% 0%, rgba(255, 255, 255, 0.03), transparent 60%);
             pointer-events: none;
+            opacity: 0.04;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+            mix-blend-mode: overlay;
+        }
+
+        #login.login-rep .login-rep-shell {
+            width: 100%;
+            max-width: 400px;
+            position: relative;
             z-index: 1;
         }
 
-        .login-lamp-unit {
-            position: absolute;
-            left: 8%;
-            bottom: 22%;
-            z-index: 2;
-            width: min(200px, 28vw);
-            height: auto;
-            filter: drop-shadow(0 24px 40px rgba(0, 0, 0, 0.45));
-            animation: loginLampIdle 7s ease-in-out infinite;
-            transform-origin: 50% 100%;
+        #login.login-rep .login-rep-head {
+            margin-bottom: 20px;
+            text-align: center;
         }
 
-        @keyframes loginLampIdle {
-            0%, 100% { transform: rotate(-0.6deg); }
-            50% { transform: rotate(0.5deg); }
-        }
-
-        .login-lamp-svg {
-            width: 100%;
-            height: auto;
+        #login.login-rep .login-rep-eyebrow {
             display: block;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.24em;
+            color: var(--lr-gold);
+            opacity: 0.9;
+            margin-bottom: 10px;
         }
 
-        .login-monitor-unit {
-            position: absolute;
-            right: 6%;
-            bottom: 24%;
-            z-index: 2;
-            width: min(220px, 30vw);
-            filter: drop-shadow(0 20px 36px rgba(0, 0, 0, 0.5));
-            opacity: 0.92;
+        #login.login-rep .login-rep-title {
+            font-size: clamp(1.2rem, 4.5vw, 1.45rem);
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            color: var(--lr-text);
+            line-height: 1.25;
+            margin: 0 0 8px;
         }
 
-        .login-monitor-svg {
-            width: 100%;
-            height: auto;
-            display: block;
+        #login.login-rep .login-rep-sub {
+            font-size: 12px;
+            color: var(--lr-muted);
+            letter-spacing: 0.06em;
+            margin: 0;
         }
 
-        .login-light-cone {
-            position: absolute;
-            left: -5%;
-            top: 8%;
-            width: 75%;
-            height: 88%;
-            z-index: 3;
-            pointer-events: none;
-            background:
-                conic-gradient(from 210deg at 22% 18%,
-                    rgba(var(--login-warm), 0) 0deg,
-                    rgba(var(--login-warm), 0.11) 28deg,
-                    rgba(var(--login-warm), 0.05) 52deg,
-                    transparent 78deg),
-                radial-gradient(ellipse 90% 70% at 42% 28%, rgba(var(--login-warm), 0.18) 0%, transparent 58%);
-            mix-blend-mode: screen;
-            opacity: 0;
-            animation: loginLightOn 2.8s cubic-bezier(0.22, 1, 0.36, 1) 0.15s forwards;
+        #login.login-rep .login-rep-card {
+            position: relative;
+            border-radius: 20px;
+            padding: 22px 22px 20px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+            border: 1px solid var(--lr-border);
+            box-shadow:
+                0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+                0 24px 48px -28px rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
         }
 
-        @keyframes loginLightOn {
-            from { opacity: 0; filter: blur(14px); }
-            to { opacity: 1; filter: blur(0); }
-        }
-
-        .login-rim-glow {
+        #login.login-rep .login-rep-card::before {
+            content: "";
             position: absolute;
             inset: 0;
-            z-index: 4;
+            border-radius: 20px;
             pointer-events: none;
-            background: radial-gradient(ellipse 55% 40% at 50% 42%, rgba(var(--login-cool), 0.04), transparent 62%);
-            opacity: 0;
-            animation: loginRimFade 2s ease 0.4s forwards;
+            background: linear-gradient(125deg, rgba(212, 175, 55, 0.08), transparent 42%);
         }
 
-        @keyframes loginRimFade {
-            to { opacity: 1; }
-        }
-
-        .login-card-3d {
+        #login.login-rep .login-rep-card-inner {
             position: relative;
-            z-index: 10;
-            width: 100%;
-            max-width: 420px;
-            transform-style: preserve-3d;
-            animation: loginCardFloat 2.6s cubic-bezier(0.22, 1, 0.36, 1) 0.2s backwards;
         }
 
-        @keyframes loginCardFloat {
-            from {
-                opacity: 0;
-                transform: translateY(28px) rotateX(8deg) scale(0.96);
-                filter: brightness(0.55) saturate(0.85);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0) rotateX(4deg) rotateY(-2.5deg) scale(1);
-                filter: brightness(1) saturate(1.05);
-            }
+        #login.login-rep .form-group {
+            margin-bottom: 16px;
         }
 
-        @media (hover: hover) and (min-width: 481px) {
-            .login-scene:hover .login-card-3d {
-                transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
-                transform: translateY(-4px) rotateX(2deg) rotateY(-1deg);
-            }
-        }
-
-        .login-container {
-            max-width: 420px;
-            margin: 0 auto;
-            padding: 52px 44px 44px;
-            border-radius: 28px;
-            position: relative;
-            overflow: hidden;
-            background: linear-gradient(155deg,
-                rgba(26, 28, 34, 0.82) 0%,
-                rgba(14, 15, 20, 0.92) 100%);
-            border: 1px solid rgba(255, 255, 255, 0.09);
-            box-shadow:
-                0 50px 120px -40px rgba(0, 0, 0, 0.75),
-                0 0 0 1px rgba(255, 255, 255, 0.05) inset,
-                0 -20px 80px -30px rgba(var(--login-warm), 0.12),
-                0 1px 0 rgba(255, 255, 255, 0.08) inset;
-            backdrop-filter: blur(28px) saturate(1.35);
-            transform-style: preserve-3d;
-        }
-
-        .login-container::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
-            opacity: 0.85;
-        }
-
-        .login-container::after {
-            content: '';
-            position: absolute;
-            top: -40%;
-            left: -20%;
-            width: 85%;
-            height: 70%;
-            background: radial-gradient(ellipse at 30% 20%, rgba(var(--login-warm), 0.14), transparent 65%);
-            pointer-events: none;
-            animation: loginWarmSweep 2.4s ease 0.3s forwards;
-        }
-
-        @keyframes loginWarmSweep {
-            from { opacity: 0; transform: translate(10px, -10px); }
-            to { opacity: 1; transform: translate(0, 0); }
-        }
-
-        .login-title {
-            text-align: center;
-            margin-bottom: 36px;
-            color: rgba(255, 255, 255, 0.96);
-            font-size: clamp(22px, 4vw, 28px);
-            font-weight: 600;
-            letter-spacing: -0.03em;
-            line-height: 1.15;
-            position: relative;
-            z-index: 2;
-            text-shadow: 0 1px 24px rgba(var(--login-warm), 0.25);
-        }
-
-        .login-container .form-group {
-            margin-bottom: 22px;
-            position: relative;
-            z-index: 2;
-        }
-
-        .login-container .form-group label {
+        #login.login-rep .form-group label {
             display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            font-size: 13px;
-            letter-spacing: 0.02em;
-            color: rgba(255, 255, 255, 0.52);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--lr-muted);
+            margin-bottom: 6px;
         }
 
-        .login-container .form-group input {
+        #login.login-rep .form-group input {
             width: 100%;
-            padding: 16px 18px;
-            min-height: 52px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 14px;
-            font-size: 16px;
-            transition: border-color 0.35s ease, box-shadow 0.45s ease, background 0.3s ease;
-            background: rgba(255, 255, 255, 0.045);
-            color: #fff;
-            box-shadow:
-                inset 0 1px 2px rgba(0, 0, 0, 0.2),
-                0 0 0 0 rgba(var(--login-warm), 0);
+            padding: 12px 14px;
+            min-height: 48px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-family: var(--lr-mono);
+            background: rgba(0, 0, 0, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: var(--lr-text);
+            color-scheme: dark;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
 
-        .login-container .form-group input::placeholder {
-            color: rgba(255, 255, 255, 0.28);
+        #login.login-rep .form-group input::placeholder {
+            color: rgba(186, 198, 215, 0.42);
         }
 
-        .login-container .form-group input:hover {
-            border-color: rgba(255, 255, 255, 0.16);
-            background: rgba(255, 255, 255, 0.06);
-        }
-
-        .login-container .form-group input:focus {
+        #login.login-rep .form-group input:focus {
             outline: none;
-            border-color: rgba(var(--login-warm), 0.55);
-            background: rgba(255, 255, 255, 0.07);
-            box-shadow:
-                0 0 0 1px rgba(var(--login-warm), 0.35),
-                0 0 28px -4px rgba(var(--login-warm), 0.45),
-                0 0 60px -12px rgba(var(--login-warm), 0.2),
-                inset 0 1px 2px rgba(0, 0, 0, 0.15);
+            border-color: rgba(212, 175, 55, 0.45);
+            box-shadow: 0 0 0 3px var(--lr-gold-glow);
         }
 
-        .login-container .btn {
+        #login.login-rep .btn {
             width: 100%;
-            margin-top: 14px;
-            padding: 16px 24px;
-            min-height: 54px;
-            font-size: 16px;
-            font-weight: 600;
-            letter-spacing: 0.04em;
-            border-radius: 14px;
-            border: none;
+            margin-top: 8px;
+            padding: 14px 20px;
+            min-height: 50px;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            border-radius: 12px;
+            border: 1px solid rgba(212, 175, 55, 0.4);
             cursor: pointer;
             position: relative;
-            z-index: 2;
-            overflow: hidden;
-            color: #0a0a0c;
-            background: linear-gradient(180deg, #fefefe 0%, #e4e6ea 45%, #c8ccd4 100%);
+            color: #0a0c10;
+            background: linear-gradient(180deg, #f0d78c 0%, var(--lr-gold) 48%, #b8922a 100%);
             box-shadow:
-                0 0 0 1px rgba(255, 255, 255, 0.5) inset,
-                0 12px 40px -8px rgba(var(--login-warm), 0.35),
-                0 4px 16px rgba(0, 0, 0, 0.35);
-            transition: transform 0.25s ease, box-shadow 0.4s ease, filter 0.35s ease;
-            animation: loginBtnPulse 2.8s ease-in-out 1.6s infinite;
+                0 0 0 1px rgba(255, 255, 255, 0.22) inset,
+                0 14px 32px -10px rgba(212, 175, 55, 0.4);
+            transition: transform 0.15s ease, filter 0.2s ease;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
 
-        @keyframes loginBtnPulse {
-            0%, 100% {
-                box-shadow:
-                    0 0 0 1px rgba(255, 255, 255, 0.5) inset,
-                    0 12px 40px -8px rgba(var(--login-warm), 0.28),
-                    0 4px 16px rgba(0, 0, 0, 0.35);
-                filter: brightness(1);
-            }
-            50% {
-                box-shadow:
-                    0 0 0 1px rgba(255, 255, 255, 0.65) inset,
-                    0 16px 52px -6px rgba(var(--login-warm), 0.5),
-                    0 0 40px -6px rgba(var(--login-warm), 0.25);
-                filter: brightness(1.06);
-            }
+        #login.login-rep .btn:hover {
+            filter: brightness(1.04);
         }
 
-        .login-container .btn::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(110deg, transparent 35%, rgba(255, 255, 255, 0.55) 48%, transparent 62%);
-            transform: translateX(-120%);
-            animation: loginBtnShine 4s ease-in-out 2s infinite;
-        }
-
-        @keyframes loginBtnShine {
-            0%, 15% { transform: translateX(-120%); }
-            35%, 100% { transform: translateX(120%); }
-        }
-
-        .login-container .btn:hover {
-            transform: translateY(-2px);
-            box-shadow:
-                0 0 0 1px rgba(255, 255, 255, 0.6) inset,
-                0 20px 56px -8px rgba(var(--login-warm), 0.55),
-                0 8px 24px rgba(0, 0, 0, 0.35);
-        }
-
-        .login-container .btn:active {
-            transform: translateY(0);
+        #login.login-rep .btn:active {
+            transform: scale(0.99);
         }
 
         @media (prefers-reduced-motion: reduce) {
-            .login-lamp-unit,
-            .login-light-cone,
-            .login-card-3d,
-            .login-container::after,
-            .login-container .btn,
-            .login-container .btn::before,
-            .login-rim-glow {
-                animation: none !important;
+            #login.login-rep .btn {
+                transition: none;
             }
-            .login-light-cone { opacity: 0.85; filter: none; }
-            .login-card-3d { opacity: 1; transform: none; filter: none; }
-            .login-container::after { opacity: 1; transform: none; }
         }
 
         .form-group {
@@ -3055,106 +2862,6 @@
         }
 
         /* ========== 移动端适配 ========== */
-        
-        /* 登录页面移动端 */
-        @media (max-width: 900px) {
-            .login-lamp-unit {
-                left: 4%;
-                bottom: 18%;
-                width: min(140px, 36vw);
-                opacity: 0.88;
-            }
-            .login-monitor-unit {
-                right: 2%;
-                bottom: 20%;
-                width: min(160px, 38vw);
-                opacity: 0.75;
-            }
-            .login-light-cone {
-                width: 95%;
-                left: -12%;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .login-desk-stage {
-                align-items: center;
-                padding: 20px 16px 32px;
-                padding-bottom: max(32px, env(safe-area-inset-bottom, 0px));
-            }
-            .login-desk-surface {
-                opacity: 0.55;
-            }
-            /* 手机：台灯与显示器置于上方两侧（勿 display:none，与桌面主题一致） */
-            .login-lamp-unit {
-                left: 4%;
-                bottom: auto;
-                top: max(4px, env(safe-area-inset-top, 0px));
-                width: 112px;
-                animation: none;
-                z-index: 22;
-                filter: none;
-            }
-            .login-monitor-unit {
-                right: 4%;
-                bottom: auto;
-                top: max(12px, calc(env(safe-area-inset-top, 0px) + 8px));
-                width: 118px;
-                z-index: 22;
-            }
-            .login-light-cone {
-                top: 0;
-                left: -15%;
-                width: 130%;
-                height: 52%;
-                opacity: 0.58;
-                mix-blend-mode: normal;
-                animation: loginLightOn 1.4s cubic-bezier(0.22, 1, 0.36, 1) 0.1s forwards;
-            }
-            .login-card-3d {
-                z-index: 11;
-                padding-top: 52px;
-                animation: none;
-                transform: none;
-            }
-            .login-container {
-                width: 100%;
-                max-width: 100%;
-                margin: 0;
-                padding: 40px 24px 36px;
-                border-radius: 22px;
-                min-height: 0;
-                transform: none;
-                box-shadow:
-                    0 32px 80px -36px rgba(0, 0, 0, 0.65),
-                    0 0 0 1px rgba(255, 255, 255, 0.06) inset;
-            }
-            .login-container::after {
-                opacity: 0.7;
-            }
-            .login-title {
-                font-size: 22px;
-                margin-bottom: 28px;
-            }
-            .login-container .form-group {
-                margin-bottom: 18px;
-            }
-            .login-container .form-group input {
-                padding: 14px 16px;
-                font-size: 16px;
-                border-radius: 12px;
-            }
-            .login-container .btn {
-                width: 100%;
-                padding: 15px;
-                font-size: 16px;
-                border-radius: 12px;
-                animation: none;
-            }
-            .login-container .btn::before {
-                animation: none;
-            }
-        }
 
         /* 响应式设计 - 移动端优化 */
         @media (max-width: 768px) {
@@ -3782,12 +3489,12 @@
 
         /* 超小屏幕适配 (iPhone SE等) */
         @media (max-width: 375px) {
-            .login-container {
-                padding: 32px 16px 24px;
+            #login.login-rep .login-rep-card {
+                padding: 18px 16px 16px;
             }
 
-            .login-title {
-                font-size: 22px;
+            #login.login-rep .login-rep-title {
+                font-size: 1.1rem;
             }
 
             .mobile-topbar {
@@ -10465,99 +10172,27 @@
             }
         }
 
-        /* 登录页手机：台灯可见 + 登录时不显示底部导航（与 mobile-nav 版一致） */
+        /* 登录页：隐藏底部导航 */
         @media (max-width: 768px) {
             body:has(#login:not(.hidden)) #mobile-nav {
                 display: none !important;
-            }
-            #login.login-scene .login-desk-stage {
-                isolation: isolate;
-            }
-            #login.login-scene .login-lamp-unit,
-            #login.login-scene .login-monitor-unit {
-                display: block !important;
-                visibility: visible !important;
-                opacity: 1 !important;
-                filter: none !important;
-                -webkit-transform: translateZ(0);
-                transform: translateZ(0);
-                z-index: 22;
-                pointer-events: none;
-            }
-            #login.login-scene .login-light-cone {
-                z-index: 21;
-                mix-blend-mode: normal !important;
-            }
-            #login.login-scene .login-card-3d {
-                z-index: 11;
             }
         }
     </style>
 </head>
 <body>
     
-    <!-- 登录界面：极简科技桌面 · 台灯照明 -->
-    <div id="login" class="container login-scene">
-        <div class="login-desk-stage" aria-hidden="false">
-            <div class="login-desk-surface"></div>
-            <div class="login-cinematic-fog"></div>
-
-            <div class="login-lamp-unit" aria-hidden="true">
-                <svg class="login-lamp-svg" viewBox="0 0 200 260" xmlns="http://www.w3.org/2000/svg" role="img">
-                    <defs>
-                        <linearGradient id="loginLampMetal" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stop-color="#fafafa"/>
-                            <stop offset="45%" stop-color="#dcdde2"/>
-                            <stop offset="100%" stop-color="#b8bcc6"/>
-                        </linearGradient>
-                        <linearGradient id="loginLampShade" x1="0%" y1="0%" x2="0%" y2="100%">
-                            <stop offset="0%" stop-color="#ffffff"/>
-                            <stop offset="100%" stop-color="#eceef2"/>
-                        </linearGradient>
-                        <radialGradient id="loginBulbCore" cx="50%" cy="40%" r="50%">
-                            <stop offset="0%" stop-color="rgba(255,252,245,0.95)"/>
-                            <stop offset="100%" stop-color="rgba(255,236,200,0)"/>
-                        </radialGradient>
-                    </defs>
-                    <ellipse cx="100" cy="248" rx="48" ry="10" fill="rgba(0,0,0,0.35)"/>
-                    <ellipse cx="100" cy="246" rx="42" ry="8" fill="url(#loginLampMetal)"/>
-                    <rect x="88" y="168" width="24" height="78" rx="5" fill="url(#loginLampMetal)"/>
-                    <path d="M100 168 C52 120 40 88 48 56" stroke="url(#loginLampMetal)" stroke-width="10" fill="none" stroke-linecap="round"/>
-                    <circle cx="48" cy="52" r="9" fill="url(#loginLampMetal)" stroke="#c5c8d0" stroke-width="1"/>
-                    <path d="M12 48 L108 52 L96 8 L24 4 Z" fill="url(#loginLampShade)" stroke="#dfe1e6" stroke-width="1"/>
-                    <ellipse cx="58" cy="50" rx="52" ry="9" fill="rgba(255,248,230,0.35)"/>
-                    <ellipse cx="58" cy="30" rx="22" ry="10" fill="url(#loginBulbCore)"/>
-                </svg>
-            </div>
-
-            <div class="login-monitor-unit" aria-hidden="true">
-                <svg class="login-monitor-svg" viewBox="0 0 240 200" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                        <linearGradient id="loginMonBezel" x1="0%" y1="0%" x2="0%" y2="100%">
-                            <stop offset="0%" stop-color="#2a2c32"/>
-                            <stop offset="100%" stop-color="#121418"/>
-                        </linearGradient>
-                        <linearGradient id="loginMonScreen" x1="50%" y1="0%" x2="50%" y2="100%">
-                            <stop offset="0%" stop-color="#1e2430"/>
-                            <stop offset="100%" stop-color="#0c0e12"/>
-                        </linearGradient>
-                    </defs>
-                    <rect x="16" y="24" width="208" height="132" rx="10" fill="url(#loginMonBezel)"/>
-                    <rect x="26" y="36" width="188" height="108" rx="4" fill="url(#loginMonScreen)" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
-                    <rect x="36" y="48" width="168" height="6" rx="2" fill="rgba(100,120,160,0.25)"/>
-                    <rect x="36" y="62" width="120" height="4" rx="1" fill="rgba(255,255,255,0.06)"/>
-                    <rect x="36" y="74" width="150" height="4" rx="1" fill="rgba(255,255,255,0.05)"/>
-                    <path d="M96 156 L144 156 L138 176 L102 176 Z" fill="#1a1c22"/>
-                    <rect x="108" y="176" width="24" height="14" rx="3" fill="#14161c"/>
-                </svg>
-            </div>
-
-            <div class="login-light-cone"></div>
-            <div class="login-rim-glow"></div>
-
-            <div class="login-card-3d">
-                <div class="login-container">
-                    <h1 class="login-title">年年有喜管理系统</h1>
+    <!-- 登录界面：分析报表系简约布局 -->
+    <div id="login" class="container login-rep">
+        <div class="login-rep-noise" aria-hidden="true"></div>
+        <div class="login-rep-shell">
+            <header class="login-rep-head">
+                <span class="login-rep-eyebrow">数据报表</span>
+                <h1 class="login-rep-title">年年有喜管理系统</h1>
+                <p class="login-rep-sub">与分析报表一致的内台视觉 · 安全登录</p>
+            </header>
+            <div class="login-rep-card">
+                <div class="login-rep-card-inner">
                     <form onsubmit="doLogin(event)">
                         <div class="form-group">
                             <label>用户名</label>
@@ -42236,7 +41871,7 @@ ${body}
             try {
                 if ('serviceWorker' in navigator) {
                     // Clean old caches, keep current version only
-                    const currentCache = 'hrms-pwa-v236';
+                    const currentCache = 'hrms-pwa-v237';
                     if (typeof caches !== 'undefined') {
                         caches.keys().then(keys => {
                             keys.forEach(k => { if (k !== currentCache) caches.delete(k); });
