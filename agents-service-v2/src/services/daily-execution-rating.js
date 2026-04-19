@@ -408,38 +408,36 @@ async function sendExecutionRatingNotifications(results, date) {
     }
   }
 
-  // 3. 发备案汇总通知给管理员和总部营运（含所有未达标人员及本月累计次数）
-  if (failedResults.length > 0) {
-    const adminRecipients = await query(
-      `SELECT open_id, username, role FROM feishu_users
-       WHERE registered = true AND open_id IS NOT NULL AND open_id != ''
-        AND role IN ('admin', 'hq_manager')`
-    );
+  // 3. 发备案汇总通知给管理员和总部营运（与「工作态度备案日报」一致：每日必达；全员达标时卡片展示 ✅ 全部达标）
+  const adminRecipients = await query(
+    `SELECT open_id, username, role FROM feishu_users
+     WHERE registered = true AND open_id IS NOT NULL AND open_id != ''
+      AND role IN ('admin', 'hq_manager')`
+  );
 
-    const summaryCard = buildAdminFilingCard(results, date);
-    for (const recipient of adminRecipients.rows) {
-      try {
-        const deliver = await sendReportToRecipient({
-          jobKey: 'daily_execution_rating_report',
-          runYmd,
-          username: recipient.username || recipient.open_id,
-          scope: 'admin_summary',
-          sendFn: async () => {
-            const cardRes = await sendCard(recipient.open_id, summaryCard, 'open_id');
-            return { ok: !!cardRes?.ok, error: cardRes?.error || '' };
-          }
-        });
-        if (deliver?.ok && !deliver?.skipped) {
-          sentCount++;
-          logger.info({ recipient: recipient.username, role: recipient.role }, 'execution filing summary card sent to admin');
-        } else if (!deliver?.ok) {
-          failedCount++;
-          logger.warn({ recipient: recipient.username, role: recipient.role, err: deliver?.error }, 'execution filing summary card send failed after retries');
+  const summaryCard = buildAdminFilingCard(results, date);
+  for (const recipient of adminRecipients.rows || []) {
+    try {
+      const deliver = await sendReportToRecipient({
+        jobKey: 'daily_execution_rating_report',
+        runYmd,
+        username: recipient.username || recipient.open_id,
+        scope: 'admin_summary',
+        sendFn: async () => {
+          const cardRes = await sendCard(recipient.open_id, summaryCard, 'open_id');
+          return { ok: !!cardRes?.ok, error: cardRes?.error || '' };
         }
-      } catch (e) {
+      });
+      if (deliver?.ok && !deliver?.skipped) {
+        sentCount++;
+        logger.info({ recipient: recipient.username, role: recipient.role }, 'execution filing summary card sent to admin');
+      } else if (!deliver?.ok) {
         failedCount++;
-        logger.warn({ err: e?.message, recipient: recipient.username }, 'execution filing summary card send failed to admin');
+        logger.warn({ recipient: recipient.username, role: recipient.role, err: deliver?.error }, 'execution filing summary card send failed after retries');
       }
+    } catch (e) {
+      failedCount++;
+      logger.warn({ err: e?.message, recipient: recipient.username }, 'execution filing summary card send failed to admin');
     }
   }
 

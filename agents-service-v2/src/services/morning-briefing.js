@@ -14,6 +14,10 @@ import {
 import { anomalyRuleLabelZh } from '../utils/anomaly-labels.js';
 import { expandAgentStoreLabels } from '../config/store-mapping.js';
 import { getShanghaiNowClock } from '../utils/cron-run-monitor.js';
+import { isMajixianPmObserverUsername } from '../utils/scoring-assignee.js';
+
+/** 马己仙出品观察号若未维护 store，与主责出品经理同店晨报 */
+const CANONICAL_MAJIXIAN_PM_USERNAME = 'NNYXLYR04';
 
 const FMT_MONEY = (n) => `¥${Number(n || 0).toLocaleString('zh-CN', { maximumFractionDigits: 0 })}`;
 const FMT_PCT   = (n) => `${(Number(n || 0) * 100).toFixed(1)}%`;
@@ -206,6 +210,26 @@ function briefingYmdAddDays(ymd, deltaDays) {
 
 function recipientScope(user) {
   return user.role === 'admin' || user.role === 'hq_manager' ? '__all_stores__' : String(user.store || '').trim();
+}
+
+/** 门店侧晨报：优先 feishu_users.store；马己仙观察号未填门店时回退主责出品经理门店 */
+async function resolveBriefingStoreForUser(user) {
+  const direct = String(user?.store || '').trim();
+  if (direct) return direct;
+  if (String(user?.role || '') === 'store_production_manager' && isMajixianPmObserverUsername(user?.username)) {
+    try {
+      const r = await query(
+        `SELECT NULLIF(trim(store), '') AS st FROM feishu_users
+         WHERE registered = true AND LOWER(trim(username)) = LOWER($1) LIMIT 1`,
+        [CANONICAL_MAJIXIAN_PM_USERNAME]
+      );
+      const st = r.rows?.[0]?.st;
+      if (st) return String(st).trim();
+    } catch (e) {
+      logger.warn({ err: e?.message }, 'resolveBriefingStoreForUser: canonical PM store lookup failed');
+    }
+  }
+  return '';
 }
 
 async function ensureBriefingSendTable() {
@@ -647,14 +671,23 @@ export async function sendMorningBriefing(options = {}) {
           payload = allParts.join('\n\n---\n\n');
           storeLabel = '全门店汇总';
         }
-      } else if (user.store) {
-        // 门店负责人/出品经理：只看本门店
-        const content = await buildStoreBriefing(user.store, {
-          recipientName: user.name || user.username || ''
-        });
-        if (content) {
-          payload = content;
-          storeLabel = user.store;
+      } else {
+        const briefingStore = await resolveBriefingStoreForUser(user);
+        if (briefingStore) {
+          const content = await buildStoreBriefing(briefingStore, {
+            recipientName: user.name || user.username || ''
+          });
+          if (content) {
+            payload = content;
+            storeLabel = briefingStore;
+          }
+        }
+        if (!payload) {
+          logger.warn(
+            { runYmd, user: user.username, role: user.role, feishuStore: user.store, briefingStore },
+            'morning briefing skip: empty payload (no resolvable store or build failed)'
+          );
+          continue;
         }
       }
       if (!payload) continue;
