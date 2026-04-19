@@ -3733,6 +3733,21 @@ export async function callVisionLLM(imageUrl, prompt) {
   }
 }
 
+async function getEmployeePositionForKb(username) {
+  const u = String(username || '').trim().toLowerCase();
+  if (!u) return '';
+  try {
+    const state = await getSharedState();
+    const employees = Array.isArray(state?.employees) ? state.employees : [];
+    const users = Array.isArray(state?.users) ? state.users : [];
+    const emp = employees.find((e) => String(e?.username || '').trim().toLowerCase() === u);
+    const usr = users.find((x) => String(x?.username || '').trim().toLowerCase() === u);
+    return String(emp?.position || usr?.position || '').trim();
+  } catch (e) {
+    return '';
+  }
+}
+
 export async function queryKnowledgeBase(agent, query, limit = 5, options = {}) {
   // 委托给 RAG 多维知识库工具（兼容旧调用签名）
   try {
@@ -3745,10 +3760,21 @@ export async function queryKnowledgeBase(agent, query, limit = 5, options = {}) 
         ? query.filter(Boolean).join(' ')
         : (String(query || '').trim() || (Array.isArray(agent) ? agent.filter(Boolean).join(' ') : String(agent || '')));
       const result = await ragModule.ragQuery({
-        agentName, userRole: options?.userRole || 'admin',
-        query: queryStr, brandTag: options?.brandTag, limit
+        agentName,
+        userRole: options?.userRole || 'admin',
+        userStore: options?.userStore ?? '',
+        userPosition: options?.userPosition ?? '',
+        skipKnowledgeAudienceFilter: options?.skipKnowledgeAudienceFilter !== false,
+        query: queryStr,
+        brandTag: options?.brandTag,
+        limit
       });
-      return (result?.results || []).map(r => ({ title: r.title, content: r.content, tags: r.tags, created_at: r.createdAt }));
+      return (result?.results || []).map((r) => ({
+        title: r.title,
+        content: r.content,
+        tags: r.tags,
+        created_at: r.createdAt
+      }));
     }
     // fallback: 直接查询
     const brandTag = String(options?.brandTag || '').trim();
@@ -9206,7 +9232,19 @@ ${groundingFacts ? '可用事实：'+groundingFacts : ''}
         let kbContext = '';
         let kbResults = [];
         try {
-          kbResults = await queryKnowledgeBase(['sop', '流程', '标准', '规范', '培训', '课件', '带教'], text, 3, { brandTag });
+          let kbPos = '';
+          try {
+            kbPos = await getEmployeePositionForKb(senderUsername);
+          } catch (e) {
+            kbPos = '';
+          }
+          kbResults = await queryKnowledgeBase(['sop', '流程', '标准', '规范', '培训', '课件', '带教'], text, 3, {
+            brandTag,
+            skipKnowledgeAudienceFilter: false,
+            userRole: senderRole,
+            userStore: store,
+            userPosition: kbPos
+          });
           if (kbResults.length) {
             kbContext = '\n\n相关知识库内容：\n' + 
               kbResults.map(r => `【${r.title}】${String(r.content || '').slice(0, 300)}...`).join('\n');

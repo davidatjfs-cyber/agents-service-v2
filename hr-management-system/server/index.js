@@ -13778,7 +13778,7 @@ app.get('/api/knowledge/:id/file', authRequiredOrQueryToken, async (req, res) =>
   if (!id) return res.status(400).json({ error: 'missing_id' });
   try {
     const r = await pool.query(
-      `select file_path, file_type
+      `select file_path, file_type, audience
        from knowledge_base
        where id = $1
        limit 1`,
@@ -13786,6 +13786,14 @@ app.get('/api/knowledge/:id/file', authRequiredOrQueryToken, async (req, res) =>
     );
     const row = r.rows?.[0] || null;
     if (!row?.file_path) return res.status(404).json({ error: 'not_found' });
+    try {
+      const viewer = await getKnowledgeViewerProfile(req);
+      if (viewer.role !== 'admin' && !canViewerSeeKnowledgeAudience(viewer, row.audience)) {
+        return res.status(403).json({ error: 'forbidden', message: '无权查看该知识库文件' });
+      }
+    } catch (e) {
+      return res.status(403).json({ error: 'forbidden', message: '无权查看该知识库文件' });
+    }
 
     const filePath = String(row.file_path || '').trim();
     const resolveUploadsFile = (p) => {
@@ -14298,18 +14306,85 @@ app.put('/api/brands/:id', authRequired, async (req, res) => {
   }
 });
 
+function parseKnowledgeAudienceFromBody(body) {
+  const t = String(body?.audienceType || body?.audience_type || 'all').trim().toLowerCase();
+  if (t === 'store') {
+    const s = String(body?.audienceStore || body?.audience_store || '').trim();
+    return s ? { type: 'store', store: s } : { type: 'all' };
+  }
+  if (t === 'position') {
+    const p = String(body?.audiencePosition || body?.audience_position || '').trim();
+    return p ? { type: 'position', position: p } : { type: 'all' };
+  }
+  return { type: 'all' };
+}
+
+async function getKnowledgeViewerProfile(req) {
+  const username = String(req.user?.username || '').trim();
+  const role = String(req.user?.role || '').trim();
+  if (!username) return { username: '', role: '', store: '', position: '' };
+  try {
+    const state = (await getSharedState()) || {};
+    const employees = Array.isArray(state.employees) ? state.employees : [];
+    const users = Array.isArray(state.users) ? state.users : [];
+    const emp = employees.find((e) => String(e?.username || '').trim().toLowerCase() === username.toLowerCase()) || {};
+    const usr = users.find((u) => String(u?.username || '').trim().toLowerCase() === username.toLowerCase()) || {};
+    return {
+      username,
+      role,
+      store: String(emp.store || usr.store || '').trim(),
+      position: String(emp.position || usr.position || '').trim()
+    };
+  } catch (e) {
+    return { username, role, store: '', position: '' };
+  }
+}
+
+function canViewerSeeKnowledgeAudience(viewer, audienceVal) {
+  let a = audienceVal;
+  if (a == null) return true;
+  if (typeof a === 'string') {
+    try {
+      a = JSON.parse(a);
+    } catch {
+      return true;
+    }
+  }
+  if (typeof a !== 'object' || !a) return true;
+  const t = String(a.type || 'all').toLowerCase();
+  if (t === 'all' || !t) return true;
+  if (t === 'store') {
+    const s = String(a.store || '').trim();
+    if (!s) return false;
+    return String(viewer.store || '').trim() === s;
+  }
+  if (t === 'position') {
+    const p = String(a.position || '').trim();
+    if (!p) return false;
+    const vp = String(viewer.position || '').trim();
+    if (vp === p) return true;
+    if (p === '系统管理员' && String(viewer.role || '') === 'admin') return true;
+    return false;
+  }
+  return true;
+}
+
 app.get('/api/knowledge', authRequired, async (req, res) => {
   try {
+    const viewer = await getKnowledgeViewerProfile(req);
     const qBrand = buildKnowledgeBrandScopeTag(req.query?.brandId || req.query?.brandScope || 'all');
     const withBrandFilter = qBrand && qBrand !== 'brand:all';
     const r = await pool.query(
-      `select id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at
+      `select id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience
        from knowledge_base
        ${withBrandFilter ? 'where tags @> $1::text[] or tags @> ARRAY[\'brand:all\']::text[]' : ''}
        order by created_at desc`,
       withBrandFilter ? [[qBrand]] : []
     );
-    return res.json({ items: r.rows || [] });
+    const rows = (r.rows || []).filter(
+      (row) => viewer.role === 'admin' || canViewerSeeKnowledgeAudience(viewer, row.audience)
+    );
+    return res.json({ items: rows });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
   }
@@ -14364,14 +14439,39 @@ app.get('/api/rag/stats', authRequired, async (req, res) => {
 app.post('/api/rag/query', authRequired, async (req, res) => {
   const { query, scope, category, brandTag, limit } = req.body;
   if (!query) return res.status(400).json({ error: 'query required' });
-  const result = await ragQuery({ agentName: req.body.agentName || 'master_agent', userRole: req.user?.role, query, scope, category, brandTag, limit });
+  const profile = await getKnowledgeViewerProfile(req);
+  const adminRag = profile.role === 'admin';
+  const result = await ragQuery({
+    agentName: req.body.agentName || 'master_agent',
+    userRole: profile.role || req.user?.role,
+    userStore: profile.store,
+    userPosition: profile.position,
+    skipKnowledgeAudienceFilter: adminRag,
+    query,
+    scope,
+    category,
+    brandTag,
+    limit
+  });
   res.json(result);
 });
 
 app.post('/api/rag/multi-query', authRequired, async (req, res) => {
   const { queries, scope, brandTag, limit } = req.body;
   if (!Array.isArray(queries)) return res.status(400).json({ error: 'queries array required' });
-  const result = await ragMultiQuery({ agentName: req.body.agentName || 'master_agent', userRole: req.user?.role, queries, scope, brandTag, limit });
+  const profile = await getKnowledgeViewerProfile(req);
+  const adminRag = profile.role === 'admin';
+  const result = await ragMultiQuery({
+    agentName: req.body.agentName || 'master_agent',
+    userRole: profile.role || req.user?.role,
+    userStore: profile.store,
+    userPosition: profile.position,
+    skipKnowledgeAudienceFilter: adminRag,
+    queries,
+    scope,
+    brandTag,
+    limit
+  });
   res.json(result);
 });
 
@@ -14441,11 +14541,12 @@ app.post('/api/knowledge/direct', authRequired, async (req, res) => {
   try {
     const createdBy = normalizeCreatedByUuid(req.user?.id);
     const kbScope = ['public','business','sensitive'].includes(req.body?.scope) ? req.body.scope : 'public';
+    const audienceObj = parseKnowledgeAudienceFromBody(req.body);
     const r = await pool.query(
-      `insert into knowledge_base (title, content, category, tags, file_path, file_type, file_size, access_roles, access_departments, created_by, scope, version)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-       returning id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at`,
-      [title, '', category || null, tags, filePath, fileType || null, size || null, null, null, createdBy, kbScope, version]
+      `insert into knowledge_base (title, content, category, tags, file_path, file_type, file_size, access_roles, access_departments, created_by, scope, version, audience)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)
+       returning id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience`,
+      [title, '', category || null, tags, filePath, fileType || null, size || null, null, null, createdBy, kbScope, version, audienceObj]
     );
     return res.json({ item: r.rows?.[0] || null });
   } catch (e) {
@@ -14475,14 +14576,15 @@ app.post('/api/knowledge', authRequired, knowledgeUpload.single('file'), async (
 
   // Insert first, respond fast. Cloud upload runs asynchronously.
   let inserted = null;
+  const audienceObj = parseKnowledgeAudienceFromBody(req.body);
   try {
     const createdBy = normalizeCreatedByUuid(req.user?.id);
     const kbScope = ['public','business','sensitive'].includes(req.body?.scope) ? req.body.scope : 'public';
     const r = await pool.query(
-      `insert into knowledge_base (title, content, category, tags, file_path, file_type, file_size, access_roles, access_departments, created_by, scope, version)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-       returning id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at`,
-      [title, '', category || null, tags, filePath, fileType || null, size || null, null, null, createdBy, kbScope, version]
+      `insert into knowledge_base (title, content, category, tags, file_path, file_type, file_size, access_roles, access_departments, created_by, scope, version, audience)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)
+       returning id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience`,
+      [title, '', category || null, tags, filePath, fileType || null, size || null, null, null, createdBy, kbScope, version, audienceObj]
     );
     inserted = r.rows?.[0] || null;
   } catch (e) {
@@ -14494,6 +14596,30 @@ app.post('/api/knowledge', authRequired, knowledgeUpload.single('file'), async (
 
   // Async cloud upload best-effort; if success, update DB and delete local file.
   (async () => {
+    try {
+      if (inserted?.id && localPath && fs.existsSync(localPath)) {
+        const ft0 = String(fileType || req.file?.mimetype || '');
+        if (/^image\//i.test(ft0)) {
+          try {
+            const { callVisionLLM } = await import('./agents.js');
+            const vr = await callVisionLLM(
+              localPath,
+              '请完整提取图片中的全部文字（含标题、表格、列表、备注），按阅读顺序输出，使用简体中文。'
+            );
+            if (vr?.ok && String(vr.content || '').trim()) {
+              await pool.query('UPDATE knowledge_base SET content = $1, updated_at = now() WHERE id = $2', [
+                String(vr.content).trim(),
+                inserted.id
+              ]);
+            }
+          } catch (ocrErr) {
+            console.warn('[knowledge] image OCR failed:', ocrErr?.message || ocrErr);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[knowledge] image OCR block:', e?.message || e);
+    }
     try {
       if (!localPath || !inserted?.id) return;
       const orig = String(req.file?.originalname || 'file');
@@ -15607,6 +15733,10 @@ app.listen(PORT, HOST, async () => {
     await pool.query(`ALTER TABLE daily_reports ADD COLUMN IF NOT EXISTS new_wechat_members INTEGER DEFAULT 0`);
     // Runtime migration: 知识库文件版本号
     await pool.query(`ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS version VARCHAR(50) DEFAULT NULL`);
+    // 知识库分发范围（门店/岗位/全员），JSON：{ type, store?, position? }
+    await pool.query(
+      `ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS audience JSONB DEFAULT '{"type":"all"}'::jsonb`
+    ).catch((e) => console.warn('[migration] knowledge_base.audience:', e?.message));
     // Runtime migration: 文件管理系统表
     await pool.query(`
       CREATE TABLE IF NOT EXISTS files (

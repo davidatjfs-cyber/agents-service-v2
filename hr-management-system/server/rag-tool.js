@@ -66,12 +66,56 @@ async function kbHasTrgm() {
   return trgmProbe;
 }
 
+/** 与 HRMS GET /api/knowledge 一致：按 audience JSON 过滤，仅分发对象可见 */
+function appendKnowledgeAudienceSql(conds, vals, idx, viewer, skip) {
+  if (skip) return idx;
+  const store = String(viewer?.userStore ?? viewer?.store ?? '').trim();
+  const pos = String(viewer?.userPosition ?? viewer?.position ?? '').trim();
+  const role = String(viewer?.userRole ?? viewer?.role ?? '').trim();
+  conds.push(`(
+    audience IS NULL
+    OR (audience->>'type') IS NULL
+    OR (audience->>'type') = 'all'
+    OR (
+      (audience->>'type') = 'store'
+      AND trim(coalesce(audience->>'store','')) = $${idx}
+    )
+    OR (
+      (audience->>'type') = 'position'
+      AND (
+        trim(coalesce(audience->>'position','')) = $${idx + 1}
+        OR (trim(coalesce(audience->>'position','')) = '系统管理员' AND $${idx + 2} = 'admin')
+      )
+    )
+  )`);
+  vals.push(store, pos, role);
+  return idx + 3;
+}
+
 export async function ragQuery(params = {}) {
-  const { agentName, userRole, query, scope, category, brandTag, limit = 5 } = params;
+  const {
+    agentName,
+    userRole,
+    userStore,
+    userPosition,
+    query,
+    scope,
+    category,
+    brandTag,
+    limit = 5,
+    skipKnowledgeAudienceFilter = true
+  } = params;
   let allowed = getAllowedScopes(agentName, userRole);
   if (scope && allowed.includes(scope)) allowed = [scope];
   const conds = ['scope = ANY($1::text[])'], vals = [allowed];
   let idx = 2;
+  idx = appendKnowledgeAudienceSql(
+    conds,
+    vals,
+    idx,
+    { userRole, userStore, userPosition },
+    skipKnowledgeAudienceFilter
+  );
   if (query) {
     const q = String(query || '').trim();
     const useTrgm = (await kbHasTrgm()) && q.length >= 2;
@@ -91,7 +135,10 @@ export async function ragQuery(params = {}) {
   if (brandTag) { const t = brandTag.startsWith('brand:') ? brandTag : `brand:${brandTag}`; conds.push(`(tags @> ARRAY[$${idx}]::text[] OR tags @> ARRAY['brand:all']::text[])`); vals.push(t); idx++; }
   vals.push(Math.min(limit, 20));
   try {
-    const r = await pool().query(`SELECT id,title,content,category,tags,scope,file_path,file_type,created_at FROM knowledge_base WHERE ${conds.join(' AND ')} ORDER BY created_at DESC LIMIT $${idx}`, vals);
+    const r = await pool().query(
+      `SELECT id,title,content,category,tags,scope,file_path,file_type,created_at,audience FROM knowledge_base WHERE ${conds.join(' AND ')} ORDER BY created_at DESC LIMIT $${idx}`,
+      vals
+    );
     return { success: true, results: (r.rows||[]).map(row => ({ id: row.id, title: row.title, content: String(row.content||'').slice(0,1000), category: row.category, scope: row.scope, tags: row.tags, hasFile: !!row.file_path, fileType: row.file_type })), accessScopes: allowed };
   } catch (e) { console.error('[RAG] query error:', e?.message); return { success: false, results: [], error: e?.message }; }
 }

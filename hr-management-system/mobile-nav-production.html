@@ -18275,7 +18275,9 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             if (t === 'position') {
                 const allow = String(audience.position || audience.value || '').trim();
                 if (!allow) return false;
-                return allow === userPos;
+                if (userPos === allow) return true;
+                if (allow === '系统管理员' && String(user.role || '') === ROLES.ADMIN) return true;
+                return false;
             }
             return true;
         }
@@ -21638,9 +21640,11 @@ ${knowledgeContent.slice(0, 30000)}`;
             if (posSel) {
                 const users = (HRMS_STORE.getUsers ? HRMS_STORE.getUsers() : []) || [];
                 const emps = (HRMS_STORE.getEmployees ? HRMS_STORE.getEmployees() : []) || [];
+                const fallbackPos = ['系统管理员', '总部营运', '店长', '出品经理', '前厅经理', '门店员工', '人事经理', '出纳', '区域经理'];
                 const positions = Array.from(new Set([
                     ...users.map(u => String(u?.position || '').trim()),
-                    ...emps.map(e => String(e?.position || '').trim())
+                    ...emps.map(e => String(e?.position || '').trim()),
+                    ...fallbackPos
                 ].filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), 'zh-Hans-CN'));
                 let html = '<option value="">请选择岗位</option>';
                 html += positions.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
