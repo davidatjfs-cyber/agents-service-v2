@@ -24,9 +24,6 @@ function storeMatchesRow(displayStore, rowStoreRaw) {
       if (sameStore(dl, rl)) return true;
     }
   }
-  for (const rl of rowLabs) {
-    if (sameStore(rowStore, rl)) return true;
-  }
   return false;
 }
 
