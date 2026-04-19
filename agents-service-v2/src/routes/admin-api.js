@@ -8,6 +8,8 @@ import { getShanghaiYmdParts } from '../utils/anomaly-week-bounds.js';
 import { startRandomInspections } from '../services/random-inspection.js';
 import { scheduleProactiveOutcomeOnClose } from '../services/proactive-v2/proactive-task-outcome-on-close.js';
 
+import { sendUsageWeeklyReport } from '../services/usage-weekly-report.js';
+
 const r = Router();
 const admin = [authRequired, requireRole('admin','hq_manager')];
 
@@ -719,6 +721,17 @@ r.post('/bitable-poll', ...admin, async (req, res) => {
 r.delete('/config/:key', ...admin, async (req, res) => {
   await query('DELETE FROM agent_v2_configs WHERE config_key = $1', [req.params.key]).catch(() => {});
   res.json({ ok: true });
+});
+
+// ─── 手动触发员工系统使用周报 ───
+r.post('/trigger-usage-weekly-report', ...admin, async (req, res) => {
+  try {
+    await sendUsageWeeklyReport();
+    res.json({ ok: true, message: '员工系统使用周报已发送' });
+  } catch (e) {
+    logger.error({ err: e?.message }, 'trigger-usage-weekly-report failed');
+    res.status(500).json({ error: String(e?.message || e) });
+  }
 });
 
 export default r;

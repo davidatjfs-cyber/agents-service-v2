@@ -5132,6 +5132,52 @@ async function ensureUserReadsTable() {
   }
 }
 
+async function ensureLoginLogTable() {
+  try {
+    await pool.query(`
+      create table if not exists user_login_log (
+        id serial primary key,
+        username varchar(100) not null,
+        login_at timestamptz not null default now(),
+        logout_at timestamptz,
+        session_nonce varchar(64),
+        ip_address varchar(45),
+        user_agent text,
+        created_at timestamptz not null default now()
+      )
+    `);
+    await pool.query(`create index if not exists idx_ull_username_date on user_login_log (username, (login_at at time zone 'Asia/Shanghai')::date)`);
+    await pool.query(`create index if not exists idx_ull_login_at on user_login_log (login_at)`);
+    await pool.query(`create index if not exists idx_ull_open_session on user_login_log (username, logout_at) where logout_at is null`);
+  } catch (e) {
+    console.error('ensureLoginLogTable failed:', e);
+  }
+}
+
+async function recordLogin(username, sessionNonce, req) {
+  try {
+    const ip = String(req.headers?.['x-forwarded-for'] || req.headers?.['x-real-ip'] || req.ip || '').split(',')[0].trim().slice(0, 45);
+    const ua = String(req.headers?.['user-agent'] || '').slice(0, 500);
+    await pool.query(
+      `insert into user_login_log (username, login_at, session_nonce, ip_address, user_agent) values ($1, now(), $2, $3, $4)`,
+      [String(username || '').trim().toLowerCase(), sessionNonce, ip, ua]
+    );
+  } catch (e) {
+    console.error('recordLogin failed:', e?.message || e);
+  }
+}
+
+async function recordLogout(username) {
+  try {
+    await pool.query(
+      `update user_login_log set logout_at = now() where username = $1 and logout_at is null`,
+      [String(username || '').trim().toLowerCase()]
+    );
+  } catch (e) {
+    console.error('recordLogout failed:', e?.message || e);
+  }
+}
+
 async function ensureCheckinTable() {
   try {
     await pool.query('create extension if not exists pgcrypto');
@@ -13931,6 +13977,7 @@ async function handleLogin(req, res) {
           JWT_SECRET,
           { expiresIn: '7d' }
         );
+        recordLogin(u.username, sn, req);
         return res.json({
           token,
           user: { id: u.id, username: u.username, name: finalName, role: finalRole }
@@ -13963,6 +14010,7 @@ async function handleLogin(req, res) {
         if (!JWT_SECRET) return res.status(500).json({ error: 'server_config_error' });
         await storeSessionNonce(canonicalUsername, sn);
         const token = jwt.sign({ id, username: canonicalUsername, name, role, sn }, JWT_SECRET, { expiresIn: '7d' });
+        recordLogin(canonicalUsername, sn, req);
         return res.json({ token, user: { id, username: canonicalUsername, name, role } });
       }
     }
@@ -17374,6 +17422,7 @@ if (__ALLOW_SCHEMA_CHANGES__) {
   ensureApprovalTables();
   ensureUserReadsTable();
   ensureUserSessionsTable();
+  ensureLoginLogTable();
   ensureAgentConfigTables();
 
   ensureCheckinTable();
@@ -18048,6 +18097,77 @@ app.get('/api/attention-scores/summary', authRequired, async (req, res) => {
     res.json({ summary: r.rows || [] });
   } catch (e) {
     console.error('GET /api/attention-scores/summary error:', e);
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// ─── 登出接口：记录登出时间 ───
+app.post('/api/auth/logout', authRequired, async (req, res) => {
+  const username = String(req.user?.username || '').trim();
+  if (username) await recordLogout(username);
+  res.json({ ok: true });
+});
+
+// ─── 心跳接口：每隔5分钟前端上报一次，用于精确统计在线时长 ───
+app.post('/api/auth/heartbeat', authRequired, async (req, res) => {
+  const username = String(req.user?.username || '').trim();
+  if (!username) return res.json({ ok: true });
+  try {
+    await pool.query(
+      `update user_login_log set logout_at = now() where username = $1 and logout_at is null`,
+      [username]
+    );
+  } catch (_e) { /* ignore heartbeat errors */ }
+  res.json({ ok: true });
+});
+
+// ─── 员工系统使用周报表 ───
+app.get('/api/admin/usage-weekly', authRequired, async (req, res) => {
+  const role = String(req.user?.role || '').trim();
+  if (role !== 'admin' && role !== 'hq_manager') {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  try {
+    const { periodStart, periodEnd } = (() => {
+      const now = new Date();
+      const shanghaiNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+      const dayOfWeek = shanghaiNow.getDay();
+      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const monday = new Date(shanghaiNow);
+      monday.setDate(shanghaiNow.getDate() + mondayOffset - 7);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      const fmt = d => d.toISOString().slice(0, 10);
+      return { periodStart: fmt(monday), periodEnd: fmt(sunday) };
+    })();
+
+    const result = await pool.query(`
+      SELECT
+        l.username,
+        COALESCE(e.name, u.real_name, l.username) AS name,
+        COALESCE(e.store, fu.store, '') AS store,
+        COALESCE(e.position, fu.role, u.role, '') AS position,
+        COUNT(*) AS login_count,
+        ROUND(
+          EXTRACT(EPOCH FROM (
+            COALESCE(SUM(LEAST(COALESCE(l.logout_at, l.login_at + INTERVAL '5 minutes'), l.login_at + INTERVAL '12 hours') - l.login_at), INTERVAL '0')
+          )) / 60.0
+        , 1) AS online_minutes
+      FROM user_login_log l
+      LEFT JOIN employees e ON LOWER(TRIM(e.username)) = LOWER(TRIM(l.username))
+      LEFT JOIN users u ON LOWER(TRIM(u.username)) = LOWER(TRIM(l.username))
+      LEFT JOIN feishu_users fu ON LOWER(TRIM(fu.username)) = LOWER(TRIM(l.username))
+      WHERE (l.login_at AT TIME ZONE 'Asia/Shanghai')::date >= $1::date
+        AND (l.login_at AT TIME ZONE 'Asia/Shanghai')::date <= $2::date
+        AND l.username NOT LIKE '__periodic%%'
+        AND COALESCE(e.name, u.real_name, '') NOT IN ('系统管理员', 'test')
+      GROUP BY l.username, e.name, u.real_name, e.store, fu.store, e.position, fu.role, u.role
+      ORDER BY login_count DESC, online_minutes DESC
+    `, [periodStart, periodEnd]);
+
+    res.json({ periodStart, periodEnd, data: result.rows });
+  } catch (e) {
+    console.error('GET /api/admin/usage-weekly error:', e);
     res.status(500).json({ error: String(e?.message || e) });
   }
 });

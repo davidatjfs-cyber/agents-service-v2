@@ -18635,6 +18635,14 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                 showPage(getHomePageName());
                 showNotification(`欢迎回来，${currentUser.name}！`, 'success');
                 updateDebug(`用户登录: ${currentUser.name} (${getRoleDisplayName(currentUser.role)})`);
+                // 心跳：每5分钟上报一次在线状态，用于统计员工在线时长
+                try {
+                    if (window.__HRMS_HEARTBEAT) clearInterval(window.__HRMS_HEARTBEAT);
+                    window.__HRMS_HEARTBEAT = setInterval(() => {
+                        fetch('/api/auth/heartbeat', { method: 'POST', headers: { 'Authorization': 'Bearer ' + (HRMS_API.getToken && HRMS_API.getToken() || '') } }).catch(() => {});
+                    }, 5 * 60 * 1000);
+                    fetch('/api/auth/heartbeat', { method: 'POST', headers: { 'Authorization': 'Bearer ' + (HRMS_API.getToken && HRMS_API.getToken() || '') } }).catch(() => {});
+                } catch (e) {};
                 try { hrmsNotifyDiskPressureIfNeeded(); } catch (e) {}
                 // 非阻塞加载角色模块和刷新
                 loadRoleModulesFromServer().catch(() => {});
@@ -40886,6 +40894,9 @@ ${body}
         async function logout() {
             if (await hrmsConfirm({ title: '确认登出', message: '确定要登出吗？', okText: '确认登出', icon: '🚪' })) {
                 try { await hrmsFlushStateSave(); } catch (e) {}
+                // 记录登出时间
+                try { fetch('/api/auth/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + (HRMS_API.getToken && HRMS_API.getToken() || '') } }).catch(() => {}); } catch (e) {}
+                try { if (window.__HRMS_HEARTBEAT) { clearInterval(window.__HRMS_HEARTBEAT); window.__HRMS_HEARTBEAT = null; } } catch (e) {}
                 isLoggedIn = false;
                 currentUser = null;
                 try { HRMS_API.clearToken(); } catch (e) {}
@@ -40897,6 +40908,7 @@ ${body}
                 showNotification('已安全登出', 'info');
                 updateDebug('已登出');
             }
+        }
         }
 
         // Mobile navigation functions

@@ -15,6 +15,7 @@ import { sendWeeklyReview } from './services/chairman/weekly-review.js';
 import { runTrendChecks } from './services/chairman/trend-rules.js';
 import { evaluateAllPendingOutcomes } from './services/chairman/decision-outcome-tracker.js';
 import { startRhythmScheduler, morningStandup, patrol, endOfDay, weeklyReport, monthlyEvaluation, dailyAttendanceReport } from './services/rhythm-engine.js';
+import { sendUsageWeeklyReport } from './services/usage-weekly-report.js';
 import { runAnomalyChecks, checkFoodSafetyFromMessage, runFoodSafetyDailyScan } from './services/anomaly-engine.js';
 import { calculateAllStoresKPI } from './services/kpi-calculator.js';
 import {
@@ -217,6 +218,20 @@ app.post('/api/login', async (req, res) => {
 // ═══════════════════════════════════════════════════════
 // Config CRUD API — 前端配置 → DB存储 → 后端执行
 // ═══════════════════════════════════════════════════════
+
+// 心跳：延长当前登录会话的 logout_at（每5分钟前端上报一次，用于在线时长统计）
+app.post('/api/auth/heartbeat', authRequired, async (req, res) => {
+  const username = String(req.user?.username || '').trim();
+  if (username) {
+    try {
+      await query(
+        `UPDATE user_login_log SET logout_at = NOW() WHERE username = LOWER($1) AND logout_at IS NULL`,
+        [username]
+      );
+    } catch (_e) { /* ignore */ }
+  }
+  res.json({ ok: true });
+});
 
 // 读取所有配置（设置中心首页）
 app.get('/api/config', authRequired, async (req, res) => {
@@ -966,6 +981,14 @@ async function start() {
     );
   }, { timezone: 'Asia/Shanghai' });
   logger.info('Morning briefing cron scheduled at 07:30 Asia/Shanghai (fixed)');
+
+  // 员工系统使用周报：每周一 07:00 Asia/Shanghai
+  cron.schedule('0 7 * * 1', () => {
+    runWithCronLog('usage_weekly_report', () => sendUsageWeeklyReport()).catch((e) =>
+      logger.warn({ err: e?.message }, 'usage weekly report cron error')
+    );
+  }, { timezone: 'Asia/Shanghai' });
+  logger.info('Usage weekly report cron scheduled at Mon 07:00 Asia/Shanghai');
 
   // Chairman: 每周决策复盘 — 周一 08:00 Asia/Shanghai
   cron.schedule('0 8 * * 1', () => {
