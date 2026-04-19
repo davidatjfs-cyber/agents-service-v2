@@ -10464,6 +10464,34 @@
                 font-size: 18px !important;
             }
         }
+
+        /* 登录页手机：台灯可见 + 登录时不显示底部导航（与 mobile-nav 版一致） */
+        @media (max-width: 768px) {
+            body:has(#login:not(.hidden)) #mobile-nav {
+                display: none !important;
+            }
+            #login.login-scene .login-desk-stage {
+                isolation: isolate;
+            }
+            #login.login-scene .login-lamp-unit,
+            #login.login-scene .login-monitor-unit {
+                display: block !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+                filter: none !important;
+                -webkit-transform: translateZ(0);
+                transform: translateZ(0);
+                z-index: 22;
+                pointer-events: none;
+            }
+            #login.login-scene .login-light-cone {
+                z-index: 21;
+                mix-blend-mode: normal !important;
+            }
+            #login.login-scene .login-card-3d {
+                z-index: 11;
+            }
+        }
     </style>
 </head>
 <body>
