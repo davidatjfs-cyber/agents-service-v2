@@ -21595,6 +21595,12 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         const createdAt = r?.created_at ? String(r.created_at) : '';
                         const filePath = String(r?.file_path || '');
                         const brandRef = parseBrandFromKnowledgeTags(r?.tags);
+                        let aud = { type: 'all' };
+                        try {
+                            const raw = r?.audience;
+                            if (raw && typeof raw === 'object' && !Array.isArray(raw)) aud = raw;
+                            else if (typeof raw === 'string' && raw.trim()) aud = JSON.parse(raw);
+                        } catch (e) { /* keep default */ }
                         return {
                             id: String(r?.id || ''),
                             title: String(r?.title || ''),
@@ -21603,7 +21609,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                             tags: Array.isArray(r?.tags) ? r.tags : [],
                             brandId: String(brandRef.brandId || 'all'),
                             brandName: String(brandRef.brandName || '全部品牌'),
-                            audience: { type: 'all' },
+                            audience: aud,
                             // file_path 是磁盘路径，不是 IndexedDB 的 fileId；留空避免 readKnowledgeItemBlob 误查库
                             fileId: '',
                             fileName: String(r?.title || filePath || ''),
@@ -22787,7 +22793,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             if (!container) return;
             const items = HRMS_STORE.getKnowledge();
             const visible = (items || [])
-                .filter(it => it && (it.type === 'pdf' || it.type === 'doc' || it.type === 'txt'))
+                .filter(it => it && (it.type === 'pdf' || it.type === 'doc' || it.type === 'txt' || it.type === 'img'))
                 .filter(it => isAdminUser() || knowledgeItemMatchesUser(it, currentUser))
                 .slice()
                 .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
@@ -22801,7 +22807,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 const cat = it.category || '未分类';
                 const name = it.title || it.name || '未命名';
                 const isSelected = kbChatSelectedSources.has(it.id);
-                const typeIcon = it.type === 'pdf' ? '📄' : it.type === 'doc' ? '📝' : '📃';
+                const typeIcon = it.type === 'pdf' ? '📄' : (it.type === 'doc' ? '📝' : (it.type === 'img' ? '🖼️' : '📃'));
                 return `<button type="button" class="kb-chat-source-chip ${isSelected ? 'selected' : ''}" data-id="${escapeHtml(it.id)}" onclick="toggleKbChatSource('${escapeHtml(it.id)}')">
                     <span class="kb-src-ic" aria-hidden="true">${typeIcon}</span>
                     <span class="kb-src-name">${escapeHtml(name)}</span>
@@ -24904,6 +24910,14 @@ ${knowledgeContent.slice(0, 30000)}`;
             }
 
             if (type === 'img' || type === 'image') {
+                try {
+                    const id = String(item?.id || '').trim();
+                    if (id) {
+                        const resp = await HRMS_API.request('/api/knowledge/' + encodeURIComponent(id) + '/content', { method: 'GET' });
+                        const c = String(resp?.content || '').trim();
+                        if (c) return c;
+                    }
+                } catch (e) { /* fallback OCR */ }
                 const blob = await readKnowledgeItemBlob(item);
                 if (!blob) return '';
                 const worker = await getOrCreateOcrWorker(null);

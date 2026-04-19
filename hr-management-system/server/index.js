@@ -14418,6 +14418,31 @@ app.get('/api/knowledge', authRequired, async (req, res) => {
   }
 });
 
+// 培训助手等：拉取已 OCR/提取的正文（不返回完整列表以减小体积）
+app.get('/api/knowledge/:id/content', authRequired, async (req, res) => {
+  const id = String(req.params?.id || '').trim();
+  if (!id) return res.status(400).json({ error: 'missing_id' });
+  try {
+    const viewer = await getKnowledgeViewerProfile(req);
+    const r = await pool.query(
+      'select id, content, audience from knowledge_base where id = $1::uuid limit 1',
+      [id]
+    );
+    const row = r.rows?.[0];
+    if (!row) return res.status(404).json({ error: 'not_found' });
+    if (String(viewer.role || '') !== 'admin' && !canViewerSeeKnowledgeAudience(viewer, row.audience)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    return res.json({ content: String(row.content || '') });
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (/invalid input syntax for type uuid/i.test(msg)) {
+      return res.status(400).json({ error: 'invalid_id' });
+    }
+    return res.status(500).json({ error: 'server_error', message: msg });
+  }
+});
+
 // 删除知识库条目（仅管理员）
 app.delete('/api/knowledge/:id', authRequired, async (req, res) => {
   if (String(req.user?.role || '') !== 'admin') {

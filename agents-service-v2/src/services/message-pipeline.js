@@ -3,6 +3,7 @@ import { routeMessage } from './message-router.js';
 import { dispatchToAgent } from './agent-handlers.js';
 import { planAndExecute } from './master-planner.js';
 import { sanitizeUserFacingLlmText } from '../utils/llm-output-sanitize.js';
+import { flattenMarkdownTablesForFeishu } from '../utils/feishu-table-plain.js';
 import { tryDeterministicReply } from './deterministic-replies.js';
 import { detectMetricFromQuestion } from './analysis-intent.js';
 import { detectIntent } from './intent-classifier.js';
@@ -191,6 +192,7 @@ async function checkAndProcessPendingReply(openId, text, messageId) {
 
 /** reply 失败时降级为 sendText（私聊优先 open_id，再 chat_id）；仅以飞书 API 成功为准，避免“逻辑成功但没收件”。 */
 async function sendReplyWithFallback(ev, text, logTag = 'reply') {
+  text = flattenMarkdownTablesForFeishu(String(text || ''));
   const mid = ev?.messageId ? String(ev.messageId).trim() : '';
   const cid = ev?.chatId ? String(ev.chatId).trim() : '';
   const uid = ev?.userId ? String(ev.userId).trim() : '';
