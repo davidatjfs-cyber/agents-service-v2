@@ -500,6 +500,38 @@ app.post('/api/rhythm/monthly-rating', authRequired, requireRole('admin', 'hq_ma
   }
 });
 
+app.post('/api/rhythm/dissatisfied-product/daily', authRequired, requireRole('admin', 'hq_manager'), async (req, res) => {
+  try {
+    const { generateDissatisfiedProductDailyReport } = await import('./services/dissatisfied-product-report.js');
+    const targetYmd = req.body?.targetYmd || null;
+    const result = await generateDissatisfiedProductDailyReport(targetYmd);
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/rhythm/dissatisfied-product/weekly', authRequired, requireRole('admin', 'hq_manager'), async (req, res) => {
+  try {
+    const { generateDissatisfiedProductWeeklyReport } = await import('./services/dissatisfied-product-report.js');
+    const result = await generateDissatisfiedProductWeeklyReport();
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/rhythm/dissatisfied-product/monthly', authRequired, requireRole('admin', 'hq_manager'), async (req, res) => {
+  try {
+    const { generateDissatisfiedProductMonthlyReport } = await import('./services/dissatisfied-product-report.js');
+    const period = req.body?.period || null;
+    const result = await generateDissatisfiedProductMonthlyReport(period);
+    res.json({ ok: true, result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── Random Inspection API ───
 app.get('/api/inspection/status', authRequired, (req, res) => {
   res.json(getRandomInspectionStatus());

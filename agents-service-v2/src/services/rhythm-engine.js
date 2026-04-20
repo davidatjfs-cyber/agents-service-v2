@@ -19,6 +19,7 @@ import { checkCampaignProgress, evaluateCompletedCampaigns } from './agent-colla
 import { getRhythmSchedule } from './config-service.js';
 import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
 import { sendWeeklyDishOptimizationReport, sendMonthlyDishOptimizationReport } from './dish-optimization-report.js';
+import { generateDissatisfiedProductDailyReport, generateDissatisfiedProductWeeklyReport, generateDissatisfiedProductMonthlyReport } from './dissatisfied-product-report.js';
 
 // ─── 检查任务是否启用 ───
 async function isRhythmTaskEnabled(taskKey) {
@@ -1275,7 +1276,40 @@ export function startRhythmScheduler() {
     }
   }, { timezone: 'Asia/Shanghai' });
 
+  // 每日 22:00 — 不满意产品日报
+  cron.schedule('0 22 * * *', async () => {
+    try {
+      await runWithCronLog('dissatisfied_product_daily', async () => {
+        await generateDissatisfiedProductDailyReport();
+      });
+    } catch (e) {
+      logger.error({ err: e }, 'Cron: dissatisfied product daily report failed');
+    }
+  }, { timezone: 'Asia/Shanghai' });
+
+  // 周一 09:00 — 不满意产品周报（上周一~上周日）
+  cron.schedule('0 9 * * 1', async () => {
+    try {
+      await runWithCronLog('dissatisfied_product_weekly', async () => {
+        await generateDissatisfiedProductWeeklyReport();
+      });
+    } catch (e) {
+      logger.error({ err: e }, 'Cron: dissatisfied product weekly report failed');
+    }
+  }, { timezone: 'Asia/Shanghai' });
+
+  // 每月1日 09:00 — 不满意产品月报（上月）
+  cron.schedule('0 9 1 * *', async () => {
+    try {
+      await runWithCronLog('dissatisfied_product_monthly', async () => {
+        await generateDissatisfiedProductMonthlyReport();
+      });
+    } catch (e) {
+      logger.error({ err: e }, 'Cron: dissatisfied product monthly report failed');
+    }
+  }, { timezone: 'Asia/Shanghai' });
+
   logger.info(
-    '✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+日频BI(每日05:08)+月收(每月1日08:12)+周报(周一10:06)+月评(每月1日10:18)+考勤(每日22:30+补跑23:10)+菜品优化周报(周一08:30)+菜品优化月报(每月1日08:10)'
+    '✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+日频BI(每日05:08)+月收(每月1日08:12)+周报(周一10:06)+月评(每月1日10:18)+考勤(每日22:30+补跑23:10)+菜品优化周报(周一08:30)+菜品优化月报(每月1日08:10)+不满意产品日报(每日22:00)+不满意产品周报(周一09:00)+不满意产品月报(每月1日09:00)'
   );
 }
