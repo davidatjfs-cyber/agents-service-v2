@@ -227,16 +227,16 @@ function buildStoreReport(entries, store, label, dateLabel) {
         totalProducts++;
         personCount++;
         if (item.reason) {
-          dishLines.push(`    - ${d}\n      原因：${item.reason}`);
+          dishLines.push(`  - ${d}（${item.reason}）`);
         } else {
-          dishLines.push(`    - ${d}`);
+          dishLines.push(`  - ${d}`);
         }
       }
     }
-    sections.push(`**${person}**（档口：${stallName}）— ${personCount}个\n${dishLines.join('\n')}`);
+    sections.push(`产品责任人：**${person}**（档口：${stallName}）\n不满意产品数量：**${personCount}**个\n不满意产品：\n${dishLines.join('\n')}`);
   }
 
-  const content = `**${label}（${dateLabel}）— ${store}**\n不满意产品总计：**${totalProducts}**个\n\n${sections.join('\n\n')}\n\n⚠️ 请关注以上产品问题及时改进！`;
+  const content = `**${label}（${dateLabel}）— ${store}**\n不满意产品总计：**${totalProducts}**个\n\n${sections.join('\n\n')}\n\n⚠️ 请关注以上产品问题及时改进，你的工作质量对我们很重要！`;
   return content;
 }
 
