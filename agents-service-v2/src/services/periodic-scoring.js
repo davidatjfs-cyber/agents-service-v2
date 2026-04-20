@@ -568,6 +568,7 @@ export async function scoreStoreForPeriod(store, periodMonday, options = {}) {
                 priorMonthDeducted = 100 - prevScore;
               }
             }
+            logger.info({ store, role, username, periodMonday, ymMonth, monthStartMonday, prevScore: prevR.rows?.[0]?.total_score, priorMonthDeducted, weekDeducted }, 'periodic-scoring: cumulative calculation');
           }
           cumulativeScore = 100 - priorMonthDeducted - weekDeducted;
 
