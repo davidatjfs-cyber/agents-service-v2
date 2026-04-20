@@ -274,7 +274,8 @@ async function sendReportToRoles(roles, content, title, runYmd, scopePrefix, for
   const placeholders = roleList.map(r => `%${r}%`);
   const recipients = await query(
     `SELECT open_id, username, role, store FROM feishu_users
-     WHERE registered = true AND open_id IS NOT NULL AND role = ANY($1::text[])`,
+     WHERE registered = true AND open_id IS NOT NULL AND role = ANY($1::text[])
+       AND open_id NOT LIKE '%probe%'`,
     [roleList]
   );
 
@@ -315,7 +316,8 @@ async function sendReportToStoreRoles(store, roles, content, title, runYmd, scop
     `SELECT open_id, username, role FROM feishu_users
      WHERE registered = true AND open_id IS NOT NULL
        AND role = ANY($1::text[])
-       AND trim(store) ILIKE ANY($2::text[])`,
+       AND trim(store) ILIKE ANY($2::text[])
+       AND open_id NOT LIKE '%probe%'`,
     [roles, pats]
   );
 
