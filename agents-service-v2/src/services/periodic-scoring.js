@@ -27,7 +27,9 @@ import {
 import {
   sortFeishuScoringRows,
   resolveMajixianProductionManagersForScoring,
-  isMajixianPmObserverUsername
+  isMajixianPmObserverUsername,
+  MAJIXIAN_PM_OBSERVER_USERNAME,
+  isMajixianStore
 } from '../utils/scoring-assignee.js';
 import {
   getMonthlyExecutionFilingCount,
@@ -456,7 +458,7 @@ function computeRoleRollupFromRows(rows, role, opts = {}) {
   const total = baseTotal + extra;
   const details = [...baseDetails, ...extraDetails];
   const totalScore = 100 - total;
-  return { totalScore, details, totalDeducted: total };
+  return { totalScore, details, totalDeducted: total, weekDeducted: total };
 }
 
 /** 测试门店 / 占位账号：不参与周度 anomaly 汇总展示与写入（无法 100% 识别「测试人」，但可屏蔽典型测试店与占位行） */
@@ -527,27 +529,62 @@ export async function scoreStoreForPeriod(store, periodMonday, options = {}) {
     const rechargeRollup = await sumRechargePenaltyPointsForClosedDaysInRange(store, seg.start, seg.end);
 
     for (const role of ['store_manager', 'store_production_manager']) {
-      const { totalScore, details, totalDeducted } = computeRoleRollupFromRows(r.rows || [], role, {
+      const { totalScore: weekRawScore, details, totalDeducted, weekDeducted } = computeRoleRollupFromRows(r.rows || [], role, {
         rechargePenaltySum: rechargeRollup.sum,
         rechargePenaltyLineDays: rechargeRollup.lineDays
       });
       const roleZh = roleLabelZh(role);
-      const summaryZh =
-        segments.length > 1
-          ? `周度自动评分（${monthPartZh}）：基于 ${rangeZh} 异常触发汇总，${roleZh} 合计扣 ${totalDeducted} 分（自然周 ${periodMonday}～${endStr}，按自然月拆分不计跨月）。`
-          : `周度自动评分：基于 ${periodMonday}～${endStr} 异常触发汇总，${roleZh} 合计扣 ${totalDeducted} 分。`;
       const users = await resolveScoringUsers(store, role);
       for (const { username, name } of users) {
         try {
+          let cumulativeScore = weekRawScore;
+          let priorMonthDeducted = 0;
+          const ymMonth = seg.start.slice(0, 7);
+          const monthStartMonday = shanghaiWeekMonSunContaining(
+            `${ymMonth}-01`
+          ).weekStart;
+          if (periodMonday > monthStartMonday) {
+            const prevR = await query(
+              `SELECT total_score FROM agent_scores
+               WHERE score_model = 'anomaly_rollups_v2'
+                 AND username = $1 AND store = $2 AND role = $3
+                 AND period LIKE 'week_' || $4 || '%'
+                 AND period NOT LIKE '%__%'
+                 AND substring(period from 6) < $5
+                 AND substring(period from 6) >= $6
+               ORDER BY period DESC LIMIT 1`,
+              [
+                username,
+                store,
+                role,
+                ymMonth,
+                periodMonday,
+                monthStartMonday
+              ]
+            );
+            if (prevR.rows?.length) {
+              const prevScore = Number(prevR.rows[0].total_score);
+              if (Number.isFinite(prevScore)) {
+                priorMonthDeducted = 100 - prevScore;
+              }
+            }
+          }
+          cumulativeScore = 100 - priorMonthDeducted - weekDeducted;
+
+          const summaryZh =
+            segments.length > 1
+              ? `周度自动评分（${monthPartZh}）：基于 ${rangeZh} 异常触发汇总，${roleZh} 本周扣 ${weekDeducted} 分${priorMonthDeducted > 0 ? `，本月累计已扣 ${priorMonthDeducted + weekDeducted} 分` : ''}（自然周 ${periodMonday}～${endStr}，按自然月拆分不计跨月）。`
+              : `周度自动评分：基于 ${periodMonday}～${endStr} 异常触发汇总，${roleZh} 本周扣 ${weekDeducted} 分${priorMonthDeducted > 0 ? `，本月累计已扣 ${priorMonthDeducted + weekDeducted} 分` : ''}。`;
           await query(
             `INSERT INTO agent_scores (
                brand, store, username, name, role, period, score_model,
-               total_score, deductions, breakdown, summary
-             ) VALUES ($1,$2,$3,$4,$5,$6,'anomaly_rollups_v2',$7,$8::jsonb,$9::jsonb,$10)
+               total_score, base_score, deductions, breakdown, summary
+             ) VALUES ($1,$2,$3,$4,$5,$6,'anomaly_rollups_v2',$7,$8,$9::jsonb,$10::jsonb,$11)
              ON CONFLICT (brand, store, username, period)
              DO UPDATE SET
                score_model = EXCLUDED.score_model,
                total_score = EXCLUDED.total_score,
+               base_score = EXCLUDED.base_score,
                deductions = EXCLUDED.deductions,
                breakdown = EXCLUDED.breakdown,
                summary = EXCLUDED.summary,
@@ -566,11 +603,14 @@ export async function scoreStoreForPeriod(store, periodMonday, options = {}) {
               name,
               role,
               periodTag,
-              totalScore,
+              cumulativeScore,
+              100 - priorMonthDeducted,
               JSON.stringify(details),
               JSON.stringify({
                 扣分项条数: details.length,
                 数据来源: '异常触发汇总',
+                本周扣分: weekDeducted,
+                本月累计扣分: priorMonthDeducted + weekDeducted,
                 ...(segments.length > 1 ? { 月分段: seg.ymMonth, 自然周: `${periodMonday}～${endStr}` } : {})
               }),
               summaryZh
@@ -586,7 +626,7 @@ export async function scoreStoreForPeriod(store, periodMonday, options = {}) {
               rangeStart: seg.start,
               rangeEnd: seg.end,
               details,
-              scoreAfterRollup: totalScore
+              scoreAfterRollup: cumulativeScore
             });
           }
         } catch (e) {
@@ -606,7 +646,7 @@ function roleLabelZh(role) {
 async function loadAnomalyRollupRows(periodMonday) {
   const base = `week_${periodMonday}`;
   const r = await query(
-    `SELECT username, name, store, role, total_score, deductions, summary, period,
+    `SELECT id, username, name, store, role, total_score, deductions, summary, period,
             COALESCE(updated_at, created_at) AS sort_ts
      FROM agent_scores
      WHERE score_model = 'anomaly_rollups_v2'
@@ -719,6 +759,34 @@ export async function sendWeeklyPerformanceFeishu(periodMonday, options = {}) {
         }
         if (!r?.ok) logger.warn({ u: row.username }, 'weekly perf feishu user failed');
       }
+
+      if (isMajixianStore(row.store) && row.role === 'store_production_manager' && !isMajixianPmObserverUsername(row.username)) {
+        try {
+          const obsU = await query(
+            `SELECT open_id FROM feishu_users WHERE LOWER(username) = LOWER($1) AND registered = true AND open_id IS NOT NULL LIMIT 1`,
+            [MAJIXIAN_PM_OBSERVER_USERNAME]
+          );
+          const obsOid = obsU.rows?.[0]?.open_id;
+          if (obsOid) {
+            let obsR = await sendCard(obsOid, card);
+            if (!obsR?.ok) {
+              obsR = await sendText(
+                obsOid,
+                `【上周绩效】${row.store} ${periodLabel}\n得分：${row.total_score}\n${row.summary || ''}`.slice(0, 3500),
+                'open_id'
+              );
+            }
+            if (!obsR?.ok) logger.warn({ u: MAJIXIAN_PM_OBSERVER_USERNAME }, 'weekly perf feishu observer failed');
+          }
+        } catch (_e) { /* ignore */ }
+      }
+
+      try {
+        await query(
+          `UPDATE agent_scores SET feishu_notified = TRUE WHERE id = $1`,
+          [row.id]
+        );
+      } catch (_e) { /* ignore */ }
     }
     const digestMd = `**全员上周异常汇总得分（${periodLabel}）**（周度异常汇总口径）\n\n${
       hqLines.length
