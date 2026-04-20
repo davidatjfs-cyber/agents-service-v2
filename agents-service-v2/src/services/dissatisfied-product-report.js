@@ -219,20 +219,24 @@ function buildStoreReport(entries, store, label, dateLabel) {
   let totalProducts = 0;
   const sections = [];
   for (const [person, items] of byPerson) {
-    const allDishes = [];
-    const reasons = [];
+    const stallName = items[0]?.stall || '未知';
+    const dishLines = [];
+    let personCount = 0;
     for (const item of items) {
       for (const d of item.dishes) {
-        const reasonPart = item.reason ? `（${item.reason}）` : '';
-        allDishes.push(`${d}${reasonPart}`);
         totalProducts++;
+        personCount++;
+        if (item.reason) {
+          dishLines.push(`    - ${d}\n      原因：${item.reason}`);
+        } else {
+          dishLines.push(`    - ${d}`);
+        }
       }
     }
-    const stallName = items[0]?.stall || '未知';
-    sections.push(`**产品责任人：${person}**（档口：${stallName}）\n不满意产品：${allDishes.join('、')}\n不满意产品数量：${allDishes.length}个`);
+    sections.push(`**${person}**（档口：${stallName}）— ${personCount}个\n${dishLines.join('\n')}`);
   }
 
-  const content = `**${label}（${dateLabel}）— ${store}**\n\n${sections.join('\n\n')}\n\n⚠️ 请关注以上产品问题及时改进，你的工作质量对我们很重要！`;
+  const content = `**${label}（${dateLabel}）— ${store}**\n不满意产品总计：**${totalProducts}**个\n\n${sections.join('\n\n')}\n\n⚠️ 请关注以上产品问题及时改进！`;
   return content;
 }
 
@@ -249,19 +253,18 @@ function buildAllStoresReport(allData, label, dateLabel) {
       if (!byPerson.has(e.person)) byPerson.set(e.person, []);
       byPerson.get(e.person).push(e);
     }
-    let storeTotal = 0;
     const personLines = [];
     for (const [person, items] of byPerson) {
       const dishCount = items.reduce((s, i) => s + i.dishes.length, 0);
-      storeTotal += dishCount;
       const stall = items[0]?.stall || '未知';
-      personLines.push(`  ${person}（${stall}）：${dishCount}个`);
+      personLines.push(`  ${person}（${stall}）：**${dishCount}**个`);
     }
+    const storeTotal = entries.reduce((s, e) => s + e.dishes.length, 0);
     totalAll += storeTotal;
-    storeSections.push(`**${store}** — 合计 ${storeTotal} 个\n${personLines.join('\n')}`);
+    storeSections.push(`**${store}** — 合计 **${storeTotal}**个\n${personLines.join('\n')}`);
   }
 
-  const content = `**${label}（${dateLabel}）— 全部门店汇总**\n\n总不满意产品数：**${totalAll}** 个\n\n${storeSections.join('\n\n')}`;
+  const content = `**${label}（${dateLabel}）— 全部门店汇总**\n不满意产品总计：**${totalAll}**个\n\n${storeSections.join('\n\n')}`;
   return content;
 }
 
