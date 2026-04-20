@@ -598,11 +598,12 @@ export async function checkBadReviewProduct(store) {
   const r = await query(
     `SELECT COUNT(*)::int AS cnt
      FROM feishu_generic_records
-     WHERE config_key = 'bad_review' AND fields->>'所属门店' = $1
+     WHERE config_key = 'bad_review' AND (fields->>'差评门店' = $1 OR fields->>'所属门店' = $1)
        AND (timezone('Asia/Shanghai', created_at))::date >= $2::date
        AND (timezone('Asia/Shanghai', created_at))::date <= $3::date
        AND ${badReviewDianpingCond('fields')}
-       AND (fields->>'差评类型' ILIKE '%产品%'
+       AND (fields->>'差评产品' IS NOT NULL AND TRIM(fields->>'差评产品') <> ''
+            OR fields->>'差评类型' ILIKE '%产品%'
             OR fields->>'差评类型' ILIKE '%出品%'
             OR fields->>'差评类型' ILIKE '%菜品%')`,
     [feishuStore, weekStart, weekEnd]
@@ -629,11 +630,13 @@ export async function checkBadReviewService(store) {
   const r = await query(
     `SELECT COUNT(*)::int AS cnt
      FROM feishu_generic_records
-     WHERE config_key = 'bad_review' AND fields->>'所属门店' = $1
+     WHERE config_key = 'bad_review' AND (fields->>'差评门店' = $1 OR fields->>'所属门店' = $1)
        AND (timezone('Asia/Shanghai', created_at))::date >= $2::date
        AND (timezone('Asia/Shanghai', created_at))::date <= $3::date
        AND ${badReviewDianpingCond('fields')}
-       AND (fields->>'差评类型' ILIKE '%服务%')`,
+       AND (fields->>'差评类型' ILIKE '%服务%'
+            OR fields->>'差评关键词' ILIKE '%服务%'
+            OR (fields->>'差评原因' ILIKE '%服务%' AND (fields->>'差评产品' IS NULL OR TRIM(fields->>'差评产品') = '')))`,
     [feishuStore, weekStart, weekEnd]
   );
   const cnt = parseInt(r.rows[0]?.cnt || 0);
@@ -849,7 +852,7 @@ async function collectFoodSafetyEvidenceForStore(store, scanYmd) {
        FROM feishu_generic_records
        WHERE config_key = 'bad_review'
          AND (timezone('Asia/Shanghai', created_at))::date = $1::date
-         AND fields->>'所属门店' = $2`,
+         AND (fields->>'差评门店' = $2 OR fields->>'所属门店' = $2)`,
       [scanYmd, feishuStore]
     );
     for (const row of brr.rows || []) {

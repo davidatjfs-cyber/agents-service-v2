@@ -46,7 +46,8 @@ const CAT_ZH = {
   margin_anomaly: '毛利异常',
   product_review: '产品差评异常',
   service_review: '服务差评异常',
-  private_room_anomaly: '包房使用异常'
+  private_room_anomaly: '包房使用异常',
+  food_safety: '食品安全异常',
 };
 
 /** 规则键 → 中文名（飞书卡片/通知禁止裸露英文 key） */
@@ -195,6 +196,7 @@ const ANOMALY_TO_CATEGORY = {
   bad_review_product: 'product_review',
   bad_review_service: 'service_review',
   hongchao_jiuguang_private_room: 'private_room_anomaly',
+  food_safety: 'food_safety',
   // 月度扣分规则（monthly frequency）— 周度仅提醒，不扣分
   revenue_achievement: 'revenue_anomaly',
   labor_efficiency: 'efficiency_anomaly',
@@ -218,8 +220,6 @@ const SKIP_WORST_FOR_KEYS = new Set([
   /** 桌访产品：按产品维度累计扣分，见 mergeTableVisitProductWeekDeduction */
   'table_visit_product',
   'revenue_achievement_monthly',
-  /** 食安走单独闭环/记录流程，不并入通用周汇总扣分模型 */
-  'food_safety'
 ]);
 
 function previousWeekMonday() {
