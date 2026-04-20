@@ -48,19 +48,21 @@ function sameStore(a, b) {
   return x === y || x.includes(y) || y.includes(x);
 }
 
-/** 「记录」作动词/备案义，避免匹配「不记录」里的子串；「属实」排除「不属实」 */
+/** 「记录」作动词/备案义，避免匹配「不记录」「不予以扣分」等否定语境 */
 function recordIntentCue(t) {
+  if (/(?:不|未|勿|无|免|非)\s*(?:予|予以|需|用|要|得)?\s*(?:记录|扣分|扣\d|备案|记在)/.test(t)) return false;
   return (
-    /(?:^|[^不])记录/.test(t) ||
-    /备案|记在|扣分|处理决定|罚款|责任在|扣\s*\d|扣.*分|(?<!不)属实/.test(t)
+    /(?:^|[^不未勿无免非])记录/.test(t) ||
+    /备案|记在|处理决定|罚款|责任在/.test(t) ||
+    /(?:^|[^不未勿无免非])扣分/.test(t) ||
+    /(?:^|[^不未勿无免非])扣\s*\d/.test(t) ||
+    /(?<!不)属实/.test(t)
   );
 }
 
 function parseDismissIntent(t) {
-  if (/情况不属实|核实不属实|核实.*不属|与事实不符|false\s*positive|误判|未发现异常|不存在问题|没有问题/i.test(t)) {
-    return true;
-  }
-  if (/无需记录|不实记录|不扣分/.test(t)) return true;
+  if (/情况不属实|核实不属实|核实.*不属|与事实不符|false\s*positive|误判|未发现异常|不存在问题|没有问题/i.test(t)) return true;
+  if (/无需记录|无需扣分|不实记录|不扣分|不予.*扣分|不予以.*扣分|不予以扣分|不.?予扣分|不用扣分|不应扣分|不该扣分|免扣分/.test(t)) return true;
   /** 整句仅为「不记录」类结案用语 */
   if (/^不记录[。！!\s]*$/i.test(t)) return true;
   if (/情况不属实[^。；;]*不记录|不记录[^。；;]*情况不属实/.test(t)) return true;
@@ -78,9 +80,10 @@ export function parseFoodSafetyHqRuling(text) {
   const smRe = /店长|门店负责人|门店经理/;
   const smOrPmLoose = /前厅|后厨|出品(?!经理)/;
 
+  const negatedAction = /(?:不|未|勿|无|免|非)\s*(?:予|予以|需|用|要|得)?\s*(?:记录|扣分|扣\d|备案|记在|属实)/;
   const rulingSemantics =
     recordIntentCue(t) ||
-    /扣分|扣\s*\d|罚款|责任认定|备案|处理决定|记在/.test(t);
+    (!negatedAction.test(t) && /扣分|扣\s*\d|罚款|责任认定|备案|处理决定|记在/.test(t));
 
   const targets = new Set();
   if (bothRe.test(t)) {
@@ -95,15 +98,15 @@ export function parseFoodSafetyHqRuling(text) {
     }
   }
 
-  /** 先识别「记录在…」属实判罚，再处理「不记录」结案，避免「不推荐不记录」等误判 */
+  /** 先识别「不予以扣分」「不记录」等结案意图；再识别「记录在…」属实判罚 */
+  if (parseDismissIntent(t)) {
+    return { kind: 'dismiss' };
+  }
   if (targets.size > 0 && rulingSemantics) {
     return { kind: 'record', targets: [...targets] };
   }
-  if (recordIntentCue(t) || /记在|扣分|扣\s*\d/.test(t)) {
+  if (recordIntentCue(t) || (!negatedAction.test(t) && /记在|扣分|扣\s*\d/.test(t))) {
     return { kind: 'unknown', reason: 'need_target' };
-  }
-  if (parseDismissIntent(t)) {
-    return { kind: 'dismiss' };
   }
   return { kind: 'unknown', reason: 'no_ruling' };
 }
