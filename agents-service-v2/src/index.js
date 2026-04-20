@@ -504,7 +504,8 @@ app.post('/api/rhythm/dissatisfied-product/daily', authRequired, requireRole('ad
   try {
     const { generateDissatisfiedProductDailyReport } = await import('./services/dissatisfied-product-report.js');
     const targetYmd = req.body?.targetYmd || null;
-    const result = await generateDissatisfiedProductDailyReport(targetYmd);
+    const force = req.body?.force || false;
+    const result = await generateDissatisfiedProductDailyReport(targetYmd, force);
     res.json({ ok: true, result });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -514,7 +515,8 @@ app.post('/api/rhythm/dissatisfied-product/daily', authRequired, requireRole('ad
 app.post('/api/rhythm/dissatisfied-product/weekly', authRequired, requireRole('admin', 'hq_manager'), async (req, res) => {
   try {
     const { generateDissatisfiedProductWeeklyReport } = await import('./services/dissatisfied-product-report.js');
-    const result = await generateDissatisfiedProductWeeklyReport();
+    const force = req.body?.force || false;
+    const result = await generateDissatisfiedProductWeeklyReport(force);
     res.json({ ok: true, result });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -525,7 +527,8 @@ app.post('/api/rhythm/dissatisfied-product/monthly', authRequired, requireRole('
   try {
     const { generateDissatisfiedProductMonthlyReport } = await import('./services/dissatisfied-product-report.js');
     const period = req.body?.period || null;
-    const result = await generateDissatisfiedProductMonthlyReport(period);
+    const force = req.body?.force || false;
+    const result = await generateDissatisfiedProductMonthlyReport(period, force);
     res.json({ ok: true, result });
   } catch (e) {
     res.status(500).json({ error: e.message });

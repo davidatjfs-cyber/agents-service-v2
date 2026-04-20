@@ -268,7 +268,7 @@ function buildAllStoresReport(allData, label, dateLabel) {
   return content;
 }
 
-async function sendReportToRoles(roles, content, title, runYmd, scopePrefix) {
+async function sendReportToRoles(roles, content, title, runYmd, scopePrefix, force = false) {
   if (!content) return;
   const roleList = Array.isArray(roles) ? roles : [roles];
   const placeholders = roleList.map(r => `%${r}%`);
@@ -294,6 +294,7 @@ async function sendReportToRoles(roles, content, title, runYmd, scopePrefix) {
         runYmd,
         username: u.username || u.open_id,
         scope: scopePrefix,
+        force,
         sendFn: async () => {
           const res = await sendCard(u.open_id, card, 'open_id');
           if (res?.ok) return { ok: true };
@@ -307,7 +308,7 @@ async function sendReportToRoles(roles, content, title, runYmd, scopePrefix) {
   }
 }
 
-async function sendReportToStoreRoles(store, roles, content, title, runYmd, scopePrefix) {
+async function sendReportToStoreRoles(store, roles, content, title, runYmd, scopePrefix, force = false) {
   if (!content) return;
   const pats = feishuStoreSearchPatterns(store);
   const recipients = await query(
@@ -334,6 +335,7 @@ async function sendReportToStoreRoles(store, roles, content, title, runYmd, scop
         runYmd,
         username: u.username || u.open_id,
         scope: `${scopePrefix}_${u.role}`,
+        force,
         sendFn: async () => {
           const res = await sendCard(u.open_id, card, 'open_id');
           if (res?.ok) return { ok: true };
@@ -347,7 +349,7 @@ async function sendReportToStoreRoles(store, roles, content, title, runYmd, scop
   }
 }
 
-export async function generateDissatisfiedProductDailyReport(targetYmd) {
+export async function generateDissatisfiedProductDailyReport(targetYmd, force = false) {
   const ymd = targetYmd || getShanghaiYmd();
   const label = '不满意产品日报';
   const dateLabel = ymd;
@@ -366,17 +368,17 @@ export async function generateDissatisfiedProductDailyReport(targetYmd) {
     const storeEntries = entries.filter(e => e.store === store);
     const content = buildStoreReport(storeEntries, store, label, dateLabel);
     const title = `📊 ${label}（${dateLabel}）— ${store}`;
-    await sendReportToStoreRoles(store, ['store_manager', 'store_production_manager'], content, title, runYmd, `daily_${store}`);
+    await sendReportToStoreRoles(store, ['store_manager', 'store_production_manager'], content, title, runYmd, `daily_${store}`, force);
   }
 
   const allContent = buildAllStoresReport(entries, label, dateLabel);
-  await sendReportToRoles(['admin', 'hq_manager'], allContent, `📊 ${label}（${dateLabel}）— 全门店汇总`, runYmd, 'daily_all');
+  await sendReportToRoles(['admin', 'hq_manager'], allContent, `📊 ${label}（${dateLabel}）— 全门店汇总`, runYmd, 'daily_all', force);
 
   logger.info({ ymd, stores: stores.length, total: entries.length }, 'dissatisfied product daily report: done');
   return { ok: true, ymd, count: entries.length };
 }
 
-export async function generateDissatisfiedProductWeeklyReport() {
+export async function generateDissatisfiedProductWeeklyReport(force = false) {
   const { weekStart, weekEnd } = shanghaiLastCompletedWeekBounds();
   const label = '不满意产品周报';
   const dateLabel = `${weekStart}～${weekEnd}`;
@@ -395,17 +397,17 @@ export async function generateDissatisfiedProductWeeklyReport() {
     const storeEntries = entries.filter(e => e.store === store);
     const content = buildStoreReport(storeEntries, store, label, dateLabel);
     const title = `📊 ${label}（${dateLabel}）— ${store}`;
-    await sendReportToStoreRoles(store, ['store_manager', 'store_production_manager'], content, title, runYmd, `weekly_${store}`);
+    await sendReportToStoreRoles(store, ['store_manager', 'store_production_manager'], content, title, runYmd, `weekly_${store}`, force);
   }
 
   const allContent = buildAllStoresReport(entries, label, dateLabel);
-  await sendReportToRoles(['admin', 'hq_manager'], allContent, `📊 ${label}（${dateLabel}）— 全门店汇总`, runYmd, 'weekly_all');
+  await sendReportToRoles(['admin', 'hq_manager'], allContent, `📊 ${label}（${dateLabel}）— 全门店汇总`, runYmd, 'weekly_all', force);
 
   logger.info({ weekStart, weekEnd, stores: stores.length, total: entries.length }, 'dissatisfied product weekly report: done');
   return { ok: true, weekStart, weekEnd, count: entries.length };
 }
 
-export async function generateDissatisfiedProductMonthlyReport(period) {
+export async function generateDissatisfiedProductMonthlyReport(period, force = false) {
   const { y, m } = getShanghaiYmdParts();
   let pm = m - 1, py = y;
   if (pm < 1) { pm = 12; py -= 1; }
@@ -430,11 +432,11 @@ export async function generateDissatisfiedProductMonthlyReport(period) {
     const storeEntries = entries.filter(e => e.store === store);
     const content = buildStoreReport(storeEntries, store, label, dateLabel);
     const title = `📊 ${label}（${dateLabel}）— ${store}`;
-    await sendReportToStoreRoles(store, ['store_manager', 'store_production_manager'], content, title, runYmd, `monthly_${store}`);
+    await sendReportToStoreRoles(store, ['store_manager', 'store_production_manager'], content, title, runYmd, `monthly_${store}`, force);
   }
 
   const allContent = buildAllStoresReport(entries, label, dateLabel);
-  await sendReportToRoles(['admin', 'hq_manager'], allContent, `📊 ${label}（${dateLabel}）— 全门店汇总`, runYmd, 'monthly_all');
+  await sendReportToRoles(['admin', 'hq_manager'], allContent, `📊 ${label}（${dateLabel}）— 全门店汇总`, runYmd, 'monthly_all', force);
 
   logger.info({ period: p, stores: stores.length, total: entries.length }, 'dissatisfied product monthly report: done');
   return { ok: true, period: p, count: entries.length };
