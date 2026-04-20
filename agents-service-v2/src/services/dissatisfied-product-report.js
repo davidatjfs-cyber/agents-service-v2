@@ -82,10 +82,10 @@ function resolvePersonAndStall(storeRaw, fieldVal) {
 }
 
 function resolveStoreKey(raw) {
-  const s = String(raw || '').trim();
-  if (/洪潮/.test(s)) return '洪潮大宁久光店';
-  if (/马己仙|马已仙/.test(s)) return '马己仙上海音乐广场店';
-  return s;
+  const s = String(raw || '').trim().toLowerCase().replace(/\s/g, '');
+  if (s.includes('洪潮') || s.includes('久光')) return '洪潮大宁久光店';
+  if (s.includes('马己仙') || s.includes('马已仙') || s.includes('大宁')) return '马己仙上海音乐广场店';
+  return String(raw || '').trim();
 }
 
 function extractDishNames(raw) {
@@ -120,6 +120,10 @@ function ext(v) {
 function bitableDate(v, fallback) {
   if (!v) return '';
   if (typeof v === 'number') {
+    if (v > 1e12) {
+      const dt = new Date(v);
+      return dt.toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
+    }
     const dt = new Date((v - 25569) * 86400000);
     return dt.toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
   }
@@ -146,15 +150,27 @@ async function fetchDissatisfiedEntries(startYmd, endYmd) {
   );
   const storeNames = (activeStores.rows || []).map(x => x.store).filter(Boolean);
 
+  function matchStore(rawStoreField) {
+    const fl = String(rawStoreField || '').trim().toLowerCase().replace(/\s/g, '');
+    if (!fl) return null;
+    for (const s of storeNames) {
+      const sl = s.toLowerCase().replace(/\s/g, '');
+      if (fl === sl || fl.includes(sl) || sl.includes(fl)) return s;
+    }
+    if (fl.includes('洪潮') || fl.includes('久光')) {
+      return storeNames.find(s => s.includes('洪潮大宁久光')) || null;
+    }
+    if (fl.includes('马己仙') || fl.includes('马已仙') || fl.includes('大宁')) {
+      return storeNames.find(s => s.includes('马己仙上海音乐广场')) || null;
+    }
+    return null;
+  }
+
   const results = [];
   for (const row of r.rows || []) {
     const f = row.fields && typeof row.fields === 'object' ? row.fields : {};
     const storeField = ext(f['所属门店'] || f['门店'] || f['门店名称'] || '');
-    const matchedStore = storeNames.find(s => {
-      const sl = s.toLowerCase().replace(/\s/g, '');
-      const fl = storeField.toLowerCase().replace(/\s/g, '');
-      return fl.includes(sl) || sl.includes(fl);
-    });
+    const matchedStore = matchStore(storeField);
     if (!matchedStore) continue;
 
     const dateStr = bitableDate(f['日期'] || f['创建日期'] || f['提交时间'], row.created_at);
