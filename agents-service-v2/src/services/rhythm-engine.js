@@ -14,10 +14,11 @@ import { logger } from '../utils/logger.js';
 import { runWithCronLog } from '../utils/cron-run-monitor.js';
 import { runAnomalyChecks } from './anomaly-engine.js';
 import { pushRhythmReport } from './feishu-client.js';
-import { buildTableVisitKpiMarkdownSection } from './deterministic-replies.js';
+import { buildTableVisitKpiMarkdownSection, getBadReviewRowsForStoreDateRange } from './deterministic-replies.js';
 import { checkCampaignProgress, evaluateCompletedCampaigns } from './agent-collaboration.js';
 import { getRhythmSchedule } from './config-service.js';
 import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
+import { sendWeeklyDishOptimizationReport, sendMonthlyDishOptimizationReport } from './dish-optimization-report.js';
 
 // ─── 检查任务是否启用 ───
 async function isRhythmTaskEnabled(taskKey) {
@@ -396,7 +397,71 @@ export async function weeklyReport() {
     wkLines.push('');
     wkLines.push('⚠️ 问题门店Top3: ' + summary.top3ProblemStores.map(s => `${s.store}(${s.anomaly_count}次异常)`).join(', '));
   }
-  if (!opsData.length && !summary.kpiByStore?.length && !summary.top3ProblemStores?.length) {
+  // ── 包房使用数(本周) ──
+  try {
+    const prR = await query(
+      `SELECT store, SUM(COALESCE(private_room_uses, 0))::int AS total
+       FROM daily_reports
+       WHERE date >= $1::date AND date <= $2::date AND private_room_uses IS NOT NULL
+       GROUP BY store`,
+      [addCalendarDaysYmdShanghai(shanghaiTodayYmd(), -6), shanghaiTodayYmd()]
+    );
+    if (prR.rows?.length) {
+      wkLines.push('');
+      wkLines.push('🏠 包房使用(本周):');
+      let prTotal = 0;
+      for (const s of prR.rows) {
+        prTotal += Number(s.total) || 0;
+        wkLines.push(`  ${s.store}: ${s.total}次`);
+      }
+      wkLines.push(`  **合计: ${prTotal}次**`);
+      summary.privateRoomUses = prR.rows;
+    }
+  } catch (e) { logger.warn({ err: e?.message }, 'weekly private_room_uses query failed'); }
+
+  // ── 差评数(本周) ──
+  try {
+    const brEnd = shanghaiTodayYmd();
+    const brStart = addCalendarDaysYmdShanghai(brEnd, -6);
+    const allBr = await query(
+      `SELECT fields, created_at FROM feishu_generic_records WHERE config_key='bad_review' ORDER BY updated_at DESC LIMIT 3000`
+    );
+    const brByStore = new Map();
+    for (const row of allBr.rows || []) {
+      const f = row.fields && typeof row.fields === 'object' ? row.fields : {};
+      const storeField = String(f['差评门店'] || f['门店'] || f['所属门店'] || '').trim();
+      const dField = f['创建日期'] || f['日期'] || f['提交时间'] || f['评价日期'];
+      let d = '';
+      if (dField) {
+        if (typeof dField === 'number') {
+          const dt = new Date((dField - 25569) * 86400000);
+          d = dt.toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
+        } else {
+          d = String(dField).slice(0, 10);
+        }
+      }
+      if (!d) d = row.created_at ? new Date(row.created_at).toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10) : '';
+      if (!d || d < brStart || d > brEnd) continue;
+      for (const s of stores) {
+        if (storeField.includes(s) || s.includes(storeField)) {
+          brByStore.set(s, (brByStore.get(s) || 0) + 1);
+        }
+      }
+    }
+    let brTotal = 0;
+    if (brByStore.size) {
+      wkLines.push('');
+      wkLines.push('💬 差评数(本周):');
+      for (const [s, cnt] of brByStore) {
+        brTotal += cnt;
+        wkLines.push(`  ${s}: ${cnt}条`);
+      }
+      wkLines.push(`  **合计: ${brTotal}条**`);
+      summary.badReviews = brByStore;
+    }
+  } catch (e) { logger.warn({ err: e?.message }, 'weekly bad_review query failed'); }
+
+  if (!opsData.length && !summary.kpiByStore?.length && !summary.top3ProblemStores?.length && !summary.privateRoomUses && !summary.badReviews) {
     wkLines.push('暂无本周运营数据');
   }
 
@@ -470,6 +535,79 @@ export async function monthlyEvaluation() {
     if (block) moTv.push(block);
   }
   let moBody = `📈 月度评估\n检测: ${summary.monthlyChecks} | 触发: ${summary.triggered}\n门店KPI: ${(summary.kpiByStore || []).length}店已汇总`;
+
+  // ── 包房使用数(本月) ──
+  try {
+    const { y, m } = (await import('../utils/anomaly-week-bounds.js')).getShanghaiYmdParts();
+    let pm = m - 1, py = y;
+    if (pm < 1) { pm = 12; py -= 1; }
+    const moPeriod = `${py}-${String(pm).padStart(2, '0')}`;
+    const daysInMonth = new Date(py, pm, 0).getDate();
+    const moStart = `${py}-${String(pm).padStart(2, '0')}-01`;
+    const moEnd = `${py}-${String(pm).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+    const prR = await query(
+      `SELECT store, SUM(COALESCE(private_room_uses, 0))::int AS total
+       FROM daily_reports
+       WHERE date >= $1::date AND date <= $2::date AND private_room_uses IS NOT NULL
+       GROUP BY store`,
+      [moStart, moEnd]
+    );
+    if (prR.rows?.length) {
+      moBody += '\n\n🏠 **包房使用（上月）**:';
+      let prTotal = 0;
+      for (const s of prR.rows) {
+        prTotal += Number(s.total) || 0;
+        moBody += `\n  ${s.store}: ${s.total}次`;
+      }
+      moBody += `\n  **合计: ${prTotal}次**`;
+    }
+  } catch (e) { logger.warn({ err: e?.message }, 'monthly private_room_uses failed'); }
+
+  // ── 差评数(本月) ──
+  try {
+    const { y, m } = (await import('../utils/anomaly-week-bounds.js')).getShanghaiYmdParts();
+    let pm = m - 1, py = y;
+    if (pm < 1) { pm = 12; py -= 1; }
+    const moPeriod = `${py}-${String(pm).padStart(2, '0')}`;
+    const daysInMonth = new Date(py, pm, 0).getDate();
+    const moStart = `${py}-${String(pm).padStart(2, '0')}-01`;
+    const moEnd = `${py}-${String(pm).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+    const allBr = await query(
+      `SELECT fields, created_at FROM feishu_generic_records WHERE config_key='bad_review' ORDER BY updated_at DESC LIMIT 3000`
+    );
+    const brByStore = new Map();
+    for (const row of allBr.rows || []) {
+      const f = row.fields && typeof row.fields === 'object' ? row.fields : {};
+      const storeField = String(f['差评门店'] || f['门店'] || f['所属门店'] || '').trim();
+      const dField = f['创建日期'] || f['日期'] || f['提交时间'] || f['评价日期'];
+      let d = '';
+      if (dField) {
+        if (typeof dField === 'number') {
+          const dt = new Date((dField - 25569) * 86400000);
+          d = dt.toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
+        } else {
+          d = String(dField).slice(0, 10);
+        }
+      }
+      if (!d) d = row.created_at ? new Date(row.created_at).toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10) : '';
+      if (!d || d < moStart || d > moEnd) continue;
+      for (const s of stores) {
+        if (storeField.includes(s) || s.includes(storeField)) {
+          brByStore.set(s, (brByStore.get(s) || 0) + 1);
+        }
+      }
+    }
+    if (brByStore.size) {
+      moBody += '\n\n💬 **差评数（上月）**:';
+      let brTotal = 0;
+      for (const [s, cnt] of brByStore) {
+        brTotal += cnt;
+        moBody += `\n  ${s}: ${cnt}条`;
+      }
+      moBody += `\n  **合计: ${brTotal}条**`;
+    }
+  } catch (e) { logger.warn({ err: e?.message }, 'monthly bad_review failed'); }
+
   if (moTv.length) {
     moBody += `\n\n🪑 **桌访经营 KPI（${moStart}～${moEnd}）**\n${moTv.slice(0, 12).join('\n\n')}`;
     if (moTv.length > 12) moBody += `\n…余 ${moTv.length - 12} 家门店有桌访数据（略）`;
@@ -1115,7 +1253,29 @@ export function startRhythmScheduler() {
     }
   }, { timezone: 'Asia/Shanghai' });
 
+  // 周一 08:30 — 菜品优化周报（按大类维度四象限分类）
+  cron.schedule('30 8 * * 1', async () => {
+    try {
+      await runWithCronLog('weekly_dish_optimization', async () => {
+        await sendWeeklyDishOptimizationReport();
+      });
+    } catch (e) {
+      logger.error({ err: e }, 'Cron: weekly dish optimization report failed');
+    }
+  }, { timezone: 'Asia/Shanghai' });
+
+  // 每月1日 08:10 — 菜品优化月报
+  cron.schedule('10 8 1 * *', async () => {
+    try {
+      await runWithCronLog('monthly_dish_optimization', async () => {
+        await sendMonthlyDishOptimizationReport();
+      });
+    } catch (e) {
+      logger.error({ err: e }, 'Cron: monthly dish optimization report failed');
+    }
+  }, { timezone: 'Asia/Shanghai' });
+
   logger.info(
-    '✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+日频BI(每日05:08)+月收(每月1日08:12)+周报(周一10:06)+月评(每月1日10:18)+考勤(每日22:30+补跑23:10)'
+    '✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+日频BI(每日05:08)+月收(每月1日08:12)+周报(周一10:06)+月评(每月1日10:18)+考勤(每日22:30+补跑23:10)+菜品优化周报(周一08:30)+菜品优化月报(每月1日08:10)'
   );
 }

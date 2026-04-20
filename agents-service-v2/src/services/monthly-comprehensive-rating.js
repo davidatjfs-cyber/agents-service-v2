@@ -29,6 +29,7 @@ import {
   getMonthlyExecutionFilingCount,
   getMonthlyAttitudeFilingCount
 } from '../utils/performance-filing-counts.js';
+import { getBadReviewRowsForStoreDateRange } from './deterministic-replies.js';
 
 const MONTHLY_RATING_PENDING = '待定';
 
@@ -663,8 +664,44 @@ export async function runMonthlyComprehensiveRating(period) {
     // 7. 工作能力月评备案（未达 A：飞书 + HRMS，与执行力日评备案同思路）
     await sendAbilityMonthlyFiling(results, period);
 
-    // 8. 发送飞书通知（月度综合评级卡）
-    await sendMonthlyRatingNotifications(results, period);
+    // 8. 补充数据：包房使用数 + 差评数
+    let supplementaryData = {};
+    try {
+      const { y, m } = getShanghaiYmdParts();
+      const endDate = `${y}-${String(m).padStart(2, '0')}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+      const prR = await query(
+        `SELECT store, SUM(COALESCE(private_room_uses, 0))::int AS total
+         FROM daily_reports
+         WHERE date >= $1::date AND date <= $2::date AND private_room_uses IS NOT NULL
+         GROUP BY store`,
+        [`${period}-01`, endDate]
+      );
+      const prMap = {};
+      let prTotal = 0;
+      for (const row of prR.rows || []) {
+        prMap[row.store] = Number(row.total) || 0;
+        prTotal += Number(row.total) || 0;
+      }
+      supplementaryData.privateRoomUses = prMap;
+      supplementaryData.privateRoomUsesTotal = prTotal;
+    } catch (e) { logger.warn({ err: e?.message }, 'monthly private_room_uses query failed'); }
+
+    try {
+      const stores = [...new Set(results.map(r => r.store).filter(Boolean))];
+      const periodEnd = `${period}-${String(getDaysInMonth(period)).padStart(2, '0')}`;
+      const brMap = {};
+      let brTotal = 0;
+      for (const store of stores) {
+        const rows = await getBadReviewRowsForStoreDateRange(store, `${period}-01`, periodEnd);
+        brMap[store] = rows.length;
+        brTotal += rows.length;
+      }
+      supplementaryData.badReviews = brMap;
+      supplementaryData.badReviewsTotal = brTotal;
+    } catch (e) { logger.warn({ err: e?.message }, 'monthly bad_review query failed'); }
+
+    // 9. 发送飞书通知（月度综合评级卡）
+    await sendMonthlyRatingNotifications(results, period, supplementaryData);
 
     logger.info({ period, evaluated: results.length }, 'monthly comprehensive rating: completed');
     return { period, evaluated: results.length, results };
@@ -859,7 +896,7 @@ async function sendAbilityMonthlyFiling(results, period) {
 // 9. 飞书通知（月度综合评级）
 // ─────────────────────────────────────────────
 
-async function sendMonthlyRatingNotifications(results, period) {
+async function sendMonthlyRatingNotifications(results, period, supplementaryData = {}) {
   let sentCount = 0;
   let failedCount = 0;
   const runYmd = getShanghaiYmd();
@@ -949,7 +986,7 @@ async function sendMonthlyRatingNotifications(results, period) {
   );
 
   if (adminRecipients.rows.length > 0 && results.length > 0) {
-    const summaryCard = buildMonthlySummaryCard(results, period);
+    const summaryCard = buildMonthlySummaryCard(results, period, supplementaryData);
     for (const recipient of adminRecipients.rows) {
       try {
         const deliver = await sendReportToRecipient({
@@ -960,7 +997,7 @@ async function sendMonthlyRatingNotifications(results, period) {
           sendFn: async () => {
             const res = await sendCard(recipient.open_id, summaryCard, 'open_id');
             if (res?.ok) return { ok: true };
-            const textRes = await sendText(recipient.open_id, buildMonthlySummaryText(results, period), 'open_id');
+            const textRes = await sendText(recipient.open_id, buildMonthlySummaryText(results, period, supplementaryData), 'open_id');
             return { ok: !!textRes?.ok, error: textRes?.error || res?.error || '' };
           }
         });
@@ -1063,7 +1100,7 @@ ${r.store} · ${roleLabel} ${r.name || r.username}
 门店级别：${fmtStoreLevelLabel(r.store_rating)}`;
 }
 
-function buildMonthlySummaryCard(results, period) {
+function buildMonthlySummaryCard(results, period, supplementaryData = {}) {
   const lines = results.map(r => {
     const roleLabel = roleLabelZh(r.role);
     const execCount =
@@ -1078,9 +1115,23 @@ function buildMonthlySummaryCard(results, period) {
     return `• **${r.store}** · ${roleLabel} ${r.name || r.username}：${r.performance_score}分 | 执行${r.execution_rating}(${execCount}次) 态度${r.attitude_rating}(${attCount}次) 能力${r.ability_rating} 门店${r.store_rating} | 备案执${fe}/态${fa}`;
   });
 
-  const content = `**${period} 月度综合评级汇总**
+  let content = `**${period} 月度综合评级汇总**\n\n${lines.join('\n')}`;
 
-${lines.join('\n')}`;
+  const sd = supplementaryData || {};
+  if (sd.privateRoomUses && Object.keys(sd.privateRoomUses).length) {
+    content += '\n\n**🏠 包房使用（上月）**\n';
+    for (const [store, cnt] of Object.entries(sd.privateRoomUses)) {
+      content += `  ${store}: ${cnt}次\n`;
+    }
+    content += `  **合计: ${sd.privateRoomUsesTotal || 0}次**`;
+  }
+  if (sd.badReviews && Object.keys(sd.badReviews).length) {
+    content += '\n\n**💬 差评数（上月）**\n';
+    for (const [store, cnt] of Object.entries(sd.badReviews)) {
+      content += `  ${store}: ${cnt}条\n`;
+    }
+    content += `  **合计: ${sd.badReviewsTotal || 0}条**`;
+  }
 
   return {
     config: { wide_screen_mode: true },
@@ -1090,12 +1141,12 @@ ${lines.join('\n')}`;
     },
     elements: [
       { tag: 'div', text: { tag: 'lark_md', content } },
-      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：周度异常汇总 + 每日执行力备案 + 月度毛利率/点评 · 每月10号01:18自动生成' }] }
+      { tag: 'note', elements: [{ tag: 'plain_text', content: '数据来源：周度异常汇总 + 每日执行力备案 + 月度毛利率/点评 + 包房使用 + 差评 · 每月10号01:18自动生成' }] }
     ]
   };
 }
 
-function buildMonthlySummaryText(results, period) {
+function buildMonthlySummaryText(results, period, supplementaryData = {}) {
   const lines = results.map(r => {
     const roleLabel = roleLabelZh(r.role);
     const execCount =
@@ -1108,7 +1159,23 @@ function buildMonthlySummaryText(results, period) {
     return `• ${r.store} · ${roleLabel} ${r.name || r.username}：${r.performance_score}分 | 执行${r.execution_rating}(${execCount}次) 态度${r.attitude_rating}(${attCount}次) 能力${r.ability_rating} 门店${r.store_rating}`;
   });
 
-  return `${period} 月度综合评级汇总
+  let text = `${period} 月度综合评级汇总\n\n${lines.join('\n')}`;
 
-${lines.join('\n')}`;
+  const sd = supplementaryData || {};
+  if (sd.privateRoomUses && Object.keys(sd.privateRoomUses).length) {
+    text += '\n\n包房使用（上月）:';
+    for (const [store, cnt] of Object.entries(sd.privateRoomUses)) {
+      text += `\n  ${store}: ${cnt}次`;
+    }
+    text += `\n  合计: ${sd.privateRoomUsesTotal || 0}次`;
+  }
+  if (sd.badReviews && Object.keys(sd.badReviews).length) {
+    text += '\n\n差评数（上月）:';
+    for (const [store, cnt] of Object.entries(sd.badReviews)) {
+      text += `\n  ${store}: ${cnt}条`;
+    }
+    text += `\n  合计: ${sd.badReviewsTotal || 0}条`;
+  }
+
+  return text;
 }
