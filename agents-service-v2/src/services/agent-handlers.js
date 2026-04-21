@@ -426,9 +426,15 @@ function sameStore(a, b) {
   return !!(ax && by && (ax === by || ax.includes(by) || by.includes(ax)));
 }
 
+const ALLOWED_RESOLVE_TABLES = new Set(['sales_raw', 'daily_reports']);
+
 async function resolveDbStoreName(tableName, storeInput) {
   const s = String(storeInput || '').trim();
   if (!s) return '';
+  if (!ALLOWED_RESOLVE_TABLES.has(tableName)) {
+    logger.warn({ tableName }, 'resolveDbStoreName: blocked disallowed tableName');
+    return s;
+  }
   try {
     const r = await query(`SELECT DISTINCT store FROM ${tableName} WHERE store IS NOT NULL LIMIT 200`);
     const stores = (r.rows || []).map(x => x.store).filter(Boolean);
@@ -832,57 +838,95 @@ async function buildSalesRawAnalysis(store, startDate, endDate, bizFilter = null
     const resolvedStore = await resolveDbStoreName('sales_raw', store);
     const dbStore = resolvedStore || store;
     const storeNorm = String(dbStore || '').trim().toLowerCase().replace(/\s+/g, '');
-    const bizClause = bizFilter ? `AND sr.biz_type = '${bizFilter}'` : '';
+    const VALID_BIZ_TYPES = new Set(['dinein', 'takeaway']);
+    const safeBizFilter = bizFilter && VALID_BIZ_TYPES.has(bizFilter) ? bizFilter : null;
+    const bizParamIdx = safeBizFilter ? 4 : -1;
 
-    // ── 1. 基础汇总（按 biz_type + slot）────────────────────────────
     const slotR = await query(
-      `SELECT sr.biz_type, sr.slot,
-              SUM(sr.qty)          AS total_qty,
-              SUM(sr.sales_amount) AS total_sales,
-              SUM(sr.revenue)      AS total_revenue
-       FROM sales_raw sr
-       WHERE lower(regexp_replace(COALESCE(sr.store,''),'\\s+','','g')) = $1
-         AND sr.date::date BETWEEN $2 AND $3
-         AND sr.revenue > 0 ${bizClause}
-       GROUP BY sr.biz_type, sr.slot
-       ORDER BY sr.biz_type, sr.slot`,
-      [storeNorm, startDate, endDate]
+      safeBizFilter
+        ? `SELECT sr.biz_type, sr.slot,
+                SUM(sr.qty)          AS total_qty,
+                SUM(sr.sales_amount) AS total_sales,
+                SUM(sr.revenue)      AS total_revenue
+         FROM sales_raw sr
+         WHERE lower(regexp_replace(COALESCE(sr.store,''),'\\s+','','g')) = $1
+           AND sr.date::date BETWEEN $2 AND $3
+           AND sr.revenue > 0 AND sr.biz_type = $4
+         GROUP BY sr.biz_type, sr.slot
+         ORDER BY sr.biz_type, sr.slot`
+        : `SELECT sr.biz_type, sr.slot,
+                SUM(sr.qty)          AS total_qty,
+                SUM(sr.sales_amount) AS total_sales,
+                SUM(sr.revenue)      AS total_revenue
+         FROM sales_raw sr
+         WHERE lower(regexp_replace(COALESCE(sr.store,''),'\\s+','','g')) = $1
+           AND sr.date::date BETWEEN $2 AND $3
+           AND sr.revenue > 0
+         GROUP BY sr.biz_type, sr.slot
+         ORDER BY sr.biz_type, sr.slot`,
+      safeBizFilter ? [storeNorm, startDate, endDate, safeBizFilter] : [storeNorm, startDate, endDate]
     );
 
-    // ── 2. 全量动销 SKU（GROUP BY 菜品+业态；JOIN dish_library_costs，无 LIMIT）──
     const allDishR = await query(
-      `SELECT
-         sr.biz_type,
-         sr.dish_name,
-         sr.category,
-         SUM(sr.qty)          AS total_qty,
-         SUM(sr.sales_amount) AS total_sales,
-         SUM(sr.revenue)      AS total_revenue,
-         MAX(dlc.unit_cost)   AS unit_cost
-       FROM sales_raw sr
-       LEFT JOIN dish_library_costs dlc
-         ON (dlc.store = sr.store OR dlc.store = '*')
-         AND (dlc.biz_type = sr.biz_type OR dlc.biz_type = '*')
-         AND lower(trim(dlc.dish_name)) = lower(trim(sr.dish_name))
-         AND dlc.enabled = true
-       WHERE lower(regexp_replace(COALESCE(sr.store,''),'\\s+','','g')) = $1
-         AND sr.date::date BETWEEN $2 AND $3
-         AND sr.revenue > 0 ${bizClause}
-       GROUP BY sr.biz_type, sr.dish_name, sr.category
-       ORDER BY SUM(sr.revenue) DESC`,
-      [storeNorm, startDate, endDate]
+      safeBizFilter
+        ? `SELECT
+           sr.biz_type,
+           sr.dish_name,
+           sr.category,
+           SUM(sr.qty)          AS total_qty,
+           SUM(sr.sales_amount) AS total_sales,
+           SUM(sr.revenue)      AS total_revenue,
+           MAX(dlc.unit_cost)   AS unit_cost
+         FROM sales_raw sr
+         LEFT JOIN dish_library_costs dlc
+           ON (dlc.store = sr.store OR dlc.store = '*')
+           AND (dlc.biz_type = sr.biz_type OR dlc.biz_type = '*')
+           AND lower(trim(dlc.dish_name)) = lower(trim(sr.dish_name))
+           AND dlc.enabled = true
+         WHERE lower(regexp_replace(COALESCE(sr.store,''),'\\s+','','g')) = $1
+           AND sr.date::date BETWEEN $2 AND $3
+           AND sr.revenue > 0 AND sr.biz_type = $4
+         GROUP BY sr.biz_type, sr.dish_name, sr.category
+         ORDER BY SUM(sr.revenue) DESC`
+        : `SELECT
+           sr.biz_type,
+           sr.dish_name,
+           sr.category,
+           SUM(sr.qty)          AS total_qty,
+           SUM(sr.sales_amount) AS total_sales,
+           SUM(sr.revenue)      AS total_revenue,
+           MAX(dlc.unit_cost)   AS unit_cost
+         FROM sales_raw sr
+         LEFT JOIN dish_library_costs dlc
+           ON (dlc.store = sr.store OR dlc.store = '*')
+           AND (dlc.biz_type = sr.biz_type OR dlc.biz_type = '*')
+           AND lower(trim(dlc.dish_name)) = lower(trim(sr.dish_name))
+           AND dlc.enabled = true
+         WHERE lower(regexp_replace(COALESCE(sr.store,''),'\\s+','','g')) = $1
+           AND sr.date::date BETWEEN $2 AND $3
+           AND sr.revenue > 0
+         GROUP BY sr.biz_type, sr.dish_name, sr.category
+         ORDER BY SUM(sr.revenue) DESC`,
+      safeBizFilter ? [storeNorm, startDate, endDate, safeBizFilter] : [storeNorm, startDate, endDate]
     );
 
-    // ── 3. 品类汇总──────────────────────────────────────────────────
     const catR = await query(
-      `SELECT sr.biz_type, COALESCE(NULLIF(sr.category,''),'未分类') AS category,
-              SUM(sr.qty) AS total_qty, SUM(sr.revenue) AS total_revenue
-       FROM sales_raw sr
-       WHERE lower(regexp_replace(COALESCE(sr.store,''),'\\s+','','g')) = $1
-         AND sr.date::date BETWEEN $2 AND $3
-         AND sr.revenue > 0 ${bizClause}
-       GROUP BY sr.biz_type, category ORDER BY SUM(sr.revenue) DESC LIMIT 12`,
-      [storeNorm, startDate, endDate]
+      safeBizFilter
+        ? `SELECT sr.biz_type, COALESCE(NULLIF(sr.category,''),'未分类') AS category,
+                SUM(sr.qty) AS total_qty, SUM(sr.revenue) AS total_revenue
+         FROM sales_raw sr
+         WHERE lower(regexp_replace(COALESCE(sr.store,''),'\\s+','','g')) = $1
+           AND sr.date::date BETWEEN $2 AND $3
+           AND sr.revenue > 0 AND sr.biz_type = $4
+         GROUP BY sr.biz_type, category ORDER BY SUM(sr.revenue) DESC LIMIT 12`
+        : `SELECT sr.biz_type, COALESCE(NULLIF(sr.category,''),'未分类') AS category,
+                SUM(sr.qty) AS total_qty, SUM(sr.revenue) AS total_revenue
+         FROM sales_raw sr
+         WHERE lower(regexp_replace(COALESCE(sr.store,''),'\\s+','','g')) = $1
+           AND sr.date::date BETWEEN $2 AND $3
+           AND sr.revenue > 0
+         GROUP BY sr.biz_type, category ORDER BY SUM(sr.revenue) DESC LIMIT 12`,
+      safeBizFilter ? [storeNorm, startDate, endDate, safeBizFilter] : [storeNorm, startDate, endDate]
     );
 
     if (!slotR.rows.length && !allDishR.rows.length) return '';
@@ -1758,13 +1802,14 @@ async function handleDataAuditor(text, ctx) {
     // 3a) 菜品销售排行
     try {
       const sortOrder = /最差|倒数|滞销|垫底/.test(text) ? 'ASC' : 'DESC';
+      const safeSortOrder = sortOrder === 'ASC' ? 'ASC' : 'DESC';
       const sr = await query(
         `SELECT dish_name, ROUND(SUM(COALESCE(qty,0))::numeric,0) AS total_qty,
                 ROUND(SUM(COALESCE(sales_amount,0))::numeric,0) AS total_sales
          FROM sales_raw WHERE store ILIKE $1 AND date BETWEEN $2 AND $3
            AND COALESCE(dish_name,'') <> ''
          GROUP BY dish_name HAVING SUM(COALESCE(qty,0)) > 0
-         ORDER BY SUM(COALESCE(sales_amount,0)) ${sortOrder} LIMIT 15`,
+         ORDER BY SUM(COALESCE(sales_amount,0)) ${safeSortOrder} LIMIT 15`,
         [`%${store}%`, start, end]);
       if (sr.rows?.length) {
         const title = sortOrder === 'ASC' ? '销售倒数TOP15' : '销售TOP15';
@@ -1840,13 +1885,14 @@ async function handleDataAuditor(text, ctx) {
     // 仅排行关键词时的兜底
     try {
       const sortOrder = /最差|倒数|滞销|垫底/.test(text) ? 'ASC' : 'DESC';
+      const safeSortOrder = sortOrder === 'ASC' ? 'ASC' : 'DESC';
       const sr = await query(
         `SELECT dish_name, ROUND(SUM(COALESCE(qty,0))::numeric,0) AS total_qty,
                 ROUND(SUM(COALESCE(sales_amount,0))::numeric,0) AS total_sales
          FROM sales_raw WHERE store ILIKE $1 AND date BETWEEN $2 AND $3
            AND COALESCE(dish_name,'') <> ''
          GROUP BY dish_name HAVING SUM(COALESCE(qty,0)) > 0
-         ORDER BY SUM(COALESCE(sales_amount,0)) ${sortOrder} LIMIT 10`,
+         ORDER BY SUM(COALESCE(sales_amount,0)) ${safeSortOrder} LIMIT 10`,
         [`%${store}%`, start, end]);
       if (sr.rows?.length) {
         const title = sortOrder === 'ASC' ? '销售倒数TOP10' : '销售TOP10';
