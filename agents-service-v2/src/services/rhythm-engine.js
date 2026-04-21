@@ -20,6 +20,7 @@ import { getRhythmSchedule } from './config-service.js';
 import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
 import { sendWeeklyDishOptimizationReport, sendMonthlyDishOptimizationReport } from './dish-optimization-report.js';
 import { generateDissatisfiedProductDailyReport, generateDissatisfiedProductWeeklyReport, generateDissatisfiedProductMonthlyReport } from './dissatisfied-product-report.js';
+import { flushPendingNotifications } from './anomaly-notify-queue.js';
 
 // ─── 检查任务是否启用 ───
 async function isRhythmTaskEnabled(taskKey) {
@@ -1221,6 +1222,17 @@ export function startRhythmScheduler() {
     }
   }, { timezone: 'Asia/Shanghai' });
 
+  // 每日 09:05 — BI异常任务卡片发送（延迟队列刷新；周一间隔5分钟/平时间隔1分钟，避免集中轰炸）
+  cron.schedule('5 9 * * *', async () => {
+    try {
+      await runWithCronLog('bi_anomaly_notify_flush', async () => {
+        await flushPendingNotifications();
+      });
+    } catch (e) {
+      logger.error({ err: e?.message }, 'BI anomaly notify flush failed');
+    }
+  }, { timezone: 'Asia/Shanghai' });
+
   // 每月1日 08:12 — 月度实收营收（与 08:02 执行力等错开）
   cron.schedule('12 8 1 * *', async () => {
     try {
@@ -1310,6 +1322,6 @@ export function startRhythmScheduler() {
   }, { timezone: 'Asia/Shanghai' });
 
   logger.info(
-    '✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+日频BI(每日05:08)+月收(每月1日08:12)+周报(周一10:06)+月评(每月1日10:18)+考勤(每日22:30+补跑23:10)+菜品优化周报(周一08:30)+菜品优化月报(每月1日08:10)+不满意产品日报(每日22:00)+不满意产品周报(周一09:00)+不满意产品月报(每月1日09:00)'
+    '✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+日频BI(每日05:08)+BI通知发送(每日09:05)+月收(每月1日08:12)+周报(周一10:06)+月评(每月1日10:18)+考勤(每日22:30+补跑23:10)+菜品优化周报(周一08:30)+菜品优化月报(每月1日08:10)+不满意产品日报(每日22:00)+不满意产品周报(周一09:00)+不满意产品月报(每月1日09:00)'
   );
 }

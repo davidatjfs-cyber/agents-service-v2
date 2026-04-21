@@ -19,6 +19,24 @@ import { expandAgentStoreLabels } from '../config/store-mapping.js';
 import { shanghaiLastCompletedWeekBounds, shanghaiCurrentWeekBounds } from '../utils/anomaly-week-bounds.js';
 import { ANOMALY_RULES } from '../config/anomaly-rules.js';
 
+async function notifyAdminsOnBadReviewCheckFailure(ruleKey, store, err) {
+  try {
+    const { sendText } = await import('./feishu-client.js');
+    const r = await query(
+      `SELECT open_id FROM feishu_users
+       WHERE registered = true AND open_id IS NOT NULL AND role = 'admin'
+       LIMIT 20`
+    );
+    const label = ruleKey === 'bad_review_product' ? '差评产品异常' : '差评服务异常';
+    const msg = `🚨 【差评检测失败告警】\n规则：${label}\n门店：${store || '—'}\n错误：${String(err?.message || err).slice(0, 800)}\n\n请检查差评数据源和服务运行状态。`;
+    for (const row of (r.rows || [])) {
+      await sendText(row.open_id, msg, 'open_id').catch(() => {});
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message, ruleKey, store }, 'notifyAdminsOnBadReviewCheckFailure failed');
+  }
+}
+
 // ─── 工具函数 ───
 function getMonthDays(year, month) {
   return new Date(year, month, 0).getDate();
@@ -1204,6 +1222,9 @@ export async function runAnomalyChecks(frequency, stores, options = {}) {
       } catch (err) {
         logger.error({ err, rule: ruleKey, store }, 'Anomaly check failed');
         results.push({ store, rule: ruleKey, name: ruleCfg.name, triggered: false, error: err.message });
+        if (ruleKey === 'bad_review_product' || ruleKey === 'bad_review_service') {
+          notifyAdminsOnBadReviewCheckFailure(ruleKey, store, err).catch(() => {});
+        }
       }
     }
   }

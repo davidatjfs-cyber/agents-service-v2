@@ -35,7 +35,8 @@ const CRON_JOB_LABEL_ZH = {
   escalation_scan: '任务升级扫描',
   task_card_reminders: '任务卡片催办',
   daily_inspection_tick: '每日巡检调度（整轮）',
-  daily_attitude_filing_report: '工作态度备案日报（昨日汇总）'
+  daily_attitude_filing_report: '工作态度备案日报（昨日汇总）',
+  bi_anomaly_notify_flush: 'BI异常任务卡片发送（09:05延迟队列刷新）'
 };
 
 function cronJobLabelZh(jobKey) {
