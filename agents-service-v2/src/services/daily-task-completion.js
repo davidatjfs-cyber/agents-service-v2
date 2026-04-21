@@ -483,8 +483,10 @@ export async function sendDailyTaskCompletionReport(opts = {}) {
     }
 
     if (failedCount > 0) {
-      logger.warn({ yesterday, sent: sentCount, failed: failedCount }, 'daily task completion report: partial failure, will rely on cron retry');
-      throw new Error(`daily task completion report has ${failedCount} failed recipients`);
+      logger.error(
+        { yesterday, sent: sentCount, failed: failedCount },
+        'daily task completion report: partial recipient failure (see logs; cron treated as success)'
+      );
     }
     if (tasks.length > 0 && sentCount === 0 && skippedCount === 0) {
       const err =

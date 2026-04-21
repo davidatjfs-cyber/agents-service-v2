@@ -123,7 +123,13 @@ export async function sendCard(receiveId, card, idType = 'open_id') {
   const t = await getTenantToken(); if (!t) return { ok: false, error: 'no_token' };
   try {
     const r = await axios.post(BASE + '/im/v1/messages', { receive_id: receiveId, msg_type: 'interactive', content: JSON.stringify(card) }, { headers: { Authorization: 'Bearer ' + t }, params: { receive_id_type: idType }, timeout: 10000 });
-    return { ok: r.data?.code === 0, data: r.data };
+    const ok = r.data?.code === 0;
+    const msg = String(r.data?.msg || '').trim();
+    return {
+      ok,
+      data: r.data,
+      error: ok ? undefined : (msg || `feishu_code_${r.data?.code ?? '?'}`)
+    };
   } catch (e) { return { ok: false, error: e?.message }; }
 }
 

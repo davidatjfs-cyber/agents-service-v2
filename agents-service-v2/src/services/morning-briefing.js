@@ -715,7 +715,11 @@ export async function sendMorningBriefing(options = {}) {
   }
 
   if (failedRecipients > 0) {
-    throw new Error(`morning briefing partial failure: ${failedRecipients} recipient(s) failed`);
+    // 个别用户 open_id 失效/飞书限流等会导致部分投递失败；已按人落库 + 日志可追，不应升级为「定时任务失败」轰炸运维
+    logger.error(
+      { runYmd, failedRecipients, total: recipients.length },
+      'morning briefing partial failure (see per-user logs; cron treated as success)'
+    );
   }
   logger.info({ stores: stores.length, users: recipients.length }, 'morning briefing done');
 }

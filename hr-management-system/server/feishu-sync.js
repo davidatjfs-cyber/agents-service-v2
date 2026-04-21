@@ -13,7 +13,32 @@ export function setFeishuSyncFailureNotifier(fn) {
   _feishuSyncFailureNotifier = typeof fn === 'function' ? fn : null;
 }
 
+/** 与 agents bitable-poller 对齐：大表/索引常见 1254607「Data not ready」等为瞬态，不应双写告警轰炸 */
+function isTransientFeishuBitableError(errText) {
+  const s = String(errText || '');
+  return /1254002|1254607|1255001|1255002|1255003|1255004|1255005|1255040|1254200|feishu_code_2200|internal[\s_]?error|rpc[\s_]?error|marshal[\s_]?error|data not ready|try again later|timeout|ECONNABORTED|ECONNRESET|ETIMEDOUT|socket hang up|EAI_AGAIN|429|502|503|504/i.test(
+    s
+  );
+}
+
+function isDataNotReadyError(errText) {
+  return /1254607|data not ready|try again later/i.test(String(errText || ''));
+}
+
+function isFeishuInternalError(errText) {
+  return /1254002|1255001|1255002|1255003|1255004|1255005|1255040|feishu_code_2200|internal[\s_]?error|rpc[\s_]?error|marshal[\s_]?error/i.test(String(errText || ''));
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 function notifyFeishuSyncFailure(label, error) {
+  const msg = String(error?.message || error || '');
+  if (isTransientFeishuBitableError(msg)) {
+    console.warn(`[feishu-sync] 飞书瞬态错误，跳过双写失败告警: ${label}`, msg.slice(0, 320));
+    return;
+  }
   try {
     void _feishuSyncFailureNotifier?.(label, error);
   } catch (_e) {
@@ -294,43 +319,71 @@ export async function getFeishuAccessToken() {
   return data.tenant_access_token;
 }
 
-// 获取表格记录
+/**
+ * 拉取单页多维表记录；对 1254607「Data not ready」等瞬态错误退避重试（与 bitable-poller 策略一致）。
+ */
+async function fetchTableRecordsPage(tableConfig, accessToken, queryParams) {
+  const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${tableConfig.app_token}/tables/${tableConfig.table_id}/records?${queryParams}`;
+  const MAX_ATTEMPTS = 6;
+  let lastErr = '';
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let data;
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      data = await response.json();
+    } catch (e) {
+      lastErr = String(e?.message || e);
+      if (isTransientFeishuBitableError(lastErr) && attempt < MAX_ATTEMPTS) {
+        await sleep(Math.min(20000, 2000 * attempt));
+        continue;
+      }
+      throw new Error(`获取表格数据失败: ${lastErr}`);
+    }
+    if (data.code === 0) {
+      return data;
+    }
+    lastErr = `feishu_code_${data.code}: ${data.msg || ''}`;
+    if (isTransientFeishuBitableError(lastErr) && attempt < MAX_ATTEMPTS) {
+      const isDNR = isDataNotReadyError(lastErr);
+      const isInt = isFeishuInternalError(lastErr);
+      const delay = isDNR
+        ? Math.min(120000, 30000 * Math.pow(2, attempt - 1))
+        : isInt
+          ? Math.min(60000, 10000 * Math.pow(2, attempt - 1))
+          : Math.min(20000, 2000 * attempt);
+      console.warn(`[fetchTableRecords] ${lastErr}, attempt ${attempt}/${MAX_ATTEMPTS}, sleep ${delay}ms`);
+      await sleep(delay);
+      continue;
+    }
+    throw new Error(`获取表格数据失败: ${data.msg || lastErr}`);
+  }
+  throw new Error(lastErr || '获取表格数据失败');
+}
+
+// 获取表格记录（分页 + 每页瞬态重试）
 export async function fetchTableRecords(tableConfig, accessToken) {
-  const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${tableConfig.app_token}/tables/${tableConfig.table_id}/records`;
-  
   let allRecords = [];
   let pageToken = null;
-  
+
   do {
-    const queryParams = new URLSearchParams({
-      page_size: '100'
-    });
+    const queryParams = new URLSearchParams({ page_size: '100' });
     if (String(tableConfig.view_id || '').trim()) {
       queryParams.append('view_id', String(tableConfig.view_id || '').trim());
     }
-    
     if (pageToken) {
       queryParams.append('page_token', pageToken);
     }
-    
-    const response = await fetch(`${url}?${queryParams}`, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    const data = await response.json();
-    
-    if (data.code !== 0) {
-      throw new Error(`获取表格数据失败: ${data.msg}`);
-    }
-    
-    allRecords = allRecords.concat(data.data.items || []);
-    pageToken = data.data.page_token;
-    
+
+    const data = await fetchTableRecordsPage(tableConfig, accessToken, queryParams);
+    allRecords = allRecords.concat(data.data?.items || []);
+    pageToken = data.data?.page_token;
   } while (pageToken);
-  
+
   return allRecords;
 }
 
