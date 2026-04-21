@@ -1070,13 +1070,13 @@ async function start() {
     );
   }, { timezone: 'Asia/Shanghai' });
   logger.info('Daily attitude filing report cron scheduled at 08:05 Asia/Shanghai');
-  // 月度综合评级：每月10号 01:18（Asia/Shanghai），晚于 01:03 KPI、00:30 加分
+  // 月度绩效成绩单：每月10号 01:18（Asia/Shanghai），晚于 01:03 KPI、00:30 加分
   cron.schedule('18 1 10 * *', () => {
     runWithCronLog('monthly_comprehensive_rating', async () => {
       await runMonthlyComprehensiveRating();
     }).catch((e) => logger.warn({ err: e?.message }, 'monthly comprehensive rating cron error'));
   }, { timezone: 'Asia/Shanghai' });
-  logger.info('Monthly comprehensive rating cron scheduled at 01:18 on 10th (Asia/Shanghai)');
+  logger.info('Monthly comprehensive rating (月度绩效成绩单) cron scheduled at 01:18 on 10th (Asia/Shanghai)');
   // 上月异常项未触发加分：10日 00:30
   cron.schedule('30 0 10 * *', async () => {
     try {
@@ -1119,7 +1119,7 @@ async function start() {
       }
     }, { timezone: 'Asia/Shanghai' });
     logger.info('Food safety data scan scheduled at 08:15 Asia/Shanghai');
-    // 总实收毛利率：每月10号00:00检测上月数据，确保10号01:18月度综合评级前已落库
+    // 总实收毛利率：每月10号00:00检测上月数据，确保10号01:18月度绩效成绩单前已落库
     cron.schedule('0 0 10 * *', async () => {
       try {
         await runWithCronLog('monthly_gross_margin_check', async () => {

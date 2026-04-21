@@ -106,7 +106,7 @@ function normalizeStoreKey(s) {
 
 /**
  * 月度关账写入 agent_scores：排除测试/误绑账号；马己仙每店仅保留一名出品经理（黎永荣 NNYXLYR04 优先），
- * 与 agents-service 月度综合评级、周度 scoring-assignee 口径一致。
+ * 与 agents-service 月度绩效成绩单、周度 scoring-assignee 口径一致。
  */
 function filterUsersForMonthlyPerformanceClose(rows) {
   const filtered = (rows || []).filter((u) => {

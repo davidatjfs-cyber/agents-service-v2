@@ -1,6 +1,6 @@
 /**
  * monthly-comprehensive-rating.js
- * 每月10号凌晨01:18（上海时区）执行月度综合评级（与 KPI 01:03、加分 00:30 错开）
+ * 每月10号凌晨01:18（上海时区）执行月度绩效成绩单（与 KPI 01:03、加分 00:30 错开）
  * 
  * 功能：
  * 1. 绩效得分统计（上月 anomaly_rollups_v2 汇总）
@@ -438,7 +438,7 @@ async function getStoreRating(store, period) {
 }
 
 /**
- * 月度综合评级人选：禁止 DISTINCT ON + username 排序误选马己仙「测试/nnyxcs35」账号；
+ * 月度绩效成绩单人选：禁止 DISTINCT ON + username 排序误选马己仙「测试/nnyxcs35」账号；
  * 马己仙出品经理与周度绩效一致，走 resolveMajixianProductionManagersForScoring（黎永荣 NNYXLYR04 优先）。
  */
 async function loadMonthlyComprehensiveStaff() {
@@ -544,7 +544,7 @@ async function loadMonthlyComprehensiveStaff() {
 }
 
 // ─────────────────────────────────────────────
-// 7. 主函数：月度综合评级
+// 7. 主函数：月度绩效成绩单
 // ─────────────────────────────────────────────
 
 export async function runMonthlyComprehensiveRating(period) {
@@ -616,7 +616,7 @@ export async function runMonthlyComprehensiveRating(period) {
           /* ignore */
         }
 
-        const summary = `月度综合评级（${period}）：执行力 ${executionResult?.rating || '—'}，态度 ${attitudeResult.rating}，能力 ${abilityResult?.rating || '—'}，门店 ${fmtStoreLevelLabel(storeRatingResult.rating)}。`;
+        const summary = `月度绩效成绩单（${period}）：执行力 ${executionResult?.rating || '—'}，态度 ${attitudeResult.rating}，能力 ${abilityResult?.rating || '—'}，门店 ${fmtStoreLevelLabel(storeRatingResult.rating)}。`;
 
         await query(
           `INSERT INTO agent_scores (brand, store, username, name, role, period, score_model, total_score, breakdown, deductions, summary)
@@ -700,7 +700,7 @@ export async function runMonthlyComprehensiveRating(period) {
       supplementaryData.badReviewsTotal = brTotal;
     } catch (e) { logger.warn({ err: e?.message }, 'monthly bad_review query failed'); }
 
-    // 9. 发送飞书通知（月度综合评级卡）
+    // 9. 发送飞书通知（月度绩效成绩单卡）
     await sendMonthlyRatingNotifications(results, period, supplementaryData);
 
     logger.info({ period, evaluated: results.length }, 'monthly comprehensive rating: completed');
@@ -771,7 +771,7 @@ ${detailMd}`;
           {
             tag: 'plain_text',
             content:
-              '数据来源：monthly_margins / daily_reports（店长取当月9号点评星级）· 与月度综合评级同批触发'
+              '数据来源：monthly_margins / daily_reports（店长取当月9号点评星级）· 与月度绩效成绩单同批触发'
           }
         ]
       }
@@ -795,7 +795,7 @@ function buildAbilityMonthlyAdminSummaryCard(allResults, period) {
       { tag: 'div', text: { tag: 'lark_md', content: md } },
       {
         tag: 'note',
-        elements: [{ tag: 'plain_text', content: '全员工作能力月评备案（含 A 级）· 与月度综合评级同批触发' }]
+        elements: [{ tag: 'plain_text', content: '全员工作能力月评备案（含 A 级）· 与月度绩效成绩单同批触发' }]
       }
     ]
   };
@@ -893,7 +893,7 @@ async function sendAbilityMonthlyFiling(results, period) {
 }
 
 // ─────────────────────────────────────────────
-// 9. 飞书通知（月度综合评级）
+// 9. 飞书通知（月度绩效成绩单）
 // ─────────────────────────────────────────────
 
 async function sendMonthlyRatingNotifications(results, period, supplementaryData = {}) {
@@ -948,7 +948,7 @@ async function sendMonthlyRatingNotifications(results, period, supplementaryData
     }
   }
 
-  // 2. 个人月度综合评级飞书通知（含执行力和态度累计次数）
+  // 2. 个人月度绩效成绩单飞书通知（含执行力和态度累计次数）
   for (const r of results) {
     const card = buildMonthlyRatingCard(r, period);
     if (r.open_id) {
@@ -1067,7 +1067,7 @@ ${execLine}
   return {
     config: { wide_screen_mode: true },
     header: {
-      title: { tag: 'plain_text', content: `📊 ${period} 月度综合评级` },
+      title: { tag: 'plain_text', content: `📊 ${period} 月度绩效成绩单` },
       template: 'blue'
     },
     elements: [
@@ -1088,7 +1088,7 @@ function buildMonthlyRatingText(r, period) {
   const attitudeCount = r.attitude_detail?.incomplete_tasks ?? '—';
   const fe = Number.isFinite(Number(r.filing_exec_ops)) ? Number(r.filing_exec_ops) : 0;
   const fa = Number.isFinite(Number(r.filing_attitude_mt)) ? Number(r.filing_attitude_mt) : 0;
-  return `${period} 月度综合评级
+  return `${period} 月度绩效成绩单
 
 ${r.store} · ${roleLabel} ${r.name || r.username}
 
@@ -1115,7 +1115,7 @@ function buildMonthlySummaryCard(results, period, supplementaryData = {}) {
     return `• **${r.store}** · ${roleLabel} ${r.name || r.username}：${r.performance_score}分 | 执行${r.execution_rating}(${execCount}次) 态度${r.attitude_rating}(${attCount}次) 能力${r.ability_rating} 门店${r.store_rating} | 备案执${fe}/态${fa}`;
   });
 
-  let content = `**${period} 月度综合评级汇总**\n\n${lines.join('\n')}`;
+  let content = `**${period} 月度绩效成绩单汇总**\n\n${lines.join('\n')}`;
 
   const sd = supplementaryData || {};
   if (sd.privateRoomUses && Object.keys(sd.privateRoomUses).length) {
@@ -1136,7 +1136,7 @@ function buildMonthlySummaryCard(results, period, supplementaryData = {}) {
   return {
     config: { wide_screen_mode: true },
     header: {
-      title: { tag: 'plain_text', content: `📊 ${period} 月度评级汇总` },
+      title: { tag: 'plain_text', content: `📊 ${period} 月度绩效成绩单汇总` },
       template: 'blue'
     },
     elements: [
@@ -1159,7 +1159,7 @@ function buildMonthlySummaryText(results, period, supplementaryData = {}) {
     return `• ${r.store} · ${roleLabel} ${r.name || r.username}：${r.performance_score}分 | 执行${r.execution_rating}(${execCount}次) 态度${r.attitude_rating}(${attCount}次) 能力${r.ability_rating} 门店${r.store_rating}`;
   });
 
-  let text = `${period} 月度综合评级汇总\n\n${lines.join('\n')}`;
+  let text = `${period} 月度绩效成绩单汇总\n\n${lines.join('\n')}`;
 
   const sd = supplementaryData || {};
   if (sd.privateRoomUses && Object.keys(sd.privateRoomUses).length) {

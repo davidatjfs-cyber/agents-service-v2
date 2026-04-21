@@ -6,14 +6,14 @@
  * 16:30 巡检 — 同上
  * 21:30 日终 — 闭环率/逾期率/提醒次数/证据链缺失+明日风险预告
  * 周一10:00 周报
- * 每月1日 月度评估
+ * 每月1日 本月运营月报
  */
 import cron from 'node-cron';
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { runWithCronLog } from '../utils/cron-run-monitor.js';
 import { runAnomalyChecks } from './anomaly-engine.js';
-import { pushRhythmReport } from './feishu-client.js';
+import { pushRhythmReport, pushRhythmCard } from './feishu-client.js';
 import { buildTableVisitKpiMarkdownSection, getBadReviewRowsForStoreDateRange } from './deterministic-replies.js';
 import { checkCampaignProgress, evaluateCompletedCampaigns } from './agent-collaboration.js';
 import { getRhythmSchedule } from './config-service.js';
@@ -480,14 +480,27 @@ export async function weeklyReport() {
     if (tvBlocks.length > 12) wkLines.push(`…余 ${tvBlocks.length - 12} 家门店有桌访数据（略）`);
   }
 
-  await pushRhythmReport(wkLines.join('\n')).catch(() => {});
+  const md = wkLines.join('\n');
+  const card = {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: `📊 本周运营周报（${weekStart}～${weekEnd}）` },
+      template: 'blue'
+    },
+    elements: [
+      { tag: 'div', text: { tag: 'lark_md', content: md.slice(0, 9800) } },
+      { tag: 'note', elements: [{ tag: 'plain_text', content: `数据来源：anomaly_triggers + daily_reports + kpi_snapshots + 桌访记录 · 周一10:06自动生成` }] }
+    ]
+  };
+
+  await pushRhythmCard(card).catch(() => {});
 
   return summary;
 }
 
-// ─── 月度评估 ───
+// ─── 本月运营月报 ───
 export async function monthlyEvaluation() {
-  logger.info('📈 Running monthly evaluation');
+  logger.info('📊 Running monthly ops report (本月运营月报)');
   const stores = await getActiveStores();
 
   // 月度异常已在月末最后一天22:00（营收）和10号08:00（毛利率）触发，此处仅读取已有数据
@@ -527,7 +540,7 @@ export async function monthlyEvaluation() {
   };
 
   await logRhythm('monthly_evaluation', 'success', summary);
-  logger.info(summary, '月度评估完成');
+  logger.info(summary, '本月运营月报完成');
 
   const moEnd = shanghaiTodayYmd();
   const moStart = addCalendarDaysYmdShanghai(moEnd, -29);
@@ -536,7 +549,37 @@ export async function monthlyEvaluation() {
     const block = await buildTableVisitKpiMarkdownSection(st, moStart, moEnd, { skipIfEmpty: true }).catch(() => '');
     if (block) moTv.push(block);
   }
-  let moBody = `📈 月度评估\n检测: ${summary.monthlyChecks} | 触发: ${summary.triggered}\n门店KPI: ${(summary.kpiByStore || []).length}店已汇总`;
+  const moBody = `📊 本月运营月报\n检测: ${summary.monthlyChecks} | 触发: ${summary.triggered}\n门店KPI: ${(summary.kpiByStore || []).length}店已汇总`;
+
+  // ── 门店运营数据(上月，来自daily_reports) ──
+  let moOpsData = [];
+  try {
+    const { y, m } = (await import('../utils/anomaly-week-bounds.js')).getShanghaiYmdParts();
+    let pm = m - 1, py = y;
+    if (pm < 1) { pm = 12; py -= 1; }
+    const moStartYmd = `${py}-${String(pm).padStart(2, '0')}-01`;
+    const moEndYmd = `${py}-${String(pm).padStart(2, '0')}-${String(new Date(py, pm, 0).getDate()).padStart(2, '0')}`;
+    const opsR = await query(
+      `SELECT store,
+              COUNT(*) AS report_days,
+              ROUND(AVG(actual_revenue)::numeric, 0) AS avg_revenue,
+              ROUND(SUM(actual_revenue)::numeric, 0) AS total_revenue,
+              ROUND(AVG(dine_orders)::numeric, 0) AS avg_tables,
+              ROUND(AVG(dine_traffic)::numeric, 0) AS avg_guests
+       FROM daily_reports
+       WHERE date >= $1::date AND date <= $2::date
+       GROUP BY store`,
+      [moStartYmd, moEndYmd]
+    );
+    moOpsData = opsR.rows;
+  } catch (e) { logger.warn({ err: e?.message }, 'monthly ops data query failed'); }
+
+  if (moOpsData.length) {
+    moBody += '\n\n📈 门店运营数据(上月):';
+    for (const s of moOpsData) {
+      moBody += `\n  ${s.store}: 总营收¥${s.total_revenue || 0} | 日均¥${s.avg_revenue || 0} | 日均桌数${s.avg_tables || 0} | 日均客数${s.avg_guests || 0} (${s.report_days}天数据)`;
+    }
+  }
 
   // ── 包房使用数(本月) ──
   try {
@@ -614,7 +657,25 @@ export async function monthlyEvaluation() {
     moBody += `\n\n🪑 **桌访经营 KPI（${moStart}～${moEnd}）**\n${moTv.slice(0, 12).join('\n\n')}`;
     if (moTv.length > 12) moBody += `\n…余 ${moTv.length - 12} 家门店有桌访数据（略）`;
   }
-  await pushRhythmReport(moBody).catch(() => {});
+
+  const { y: moY, m: moM } = (await import('../utils/anomaly-week-bounds.js')).getShanghaiYmdParts();
+  let prevM = moM - 1, prevY = moY;
+  if (prevM < 1) { prevM = 12; prevY -= 1; }
+  const moPeriodLabel = `${prevY}-${String(prevM).padStart(2, '0')}`;
+
+  const moCard = {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: `📊 本月运营月报（${moPeriodLabel}）` },
+      template: 'turquoise'
+    },
+    elements: [
+      { tag: 'div', text: { tag: 'lark_md', content: moBody.slice(0, 9800) } },
+      { tag: 'note', elements: [{ tag: 'plain_text', content: `数据来源：anomaly_triggers + daily_reports + kpi_snapshots + 桌访记录 · 每月10日10:18自动生成` }] }
+    ]
+  };
+
+  await pushRhythmCard(moCard).catch(() => {});
 
   return summary;
 }
@@ -1199,7 +1260,7 @@ export function startRhythmScheduler() {
     }
   }, { timezone: 'Asia/Shanghai' });
 
-  // 每月1日 10:18 月度评估
+  // 每月1日 10:18 本月运营月报
   cron.schedule('18 10 1 * *', async () => {
     if (!await isRhythmTaskEnabled('monthly')) { logger.info('Cron: monthly evaluation SKIPPED (disabled in config)'); return; }
     try {

@@ -783,6 +783,25 @@ export async function pushRhythmReport(content) {
   return { ok: false, reason: 'no_hq_chat_id_and_no_admins' };
 }
 
+export async function pushRhythmCard(card) {
+  const chatId = process.env.FEISHU_HQ_OPS_CHAT_ID;
+  if (chatId) return sendGroupCard(chatId, card);
+  try {
+    const r = await (await import('../utils/db.js')).query(
+      `SELECT open_id FROM feishu_users
+       WHERE registered = true AND open_id IS NOT NULL AND role IN ('admin','hq_manager')`
+    );
+    let sent = 0;
+    for (const u of (r.rows || [])) {
+      if (!u.open_id) continue;
+      const res = await sendCard(u.open_id, card, 'open_id');
+      if (res?.ok) sent++;
+    }
+    if (sent > 0) return { ok: true, sent };
+  } catch (_e) { /* ignore */ }
+  return { ok: false, reason: 'no_hq_chat_id_and_no_admins' };
+}
+
 const _processedEvents = new Set();
 
 function shouldTriggerOpsDiagnosis(text) {

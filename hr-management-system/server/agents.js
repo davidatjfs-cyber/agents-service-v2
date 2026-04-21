@@ -10981,7 +10981,7 @@ function isShanghaiMondayNow() {
 // Push performance scores to users via Feishu
 async function pushScoresToFeishu() {
   try {
-    // new_model_monthly：由 agents-service 月度综合评级统一发卡片并批量标记已通知；
+    // new_model_monthly：由 agents-service 月度绩效成绩单统一发卡片并批量标记已通知；
     // 若仍走本通道，会在每月 10 日 01:00～01:18 之间用「周报」版式误发上月月评数据（与 01:18 正式月评卡矛盾）。
     const r = await pool().query(
       `SELECT * FROM agent_scores
@@ -11126,7 +11126,7 @@ async function pushScoresToFeishu() {
 
       const isMonthlyModel = modelKey === 'new_model_monthly';
       const perfTitle = isMonthlyModel ? '绩效考核月报' : '绩效考核周报';
-      const perfKind = isMonthlyModel ? '月度绩效摘要（与上方「月度综合评级」卡片同源数据时请以卡片为准）' : '绩效考核周报（与月度总结区分：本条对应系统刚写入的一条评分记录）';
+      const perfKind = isMonthlyModel ? '月度绩效摘要（与上方「月度绩效成绩单」卡片同源数据时请以卡片为准）' : '绩效考核周报（与月度总结区分：本条对应系统刚写入的一条评分记录）';
       const msgText = `📊 ${perfTitle}\n\n${fu.name || score.username}，你好！以下是你在${score.store}（${score.brand}）的${perfKind}。\n\n📋 岗位：${roleLabel}\n🗓️ ${periodLabel}${modelLine}\n\n📊 本期总分：**${score.total_score} 分**（满分100）\n\n${msgMidLabel}：\n${midSectionBody}\n\n扣分明细：\n${deductionText}\n\n${summaryZh ? '说明：' + summaryZh + '\n\n' : ''}如有异议，请回复「申诉」并说明原因。`;
       const msg = prefixWithAgentName('chief_evaluator', msgText);
 
@@ -12969,25 +12969,7 @@ export async function sendTestReportsToUser(targetUsername) {
 }
 
 export function startWeeklyReportScheduler() {
-  let lastRunDate = '';
-  let lastMonthlyRunMonth = '';
-  setInterval(() => {
-    const n = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Shanghai'}));
-    if (n.getDay()===1 && n.getHours()===10 && n.getMinutes()<5) {
-      const runDate = `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;
-      if (runDate !== lastRunDate) {
-        lastRunDate = runDate;
-        sendWeeklyReports().catch(e=>console.error('[bi-report] err:',e?.message));
-      }
-    }
-
-    if (n.getDate()===1 && n.getHours()===10 && n.getMinutes()<5) {
-      const runMonth = `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`;
-      if (runMonth !== lastMonthlyRunMonth) {
-        lastMonthlyRunMonth = runMonth;
-        sendMonthlyReports().catch(e=>console.error('[bi-monthly-report] err:',e?.message));
-      }
-    }
-  }, 60000);
-  console.log('[bi-report] weekly/monthly report scheduler started (Mon 10:00 CST, monthly on day 1 10:00 CST)');
+  // DISABLED 2026-04-21: 周报/月报已合并到 Agents v2 本周运营周报（周一10:06飞书卡片）和本月运营月报（每月10日10:18飞书卡片）
+  // 原来 HRMS 侧的纯文本周报(周一10:00)和月报(每月1日10:00)不再单独发送
+  console.log('[bi-report] weekly/monthly report scheduler DISABLED — merged into Agents v2 rhythm-engine');
 }
