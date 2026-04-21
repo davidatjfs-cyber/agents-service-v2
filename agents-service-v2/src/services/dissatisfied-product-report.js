@@ -426,7 +426,7 @@ export async function generateDissatisfiedProductDailyReport(targetYmd, force = 
     await sendReportToStoreRoles(store, ['store_manager', 'store_production_manager'], content, title, runYmd, `daily_${store}`, force);
   }
 
-  const allContent = buildAllStoresReport(entries, label, dateLabel, monthStart, monthEnd);
+  const allContent = await buildAllStoresReport(entries, label, dateLabel, monthStart, monthEnd);
   await sendReportToRoles(['admin', 'hq_manager'], allContent, `📊 ${label}（${dateLabel}）— 全门店汇总`, runYmd, 'daily_all', force);
 
   logger.info({ ymd, stores: stores.length, total: entries.length }, 'dissatisfied product daily report: done');
@@ -459,7 +459,7 @@ export async function generateDissatisfiedProductWeeklyReport(force = false) {
     await sendReportToStoreRoles(store, ['store_manager', 'store_production_manager'], content, title, runYmd, `weekly_${store}`, force);
   }
 
-  const allContent = buildAllStoresReport(entries, label, dateLabel, monthStart, monthEnd);
+  const allContent = await buildAllStoresReport(entries, label, dateLabel, monthStart, monthEnd);
   await sendReportToRoles(['admin', 'hq_manager'], allContent, `📊 ${label}（${dateLabel}）— 全门店汇总`, runYmd, 'weekly_all', force);
 
   logger.info({ weekStart, weekEnd, stores: stores.length, total: entries.length }, 'dissatisfied product weekly report: done');
@@ -494,7 +494,7 @@ export async function generateDissatisfiedProductMonthlyReport(period, force = f
     await sendReportToStoreRoles(store, ['store_manager', 'store_production_manager'], content, title, runYmd, `monthly_${store}`, force);
   }
 
-  const allContent = buildAllStoresReport(entries, label, dateLabel, start, end);
+  const allContent = await buildAllStoresReport(entries, label, dateLabel, start, end);
   await sendReportToRoles(['admin', 'hq_manager'], allContent, `📊 ${label}（${dateLabel}）— 全门店汇总`, runYmd, 'monthly_all', force);
 
   logger.info({ period: p, stores: stores.length, total: entries.length }, 'dissatisfied product monthly report: done');

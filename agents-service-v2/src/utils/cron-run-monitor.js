@@ -36,7 +36,10 @@ const CRON_JOB_LABEL_ZH = {
   task_card_reminders: '任务卡片催办',
   daily_inspection_tick: '每日巡检调度（整轮）',
   daily_attitude_filing_report: '工作态度备案日报（昨日汇总）',
-  bi_anomaly_notify_flush: 'BI异常任务卡片发送（09:05延迟队列刷新）'
+  bi_anomaly_notify_flush: 'BI异常任务卡片发送（09:05延迟队列刷新）',
+  dissatisfied_product_daily: '不满意产品日报',
+  dissatisfied_product_weekly: '不满意产品周报',
+  dissatisfied_product_monthly: '不满意产品月报'
 };
 
 function cronJobLabelZh(jobKey) {
