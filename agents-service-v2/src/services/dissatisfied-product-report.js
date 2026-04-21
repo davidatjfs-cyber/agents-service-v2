@@ -57,12 +57,32 @@ for (const map of Object.values(STALL_PERSON_MAP)) {
   for (const stall of Object.values(map)) ALL_STALLS.add(stall);
 }
 
-function resolvePersonAndStall(storeRaw, fieldVal) {
+function resolvePersonAndStall(storeRaw, fieldVal, personFieldVal) {
   const store = resolveStoreKey(storeRaw);
   const val = String(fieldVal || '').trim();
-  if (!val) return { person: '未分配', stall: '未知' };
-
+  const pfv = String(personFieldVal || '').trim();
   const storeMap = STALL_PERSON_MAP[store] || {};
+
+  // Try "人名：档口" format from product-specific person fields (e.g. "陈林：煲仔")
+  if (pfv) {
+    const colonIdx = pfv.indexOf('：');
+    if (colonIdx > 0) {
+      const namePart = pfv.slice(0, colonIdx).trim();
+      const stallPart = pfv.slice(colonIdx + 1).trim();
+      if (namePart && storeMap[namePart]) {
+        return { person: namePart, stall: storeMap[namePart] };
+      }
+      if (namePart) {
+        return { person: namePart, stall: stallPart || storeMap[namePart] || '未知' };
+      }
+    }
+    // PersonFieldVal without colon might be just a name
+    if (storeMap[pfv]) {
+      return { person: pfv, stall: storeMap[pfv] };
+    }
+  }
+
+  if (!val) return { person: '未分配', stall: '未知' };
 
   if (storeMap[val]) {
     return { person: val, stall: storeMap[val] };
@@ -70,7 +90,7 @@ function resolvePersonAndStall(storeRaw, fieldVal) {
 
   for (const [p, s] of Object.entries(storeMap)) {
     if (s === val) {
-      return { person: `${val}(待确认)`, stall: val };
+      return { person: p, stall: val };
     }
   }
 
@@ -192,7 +212,8 @@ async function fetchDissatisfiedEntries(startYmd, endYmd) {
     if (!reasonMeaningful && !isNegative) continue;
 
     const stallField = ext(f['不满意产品负责的档口'] || '');
-    const { person, stall } = resolvePersonAndStall(matchedStore, stallField);
+    const personField = ext(f['不满意产品负责人'] || f['马己仙产品责任人'] || f['洪潮产品责任人'] || '');
+    const { person, stall } = resolvePersonAndStall(matchedStore, stallField, personField);
 
     results.push({
       store: matchedStore,
@@ -206,20 +227,35 @@ async function fetchDissatisfiedEntries(startYmd, endYmd) {
   return results;
 }
 
-function buildStoreReport(entries, store, label, dateLabel) {
+async function buildStoreReport(entries, store, label, dateLabel, periodStart, periodEnd) {
   if (!entries.length) return null;
 
   const byPerson = new Map();
   for (const e of entries) {
-    const k = e.person;
-    if (!byPerson.has(k)) byPerson.set(k, []);
-    byPerson.get(k).push(e);
+    const k = `${e.person}||${e.stall}`;
+    if (!byPerson.has(k)) byPerson.set(k, { person: e.person, stall: e.stall, items: [] });
+    byPerson.get(k).items.push(e);
   }
+
+  const monthlyCounts = new Map();
+  try {
+    const { y, m } = getShanghaiYmdParts();
+    let pm = m - 1, py = y;
+    if (pm < 1) { pm = 12; py -= 1; }
+    const monthStart = `${py}-${String(pm).padStart(2, '0')}-01`;
+    const monthEnd = `${py}-${String(pm).padStart(2, '0')}-${String(new Date(py, pm, 0).getDate()).padStart(2, '0')}`;
+    const allMonth = await fetchDissatisfiedEntries(monthStart, monthEnd);
+    const storeEntries = allMonth.filter(e => e.store === store);
+    for (const e of storeEntries) {
+      const k = `${e.person}||${e.stall}`;
+      monthlyCounts.set(k, (monthlyCounts.get(k) || 0) + e.dishes.length);
+    }
+  } catch (_e) { /* ignore */ }
 
   let totalProducts = 0;
   const sections = [];
-  for (const [person, items] of byPerson) {
-    const stallName = items[0]?.stall || '未知';
+  for (const [k, { person, stall, items }] of byPerson) {
+    const stallName = stall || '未知';
     const dishLines = [];
     let personCount = 0;
     for (const item of items) {
@@ -233,14 +269,15 @@ function buildStoreReport(entries, store, label, dateLabel) {
         }
       }
     }
-    sections.push(`产品责任人：**${person}**（档口：${stallName}）\n不满意产品数量：**${personCount}**个\n不满意产品：\n${dishLines.join('\n')}`);
+    const monthTotal = monthlyCounts.get(k) || personCount;
+    sections.push(`**${person}**（${stallName}）\n  当期：**${personCount}**个 ｜ 本月累计：**${monthTotal}**个\n${dishLines.join('\n')}`);
   }
 
-  const content = `**${label}（${dateLabel}）— ${store}**\n不满意产品总计：**${totalProducts}**个\n\n${sections.join('\n\n')}\n\n⚠️ 请关注以上产品问题及时改进，你的工作质量对我们很重要！`;
+  const content = `**${label}（${dateLabel}）— ${store}**\n不满意产品总计：**${totalProducts}**个\n\n${sections.join('\n\n')}`;
   return content;
 }
 
-function buildAllStoresReport(allData, label, dateLabel) {
+async function buildAllStoresReport(allData, label, dateLabel, periodStart, periodEnd) {
   const stores = [...new Set(allData.map(e => e.store))].sort();
   if (!stores.length) return null;
 
@@ -250,13 +287,13 @@ function buildAllStoresReport(allData, label, dateLabel) {
     const entries = allData.filter(e => e.store === store);
     const byPerson = new Map();
     for (const e of entries) {
-      if (!byPerson.has(e.person)) byPerson.set(e.person, []);
-      byPerson.get(e.person).push(e);
+      const k = `${e.person}||${e.stall}`;
+      if (!byPerson.has(k)) byPerson.set(k, { person: e.person, stall: e.stall, items: [] });
+      byPerson.get(k).items.push(e);
     }
     const personSections = [];
     let storeTotal = 0;
-    for (const [person, items] of byPerson) {
-      const stall = items[0]?.stall || '未知';
+    for (const [k, { person, stall, items }] of byPerson) {
       const dishLines = [];
       let personCount = 0;
       for (const item of items) {
@@ -270,13 +307,13 @@ function buildAllStoresReport(allData, label, dateLabel) {
         }
       }
       storeTotal += personCount;
-      personSections.push(`产品责任人：**${person}**（档口：${stall}）— ${personCount}个\n不满意产品：\n${dishLines.join('\n')}`);
+      personSections.push(`**${person}**（${stall}）— ${personCount}个\n不满意产品：\n${dishLines.join('\n')}`);
     }
     totalAll += storeTotal;
     storeSections.push(`**${store}** — 合计 **${storeTotal}**个\n${personSections.join('\n\n')}`);
   }
 
-  const content = `**${label}（${dateLabel}）— 全部门店汇总**\n不满意产品总计：**${totalAll}**个\n\n${storeSections.join('\n\n')}\n\n⚠️ 请关注以上产品问题及时改进，你的工作质量对我们很重要！`;
+  const content = `**${label}（${dateLabel}）— 全部门店汇总**\n不满意产品总计：**${totalAll}**个\n\n${storeSections.join('\n\n')}`;
   return content;
 }
 
@@ -377,15 +414,19 @@ export async function generateDissatisfiedProductDailyReport(targetYmd, force = 
     return { ok: true, ymd, count: 0 };
   }
 
+  const { y, m } = getShanghaiYmdParts();
+  const monthStart = `${y}-${String(m).padStart(2, '0')}-01`;
+  const monthEnd = `${y}-${String(m).padStart(2, '0')}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+
   const stores = [...new Set(entries.map(e => e.store))].sort();
   for (const store of stores) {
     const storeEntries = entries.filter(e => e.store === store);
-    const content = buildStoreReport(storeEntries, store, label, dateLabel);
+    const content = await buildStoreReport(storeEntries, store, label, dateLabel, monthStart, monthEnd);
     const title = `📊 ${label}（${dateLabel}）— ${store}`;
     await sendReportToStoreRoles(store, ['store_manager', 'store_production_manager'], content, title, runYmd, `daily_${store}`, force);
   }
 
-  const allContent = buildAllStoresReport(entries, label, dateLabel);
+  const allContent = buildAllStoresReport(entries, label, dateLabel, monthStart, monthEnd);
   await sendReportToRoles(['admin', 'hq_manager'], allContent, `📊 ${label}（${dateLabel}）— 全门店汇总`, runYmd, 'daily_all', force);
 
   logger.info({ ymd, stores: stores.length, total: entries.length }, 'dissatisfied product daily report: done');
@@ -406,15 +447,19 @@ export async function generateDissatisfiedProductWeeklyReport(force = false) {
     return { ok: true, weekStart, weekEnd, count: 0 };
   }
 
+  const { y, m } = getShanghaiYmdParts();
+  const monthStart = `${y}-${String(m).padStart(2, '0')}-01`;
+  const monthEnd = `${y}-${String(m).padStart(2, '0')}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+
   const stores = [...new Set(entries.map(e => e.store))].sort();
   for (const store of stores) {
     const storeEntries = entries.filter(e => e.store === store);
-    const content = buildStoreReport(storeEntries, store, label, dateLabel);
+    const content = await buildStoreReport(storeEntries, store, label, dateLabel, monthStart, monthEnd);
     const title = `📊 ${label}（${dateLabel}）— ${store}`;
     await sendReportToStoreRoles(store, ['store_manager', 'store_production_manager'], content, title, runYmd, `weekly_${store}`, force);
   }
 
-  const allContent = buildAllStoresReport(entries, label, dateLabel);
+  const allContent = buildAllStoresReport(entries, label, dateLabel, monthStart, monthEnd);
   await sendReportToRoles(['admin', 'hq_manager'], allContent, `📊 ${label}（${dateLabel}）— 全门店汇总`, runYmd, 'weekly_all', force);
 
   logger.info({ weekStart, weekEnd, stores: stores.length, total: entries.length }, 'dissatisfied product weekly report: done');
@@ -444,12 +489,12 @@ export async function generateDissatisfiedProductMonthlyReport(period, force = f
   const stores = [...new Set(entries.map(e => e.store))].sort();
   for (const store of stores) {
     const storeEntries = entries.filter(e => e.store === store);
-    const content = buildStoreReport(storeEntries, store, label, dateLabel);
+    const content = await buildStoreReport(storeEntries, store, label, dateLabel, start, end);
     const title = `📊 ${label}（${dateLabel}）— ${store}`;
     await sendReportToStoreRoles(store, ['store_manager', 'store_production_manager'], content, title, runYmd, `monthly_${store}`, force);
   }
 
-  const allContent = buildAllStoresReport(entries, label, dateLabel);
+  const allContent = buildAllStoresReport(entries, label, dateLabel, start, end);
   await sendReportToRoles(['admin', 'hq_manager'], allContent, `📊 ${label}（${dateLabel}）— 全门店汇总`, runYmd, 'monthly_all', force);
 
   logger.info({ period: p, stores: stores.length, total: entries.length }, 'dissatisfied product monthly report: done');
