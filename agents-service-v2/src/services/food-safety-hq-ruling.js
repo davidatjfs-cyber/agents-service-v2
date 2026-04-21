@@ -185,10 +185,10 @@ async function applyFoodSafetyDeduction({
         [username, brand, store, period]
       );
       if (prevSr.rows?.[0]?.total_score != null) {
-        baseScore = Math.max(0, Number(prevSr.rows[0].total_score));
+        baseScore = Number(prevSr.rows[0].total_score);
       }
     } catch (_e) { /* ignore */ }
-    const totalScore = Math.max(0, baseScore - points);
+    const totalScore = baseScore - points;
     await query(
       `INSERT INTO agent_scores (
          brand, store, username, name, role, period, score_model,
@@ -212,7 +212,7 @@ async function applyFoodSafetyDeduction({
 
   const deductions = parseDeductions(row.deductions);
   deductions.push(detail);
-  const totalScore = Math.max(0, Number(row.total_score) - points);
+  const totalScore = Number(row.total_score) - points;
   const summaryZh = `本周含食安总部判罚等：${roleZh} 当前剩余 ${totalScore} 分（任务 ${taskId}）。`;
   await query(
     `UPDATE agent_scores SET
