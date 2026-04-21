@@ -1,5 +1,5 @@
 /**
- * 数据异常时向 admin / hq_manager 发飞书文本告警（与 cron-run-monitor 定时失败告警风格一致）。
+ * 数据异常时仅向 admin 发飞书文本告警（与 cron-run-monitor 定时失败告警一致；不推送给总部营运）。
  * 用 DB 表做去重，避免同一问题短时间刷屏。
  *
  * 分级（与业务约定一致）：
@@ -138,7 +138,7 @@ export async function notifyAdminsDataIssue(opts) {
     const r = await query(
       `SELECT open_id, username FROM feishu_users
        WHERE registered = true AND open_id IS NOT NULL AND open_id <> ''
-         AND role IN ('admin','hq_manager')
+         AND role = 'admin'
        ORDER BY username
        LIMIT 30`
     );

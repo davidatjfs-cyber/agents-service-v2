@@ -109,7 +109,7 @@ function buildAttitudeFilingCard(title, bodyMd, template = 'blue') {
           {
             tag: 'plain_text',
             content:
-              '数据来源：master_tasks（昨日条数按 dispatched_at 落在统计日内，与月度累计口径一致；「本月累计」按 dispatched_at 落在当月1日—统计日）。卡片首行「统计日」= 备案状态更新窗口日；每条「异常实际营业日」= 无充值/数据异常所指的营业日历日（与统计日可不同）。 · 每日08:05'
+              '数据来源：master_tasks（昨日条数按 dispatched_at 落在业务日期口径内，与月度累计口径一致；「本月累计」按 dispatched_at 落在当月1日—业务日期）。卡片首行「业务日期」= 备案状态更新窗口日；每条「异常实际营业日」= 无充值/数据异常所指的营业日历日（与业务日期可不同）。 · 每日08:05'
           }
         ]
       }
@@ -117,7 +117,7 @@ function buildAttitudeFilingCard(title, bodyMd, template = 'blue') {
   };
 }
 
-/** 昨日涉及账号 → 截至统计日「本月」态度备案累计（distinct task_id；与月度评级口径一致） */
+/** 昨日涉及账号 → 截至业务日期「本月」态度备案累计（distinct task_id；与月度评级口径一致） */
 async function buildMonthlyAttitudeCountMap(rows, bizYmd, restrictStoreTrim) {
   const users = [...new Set((rows || []).map((r) => String(r.assignee_username || '').trim()).filter(Boolean))];
   const m = new Map();
@@ -135,7 +135,7 @@ async function buildHqBodyMarkdown(byStore, rows, bizYmd, nameMap, monthlyMap) {
   if (!total) {
     return `**备案类型**：工作态度备案（全系统昨日汇总）
 
-**统计日（上海）**：${bizYmd}
+**业务日期**：${bizYmd}
 
 **昨日备案条数**：**0** 条
 
@@ -143,7 +143,7 @@ async function buildHqBodyMarkdown(byStore, rows, bizYmd, nameMap, monthlyMap) {
   }
   let md = `**备案类型**：工作态度备案（全系统昨日汇总）
 
-**统计日（上海）**：${bizYmd}
+**业务日期**：${bizYmd}
 
 **昨日备案条数**：**${total}** 条
 
@@ -167,10 +167,10 @@ async function buildHqBodyMarkdown(byStore, rows, bizYmd, nameMap, monthlyMap) {
     const taskBiz = extractTaskBizYmdFromRow(row);
     const actualBiz = taskBiz || extractFirstYmdFromText(title) || '—';
     md += `· **${st}**｜${sourceLabelZh(row.source)}\n`;
-    md += `  · **异常实际营业日**：**${actualBiz}**（本条「无充值/异常」所指的**营业日历日**；与下方「统计日 ${bizYmd}」可不同）\n`;
+    md += `  · **异常实际营业日**：**${actualBiz}**（本条「无充值/异常」所指的**营业日历日**；与下方「业务日期 ${bizYmd}」可不同）\n`;
     md += `  · 摘要：${title}\n`;
     md += `  · 责任人：**${disp}**（\`${un || '—'}\`）｜状态：${row.status || '—'}\n`;
-    md += `  · **HR 备案更新时间**：${row.filed_at_sh || '—'}（因 \`updated_at\` 落在统计日 **${bizYmd}** 而进入本日报）\n`;
+    md += `  · **HR 备案更新时间**：${row.filed_at_sh || '—'}（因 \`updated_at\` 落在业务日期 **${bizYmd}** 而进入本日报）\n`;
     md += `  · **本月累计（工作态度备案）**：**${monthCnt}** 次（截至 **${bizYmd}**；全门店 distinct task_id）\n\n`;
   }
   return md;
@@ -183,7 +183,7 @@ async function buildStoreBodyMarkdown(filtered, bizYmd, store, nameMap, monthlyM
 
 **门店**：${store}
 
-**统计日（上海）**：${bizYmd}
+**业务日期**：${bizYmd}
 
 **昨日备案条数**：**0** 条
 
@@ -193,7 +193,7 @@ async function buildStoreBodyMarkdown(filtered, bizYmd, store, nameMap, monthlyM
 
 **门店**：${store}
 
-**统计日（上海）**：${bizYmd}
+**业务日期**：${bizYmd}
 
 **昨日备案条数**：**${n}** 条
 
@@ -211,10 +211,10 @@ async function buildStoreBodyMarkdown(filtered, bizYmd, store, nameMap, monthlyM
     const taskBiz = extractTaskBizYmdFromRow(row);
     const actualBiz = taskBiz || extractFirstYmdFromText(title) || '—';
     md += `· **${sourceLabelZh(row.source)}**\n`;
-    md += `  · **异常实际营业日**：**${actualBiz}**（本条异常所指的**营业日历日**；与统计日 **${bizYmd}** 可不同）\n`;
+    md += `  · **异常实际营业日**：**${actualBiz}**（本条异常所指的**营业日历日**；与业务日期 **${bizYmd}** 可不同）\n`;
     md += `  · 摘要：${title}\n`;
     md += `  · 责任人：**${disp}**（\`${un || '—'}\`）｜状态：${row.status || '—'}\n`;
-    md += `  · **HR 备案更新时间**：${row.filed_at_sh || '—'}（因 \`updated_at\` 落在统计日 **${bizYmd}** 而进入本日报）\n`;
+    md += `  · **HR 备案更新时间**：${row.filed_at_sh || '—'}（因 \`updated_at\` 落在业务日期 **${bizYmd}** 而进入本日报）\n`;
     md += `  · **本月累计（工作态度备案）**：**${monthCnt}** 次（截至 **${bizYmd}**；本店 distinct task_id）\n\n`;
   }
   return md;

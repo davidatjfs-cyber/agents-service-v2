@@ -231,7 +231,7 @@ function buildHQCard(storeSections, yesterday) {
   
   elements.push({
     tag: 'div',
-    text: { tag: 'lark_md', content: `**📊 每日任务达成率报告 · ${yesterday}**` }
+    text: { tag: 'lark_md', content: `**业务日期：${yesterday}**` }
   });
   elements.push({ tag: 'hr' });
   
@@ -263,7 +263,7 @@ function buildHQCard(storeSections, yesterday) {
   return {
     config: { wide_screen_mode: true },
     header: {
-      title: { tag: 'plain_text', content: `📊 每日任务达成率 · ${yesterday}` },
+      title: { tag: 'plain_text', content: `📊 每日任务达成率报告 ${yesterday}` },
       template: 'blue'
     },
     elements
@@ -276,7 +276,7 @@ function buildStoreCard(store, storeMd, yesterday) {
   
   elements.push({
     tag: 'div',
-    text: { tag: 'lark_md', content: `**📊 每日任务达成率报告 · ${yesterday}**` }
+    text: { tag: 'lark_md', content: `**业务日期：${yesterday}**` }
   });
   elements.push({ tag: 'hr' });
   
@@ -294,7 +294,7 @@ function buildStoreCard(store, storeMd, yesterday) {
   return {
     config: { wide_screen_mode: true },
     header: {
-      title: { tag: 'plain_text', content: `📊 每日任务达成率 · ${yesterday}` },
+      title: { tag: 'plain_text', content: `📊 每日任务达成率报告 ${yesterday}` },
       template: 'green'
     },
     elements

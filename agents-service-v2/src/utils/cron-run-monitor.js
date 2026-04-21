@@ -3,7 +3,7 @@
  *
  * 设计原则（2026-04 修订）：
  *   1. 每个定时任务只在约定时刻触发一次（通过 node-cron）。
- *   2. runWithCronLog 包装：成功写 ok=true；失败写 ok=false，并立即发飞书告警给 admin/hq_manager。
+ *   2. runWithCronLog 包装：成功写 ok=true；失败写 ok=false，并立即发飞书告警给 admin（不推送给总部营运）。
  *   3. 不再有 sweepCronRetries 全局补偿循环，从根上杜绝「莫名其妙多出消息」。
  *   4. 极端情况（进程重启错过窗口）通过飞书告警人工确认，而非自动补跑。
  */
@@ -43,7 +43,7 @@ function cronJobLabelZh(jobKey) {
   return CRON_JOB_LABEL_ZH[k] || '定时任务';
 }
 
-/** 凡经 runWithCronLog 包装且抛错时，会向 admin/hq_manager 发飞书告警的任务清单（与 job_key 一致） */
+/** 凡经 runWithCronLog 包装且抛错时，会向 admin 发飞书告警的任务清单（与 job_key 一致） */
 export function listCronJobKeysWithFeishuFailureAlert() {
   return Object.keys(CRON_JOB_LABEL_ZH);
 }
@@ -101,14 +101,14 @@ async function insertRun(jobKey, runYmd, ok, error, source) {
   );
 }
 
-/** 向所有 admin/hq_manager 发飞书告警文本 */
+/** 向所有 admin 发飞书告警文本（失败类告警不推送给 hq_manager） */
 async function notifyAdminsOnFailure(jobKey, errorMsg) {
   try {
     const { sendText } = await import('../services/feishu-client.js');
     const r = await query(
       `SELECT open_id FROM feishu_users
        WHERE registered = true AND open_id IS NOT NULL
-         AND role IN ('admin','hq_manager')
+         AND role = 'admin'
        LIMIT 20`
     );
     const { ymd, hour, minute } = getShanghaiNowClock();
@@ -125,7 +125,7 @@ async function notifyAdminsOnFailure(jobKey, errorMsg) {
 /**
  * 主定时任务包装：
  *   - 成功：默认记录 ok=true（高频任务可传 { recordSuccess: false } 省略成功行，仅失败入库 + 飞书）
- *   - 失败：记录 ok=false + 立即向所有 admin/hq_manager 飞书告警（错误信息截断见 notifyAdminsOnFailure）
+ *   - 失败：记录 ok=false + 立即向所有 admin 飞书告警（错误信息截断见 notifyAdminsOnFailure）
  *
  * @param {string} jobKey
  * @param {() => Promise<unknown>} fn
