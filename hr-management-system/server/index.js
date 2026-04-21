@@ -5458,7 +5458,7 @@ async function mergeSharedStateFields(patches, arrayIdFields = {}) {
 }
 
 /**
- * 双写失败时通知飞书 admin/hq_manager（与 agents cron-run-monitor 的 feishu_users 查询口径一致）。
+ * 双写失败时仅通知飞书 admin（不推送给总部营运；与 agents 失败告警口径一致）。
  * 当前已接入告警的范围（遗漏新增双写时请同步调用本函数）：
  * - dualWriteStateToDB 全量块（employees / leave / reward_punishment / notifications）
  * - hrms_payroll_domain（异步薪资域、PUT /api/state）
@@ -5474,12 +5474,12 @@ async function notifyAdminsDualWriteFailure(scopeLabel, err) {
     const r = await pool.query(
       `SELECT open_id FROM feishu_users
        WHERE registered = true AND open_id IS NOT NULL
-         AND role IN ('admin', 'hq_manager')
+         AND role = 'admin'
        LIMIT 20`
     );
     const rows = r.rows || [];
     if (!rows.length) {
-      console.warn('[dual-write] no admin/hq_manager open_id for Feishu alert:', scopeLabel);
+      console.warn('[dual-write] no admin open_id for Feishu alert:', scopeLabel);
       return;
     }
     const reason = String(err?.message || err || 'unknown').slice(0, 500);
