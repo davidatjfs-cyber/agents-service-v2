@@ -167,12 +167,28 @@ async function applyFoodSafetyDeduction({
   const sel = await query(
     `SELECT total_score, deductions, breakdown, summary
      FROM agent_scores
-     WHERE brand = $1 AND store = $2 AND username = $3 AND period = $4 AND score_model = 'anomaly_rollups_v2'`,
+     WHERE brand = $1 AND store = $2 AND username = $3
+       AND score_model = 'anomaly_rollups_v2'
+       AND (period = $4 OR period LIKE $4 || '__%')`,
     [brand, store, username, period]
   );
   const row = sel.rows?.[0];
   if (!row) {
-    const totalScore = Math.max(0, 100 - points);
+    let baseScore = 100;
+    try {
+      const prevSr = await query(
+        `SELECT total_score FROM agent_scores
+         WHERE username = $1 AND score_model = 'anomaly_rollups_v2'
+           AND brand = $2 AND store = $3
+           AND period < $4
+         ORDER BY period DESC LIMIT 1`,
+        [username, brand, store, period]
+      );
+      if (prevSr.rows?.[0]?.total_score != null) {
+        baseScore = Math.max(0, Number(prevSr.rows[0].total_score));
+      }
+    } catch (_e) { /* ignore */ }
+    const totalScore = Math.max(0, baseScore - points);
     await query(
       `INSERT INTO agent_scores (
          brand, store, username, name, role, period, score_model,
@@ -398,21 +414,6 @@ export async function tryHandleFoodSafetyHqRuling({ taskId, responseText, openId
         continue;
       }
       for (const u of users) {
-        /** 必须与即将写入的 agent_scores 行同一 brand/store/period，禁止仅用 username + ORDER BY updated_at（会误取他店他周，导致「现有分」与「剩余分」自相矛盾） */
-        let currentScore = 100;
-        try {
-          const sr = await query(
-            `SELECT total_score FROM agent_scores
-             WHERE username = $1 AND score_model = 'anomaly_rollups_v2'
-               AND brand = $2 AND store = $3 AND period = $4`,
-            [u.username, brand, store, period]
-          );
-          if (sr.rows?.[0]?.total_score != null) {
-            currentScore = Math.max(0, Number(sr.rows[0].total_score));
-          }
-        } catch (_e) {
-          /* ignore */
-        }
         const points = FOOD_SAFETY_HQ_POINTS;
         const { totalScore: remainingScore } = await applyFoodSafetyDeduction({
           store,
@@ -424,6 +425,7 @@ export async function tryHandleFoodSafetyHqRuling({ taskId, responseText, openId
           period,
           brand
         });
+        const currentScore = remainingScore + points;
         await notifyInstantDeductionFeishu({
           store,
           username: u.username,

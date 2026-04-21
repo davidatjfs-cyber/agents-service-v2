@@ -240,6 +240,24 @@ async function fetchLatestAnomalyRollupScore(username, store = null, weekPeriod 
     if (scoreRes.rows?.[0]?.total_score != null) {
       return Number(scoreRes.rows[0].total_score);
     }
+    // Fallback: no row for current week — look up the latest period for this user+store
+    if (weekPeriod) {
+      const fbCond = [`username = $1`, `score_model = 'anomaly_rollups_v2'`];
+      const fbParams = [username];
+      let fn = 2;
+      if (store) {
+        fbCond.push(`(store = $${fn} OR $${fn} ILIKE '%' || store || '%' OR store ILIKE '%' || $${fn} || '%')`);
+        fbParams.push(store);
+        fn++;
+      }
+      const fbRes = await query(
+        `SELECT total_score FROM agent_scores WHERE ${fbCond.join(' AND ')} ORDER BY period DESC LIMIT 1`,
+        fbParams
+      );
+      if (fbRes.rows?.[0]?.total_score != null) {
+        return Number(fbRes.rows[0].total_score);
+      }
+    }
   } catch (_e) {
     /* ignore */
   }
