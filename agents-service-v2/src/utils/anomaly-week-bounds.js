@@ -57,6 +57,13 @@ export function shanghaiLastCompletedWeekBounds() {
   return shanghaiWeekMonSunContaining(yesterday);
 }
 
+/** 本周至今（周一至今日），以「今天上海日期」为锚 */
+export function shanghaiCurrentWeekBounds() {
+  const { ymd: today } = getShanghaiYmdParts();
+  const { weekStart } = shanghaiWeekMonSunContaining(today);
+  return { weekStart, weekEnd: today };
+}
+
 /** 与 periodic-scoring 一致：上周一（用于周评分 period） */
 export function previousWeekMondayFromToday() {
   const { weekStart } = shanghaiLastCompletedWeekBounds();

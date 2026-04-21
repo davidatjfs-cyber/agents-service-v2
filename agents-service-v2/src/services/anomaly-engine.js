@@ -16,7 +16,7 @@ import {
   visitEntryStoreMatches
 } from './deterministic-replies.js';
 import { expandAgentStoreLabels } from '../config/store-mapping.js';
-import { shanghaiLastCompletedWeekBounds } from '../utils/anomaly-week-bounds.js';
+import { shanghaiLastCompletedWeekBounds, shanghaiCurrentWeekBounds } from '../utils/anomaly-week-bounds.js';
 import { ANOMALY_RULES } from '../config/anomaly-rules.js';
 
 // ─── 工具函数 ───
@@ -591,10 +591,11 @@ function badReviewDianpingCond(alias = 'fields') {
   )`;
 }
 
-// ─── 7. 差评报告产品异常（大众点评 only，自然周独立）───
+// ─── 7. 差评报告产品异常（大众点评 only，每日触发，自然周递进扣分）───
+// 产品差评判定：差评产品去除服务/环境/态度等非产品标签后仍有实质内容 + 差评类型含产品/出品/菜品
 export async function checkBadReviewProduct(store) {
   const feishuStore = await toFeishuStoreName(store);
-  const { weekStart, weekEnd } = shanghaiLastCompletedWeekBounds();
+  const { weekStart, weekEnd } = shanghaiCurrentWeekBounds();
   const r = await query(
     `SELECT COUNT(*)::int AS cnt
      FROM feishu_generic_records
@@ -602,10 +603,19 @@ export async function checkBadReviewProduct(store) {
        AND (timezone('Asia/Shanghai', created_at))::date >= $2::date
        AND (timezone('Asia/Shanghai', created_at))::date <= $3::date
        AND ${badReviewDianpingCond('fields')}
-       AND (fields->>'差评产品' IS NOT NULL AND TRIM(fields->>'差评产品') <> ''
-            OR fields->>'差评类型' ILIKE '%产品%'
-            OR fields->>'差评类型' ILIKE '%出品%'
-            OR fields->>'差评类型' ILIKE '%菜品%')`,
+       AND (
+         (fields->>'差评产品' IS NOT NULL AND TRIM(fields->>'差评产品') <> ''
+          AND TRIM(regexp_replace(
+            regexp_replace(
+              regexp_replace(fields->>'差评产品', '(^|、|,)\\s*(服务|环境|态度|全品类菜品|全店菜品)\\s*(?=(、|,|$))', E'\\1', 'g'),
+              '(^|、|,)\\s*(服务|环境|态度|全品类菜品|全店菜品)\\s*(?=(、|,|$))', E'\\1', 'g'
+            ),
+            '(^、+|、+$|,{1,}|、{2,})', '', 'g'
+          )) <> '')
+         OR fields->>'差评类型' ILIKE '%产品%'
+         OR fields->>'差评类型' ILIKE '%出品%'
+         OR fields->>'差评类型' ILIKE '%菜品%'
+       )`,
     [feishuStore, weekStart, weekEnd]
   );
   const cnt = parseInt(r.rows[0]?.cnt || 0);
@@ -618,15 +628,16 @@ export async function checkBadReviewProduct(store) {
     triggered: true,
     severity,
     value: { count: cnt, weekStart, weekEnd, deduction_production, platform: 'dianping_only' },
-    threshold: { one: '5分/条', multi: '同类型≥2条则每条10分' },
+    threshold: { one: '本周第1条5分', multi: '本周≥2条每条10分' },
     detail: `大众点评产品差评${cnt}条（${weekStart}~${weekEnd}），出品扣${deduction_production}分`
   };
 }
 
-// ─── 8. 差评报告服务异常（大众点评 only，自然周独立）───
+// ─── 8. 差评报告服务异常（大众点评 only，每日触发，自然周递进扣分）───
+// 服务差评判定：差评类型含服务 + 差评关键词含服务 + 差评产品字段值为"服务" + 差评原因含服务且无产品
 export async function checkBadReviewService(store) {
   const feishuStore = await toFeishuStoreName(store);
-  const { weekStart, weekEnd } = shanghaiLastCompletedWeekBounds();
+  const { weekStart, weekEnd } = shanghaiCurrentWeekBounds();
   const r = await query(
     `SELECT COUNT(*)::int AS cnt
      FROM feishu_generic_records
@@ -634,9 +645,12 @@ export async function checkBadReviewService(store) {
        AND (timezone('Asia/Shanghai', created_at))::date >= $2::date
        AND (timezone('Asia/Shanghai', created_at))::date <= $3::date
        AND ${badReviewDianpingCond('fields')}
-       AND (fields->>'差评类型' ILIKE '%服务%'
-            OR fields->>'差评关键词' ILIKE '%服务%'
-            OR (fields->>'差评原因' ILIKE '%服务%' AND (fields->>'差评产品' IS NULL OR TRIM(fields->>'差评产品') = '')))`,
+       AND (
+         fields->>'差评类型' ILIKE '%服务%'
+         OR fields->>'差评关键词' ILIKE '%服务%'
+         OR (fields->>'差评产品' ILIKE '%服务%')
+         OR (fields->>'差评原因' ILIKE '%服务%' AND (fields->>'差评产品' IS NULL OR TRIM(fields->>'差评产品') = ''))
+       )`,
     [feishuStore, weekStart, weekEnd]
   );
   const cnt = parseInt(r.rows[0]?.cnt || 0);
@@ -649,7 +663,7 @@ export async function checkBadReviewService(store) {
     triggered: true,
     severity,
     value: { count: cnt, weekStart, weekEnd, deduction_manager, platform: 'dianping_only' },
-    threshold: { one: '5分/条', multi: '同类型≥2条则每条10分' },
+    threshold: { one: '本周第1条5分', multi: '本周≥2条每条10分' },
     detail: `大众点评服务差评${cnt}条（${weekStart}~${weekEnd}），店长扣${deduction_manager}分`
   };
 }
@@ -1014,6 +1028,8 @@ export async function runAnomalyChecks(frequency, stores, options = {}) {
               results.push({ store, rule: ruleKey, name: ruleCfg.name, ...result, skipped: 'missing_eval_date' });
               continue;
             }
+          } else if (ruleKey === 'bad_review_product' || ruleKey === 'bad_review_service') {
+            triggerDate = shanghaiTodayYmd();
           } else if (result.value?.weekEnd) {
             triggerDate = result.value.weekEnd;
           } else if (ruleKey === 'revenue_achievement_monthly' || ruleKey === 'gross_margin') {

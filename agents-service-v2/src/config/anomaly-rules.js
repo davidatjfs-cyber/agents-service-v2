@@ -224,18 +224,17 @@ export const ANOMALY_RULES = [
   {
     key: 'bad_review_product',
     name: '差评报告产品异常',
-    frequency: 'weekly',
+    frequency: 'daily',
     brands: null,
     thresholds: {
-      // 1周内产品相关差评
-      medium: { count: 1 },
-      high: { count: 2 }
+      medium: { count_per_week: 1 },
+      high: { count_per_week: 2 }
     },
     dataSource: {
       table: 'feishu_generic_records',
       config: 'bad_review',
-      fields: ['差评类型=产品'],
-      calc: '大众点评差评中关于产品的，1周内1条medium,2条high'
+      fields: ['差评类型=产品', '差评产品≠服务/态度'],
+      calc: '大众点评差评中关于产品的，每自然周独立计算不跨周：1条=medium(5分)；≥2条每条=10分；次周清零重新统计'
     },
     assignTo: { role: 'ops', title: '运营' },
     notifyTarget: { role: 'kitchen_manager', title: '出品经理' },
@@ -246,14 +245,14 @@ export const ANOMALY_RULES = [
       optional: []
     },
     autoActions: ['trigger', 'remind', 'follow_up', 'pdca_generate'],
-    notes: '数据从差评报告获取'
+    notes: '每日触发；每自然周独立计算不跨周累计，第1条5分、第2条起每条10分；次周清零；扣分按月汇总'
   },
 
   // ─── 8. 差评报告服务异常 ───
   {
     key: 'bad_review_service',
     name: '差评报告服务异常',
-    frequency: 'weekly',
+    frequency: 'daily',
     brands: null,
     thresholds: {
       medium: { count_per_week: 1 },
@@ -262,8 +261,8 @@ export const ANOMALY_RULES = [
     dataSource: {
       table: 'feishu_generic_records',
       config: 'bad_review',
-      fields: ['差评类型=服务'],
-      calc: '大众点评差评中关于服务的，每自然周独立计算不跨周：1条=medium(5分)；2条=high(20分，即2×10)；3条=30分(3×10)；次周清零重新统计'
+      fields: ['差评类型=服务', '差评关键词含服务', '差评产品=服务'],
+      calc: '大众点评差评中关于服务的，每自然周独立计算不跨周：1条=medium(5分)；≥2条每条=10分；次周清零重新统计'
     },
     assignTo: { role: 'ops', title: '运营' },
     notifyTarget: { role: 'store_manager', title: '店长' },
@@ -274,7 +273,7 @@ export const ANOMALY_RULES = [
       optional: []
     },
     autoActions: ['trigger', 'remind', 'follow_up'],
-    notes: '每自然周独立计算，不跨周累计；1条5分、2条20分（2×10）、3条30分（3×10）；次周清零重新统计'
+    notes: '每日触发；每自然周独立计算不跨周累计，第1条5分、第2条起每条10分；次周清零；扣分按月汇总'
   },
 
   // ─── 9. 洪潮久光包房使用异常 ───
