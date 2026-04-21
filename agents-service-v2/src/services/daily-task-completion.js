@@ -14,6 +14,7 @@ import {
   resolveMajixianProductionManagersForScoring,
   resolvePerformanceReportDisplayName
 } from '../utils/scoring-assignee.js';
+import { notifyAdminsDataIssue } from './admin-data-alert.js';
 
 /** 任务类型 → 中文标签 */
 function taskTypeLabel(type) {
@@ -131,14 +132,17 @@ async function getUserNames(usernames) {
   return map;
 }
 
-/** 获取接收人列表 */
+/** 获取接收人列表（与晨报一致：同一 username 只保留一行，避免重复 admin/probe 行导致「部分失败」误报） */
 async function getRecipients() {
   const result = await query(
-    `SELECT open_id, username, name, store, role 
+    `SELECT DISTINCT ON (lower(trim(username)))
+       open_id, username, name, store, role
      FROM feishu_users
-     WHERE registered = true AND open_id IS NOT NULL AND open_id != ''
-     AND role IN ('store_manager', 'store_production_manager', 'hq_manager', 'admin')
-     ORDER BY role, store`
+     WHERE registered = true AND open_id IS NOT NULL AND trim(open_id) <> ''
+       AND role IN ('store_manager', 'store_production_manager', 'hq_manager', 'admin')
+     ORDER BY lower(trim(username)),
+       CASE WHEN trim(open_id) ILIKE '%probe%' OR trim(open_id) ILIKE 'ou_probe%' THEN 1 ELSE 0 END,
+       created_at ASC NULLS LAST`
   );
   return result.rows || [];
 }
@@ -348,6 +352,8 @@ export async function sendDailyTaskCompletionReport(opts = {}) {
     let sentCount = 0;
     let failedCount = 0;
     let skippedCount = 0;
+    /** @type {{ username: string, scope: string, store?: string, err: string }[]} */
+    const deliveryFailures = [];
     const runYmd = getShanghaiYmd();
     const forceResend = !!opts?.force;
     
@@ -372,10 +378,20 @@ export async function sendDailyTaskCompletionReport(opts = {}) {
           logger.info({ recipient: recipient.username, role: recipient.role }, 'HQ task completion card sent');
         } else if (!deliver?.ok) {
           failedCount++;
+          deliveryFailures.push({
+            username: String(recipient.username || '').trim(),
+            scope: 'hq_summary',
+            err: String(deliver?.error || 'send_failed')
+          });
           logger.warn({ recipient: recipient.username, role: recipient.role, err: deliver?.error }, 'HQ task completion card send failed after retries');
         }
       } catch (e) {
         failedCount++;
+        deliveryFailures.push({
+          username: String(recipient.username || '').trim(),
+          scope: 'hq_summary',
+          err: String(e?.message || e)
+        });
         logger.warn({ err: e?.message, recipient: recipient.username }, 'HQ task completion card send failed');
       }
     }
@@ -432,10 +448,22 @@ export async function sendDailyTaskCompletionReport(opts = {}) {
             logger.info({ recipient: row.username, store }, 'store task completion card sent');
           } else if (!deliver?.ok) {
             failedCount++;
+            deliveryFailures.push({
+              username: String(row.username || '').trim(),
+              scope: `store_${store}_${un}`,
+              store,
+              err: String(deliver?.error || 'send_failed')
+            });
             logger.warn({ recipient: row.username, store, err: deliver?.error }, 'store task completion card send failed after retries');
           }
         } catch (e) {
           failedCount++;
+          deliveryFailures.push({
+            username: String(row.username || '').trim(),
+            scope: `store_${store}_${un}`,
+            store,
+            err: String(e?.message || e)
+          });
           logger.warn({ err: e?.message, recipient: row.username, store }, 'store task completion card send failed');
         }
       }
@@ -472,6 +500,12 @@ export async function sendDailyTaskCompletionReport(opts = {}) {
                 logger.info({ recipient: canonUn, store }, 'store task completion card sent (马己仙出品主责)');
               } else if (!deliver?.ok) {
                 failedCount++;
+                deliveryFailures.push({
+                  username: String(canonUn).trim(),
+                  scope: `store_${store}_mj_pm_canon`,
+                  store,
+                  err: String(deliver?.error || 'send_failed')
+                });
                 logger.warn({ recipient: canonUn, store, err: deliver?.error }, '马己仙主责出品任务达成率发送失败');
               }
             }
@@ -483,10 +517,26 @@ export async function sendDailyTaskCompletionReport(opts = {}) {
     }
 
     if (failedCount > 0) {
-      logger.error(
-        { yesterday, sent: sentCount, failed: failedCount },
-        'daily task completion report: partial recipient failure (see logs; cron treated as success)'
-      );
+      const lines = [
+        `业务日（昨日任务）：${yesterday}`,
+        `投递日 run_ymd：${runYmd}`,
+        `失败笔数：${failedCount}`,
+        ...deliveryFailures.map(
+          (f) =>
+            `· **${f.username}**｜${f.scope}${f.store ? `｜门店：${f.store}` : ''}｜错误：${String(f.err).slice(0, 280)}`
+        ),
+        '请核对 `feishu_users` 中上述账号的 `open_id` 是否有效。'
+      ];
+      void notifyAdminsDataIssue({
+        alertType: 'daily_task_completion_partial_fail',
+        priority: 'B',
+        title: '每日任务达成率：部分收件人飞书投递失败（含账号明细）',
+        lines,
+        dedupeKey: `daily_task_completion_partial_${runYmd}_${deliveryFailures.map((f) => f.username + f.scope).sort().join('|')}`,
+        dedupeHours: 2
+      }).catch(() => {});
+      const summary = deliveryFailures.map((f) => `${f.username}:${String(f.err).slice(0, 100)}`).join(' || ');
+      throw new Error(`daily task completion report has ${failedCount} failed recipient(s). Detail: ${summary}`);
     }
     if (tasks.length > 0 && sentCount === 0 && skippedCount === 0) {
       const err =

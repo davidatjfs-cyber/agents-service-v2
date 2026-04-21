@@ -26,6 +26,8 @@ const ALERT_TYPE_LABEL_ZH = {
   bitable_material_date_parse_empty: '原料表轮询：日期列有值但解析为空',
   material_agent_feishu_divergence: '原料数据：助手结果与飞书同步库不一致',
   execution_rating_feishu_partial_fail: '执行力日评：飞书卡片部分发送失败',
+  morning_briefing_partial_fail: '每日晨报：部分收件人飞书投递失败',
+  daily_task_completion_partial_fail: '每日任务达成率：部分收件人飞书投递失败',
   data_issue: '数据异常'
 };
 

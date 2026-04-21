@@ -15,6 +15,7 @@ import { anomalyRuleLabelZh } from '../utils/anomaly-labels.js';
 import { expandAgentStoreLabels } from '../config/store-mapping.js';
 import { getShanghaiNowClock } from '../utils/cron-run-monitor.js';
 import { isMajixianPmObserverUsername } from '../utils/scoring-assignee.js';
+import { notifyAdminsDataIssue } from './admin-data-alert.js';
 
 /** 马己仙出品观察号若未维护 store，与主责出品经理同店晨报 */
 const CANONICAL_MAJIXIAN_PM_USERNAME = 'NNYXLYR04';
@@ -177,13 +178,18 @@ async function briefAssigneeDisplayMap(usernames) {
 }
 
 // 获取所有需要接收晨报的飞书用户（店长 + 总部）
+// 同一 username 多行（如重复 admin + probe 测试 open_id）会导致同一逻辑用户被投递两次、失败计数失真 → DISTINCT ON 每人只保留一行
 async function getBriefingRecipients() {
   try {
     const r = await query(
-      `SELECT open_id, username, name, store, role FROM feishu_users
-       WHERE registered = true AND open_id IS NOT NULL AND open_id != ''
-       AND role IN ('store_manager','store_production_manager','hq_manager','admin')
-       ORDER BY role, store`
+      `SELECT DISTINCT ON (lower(trim(username)))
+         open_id, username, name, store, role
+       FROM feishu_users
+       WHERE registered = true AND open_id IS NOT NULL AND trim(open_id) <> ''
+         AND role IN ('store_manager','store_production_manager','hq_manager','admin')
+       ORDER BY lower(trim(username)),
+         CASE WHEN trim(open_id) ILIKE '%probe%' OR trim(open_id) ILIKE 'ou_probe%' THEN 1 ELSE 0 END,
+         created_at ASC NULLS LAST`
     );
     return r.rows || [];
   } catch (e) {
@@ -650,7 +656,8 @@ export async function sendMorningBriefing(options = {}) {
   const stores = [...new Set(recipients.filter(u => u.store).map(u => u.store))].filter(
     (s) => !isBriefingExcludedStore(s)
   );
-  let failedRecipients = 0;
+  /** 投递失败明细：用于管理员告警与 cron 错误摘要（须含 username / 飞书错误码） */
+  const briefingFailures = [];
 
   for (const user of recipients) {
     try {
@@ -705,20 +712,48 @@ export async function sendMorningBriefing(options = {}) {
         }
       }
       if (!ok) {
-        failedRecipients += 1;
+        briefingFailures.push({
+          username: String(user.username || '').trim(),
+          name: String(user.name || '').trim(),
+          scope,
+          storeLabel,
+          error: lastErr || 'unknown'
+        });
         logger.warn({ runYmd, user: user.username, scope, error: lastErr }, 'morning briefing recipient failed after retries');
       }
     } catch (e) {
-      failedRecipients += 1;
+      briefingFailures.push({
+        username: String(user.username || '').trim(),
+        name: String(user.name || '').trim(),
+        scope: recipientScope(user),
+        storeLabel: '',
+        error: String(e?.message || e)
+      });
       logger.warn({ err: e?.message, user: user.username }, 'briefing user error');
     }
   }
 
-  if (failedRecipients > 0) {
-    // 个别用户 open_id 失效/飞书限流等会导致部分投递失败；已按人落库 + 日志可追，不应升级为「定时任务失败」轰炸运维
-    logger.error(
-      { runYmd, failedRecipients, total: recipients.length },
-      'morning briefing partial failure (see per-user logs; cron treated as success)'
+  if (briefingFailures.length) {
+    const lines = [
+      `业务日：${runYmd}`,
+      `失败人数：${briefingFailures.length}`,
+      ...briefingFailures.map(
+        (f) =>
+          `· **${f.username}**（${f.name || '—'}）｜scope=${f.scope}｜汇总/门店：${f.storeLabel || '—'}｜错误：${String(f.error).slice(0, 280)}`
+      ),
+      '请核对 `feishu_users` 中对应账号的 `open_id` 是否与飞书一致；修复后可用管理接口补发晨报。'
+    ];
+    void notifyAdminsDataIssue({
+      alertType: 'morning_briefing_partial_fail',
+      priority: 'B',
+      title: '每日晨报：部分收件人飞书投递失败（含账号明细）',
+      lines,
+      dedupeKey: `morning_briefing_partial_${runYmd}_${briefingFailures.map((f) => f.username).sort().join('|')}`,
+      dedupeHours: 2
+    }).catch(() => {});
+    const summary = briefingFailures.map((f) => `${f.username}(${f.name || '—'}):${String(f.error).slice(0, 100)}`).join(' || ');
+    throw new Error(
+      `morning briefing partial failure: ${briefingFailures.length} recipient(s). Detail: ${summary}`
     );
   }
   logger.info({ stores: stores.length, users: recipients.length }, 'morning briefing done');

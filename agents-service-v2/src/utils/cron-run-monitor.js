@@ -113,7 +113,7 @@ async function notifyAdminsOnFailure(jobKey, errorMsg) {
     );
     const { ymd, hour, minute } = getShanghaiNowClock();
     const timeStr = `${ymd} ${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`;
-    const text = `⚠️ 【定时任务失败告警】\n任务：${cronJobLabelZh(jobKey)}\n时间：${timeStr}（上海）\n错误：${String(errorMsg || '未知错误').slice(0, 400)}\n\n请检查服务日志并在必要时联系运维补跑。`;
+    const text = `⚠️ 【定时任务失败告警】\n任务：${cronJobLabelZh(jobKey)}\n时间：${timeStr}（上海）\n错误：${String(errorMsg || '未知错误').slice(0, 1200)}\n\n请检查服务日志并在必要时联系运维补跑。`;
     for (const row of (r.rows || [])) {
       sendText(row.open_id, text, 'open_id').catch(() => {});
     }
