@@ -42,7 +42,7 @@ function shanghaiTodayInputDate() {
 // ── State ──
 const AN = { master: 'Master调度中枢', data_auditor: '数据审计', ops_supervisor: '运营督导', chief_evaluator: '绩效考核', train_advisor: '培训顾问', appeal: '申诉处理', marketing_planner: '营销策划', marketing_executor: '营销执行', procurement_advisor: '采购建议' };
 let tab = 'dashboard';
-let S = { hl: {}, st: {}, fs: {}, bitableSyncHealth: null, agents: {}, rules: [], scores: {}, campaigns: [], templates: [], evalReport: {}, auditItems: [], cfgs: [], schedCfg: {}, anomalyCfg: {}, perfCfg: {}, ratingCfg: {}, kpiTargets: [], kbItems: [], memoryItems: [], knowledgeSources: null, knowledgeSourcesErr: '', featureFlags: {}, selectedAgent: 'data_auditor', activity: {}, activityDate: shanghaiTodayInputDate(), drillData: [], bitableStatus: {}, chairmanCfg: {}, chairmanTab: 'stores' };
+let S = { hl: {}, st: {}, fs: {}, bitableSyncHealth: null, agents: {}, rules: [], scores: {}, campaigns: [], templates: [], evalReport: {}, auditItems: [], cfgs: [], schedCfg: {}, anomalyCfg: {}, perfCfg: {}, ratingCfg: {}, kpiTargets: [], kbItems: [], memoryItems: [], knowledgeSources: null, knowledgeSourcesErr: '', featureFlags: {}, selectedAgent: 'data_auditor', activity: {}, activityDate: shanghaiTodayInputDate(), drillData: [], bitableStatus: {}, chairmanCfg: {}, chairmanTab: 'stores', agentSkills: {} };
 
 // ── DOM Helpers ──
 function $(id) { return document.getElementById(id); }
@@ -2705,6 +2705,7 @@ async function load(t) {
     if (t === 'activity') { S.activity = await G('/api/agent-activity?date=' + S.activityDate).catch(e => { catchNonAuth(e); return {}; }); }
     if (t === 'datasources') { S.bitableStatus = await G('/api/bitable-status').catch(e => { catchNonAuth(e); return {}; }); }
     if (t === 'chairman') { S.chairmanCfg = (await G('/api/chairman/config').catch(e => { catchNonAuth(e); return { ok: true, config: {} }; })).config || {}; }
+    if (t === 'skills') { S.agentSkills = (await G('/api/agent-skills').catch(e => { catchNonAuth(e); return { agents: {} }; })).agents || {}; }
   } catch (e) { if (e.message === 'auth') { localStorage.removeItem('aat'); renderLogin(); return 'auth'; } }
 }
 
@@ -2714,6 +2715,7 @@ async function load(t) {
 const TABS = [
   ['dashboard', '📊 仪表盘'],
   ['activity', '📋 Agent活动'],
+  ['skills', '🎯 Agent技能'],
   ['datasources', '📡 数据源'],
   ['agents', '🤖 Agent配置'],
   ['scheduled', '⏰ 定时任务'],
@@ -2728,7 +2730,60 @@ const TABS = [
   ['chairman', '👔 董事长配置'],
   ['audit', '📝 审计']
 ];
-const VW = { dashboard: viewDash, activity: viewActivity, datasources: viewDataSources, agents: viewAgents, scheduled: viewScheduled, anomaly: viewAnomaly, performance: viewPerformance, marketing: viewMarketing, evaluation: viewEval, knowledge: viewKnowledge, memory: viewMemory, flags: viewFlags, configs: viewCfgs, chairman: viewChairman, audit: viewAudit };
+const VW = { dashboard: viewDash, activity: viewActivity, skills: viewSkills, datasources: viewDataSources, agents: viewAgents, scheduled: viewScheduled, anomaly: viewAnomaly, performance: viewPerformance, marketing: viewMarketing, evaluation: viewEval, knowledge: viewKnowledge, memory: viewMemory, flags: viewFlags, configs: viewCfgs, chairman: viewChairman, audit: viewAudit };
+
+function viewSkills() {
+  const w = el('div');
+  const agents = S.agentSkills || {};
+  const keys = Object.keys(agents);
+  if (!keys.length) {
+    w.appendChild(card(null, [el('p', { className: 'text-gray-500 text-center py-8' }, '加载中…')]));
+    return w;
+  }
+  const totalSkills = keys.reduce((s, k) => s + (agents[k].skills?.length || 0), 0);
+  w.appendChild(card('Agent 技能总览', [
+    el('div', { className: 'grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4' }, [
+      stat(keys.length, 'Agent 数量', 'text-indigo-600'),
+      stat(totalSkills, '技能总数', 'text-green-600'),
+      stat(keys.filter(k => (agents[k].skills?.length || 0) > 3).length, '技能≥4', 'text-blue-600'),
+      stat(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }), '更新时间', 'text-gray-500')
+    ])
+  ]));
+  for (const [agentId, info] of Object.entries(agents)) {
+    const sCard = el('div', { className: 'bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-4' });
+    const sTitle = el('h4', { className: 'font-semibold text-gray-800 flex items-center gap-2 mb-3' });
+    const agentName = AN[agentId] || agentId;
+    sTitle.appendChild(el('span', { className: 'text-base' }, `${agentId}`));
+    sTitle.appendChild(el('span', { className: 'text-xs text-gray-500 font-normal' }, `(${agentName})`));
+    sTitle.appendChild(el('span', { className: 'ml-auto text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full' }, `${info.skills?.length || 0} 技能`));
+    sCard.appendChild(sTitle);
+    if (info.skills && info.skills.length) {
+      const tbl = el('table', { className: 'w-full text-sm' });
+      tbl.innerHTML = '<thead><tr class="border-b border-gray-100"><th class="text-left py-2 px-2 text-gray-500 font-medium w-36">ID</th><th class="text-left py-2 px-2 text-gray-500 font-medium w-40">名称</th><th class="text-left py-2 px-2 text-gray-500 font-medium">描述</th><th class="text-left py-2 px-2 text-gray-500 font-medium w-48">触发关键词</th></tr></thead>';
+      const tbody = el('tbody');
+      for (const sk of info.skills) {
+        const tr = el('tr', { className: 'border-b border-gray-50 hover:bg-gray-50' });
+        tr.appendChild(el('td', { className: 'py-2 px-2 font-mono text-xs text-indigo-600' }, sk.id));
+        tr.appendChild(el('td', { className: 'py-2 px-2 font-medium' }, sk.name));
+        tr.appendChild(el('td', { className: 'py-2 px-2 text-gray-600 text-xs' }, sk.desc));
+        const triggers = String(sk.trigger || '').split(/[|、]/);
+        const triggerWrap = el('td', { className: 'py-2 px-2' });
+        for (const t of triggers) {
+          const tag = t.trim();
+          if (tag) triggerWrap.appendChild(el('span', { className: 'inline-block bg-gray-100 text-gray-600 text-xs px-1.5 py-0.5 rounded mr-1 mb-1' }, tag));
+        }
+        tr.appendChild(triggerWrap);
+        tbody.appendChild(tr);
+      }
+      tbl.appendChild(tbody);
+      sCard.appendChild(tbl);
+    } else {
+      sCard.appendChild(el('p', { className: 'text-gray-400 text-sm' }, '暂无注册技能'));
+    }
+    w.appendChild(sCard);
+  }
+  return w;
+}
 
 function render() {
   const a = $('app');

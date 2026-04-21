@@ -3352,6 +3352,84 @@ async function handleAcceptActionPlan(text, ctx) {
   };
 }
 
+const AGENT_SKILLS = Object.freeze({
+  data_auditor: {
+    name: '数据审计',
+    skills: [
+      { id: 'sales_detail_analysis', name: '菜品销售分析', desc: '菜品/时段/堂食外卖/毛利率/产品结构分析(sales_raw)', trigger: '菜品|产品结构|销售排行|时段|毛利率|成本库' },
+      { id: 'margin_estimate', name: '毛利估算', desc: '基于销售明细与成本库的毛利率估算', trigger: '毛利估算|预估毛利|销售成本' },
+      { id: 'month_comparison', name: '经营月报(月度对比)', desc: '跨月营收/毛利/人效对比 + LLM行动建议', trigger: '上个月|上月|对比|比较|下滑|趋势|环比|同比' },
+      { id: 'revenue_analysis', name: '营收分析', desc: '日均/达成率/近7天营收汇总(日报确定性)', trigger: '营收|营业额|实收|生意|经营' },
+      { id: 'table_visit', name: '桌访热点', desc: '桌访记录与反馈汇总', trigger: '桌访|桌数|桌访情况' },
+      { id: 'bad_review', name: '差评报告', desc: '产品/服务差评统计', trigger: '差评|投诉|点评' },
+      { id: 'meeting_report', name: '例会报告', desc: '例会/会议数据汇总', trigger: '例会|会议' },
+      { id: 'material_report', name: '原料收货报告', desc: '原料采购收货异常分析', trigger: '原料|收货|进货|采购' },
+      { id: 'metric_tree', name: '指标树分析', desc: '指标库匹配 + 根因下钻(revenue/margin/labor等)', trigger: '指标|达成率|人效|客流' },
+      { id: 'llm_decision', name: 'LLM决策分析', desc: 'LLM综合分析(注入SOP+策略+经验)', trigger: '原因|为什么|建议|怎么办|行动' },
+      { id: 'action_plan', name: '行动计划', desc: '将分析建议转化为可追踪的master_tasks', trigger: '接受行动计划' }
+    ]
+  },
+  ops_supervisor: {
+    name: '运营督导',
+    skills: [
+      { id: 'opening_submission', name: '开档提交情况', desc: '谁没开档/缺失记录统计', trigger: '开档|谁没开档|开档提交' },
+      { id: 'closing_submission', name: '收档提交情况', desc: '谁没收档/缺失记录统计', trigger: '谁没收档|收档提交|收档缺失' },
+      { id: 'closing_detail', name: '收档详情', desc: '各档口得分与异常明细', trigger: '收档|收市|闭档|昨天收档' },
+      { id: 'ops_analysis', name: '运营综合分析', desc: '日报+巡检+异常+任务数据综合LLM分析', trigger: '生意|营业|人效|客流|效率|运营' }
+    ]
+  },
+  chief_evaluator: {
+    name: '绩效考核',
+    skills: [
+      { id: 'score_query', name: '绩效评分查询', desc: '门店/员工历史评分查询', trigger: '绩效|评分|考核|分数' },
+      { id: 'grade_explain', name: '评级说明', desc: 'A/B/C/D等级标准与奖金规则', trigger: '等级|A级|B级|奖金|工资' },
+      { id: 'deduction_detail', name: '扣分明细', desc: '异常扣分项与日期查询', trigger: '扣分|扣了|减分' },
+      { id: 'improve_suggest', name: '绩效改善建议', desc: '基于扣分记录的改善方向', trigger: '改善|提高|怎么提升' }
+    ]
+  },
+  train_advisor: {
+    name: '培训顾问',
+    skills: [
+      { id: 'kb_search', name: '知识库检索', desc: 'PDF知识库全文检索(菜单/SOP/流程)', trigger: '菜单|SOP|流程|操作|标准|指引' },
+      { id: 'training_tasks', name: '培训任务查询', desc: '用户培训任务进度查询', trigger: '培训|学习|任务' }
+    ]
+  },
+  appeal: {
+    name: '申诉处理',
+    skills: [
+      { id: 'appeal_filing', name: '申诉受理', desc: '核实评分/扣分记录,提交申诉', trigger: '申诉|不公平|不认可|投诉' },
+      { id: 'appeal_history', name: '历史申诉查询', desc: '用户历史申诉记录查询', trigger: '之前申诉|申诉记录|上次' }
+    ]
+  },
+  marketing_planner: {
+    name: '营销策划',
+    skills: [
+      { id: 'mkt_strategy', name: '营销方案制定', desc: '基于营收/差评/客流数据生成营销策略', trigger: '营销|方案|活动计划|促销' },
+      { id: 'mkt_data_analysis', name: '营销数据概览', desc: '近30天营收/差评/活动数据汇总', trigger: '营销数据|活动效果' }
+    ]
+  },
+  marketing_executor: {
+    name: '营销执行',
+    skills: [
+      { id: 'mkt_progress', name: '活动执行跟踪', desc: '营销活动进度/完成度/预算使用追踪', trigger: '活动进度|执行情况|完成度' },
+      { id: 'mkt_verify', name: '营收验证', desc: '活动期间营收对比验证', trigger: '活动效果|效果验证|ROI' }
+    ]
+  },
+  procurement_advisor: {
+    name: '采购建议',
+    skills: [
+      { id: 'procurement_advice', name: '采购增减建议', desc: '基于销售/库存数据的采购调整建议', trigger: '采购|进货|备货|库存' }
+    ]
+  },
+  master: {
+    name: 'Master调度中枢',
+    skills: [
+      { id: 'general_dispatch', name: '通用调度', desc: '路由未分类请求,给出下一步建议', trigger: '(兜底)' },
+      { id: 'task_context', name: '任务上下文', desc: '活跃任务查询与状态追踪', trigger: '任务|进度|状态' }
+    ]
+  }
+});
+
 const HANDLERS={data_auditor:handleDataAuditor,ops_supervisor:handleOpsSupervisor,chief_evaluator:handleChiefEvaluator,train_advisor:handleTrainAdvisor,appeal:handleAppeal,marketing_planner:handleMarketingPlanner,marketing_executor:handleMarketingExecutor,procurement_advisor:handleProcurementAdvisor,marketing:handleMarketingPlanner,food_quality:handleOpsSupervisor,master:handleMaster,accept_action_plan:handleAcceptActionPlan};
 
 /**
@@ -3462,4 +3540,4 @@ async function mergeReportWithDataAuditorDecision(originalReturn, text, ctx) {
   }
 }
 
-export{HANDLERS};
+export{HANDLERS,AGENT_SKILLS};

@@ -9,6 +9,7 @@ import { startRandomInspections } from '../services/random-inspection.js';
 import { scheduleProactiveOutcomeOnClose } from '../services/proactive-v2/proactive-task-outcome-on-close.js';
 
 import { sendUsageWeeklyReport } from '../services/usage-weekly-report.js';
+import { AGENT_SKILLS } from '../services/agent-handlers.js';
 
 const r = Router();
 const admin = [authRequired, requireRole('admin','hq_manager')];
@@ -732,6 +733,14 @@ r.post('/trigger-usage-weekly-report', ...admin, async (req, res) => {
     logger.error({ err: e?.message }, 'trigger-usage-weekly-report failed');
     res.status(500).json({ error: String(e?.message || e) });
   }
+});
+
+r.get('/agent-skills', ...admin, (_req, res) => {
+  const result = {};
+  for (const [agentId, info] of Object.entries(AGENT_SKILLS)) {
+    result[agentId] = { name: info.name, skills: info.skills };
+  }
+  res.json({ ok: true, agents: result });
 });
 
 export default r;
