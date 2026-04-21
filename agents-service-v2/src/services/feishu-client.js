@@ -528,18 +528,20 @@ export function buildBiDeductionCard({
   currentScore,
   remainingScore,
   taskId = null,
-  dataSourceNote
+  dataSourceNote,
+  bizDates
 } = {}) {
   const roleLabel = roleLabelZhForBiCard(role);
   const color = severity === '高' ? 'red' : 'orange';
   const defaultWeeklyNote = '数据来源：异常触发汇总（anomaly_triggers）· 周度自动计算';
   const noteText = dataSourceNote != null ? dataSourceNote : defaultWeeklyNote;
 
+  const bizDateLine = bizDates ? `**业务日期**：${bizDates}\n` : '';
   const content = `**备案类型**：BI异常情况扣分
 **门店**：${store}
 **岗位**：${roleLabel} · ${assigneeName}
 **周期**：${period}
-**异常类型**：${reason}（${keyZh}，严重度 ${severity}）
+${bizDateLine}**异常类型**：${reason}（${keyZh}，严重度 ${severity}）
 
 **分数情况**
 • 现有分数：${currentScore} 分

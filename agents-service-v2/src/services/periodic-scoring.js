@@ -77,7 +77,8 @@ async function recordDeductionNotifications({
   rangeEnd,
   details,
   /** 本周期 UPSERT 后的总分（与 details 同源）；用于推算每条扣分前的「现有分」，避免误读他店/他周或「已扣分后再 SELECT」的错序 */
-  scoreAfterRollup
+  scoreAfterRollup,
+  triggerDatesByKey
 }) {
   if (!username || String(username).startsWith('__periodic')) return;
   await ensureHrmsUserNotificationsTable();
@@ -125,6 +126,9 @@ async function recordDeductionNotifications({
     const keyZh = ANOMALY_KEY_ZH[d.anomaly_key] || '相关规则';
     const sevZh = d.severity === 'high' ? '高' : d.severity === 'medium' ? '中' : String(d.severity || '-');
     
+    const triggerDates = triggerDatesByKey?.get(d.anomaly_key);
+    const bizDates = triggerDates ? [...triggerDates].sort().join('、') : null;
+    
     // 构建卡片
     const card = buildBiDeductionCard({
       store,
@@ -136,7 +140,8 @@ async function recordDeductionNotifications({
       severity: sevZh,
       points: pts,
       currentScore,
-      remainingScore
+      remainingScore,
+      bizDates
     });
     
     // 写入 HRMS 档案通知
@@ -148,7 +153,8 @@ async function recordDeductionNotifications({
       points: pts, 
       current_score: currentScore, 
       remaining_score: remainingScore,
-      period_week_start: periodMonday 
+      period_week_start: periodMonday,
+      biz_dates: bizDates
     });
     
     try {
@@ -512,7 +518,7 @@ export async function scoreStoreForPeriod(store, periodMonday, options = {}) {
 
   for (const seg of segments) {
     const r = await query(
-      `SELECT anomaly_key, severity, trigger_value
+      `SELECT anomaly_key, severity, trigger_value, trigger_date::text AS trigger_date
        FROM anomaly_triggers
        WHERE store = $1
          AND trigger_date >= $2::date
@@ -520,6 +526,14 @@ export async function scoreStoreForPeriod(store, periodMonday, options = {}) {
          AND COALESCE(status, 'open') NOT IN ('superseded', 'pending_data')`,
       [store, seg.start, seg.end]
     );
+
+    const triggerDatesByKey = new Map();
+    for (const row of r.rows || []) {
+      const k = row.anomaly_key;
+      if (!row.trigger_date) continue;
+      if (!triggerDatesByKey.has(k)) triggerDatesByKey.set(k, new Set());
+      triggerDatesByKey.get(k).add(String(row.trigger_date).slice(0, 10));
+    }
 
     const periodTag = segments.length > 1 ? `week_${periodMonday}__${seg.ymKey}` : `week_${periodMonday}`;
     const monthPartZh =
@@ -626,7 +640,8 @@ export async function scoreStoreForPeriod(store, periodMonday, options = {}) {
               rangeStart: seg.start,
               rangeEnd: seg.end,
               details,
-              scoreAfterRollup: cumulativeScore
+              scoreAfterRollup: cumulativeScore,
+              triggerDatesByKey
             });
           }
         } catch (e) {
