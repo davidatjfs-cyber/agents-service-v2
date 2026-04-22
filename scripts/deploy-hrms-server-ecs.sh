@@ -168,7 +168,7 @@ for i in $(seq 1 20); do
   fi
   sleep 3
 done
-echo "::error::HRMS /api/health 未就绪（10 次重试）"
+echo "::error::HRMS /api/health 未就绪（20 次重试）"
 RB="${HRMS_ROLLBACK_TGZ:-}"
 if [[ -n "$RB" ]] && [[ -f "$RB" ]]; then
   echo ">>> canary 失败：尝试从部署前备份回滚 $RB"
