@@ -146,8 +146,8 @@ ensure_kv .env AGENTS_SERVICE_HEALTH_URL http://127.0.0.1:3101/health
 # 彻底清理：先 PM2 delete，再杀所有孤儿 node 进程，最后释放端口
 pm2 delete hrms-service 2>/dev/null || true
 sleep 1
-pkill -9 -f "node.*hrms/server/index" 2>/dev/null || true
-pkill -9 -f "node index.js" 2>/dev/null || true
+# 仅清理本目录 HRMS 入口，禁止匹配全局「node index.js」以免误杀其它 PM2 应用导致 502
+pkill -9 -f "${REMOTE_DIR}/index.js" 2>/dev/null || true
 sleep 1
 fuser -k 3000/tcp 2>/dev/null || true
 sleep 2
@@ -158,14 +158,15 @@ if ss -tlnp 2>/dev/null | grep -q ':3000 '; then
 fi
 pm2 start ecosystem.config.cjs --update-env
 echo "--- wait for HRMS listen on 3000 ---"
-for i in 1 2 3 4 5 6 7 8 9 10; do
-  if curl -sS -m 2 http://127.0.0.1:3000/api/health >/tmp/hrms_h.txt 2>/dev/null; then
-    echo "--- /api/health (ok after ${i}s) ---"
+sleep 5
+for i in $(seq 1 20); do
+  if curl -sS -m 3 http://127.0.0.1:3000/api/health >/tmp/hrms_h.txt 2>/dev/null; then
+    echo "--- /api/health (ok after ${i} tries) ---"
     head -c 500 /tmp/hrms_h.txt
     echo
     exit 0
   fi
-  sleep 2
+  sleep 3
 done
 echo "::error::HRMS /api/health 未就绪（10 次重试）"
 RB="${HRMS_ROLLBACK_TGZ:-}"
@@ -177,7 +178,7 @@ if [[ -n "$RB" ]] && [[ -f "$RB" ]]; then
   tar xzf "$RB" --overwrite 2>/dev/null || true
   (npm ci --omit=dev 2>/dev/null || npm install --omit=dev 2>/dev/null) || true
   pm2 start ecosystem.config.cjs --update-env
-  sleep 5
+  sleep 8
   if curl -sS -m 4 http://127.0.0.1:3000/api/health >/tmp/hrms_rb.txt 2>/dev/null; then
     echo "::warning::回滚后 /api/health 已恢复；请检查本次发布内容与 pm2 日志"
     head -c 400 /tmp/hrms_rb.txt

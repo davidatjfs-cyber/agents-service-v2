@@ -12282,11 +12282,20 @@ export function registerAgentRoutes(app, authRequired) {
       const emp = es.rows?.[0];
       if (!store && emp?.store) store = String(emp.store).trim();
 
+      /** 马己仙出品观察号不写月度 agent_scores，与 monthly-comprehensive 一致读主责 NNYXLYR04 的 new_model 行 */
+      const __majStore = (s) => /马己仙/.test(String(s || ''));
+      const __obsPm = (u) => String(u || '').trim().toLowerCase() === 'nnyxcs35';
+      const scoresUsername =
+        __obsPm(username) && __majStore(store) ? 'NNYXLYR04' : username;
+
       const asMonth = await pool().query(
         `SELECT total_score, breakdown, summary, period, brand, store
-         FROM agent_scores WHERE lower(username) = lower($1) AND period = $2 AND period ~ '^[0-9]{4}-[0-9]{2}$'
+         FROM agent_scores
+         WHERE lower(username) = lower($1) AND period = $2 AND period ~ '^[0-9]{4}-[0-9]{2}$'
+         ORDER BY CASE WHEN score_model = 'new_model_monthly' THEN 0 ELSE 1 END,
+                  updated_at DESC NULLS LAST
          LIMIT 1`,
-        [username, personalPeriod]
+        [scoresUsername, personalPeriod]
       ).catch(() => ({ rows: [] }));
 
       const rowM = asMonth.rows?.[0];
@@ -12302,7 +12311,15 @@ export function registerAgentRoutes(app, authRequired) {
         store_rating_period = srInfo.period;
       }
 
-      const bM = rowM?.breakdown && typeof rowM.breakdown === 'object' ? rowM.breakdown : {};
+      let rawBd = rowM?.breakdown;
+      if (typeof rawBd === 'string') {
+        try {
+          rawBd = JSON.parse(rawBd);
+        } catch (_e) {
+          rawBd = null;
+        }
+      }
+      const bM = rawBd && typeof rawBd === 'object' && !Array.isArray(rawBd) ? rawBd : {};
 
       const total_score =
         emp?.total_score != null ? emp.total_score
