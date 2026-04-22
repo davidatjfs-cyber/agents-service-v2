@@ -7,6 +7,7 @@
  */
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
+import { getAllStoreMappings } from '../config/store-mapping.js';
 
 // ─── 内存缓存 ───
 const cache = new Map();
@@ -154,18 +155,24 @@ export async function getStoreMapping() {
 
 export async function toFeishuStoreName(storeName) {
   const mapping = await getStoreMapping();
-  if (!mapping) return storeName;
-  return mapping.daily_reports_to_feishu?.[storeName] || storeName;
+  if (mapping?.daily_reports_to_feishu?.[storeName]) {
+    return mapping.daily_reports_to_feishu[storeName];
+  }
+  const staticMapping = getAllStoreMappings();
+  if (staticMapping[storeName]) {
+    return staticMapping[storeName];
+  }
+  return storeName;
 }
 
 export async function getBrandForStore(storeName) {
   const mapping = await getStoreMapping();
-  if (!mapping) {
-    if (/洪潮/.test(storeName)) return '洪潮';
-    if (/马己仙/.test(storeName)) return '马己仙';
-    return null;
+  if (mapping?.store_brands?.[storeName]) {
+    return mapping.store_brands[storeName];
   }
-  return mapping.store_brands?.[storeName] || null;
+  if (/洪潮/.test(storeName)) return '洪潮';
+  if (/马己仙/.test(storeName)) return '马己仙';
+  return null;
 }
 
 // ─── KPI Targets ───
