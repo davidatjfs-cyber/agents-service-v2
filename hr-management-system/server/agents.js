@@ -4205,7 +4205,7 @@ async function loadUnifiedTableVisitRowsByStore(store, startDate, endDate) {
        FROM feishu_generic_records
        WHERE table_id = $1
        ORDER BY updated_at DESC
-       LIMIT 12000`,
+       LIMIT 2000`,
       [tableId]
     );
 
@@ -5194,6 +5194,7 @@ export async function archiveOldBitableSubmissions() {
         AND created_at < $1
         AND record_id NOT IN (SELECT record_id FROM bitable_submissions_archive)
       ORDER BY created_at ASC
+      LIMIT 5000
     `, [cutoffDate.toISOString()]);
     
     if (oldRecords.rows.length === 0) {
@@ -5203,30 +5204,40 @@ export async function archiveOldBitableSubmissions() {
     
     console.log(`[bitable] found ${oldRecords.rows.length} records to archive`);
     
-    // 3. 移动到归档表
+    // 3. 批量移动到归档表（事务包裹）
     let archivedCount = 0;
-    for (const record of oldRecords.rows) {
-      try {
-        await pool().query(`
-          INSERT INTO bitable_submissions_archive (
-            id, direction, channel, feishu_open_id, sender_username, sender_name, 
-            sender_role, routed_to, content_type, content, agent_data, 
-            created_at, updated_at, feishu_message_id, image_urls
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-        `, [
-          record.id, record.direction, record.channel, record.feishu_open_id,
-          record.sender_username, record.sender_name, record.sender_role,
-          record.routed_to, record.content_type, record.content, record.agent_data,
-          record.created_at, record.updated_at, record.feishu_message_id,
-          record.image_urls
-        ]);
-        
-        // 删除原记录
-        await pool().query('DELETE FROM agent_messages WHERE id = $1', [record.id]);
-        archivedCount++;
-      } catch (e) {
-        console.error(`[bitable] failed to archive record ${record.id}:`, e?.message);
+    const client = await pool().connect();
+    try {
+      await client.query('BEGIN');
+      for (const record of oldRecords.rows) {
+        try {
+          await client.query(`
+            INSERT INTO bitable_submissions_archive (
+              id, direction, channel, feishu_open_id, sender_username, sender_name, 
+              sender_role, routed_to, content_type, content, agent_data, 
+              created_at, updated_at, feishu_message_id, image_urls
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          `, [
+            record.id, record.direction, record.channel, record.feishu_open_id,
+            record.sender_username, record.sender_name, record.sender_role,
+            record.routed_to, record.content_type, record.content, record.agent_data,
+            record.created_at, record.updated_at, record.feishu_message_id,
+            record.image_urls
+          ]);
+          await client.query('DELETE FROM agent_messages WHERE id = $1', [record.id]);
+          archivedCount++;
+        } catch (e) {
+          console.error(`[bitable] failed to archive record ${record.id}:`, e?.message);
+          // 单条失败继续处理下一条，不回滚整个批次
+        }
       }
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      console.error('[bitable] archive transaction failed:', e?.message);
+      throw e;
+    } finally {
+      client.release();
     }
     
     // 4. 删除超过删除阈值的记录
@@ -10844,7 +10855,7 @@ export async function onFeishuEvent(body) {
                 [taskResult.response, JSON.stringify({ taskId: taskResult.taskId, route: 'master_task' }), msgDbId]
               );
             }
-          } catch (e) {}
+  } catch (e) { console.error('[agents] recordAgentQualityAudit failed:', e?.message || e); }
           return { ok: true, route: 'master', taskId: taskResult.taskId };
         }
       } catch (e) {

@@ -1588,7 +1588,7 @@ async function handleDataAuditor(text, ctx) {
 
     const salesBody = await buildSalesRawAnalysis(store, salesStart, salesEnd, bizFilter);
     if (salesBody) {
-      saveMemory('data_auditor', store, salesBody.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
+      saveMemory('data_auditor', store, salesBody.slice(0, 500), { query: text.slice(0, 200) }).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
       try {
         await writeWikiKnowledge({
           agent: 'data_auditor',
@@ -1605,7 +1605,7 @@ async function handleDataAuditor(text, ctx) {
             afterData: ctx.metricAnalysis?.after,
             metricAnalysis: ctx.metricAnalysis || null
           });
-        } catch (e) { /* silent */ }
+        } catch (e) { logger.warn({ err: e?.message }, 'evaluateOutcome failed'); }
         await recordOutcome({
           store,
           problem: structured.problem,
@@ -1613,7 +1613,7 @@ async function handleDataAuditor(text, ctx) {
           result: outcome.result,
           score: outcome.score
         });
-      } catch (e) { /* silent */ }
+      } catch (e) { logger.warn({ err: e?.message }, 'recordOutcome failed'); }
       return {
         agent: 'data_auditor',
         response: salesBody,
@@ -1650,7 +1650,7 @@ async function handleDataAuditor(text, ctx) {
   if (store && /(毛利估算|预估毛利|销售.*成本)/.test(text)) {
     const marginBody = await estimateMarginForStore(store, start, end);
     if (marginBody) {
-      saveMemory('data_auditor', store, marginBody.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
+      saveMemory('data_auditor', store, marginBody.slice(0, 500), { query: text.slice(0, 200) }).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
       return {
         agent: 'data_auditor',
         response: marginBody,
@@ -1722,16 +1722,16 @@ async function handleDataAuditor(text, ctx) {
           query: text.slice(0, 200),
           type: 'action_plan',
           store
-        }).catch(() => {});
+        }).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
       }
 
-      saveMemory('data_auditor', store, fullResponse.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
+      saveMemory('data_auditor', store, fullResponse.slice(0, 500), { query: text.slice(0, 200) }).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
       return { agent: 'data_auditor', response: fullResponse, store, data: monthSummary, timeRange: tr, timeLabel: '月度对比', reportTitle: '经营月报', dataBacked: true };
     }
     // 兜底：无对比数据，用确定性营收分析
     const revenueBody = await buildDeterministicRevenueReply(store, start, end, label);
     if (revenueBody) {
-      saveMemory('data_auditor', store, revenueBody.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
+      saveMemory('data_auditor', store, revenueBody.slice(0, 500), { query: text.slice(0, 200) }).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
       const revTimeLabel = (tr && /~/.test(tr)) ? `最近7天(${formatDateRangeForDisplay(start, end)})` : timeLabel;
       return { agent: 'data_auditor', response: revenueBody, store, data: revenueBody, timeRange: tr, timeLabel: revTimeLabel, reportTitle: '营收分析', dataBacked: true };
     }
@@ -1741,7 +1741,7 @@ async function handleDataAuditor(text, ctx) {
   if (store && /桌访|桌数|桌访情况/.test(text)) {
     const tableVisitBody = await buildDeterministicTableVisitReply(store, start, end);
     if (tableVisitBody) {
-      saveMemory('data_auditor', store, tableVisitBody.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
+      saveMemory('data_auditor', store, tableVisitBody.slice(0, 500), { query: text.slice(0, 200) }).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
       return { agent: 'data_auditor', response: tableVisitBody, store, data: tableVisitBody, timeRange: tr, timeLabel, reportTitle: '桌访热点', dataBacked: true };
     }
   }
@@ -1786,7 +1786,7 @@ async function handleDataAuditor(text, ctx) {
         const r7 = rev.rows.slice(0, 7);
         ds += '- 近7天: ' + r7.map(r => `${String(r.date||'').slice(5,10)}:¥${r.actual_revenue||0}`).join(', ') + '\n';
       } else if (isBusinessOverview) ds += `\n[营收汇总](${label},${store}) 暂无该时间段的营业日报数据。\n`;
-    } catch (e) { /* silent */ }
+    } catch (e) { logger.debug({ err: e?.message }, "query fallback skipped"); }
   }
   // 1) Metric execution (指标库匹配)
   const allDefs = await getAllMetricDefs();
@@ -1838,7 +1838,7 @@ async function handleDataAuditor(text, ctx) {
             ds += `- ${sl}·${bt}：¥${r.slot_sales}（${r.slot_qty}份）\n`;
           });
         }
-      } catch (e) { /* silent */ }
+      } catch (e) { logger.debug({ err: e?.message }, "query fallback skipped"); }
     }
 
     // 3c) 类目/部门结构
@@ -1856,7 +1856,7 @@ async function handleDataAuditor(text, ctx) {
           ds += `\n[品类销售结构](${store},${label})\n`;
           catR.rows.forEach(r => { ds += `- ${r.cat}：¥${r.cat_sales}（${r.cat_qty}份）\n`; });
         }
-      } catch (e) { /* silent */ }
+      } catch (e) { logger.debug({ err: e?.message }, "query fallback skipped"); }
     }
 
     // 3d) 堂食 vs 外卖分布
@@ -1879,7 +1879,7 @@ async function handleDataAuditor(text, ctx) {
             ds += `- ${r.biz_label}：¥${r.biz_sales}（占比 ${pct}%）\n`;
           });
         }
-      } catch (e) { /* silent */ }
+      } catch (e) { logger.debug({ err: e?.message }, "query fallback skipped"); }
     }
   } else if (store && /排行|排名|最好|最差|畅销|滞销|TOP|倒数/.test(text)) {
     // 仅排行关键词时的兜底
@@ -1915,7 +1915,7 @@ async function handleDataAuditor(text, ctx) {
         ds += `\n[差评报告](${store||'全部'},${label}) ${br.rows.length}条\n`;
         br.rows.slice(0, 8).forEach(r => { ds += `- ${String(r.created_at||'').slice(0,10)} ${r.platform||''} ${r.cat||''}: ${(r.content||'').slice(0,60)}\n`; });
       }
-    } catch (e) { /* silent */ }
+    } catch (e) { logger.debug({ err: e?.message }, "query fallback skipped"); }
     try {
       const at = await query(
         `SELECT anomaly_key, severity, trigger_date, trigger_value FROM anomaly_triggers
@@ -1926,7 +1926,7 @@ async function handleDataAuditor(text, ctx) {
         ds += `\n[差评异常触发] ${at.rows.length}条\n`;
         at.rows.slice(0, 5).forEach(r => { ds += `- ${String(r.trigger_date||'').slice(0,10)} ${r.anomaly_key}(${r.severity})\n`; });
       }
-    } catch (e) { /* silent */ }
+    } catch (e) { logger.debug({ err: e?.message }, "query fallback skipped"); }
   }
   // 5) 收档报告 (feishu_generic_records)
   if (/收档|收市|闭店|closing/.test(text)) {
@@ -1942,7 +1942,7 @@ async function handleDataAuditor(text, ctx) {
         ds += `\n[收档报告](${store||'全部'},${label}) ${cr.rows.length}条\n`;
         cr.rows.slice(0, 8).forEach(r => { ds += `- ${r.d||''} ${r.station||''} 得分:${r.score||'-'} ${r.issues ? '异常:'+r.issues.slice(0,40) : ''}\n`; });
       }
-    } catch (e) { /* silent */ }
+    } catch (e) { logger.debug({ err: e?.message }, "query fallback skipped"); }
   }
   // 6) 开档报告 (feishu_generic_records)
   if (/开档|开市|开店|opening/.test(text)) {
@@ -1958,7 +1958,7 @@ async function handleDataAuditor(text, ctx) {
         ds += `\n[开档报告](${store||'全部'},${label}) ${or2.rows.length}条\n`;
         or2.rows.slice(0, 8).forEach(r => { ds += `- ${r.d||''} ${r.station||''} 得分:${r.score||'-'} ${r.issues ? '异常:'+r.issues.slice(0,40) : ''}\n`; });
       }
-    } catch (e) { /* silent */ }
+    } catch (e) { logger.debug({ err: e?.message }, "query fallback skipped"); }
   }
   // 7) 例会报告 (feishu_generic_records)
   if (/例会|会议|meeting/.test(text)) {
@@ -1974,7 +1974,7 @@ async function handleDataAuditor(text, ctx) {
         ds += `\n[例会报告](${store||'全部'},${label}) ${mr.rows.length}条\n`;
         mr.rows.slice(0, 6).forEach(r => { ds += `- ${r.d||''} ${r.mtype||'例会'} 参会:${r.attendees||'-'}人 ${(r.content||'').slice(0,50)}\n`; });
       }
-    } catch (e) { /* silent */ }
+    } catch (e) { logger.debug({ err: e?.message }, "query fallback skipped"); }
   }
   // 8) 原料收货日报 (feishu_generic_records)
   if (/原料|收货|进货|material|采购/.test(text)) {
@@ -1991,7 +1991,7 @@ async function handleDataAuditor(text, ctx) {
         ds += `\n[原料收货](${store||'全部'},${label}) ${mat.rows.length}条\n`;
         mat.rows.slice(0, 8).forEach(r => { ds += `- ${r.d||''} ${r.item||''} ${r.qty||''}${r.amt ? ' ¥'+r.amt : ''} ${r.supplier||''} ${r.issues ? '异常:'+r.issues.slice(0,30) : ''}\n`; });
       }
-    } catch (e) { /* silent */ }
+    } catch (e) { logger.debug({ err: e?.message }, "query fallback skipped"); }
   }
   // 9) 报损单 (feishu_generic_records)
   if (/报损|损耗|loss|废弃/.test(text)) {
@@ -2007,7 +2007,7 @@ async function handleDataAuditor(text, ctx) {
         ds += `\n[报损记录](${store||'全部'},${label}) ${loss.rows.length}条\n`;
         loss.rows.slice(0, 8).forEach(r => { ds += `- ${r.d||''} ${r.item||''} ${r.qty||''}${r.amt ? ' ¥'+r.amt : ''} ${r.reason||''}\n`; });
       }
-    } catch (e) { /* silent */ }
+    } catch (e) { logger.debug({ err: e?.message }, "query fallback skipped"); }
   }
   if (!ds) ds = '\n[no data found]\n';
   // P2: 记忆回调
@@ -2019,7 +2019,7 @@ async function handleDataAuditor(text, ctx) {
         ds += `\n\n${expBlock}\n`;
         console.log('[WIKI RETRIEVE]');
       }
-    } catch (e) { /* silent */ }
+    } catch (e) { logger.debug({ err: e?.message }, "query fallback skipped"); }
   }
   const businessHint = isBusinessOverview
     ? '\n重要：用户问的是整体生意/经营情况，请以营收、达成率、毛利、客流为主作答；若仅有桌访等单项数据或无营收日报，需先说明「暂无该时段营业日报数据」再简述已有数据，不要只回复桌访。\n'
@@ -2148,7 +2148,7 @@ ${metricExperienceAppendix}
     cleanedAns = buildWikiComplianceFallback(ds, text, store);
   }
   cleanedAns = await coerceDecisionExecutionOutput(cleanedAns, mode, store, text);
-  saveMemory('data_auditor', store, cleanedAns.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
+  saveMemory('data_auditor', store, cleanedAns.slice(0, 500), { query: text.slice(0, 200) }).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
   try {
     await writeWikiKnowledge({
       agent: 'data_auditor',
@@ -2165,7 +2165,7 @@ ${metricExperienceAppendix}
         afterData: ctx.metricAnalysis?.after,
         metricAnalysis: ctx.metricAnalysis || metricSnapshotForOutcome
       });
-    } catch (e) { /* silent */ }
+    } catch (e) { logger.warn({ err: e?.message }, 'evaluateOutcome failed'); }
     await recordOutcome({
       store,
       problem: structured.problem,
@@ -2173,7 +2173,7 @@ ${metricExperienceAppendix}
       result: outcome.result,
       score: outcome.score
     });
-  } catch (e) { /* silent */ }
+  } catch (e) { logger.warn({ err: e?.message }, 'recordOutcome failed'); }
   // V1 格式：报告类型标题（由 pipeline 拼成 小年：📊 标题 (门店 · 时间)）
   const reportTitle = inferDataAuditorReportTitle(text, ctx);
   return { agent: 'data_auditor', response: cleanedAns || FACTUAL_BLOCKED, data: ds, store, timeRange: tr, timeLabel, reportTitle, dataBacked: ds !== '\n[no data found]\n' };
@@ -2225,7 +2225,7 @@ async function handleOpsSupervisor(text, ctx) {
       }
       lines.push(`共缺失${report.totalMissing}次开档提交。`);
       const body = lines.join('\n');
-      saveMemory('ops_supervisor', store, body.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
+      saveMemory('ops_supervisor', store, body.slice(0, 500), { query: text.slice(0, 200) }).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
       return { agent: 'ops_supervisor', response: body, store, data: body, timeLabel, reportTitle: '开档提交情况' };
     }
     if (report === null || (report && report.daily.length === 0)) {
@@ -2254,7 +2254,7 @@ async function handleOpsSupervisor(text, ctx) {
       }
       lines.push(`共缺失${report.totalMissing}次收档提交。`);
       const body = lines.join('\n');
-      saveMemory('ops_supervisor', store, body.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
+      saveMemory('ops_supervisor', store, body.slice(0, 500), { query: text.slice(0, 200) }).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
       return { agent: 'ops_supervisor', response: body, store, data: body, timeLabel, reportTitle: '收档提交情况' };
     }
     if (report === null || (report && report.daily.length === 0)) {
@@ -2280,7 +2280,7 @@ async function handleOpsSupervisor(text, ctx) {
         lines.push('');
         lines.push(`**分析说明**：${dateStr}共 ${closing.items.length} 个档口提交收档，以上为各档口得分与异常说明。`);
         const body = lines.join('\n');
-        saveMemory('ops_supervisor', store, body.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
+        saveMemory('ops_supervisor', store, body.slice(0, 500), { query: text.slice(0, 200) }).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
         return { agent: 'ops_supervisor', response: body, store, data: body, timeLabel, reportTitle: '收档提交情况' };
       }
       const noData = closing.emptyReason || `该日（${dateStr}）暂无收档记录。`;
@@ -2307,7 +2307,7 @@ async function handleOpsSupervisor(text, ctx) {
           opsData += `- ${String(r.date||'').slice(5,10)} 营收:¥${r.actual_revenue||0} 达成:${rate} 客流:${r.dine_traffic||0}人 人效:¥${r.efficiency||0} 外卖:¥${r.delivery_actual||0}${r.delivery_bad_reviews>0?' 差评:'+r.delivery_bad_reviews+'单':''}\n`;
         });
       }
-    } catch (e) { /* silent */ }
+    } catch (e) { logger.debug({ err: e?.message }, "query fallback skipped"); }
   }
   if (store) {
     try {
@@ -2321,7 +2321,7 @@ async function handleOpsSupervisor(text, ctx) {
         opsData += '\n[近期巡检记录]\n';
         r.rows.forEach(row => { opsData += `- ${row.d||''}${row.t||'检查'}: ${row.s||'-'}分 ${row.result||''}\n`; });
       }
-    } catch (e) { /* silent */ }
+    } catch (e) { logger.debug({ err: e?.message }, "query fallback skipped"); }
     try {
       const anom = await query(
         `SELECT anomaly_key, severity, trigger_date FROM anomaly_triggers
@@ -2331,7 +2331,7 @@ async function handleOpsSupervisor(text, ctx) {
         opsData += '\n[近2周运营异常]\n';
         anom.rows.forEach(r => { opsData += `- ${String(r.trigger_date||'').slice(0,10)} ${r.anomaly_key}(${r.severity})\n`; });
       }
-    } catch (e) { /* silent */ }
+    } catch (e) { logger.debug({ err: e?.message }, "query fallback skipped"); }
     try {
       const pats = feishuStoreSearchPatterns(store);
       const username = String(ctx.username || '').trim();
@@ -2360,7 +2360,7 @@ async function handleOpsSupervisor(text, ctx) {
         tasks = { rows: [] };
       }
       if (tasks.rows?.length) opsData += '\n[待处理任务] ' + tasks.rows.map(t => `${t.title}(${t.status}/${t.severity})`).join(', ');
-    } catch (e) { /* silent */ }
+    } catch (e) { logger.debug({ err: e?.message }, "query fallback skipped"); }
   }
   try { const mem = await recallMemories('ops_supervisor', store, '', 3); if (mem.length) opsData += '\n[历史巡检] ' + mem.map(m => m.content.slice(0,80)).join('; '); } catch(e) {}
   let metricExperienceAppendixOps = '';
@@ -2576,7 +2576,7 @@ ${kbData}${trainingCtx}
       ...(ctx.llmContext ? { context: ctx.llmContext } : {})
     }
   );
-  saveMemory('train_advisor', store, (r.content || '').slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
+  saveMemory('train_advisor', store, (r.content || '').slice(0, 500), { query: text.slice(0, 200) }).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
   return { agent: 'train_advisor', response: r.content || '请描述培训需求', data: kbData + trainingCtx, store };
 }
 // ── 5. Appeal (对标V1: 申诉记录入库+扣分核实+公正处理) ──
@@ -2609,7 +2609,7 @@ async function handleAppeal(text, ctx) {
       appealData += '\n[历史申诉记录]\n';
       prevAppeals.rows.forEach(r => { appealData += `- ${String(r.created_at||'').slice(0,10)} 状态:${r.status} 原因:${(r.reason||'').slice(0,50)}\n`; });
     }
-  } catch (e) { /* silent */ }
+  } catch (e) { logger.debug({ err: e?.message }, "query fallback skipped"); }
   if (!appealData) appealData = '\n[暂无评分/扣分记录]';
   // P2: 记忆回调
   try { const mem = await recallMemories('appeal', store, '', 3); if (mem.length) appealData += '\n[历史申诉记忆] ' + mem.map(m => m.content.slice(0,80)).join('; '); } catch(e) {}
@@ -2951,7 +2951,7 @@ ${JSON.stringify(engineStrategies, null, 2)}
       const askScore = scoreStrategyForMemPalace('ask', q).score || 0.6;
       logStrategyAbTest(ctx, memPalaceRows, q, askScore);
       logMemoryDecision(q);
-      saveMemory('marketing_planner', store, `Asked: ${q}`, { query: text.slice(0, 200) }).catch(() => {});
+      saveMemory('marketing_planner', store, `Asked: ${q}`, { query: text.slice(0, 200) }).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
       return {
         agent: 'marketing_planner',
         response: q,
@@ -2971,7 +2971,7 @@ ${JSON.stringify(engineStrategies, null, 2)}
       );
       if (answerText) {
         answerText = ensureMarketingStrategyText(answerText, ctx);
-        saveMemory('marketing_planner', store, answerText.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
+        saveMemory('marketing_planner', store, answerText.slice(0, 500), { query: text.slice(0, 200) }).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
         const { score, hasOutcome } = scoreStrategyForMemPalace('final', answerText);
         const outScore = score || 0.6;
         logStrategyAbTest(ctx, memPalaceRows, answerText, outScore);
@@ -3003,7 +3003,7 @@ ${JSON.stringify(engineStrategies, null, 2)}
   // 普通文本响应（兼容旧逻辑）
   let responseText = decodeJsonStringEscapesForFeishu(stripJsonFromResponse(rawContent));
   responseText = ensureMarketingStrategyText(responseText, ctx);
-  saveMemory('marketing_planner', store, responseText.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
+  saveMemory('marketing_planner', store, responseText.slice(0, 500), { query: text.slice(0, 200) }).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
   const { score: textScore, hasOutcome: textOutcome } = scoreStrategyForMemPalace('text', responseText);
   const textOutScore = textScore || 0.6;
   logStrategyAbTest(ctx, memPalaceRows, responseText, textOutScore);
@@ -3107,7 +3107,7 @@ ${execData}
   ], { temperature: 0.4, max_tokens: 800, purpose: 'marketing_executor', ...(ctx.llmContext ? { context: ctx.llmContext } : {}) });
 
   const responseText = stripJsonFromResponse(r.content || '请描述营销执行需求，系统将查询真实活动数据。');
-  saveMemory('marketing_executor', store, responseText.slice(0, 500), { query: text.slice(0, 200) }).catch(() => {});
+  saveMemory('marketing_executor', store, responseText.slice(0, 500), { query: text.slice(0, 200) }).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
   const baseReturn = {
     agent: 'marketing_executor',
     response: responseText,
@@ -3351,7 +3351,7 @@ async function handleAcceptActionPlan(text, ctx) {
           JSON.stringify({ source: 'action_plan', originalLine: line }),
           timeoutAt.toISOString()
         ]
-      ).catch(() => {});
+      ).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
 
       createdTasks.push({
         taskId,
@@ -3369,7 +3369,7 @@ async function handleAcceptActionPlan(text, ctx) {
     store, brand: brand || '', decisionType: 'action_plan',
     title: decisionTitle, content: actionPlanText.slice(0, 500),
     agent: 'accept_action_plan'
-  }).catch(() => {});
+  }).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
 
   const lines = [
     `✅ **行动计划已接受，已创建 ${createdTasks.length} 个追踪任务：**`,

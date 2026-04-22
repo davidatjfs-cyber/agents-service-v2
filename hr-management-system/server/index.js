@@ -7233,13 +7233,24 @@ app.get('/api/daily-reports/private-room-month-total', authRequired, async (req,
     return res.json({ total: 0 });
   }
   try {
-    const r = await pool.query(
+    // 优先精确匹配门店名（避免 ILIKE 模糊匹配到多条或特殊字符导致恒为 0）
+    let r = await pool.query(
       `SELECT COALESCE(SUM(private_room_uses), 0)::int AS total
        FROM daily_reports
-       WHERE store ILIKE $1 AND TO_CHAR(date,'YYYY-MM') = $2`,
-      [`%${store}%`, month]
+       WHERE TRIM(store) = TRIM($1) AND TO_CHAR(date::date,'YYYY-MM') = $2`,
+      [store, month]
     );
-    return res.json({ total: parseInt(r.rows?.[0]?.total || 0, 10) });
+    let total = parseInt(r.rows?.[0]?.total || 0, 10);
+    if (!total) {
+      r = await pool.query(
+        `SELECT COALESCE(SUM(private_room_uses), 0)::int AS total
+         FROM daily_reports
+         WHERE POSITION(TRIM($1) IN TRIM(store)) > 0 AND TO_CHAR(date::date,'YYYY-MM') = $2`,
+        [store, month]
+      );
+      total = parseInt(r.rows?.[0]?.total || 0, 10);
+    }
+    return res.json({ total });
   } catch (e) {
     console.error('[private-room-month-total]', e?.message);
     return res.json({ total: 0 });
@@ -13052,6 +13063,28 @@ function deepRepairGarbledStrings(obj) {
   return obj;
 }
 
+/** GET /api/state 时非 admin 不返回 employees/users 中的明文 password（仅系统管理员可拉取完整副本）。 */
+function stripPasswordFieldsFromStateForClient(data, role) {
+  if (!data || typeof data !== 'object') return data;
+  if (String(role || '').trim() === 'admin') return data;
+  try {
+    const clone = JSON.parse(JSON.stringify(data));
+    const wipe = (arr) => {
+      if (!Array.isArray(arr)) return;
+      for (const it of arr) {
+        if (it && typeof it === 'object' && Object.prototype.hasOwnProperty.call(it, 'password')) {
+          it.password = '';
+        }
+      }
+    };
+    wipe(clone.employees);
+    wipe(clone.users);
+    return clone;
+  } catch (_e) {
+    return data;
+  }
+}
+
 app.get('/api/state', authRequired, async (req, res) => {
   try {
     const r = await pool.query('select data from hrms_state where key = $1 limit 1', ['default']);
@@ -13073,7 +13106,29 @@ app.get('/api/state', authRequired, async (req, res) => {
         console.error('[state] Failed to persist repaired state:', saveErr?.message || saveErr);
       }
     }
-    return res.json({ data: repaired });
+    const role = String(req.user?.role || '').trim();
+    const payload = stripPasswordFieldsFromStateForClient(repaired, role);
+    return res.json({ data: payload });
+  } catch (e) {
+    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+  }
+});
+
+/** 管理员查看某账号在 hrms_state 中记录的当前登录密码明文（与改密接口写入的 state 同步，保证为最新）。 */
+app.get('/api/admin/employee-password/:username', authRequired, async (req, res) => {
+  if (String(req.user?.role || '') !== 'admin') {
+    return res.status(403).json({ error: 'forbidden', message: '仅系统管理员可查看密码' });
+  }
+  const un = String(req.params.username || '').trim().toLowerCase();
+  if (!un) return res.status(400).json({ error: 'missing_username' });
+  try {
+    const state = (await getSharedState()) || {};
+    const employees = Array.isArray(state.employees) ? state.employees : [];
+    const users = Array.isArray(state.users) ? state.users : [];
+    const emp = employees.find((e) => String(e?.username || '').trim().toLowerCase() === un);
+    const usr = users.find((u) => String(u?.username || '').trim().toLowerCase() === un);
+    const password = String(emp?.password ?? usr?.password ?? '').trim();
+    return res.json({ username: String(req.params.username || '').trim(), password });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
   }
@@ -18410,4 +18465,8 @@ app.get('/api/admin/usage-weekly', authRequired, async (req, res) => {
     console.error('GET /api/admin/usage-weekly error:', e);
     res.status(500).json({ error: String(e?.message || e) });
   }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[HRMS] Unhandled rejection:', reason instanceof Error ? reason.stack : String(reason));
 });

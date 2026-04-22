@@ -71,6 +71,7 @@ import { REPLY_ENGINE_BUILD } from './reply-engine-version.js';
 let randomInspectionStartRetried = false;
 
 const app = express();
+let httpServer = null;
 /** 生产与 ecosystem.config.cjs 固定 3101；勿改为 3000（HRMS）或 3100（历史易与文档/旧进程混淆） */
 const PORT = parseInt(process.env.PORT || '3101', 10);
 enforceRuntimeSafetyOrExit({ serviceName: 'agents-service-v2' });
@@ -1209,6 +1210,7 @@ async function start() {
   // Prevents EADDRINUSE crash loops caused by orphan node processes from bad deploys
   await new Promise((resolve) => {
     const server = app.listen(PORT, () => {
+      httpServer = server;
       logger.info({ port: PORT }, `🚀 agents-service-v2 running on port ${PORT}`);
       void import('./services/proactive-v2/proactive-runner.js')
         .then((m) => {
@@ -1251,15 +1253,29 @@ async function start() {
 }
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down...');
+function gracefulShutdown(signal) {
+  logger.info(`SIG${signal} received, shutting down gracefully...`);
   stopBitablePolling();
-  process.exit(0);
-});
-process.on('SIGINT', () => {
-  logger.info('SIGINT received, shutting down...');
-  stopBitablePolling();
-  process.exit(0);
+  if (httpServer) {
+    httpServer.close(() => {
+      logger.info('HTTP server closed');
+      process.exit(0);
+    });
+    // 10s timeout fallback
+    setTimeout(() => {
+      logger.warn('Graceful shutdown timeout, forcing exit');
+      process.exit(1);
+    }, 10000);
+  } else {
+    process.exit(0);
+  }
+}
+
+process.on('SIGTERM', () => gracefulShutdown('TERM'));
+process.on('SIGINT', () => gracefulShutdown('INT'));
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error({ err: reason instanceof Error ? reason : new Error(String(reason)), promise: false }, 'Unhandled rejection');
 });
 
 start().catch(err => {
