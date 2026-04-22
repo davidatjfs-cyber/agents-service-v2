@@ -19,6 +19,18 @@ import { expandAgentStoreLabels } from '../config/store-mapping.js';
 import { shanghaiLastCompletedWeekBounds, shanghaiCurrentWeekBounds } from '../utils/anomaly-week-bounds.js';
 import { ANOMALY_RULES } from '../config/anomaly-rules.js';
 
+function badReviewStoreCond(store) {
+  const labels = expandAgentStoreLabels(store);
+  if (labels.length === 0) return { sql: '1=0', params: [] };
+  const conds = [];
+  const params = [];
+  for (const label of labels) {
+    params.push(`%${label}%`);
+    conds.push(`(fields->>'差评门店' ILIKE $${params.length} OR fields->>'所属门店' ILIKE $${params.length} OR fields->>'门店' ILIKE $${params.length})`);
+  }
+  return { sql: `(${conds.join(' OR ')})`, params };
+}
+
 async function notifyAdminsOnBadReviewCheckFailure(ruleKey, store, err) {
   try {
     const { sendText } = await import('./feishu-client.js');
@@ -612,14 +624,14 @@ function badReviewDianpingCond(alias = 'fields') {
 // ─── 7. 差评报告产品异常（大众点评 only，每日触发，自然周递进扣分）───
 // 产品差评判定：差评产品去除服务/环境/态度等非产品标签后仍有实质内容 + 差评类型含产品/出品/菜品
 export async function checkBadReviewProduct(store) {
-  const feishuStore = await toFeishuStoreName(store);
   const { weekStart, weekEnd } = shanghaiCurrentWeekBounds();
+  const sc = badReviewStoreCond(store);
   const r = await query(
     `SELECT COUNT(*)::int AS cnt
      FROM feishu_generic_records
-     WHERE config_key = 'bad_review' AND (fields->>'差评门店' = $1 OR fields->>'所属门店' = $1)
-       AND (timezone('Asia/Shanghai', created_at))::date >= $2::date
-       AND (timezone('Asia/Shanghai', created_at))::date <= $3::date
+     WHERE config_key = 'bad_review' AND ${sc.sql}
+       AND (timezone('Asia/Shanghai', created_at))::date >= $${sc.params.length + 1}::date
+       AND (timezone('Asia/Shanghai', created_at))::date <= $${sc.params.length + 2}::date
        AND ${badReviewDianpingCond('fields')}
        AND (
          (fields->>'差评产品' IS NOT NULL AND TRIM(fields->>'差评产品') <> ''
@@ -634,7 +646,7 @@ export async function checkBadReviewProduct(store) {
          OR fields->>'差评类型' ILIKE '%出品%'
          OR fields->>'差评类型' ILIKE '%菜品%'
        )`,
-    [feishuStore, weekStart, weekEnd]
+    [...sc.params, weekStart, weekEnd]
   );
   const cnt = parseInt(r.rows[0]?.cnt || 0);
   if (cnt <= 0) {
@@ -654,14 +666,14 @@ export async function checkBadReviewProduct(store) {
 // ─── 8. 差评报告服务异常（大众点评 only，每日触发，自然周递进扣分）───
 // 服务差评判定：差评类型含服务 + 差评关键词含服务 + 差评产品字段值为"服务" + 差评原因含服务且无产品
 export async function checkBadReviewService(store) {
-  const feishuStore = await toFeishuStoreName(store);
   const { weekStart, weekEnd } = shanghaiCurrentWeekBounds();
+  const sc = badReviewStoreCond(store);
   const r = await query(
     `SELECT COUNT(*)::int AS cnt
      FROM feishu_generic_records
-     WHERE config_key = 'bad_review' AND (fields->>'差评门店' = $1 OR fields->>'所属门店' = $1)
-       AND (timezone('Asia/Shanghai', created_at))::date >= $2::date
-       AND (timezone('Asia/Shanghai', created_at))::date <= $3::date
+     WHERE config_key = 'bad_review' AND ${sc.sql}
+       AND (timezone('Asia/Shanghai', created_at))::date >= $${sc.params.length + 1}::date
+       AND (timezone('Asia/Shanghai', created_at))::date <= $${sc.params.length + 2}::date
        AND ${badReviewDianpingCond('fields')}
        AND (
          fields->>'差评类型' ILIKE '%服务%'
@@ -669,7 +681,7 @@ export async function checkBadReviewService(store) {
          OR (fields->>'差评产品' ILIKE '%服务%')
          OR (fields->>'差评原因' ILIKE '%服务%' AND (fields->>'差评产品' IS NULL OR TRIM(fields->>'差评产品') = ''))
        )`,
-    [feishuStore, weekStart, weekEnd]
+    [...sc.params, weekStart, weekEnd]
   );
   const cnt = parseInt(r.rows[0]?.cnt || 0);
   if (cnt <= 0) {
@@ -878,14 +890,14 @@ async function collectFoodSafetyEvidenceForStore(store, scanYmd) {
   }
 
   try {
-    const feishuStore = await toFeishuStoreName(store);
+    const sc2 = badReviewStoreCond(store);
     const brr = await query(
       `SELECT record_id, created_at, fields
        FROM feishu_generic_records
        WHERE config_key = 'bad_review'
-         AND (timezone('Asia/Shanghai', created_at))::date = $1::date
-         AND (fields->>'差评门店' = $2 OR fields->>'所属门店' = $2)`,
-      [scanYmd, feishuStore]
+         AND (timezone('Asia/Shanghai', created_at))::date = $${sc2.params.length + 1}::date
+         AND ${sc2.sql}`,
+      [...sc2.params, scanYmd]
     );
     for (const row of brr.rows || []) {
       const f = row.fields || {};
