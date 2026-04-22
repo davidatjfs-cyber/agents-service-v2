@@ -6,7 +6,7 @@
 import 'dotenv/config';
 import { query } from '../src/utils/db.js';
 import { runAnomalyChecks } from '../src/services/anomaly-engine.js';
-import { flushPendingNotifications } from '../src/services/anomaly-queue.js';
+import { flushPendingNotifications } from '../src/services/anomaly-notify-queue.js';
 import { logger } from '../src/utils/logger.js';
 
 async function main() {
