@@ -548,29 +548,10 @@ ${bizDateLine}**异常类型**：${reason}（${keyZh}，严重度 ${severity}）
 • 本次扣分：${points} 分
 • 剩余分数：${remainingScore} 分`;
 
-  const taskHint = taskId
-    ? `\n\n📌 **任务ID**：\`${taskId}\`\n✅ 与定时任务、随机抽检相同：请**引用/回复本条卡片消息**（或在新消息里带上任务ID）直接发送整改措施，系统将自动记录并审核。`
-    : '';
-
-  const elements = [{ tag: 'div', text: { tag: 'lark_md', content: content + taskHint } }];
+  const elements = [{ tag: 'div', text: { tag: 'lark_md', content } }];
 
   if (taskId) {
     elements.push({ tag: 'hr' });
-    elements.push({
-      tag: 'action',
-      actions: [
-        {
-          tag: 'button',
-          text: { tag: 'plain_text', content: '✅ 已查看' },
-          type: 'primary',
-          value: JSON.stringify({ action: 'ack_anomaly', taskId })
-        }
-      ]
-    });
-    elements.push({
-      tag: 'note',
-      elements: [{ tag: 'plain_text', content: '⏰ 催办规则：下发后每间隔1小时提醒，共3次；仍未有效闭环将提交HR记入绩效' }]
-    });
     elements.push({ tag: 'note', elements: [{ tag: 'plain_text', content: noteText }] });
   } else {
     elements.push({ tag: 'note', elements: [{ tag: 'plain_text', content: noteText }] });

@@ -612,7 +612,6 @@ export async function checkGrossMargin(store) {
   };
 }
 
-/** 仅大众点评（排除外卖差评） */
 function badReviewDianpingCond(alias = 'fields') {
   return `(
     (COALESCE(${alias}->>'差评平台','') ILIKE '%大众%' OR COALESCE(${alias}->>'差评平台','') ILIKE '%美团点评%')
@@ -621,34 +620,46 @@ function badReviewDianpingCond(alias = 'fields') {
   )`;
 }
 
-// ─── 7. 差评报告产品异常（大众点评 only，每日触发，自然周递进扣分）───
-// 产品差评判定：差评产品去除服务/环境/态度等非产品标签后仍有实质内容 + 差评类型含产品/出品/菜品
+const SERVICE_KEYWORDS = ['服务', '态度', '笑脸', '上菜慢', '上菜速度', '等位', '排队', '响应', '接待', '招呼', '送客', '迎宾'];
+const PRODUCT_KEYWORDS = ['菜品', '口味', '味道', '难吃', '好吃', '不入味', '不好吃', '质量', '食材', '新鲜', '不新鲜', '变质', '性价比', '贵', '单价', '死鱼', '异物', '腥'];
+const ENV_KEYWORDS = ['环境', '逼仄', '空调', '闷热', '吵', '卫生', '装修'];
+const NON_PRODUCT_TAGS = /(^|、|,)\s*(服务|环境|态度|全品类菜品|全店菜品|就餐环境)\s*(?=(、|,|$))/g;
+const VAGUE_PRODUCT = /未展示|无法确定|无法生成|无法得知|不确定|暂无/i;
+
+function classifyBadReviewRecord(f) {
+  const product = String(f?.差评产品 || '').trim();
+  const type = String(f?.差评类型 || '').trim();
+  const keywords = String(f?.差评关键词 || '').trim();
+  const reason = String(f?.差评原因 || '').trim();
+  const all = `${type} ${product} ${keywords} ${reason}`;
+  const cleanProduct = product.replace(NON_PRODUCT_TAGS, '').replace(/(^、+|、+$|,{1,}|、{2,})/g, '').trim();
+  const isVague = VAGUE_PRODUCT.test(product) || VAGUE_PRODUCT.test(keywords);
+  const hasRealProduct = !isVague && (cleanProduct.length > 0 || PRODUCT_KEYWORDS.some(k => reason.includes(k)));
+  const hasServiceKw = !isVague && SERVICE_KEYWORDS.some(k => all.includes(k));
+  const hasEnvKw = ENV_KEYWORDS.some(k => all.includes(k));
+  const isProduct = hasRealProduct;
+  const isService = type.includes('服务') || hasServiceKw;
+  const isUnclassified = !hasRealProduct && !hasServiceKw && !hasEnvKw && !type && !cleanProduct;
+  return { isProduct, isService, isUnclassified };
+}
+
 export async function checkBadReviewProduct(store) {
   const { weekStart, weekEnd } = shanghaiCurrentWeekBounds();
   const sc = badReviewStoreCond(store);
   const r = await query(
-    `SELECT COUNT(*)::int AS cnt
+    `SELECT fields
      FROM feishu_generic_records
      WHERE config_key = 'bad_review' AND ${sc.sql}
        AND (timezone('Asia/Shanghai', created_at))::date >= $${sc.params.length + 1}::date
        AND (timezone('Asia/Shanghai', created_at))::date <= $${sc.params.length + 2}::date
-       AND ${badReviewDianpingCond('fields')}
-       AND (
-         (fields->>'差评产品' IS NOT NULL AND TRIM(fields->>'差评产品') <> ''
-          AND TRIM(regexp_replace(
-            regexp_replace(
-              regexp_replace(fields->>'差评产品', '(^|、|,)\\s*(服务|环境|态度|全品类菜品|全店菜品)\\s*(?=(、|,|$))', E'\\1', 'g'),
-              '(^|、|,)\\s*(服务|环境|态度|全品类菜品|全店菜品)\\s*(?=(、|,|$))', E'\\1', 'g'
-            ),
-            '(^、+|、+$|,{1,}|、{2,})', '', 'g'
-          )) <> '')
-         OR fields->>'差评类型' ILIKE '%产品%'
-         OR fields->>'差评类型' ILIKE '%出品%'
-         OR fields->>'差评类型' ILIKE '%菜品%'
-       )`,
+       AND ${badReviewDianpingCond('fields')}`,
     [...sc.params, weekStart, weekEnd]
   );
-  const cnt = parseInt(r.rows[0]?.cnt || 0);
+  let cnt = 0;
+  for (const row of r.rows || []) {
+    const { isProduct } = classifyBadReviewRecord(row.fields);
+    if (isProduct) cnt++;
+  }
   if (cnt <= 0) {
     return { triggered: false, detail: `大众点评产品差评 0 条（${weekStart}~${weekEnd}）` };
   }
@@ -663,27 +674,23 @@ export async function checkBadReviewProduct(store) {
   };
 }
 
-// ─── 8. 差评报告服务异常（大众点评 only，每日触发，自然周递进扣分）───
-// 服务差评判定：差评类型含服务 + 差评关键词含服务 + 差评产品字段值为"服务" + 差评原因含服务且无产品
 export async function checkBadReviewService(store) {
   const { weekStart, weekEnd } = shanghaiCurrentWeekBounds();
   const sc = badReviewStoreCond(store);
   const r = await query(
-    `SELECT COUNT(*)::int AS cnt
+    `SELECT fields
      FROM feishu_generic_records
      WHERE config_key = 'bad_review' AND ${sc.sql}
        AND (timezone('Asia/Shanghai', created_at))::date >= $${sc.params.length + 1}::date
        AND (timezone('Asia/Shanghai', created_at))::date <= $${sc.params.length + 2}::date
-       AND ${badReviewDianpingCond('fields')}
-       AND (
-         fields->>'差评类型' ILIKE '%服务%'
-         OR fields->>'差评关键词' ILIKE '%服务%'
-         OR (fields->>'差评产品' ILIKE '%服务%')
-         OR (fields->>'差评原因' ILIKE '%服务%' AND (fields->>'差评产品' IS NULL OR TRIM(fields->>'差评产品') = ''))
-       )`,
+       AND ${badReviewDianpingCond('fields')}`,
     [...sc.params, weekStart, weekEnd]
   );
-  const cnt = parseInt(r.rows[0]?.cnt || 0);
+  let cnt = 0;
+  for (const row of r.rows || []) {
+    const { isService } = classifyBadReviewRecord(row.fields);
+    if (isService) cnt++;
+  }
   if (cnt <= 0) {
     return { triggered: false, detail: `大众点评服务差评 0 条（${weekStart}~${weekEnd}）` };
   }
@@ -1206,6 +1213,17 @@ export async function runAnomalyChecks(frequency, stores, options = {}) {
               logger.warn(
                 { err: e?.message, store, triggerDate },
                 'recharge_zero: refreshWeeklyRollupAfterRechargeTrigger failed'
+              );
+            }
+          }
+          if (ruleKey === 'bad_review_product' || ruleKey === 'bad_review_service') {
+            try {
+              const { refreshWeeklyRollupAfterRechargeTrigger } = await import('./periodic-scoring.js');
+              await refreshWeeklyRollupAfterRechargeTrigger(store, triggerDate);
+            } catch (e) {
+              logger.warn(
+                { err: e?.message, store, triggerDate, ruleKey },
+                'bad_review: refreshWeeklyRollup failed'
               );
             }
           }

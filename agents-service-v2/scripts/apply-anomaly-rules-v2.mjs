@@ -121,7 +121,7 @@ const PATCH = {
   bad_review_product: {
     name: '大众点评产品差评',
     enabled: true,
-    frequency: 'weekly',
+    frequency: 'daily',
     data_source: 'feishu_generic_records.bad_review dianping only',
     threshold: {},
     assign_to: 'kitchen_manager',
@@ -133,7 +133,7 @@ const PATCH = {
   bad_review_service: {
     name: '大众点评服务差评',
     enabled: true,
-    frequency: 'weekly',
+    frequency: 'daily',
     data_source: 'feishu_generic_records.bad_review dianping only',
     threshold: {},
     assign_to: 'store_manager',

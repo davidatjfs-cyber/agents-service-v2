@@ -280,6 +280,21 @@ export async function runBiAnomalyNotifyPipeline({
   let users =
     ruleKey === 'food_safety' ? await pickUsersForFoodSafety(store, roles) : await pickUsersForStoreAndRoles(store, roles);
   users = await collapseProductionManagerNotifyRecipients(store, users);
+  const missingHqRoles = ['admin', 'hq_manager'].filter(r => !roles.includes(r));
+  if (missingHqRoles.length) {
+    try {
+      const hqR = await query(
+        `SELECT open_id, username, role, store,
+                COALESCE(NULLIF(TRIM(name), ''), username) AS display_name
+         FROM feishu_users
+         WHERE registered = true AND open_id IS NOT NULL AND role = ANY($1)`,
+        [missingHqRoles]
+      );
+      for (const hq of hqR.rows || []) {
+        if (!users.some(u => u.open_id === hq.open_id)) users.push(hq);
+      }
+    } catch (_e) { /* ignore */ }
+  }
 
   const taskId = `ANO-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
 
@@ -306,64 +321,90 @@ export async function runBiAnomalyNotifyPipeline({
   }
   const msgIds = [];
 
-  // ── ① 立刻通知（卡片优先）──
+  // ── ① 立刻通知：异常告警卡（含任务功能） + BI异常情况扣分卡（纯通知）──
   for (const u of users) {
-    let card;
-    let rechargeCur = null;
-    let rechargePts = null;
-    let rechargeRem = null;
-    let sevZh = null;
-    if (ruleKey === 'recharge_zero') {
-      rechargePts = Number(value?.penalty_points ?? 0) || 0;
-      sevZh = severity === 'high' ? '高' : severity === 'medium' ? '中' : String(severity || '—');
-      const todayYmd = value?.evaluationYmd || value?.dateToday || getShanghaiYmdParts().ymd;
-      const monthStart = value?.month_start || '';
-      const runY = value?.runCalendarYmd || '';
-      const periodZh = monthStart
-        ? `判定营业日 ${todayYmd}（以上海「昨日」口径，任务在 ${runY || '—'} 触发；当月自 ${monthStart} 起累计，不跨月）`
-        : `判定营业日 ${todayYmd}（以上海「昨日」口径${runY ? `，${runY} 触发` : ''}）`;
-      const { weekStart: rechargeWeekStart } = shanghaiWeekMonSunContaining(String(todayYmd).slice(0, 10));
-      const rechargeWeekPeriod = `week_${rechargeWeekStart}`;
-      rechargeCur = await fetchLatestAnomalyRollupScore(u.username, store, rechargeWeekPeriod);
-      rechargeRem = rechargeCur - rechargePts;
-      const assigneeName = u.display_name || u.username || '—';
-      card = buildBiDeductionCard({
-        store,
-        assigneeName,
-        role: u.role,
-        period: periodZh,
-        reason: '充值异常',
-        keyZh: '充值异常',
-        severity: sevZh,
-        points: rechargePts,
-        currentScore: rechargeCur,
-        remainingScore: rechargeRem,
-        taskId,
-        dataSourceNote:
-          '数据来源：日频检测写入 anomaly_triggers（判定营业日为上海「昨日」）；绩效扣分在周一「周度门店评分」中按自然周内各日 penalty 累加后写入 anomaly_rollups_v2。'
-      });
-    } else {
-      card = buildAnomalyCard(store, ruleKey, severity, initialDetail, taskId);
-    }
-    let r = await sendCard(u.open_id, card);
+    const assigneeName = u.display_name || u.username || '—';
+
+    // ── 1) 异常告警卡（带任务提示、按钮、催办，回复可被记录）──
+    const alertCard = buildAnomalyCard(store, ruleKey, severity, initialDetail, taskId);
+    let r = await sendCard(u.open_id, alertCard);
     if (!r?.ok) {
       const emoji = severity === 'high' ? '🚨' : '⚠️';
-      if (ruleKey === 'recharge_zero' && rechargeCur != null) {
-        r = await sendText(
-          u.open_id,
-          `${emoji} 【BI异常情况扣分·即时】${store}\n备案类型：BI异常情况扣分\n岗位：${u.role || '—'} · ${u.display_name || u.username}\n异常类型：充值异常（严重度 ${sevZh}）\n本次扣分：${rechargePts} 分 · 现有 ${rechargeCur} → 剩余 ${rechargeRem}\n任务ID：${taskId}\n\n${initialDetail.slice(0, 1000)}`,
-          'open_id'
-        );
-      } else {
-        r = await sendText(
-          u.open_id,
-          `${emoji} 【BI异常｜立刻处理】${store}\n类型: ${typeZh}\n严重度: ${severity}\n任务ID: ${taskId}\n\n${initialDetail.slice(0, 1200)}`,
-          'open_id'
-        );
-      }
+      r = await sendText(
+        u.open_id,
+        `${emoji} 【异常告警｜立刻处理】${store}\n类型: ${typeZh}\n严重度: ${severity}\n任务ID: ${taskId}\n\n${initialDetail.slice(0, 1200)}`,
+        'open_id'
+      );
     }
     const mid = extractMessageId(r);
     if (mid) msgIds.push(mid);
+
+    // ── 2) BI异常情况扣分卡（纯通知，无任务提示）──
+    const { weekStart: weekStartVal } = shanghaiWeekMonSunContaining(getShanghaiYmdParts().ymd);
+    const weekPeriod = `week_${weekStartVal}`;
+    const curScore = await fetchLatestAnomalyRollupScore(u.username, store, weekPeriod);
+    let pts = 0;
+    let periodZh = '';
+    let reasonZh = typeZh;
+    let bizDates = biTriggerDate || getShanghaiYmdParts().ymd;
+    let dataSourceNote = '数据来源：异常触发汇总（anomaly_triggers）· 周度自动计算';
+    if (ruleKey === 'recharge_zero') {
+      pts = Number(value?.penalty_points ?? 0) || 0;
+      const todayYmd = value?.evaluationYmd || value?.dateToday || getShanghaiYmdParts().ymd;
+      const monthStart = value?.month_start || '';
+      const runY = value?.runCalendarYmd || '';
+      periodZh = monthStart
+        ? `判定营业日 ${todayYmd}（以上海「昨日」口径，任务在 ${runY || '—'} 触发；当月自 ${monthStart} 起累计，不跨月）`
+        : `判定营业日 ${todayYmd}（以上海「昨日」口径${runY ? `，${runY} 触发` : ''}）`;
+      reasonZh = '充值异常';
+      bizDates = todayYmd;
+      dataSourceNote = '数据来源：日频检测写入 anomaly_triggers（判定营业日为上海「昨日」）；绩效扣分在周一「周度门店评分」中按自然周内各日 penalty 累加后写入 anomaly_rollups_v2。';
+    } else if (ruleKey === 'bad_review_product') {
+      pts = value?.deduction_production ?? 0;
+      const ws = value?.weekStart || '';
+      const we = value?.weekEnd || '';
+      periodZh = ws ? `自然周 ${ws}~${we}（每日触发，自然周递进扣分）` : '';
+      reasonZh = '差评产品异常';
+      dataSourceNote = '数据来源：日频检测写入 anomaly_triggers（飞书 bitable 差评分产品/服务分类）；绩效扣分在周一「周度门店评分」中按自然周内各日 penalty 累加后写入 anomaly_rollups_v2。';
+    } else if (ruleKey === 'bad_review_service') {
+      pts = value?.deduction_manager ?? 0;
+      const ws = value?.weekStart || '';
+      const we = value?.weekEnd || '';
+      periodZh = ws ? `自然周 ${ws}~${we}（每日触发，自然周递进扣分）` : '';
+      reasonZh = '差评服务异常';
+      dataSourceNote = '数据来源：日频检测写入 anomaly_triggers（飞书 bitable 差评分产品/服务分类）；绩效扣分在周一「周度门店评分」中按自然周内各日 penalty 累加后写入 anomaly_rollups_v2。';
+    } else if (ruleKey === 'food_safety') {
+      pts = 20;
+      const { weekStart: fsWs, weekEnd: fsWe } = shanghaiWeekMonSunContaining(getShanghaiYmdParts().ymd);
+      periodZh = `自然周 ${fsWs}~${fsWe}`;
+      reasonZh = '食品安全异常';
+      dataSourceNote = '数据来源：实时检测+日频扫描写入 anomaly_triggers（食安红色通道）；绩效扣分在周一「周度门店评分」中按自然周内各日 penalty 累加后写入 anomaly_rollups_v2。';
+    } else if (ruleKey === 'table_visit_product') {
+      pts = value?.deduction_points_total ?? 0;
+      periodZh = value?.weekPeriod || '';
+      reasonZh = '桌访产品异常';
+      dataSourceNote = '数据来源：周频检测写入 anomaly_triggers（桌访合并数据）；绩效扣分在周一「周度门店评分」中按自然周内各日 penalty 累加后写入 anomaly_rollups_v2。';
+    } else {
+      pts = severity === 'high' ? 10 : severity === 'medium' ? 5 : 0;
+    }
+    const sevZh = severity === 'high' ? '高' : severity === 'medium' ? '中' : String(severity || '—');
+    const rem = curScore - pts;
+    const dedCard = buildBiDeductionCard({
+      store,
+      assigneeName,
+      role: u.role,
+      period: periodZh,
+      reason: reasonZh,
+      keyZh: reasonZh,
+      severity: sevZh,
+      points: pts,
+      currentScore: curScore,
+      remainingScore: rem,
+      taskId: null,
+      bizDates,
+      dataSourceNote
+    });
+    await sendCard(u.open_id, dedCard).catch(() => {});
   }
 
   if (!users.length) {
