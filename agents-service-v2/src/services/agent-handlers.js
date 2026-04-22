@@ -2422,7 +2422,7 @@ ${metricExperienceAppendixOps}
     { role: 'system', content: sysPrompt },
     { role: 'user', content: text }
   ], { temperature: 0.2, max_tokens: 600, purpose: 'ops_supervisor', ...(ctx.llmContext ? { context: ctx.llmContext } : {}) });
-  saveMemory('ops_supervisor', store, (r.content||'').slice(0,500), {query:text.slice(0,200)}).catch(()=>{});
+  saveMemory('ops_supervisor', store, (r.content||'').slice(0,500), {query:text.slice(0,200)}).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
   const reportTitle = /开档|谁没|提交情况/.test(text) ? '开档提交情况' : /收档|闭市/.test(text) ? '收档提交情况' : '营运巡检';
   return { agent: 'ops_supervisor', response: r.content || '请描述巡检需求。', store, data: opsData, timeLabel, reportTitle };
 }
@@ -2492,7 +2492,7 @@ ${evidence}
     { role: 'system', content: sysPrompt },
     { role: 'user', content: text }
   ], { temperature: 0.1, max_tokens: 600, purpose: 'chief_evaluator', ...(ctx.llmContext ? { context: ctx.llmContext } : {}) });
-  saveMemory('chief_evaluator', store, (r.content||'').slice(0,500), {query:text.slice(0,200)}).catch(()=>{});
+  saveMemory('chief_evaluator', store, (r.content||'').slice(0,500), {query:text.slice(0,200)}).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
   return { agent: 'chief_evaluator', response: r.content || '暂无评分数据', data: evidence, store };
 }
 // ── 4. Train Advisor (对标V1: SOP知识库+培训任务+品牌差异化) ──
@@ -2642,7 +2642,7 @@ ${appealData}
   try {
     await query(`INSERT INTO agent_appeals (username, reason, status) VALUES ($1, $2, 'pending')`, [user || 'anonymous', text.slice(0, 500)]);
   } catch (e) { /* agent_appeals table may not exist */ }
-  saveMemory('appeal', store, (r.content||'').slice(0,500), {query:text.slice(0,200)}).catch(()=>{});
+  saveMemory('appeal', store, (r.content||'').slice(0,500), {query:text.slice(0,200)}).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
   return { agent: 'appeal', response: r.content || '已记录，我们将在24小时内核实并回复。', data: appealData, store, appealRecorded: true };
 }
 function logStrategyAbTest(ctx, memories, strategyText, score) {
@@ -3132,7 +3132,7 @@ async function handleProcurementAdvisor(text, ctx) {
   }
   if (advice.warnings?.length) resp += '\n\n⚠️ ' + advice.warnings.join('\n⚠️ ');
   resp += `\n\n_下次复查: ${advice.next_review_days || 7}天后_`;
-  saveMemory('procurement_advisor', store, (resp||'').slice(0,500), {query:text.slice(0,200)}).catch(()=>{});
+  saveMemory('procurement_advisor', store, (resp||'').slice(0,500), {query:text.slice(0,200)}).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
   return { agent: 'procurement_advisor', response: resp, data: advice, store };
 }
 
@@ -3203,7 +3203,7 @@ async function handleMaster(t, c) {
 `;
   const r = await callLLM([{ role: 'system', content: sysPrompt }, { role: 'user', content: t }],
     { temperature: 0.1, max_tokens: 600, purpose: 'master', ...(c.llmContext ? { context: c.llmContext } : {}) });
-  saveMemory('master', store, (r.content||'').slice(0,500), {query:t.slice(0,200)}).catch(()=>{});
+  saveMemory('master', store, (r.content||'').slice(0,500), {query:t.slice(0,200)}).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
   return { agent: 'master', response: r.content || '您好，请描述您的需求。', store };
 }
 /** 从文本中提取第一个花括号平衡的 JSON 对象（忽略字符串内的括号）。 */

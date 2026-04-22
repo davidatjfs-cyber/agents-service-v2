@@ -3423,7 +3423,7 @@ async function recordAgentQualityAudit({ route, username, queryText, responseTex
         Math.max(0, Number(rewriteCount) || 0)
       ]
     );
-  } catch (e) {}
+  } catch (e) { console.error('[agents] recordAgentQualityAudit failed:', e?.message || e); }
 }
 
 function buildAutonomousTaskFingerprint({ taskType, store, route, queryText }) {
@@ -5321,7 +5321,7 @@ async function seedBitableDedup() {
        FROM feishu_generic_records
        WHERE created_at > NOW() - INTERVAL '30 days'
        GROUP BY record_id, table_id
-       LIMIT 50000`
+       LIMIT 20000`
     );
     const tableIdToConfigKeys = new Map();
     for (const [key, cfg] of Object.entries(BITABLE_CONFIGS)) {
@@ -10855,7 +10855,7 @@ export async function onFeishuEvent(body) {
                 [taskResult.response, JSON.stringify({ taskId: taskResult.taskId, route: 'master_task' }), msgDbId]
               );
             }
-  } catch (e) { console.error('[agents] recordAgentQualityAudit failed:', e?.message || e); }
+          } catch (e) { /* feishu task response update */ }
           return { ok: true, route: 'master', taskId: taskResult.taskId };
         }
       } catch (e) {
