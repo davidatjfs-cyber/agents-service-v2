@@ -239,12 +239,7 @@ async function buildStoreReport(entries, store, label, dateLabel, periodStart, p
 
   const monthlyCounts = new Map();
   try {
-    const { y, m } = getShanghaiYmdParts();
-    let pm = m - 1, py = y;
-    if (pm < 1) { pm = 12; py -= 1; }
-    const monthStart = `${py}-${String(pm).padStart(2, '0')}-01`;
-    const monthEnd = `${py}-${String(pm).padStart(2, '0')}-${String(new Date(py, pm, 0).getDate()).padStart(2, '0')}`;
-    const allMonth = await fetchDissatisfiedEntries(monthStart, monthEnd);
+    const allMonth = await fetchDissatisfiedEntries(periodStart, periodEnd);
     const storeEntries = allMonth.filter(e => e.store === store);
     for (const e of storeEntries) {
       const k = `${e.person}||${e.stall}`;
@@ -269,7 +264,7 @@ async function buildStoreReport(entries, store, label, dateLabel, periodStart, p
         }
       }
     }
-    const monthTotal = monthlyCounts.get(k) || personCount;
+    const monthTotal = monthlyCounts.has(k) ? monthlyCounts.get(k) : personCount;
     sections.push(`**${person}**（${stallName}）\n  当期：**${personCount}**个 ｜ 本月累计：**${monthTotal}**个\n${dishLines.join('\n')}`);
   }
 
