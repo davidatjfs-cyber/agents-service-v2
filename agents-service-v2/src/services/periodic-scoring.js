@@ -29,7 +29,8 @@ import {
   resolveMajixianProductionManagersForScoring,
   isMajixianPmObserverUsername,
   MAJIXIAN_PM_OBSERVER_USERNAME,
-  isMajixianStore
+  isMajixianStore,
+  majixianPmHrmsMirrorTargets
 } from '../utils/scoring-assignee.js';
 import {
   getMonthlyExecutionFilingCount,
@@ -85,19 +86,33 @@ async function recordDeductionNotifications({
   const rs = String(rangeStart || periodMonday || '').slice(0, 10);
   const re = String(rangeEnd || weekEndStr || '').slice(0, 10);
   const rangeZh = `${rs}～${re}`;
+
+  const mirrorUsernames = majixianPmHrmsMirrorTargets(username, store);
+  const hrmsTargets = [...new Set([String(username).trim(), ...mirrorUsernames].filter(Boolean))];
   
   // 查询责任人飞书 open_id
   let assigneeOpenId = null;
   let assigneeName = username;
+  let observerOpenId = null;
   try {
     const fu = await query(
       `SELECT open_id, COALESCE(NULLIF(TRIM(name), ''), username) AS name
-       FROM feishu_users WHERE username = $1 AND registered = true AND open_id IS NOT NULL LIMIT 1`,
+       FROM feishu_users WHERE LOWER(TRIM(username)) = LOWER(TRIM($1)) AND registered = true AND open_id IS NOT NULL LIMIT 1`,
       [username]
     );
     assigneeOpenId = fu.rows?.[0]?.open_id || null;
     assigneeName = fu.rows?.[0]?.name || username;
   } catch (_e) { /* ignore */ }
+  if (mirrorUsernames[0]) {
+    try {
+      const ob = await query(
+        `SELECT open_id FROM feishu_users
+         WHERE LOWER(TRIM(username)) = LOWER(TRIM($1)) AND registered = true AND open_id IS NOT NULL LIMIT 1`,
+        [mirrorUsernames[0]]
+      );
+      observerOpenId = ob.rows?.[0]?.open_id || null;
+    } catch (_e) { /* ignore */ }
+  }
   
   const after = Number(scoreAfterRollup);
   const ptSum = (details || []).reduce((s, d) => s + Math.max(0, Number(d.points || 0)), 0);
@@ -157,14 +172,16 @@ async function recordDeductionNotifications({
       biz_dates: bizDates
     });
     
-    try {
-      await query(
-        `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
-         VALUES ($1, $2, $3, $4, $5::jsonb)`,
-        [username, 'BI异常情况扣分', `您的${rangeZh}绩效扣${pts}分，剩余${remainingScore}分。`, 'bi_deduction', metaJson]
-      );
-    } catch (e) {
-      logger.warn({ err: e?.message, username }, 'recordDeductionNotifications insert failed');
+    for (const tgt of hrmsTargets) {
+      try {
+        await query(
+          `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
+           VALUES ($1, $2, $3, $4, $5::jsonb)`,
+          [tgt, 'BI异常情况扣分', `您的${rangeZh}绩效扣${pts}分，剩余${remainingScore}分。`, 'bi_deduction', metaJson]
+        );
+      } catch (e) {
+        logger.warn({ err: e?.message, username: tgt }, 'recordDeductionNotifications insert failed');
+      }
     }
     
     // 发送飞书卡片给责任人
@@ -173,6 +190,13 @@ async function recordDeductionNotifications({
         await sendCard(assigneeOpenId, card, 'open_id');
       } catch (e) {
         logger.warn({ err: e?.message, username }, 'bi deduction card send failed');
+      }
+    }
+    if (observerOpenId && mirrorUsernames[0] && String(mirrorUsernames[0]).toLowerCase() !== String(username).trim().toLowerCase()) {
+      try {
+        await sendCard(observerOpenId, card, 'open_id');
+      } catch (e) {
+        logger.warn({ err: e?.message, observer: mirrorUsernames[0] }, 'bi deduction observer card send failed');
       }
     }
     

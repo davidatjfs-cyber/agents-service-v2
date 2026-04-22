@@ -39,6 +39,17 @@ export function majixianPmNewModelLookupUsername(rowUsername, store) {
   return isMajixianPmObserverUsername(rowUsername) ? CANONICAL_MAJIXIAN_PM.username : rowUsername;
 }
 
+/**
+ * 周度 BI 扣分等仅对主责账号写入 anomaly_rollups 时，HRMS「公司通知」与飞书卡片需镜像到出品观察号（与主责同一扣分语义）。
+ */
+export function majixianPmHrmsMirrorTargets(primaryUsername, store) {
+  if (!isMajixianStore(store)) return [];
+  const p = String(primaryUsername || '').trim().toLowerCase();
+  if (p !== String(CANONICAL_MAJIXIAN_PM.username).toLowerCase()) return [];
+  const obs = String(MAJIXIAN_PM_OBSERVER_USERNAME || '').trim();
+  return obs ? [obs] : [];
+}
+
 export function isMajixianStore(store) {
   return /马己仙/.test(String(store || ''));
 }

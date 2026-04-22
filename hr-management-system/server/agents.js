@@ -12242,6 +12242,13 @@ export function registerAgentRoutes(app, authRequired) {
   app.get('/api/agent-scores/me', authRequired, async (req, res) => {
     const username = String(req.user?.username || '').trim();
     if (!username) return res.status(400).json({ error: 'missing_username' });
+    /** 月度 new_model 的 breakdown 已产出 A/B/C/D 时，不得被 employee_scores 里的占位「待定」盖住 */
+    const __letterGradeOnly = (v) => {
+      const s = String(v ?? '').trim().toUpperCase();
+      return /^[ABCD]$/.test(s) ? s : null;
+    };
+    const __mergeProfileDim = (breakdownVal, employeeVal) =>
+      __letterGradeOnly(breakdownVal) ?? __letterGradeOnly(employeeVal) ?? (String(employeeVal ?? '').trim() || null);
     try {
       const personalPeriod = profilePerformanceDisplayPeriodShanghai();
       const storePeriod = shanghaiPrevCalendarYm();
@@ -12302,9 +12309,9 @@ export function registerAgentRoutes(app, authRequired) {
           : rowM?.total_score != null ? rowM.total_score
             : null;
 
-      const execution_rating = emp?.execution_rating ?? bM.execution_rating ?? null;
-      const attitude_rating = emp?.attitude_rating ?? bM.attitude_rating ?? null;
-      const ability_rating = emp?.ability_rating ?? bM.ability_rating ?? null;
+      const execution_rating = __mergeProfileDim(bM.execution_rating, emp?.execution_rating);
+      const attitude_rating = __mergeProfileDim(bM.attitude_rating, emp?.attitude_rating);
+      const ability_rating = __mergeProfileDim(bM.ability_rating, emp?.ability_rating);
       const store_rating_out = store_rating ?? bM.store_rating ?? null;
 
       const summary = rowM?.summary || null;
@@ -12349,7 +12356,7 @@ export function registerAgentRoutes(app, authRequired) {
       const r = await pool().query(
         `SELECT id, title, message, type, meta, created_at
          FROM hrms_user_notifications
-         WHERE target_username = $1
+         WHERE LOWER(TRIM(target_username)) = LOWER(TRIM($1))
          ORDER BY created_at DESC
          LIMIT $2`,
         [username, limit]

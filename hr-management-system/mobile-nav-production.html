@@ -27718,8 +27718,11 @@ tr:nth-child(even) td { background: #fafafa; }
             if (abilityEl) abilityEl.textContent = '--';
 
             try {
+                const __pTok = (typeof HRMS_STORE !== 'undefined' && HRMS_STORE && typeof HRMS_STORE.token === 'function')
+                    ? HRMS_STORE.token()
+                    : String(localStorage.getItem('HRMS_API_TOKEN') || localStorage.getItem('hrms_token') || '').trim();
                 const resp = await fetch('/api/agent-scores/me', {
-                    headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('hrms_token') || '') }
+                    headers: { 'Authorization': 'Bearer ' + __pTok }
                 });
                 if (!resp.ok) return;
                 const data = await resp.json();
@@ -27815,7 +27818,9 @@ tr:nth-child(even) td { background: #fafafa; }
             // 从 API 获取 DB 中的公司通知（V2 Agent 直接写入 hrms_user_notifications 表）
             let dbNotifs = [];
             try {
-                const token = localStorage.getItem('hrms_token') || '';
+                const token = (typeof HRMS_STORE !== 'undefined' && HRMS_STORE && typeof HRMS_STORE.token === 'function')
+                    ? HRMS_STORE.token()
+                    : String(localStorage.getItem('HRMS_API_TOKEN') || localStorage.getItem('hrms_token') || '').trim();
                 const r = await fetch('/api/hrms-notifications/me?limit=100', {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
