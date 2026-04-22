@@ -280,20 +280,23 @@ export async function runBiAnomalyNotifyPipeline({
   let users =
     ruleKey === 'food_safety' ? await pickUsersForFoodSafety(store, roles) : await pickUsersForStoreAndRoles(store, roles);
   users = await collapseProductionManagerNotifyRecipients(store, users);
-  const missingHqRoles = ['admin', 'hq_manager'].filter(r => !roles.includes(r));
-  if (missingHqRoles.length) {
-    try {
-      const hqR = await query(
-        `SELECT open_id, username, role, store,
-                COALESCE(NULLIF(TRIM(name), ''), username) AS display_name
-         FROM feishu_users
-         WHERE registered = true AND open_id IS NOT NULL AND role = ANY($1)`,
-        [missingHqRoles]
-      );
-      for (const hq of hqR.rows || []) {
-        if (!users.some(u => u.open_id === hq.open_id)) users.push(hq);
-      }
-    } catch (_e) { /* ignore */ }
+  const isBadReview = ruleKey === 'bad_review_product' || ruleKey === 'bad_review_service';
+  if (!isBadReview) {
+    const missingHqRoles = ['admin', 'hq_manager'].filter(r => !roles.includes(r));
+    if (missingHqRoles.length) {
+      try {
+        const hqR = await query(
+          `SELECT open_id, username, role, store,
+                  COALESCE(NULLIF(TRIM(name), ''), username) AS display_name
+           FROM feishu_users
+           WHERE registered = true AND open_id IS NOT NULL AND role = ANY($1)`,
+          [missingHqRoles]
+        );
+        for (const hq of hqR.rows || []) {
+          if (!users.some(u => u.open_id === hq.open_id)) users.push(hq);
+        }
+      } catch (_e) { /* ignore */ }
+    }
   }
 
   const taskId = `ANO-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
