@@ -14600,6 +14600,146 @@ app.delete('/api/knowledge/:id', authRequired, async (req, res) => {
   }
 });
 
+app.put('/api/knowledge/:id', authRequired, async (req, res) => {
+  if (String(req.user?.role || '') !== 'admin') {
+    return res.status(403).json({ error: 'admin_only' });
+  }
+  const id = String(req.params?.id || '').trim();
+  if (!id) return res.status(400).json({ error: 'missing_id' });
+
+  const { title, category, audience, scope, tags, version } = req.body || {};
+  const sets = [];
+  const params = [];
+  let idx = 1;
+
+  if (title !== undefined) { sets.push(`title = $${idx}`); params.push(String(title).trim()); idx++; }
+  if (category !== undefined) { sets.push(`category = $${idx}`); params.push(String(category).trim() || null); idx++; }
+  if (scope !== undefined && ['public','business','sensitive'].includes(scope)) { sets.push(`scope = $${idx}`); params.push(scope); idx++; }
+  if (version !== undefined) { sets.push(`version = $${idx}`); params.push(String(version).trim() || null); idx++; }
+  if (tags !== undefined && Array.isArray(tags)) { sets.push(`tags = $${idx}`); params.push(tags); idx++; }
+  if (audience !== undefined) {
+    const audObj = (typeof audience === 'object' && audience !== null && !Array.isArray(audience)) ? audience : { type: 'all' };
+    sets.push(`audience = $${idx}::jsonb`);
+    params.push(JSON.stringify(audObj));
+    idx++;
+    const accessRoles = [];
+    const accessDepts = [];
+    if (audObj.type === 'store' && Array.isArray(audObj.stores)) {
+      accessDepts.push(...audObj.stores);
+      if (audObj.store) accessDepts.push(audObj.store);
+    }
+    if (audObj.type === 'position' && Array.isArray(audObj.positions)) {
+      accessRoles.push(...audObj.positions);
+      if (audObj.position) accessRoles.push(audObj.position);
+    }
+    if (accessRoles.length || accessDepts.length) {
+      if (accessRoles.length) { sets.push(`access_roles = $${idx}`); params.push(accessRoles); idx++; }
+      if (accessDepts.length) { sets.push(`access_departments = $${idx}`); params.push(accessDepts); idx++; }
+    }
+  }
+
+  if (!sets.length) return res.status(400).json({ error: 'no_fields_to_update' });
+  sets.push(`updated_at = now()`);
+  params.push(id);
+
+  try {
+    const r = await pool.query(
+      `UPDATE knowledge_base SET ${sets.join(', ')} WHERE id = $${idx} RETURNING id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience`,
+      params
+    );
+    const row = r.rows?.[0];
+    if (!row) return res.status(404).json({ error: 'not_found' });
+    return res.json({ item: row });
+  } catch (e) {
+    console.error('PUT /api/knowledge/:id error:', e);
+    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+  }
+});
+
+app.post('/api/knowledge/batch', authRequired, knowledgeUpload.array('files', 20), async (req, res) => {
+  if (String(req.user?.role || '') !== 'admin') {
+    return res.status(403).json({ error: 'admin_only' });
+  }
+  const files = req.files || [];
+  if (!files.length) return res.status(400).json({ error: 'missing_files' });
+
+  const title = String(req.body?.title || '').trim();
+  const category = String(req.body?.category || '').trim();
+  const feedAgent = String(req.body?.feedAgent || '').trim();
+  const brandScopeTag = buildKnowledgeBrandScopeTag(req.body?.brandId || req.body?.brandScope || 'all');
+  const tags = normalizeKnowledgeTags(req.body?.tags, feedAgent, brandScopeTag);
+  const kbScope = ['public','business','sensitive'].includes(req.body?.scope) ? req.body.scope : 'public';
+  const version = String(req.body?.version || '').trim() || null;
+  const audienceObj = parseKnowledgeAudienceFromBody(req.body);
+  if (!category) return res.status(400).json({ error: 'missing_category' });
+  if (!feedAgent) return res.status(400).json({ error: 'missing_feed_agent' });
+
+  const createdBy = normalizeCreatedByUuid(req.user?.id);
+  const results = [];
+  const errors = [];
+
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    let fileTitle = title || String(f.originalname || '').replace(/\.[^.]+$/, '');
+    if (batchTitleMode === 'filename') {
+      fileTitle = String(f.originalname || '').replace(/\.[^.]+$/, '');
+    } else if (batchTitleMode === 'custom' && customPrefix) {
+      fileTitle = customPrefix + (files.length > 1 ? ` (${i + 1}/${files.length})` : '');
+    }
+    const fileType = String(req.body?.type || '').trim() || String(f.mimetype || '').trim();
+    const size = Number(f.size || 0);
+    const filePath = `/uploads/${f.filename}`;
+
+    try {
+      const r = await pool.query(
+        `insert into knowledge_base (title, content, category, tags, file_path, file_type, file_size, access_roles, access_departments, created_by, scope, version, audience)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)
+         returning id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience`,
+        [fileTitle, '', category || null, tags, filePath, fileType || null, size || null, null, null, createdBy, kbScope, version, audienceObj]
+      );
+      results.push(r.rows?.[0] || null);
+
+      (async (insertedId, localPath, originalName, mimeType) => {
+        try {
+          if (!localPath || !insertedId) return;
+          const ext = path.extname(originalName).slice(0, 16);
+          const objectKey = `hrms/knowledge/${randomUUID()}${ext}`;
+          const contentType = inferContentType({ declaredType: req.body?.type, originalName, mimeType });
+          let finalUrl = '';
+          const cos = getCosClient();
+          if (cos) {
+            await new Promise((resolve, reject) => {
+              cos.sliceUploadFile({ Bucket: COS_BUCKET, Region: COS_REGION, Key: objectKey, FilePath: localPath }, (err) => err ? reject(err) : resolve());
+            });
+            try {
+              await new Promise((resolve, reject) => {
+                cos.putObjectCopy({ Bucket: COS_BUCKET, Region: COS_REGION, Key: objectKey, CopySource: `${COS_BUCKET}.cos.${COS_REGION}.myqcloud.com/${objectKey}`, MetadataDirective: 'Replaced', ContentType: contentType, ContentDisposition: buildInlineContentDisposition(originalName) }, (err) => err ? reject(err) : resolve());
+              });
+            } catch (e2) {}
+            finalUrl = buildCosPublicUrl(objectKey) || '';
+          } else {
+            const oss = getOssClient();
+            if (oss) {
+              await oss.multipartUpload(objectKey, localPath, { partSize: Math.max(1, OSS_PART_SIZE_MB) * 1024 * 1024, parallel: Math.max(1, OSS_PARALLEL), retryCount: Math.max(0, OSS_RETRY_COUNT), timeout: Math.max(10000, OSS_TIMEOUT_MS), headers: { 'Content-Type': contentType, 'Content-Disposition': buildInlineContentDisposition(originalName) } });
+              finalUrl = buildOssPublicUrl(objectKey) || '';
+            }
+          }
+          if (finalUrl) {
+            await pool.query('update knowledge_base set file_path = $1, updated_at = now() where id = $2', [finalUrl, insertedId]);
+            try { fs.unlinkSync(localPath); } catch (e) {}
+          }
+        } catch (e) {
+          console.log('Batch knowledge cloud upload failed for', insertedId, e?.message || e);
+        }
+      })(r.rows?.[0]?.id, String(f.path || ''), String(f.originalname || ''), String(f.mimetype || ''));
+    } catch (e) {
+      errors.push({ file: f.originalname, error: String(e?.message || e) });
+    }
+  }
+
+  return res.json({ items: results, errors, total: files.length, succeeded: results.length, failed: errors.length });
+});
+
 // ─── RAG 多维知识库 API ───
 app.put('/api/knowledge/:id/scope', authRequired, async (req, res) => {
   if (!['admin', 'hq_manager', 'hr_manager'].includes(req.user?.role)) return res.status(403).json({ error: 'forbidden' });

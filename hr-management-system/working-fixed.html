@@ -12180,6 +12180,21 @@
                     <div class="modal-body" style="flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;">
                         <div class="ui-form-grid" style="grid-template-columns: 1fr;">
                             <div class="ui-form-group">
+                                <label class="ui-label">批量上传</label>
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <input id="knowledge-upload-batch" type="checkbox" style="width:18px;height:18px;cursor:pointer;" onchange="toggleKnowledgeBatchMode()">
+                                    <span style="font-size:13px;cursor:pointer;" onclick="document.getElementById('knowledge-upload-batch').click()">同时上传多个文件（每个文件独立创建一条记录）</span>
+                                </div>
+                            </div>
+                            <div class="ui-form-group" id="knowledge-upload-batch-title-group" style="display:none;">
+                                <label class="ui-label">批量标题规则</label>
+                                <select id="knowledge-upload-batch-title-mode">
+                                    <option value="filename">使用文件名作为标题</option>
+                                    <option value="custom">统一自定义标题前缀</option>
+                                </select>
+                                <input id="knowledge-upload-batch-title-prefix" type="text" placeholder="自定义前缀（如：门店卫生SOP）" style="display:none;margin-top:6px;">
+                            </div>
+                            <div class="ui-form-group">
                                 <label class="ui-label">标题 <span class="req">*</span></label>
                                 <input id="knowledge-upload-title" type="text" placeholder="门店卫生SOP">
                             </div>
@@ -12285,6 +12300,72 @@
                         <div class="ui-modal-footer">
                             <button class="btn btn-secondary" id="btn-knowledge-upload-cancel" onclick="closeKnowledgeUploadModal()">取消</button>
                             <button class="btn" id="btn-knowledge-upload-confirm" onclick="confirmKnowledgeUpload()">上传</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="knowledge-edit-modal" class="modal ui-modal">
+                <div class="modal-content" style="max-width: 520px; max-height: 90vh; max-height: 90dvh; display: flex; flex-direction: column;">
+                    <div class="modal-header" style="flex-shrink: 0;">
+                        <div>
+                            <h3 class="ui-modal-title">编辑知识库内容</h3>
+                            <div class="ui-modal-desc">修改标题、分类、发布对象等</div>
+                        </div>
+                        <button class="modal-close" onclick="closeKnowledgeEditModal()">×</button>
+                    </div>
+                    <div class="modal-body" style="flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;">
+                        <div class="ui-form-grid" style="grid-template-columns: 1fr;">
+                            <input id="knowledge-edit-id" type="hidden">
+                            <div class="ui-form-group">
+                                <label class="ui-label">标题 <span class="req">*</span></label>
+                                <input id="knowledge-edit-title" type="text" placeholder="输入新标题">
+                            </div>
+                            <div class="ui-form-group-row">
+                                <div class="ui-form-group">
+                                    <label class="ui-label">分类 <span class="req">*</span></label>
+                                    <select id="knowledge-edit-category">
+                                        <option value="">请选择</option>
+                                        <option value="行政文件">行政文件</option>
+                                        <option value="岗位SOP">岗位SOP</option>
+                                        <option value="业务SOP">业务SOP</option>
+                                        <option value="培训资料">培训资料</option>
+                                        <option value="其他">其他</option>
+                                    </select>
+                                </div>
+                                <div class="ui-form-group">
+                                    <label class="ui-label">知识库范围</label>
+                                    <select id="knowledge-edit-scope">
+                                        <option value="public">📢 公共库</option>
+                                        <option value="business">📋 业务库</option>
+                                        <option value="sensitive">🔒 敏感库</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="ui-form-group">
+                                <label class="ui-label">版本号</label>
+                                <input id="knowledge-edit-version" type="text" placeholder="例如: v1.0、2024Q1">
+                            </div>
+                            <div class="ui-form-group">
+                                <label class="ui-label">分发范围 <span class="req">*</span></label>
+                                <select id="knowledge-edit-audience-type" onchange="syncKnowledgeEditAudience()">
+                                    <option value="all">全体员工</option>
+                                    <option value="store">指定门店</option>
+                                    <option value="position">指定岗位</option>
+                                </select>
+                            </div>
+                            <div id="knowledge-edit-audience-store-box" class="ui-form-group" style="display:none;">
+                                <label class="ui-label">选择门店（可多选）</label>
+                                <div id="knowledge-edit-audience-store-list" class="kb-aud-check-list" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;"></div>
+                            </div>
+                            <div id="knowledge-edit-audience-position-box" class="ui-form-group" style="display:none;">
+                                <label class="ui-label">选择岗位（可多选）</label>
+                                <div id="knowledge-edit-audience-position-list" class="kb-aud-check-list" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;"></div>
+                            </div>
+                        </div>
+                        <div class="ui-modal-footer">
+                            <button class="btn btn-secondary" onclick="closeKnowledgeEditModal()">取消</button>
+                            <button class="btn" id="btn-knowledge-edit-confirm" onclick="confirmKnowledgeEdit()">保存修改</button>
                         </div>
                     </div>
                 </div>
@@ -12706,6 +12787,7 @@
                         <div class="kb-dc-viewer-head">
                             <h3>👁️ 查看内容</h3>
                             <div class="kb-dc-viewer-actions">
+                                <button class="btn" id="knowledge-edit-btn" type="button" style="display:none;">✏️ 编辑</button>
                                 <button class="btn btn-danger" id="knowledge-delete-btn" type="button" style="display:none;">🗑️ 删除</button>
                                 <button class="btn btn-secondary" id="knowledge-back-btn" type="button" onclick="kbBackToList()" style="display:none;">← 返回</button>
                             </div>
@@ -12719,6 +12801,7 @@
                         <div id="knowledge-viewer-body" class="kb-dc-viewer-body"></div>
                         <div id="knowledge-viewer-toolbar" class="kb-dc-bottom-bar">
                             <button class="btn btn-secondary" id="kb-toolbar-back" type="button">返回</button>
+                            <button class="btn" id="kb-toolbar-edit" type="button" style="display:none;">✏️ 编辑</button>
                             <button class="btn btn-danger" id="kb-toolbar-delete" type="button" style="display:none;">删除</button>
                         </div>
                     </div>
@@ -15904,6 +15987,26 @@
             },
             async deleteKnowledge(id) {
                 return this.request('/api/knowledge/' + encodeURIComponent(String(id || '')), { method: 'DELETE' });
+            },
+            async updateKnowledge(id, payload) {
+                return this.request('/api/knowledge/' + encodeURIComponent(String(id || '')), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload || {})
+                });
+            },
+            async batchUploadKnowledge(formData) {
+                const rel = '/api/knowledge/batch';
+                const token = this.token();
+                let url = (this.baseUrl() || '') + rel;
+                try {
+                    if (token && !/(?:[?&])(?:access_token|token)=/.test(url)) {
+                        url += (url.indexOf('?') >= 0 ? '&' : '?') + 'access_token=' + encodeURIComponent(token);
+                    }
+                } catch (e) {}
+                const resp = await fetch(url, { method: 'POST', headers: token ? { 'Authorization': 'Bearer ' + token } : {}, body: formData });
+                const text = await resp.text();
+                try { return JSON.parse(text); } catch (e) { return { raw: text }; }
             },
             async uploadKnowledge(formData) {
                 let rel = '/api/knowledge';
@@ -21501,6 +21604,15 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         btnDel.style.display = 'none';
                     }
                 }
+                const btnEdit = document.getElementById('kb-toolbar-edit');
+                if (btnEdit) {
+                    if (isAdminUser()) {
+                        btnEdit.style.display = '';
+                        btnEdit.onclick = () => openKnowledgeEditModal(id);
+                    } else {
+                        btnEdit.style.display = 'none';
+                    }
+                }
             } catch (e) {}
 
             if (header) header.style.display = '';
@@ -21519,12 +21631,21 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
 
             // 添加删除按钮（仅管理员可见）
             const deleteBtn = document.getElementById('knowledge-delete-btn');
+            const editBtn = document.getElementById('knowledge-edit-btn');
             if (deleteBtn) {
                 if (isAdminUser()) {
                     deleteBtn.style.display = '';
                     deleteBtn.onclick = () => deleteKnowledgeItem(id);
                 } else {
                     deleteBtn.style.display = 'none';
+                }
+            }
+            if (editBtn) {
+                if (isAdminUser()) {
+                    editBtn.style.display = '';
+                    editBtn.onclick = () => openKnowledgeEditModal(id);
+                } else {
+                    editBtn.style.display = 'none';
                 }
             }
 
@@ -27908,6 +28029,205 @@ ${knowledgeContent.slice(0, 30000)}`;
             const modal = document.getElementById('knowledge-upload-modal');
             if (!modal) return;
             modal.style.display = 'none';
+            const batchCb = document.getElementById('knowledge-upload-batch');
+            if (batchCb) batchCb.checked = false;
+            const batchTitleGroup = document.getElementById('knowledge-upload-batch-title-group');
+            if (batchTitleGroup) batchTitleGroup.style.display = 'none';
+            const fileEl = document.getElementById('knowledge-upload-file');
+            if (fileEl) fileEl.removeAttribute('multiple');
+            const titleEl = document.getElementById('knowledge-upload-title');
+            if (titleEl) { titleEl.style.display = ''; titleEl.parentElement.style.display = ''; }
+        }
+
+        function toggleKnowledgeBatchMode() {
+            const batchCb = document.getElementById('knowledge-upload-batch');
+            const isBatch = batchCb && batchCb.checked;
+            const fileEl = document.getElementById('knowledge-upload-file');
+            const titleGroup = document.getElementById('knowledge-upload-batch-title-group');
+            const titleEl = document.getElementById('knowledge-upload-title');
+            const hint = document.getElementById('knowledge-upload-file-hint');
+            if (isBatch) {
+                if (fileEl) fileEl.setAttribute('multiple', 'multiple');
+                if (titleGroup) titleGroup.style.display = '';
+                if (hint) hint.textContent = '已开启多选模式，可同时选择多个文件（最多20个）';
+            } else {
+                if (fileEl) fileEl.removeAttribute('multiple');
+                if (titleGroup) titleGroup.style.display = 'none';
+                syncKnowledgeUploadFields();
+            }
+            const batchTitleMode = document.getElementById('knowledge-upload-batch-title-mode');
+            if (batchTitleMode) {
+                batchTitleMode.onchange = () => {
+                    const prefixInput = document.getElementById('knowledge-upload-batch-title-prefix');
+                    if (prefixInput) prefixInput.style.display = batchTitleMode.value === 'custom' ? '' : 'none';
+                };
+            }
+        }
+
+        function openKnowledgeEditModal(itemId) {
+            if (!isAdminUser()) {
+                showNotification('仅管理员可编辑知识库内容', 'warning');
+                return;
+            }
+            const items = HRMS_STORE.getKnowledge();
+            const item = (items || []).find(x => String(x?.id || '') === String(itemId || ''));
+            if (!item) {
+                showNotification('未找到该资料', 'error');
+                return;
+            }
+
+            const modal = document.getElementById('knowledge-edit-modal');
+            if (!modal) return;
+
+            document.getElementById('knowledge-edit-id').value = String(item.id || '');
+            document.getElementById('knowledge-edit-title').value = String(item.title || '');
+            document.getElementById('knowledge-edit-category').value = String(item.category || '');
+            document.getElementById('knowledge-edit-scope').value = String(item.scope || 'public');
+            document.getElementById('knowledge-edit-version').value = String(item.version || '');
+            document.getElementById('knowledge-edit-audience-type').value = String(item.audience?.type || 'all');
+
+            syncKnowledgeEditAudience();
+
+            const audType = String(item.audience?.type || 'all');
+            if (audType === 'store' && item.audience?.stores) {
+                const storeList = document.getElementById('knowledge-edit-audience-store-list');
+                if (storeList) {
+                    (item.audience.stores || []).forEach(s => {
+                        const inp = Array.from(storeList.querySelectorAll('input[name="kb-edit-aud-store"]')).find(i => String(i.value) === String(s));
+                        if (inp) inp.checked = true;
+                    });
+                }
+            }
+            if (audType === 'position' && item.audience?.positions) {
+                const posList = document.getElementById('knowledge-edit-audience-position-list');
+                if (posList) {
+                    (item.audience.positions || []).forEach(p => {
+                        const inp = Array.from(posList.querySelectorAll('input[name="kb-edit-aud-pos"]')).find(i => String(i.value) === String(p));
+                        if (inp) inp.checked = true;
+                    });
+                }
+            }
+
+            modal.style.display = 'flex';
+        }
+
+        function closeKnowledgeEditModal() {
+            const modal = document.getElementById('knowledge-edit-modal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function syncKnowledgeEditAudience() {
+            const audType = (document.getElementById('knowledge-edit-audience-type')?.value || '').trim();
+            const boxStore = document.getElementById('knowledge-edit-audience-store-box');
+            const boxPos = document.getElementById('knowledge-edit-audience-position-box');
+            if (boxStore) boxStore.style.display = audType === 'store' ? '' : 'none';
+            if (boxPos) boxPos.style.display = audType === 'position' ? '' : 'none';
+
+            if (audType === 'store') {
+                const storeBox = document.getElementById('knowledge-edit-audience-store-list');
+                if (storeBox) {
+                    const prevChecked = Array.from(storeBox.querySelectorAll('input[name="kb-edit-aud-store"]:checked')).map(cb => String(cb.value || '').trim()).filter(Boolean);
+                    const stores = (HRMS_STORE.getStores ? HRMS_STORE.getStores() : []).filter(s => String(s?.status || 'active') === 'active');
+                    const names = new Set();
+                    (stores || []).forEach(s => s && s.name && names.add(s.name));
+                    const list = Array.from(names).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b), 'zh-Hans-CN'));
+                    storeBox.innerHTML = list.map(n =>
+                        `<label class="kb-aud-check" style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;"><input type="checkbox" name="kb-edit-aud-store" value="${escapeHtml(n)}"> <span>${escapeHtml(n)}</span></label>`
+                    ).join('');
+                    prevChecked.forEach(v => {
+                        const inp = Array.from(storeBox.querySelectorAll('input[name="kb-edit-aud-store"]')).find(i => String(i.value) === v);
+                        if (inp) inp.checked = true;
+                    });
+                }
+            }
+            if (audType === 'position') {
+                const posBox = document.getElementById('knowledge-edit-audience-position-list');
+                if (posBox) {
+                    const prevChecked = Array.from(posBox.querySelectorAll('input[name="kb-edit-aud-pos"]:checked')).map(cb => String(cb.value || '').trim()).filter(Boolean);
+                    const users = (HRMS_STORE.getUsers ? HRMS_STORE.getUsers() : []) || [];
+                    const emps = (HRMS_STORE.getEmployees ? HRMS_STORE.getEmployees() : []) || [];
+                    const fallbackPos = ['系统管理员', '总部营运', '店长', '出品经理', '前厅经理', '门店员工', '人事经理', '出纳', '区域经理'];
+                    const positions = Array.from(new Set([
+                        ...users.map(u => String(u?.position || '').trim()),
+                        ...emps.map(e => String(e?.position || '').trim()),
+                        ...fallbackPos
+                    ].filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), 'zh-Hans-CN'));
+                    posBox.innerHTML = positions.map(p =>
+                        `<label class="kb-aud-check" style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;"><input type="checkbox" name="kb-edit-aud-pos" value="${escapeHtml(p)}"> <span>${escapeHtml(p)}</span></label>`
+                    ).join('');
+                    prevChecked.forEach(v => {
+                        const inp = Array.from(posBox.querySelectorAll('input[name="kb-edit-aud-pos"]')).find(i => String(i.value) === v);
+                        if (inp) inp.checked = true;
+                    });
+                }
+            }
+        }
+
+        async function confirmKnowledgeEdit() {
+            const id = (document.getElementById('knowledge-edit-id')?.value || '').trim();
+            const title = (document.getElementById('knowledge-edit-title')?.value || '').trim();
+            const category = (document.getElementById('knowledge-edit-category')?.value || '').trim();
+            const scope = (document.getElementById('knowledge-edit-scope')?.value || 'public').trim();
+            const version = (document.getElementById('knowledge-edit-version')?.value || '').trim();
+            const audType = (document.getElementById('knowledge-edit-audience-type')?.value || '').trim();
+
+            if (!title) { showNotification('请输入标题', 'warning'); return; }
+            if (!category) { showNotification('请选择分类', 'warning'); return; }
+            if (!['all', 'store', 'position'].includes(audType)) { showNotification('请选择分发范围', 'warning'); return; }
+
+            const audience = { type: audType };
+            if (audType === 'store') {
+                const storeBox = document.getElementById('knowledge-edit-audience-store-list');
+                const stores = storeBox
+                    ? Array.from(storeBox.querySelectorAll('input[name="kb-edit-aud-store"]:checked')).map(cb => String(cb.value || '').trim()).filter(Boolean)
+                    : [];
+                if (!stores.length) { showNotification('请至少选择一个门店', 'warning'); return; }
+                audience.stores = stores;
+                audience.store = stores[0];
+            }
+            if (audType === 'position') {
+                const posBox = document.getElementById('knowledge-edit-audience-position-list');
+                const positions = posBox
+                    ? Array.from(posBox.querySelectorAll('input[name="kb-edit-aud-pos"]:checked')).map(cb => String(cb.value || '').trim()).filter(Boolean)
+                    : [];
+                if (!positions.length) { showNotification('请至少选择一个岗位', 'warning'); return; }
+                audience.positions = positions;
+                audience.position = positions[0];
+            }
+
+            const payload = { title, category, scope, audience };
+            if (version) payload.version = version;
+
+            try {
+                const confirmBtn = document.getElementById('btn-knowledge-edit-confirm');
+                if (confirmBtn) confirmBtn.disabled = true;
+                const result = await HRMS_API.updateKnowledge(id, payload);
+                if (result?.item) {
+                    const items = HRMS_STORE.getKnowledge();
+                    const idx = (items || []).findIndex(x => String(x?.id || '') === id);
+                    if (idx >= 0) {
+                        items[idx].title = result.item.title;
+                        items[idx].category = result.item.category;
+                        items[idx].scope = result.item.scope;
+                        items[idx].audience = result.item.audience;
+                        items[idx].version = result.item.version;
+                        items[idx].updatedAt = result.item.updated_at;
+                    }
+                    HRMS_STORE.setKnowledge(items);
+                    closeKnowledgeEditModal();
+                    renderKnowledgeList();
+                    const viewerTitle = document.getElementById('knowledge-viewer-title');
+                    if (viewerTitle && window.__HRMS_KB_ACTIVE_ID === id) viewerTitle.textContent = title;
+                    showNotification('修改已保存', 'success');
+                } else {
+                    showNotification('修改失败：' + String(result?.error || '未知错误'), 'error');
+                }
+            } catch (e) {
+                showNotification('修改失败：' + String(e?.message || e), 'error');
+            } finally {
+                const confirmBtn = document.getElementById('btn-knowledge-edit-confirm');
+                if (confirmBtn) confirmBtn.disabled = false;
+            }
         }
 
         function setKnowledgeUploadBusy(busy, text) {
@@ -28031,8 +28351,32 @@ ${knowledgeContent.slice(0, 30000)}`;
         function handleKnowledgeFileSelect(event) {
             const statusEl = document.getElementById('knowledge-upload-file-status');
             if (statusEl) statusEl.textContent = '';
-            const file = event?.target?.files?.[0];
-            if (!file) return;
+            const files = Array.from(event?.target?.files || []);
+            if (!files.length) return;
+
+            const batchCb = document.getElementById('knowledge-upload-batch');
+            const isBatch = batchCb && batchCb.checked;
+
+            if (isBatch) {
+                // 批量模式：显示已选择文件数量和总大小
+                const total = files.length;
+                const totalSize = files.reduce((sum, f) => sum + Number(f.size || 0), 0);
+                let invalid = '';
+                for (const file of files) {
+                    if (Number(file.size || 0) > 300 * 1024 * 1024) invalid = file.name;
+                }
+                if (invalid) {
+                    if (statusEl) statusEl.textContent = `文件过大（>300MB）：${invalid}`;
+                    showNotification('部分文件超过300MB限制，请重新选择', 'warning');
+                    event.target.value = '';
+                    return;
+                }
+                if (statusEl) statusEl.textContent = `已选择 ${total} 个文件，共 ${formatFileSize(totalSize)}`;
+                return;
+            }
+
+            // 单文件模式保持原有逻辑
+            const file = files[0];
             const type = (document.getElementById('knowledge-upload-type')?.value || '').trim();
             const name = String(file.name || '').toLowerCase();
             const size = Number(file.size || 0);
@@ -28103,9 +28447,11 @@ ${knowledgeContent.slice(0, 30000)}`;
             const fileInput = document.getElementById('knowledge-upload-file');
             const statusEl = document.getElementById('knowledge-upload-file-status');
             const feedTags = getKnowledgeAgentTags(feedAgent);
-
-            const file = fileInput?.files?.[0];
-            if (!title) {
+            const files = Array.from(fileInput?.files || []);
+            const batchCb = document.getElementById('knowledge-upload-batch');
+            const isBatch = batchCb && batchCb.checked;
+            const file = files[0];
+            if (!isBatch && !title) {
                 showNotification('请输入标题', 'warning');
                 return;
             }
@@ -28150,6 +28496,65 @@ ${knowledgeContent.slice(0, 30000)}`;
                 }
                 audience.positions = positions;
                 audience.position = positions[0];
+            }
+
+            // 批量上传模式
+            if (isBatch) {
+                const batchTitleMode = document.getElementById('knowledge-upload-batch-title-mode')?.value || 'filename';
+                const customPrefix = (document.getElementById('knowledge-upload-batch-title-prefix')?.value || '').trim();
+
+                if (batchTitleMode === 'custom' && !customPrefix) {
+                    showNotification('请输入自定义标题前缀', 'warning');
+                    return;
+                }
+
+                try {
+                    setKnowledgeUploadBusy(true, '准备批量上传...');
+                    const fd = new FormData();
+                    fd.append('category', category);
+                    fd.append('type', type);
+                    fd.append('feedAgent', feedAgent);
+                    fd.append('brandId', brandId);
+                    fd.append('tags', JSON.stringify(feedTags));
+                    fd.append('scope', kbScope);
+                    if (version) fd.append('version', version);
+                    fd.append('audienceType', String(audience.type || 'all'));
+                    if (audience.type === 'store') {
+                        fd.append('audienceStores', JSON.stringify(audience.stores || []));
+                        if (audience.store) fd.append('audienceStore', String(audience.store));
+                    }
+                    if (audience.type === 'position') {
+                        fd.append('audiencePositions', JSON.stringify(audience.positions || []));
+                        if (audience.position) fd.append('audiencePosition', String(audience.position));
+                    }
+                    files.forEach(f => fd.append('files', f, f.name));
+                    fd.append('batchTitleMode', batchTitleMode);
+                    if (customPrefix) fd.append('customPrefix', customPrefix);
+
+                    if (statusEl) statusEl.textContent = `批量上传 ${files.length} 个文件中...`;
+                    const result = await HRMS_API.batchUploadKnowledge(fd);
+                    setKnowledgeUploadBusy(false);
+                    closeKnowledgeUploadModal();
+                    loadKnowledgeData();
+                    if (result?.succeeded !== undefined) {
+                        showNotification(`批量上传完成：${result.succeeded} 个成功${result.failed ? '，' + result.failed + ' 个失败' : ''}`, result.failed ? 'warning' : 'success');
+                    } else {
+                        showNotification('批量上传完成', 'success');
+                    }
+                    return;
+                } catch (e) {
+                    console.error(e);
+                    setKnowledgeUploadBusy(false);
+                    if (statusEl) statusEl.textContent = '';
+                    showNotification('批量上传失败：' + String(e?.message || e), 'error');
+                    return;
+                }
+            }
+
+            // 单文件上传模式（原有逻辑）
+            if (!title) {
+                showNotification('请输入标题', 'warning');
+                return;
             }
 
             try {

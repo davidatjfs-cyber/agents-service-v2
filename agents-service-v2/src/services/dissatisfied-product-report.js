@@ -276,7 +276,20 @@ async function buildAllStoresReport(allData, label, dateLabel, periodStart, peri
   const stores = [...new Set(allData.map(e => e.store))].sort();
   if (!stores.length) return null;
 
+  // 获取本月累计数据（与单门店报告保持一致）
+  const monthlyCounts = new Map();
+  try {
+    const allMonth = await fetchDissatisfiedEntries(periodStart, periodEnd);
+    for (const e of allMonth) {
+      const sk = e.store;
+      const pk = `${e.person}||${e.stall}`;
+      if (!monthlyCounts.has(sk)) monthlyCounts.set(sk, new Map());
+      monthlyCounts.get(sk).set(pk, (monthlyCounts.get(sk).get(pk) || 0) + e.dishes.length);
+    }
+  } catch (_e) { /* ignore */ }
+
   let totalAll = 0;
+  let monthlyAll = 0;
   const storeSections = [];
   for (const store of stores) {
     const entries = allData.filter(e => e.store === store);
@@ -288,6 +301,7 @@ async function buildAllStoresReport(allData, label, dateLabel, periodStart, peri
     }
     const personSections = [];
     let storeTotal = 0;
+    let storeMonthly = 0;
     for (const [k, { person, stall, items }] of byPerson) {
       const dishLines = [];
       let personCount = 0;
@@ -302,13 +316,16 @@ async function buildAllStoresReport(allData, label, dateLabel, periodStart, peri
         }
       }
       storeTotal += personCount;
-      personSections.push(`**${person}**（${stall}）— ${personCount}个\n不满意产品：\n${dishLines.join('\n')}`);
+      const monthTotal = monthlyCounts.get(store)?.get(k) || personCount;
+      storeMonthly += monthTotal;
+      personSections.push(`**${person}**（${stall}）\n  当期：**${personCount}**个 ｜ 本月累计：**${monthTotal}**个\n不满意产品：\n${dishLines.join('\n')}`);
     }
     totalAll += storeTotal;
-    storeSections.push(`**${store}** — 合计 **${storeTotal}**个\n${personSections.join('\n\n')}`);
+    monthlyAll += storeMonthly;
+    storeSections.push(`**${store}** — 当期 **${storeTotal}**个 ｜ 本月累计 **${storeMonthly}**个\n${personSections.join('\n\n')}`);
   }
 
-  const content = `**${label}（${dateLabel}）— 全部门店汇总**\n不满意产品总计：**${totalAll}**个\n\n${storeSections.join('\n\n')}`;
+  const content = `**${label}（${dateLabel}）— 全部门店汇总**\n不满意产品当期总计：**${totalAll}**个 ｜ 本月累计：**${monthlyAll}**个\n\n${storeSections.join('\n\n')}`;
   return content;
 }
 
