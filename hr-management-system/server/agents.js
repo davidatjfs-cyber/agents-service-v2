@@ -12044,13 +12044,13 @@ export function registerAgentRoutes(app, authRequired) {
         .catch(() => ({ rows: [] }));
       let notif = { rows: [] };
       try {
-        notif = await p.query(
-          `SELECT title, type, LEFT(message, 800) AS message_preview, created_at
-           FROM hrms_user_notifications
-           WHERE LOWER(TRIM(target_username)) = LOWER(TRIM($1))
-           ORDER BY created_at DESC
-           LIMIT $2`,
-          [resolvedUsername, lim]
+         notif = await p.query(
+           `SELECT title, type, LEFT(message, 800) AS message_preview, created_at
+            FROM hrms_user_notifications
+            WHERE target_username = $1
+            ORDER BY created_at DESC
+            LIMIT $2`,
+           [resolvedUsername, lim]
         );
       } catch (_e) {
         notif = { rows: [] };
@@ -12374,7 +12374,7 @@ export function registerAgentRoutes(app, authRequired) {
       const r = await pool().query(
         `SELECT id, title, message, type, meta, created_at
          FROM hrms_user_notifications
-         WHERE LOWER(TRIM(target_username)) = LOWER(TRIM($1))
+         WHERE target_username = $1
          ORDER BY created_at DESC
          LIMIT $2`,
         [username, limit]

@@ -5157,7 +5157,7 @@ async function ensureLoginLogTable() {
         created_at timestamptz not null default now()
       )
     `);
-    await pool.query(`create index if not exists idx_ull_username_date on user_login_log (username, (login_at at time zone 'Asia/Shanghai')::date)`);
+    await pool.query(`create index if not exists idx_ull_username_date on user_login_log (username, CAST((login_at at time zone 'Asia/Shanghai') AS date))`);
     await pool.query(`create index if not exists idx_ull_login_at on user_login_log (login_at)`);
     await pool.query(`create index if not exists idx_ull_open_session on user_login_log (username, logout_at) where logout_at is null`);
   } catch (e) {
