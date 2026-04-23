@@ -85,8 +85,7 @@ export function registerPerformanceInvalidationRoutes(app, authRequired) {
 
     const p = pool();
     try {
-      const pats = ['%'];
-      const weeklyParams = [period];
+      const weeklyParams = [];
       let weeklyWhere = `WHERE period LIKE 'week_%'
         AND score_model = 'anomaly_rollups_v2'`;
       if (username) {
