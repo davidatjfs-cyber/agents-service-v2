@@ -13588,6 +13588,22 @@ function getAgentsServiceBaseUrl() {
   return String(process.env.AGENTS_SERVICE_BASE_URL || 'http://127.0.0.1:3101').trim().replace(/\/$/, '');
 }
 
+async function getAgentsServiceAdminToken() {
+  const url = getAgentsServiceBaseUrl() + '/api/login';
+  const username = String(process.env.AGENTS_ADMIN_USERNAME || 'admin').trim() || 'admin';
+  const password = String(process.env.AGENTS_ADMIN_PASSWORD || 'admin123').trim() || 'admin123';
+  const r = await axios.post(url, { username, password }, {
+    timeout: 8000,
+    validateStatus: () => true,
+    headers: { 'Content-Type': 'application/json' }
+  });
+  if (r.status < 200 || r.status >= 300 || !r.data?.token) {
+    const detail = typeof r.data === 'object' ? JSON.stringify(r.data) : String(r.data || '');
+    throw new Error(`agents_service_login_failed:${r.status}:${detail}`);
+  }
+  return String(r.data.token);
+}
+
 function canManageChairmanConfig(user) {
   const role = String(user?.role || '').trim();
   return role === 'admin' || role === 'hq_manager' || role === 'hr_manager';
@@ -13597,9 +13613,11 @@ app.get('/api/chairman/config', authRequired, async (req, res) => {
   if (!canManageChairmanConfig(req.user)) return res.status(403).json({ error: 'forbidden' });
   try {
     const url = getAgentsServiceBaseUrl() + '/api/chairman/config';
+    const token = await getAgentsServiceAdminToken();
     const r = await axios.get(url, {
       timeout: 8000,
-      validateStatus: () => true
+      validateStatus: () => true,
+      headers: { Authorization: `Bearer ${token}` }
     });
     if (r.status < 200 || r.status >= 300) {
       return res.status(r.status || 502).json(r.data || { error: 'chairman_config_proxy_failed' });
@@ -13614,10 +13632,14 @@ app.post('/api/chairman/config', authRequired, async (req, res) => {
   if (!canManageChairmanConfig(req.user)) return res.status(403).json({ error: 'forbidden' });
   try {
     const url = getAgentsServiceBaseUrl() + '/api/chairman/config';
+    const token = await getAgentsServiceAdminToken();
     const r = await axios.post(url, req.body || {}, {
       timeout: 10000,
       validateStatus: () => true,
-      headers: { 'Content-Type': 'application/json' }
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      }
     });
     if (r.status < 200 || r.status >= 300) {
       return res.status(r.status || 502).json(r.data || { error: 'chairman_config_proxy_failed' });
