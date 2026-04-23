@@ -9360,8 +9360,13 @@
                 </div>
                 <div class="nav-item" data-page="knowledge">
                     <a href="#" class="nav-link" onclick="showPage('knowledge')">
-                        <i>📚</i> <span>知识库</span>
+                        <i>🤖</i> <span>智能助手</span>
                         <span class="nav-badge" id="nav-badge-knowledge" style="display:none;">0</span>
+                    </a>
+                </div>
+                <div class="nav-item" data-page="agents" style="display:none;">
+                    <a href="#" class="nav-link" onclick="showPage('agents')">
+                        <i>📊</i> <span>数据中心</span>
                     </a>
                 </div>
                 <div class="nav-item" data-page="exam">
@@ -11237,8 +11242,8 @@
                     <header class="rep-page-head kb-mobile-header">
                         <div>
                             <span class="rep-page-head__eyebrow">KNOWLEDGE BASE</span>
-                            <h2>知识库</h2>
-                            <p class="kb-rep-sub">制度、培训与标准的统一查阅入口</p>
+                            <h2>智能助手</h2>
+                            <p class="kb-rep-sub">知识库、部门分身与 Agent 监控的统一入口</p>
                         </div>
                         <div class="rep-page-head__actions">
                             <button class="btn btn-secondary" type="button" aria-label="通知" style="min-width:40px;padding:8px 10px;border-radius:10px;">🔔</button>
@@ -15930,7 +15935,7 @@ th { background: #f5f5f5; font-weight: 700; }
         }
 
         function getHomePageName() {
-            return isMobileAdminDataCenterEnabled() ? 'agents' : 'profile';
+            return 'profile';
         }
         
         // 更新调试信息
@@ -16186,6 +16191,9 @@ th { background: #f5f5f5; font-weight: 700; }
             const canSeeReports = currentUser && repRoleCanSeeReports();
             if (repNav) repNav.style.display = canSeeReports ? '' : 'none';
 
+            const agentsNav = document.querySelector('.nav-item[data-page="agents"]');
+            if (agentsNav) agentsNav.style.display = isMobileAdminDataCenterEnabled() ? '' : 'none';
+
             try {
                 const addEmpBtn = document.getElementById('add-emp-btn');
                 if (addEmpBtn) addEmpBtn.style.display = (isAdminUser() || currentUser.role === ROLES.STORE_MANAGER) ? '' : 'none';
@@ -16338,7 +16346,7 @@ th { background: #f5f5f5; font-weight: 700; }
                         profile: '我的档案',
                         employees: '员工管理',
                         users: '用户管理',
-                        knowledge: '知识库',
+                        knowledge: '智能助手',
                         stores: '门店管理',
                         roles: '角色权限',
                         exam: '考试测评',
@@ -25333,9 +25341,10 @@ ${knowledgeContent.slice(0, 30000)}`;
                     const te = pwdTipId ? document.getElementById(pwdTipId) : null;
                     if (pe && pw) {
                         pe.value = pw;
-                        if (te) te.textContent = '当前登录密码（已从服务器同步，仅管理员可见）';
+                        pe.type = 'text';
+                        if (te) te.textContent = '当前登录密码';
                     } else if (te && !hadLocalPassword && !pw) {
-                        te.textContent = '档案中暂无登录明文（仅 hrms_state 有记录；可用「重置密码」）';
+                        te.textContent = '档案中暂无登录密码，可使用重置密码';
                     }
                 } catch (_e) {}
             })();
@@ -25558,7 +25567,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 if (pwdEl) {
                     const curPwd = String(emp.password || '');
                     pwdEl.value = curPwd;
-                    pwdEl.type = 'password';
+                    pwdEl.type = isAdminUser() ? 'text' : 'password';
                     pwdEl.placeholder = curPwd ? '已设置，留空=不修改' : '初始密码';
                 }
                 if (pwdTipEl) pwdTipEl.textContent = String(emp.password || '') ? '当前密码已设置，留空则不修改' : '请设置初始密码';
@@ -26371,6 +26380,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 if (pwdEl) {
                     const curPwd = String(user.password || '');
                     pwdEl.value = curPwd;
+                    pwdEl.type = isAdminUser() ? 'text' : 'password';
                     pwdEl.placeholder = curPwd ? '已设置，留空=不修改' : '初始密码';
                 }
                 if (pwdTipEl) pwdTipEl.textContent = String(user.password || '').trim() ? '当前密码已设置，留空则不修改' : '（留空=不修改）';
@@ -33171,7 +33181,7 @@ ${body}
         }
 
         function getMobilePrimaryPage() {
-            return isMobileAdminDataCenterEnabled() ? 'agents' : 'dashboard';
+            return 'dashboard';
         }
 
         function initMobilePerformanceAuditDefaults() {
@@ -33401,23 +33411,14 @@ ${body}
         }
 
         function updateMobileNavForRole() {
-            const primary = document.querySelector('.mobile-nav-item[data-page="dashboard"], .mobile-nav-item[data-page="agents"]');
+            const primary = document.querySelector('.mobile-nav-item[data-page="dashboard"]');
             if (!primary) return;
-            if (isMobileAdminDataCenterEnabled()) {
-                primary.setAttribute('data-page', 'agents');
-                primary.setAttribute('onclick', "mobileNavigateTo('agents')");
-                const icon = primary.querySelector('.mobile-nav-icon');
-                const label = primary.querySelector('.mobile-nav-label');
-                if (icon) icon.textContent = '📊';
-                if (label) label.textContent = '数据中心';
-            } else {
-                primary.setAttribute('data-page', 'dashboard');
-                primary.setAttribute('onclick', "mobileNavigateTo('dashboard')");
-                const icon = primary.querySelector('.mobile-nav-icon');
-                const label = primary.querySelector('.mobile-nav-label');
-                if (icon) icon.textContent = '🏠';
-                if (label) label.textContent = '首页';
-            }
+            primary.setAttribute('data-page', 'dashboard');
+            primary.setAttribute('onclick', "mobileNavigateTo('dashboard')");
+            const icon = primary.querySelector('.mobile-nav-icon');
+            const label = primary.querySelector('.mobile-nav-label');
+            if (icon) icon.textContent = '🏠';
+            if (label) label.textContent = '首页';
         }
 
         // Mobile navigation functions
@@ -33453,7 +33454,7 @@ ${body}
                     showPage('dashboard');
                     break;
                 case 'attendance':
-                    showPage('attendance-page');
+                    showPage('attendance');
                     break;
                 case 'approvals':
                     // Show approvals based on user role
@@ -33467,7 +33468,10 @@ ${body}
                     }
                     break;
                 case 'profile':
-                    showPage('profile-page');
+                    showPage('profile');
+                    break;
+                case 'knowledge':
+                    showPage('knowledge');
                     break;
                 default:
                     showPage(getMobilePrimaryPage());
@@ -33544,9 +33548,13 @@ ${body}
                     'agents-page': 'agents',
                     'dashboard': 'dashboard',
                     'attendance-page': 'attendance',
+                    'attendance': 'attendance',
                     'rewards-page': 'approvals',
                     'payment-page': 'approvals',
-                    'profile-page': 'profile'
+                    'profile-page': 'profile',
+                    'profile': 'profile',
+                    'knowledge-page': 'knowledge',
+                    'knowledge': 'knowledge'
                 };
                 
                 const mobilePage = pageMap[pageId];
@@ -34091,7 +34099,7 @@ ${body}
                     // Force clear old caches on every load
                     if (typeof caches !== 'undefined') {
                         caches.keys().then(keys => {
-                            keys.forEach(k => { if (k !== 'hrms-pwa-v237') caches.delete(k); });
+                            keys.forEach(k => { caches.delete(k); });
                         }).catch(() => {});
                     }
                     navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((reg) => {
@@ -34130,9 +34138,9 @@ ${body}
             <span class="mobile-nav-icon">📋</span>
             <span class="mobile-nav-label">审批</span>
         </div>
-        <div class="mobile-nav-item" data-page="profile" onclick="mobileNavigateTo('profile')">
-            <span class="mobile-nav-icon">⚙️</span>
-            <span class="mobile-nav-label">我的</span>
+        <div class="mobile-nav-item" data-page="knowledge" onclick="mobileNavigateTo('knowledge')">
+            <span class="mobile-nav-icon">🤖</span>
+            <span class="mobile-nav-label">智能助手</span>
         </div>
     </nav>
 </body>

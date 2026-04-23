@@ -32417,9 +32417,10 @@ ${knowledgeContent.slice(0, 30000)}`;
                     const te = pwdTipId ? document.getElementById(pwdTipId) : null;
                     if (pe && pw) {
                         pe.value = pw;
-                        if (te) te.textContent = '当前登录密码（已从服务器同步，仅管理员可见）';
+                        pe.type = 'text';
+                        if (te) te.textContent = '当前登录密码';
                     } else if (te && !hadLocalPassword && !pw) {
-                        te.textContent = '档案中暂无登录明文（仅 hrms_state 有记录；可用「重置密码」）';
+                        te.textContent = '档案中暂无登录密码，可使用重置密码';
                     }
                 } catch (_e) {}
             })();
@@ -32643,7 +32644,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 if (pwdEl) {
                     const curPwd = String(emp.password || '');
                     pwdEl.value = curPwd;
-                    pwdEl.type = 'password';
+                    pwdEl.type = isAdminUser() ? 'text' : 'password';
                     pwdEl.placeholder = curPwd ? '已设置，留空=不修改' : '初始密码';
                 }
                 if (pwdTipEl) pwdTipEl.textContent = String(emp.password || '') ? '当前密码已设置，留空则不修改' : '请设置初始密码';
@@ -33609,6 +33610,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 if (pwdEl) {
                     const curPwd = String(user.password || '');
                     pwdEl.value = curPwd;
+                    pwdEl.type = isAdminUser() ? 'text' : 'password';
                     pwdEl.placeholder = curPwd ? '已设置，留空=不修改' : '初始密码';
                 }
                 if (pwdTipEl) pwdTipEl.textContent = String(user.password || '').trim() ? '当前密码已设置，留空则不修改' : '（留空=不修改）';
