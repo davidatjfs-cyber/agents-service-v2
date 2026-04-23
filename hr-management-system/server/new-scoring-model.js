@@ -813,17 +813,17 @@ function parseJsonArrayMaybe(v) {
 // 计算零异常加分
 async function calculateExceptionBonus(username, period) {
   // 检查该用户在period期间是否有异常；使用上海时区转换，避免跨月归属错误
+  const { startDate, endDate } = periodDateRange(period);
   const result = await pool().query(`
     SELECT COUNT(*) as count FROM agent_issues 
     WHERE assignee_username = $1 AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $2::date AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $3::date
-  `, [username, `${period}-01`, `${period}-31`]);
+  `, [username, startDate, endDate]);
   
   const exceptionCount = Number(result.rows[0]?.count || 0);
   if (exceptionCount > 0) return 0;
 
   // 兜底：当前业务主链路异常主要落在 anomaly_triggers -> 周度 anomaly_rollups_v2
   // 若本月周度扣分明细已有异常，不应再给“零异常+10”。
-  const { startDate, endDate } = periodDateRange(period);
   const weekly = await pool().query(
     `SELECT deductions
      FROM agent_scores
@@ -867,11 +867,12 @@ function getMaxTriggers(frequency, period) {
 // 计算异常扣分
 async function calculateExceptionDeduction(username, period) {
   // 按类别+严重度分组查询；使用上海时区转换，避免跨月归属错误
+  const { startDate, endDate } = periodDateRange(period);
   const result = await pool().query(`
     SELECT category, severity, COUNT(*) as count FROM agent_issues 
     WHERE assignee_username = $1 AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $2::date AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $3::date
     GROUP BY category, severity
-  `, [username, `${period}-01`, `${period}-31`]);
+  `, [username, startDate, endDate]);
   
   let totalDeduction = 0;
   for (const row of result.rows) {
