@@ -13086,6 +13086,81 @@ function stripPasswordFieldsFromStateForClient(data, role) {
   }
 }
 
+function hrmsNormStoreName(s) {
+  return String(s || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+/** 与前端员工列表一致：离职 / 停用等不在非管理员接口中返回。 */
+function hrmsIsInactiveEmploymentRecord(row) {
+  const raw = String(row?.status || '').trim();
+  if (!raw) return false;
+  const st = raw.toLowerCase();
+  if (['inactive', 'resigned', 'terminated', 'deleted', 'left', 'departed'].includes(st)) return true;
+  if (/离职|离岗|离退|已删除|已离职|停职|停用/.test(raw)) return true;
+  return false;
+}
+
+/**
+ * 裁剪 state 中的 employees / users：
+ * - 仅 admin 可看到离职等停用记录；
+ * - 店长仅能看到本店（与自身档案或 feishu_users 门店一致）的在册人员。
+ */
+async function applyStatePeopleVisibilityForRole(data, role, username, fullStateForLookup) {
+  if (!data || typeof data !== 'object') return data;
+  const r = String(role || '').trim();
+  if (r === 'admin') return data;
+
+  const rawEmps = Array.isArray(data.employees) ? data.employees : [];
+  const rawUsers = Array.isArray(data.users) ? data.users : [];
+  const lookupAll = []
+    .concat(Array.isArray(fullStateForLookup?.employees) ? fullStateForLookup.employees : [])
+    .concat(Array.isArray(fullStateForLookup?.users) ? fullStateForLookup.users : []);
+  const un = String(username || '').trim().toLowerCase();
+
+  let storeScope = null;
+  if (r === 'store_manager') {
+    const self = lookupAll.find((x) => String(x?.username || '').trim().toLowerCase() === un);
+    storeScope = hrmsNormStoreName(self?.store);
+    if (!storeScope && username) {
+      try {
+        const rr = await pool.query(
+          `select trim(store) as s from feishu_users
+           where coalesce(registered, false) = true
+             and lower(trim(username)) = lower(trim($1))
+           limit 1`,
+          [username]
+        );
+        storeScope = hrmsNormStoreName(rr.rows?.[0]?.s);
+      } catch (_e) {
+        storeScope = '';
+      }
+    }
+  }
+
+  const pass = (row) => {
+    if (hrmsIsInactiveEmploymentRecord(row)) return false;
+    if (storeScope) return hrmsNormStoreName(row?.store) === storeScope;
+    return true;
+  };
+
+  if (r === 'store_manager' && !storeScope) {
+    const keepSelf = (row) => String(row?.username || '').trim().toLowerCase() === un;
+    return {
+      ...data,
+      employees: rawEmps.filter((row) => keepSelf(row) && !hrmsIsInactiveEmploymentRecord(row)),
+      users: rawUsers.filter((row) => keepSelf(row) && !hrmsIsInactiveEmploymentRecord(row))
+    };
+  }
+
+  return {
+    ...data,
+    employees: rawEmps.filter(pass),
+    users: rawUsers.filter(pass)
+  };
+}
+
 app.get('/api/state', authRequired, async (req, res) => {
   try {
     const r = await pool.query('select data from hrms_state where key = $1 limit 1', ['default']);
@@ -13108,7 +13183,9 @@ app.get('/api/state', authRequired, async (req, res) => {
       }
     }
     const role = String(req.user?.role || '').trim();
-    const payload = stripPasswordFieldsFromStateForClient(repaired, role);
+    const uname = String(req.user?.username || '').trim();
+    let payload = stripPasswordFieldsFromStateForClient(repaired, role);
+    payload = await applyStatePeopleVisibilityForRole(payload, role, uname, repaired);
     return res.json({ data: payload });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });

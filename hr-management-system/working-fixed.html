@@ -31884,31 +31884,43 @@ ${knowledgeContent.slice(0, 30000)}`;
             } catch (e) {}
 
             const stores = (HRMS_STORE.getStores ? HRMS_STORE.getStores() : []) || [];
-            
-            // 根据当前用户角色过滤员工
+
+            const normEmpStore = (s) => String(s || '').trim().replace(/\s+/g, ' ');
+            const isInactiveEmp = (emp) => {
+                const raw = String(emp?.status || '').trim();
+                if (!raw) return false;
+                const st = raw.toLowerCase();
+                if (['inactive', 'resigned', 'terminated', 'deleted', 'left', 'departed'].includes(st)) return true;
+                if (/离职|离岗|离退|已删除|已离职|停职|停用/.test(raw)) return true;
+                return false;
+            };
+            const resolveManagerStoreForEmployees = (pool) => {
+                let s = normEmpStore(currentUser?.store || '');
+                if (s) return s;
+                const un = String(currentUser?.username || '').trim().toLowerCase();
+                const self = (pool || []).find((e) => String(e?.username || '').trim().toLowerCase() === un);
+                return normEmpStore(self?.store || '');
+            };
+
+            // 根据当前用户角色过滤员工（与 GET /api/state 裁剪策略一致）
             let filtered = employees;
             if (currentUser && currentUser.role === ROLES.STORE_MANAGER) {
-                // 门店店长只能看到自己门店的活跃员工（离职的看不到）
-                if (String(currentUser.store || '').trim()) {
-                    filtered = employees.filter(e => e.store === currentUser.store && !isInactiveEmp(e));
-                } else {
-                    filtered = employees.filter(e => !isInactiveEmp(e));
-                }
-            } else if (currentUser && (currentUser.role === ROLES.HQ_MANAGER || currentUser.role === 'hr_manager')) {
-                // 总部营运、总部人事看不到离职员工
-                filtered = employees.filter(e => !isInactiveEmp(e));
+                const myStore = resolveManagerStoreForEmployees(employees);
+                filtered = myStore
+                    ? employees.filter((e) => normEmpStore(e?.store) === myStore && !isInactiveEmp(e))
+                    : [];
+            } else if (currentUser && currentUser.role === ROLES.ADMIN) {
+                // 管理员可见含离职在内的全量
+            } else if (currentUser) {
+                // 总部营运 / 人事及其他非管理员：不展示离职等停用记录
+                filtered = employees.filter((e) => !isInactiveEmp(e));
             }
-            // 管理员可以看到所有员工（包括离职的）
 
             const parseJoinDateTs = (emp) => {
                 const jd = String(emp?.joinDate || emp?.hireDate || emp?.startDate || emp?.entryDate || emp?.onboardDate || emp?.joiningDate || '').trim();
                 if (!/^\d{4}-\d{2}-\d{2}$/.test(jd)) return Number.POSITIVE_INFINITY;
                 const t = new Date(jd + 'T00:00:00').getTime();
                 return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
-            };
-            const isInactiveEmp = (emp) => {
-                const st = String(emp?.status || '').trim().toLowerCase();
-                return st === 'inactive' || st === '离职';
             };
             filtered = (Array.isArray(filtered) ? filtered.slice() : []).sort((a, b) => {
                 const aInactive = isInactiveEmp(a) ? 1 : 0;
@@ -31936,9 +31948,22 @@ ${knowledgeContent.slice(0, 30000)}`;
                 const posEl = document.getElementById('emp-filter-position');
                 if (storeEl) {
                     const prev = filterStore;
-                    const vals = Array.from(new Set(filtered.map(e => String(e?.store || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
-                    storeEl.innerHTML = '<option value="">全部门店</option>' + vals.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
-                    if (prev) storeEl.value = prev;
+                    if (currentUser && currentUser.role === ROLES.STORE_MANAGER) {
+                        const ms = resolveManagerStoreForEmployees(employees);
+                        if (ms) {
+                            storeEl.innerHTML = `<option value="${escapeHtml(ms)}">${escapeHtml(ms)}</option>`;
+                            storeEl.value = ms;
+                        } else {
+                            storeEl.innerHTML = '<option value="">未绑定门店</option>';
+                            storeEl.value = '';
+                        }
+                        storeEl.disabled = true;
+                    } else {
+                        storeEl.disabled = false;
+                        const vals = Array.from(new Set(filtered.map(e => String(e?.store || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+                        storeEl.innerHTML = '<option value="">全部门店</option>' + vals.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+                        if (prev) storeEl.value = prev;
+                    }
                 }
                 if (posEl) {
                     const prev = filterPos;
