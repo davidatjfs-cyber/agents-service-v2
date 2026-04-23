@@ -21482,7 +21482,9 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
         }
 
         async function ensureAgentTemplateMaps() {
-            const token = localStorage.getItem('hrms_token');
+            const token = (typeof HRMS_API !== 'undefined' && HRMS_API && typeof HRMS_API.token === 'function')
+                ? HRMS_API.token()
+                : String(localStorage.getItem('HRMS_API_TOKEN') || localStorage.getItem('hrms_token') || '').trim();
             const [promptResp, replyResp] = await Promise.all([
                 fetchWithAgentAbort('agent_templates_prompt', '/api/admin/agents/templates', { headers: { 'Authorization': 'Bearer ' + token } }),
                 fetchWithAgentAbort('agent_templates_reply', '/api/admin/agents/reply-templates', { headers: { 'Authorization': 'Bearer ' + token } })
@@ -24384,7 +24386,9 @@ ${knowledgeContent.slice(0, 30000)}`;
             const period = String(document.getElementById('perf-audit-period')?.value || '').trim();
             const username = String(document.getElementById('perf-audit-username')?.value || '').trim();
             if (!period) { showNotification('请选择统计月份', 'warning'); return; }
-            const token = localStorage.getItem('hrms_token');
+            const token = (typeof HRMS_API !== 'undefined' && HRMS_API && typeof HRMS_API.token === 'function')
+                ? HRMS_API.token()
+                : String(localStorage.getItem('HRMS_API_TOKEN') || localStorage.getItem('hrms_token') || '').trim();
             const params = new URLSearchParams({ period });
             if (username) params.set('username', username);
             try {
