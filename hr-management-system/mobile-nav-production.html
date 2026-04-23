@@ -14065,6 +14065,11 @@
                 return this.request('/api/state', { method: 'GET' });
             },
 
+            async getAdminEmployeePassword(username) {
+                const u = encodeURIComponent(String(username || '').trim());
+                return this.request('/api/admin/employee-password/' + u, { method: 'GET' });
+            },
+
             async saveState(data) {
                 return this.request('/api/state', {
                     method: 'PUT',
@@ -25318,6 +25323,24 @@ ${knowledgeContent.slice(0, 30000)}`;
             return gmU || '';
         }
 
+        function hrmsScheduleAdminPasswordFetch(username, pwdInputId, pwdTipId, hadLocalPassword) {
+            if (!isAdminUser() || !username || !HRMS_API.getAdminEmployeePassword) return;
+            (async () => {
+                try {
+                    const resp = await HRMS_API.getAdminEmployeePassword(username);
+                    const pw = String(resp?.password || '').trim();
+                    const pe = document.getElementById(pwdInputId);
+                    const te = pwdTipId ? document.getElementById(pwdTipId) : null;
+                    if (pe && pw) {
+                        pe.value = pw;
+                        if (te) te.textContent = '当前登录密码（已从服务器同步，仅管理员可见）';
+                    } else if (te && !hadLocalPassword && !pw) {
+                        te.textContent = '档案中暂无登录明文（仅 hrms_state 有记录；可用「重置密码」）';
+                    }
+                } catch (_e) {}
+            })();
+        }
+
         function openEmployeeFormModal(mode, empId) {
             const realMode = mode === 'view' ? 'view' : (mode === 'edit' ? 'edit' : 'create');
             const canView = currentUser && (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.HQ_MANAGER || currentUser.role === ROLES.STORE_MANAGER || currentUser.role === ROLES.HR_MANAGER);
@@ -25532,8 +25555,17 @@ ${knowledgeContent.slice(0, 30000)}`;
                 if (idEl) idEl.value = String(emp.id || '');
                 if (usernameEl) usernameEl.value = String(emp.username || '');
                 if (nameEl) nameEl.value = String(emp.name || '');
-                if (pwdEl) pwdEl.value = '';
-                if (pwdTipEl) pwdTipEl.textContent = '（留空=不修改）';
+                if (pwdEl) {
+                    const curPwd = String(emp.password || '');
+                    pwdEl.value = curPwd;
+                    pwdEl.type = 'password';
+                    pwdEl.placeholder = curPwd ? '已设置，留空=不修改' : '初始密码';
+                }
+                if (pwdTipEl) pwdTipEl.textContent = String(emp.password || '') ? '当前密码已设置，留空则不修改' : '请设置初始密码';
+                if (isAdminUser() && (realMode === 'edit' || realMode === 'view')) {
+                    const unForPwd = String(emp.username || '').trim();
+                    hrmsScheduleAdminPasswordFetch(unForPwd, 'employee-form-password', 'employee-form-password-tip', !!String(emp.password || '').trim());
+                }
                 if (genderEl) genderEl.value = String(emp.gender || '');
                 if (birthdayEl) {
                     const raw = String(emp.birthday || '');
@@ -26336,8 +26368,16 @@ ${knowledgeContent.slice(0, 30000)}`;
                 }
                 if (usernameEl) usernameEl.value = String(user.username || '');
                 if (nameEl) nameEl.value = String(user.name || '');
-                if (pwdEl) pwdEl.value = '';
-                if (pwdTipEl) pwdTipEl.textContent = '（留空=不修改）';
+                if (pwdEl) {
+                    const curPwd = String(user.password || '');
+                    pwdEl.value = curPwd;
+                    pwdEl.placeholder = curPwd ? '已设置，留空=不修改' : '初始密码';
+                }
+                if (pwdTipEl) pwdTipEl.textContent = String(user.password || '').trim() ? '当前密码已设置，留空则不修改' : '（留空=不修改）';
+                if (isAdminUser()) {
+                    const unForPwd = String(user.username || '').trim();
+                    hrmsScheduleAdminPasswordFetch(unForPwd, 'user-form-password', 'user-form-password-tip', !!String(user.password || '').trim());
+                }
                 if (roleEl) roleEl.value = String(user.role || '');
                 if (storeEl) storeEl.value = String(user.store || '');
                 if (managerUsernameEl) managerUsernameEl.value = String(user.managerUsername || '');
