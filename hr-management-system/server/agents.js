@@ -25,8 +25,7 @@ import { isExternalEnabled } from './safety.js';
 import crypto from 'crypto';
 import { 
   calculateStoreRating, 
-  calculateEmployeeScore,
-  getMonthlyAnomalyRollupAverageScore
+  calculateEmployeeScore
 } from './new-scoring-model.js';
 import { 
   AgentCommunicationSystem, 
@@ -12069,7 +12068,7 @@ export function registerAgentRoutes(app, authRequired) {
   });
 
   /**
-   * 数据中心：考核员工实时看板（BI 月均、执行力/态度备案数、月度表快照、最新周汇总行）
+   * 数据中心：考核员工实时看板（本月 BI 累计扣分 / 最新绩效得分、执行力/态度备案数、月度表快照、最新周汇总行）
    * 与飞书绩效卡「本月累计备案」SQL 同源（performance-filing-counts-pg）。
    */
   app.get('/api/agents/employee-live-dashboard', authRequired, async (req, res) => {
@@ -12165,9 +12164,73 @@ export function registerAgentRoutes(app, authRequired) {
       const store = String(prof.rows?.[0]?.store || '').trim();
       const feishuRole = String(prof.rows?.[0]?.role || '').trim();
 
-      const biAvgRaw = await getMonthlyAnomalyRollupAverageScore(resolvedUsername, period);
-      const biAvgNum = Number(biAvgRaw);
-      const biClamped = Number.isFinite(biAvgNum) ? Math.min(100, Math.max(0, biAvgNum)) : null;
+      const [py, pm] = period.split('-');
+      const monthStart = `${py}-${pm}-01`;
+      const monthLastDay = String(new Date(Number(py), Number(pm), 0).getDate()).padStart(2, '0');
+      const monthEnd = `${py}-${pm}-${monthLastDay}`;
+      const monthKey = `${py}${String(pm).padStart(2, '0')}`;
+
+      const parseRollupBreakdown = (bd) => {
+        if (bd == null) return {};
+        if (typeof bd === 'string') {
+          try {
+            const o = JSON.parse(bd);
+            return o && typeof o === 'object' ? o : {};
+          } catch {
+            return {};
+          }
+        }
+        return bd && typeof bd === 'object' ? bd : {};
+      };
+
+      const monthRollupWhere = `LOWER(TRIM(username)) = LOWER(TRIM($1))
+       AND score_model = 'anomaly_rollups_v2'
+       AND COALESCE(is_invalidated, false) = false
+       AND period LIKE 'week_%'
+       AND (
+         (POSITION('__' IN period) = 0
+           AND substring(period from 6 for 10)::date >= $2::date
+           AND substring(period from 6 for 10)::date <= $3::date)
+         OR
+         (POSITION('__' IN period) > 0 AND split_part(period, '__', 2) = $4)
+       )`;
+
+      const latestRollupInMonth = await p
+        .query(
+          `SELECT total_score, breakdown, period, updated_at
+           FROM agent_scores
+           WHERE ${monthRollupWhere}
+           ORDER BY updated_at DESC NULLS LAST
+           LIMIT 1`,
+          [resolvedUsername, monthStart, monthEnd, monthKey]
+        )
+        .catch(() => ({ rows: [] }));
+
+      let monthBiDeducted = null;
+      const rollupHead = latestRollupInMonth.rows?.[0];
+      if (rollupHead) {
+        const b0 = parseRollupBreakdown(rollupHead.breakdown);
+        const cum = Number(b0['本月累计扣分']);
+        if (Number.isFinite(cum)) monthBiDeducted = cum;
+      }
+      if (monthBiDeducted == null || !Number.isFinite(monthBiDeducted)) {
+        const allWeeks = await p
+          .query(
+            `SELECT breakdown FROM agent_scores WHERE ${monthRollupWhere} ORDER BY period ASC`,
+            [resolvedUsername, monthStart, monthEnd, monthKey]
+          )
+          .catch(() => ({ rows: [] }));
+        let sumWeek = 0;
+        for (const rw of allWeeks.rows || []) {
+          const b = parseRollupBreakdown(rw.breakdown);
+          const w = Number(b['本周扣分']);
+          if (Number.isFinite(w)) sumWeek += w;
+        }
+        monthBiDeducted = sumWeek;
+      }
+      if (!Number.isFinite(monthBiDeducted)) monthBiDeducted = 0;
+
+      const latestPerformanceScore = 100 - monthBiDeducted;
 
       const empR = await p
         .query(
@@ -12207,8 +12270,11 @@ export function registerAgentRoutes(app, authRequired) {
         resolvedName,
         store,
         feishu_role: feishuRole,
-        bi_rollup_month_avg_raw: biAvgRaw,
-        bi_rollup_month_avg_clamped_0_100: biClamped,
+        /** 统计月内 BI 周汇总行上「本月累计扣分」（取该月内按 updated_at 最新一行 breakdown，与 periodic-scoring 写入一致） */
+        month_bi_deducted_total: monthBiDeducted,
+        /** 看板直观分：100 − 本月已扣分数（可与「最新周行 total_score」滚存口径不同，见 footnote） */
+        latest_performance_score: latestPerformanceScore,
+        rollup_breakdown_source_period: rollupHead?.period || null,
         employee_scores_rows: empR.rows || [],
         latest_weekly_anomaly_row: latestWeek.rows?.[0] || null,
         execution_filing_count: executionFiling,

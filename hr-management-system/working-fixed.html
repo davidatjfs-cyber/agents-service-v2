@@ -12795,7 +12795,18 @@
             <div id="agents-page" class="hidden dc-v2">
                 <style>
                     #agents-page.dc-v2 { --dc-ink: rgba(248,250,252,0.96); --dc-muted: rgba(148,163,184,0.88); --dc-faint: rgba(100,116,139,0.95); --dc-line: rgba(148,163,184,0.14); --dc-glow: rgba(245,158,11,0.14); --dc-num: 'Outfit', ui-rounded, system-ui, sans-serif; }
-                    #agents-page.dc-v2 .dc-wrap { max-width: 820px; margin: 0 auto 28px; }
+                    #agents-page.dc-v2 .dc-wrap { max-width: 820px; margin: 0 auto 28px; padding: 0 16px; box-sizing: border-box; }
+                    @media (max-width: 560px) {
+                        #agents-page.dc-v2 .dc-wrap { padding: 0 12px 20px; margin-bottom: 16px; }
+                        #agents-page.dc-v2 .dc-hero { padding: 16px 0 14px; flex-direction: column; align-items: stretch; }
+                        #agents-page.dc-v2 .dc-btn-refresh { width: 100%; text-align: center; }
+                        #agents-page.dc-v2 .dc-panel-head { padding: 14px 14px 12px; }
+                        #agents-page.dc-v2 .dc-stack { gap: 14px; }
+                        #agents-page.dc-v2 .dc-toolbar { padding: 12px 14px; flex-direction: column; align-items: stretch; }
+                        #agents-page.dc-v2 .dc-toolbar input,
+                        #agents-page.dc-v2 .dc-toolbar .dc-btn-go { width: 100%; min-width: 0; }
+                        #agents-page.dc-v2 details.dc-doc { margin-left: 12px; margin-right: 12px; }
+                    }
                     #agents-page.dc-v2 .dc-hero {
                         position: relative; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px;
                         padding: 22px 0 20px; margin-bottom: 4px;
@@ -12862,6 +12873,37 @@
                     #agents-page.dc-v2 .dc-doc-body { padding: 12px 14px 14px; font-size: 11px; color: #94a3b8; line-height: 1.65; }
                     #agents-page.dc-v2 .dc-kpi-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
                     @media (min-width: 560px) { #agents-page.dc-v2 .dc-kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+                    #agents-page.dc-v2 .dc-live-surface { margin: 0 14px 16px; padding: 12px 0 4px; border-top: 1px solid rgba(148,163,184,0.08); }
+                    @media (max-width: 560px) { #agents-page.dc-v2 .dc-live-surface { margin: 0 12px 14px; padding-top: 10px; } }
+                    #agents-page.dc-v2 .dc-live-who { margin-bottom: 14px; font-size: 12px; color: #94a3b8; line-height: 1.5; }
+                    #agents-page.dc-v2 .dc-live-hero { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+                    @media (min-width: 560px) { #agents-page.dc-v2 .dc-live-hero { gap: 14px; } }
+                    #agents-page.dc-v2 .dc-live-hero-card {
+                        border-radius: 18px; padding: 18px 14px 15px;
+                        background: linear-gradient(155deg, rgba(30,41,59,0.75), rgba(15,23,42,0.52));
+                        border: 1px solid rgba(148,163,184,0.14);
+                        box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 44px -24px rgba(0,0,0,0.55);
+                        min-height: 104px;
+                    }
+                    #agents-page.dc-v2 .dc-live-hero-card--ded { border-color: rgba(251,146,60,0.22); }
+                    #agents-page.dc-v2 .dc-live-hero-card--score { border-color: rgba(56,189,248,0.24); }
+                    #agents-page.dc-v2 .dc-live-hero-k { font-size: 11px; font-weight: 700; color: var(--dc-faint); letter-spacing: 0.05em; margin-bottom: 10px; }
+                    #agents-page.dc-v2 .dc-live-hero-v { font-family: var(--dc-num); font-size: clamp(1.8rem, 7.5vw, 2.45rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+                    #agents-page.dc-v2 .dc-live-hero-card--ded .dc-live-hero-v { color: #fdba74; }
+                    #agents-page.dc-v2 .dc-live-hero-card--score .dc-live-hero-v { color: #7dd3fc; }
+                    #agents-page.dc-v2 .dc-live-hero-s { margin-top: 10px; font-size: 10px; color: #64748b; line-height: 1.45; }
+                    #agents-page.dc-v2 .dc-live-sec-head { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #64748b; margin: 2px 0 10px; }
+                    #agents-page.dc-v2 .dc-live-secondary { display: flex; gap: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; scroll-snap-type: x proximity; }
+                    #agents-page.dc-v2 .dc-live-secondary .dc-kpi { flex: 0 0 min(100%, 168px); scroll-snap-align: start; min-width: 148px; }
+                    @media (min-width: 560px) {
+                        #agents-page.dc-v2 .dc-live-secondary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: visible; padding-bottom: 0; }
+                        #agents-page.dc-v2 .dc-live-secondary .dc-kpi { min-width: 0; flex: none; }
+                    }
+                    #agents-page.dc-v2 .dc-live-foot {
+                        margin-top: 12px; padding: 12px 14px; border-radius: 14px;
+                        background: rgba(2,6,23,0.45); border: 1px solid rgba(148,163,184,0.12);
+                        font-size: 12px; color: #cbd5e1; line-height: 1.55;
+                    }
                     #agents-page.dc-v2 .dc-kpi {
                         position: relative; padding: 16px 14px 14px; border-radius: 16px; overflow: hidden;
                         background: rgba(2,6,23,0.5); border: 1px solid rgba(148,163,184,0.14);
@@ -13004,7 +13046,7 @@
                             <div class="dc-panel-head">
                                 <div>
                                     <h3>考核员工实时看板</h3>
-                                    <p class="dc-panel-sub">与下方「个人绩效分由来」共用同一输入框（姓名或飞书账号）；备案数与飞书绩效卡「本月累计备案」SQL 同源，每次刷新均为数据库实时值。</p>
+                                    <p class="dc-panel-sub">与下方「个人绩效分由来」共用查询账号；备案数与飞书绩效卡「本月累计备案」同源。顶部两卡为「100 − 本月 BI 累计扣分」直观得分。</p>
                                 </div>
                             </div>
                             <div class="dc-toolbar" style="border-bottom:none;">
@@ -13014,11 +13056,11 @@
                                 <span id="dc-live-asof" style="margin-left:auto;font-size:11px;color:#64748b;"></span>
                             </div>
                             <details class="dc-doc" style="margin:0 18px 12px;">
-                                <summary>周度扣分与「每日」项是什么关系？</summary>
-                                <div class="dc-doc-body">周度列表里每一行是<strong>一个自然周</strong>的 BI 汇总分，其中的扣分项（充值异常、差评产品/服务、食安等）来自该周内 <code>anomaly_triggers</code> 等数据的<strong>归类汇总</strong>，不是把「每一天」各打一行混在周列表里。「绩效审核」里的 <strong>BI 按日触发</strong> 才是按触发日展开的原始命中。某周卡片上的 <strong>-40</strong> 表示<strong>该周这一行</strong>的汇总分；整月口径另见下方「BI 月均」与「月度表」。</div>
+                                <summary>周度扣分、每日项与看板得分的关系？</summary>
+                                <div class="dc-doc-body">周度表里每一行是<strong>一个自然周</strong>的 BI 汇总，扣分来自该周内 <code>anomaly_triggers</code> 等数据的<strong>归类汇总</strong>。「绩效审核」里的 <strong>BI 按日触发</strong> 是按触发日展开的原始命中。看板<strong>本月已扣分数</strong>取统计月内、按更新时间最新的周行 <code>breakdown</code> 中的<strong>本月累计扣分</strong>（与 periodic-scoring 写入一致）；<strong>最新绩效得分 = 100 − 本月已扣分数</strong>。某周行的 <code>total_score</code> 为引擎内另一滚存口径，可能与「100 − 累计扣分」不同，底部脚注会同时展示。</div>
                             </details>
-                            <div id="dc-live-dashboard-body" class="dc-kpi-grid" style="padding:14px 18px 18px;border-top:1px solid rgba(148,163,184,0.08);">
-                                <div style="grid-column:1/-1;font-size:12px;color:#64748b;">请在下方「个人绩效分由来」输入姓名或账号后，点击「刷新看板」；本页停留时每约 45 秒与绩效分由来一并自动刷新。</div>
+                            <div id="dc-live-dashboard-body" class="dc-live-surface">
+                                <div style="font-size:12px;color:#64748b;">请在下方「个人绩效分由来」输入姓名或账号后，点击「刷新看板」；本页停留时每约 45 秒与绩效分由来一并自动刷新。</div>
                             </div>
                         </section>
                         <section class="dc-panel">
@@ -22578,7 +22620,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
 
         function renderDcLiveDashboardError(msg) {
             const out = document.getElementById('dc-live-dashboard-body');
-            if (out) out.innerHTML = '<div style="grid-column:1/-1;font-size:12px;color:#f87171;">' + escapeHtml(String(msg || '加载失败')) + '</div>';
+            if (out) out.innerHTML = '<div style="font-size:12px;color:#f87171;">' + escapeHtml(String(msg || '加载失败')) + '</div>';
         }
 
         function renderDcLiveDashboardFromJson(j) {
@@ -22588,27 +22630,43 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             if (asof) {
                 asof.textContent = j.as_of_shanghai ? `数据截止（沪）：${j.as_of_shanghai}` : '';
             }
-            const raw = j.bi_rollup_month_avg_raw;
-            const rawDisp = raw === null || typeof raw === 'undefined' || raw === '' ? '—' : Number(raw).toFixed(1);
-            const clamp = j.bi_rollup_month_avg_clamped_0_100;
-            const clampDisp = clamp === null || typeof clamp === 'undefined' ? '—' : Number(clamp).toFixed(1);
+            const dedN = Number(j.month_bi_deducted_total);
+            const dedDisp = Number.isFinite(dedN) ? dedN.toFixed(1) : '—';
+            const scoreN = Number(j.latest_performance_score);
+            let scoreDisp = '—';
+            if (Number.isFinite(scoreN)) scoreDisp = scoreN.toFixed(1);
+            else if (Number.isFinite(dedN)) scoreDisp = (100 - dedN).toFixed(1);
+            const srcP = j.rollup_breakdown_source_period ? escapeHtml(String(j.rollup_breakdown_source_period)) : '';
             const empRows = Array.isArray(j.employee_scores_rows) ? j.employee_scores_rows : [];
             const empLine = empRows.length
                 ? empRows.map((r) => `月度表 ${escapeHtml(r.store || '')}·${escapeHtml(r.role || '')}：<strong>${escapeHtml(String(r.total_score != null ? r.total_score : '—'))}</strong>（执行力 ${escapeHtml(String(r.execution_rating || '—'))}）`).join('<br>')
                 : '<span style="color:#64748b;">月度 employee_scores 尚无该月行（可能未到关账）</span>';
             const lw = j.latest_weekly_anomaly_row;
             const lwLine = lw
-                ? `最新周汇总行：<strong>${escapeHtml(String(lw.total_score != null ? Number(lw.total_score).toFixed(1) : '—'))}</strong> 分 · ${escapeHtml(String(lw.period || ''))}`
+                ? `最新周汇总行 total_score：<strong>${escapeHtml(String(lw.total_score != null ? Number(lw.total_score).toFixed(1) : '—'))}</strong> · ${escapeHtml(String(lw.period || ''))}`
                 : '暂无周汇总行';
             const who = `${escapeHtml(String(j.resolvedName || j.username || ''))} <span style="color:#64748b;">(${escapeHtml(String(j.username || ''))})</span>`;
+            const dedSub = srcP ? `数据取自该月内最近更新的周行 <code style="font-size:9px;">${srcP}</code> 的 breakdown。` : '该统计月内暂无有效 BI 周汇总行，已扣分数按 0。';
             out.innerHTML =
-                '<div style="grid-column:1/-1;margin-bottom:8px;font-size:12px;color:#94a3b8;">' + who + ' · 统计月 <strong style="color:#e2e8f0;">' + escapeHtml(String(j.period || '')) + '</strong></div>' +
-                '<div class="dc-kpi dc-kpi--a"><div class="dc-kpi-label">BI 月均（原始）</div><div class="dc-kpi-val" style="color:#fb923c;">' + escapeHtml(rawDisp) + '</div><div class="dc-kpi-s">当月各周 anomaly_rollups_v2 行均分，可 &lt; 0</div></div>' +
-                '<div class="dc-kpi dc-kpi--b"><div class="dc-kpi-label">BI 月均（0～100 截断）</div><div class="dc-kpi-val" style="color:#fde68a;">' + escapeHtml(clampDisp) + '</div><div class="dc-kpi-s">与写入 employee_scores 的绩效分算法对齐</div></div>' +
+                '<div class="dc-live-who">' + who + ' · 统计月 <strong style="color:#e2e8f0;">' + escapeHtml(String(j.period || '')) + '</strong></div>' +
+                '<div class="dc-live-hero">' +
+                '<div class="dc-live-hero-card dc-live-hero-card--ded">' +
+                '<div class="dc-live-hero-k">本月已扣分数</div>' +
+                '<div class="dc-live-hero-v">' + escapeHtml(dedDisp) + '</div>' +
+                '<div class="dc-live-hero-s">BI 统计月内系统累计扣分（周行 JSON「本月累计扣分」）。' + dedSub + '</div>' +
+                '</div>' +
+                '<div class="dc-live-hero-card dc-live-hero-card--score">' +
+                '<div class="dc-live-hero-k">最新绩效得分</div>' +
+                '<div class="dc-live-hero-v">' + escapeHtml(scoreDisp) + '</div>' +
+                '<div class="dc-live-hero-s">按 <strong>100 − 本月已扣分数</strong> 计算，便于与满分对齐理解。</div>' +
+                '</div></div>' +
+                '<div class="dc-live-sec-head">备案与能力</div>' +
+                '<div class="dc-live-secondary">' +
                 '<div class="dc-kpi dc-kpi--c"><div class="dc-kpi-label">执行力备案数</div><div class="dc-kpi-val">' + escapeHtml(String(j.execution_filing_count ?? 0)) + '</div><div class="dc-kpi-s">ops_tasks · execution_rating_daily</div></div>' +
-                '<div class="dc-kpi dc-kpi--d"><div class="dc-kpi-label">态度备案数</div><div class="dc-kpi-val">' + escapeHtml(String(j.attitude_filing_count ?? 0)) + '</div><div class="dc-kpi-s">master_tasks · hr_performance_recorded</div></div>' +
+                '<div class="dc-kpi dc-kpi--d"><div class="dc-kpi-label">态度备案数</div><div class="dc-kpi-val">' + escapeHtml(String(j.attitude_filing_count ?? 0)) + '</div><div class="dc-kpi-s">master_tasks · hr_performance_record</div></div>' +
                 '<div class="dc-kpi dc-kpi--a"><div class="dc-kpi-label">能力备案数</div><div class="dc-kpi-val">' + escapeHtml(String(j.ability_filing_count ?? 0)) + '</div><div class="dc-kpi-s">' + escapeHtml(String(j.ability_filing_note || '')) + '</div></div>' +
-                '<div style="grid-column:1/-1;margin-top:10px;padding:10px 12px;border-radius:12px;background:rgba(2,6,23,0.45);border:1px solid rgba(148,163,184,0.12);font-size:12px;color:#cbd5e1;line-height:1.55;">' + empLine + '<div style="margin-top:8px;color:#94a3b8;">' + lwLine + '</div></div>';
+                '</div>' +
+                '<div class="dc-live-foot">' + empLine + '<div style="margin-top:10px;color:#94a3b8;">' + lwLine + '</div></div>';
         }
 
         async function loadDcEmployeeLiveDashboard(pickUsername) {
@@ -22619,7 +22677,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             if (!inp || !out) return;
             const u = String(pickUsername || inp.value || '').trim();
             if (!u) {
-                out.innerHTML = '<div style="grid-column:1/-1;font-size:12px;color:#fbbf24;">请先在下方「个人绩效分由来」输入姓名或飞书账号。</div>';
+                out.innerHTML = '<div style="font-size:12px;color:#fbbf24;">请先在下方「个人绩效分由来」输入姓名或飞书账号。</div>';
                 const asof = document.getElementById('dc-live-asof');
                 if (asof) asof.textContent = '';
                 return;
@@ -22629,7 +22687,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 period = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 7);
                 if (per) per.value = period;
             }
-            out.innerHTML = '<div style="grid-column:1/-1;color:#64748b;">看板加载中…</div>';
+            out.innerHTML = '<div style="color:#64748b;">看板加载中…</div>';
             try {
                 const qs = new URLSearchParams({ q: u, period });
                 const r = await fetch('/api/agents/employee-live-dashboard?' + qs.toString(), { headers: hdr });
@@ -22642,7 +22700,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         })
                         .join('');
                     out.innerHTML =
-                        '<div style="grid-column:1/-1;color:#fbbf24;margin-bottom:8px;">' + escapeHtml(String(j.message || '多名匹配')) + '</div>' + btns;
+                        '<div style="color:#fbbf24;margin-bottom:8px;">' + escapeHtml(String(j.message || '多名匹配')) + '</div>' + btns;
                     return;
                 }
                 if (!r.ok || j.error) {
