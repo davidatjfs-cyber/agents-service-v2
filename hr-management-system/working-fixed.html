@@ -13000,6 +13000,35 @@
                         <section class="dc-panel">
                             <div class="dc-panel-head">
                                 <div>
+                                    <h3>绩效审核</h3>
+                                    <p class="dc-panel-sub">仅管理员可见。支持查询周度扣分、备案与失效记录，并可直接执行失效操作。</p>
+                                </div>
+                            </div>
+                            <div class="dc-toolbar">
+                                <input id="dc-perf-audit-period" type="month" placeholder="统计月份" />
+                                <input id="dc-perf-audit-username" type="text" placeholder="员工账号（留空查全部）" />
+                                <button type="button" class="dc-btn-go" onclick="loadDataCenterPerformanceAuditRecords()">查询</button>
+                            </div>
+                            <div style="padding:12px 18px 18px;">
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                                    <div style="font-size:13px;font-weight:700;color:#94a3b8;">周度扣分记录</div>
+                                    <span id="dc-perf-audit-weekly-count" style="font-size:12px;color:#64748b;">0 条</span>
+                                </div>
+                                <div id="dc-perf-audit-weekly-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;">
+                                    <div style="font-size:13px;font-weight:700;color:#94a3b8;">备案记录</div>
+                                    <span id="dc-perf-audit-filing-count" style="font-size:12px;color:#64748b;">0 条</span>
+                                </div>
+                                <div id="dc-perf-audit-filing-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;">
+                                    <div style="font-size:13px;font-weight:700;color:#94a3b8;">失效操作记录</div>
+                                </div>
+                                <div id="dc-perf-audit-invalidation-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+                            </div>
+                        </section>
+                        <section class="dc-panel">
+                            <div class="dc-panel-head">
+                                <div>
                                     <h3>绩效看板</h3>
                                     <p class="dc-panel-sub">周度 BI 汇总与仪表盘指标。</p>
                                 </div>
@@ -21763,6 +21792,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             if (btnCard) btnCard.style.display = canManageAgents ? '' : 'none';
             if (lockTip) lockTip.style.display = canManageAgents ? 'none' : '';
             loadDataCenterDashboard();
+            if (role === ROLES.ADMIN) loadDataCenterPerformanceAuditRecords();
         }
 
         async function loadDataCenterDashboard() {
@@ -24382,7 +24412,28 @@ ${knowledgeContent.slice(0, 30000)}`;
         }
 
         // ─── 绩效审核 ───
+        function initPerformanceAuditMonthInput(inputId) {
+            const el = document.getElementById(inputId);
+            if (!el || el.value) return;
+            const d = new Date();
+            d.setDate(1);
+            d.setMonth(d.getMonth() - 1);
+            el.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        }
+
+        function getPerformanceAuditDom(prefix) {
+            return {
+                results: document.getElementById(prefix + 'results'),
+                weeklyList: document.getElementById(prefix + 'weekly-list'),
+                weeklyCount: document.getElementById(prefix + 'weekly-count'),
+                filingList: document.getElementById(prefix + 'filing-list'),
+                filingCount: document.getElementById(prefix + 'filing-count'),
+                invalidationList: document.getElementById(prefix + 'invalidation-list')
+            };
+        }
+
         async function loadPerformanceAuditRecords() {
+            initPerformanceAuditMonthInput('perf-audit-period');
             const period = String(document.getElementById('perf-audit-period')?.value || '').trim();
             const username = String(document.getElementById('perf-audit-username')?.value || '').trim();
             if (!period) { showNotification('请选择统计月份', 'warning'); return; }
@@ -24398,24 +24449,23 @@ ${knowledgeContent.slice(0, 30000)}`;
                 if (!resp.ok) { showNotification('查询失败（无权限或接口错误）', 'error'); return; }
                 const data = await resp.json();
                 if (!data.success) { showNotification(data.error || '查询失败', 'error'); return; }
-                renderPerformanceAudit(data.data, period);
+                renderPerformanceAuditToDom(getPerformanceAuditDom('perf-audit-'), data.data, period, 'acm-empty');
             } catch (e) {
                 showNotification('查询异常', 'error');
             }
         }
 
-        function renderPerformanceAudit(data, period) {
-            const results = document.getElementById('perf-audit-results');
+        function renderPerformanceAuditToDom(dom, data, period, emptyClassName) {
+            const results = dom?.results;
             if (results) results.style.display = 'block';
 
-            // Weekly scores
-            const weeklyList = document.getElementById('perf-audit-weekly-list');
-            const weeklyCount = document.getElementById('perf-audit-weekly-count');
+            const weeklyList = dom?.weeklyList;
+            const weeklyCount = dom?.weeklyCount;
             const weeks = data.weekly_scores || [];
             if (weeklyCount) weeklyCount.textContent = weeks.length + ' 条';
             if (weeklyList) {
                 if (!weeks.length) {
-                    weeklyList.innerHTML = '<div class="acm-empty">无周度扣分记录</div>';
+                    weeklyList.innerHTML = `<div class="${emptyClassName}">无周度扣分记录</div>`;
                 } else {
                     weeklyList.innerHTML = weeks.map(w => {
                         const inv = w.is_invalidated;
@@ -24440,13 +24490,13 @@ ${knowledgeContent.slice(0, 30000)}`;
             }
 
             // Filings
-            const filingList = document.getElementById('perf-audit-filing-list');
-            const filingCount = document.getElementById('perf-audit-filing-count');
+            const filingList = dom?.filingList;
+            const filingCount = dom?.filingCount;
             const filings = data.filings || [];
             if (filingCount) filingCount.textContent = filings.length + ' 条';
             if (filingList) {
                 if (!filings.length) {
-                    filingList.innerHTML = '<div class="acm-empty">无备案记录</div>';
+                    filingList.innerHTML = `<div class="${emptyClassName}">无备案记录</div>`;
                 } else {
                     filingList.innerHTML = filings.map(f => {
                         const inv = f.is_invalidated;
@@ -24468,11 +24518,11 @@ ${knowledgeContent.slice(0, 30000)}`;
             }
 
             // Invalidation history
-            const invList = document.getElementById('perf-audit-invalidation-list');
+            const invList = dom?.invalidationList;
             const invs = data.invalidations || [];
             if (invList) {
                 if (!invs.length) {
-                    invList.innerHTML = '<div class="acm-empty">无失效操作记录</div>';
+                    invList.innerHTML = `<div class="${emptyClassName}">无失效操作记录</div>`;
                 } else {
                     invList.innerHTML = invs.map(iv => {
                         const dt = iv.invalidated_at ? new Date(iv.invalidated_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) : '';
@@ -24485,6 +24535,29 @@ ${knowledgeContent.slice(0, 30000)}`;
                         </div>`;
                     }).join('');
                 }
+            }
+        }
+
+        async function loadDataCenterPerformanceAuditRecords() {
+            initPerformanceAuditMonthInput('dc-perf-audit-period');
+            const period = String(document.getElementById('dc-perf-audit-period')?.value || '').trim();
+            const username = String(document.getElementById('dc-perf-audit-username')?.value || '').trim();
+            if (!period) { showNotification('请选择统计月份', 'warning'); return; }
+            const token = (typeof HRMS_API !== 'undefined' && HRMS_API && typeof HRMS_API.token === 'function')
+                ? HRMS_API.token()
+                : String(localStorage.getItem('HRMS_API_TOKEN') || localStorage.getItem('hrms_token') || '').trim();
+            const params = new URLSearchParams({ period });
+            if (username) params.set('username', username);
+            try {
+                const resp = await fetch('/api/admin/performance-records?' + params, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!resp.ok) { showNotification('查询失败（无权限或接口错误）', 'error'); return; }
+                const data = await resp.json();
+                if (!data.success) { showNotification(data.error || '查询失败', 'error'); return; }
+                renderPerformanceAuditToDom(getPerformanceAuditDom('dc-perf-audit-'), data.data, period, 'acm-empty');
+            } catch (e) {
+                showNotification('查询异常', 'error');
             }
         }
 
@@ -24504,6 +24577,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                         : '已失效，得分无变化。';
                     showNotification(msg, 'success');
                     loadPerformanceAuditRecords();
+                    loadDataCenterPerformanceAuditRecords();
                 } else {
                     showNotification(data.error || data.message || '操作失败', 'error');
                 }
