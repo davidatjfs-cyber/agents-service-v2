@@ -13003,6 +13003,27 @@
                         <section class="dc-panel">
                             <div class="dc-panel-head">
                                 <div>
+                                    <h3>考核员工实时看板</h3>
+                                    <p class="dc-panel-sub">与下方「个人绩效分由来」共用同一输入框（姓名或飞书账号）；备案数与飞书绩效卡「本月累计备案」SQL 同源，每次刷新均为数据库实时值。</p>
+                                </div>
+                            </div>
+                            <div class="dc-toolbar" style="border-bottom:none;">
+                                <label for="dc-live-period" style="font-size:11px;color:#64748b;">统计月</label>
+                                <input id="dc-live-period" class="dc-input-date" type="month" />
+                                <button type="button" class="dc-btn-go" onclick="loadDcEmployeeLiveDashboard()">刷新看板</button>
+                                <span id="dc-live-asof" style="margin-left:auto;font-size:11px;color:#64748b;"></span>
+                            </div>
+                            <details class="dc-doc" style="margin:0 18px 12px;">
+                                <summary>周度扣分与「每日」项是什么关系？</summary>
+                                <div class="dc-doc-body">周度列表里每一行是<strong>一个自然周</strong>的 BI 汇总分，其中的扣分项（充值异常、差评产品/服务、食安等）来自该周内 <code>anomaly_triggers</code> 等数据的<strong>归类汇总</strong>，不是把「每一天」各打一行混在周列表里。「绩效审核」里的 <strong>BI 按日触发</strong> 才是按触发日展开的原始命中。某周卡片上的 <strong>-40</strong> 表示<strong>该周这一行</strong>的汇总分；整月口径另见下方「BI 月均」与「月度表」。</div>
+                            </details>
+                            <div id="dc-live-dashboard-body" class="dc-kpi-grid" style="padding:14px 18px 18px;border-top:1px solid rgba(148,163,184,0.08);">
+                                <div style="grid-column:1/-1;font-size:12px;color:#64748b;">请在下方「个人绩效分由来」输入姓名或账号后，点击「刷新看板」；本页停留时每约 45 秒与绩效分由来一并自动刷新。</div>
+                            </div>
+                        </section>
+                        <section class="dc-panel">
+                            <div class="dc-panel-head">
+                                <div>
                                     <h3>个人绩效分由来</h3>
                                     <p class="dc-panel-sub">查询已写入绩效分表的记录；本页约 45 秒自动刷新摘要与健康条。</p>
                                 </div>
@@ -18932,6 +18953,9 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                     if (__dcProvWatchUser && typeof loadDcScoreProvenance === 'function') {
                         loadDcScoreProvenance(__dcProvWatchUser);
                     }
+                    if (__dcProvWatchUser && typeof loadDcEmployeeLiveDashboard === 'function') {
+                        loadDcEmployeeLiveDashboard(__dcProvWatchUser);
+                    }
                 } catch (e) {}
             }, 45000);
         }
@@ -21824,6 +21848,12 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             if (btnMain) btnMain.style.display = canManageAgents ? '' : 'none';
             if (btnCard) btnCard.style.display = canManageAgents ? '' : 'none';
             if (lockTip) lockTip.style.display = canManageAgents ? 'none' : '';
+            try {
+                const lp = document.getElementById('dc-live-period');
+                if (lp && !lp.value) {
+                    lp.value = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 7);
+                }
+            } catch (e) {}
             loadDataCenterDashboard();
             if (role === ROLES.ADMIN) loadDataCenterPerformanceAuditRecords();
         }
@@ -22539,9 +22569,89 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     '<div style="color:#94a3b8;font-weight:600;margin:14px 0 6px;">公司通知 / 备案（库表 <code style="font-size:10px;">hrms_user_notifications</code>）</div>' +
                     (notes || '<div style="color:#475569;">无记录</div>');
                 __dcProvWatchUser = String(j.username || '').trim() || null;
+                try { loadDcEmployeeLiveDashboard(__dcProvWatchUser); } catch (e2) {}
             } catch (e) {
                 __dcProvWatchUser = null;
                 out.innerHTML = '<span style="color:#ef4444;">加载失败</span>';
+            }
+        }
+
+        function renderDcLiveDashboardError(msg) {
+            const out = document.getElementById('dc-live-dashboard-body');
+            if (out) out.innerHTML = '<div style="grid-column:1/-1;font-size:12px;color:#f87171;">' + escapeHtml(String(msg || '加载失败')) + '</div>';
+        }
+
+        function renderDcLiveDashboardFromJson(j) {
+            const out = document.getElementById('dc-live-dashboard-body');
+            const asof = document.getElementById('dc-live-asof');
+            if (!out) return;
+            if (asof) {
+                asof.textContent = j.as_of_shanghai ? `数据截止（沪）：${j.as_of_shanghai}` : '';
+            }
+            const raw = j.bi_rollup_month_avg_raw;
+            const rawDisp = raw === null || typeof raw === 'undefined' || raw === '' ? '—' : Number(raw).toFixed(1);
+            const clamp = j.bi_rollup_month_avg_clamped_0_100;
+            const clampDisp = clamp === null || typeof clamp === 'undefined' ? '—' : Number(clamp).toFixed(1);
+            const empRows = Array.isArray(j.employee_scores_rows) ? j.employee_scores_rows : [];
+            const empLine = empRows.length
+                ? empRows.map((r) => `月度表 ${escapeHtml(r.store || '')}·${escapeHtml(r.role || '')}：<strong>${escapeHtml(String(r.total_score != null ? r.total_score : '—'))}</strong>（执行力 ${escapeHtml(String(r.execution_rating || '—'))}）`).join('<br>')
+                : '<span style="color:#64748b;">月度 employee_scores 尚无该月行（可能未到关账）</span>';
+            const lw = j.latest_weekly_anomaly_row;
+            const lwLine = lw
+                ? `最新周汇总行：<strong>${escapeHtml(String(lw.total_score != null ? Number(lw.total_score).toFixed(1) : '—'))}</strong> 分 · ${escapeHtml(String(lw.period || ''))}`
+                : '暂无周汇总行';
+            const who = `${escapeHtml(String(j.resolvedName || j.username || ''))} <span style="color:#64748b;">(${escapeHtml(String(j.username || ''))})</span>`;
+            out.innerHTML =
+                '<div style="grid-column:1/-1;margin-bottom:8px;font-size:12px;color:#94a3b8;">' + who + ' · 统计月 <strong style="color:#e2e8f0;">' + escapeHtml(String(j.period || '')) + '</strong></div>' +
+                '<div class="dc-kpi dc-kpi--a"><div class="dc-kpi-label">BI 月均（原始）</div><div class="dc-kpi-val" style="color:#fb923c;">' + escapeHtml(rawDisp) + '</div><div class="dc-kpi-s">当月各周 anomaly_rollups_v2 行均分，可 &lt; 0</div></div>' +
+                '<div class="dc-kpi dc-kpi--b"><div class="dc-kpi-label">BI 月均（0～100 截断）</div><div class="dc-kpi-val" style="color:#fde68a;">' + escapeHtml(clampDisp) + '</div><div class="dc-kpi-s">与写入 employee_scores 的绩效分算法对齐</div></div>' +
+                '<div class="dc-kpi dc-kpi--c"><div class="dc-kpi-label">执行力备案数</div><div class="dc-kpi-val">' + escapeHtml(String(j.execution_filing_count ?? 0)) + '</div><div class="dc-kpi-s">ops_tasks · execution_rating_daily</div></div>' +
+                '<div class="dc-kpi dc-kpi--d"><div class="dc-kpi-label">态度备案数</div><div class="dc-kpi-val">' + escapeHtml(String(j.attitude_filing_count ?? 0)) + '</div><div class="dc-kpi-s">master_tasks · hr_performance_recorded</div></div>' +
+                '<div class="dc-kpi dc-kpi--a"><div class="dc-kpi-label">能力备案数</div><div class="dc-kpi-val">' + escapeHtml(String(j.ability_filing_count ?? 0)) + '</div><div class="dc-kpi-s">' + escapeHtml(String(j.ability_filing_note || '')) + '</div></div>' +
+                '<div style="grid-column:1/-1;margin-top:10px;padding:10px 12px;border-radius:12px;background:rgba(2,6,23,0.45);border:1px solid rgba(148,163,184,0.12);font-size:12px;color:#cbd5e1;line-height:1.55;">' + empLine + '<div style="margin-top:8px;color:#94a3b8;">' + lwLine + '</div></div>';
+        }
+
+        async function loadDcEmployeeLiveDashboard(pickUsername) {
+            const hdr = { Authorization: 'Bearer ' + (HRMS_API.token ? HRMS_API.token() : '') };
+            const inp = document.getElementById('dc-prov-username');
+            const per = document.getElementById('dc-live-period');
+            const out = document.getElementById('dc-live-dashboard-body');
+            if (!inp || !out) return;
+            const u = String(pickUsername || inp.value || '').trim();
+            if (!u) {
+                out.innerHTML = '<div style="grid-column:1/-1;font-size:12px;color:#fbbf24;">请先在下方「个人绩效分由来」输入姓名或飞书账号。</div>';
+                const asof = document.getElementById('dc-live-asof');
+                if (asof) asof.textContent = '';
+                return;
+            }
+            let period = String(per?.value || '').trim();
+            if (!period) {
+                period = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 7);
+                if (per) per.value = period;
+            }
+            out.innerHTML = '<div style="grid-column:1/-1;color:#64748b;">看板加载中…</div>';
+            try {
+                const qs = new URLSearchParams({ q: u, period });
+                const r = await fetch('/api/agents/employee-live-dashboard?' + qs.toString(), { headers: hdr });
+                const j = await r.json();
+                if (r.status === 409 && j.candidates && j.candidates.length) {
+                    const btns = j.candidates
+                        .map((c) => {
+                            const uj = JSON.stringify(String(c.username || ''));
+                            return `<button type="button" class="btn btn-secondary" style="margin:4px 6px 0 0;padding:4px 10px;font-size:11px;" onclick="loadDcScoreProvenance(${uj})">${escapeHtml(String(c.name || ''))} <span style="color:#64748b;">(${escapeHtml(String(c.username || ''))})</span></button>`;
+                        })
+                        .join('');
+                    out.innerHTML =
+                        '<div style="grid-column:1/-1;color:#fbbf24;margin-bottom:8px;">' + escapeHtml(String(j.message || '多名匹配')) + '</div>' + btns;
+                    return;
+                }
+                if (!r.ok || j.error) {
+                    renderDcLiveDashboardError(j.message || j.error || '加载失败');
+                    return;
+                }
+                renderDcLiveDashboardFromJson(j);
+            } catch (e) {
+                renderDcLiveDashboardError(e?.message || e);
             }
         }
 

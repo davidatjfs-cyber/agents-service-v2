@@ -25,7 +25,8 @@ import { isExternalEnabled } from './safety.js';
 import crypto from 'crypto';
 import { 
   calculateStoreRating, 
-  calculateEmployeeScore 
+  calculateEmployeeScore,
+  getMonthlyAnomalyRollupAverageScore
 } from './new-scoring-model.js';
 import { 
   AgentCommunicationSystem, 
@@ -12061,6 +12062,160 @@ export function registerAgentRoutes(app, authRequired) {
         resolvedName,
         scores: scoresR.rows || [],
         notifications: notif.rows || []
+      });
+    } catch (e) {
+      return res.status(500).json({ error: String(e?.message || e) });
+    }
+  });
+
+  /**
+   * 数据中心：考核员工实时看板（BI 月均、执行力/态度备案数、月度表快照、最新周汇总行）
+   * 与飞书绩效卡「本月累计备案」SQL 同源（performance-filing-counts-pg）。
+   */
+  app.get('/api/agents/employee-live-dashboard', authRequired, async (req, res) => {
+    const role = String(req.user?.role || '').trim();
+    if (!['admin', 'hq_manager', 'hr_manager'].includes(role)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    const raw = String(req.query?.q || req.query?.username || '').trim();
+    if (!raw) return res.status(400).json({ error: 'q or username required' });
+    let period = String(req.query?.period || '').trim();
+    if (!/^\d{4}-\d{2}$/.test(period)) {
+      period = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 7);
+    }
+    const p = pool();
+    const shanghaiYmd = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+    try {
+      let resolvedUsername = null;
+      let resolvedName = null;
+      const byUser = await p
+        .query(
+          `SELECT username, COALESCE(NULLIF(TRIM(name), ''), username) AS disp
+           FROM feishu_users
+           WHERE registered = true AND LOWER(TRIM(username)) = LOWER(TRIM($1))
+           LIMIT 1`,
+          [raw]
+        )
+        .catch(() => ({ rows: [] }));
+      if (byUser.rows?.length) {
+        resolvedUsername = byUser.rows[0].username;
+        resolvedName = byUser.rows[0].disp;
+      } else {
+        const byExactName = await p
+          .query(
+            `SELECT username, COALESCE(NULLIF(TRIM(name), ''), username) AS disp
+             FROM feishu_users
+             WHERE registered = true AND TRIM(name) = $1
+             ORDER BY updated_at DESC NULLS LAST
+             LIMIT 8`,
+            [raw]
+          )
+          .catch(() => ({ rows: [] }));
+        if (byExactName.rows?.length === 1) {
+          resolvedUsername = byExactName.rows[0].username;
+          resolvedName = byExactName.rows[0].disp;
+        } else if (byExactName.rows?.length > 1) {
+          return res.status(409).json({
+            error: 'ambiguous_name',
+            message: '存在多名同姓名用户，请改用飞书账号或补全区分信息',
+            query: raw,
+            candidates: byExactName.rows.map((r) => ({ username: r.username, name: r.disp }))
+          });
+        } else {
+          const byLike = await p
+            .query(
+              `SELECT username, COALESCE(NULLIF(TRIM(name), ''), username) AS disp
+               FROM feishu_users
+               WHERE registered = true AND name ILIKE $1
+               ORDER BY updated_at DESC NULLS LAST
+               LIMIT 8`,
+              [`%${raw}%`]
+            )
+            .catch(() => ({ rows: [] }));
+          if (byLike.rows?.length === 1) {
+            resolvedUsername = byLike.rows[0].username;
+            resolvedName = byLike.rows[0].disp;
+          } else if (byLike.rows?.length > 1) {
+            return res.status(409).json({
+              error: 'ambiguous_match',
+              message: '匹配到多名用户，请缩小关键词或改用飞书账号',
+              query: raw,
+              candidates: byLike.rows.map((r) => ({ username: r.username, name: r.disp }))
+            });
+          } else {
+            return res.status(404).json({
+              error: 'not_found',
+              message: '未找到匹配的飞书用户（可试姓名全称或账号）',
+              query: raw
+            });
+          }
+        }
+      }
+
+      const prof = await p
+        .query(
+          `SELECT store, role
+           FROM feishu_users
+           WHERE registered = true AND LOWER(TRIM(username)) = LOWER(TRIM($1))
+           ORDER BY updated_at DESC NULLS LAST
+           LIMIT 1`,
+          [resolvedUsername]
+        )
+        .catch(() => ({ rows: [] }));
+      const store = String(prof.rows?.[0]?.store || '').trim();
+      const feishuRole = String(prof.rows?.[0]?.role || '').trim();
+
+      const biAvgRaw = await getMonthlyAnomalyRollupAverageScore(resolvedUsername, period);
+      const biAvgNum = Number(biAvgRaw);
+      const biClamped = Number.isFinite(biAvgNum) ? Math.min(100, Math.max(0, biAvgNum)) : null;
+
+      const empR = await p
+        .query(
+          `SELECT store, role, total_score, execution_rating, attitude_rating, ability_rating,
+                  base_score, exception_bonus, exception_deduction, updated_at
+           FROM employee_scores
+           WHERE LOWER(TRIM(username)) = LOWER(TRIM($1)) AND period = $2
+           ORDER BY updated_at DESC NULLS LAST`,
+          [resolvedUsername, period]
+        )
+        .catch(() => ({ rows: [] }));
+
+      const latestWeek = await p
+        .query(
+          `SELECT period, total_score, updated_at, LEFT(COALESCE(summary, ''), 200) AS summary
+           FROM agent_scores
+           WHERE LOWER(TRIM(username)) = LOWER(TRIM($1))
+             AND score_model = 'anomaly_rollups_v2'
+             AND period LIKE 'week_%'
+           ORDER BY updated_at DESC NULLS LAST
+           LIMIT 1`,
+          [resolvedUsername]
+        )
+        .catch(() => ({ rows: [] }));
+
+      let executionFiling = 0;
+      if (store) {
+        executionFiling = await pgGetMonthlyExecutionFilingCount(p, resolvedUsername, store, shanghaiYmd);
+      }
+      const attitudeFiling = await pgGetMonthlyAttitudeFilingCount(p, resolvedUsername, shanghaiYmd);
+
+      return res.json({
+        query: raw,
+        period,
+        as_of_shanghai: shanghaiYmd,
+        username: resolvedUsername,
+        resolvedName,
+        store,
+        feishu_role: feishuRole,
+        bi_rollup_month_avg_raw: biAvgRaw,
+        bi_rollup_month_avg_clamped_0_100: biClamped,
+        employee_scores_rows: empR.rows || [],
+        latest_weekly_anomaly_row: latestWeek.rows?.[0] || null,
+        execution_filing_count: executionFiling,
+        attitude_filing_count: attitudeFiling,
+        ability_filing_count: 0,
+        ability_filing_note:
+          '能力维度为毛利率/点评等指标评级，当前无与「能力」对应的独立备案任务计数（与飞书绩效卡一致仅统计执行力日评 + 态度任务备案）。'
       });
     } catch (e) {
       return res.status(500).json({ error: String(e?.message || e) });

@@ -270,7 +270,7 @@ export async function calculateStoreRating(store, brand, period) {
  * 与 agents-service「月度综合」一致：上月各自然周 `anomaly_rollups_v2` 的 total_score 算术平均。
  * BI 异常经 periodic-scoring 已体现在周行扣分与 total_score 中；此处不再用 agent_issues 加减分混算 total_score，避免双口径。
  */
-async function getMonthlyAnomalyRollupAverageScore(username, period) {
+export async function getMonthlyAnomalyRollupAverageScore(username, period) {
   const [year, month] = String(period || '').split('-');
   if (!year || !month) return 100;
   const startDate = `${year}-${month}-01`;
