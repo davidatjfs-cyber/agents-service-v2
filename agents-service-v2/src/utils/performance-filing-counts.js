@@ -40,6 +40,11 @@ export async function getMonthlyAttitudeFilingCount(username, dateYmd) {
        WHERE lower(trim(coalesce(assignee_username, ''))) = lower(trim($1))
          AND source = ANY($2::text[])
          AND coalesce(hr_performance_recorded, false) = true
+         AND NOT EXISTS (
+           SELECT 1 FROM performance_invalidation_records pir
+           WHERE pir.source_type = 'master_tasks_filing'
+             AND pir.source_id = master_tasks.task_id
+         )
          AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date >= $3::date
          AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date <= $4::date`,
       [username, sources, monthStart, dateYmd]
@@ -64,6 +69,11 @@ export async function getMonthlyAttitudeFilingCountForStore(username, store, dat
          AND lower(trim(coalesce(store, ''))) = lower(trim($5))
          AND source = ANY($2::text[])
          AND coalesce(hr_performance_recorded, false) = true
+         AND NOT EXISTS (
+           SELECT 1 FROM performance_invalidation_records pir
+           WHERE pir.source_type = 'master_tasks_filing'
+             AND pir.source_id = master_tasks.task_id
+         )
          AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date >= $3::date
          AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date <= $4::date`,
       [username, sources, monthStart, dateYmd, String(store || '').trim()]

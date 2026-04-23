@@ -45,6 +45,7 @@ import {
 import { startDailyFeishuSync, syncDishLibraryCosts, setFeishuSyncFailureNotifier } from './feishu-sync.js';
 import { calculateStoreRating, calculateEmployeeScore } from './new-scoring-model.js';
 import { registerNewScoringRoutes } from './new-scoring-api.js';
+import { registerPerformanceInvalidationRoutes } from './performance-invalidation-api.js';
 import { handleMarginMessage } from './margin-message-handler.js';
 import { registerUploadStatusRoute } from './upload-status.js';
 import { ensureRAGSchema, ragQuery, ragMultiQuery, ragUpdateScope, ragStats } from './rag-tool.js';
@@ -15810,6 +15811,7 @@ registerAgentConfigRoutes(app, authRequired);
 
 registerMasterRoutes(app, authRequired);
 registerNewScoringRoutes(app, authRequired);
+registerPerformanceInvalidationRoutes(app, authRequired);
 registerTaskBoardRoutes(app, authRequired);
 registerHRMSApiRoutes(app, authRequired);
 registerSOPDistributionRoutes(app, authRequired);

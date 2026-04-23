@@ -10891,6 +10891,7 @@
                         <button id="agent-config-tab-btn-rules"     class="acm-tab"        onclick="switchAgentConfigTab('rules')">责任人规则</button>
                         <button id="agent-config-tab-btn-templates" class="acm-tab"        onclick="switchAgentConfigTab('templates')">模板库</button>
                         <button id="agent-config-tab-btn-hr-rating" class="acm-tab"        onclick="switchAgentConfigTab('hr_rating')">HR评级</button>
+                        <button id="agent-config-tab-btn-perf-audit" class="acm-tab"        onclick="switchAgentConfigTab('perf_audit')">绩效审核</button>
                     </div>
                     <div class="acm-body">
 
@@ -11056,8 +11057,42 @@
                                 </div>
                             </div>
                         </div>
-
-                    </div><!-- /.acm-body -->
+                        <!-- ── 绩效审核 ── -->
+                        <div id="agent-config-tab-perf_audit" class="acm-panel" style="display:none;">
+                            <div class="acm-card" style="background:linear-gradient(135deg, rgba(251,146,60,0.12), rgba(245,158,11,0.06));border:1px solid rgba(251,146,60,0.25);">
+                                <div class="acm-card-title" style="margin-bottom:12px;">\u270f\ufe0f 绩效记录审核</div>
+                                <div style="font-size:13px;color:#94a3b8;margin-bottom:14px;line-height:1.5;">查看每人每条扣分/备案记录，标记有问题的记录为失效。失效后系统自动重新计算绩效得分并通知变更。</div>
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                                    <div>
+                                        <label class="acm-lbl">统计月份</label>
+                                        <input type="month" id="perf-audit-period" class="acm-inp acm-inp-sm">
+                                    </div>
+                                    <div>
+                                        <label class="acm-lbl">员工账号（可选）</label>
+                                        <input type="text" id="perf-audit-username" class="acm-inp acm-inp-sm" placeholder="留空查全部">
+                                    </div>
+                                </div>
+                                <div style="margin-top:12px;">
+                                    <button class="acm-save" onclick="loadPerformanceAuditRecords()" style="flex:1;">查询记录</button>
+                                </div>
+                            </div>
+                            <div id="perf-audit-results" style="display:none;">
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                                    <div style="font-size:13px;font-weight:700;color:#94a3b8;">周度扣分记录</div>
+                                    <span id="perf-audit-weekly-count" style="font-size:12px;color:#64748b;"></span>
+                                </div>
+                                <div id="perf-audit-weekly-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;">
+                                    <div style="font-size:13px;font-weight:700;color:#94a3b8;">备案记录</div>
+                                    <span id="perf-audit-filing-count" style="font-size:12px;color:#64748b;"></span>
+                                </div>
+                                <div id="perf-audit-filing-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;">
+                                    <div style="font-size:13px;font-weight:700;color:#94a3b8;">失效操作记录</div>
+                                </div>
+                                <div id="perf-audit-invalidation-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+                            </div>
+                        </div>
                 </div><!-- /.acm-sheet -->
             </div><!-- /#agent-config-modal -->
 
@@ -23903,8 +23938,15 @@ ${knowledgeContent.slice(0, 30000)}`;
             }
             modal.style.display = 'flex';
             modal.classList.add('open');
-            ['configs', 'op_config', 'bi_config', 'rules', 'templates', 'hr_rating'].forEach((k) => { delete __AGENT_TAB_LOADED[k]; });
+            ['configs', 'op_config', 'bi_config', 'rules', 'templates', 'hr_rating', 'perf_audit'].forEach((k) => { delete __AGENT_TAB_LOADED[k]; });
             switchAgentConfigTab('configs');
+            const paInput = document.getElementById('perf-audit-period');
+            if (paInput && !paInput.value) {
+                const d = new Date();
+                d.setDate(1);
+                d.setMonth(d.getMonth() - 1);
+                paInput.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+            }
         }
 
         function closeAgentConfigModal() {
@@ -23923,6 +23965,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             document.getElementById('agent-config-tab-rules').style.display = tab === 'rules' ? 'block' : 'none';
             document.getElementById('agent-config-tab-templates').style.display = tab === 'templates' ? 'block' : 'none';
             document.getElementById('agent-config-tab-hr-rating').style.display = tab === 'hr_rating' ? 'block' : 'none';
+            document.getElementById('agent-config-tab-perf_audit').style.display = tab === 'perf_audit' ? 'block' : 'none';
 
             const cfgBtn = document.getElementById('agent-config-tab-btn-configs');
             const opBtn = document.getElementById('agent-config-tab-btn-op_config');
@@ -23943,6 +23986,9 @@ ${knowledgeContent.slice(0, 30000)}`;
             if (tplBtn) tplBtn.classList.toggle('btn-secondary', tab !== 'templates');
             if (hrBtn) hrBtn.classList.toggle('active', tab === 'hr_rating');
             if (hrBtn) hrBtn.classList.toggle('btn-secondary', tab !== 'hr_rating');
+            const paBtn = document.getElementById('agent-config-tab-btn-perf-audit');
+            if (paBtn) paBtn.classList.toggle('active', tab === 'perf_audit');
+            if (paBtn) paBtn.classList.toggle('btn-secondary', tab !== 'perf_audit');
 
             if (__AGENT_TAB_SWITCH_TIMER) clearTimeout(__AGENT_TAB_SWITCH_TIMER);
             __AGENT_TAB_SWITCH_TIMER = window.setTimeout(() => {
@@ -24315,6 +24361,135 @@ ${knowledgeContent.slice(0, 30000)}`;
                 showNotification(`${store}·${role === 'store_manager' ? '店长' : '出品经理'} 评级配置已保存`, 'success');
             } catch (e) {
                 showNotification('HR评级配置保存失败', 'error');
+            }
+        }
+
+        // ─── 绩效审核 ───
+        async function loadPerformanceAuditRecords() {
+            const period = String(document.getElementById('perf-audit-period')?.value || '').trim();
+            const username = String(document.getElementById('perf-audit-username')?.value || '').trim();
+            if (!period) { showNotification('请选择统计月份', 'warning'); return; }
+            const token = localStorage.getItem('hrms_token');
+            const params = new URLSearchParams({ period });
+            if (username) params.set('username', username);
+            try {
+                const resp = await fetch('/api/admin/performance-records?' + params, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!resp.ok) { showNotification('查询失败（无权限或接口错误）', 'error'); return; }
+                const data = await resp.json();
+                if (!data.success) { showNotification(data.error || '查询失败', 'error'); return; }
+                renderPerformanceAudit(data.data, period);
+            } catch (e) {
+                showNotification('查询异常', 'error');
+            }
+        }
+
+        function renderPerformanceAudit(data, period) {
+            const results = document.getElementById('perf-audit-results');
+            if (results) results.style.display = 'block';
+
+            // Weekly scores
+            const weeklyList = document.getElementById('perf-audit-weekly-list');
+            const weeklyCount = document.getElementById('perf-audit-weekly-count');
+            const weeks = data.weekly_scores || [];
+            if (weeklyCount) weeklyCount.textContent = weeks.length + ' 条';
+            if (weeklyList) {
+                if (!weeks.length) {
+                    weeklyList.innerHTML = '<div class="acm-empty">无周度扣分记录</div>';
+                } else {
+                    weeklyList.innerHTML = weeks.map(w => {
+                        const inv = w.is_invalidated;
+                        const deductions = (() => {
+                            try { const d = typeof w.deductions === 'string' ? JSON.parse(w.deductions) : w.deductions; return Array.isArray(d) ? d : []; } catch { return []; }
+                        })();
+                        const dedLines = deductions.filter(d => Number(d?.points || 0) > 0).map(d => `${escapeHtml(d.category || d.reason || '')} -${d.points}`).join('、');
+                        const bgStyle = inv
+                            ? 'background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);opacity:0.6;'
+                            : 'background:rgba(30,41,59,0.5);border:1px solid rgba(255,255,255,0.06);';
+                        return `<div style="padding:10px 12px;border-radius:8px;${bgStyle}">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                                <span style="font-size:13px;font-weight:600;color:#f1f5f9;">${escapeHtml(w.name || w.username)} <span style="color:#64748b;font-weight:400;">(${escapeHtml(w.username)})</span></span>
+                                <span style="font-size:14px;font-weight:700;color:${Number(w.total_score) < 100 ? '#fb923c' : '#22c55e'};">${w.total_score}分</span>
+                            </div>
+                            <div style="font-size:12px;color:#94a3b8;margin-bottom:4px;">${escapeHtml(w.period)} · ${escapeHtml(w.store)}</div>
+                            ${dedLines ? `<div style="font-size:12px;color:#fb923c;margin-bottom:4px;">${dedLines}</div>` : ''}
+                            ${inv ? '<div style="font-size:12px;color:#ef4444;font-weight:600;">已失效</div>' : `<button onclick="invalidatePerformanceRecord('agent_scores_weekly','${escapeHtml(String(w.id))}','${escapeHtml(w.username)}','${escapeHtml(w.store || '')}','${escapeHtml(period)}')" style="margin-top:6px;font-size:12px;padding:4px 12px;border-radius:6px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);cursor:pointer;">标记失效</button>`}
+                        </div>`;
+                    }).join('');
+                }
+            }
+
+            // Filings
+            const filingList = document.getElementById('perf-audit-filing-list');
+            const filingCount = document.getElementById('perf-audit-filing-count');
+            const filings = data.filings || [];
+            if (filingCount) filingCount.textContent = filings.length + ' 条';
+            if (filingList) {
+                if (!filings.length) {
+                    filingList.innerHTML = '<div class="acm-empty">无备案记录</div>';
+                } else {
+                    filingList.innerHTML = filings.map(f => {
+                        const inv = f.is_invalidated;
+                        const bgStyle = inv
+                            ? 'background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);opacity:0.6;'
+                            : 'background:rgba(30,41,59,0.5);border:1px solid rgba(255,255,255,0.06);';
+                        const dt = f.dispatched_at ? new Date(f.dispatched_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) : '';
+                        return `<div style="padding:10px 12px;border-radius:8px;${bgStyle}">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                                <span style="font-size:13px;font-weight:600;color:#f1f5f9;">${escapeHtml(f.assignee_username || '')}</span>
+                                <span style="font-size:11px;color:#64748b;">${escapeHtml(f.source || '')}</span>
+                            </div>
+                            <div style="font-size:12px;color:#94a3b8;margin-bottom:4px;">${escapeHtml(f.title || f.category || '')}</div>
+                            <div style="font-size:11px;color:#64748b;margin-bottom:4px;">${dt} · ${escapeHtml(f.store || '')}</div>
+                            ${inv ? '<div style="font-size:12px;color:#ef4444;font-weight:600;">已失效</div>' : `<button onclick="invalidatePerformanceRecord('master_tasks_filing','${escapeHtml(f.task_id)}','${escapeHtml(f.assignee_username || '')}','${escapeHtml(f.store || '')}','${period}')" style="margin-top:6px;font-size:12px;padding:4px 12px;border-radius:6px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);cursor:pointer;">标记失效</button>`}
+                        </div>`;
+                    }).join('');
+                }
+            }
+
+            // Invalidation history
+            const invList = document.getElementById('perf-audit-invalidation-list');
+            const invs = data.invalidations || [];
+            if (invList) {
+                if (!invs.length) {
+                    invList.innerHTML = '<div class="acm-empty">无失效操作记录</div>';
+                } else {
+                    invList.innerHTML = invs.map(iv => {
+                        const dt = iv.invalidated_at ? new Date(iv.invalidated_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) : '';
+                        const srcLabel = iv.source_type === 'agent_scores_weekly' ? '周度扣分' : iv.source_type === 'master_tasks_filing' ? '备案记录' : iv.source_type;
+                        return `<div style="padding:8px 12px;border-radius:8px;background:rgba(30,41,59,0.3);border:1px solid rgba(255,255,255,0.04);">
+                            <span style="font-size:12px;color:#f87171;font-weight:600;">已失效</span>
+                            <span style="font-size:12px;color:#94a3b8;margin-left:6px;">${srcLabel}</span>
+                            <span style="font-size:12px;color:#64748b;margin-left:6px;">${escapeHtml(iv.username || '')} · ${escapeHtml(iv.source_id || '')}</span>
+                            <span style="font-size:11px;color:#475569;margin-left:8px;">${dt} · by ${escapeHtml(iv.invalidated_by || '')}</span>
+                        </div>`;
+                    }).join('');
+                }
+            }
+        }
+
+        async function invalidatePerformanceRecord(sourceType, sourceId, username, store, period) {
+            if (!confirm(`确认失效该记录？\n\n类型：${sourceType === 'agent_scores_weekly' ? '周度扣分' : '备案记录'}\n员工：${username}\n\n失效后系统将自动重新计算绩效并通知变更。`)) return;
+            const token = localStorage.getItem('hrms_token');
+            try {
+                const resp = await fetch('/api/admin/performance-invalidate', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ source_type: sourceType, source_id: sourceId, username, store, period })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    const msg = data.data?.changed
+                        ? `已失效。绩效得分：${data.data.before?.total_score ?? '—'} → ${data.data.after?.total_score ?? '—'}`
+                        : '已失效，得分无变化。';
+                    showNotification(msg, 'success');
+                    loadPerformanceAuditRecords();
+                } else {
+                    showNotification(data.error || data.message || '操作失败', 'error');
+                }
+            } catch (e) {
+                showNotification('操作异常', 'error');
             }
         }
 

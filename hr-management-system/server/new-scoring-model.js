@@ -278,10 +278,11 @@ async function getMonthlyAnomalyRollupAverageScore(username, period) {
   const monthKey = `${year}${String(month).padStart(2, '0')}`;
   const r = await pool().query(
     `SELECT COALESCE(SUM(total_score), 0)::numeric AS total,
-            COUNT(*)::int AS week_count
+             COUNT(*)::int AS week_count
      FROM agent_scores
      WHERE LOWER(TRIM(username)) = LOWER(TRIM($1))
        AND score_model = 'anomaly_rollups_v2'
+       AND COALESCE(is_invalidated, false) = false
        AND period LIKE 'week_%'
        AND (
          (POSITION('__' IN period) = 0
@@ -674,6 +675,11 @@ async function getIncompleteTaskCount(username, period) {
        WHERE LOWER(TRIM(COALESCE(assignee_username, ''))) = LOWER(TRIM($1))
          AND source = ANY($2::text[])
          AND COALESCE(hr_performance_recorded, false) = true
+         AND NOT EXISTS (
+           SELECT 1 FROM performance_invalidation_records pir
+           WHERE pir.source_type = 'master_tasks_filing'
+             AND pir.source_id = master_tasks.task_id
+         )
          AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date >= $3::date
          AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date <= $4::date`,
       [un, sources, startDate, endDate]
@@ -823,6 +829,7 @@ async function calculateExceptionBonus(username, period) {
      FROM agent_scores
      WHERE lower(username) = lower($1)
        AND score_model = 'anomaly_rollups_v2'
+       AND COALESCE(is_invalidated, false) = false
        AND period LIKE 'week_%'
        AND substring(period from 6 for 10)::date >= $2::date
        AND substring(period from 6 for 10)::date <= $3::date`,

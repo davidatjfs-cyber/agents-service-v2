@@ -11831,6 +11831,7 @@ export function registerAgentRoutes(app, authRequired) {
                     COUNT(*)::int AS rollup_rows
              FROM agent_scores
              WHERE score_model = 'anomaly_rollups_v2'
+               AND COALESCE(is_invalidated, false) = false
                AND updated_at > NOW() - INTERVAL '14 days'`
           )
           .catch(() => ({ rows: [{ avg_bi: null, rollup_rows: 0 }] }))

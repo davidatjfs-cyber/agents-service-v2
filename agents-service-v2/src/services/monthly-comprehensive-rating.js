@@ -131,20 +131,21 @@ async function getMonthlyPerformanceScore(username, period) {
 
   const result = await query(
     `SELECT COALESCE(SUM(total_score), 0) as total,
-            COUNT(*) as week_count
-     FROM agent_scores
-     WHERE LOWER(TRIM(username)) = LOWER(TRIM($1))
-       AND score_model = 'anomaly_rollups_v2'
-       AND (store IS NULL OR store !~* '(测试门店|SAFE_TEST|_SAFE_TEST|沙箱|sandbox)')
-       AND COALESCE(username,'') NOT LIKE '__periodic%'
-       AND LOWER(TRIM(COALESCE(username,''))) <> 'nnyxcs35'
-       AND (
-         (POSITION('__' IN period) = 0
-           AND substring(period from 6 for 10)::date >= $2::date
-           AND substring(period from 6 for 10)::date <= $3::date)
-         OR
-         (POSITION('__' IN period) > 0 AND split_part(period, '__', 2) = $4)
-       )`,
+             COUNT(*) as week_count
+      FROM agent_scores
+      WHERE LOWER(TRIM(username)) = LOWER(TRIM($1))
+        AND score_model = 'anomaly_rollups_v2'
+        AND COALESCE(is_invalidated, false) = false
+        AND (store IS NULL OR store !~* '(测试门店|SAFE_TEST|_SAFE_TEST|沙箱|sandbox)')
+        AND COALESCE(username,'') NOT LIKE '__periodic%'
+        AND LOWER(TRIM(COALESCE(username,''))) <> 'nnyxcs35'
+        AND (
+          (POSITION('__' IN period) = 0
+            AND substring(period from 6 for 10)::date >= $2::date
+            AND substring(period from 6 for 10)::date <= $3::date)
+          OR
+          (POSITION('__' IN period) > 0 AND split_part(period, '__', 2) = $4)
+        )`,
     [username, startDate, endDate, monthKey]
   );
 
@@ -176,6 +177,11 @@ async function getAttitudeRating(username, period) {
      WHERE LOWER(TRIM(COALESCE(assignee_username, ''))) = LOWER(TRIM($1))
        AND source = ANY($2::text[])
        AND COALESCE(hr_performance_recorded, false) = true
+       AND NOT EXISTS (
+         SELECT 1 FROM performance_invalidation_records pir
+         WHERE pir.source_type = 'master_tasks_filing'
+           AND pir.source_id = master_tasks.task_id
+       )
        AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date >= $3::date
        AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date <= $4::date`,
     [username, sources, startDate, endDate]
