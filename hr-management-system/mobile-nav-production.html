@@ -12415,7 +12415,7 @@
                     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px;">
                         <div>
                             <div style="font-weight:800;font-size:16px;color:rgba(226,232,240,0.96);">绩效审核</div>
-                            <div style="margin-top:4px;font-size:12px;color:rgba(200,215,230,0.68);">仅管理员 / 总部营运 / 总部人事可见。支持查询周度扣分、备案与失效记录。</div>
+                        <div style="margin-top:4px;font-size:12px;color:rgba(200,215,230,0.68);">仅管理员可见。支持查询周度扣分、备案与失效记录。</div>
                         </div>
                         <div id="mobile-perf-audit-status" style="font-size:11px;color:rgba(148,163,184,0.78);white-space:nowrap;">待查询</div>
                     </div>
@@ -33067,7 +33067,7 @@ ${body}
 
         function isMobileAdminDataCenterEnabled() {
             const role = String(currentUser?.role || '').trim();
-            return role === ROLES.ADMIN || role === ROLES.HQ_MANAGER || role === ROLES.HR_MANAGER;
+            return role === ROLES.ADMIN;
         }
 
         function getMobilePrimaryPage() {
@@ -33092,9 +33092,18 @@ ${body}
             const filingCount = document.getElementById('mobile-perf-audit-filing-count');
             const invalidationCount = document.getElementById('mobile-perf-audit-invalidation-count');
             if (!weeklyList || !filingList || !invalidationList) return;
-            const weekly = Array.isArray(data?.weekly) ? data.weekly : [];
-            const filings = Array.isArray(data?.filings) ? data.filings : [];
-            const invalidations = Array.isArray(data?.invalidations) ? data.invalidations : [];
+            const payload = data && typeof data === 'object' ? (data.data && typeof data.data === 'object' ? data.data : data) : {};
+            const weekly = Array.isArray(payload?.weekly) ? payload.weekly : Array.isArray(payload?.weekly_scores) ? payload.weekly_scores.map((w) => ({
+                ...w,
+                invalidated: !!w?.invalidated || !!w?.is_invalidated,
+                score: typeof w?.score !== 'undefined' ? w.score : w?.total_score,
+                reason: w?.reason || w?.summary || w?.metric_key || ''
+            })) : [];
+            const filings = Array.isArray(payload?.filings) ? payload.filings.map((f) => ({
+                ...f,
+                invalidated: !!f?.invalidated || !!f?.is_invalidated
+            })) : [];
+            const invalidations = Array.isArray(payload?.invalidations) ? payload.invalidations : [];
             if (weeklyCount) weeklyCount.textContent = `${weekly.length} 条`;
             if (filingCount) filingCount.textContent = `${filings.length} 条`;
             if (invalidationCount) invalidationCount.textContent = `${invalidations.length} 条`;
@@ -33184,8 +33193,8 @@ ${body}
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        sourceType,
-                        sourceId,
+                        source_type: sourceType,
+                        source_id: sourceId,
                         username,
                         store,
                         period,
