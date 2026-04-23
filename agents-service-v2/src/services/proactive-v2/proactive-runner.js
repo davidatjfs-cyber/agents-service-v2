@@ -3,7 +3,7 @@
  * 顶部不静态 import anomaly-engine / anomaly-bridge，避免与 anomaly-engine 动态 import bridge 形成环。
  */
 
-import config from './config.js';
+import { getProactiveConfig } from './config.js';
 import { query } from '../../utils/db.js';
 
 let intervalId = null;
@@ -53,6 +53,7 @@ async function proactiveTick(options = {}) {
  * 手动单轮（可指定门店 / 频率）；与定时 tick 同源逻辑
  */
 export async function runOnce(options = {}) {
+  const config = await getProactiveConfig();
   if (!config.enabled) {
     console.log('[Proactive] disabled — runOnce skip');
     return { enabled: false };
@@ -90,25 +91,23 @@ export function stopProactive() {
  * 服务启动后调用：默认定时 5 分钟（PROACTIVE_INTERVAL_MS）
  */
 export function startProactive() {
-  if (!config.enabled) {
-    console.log('[Proactive] disabled');
-    return;
-  }
-
-  if (intervalId) {
-    console.log('[Proactive] scheduler already active');
-    return;
-  }
-
-  console.log('[Proactive] starting... intervalMs=', config.intervalMs);
-
-  if (config.immediateFirstRun) {
-    proactiveTick({}).catch((e) => console.error('[Proactive] initial tick error', e?.message));
-  }
-
-  intervalId = setInterval(() => {
-    proactiveTick({}).catch((e) => console.error('[Proactive] error', e?.message));
-  }, config.intervalMs);
+  getProactiveConfig().then((config) => {
+    if (!config.enabled) {
+      console.log('[Proactive] disabled');
+      return;
+    }
+    if (intervalId) {
+      console.log('[Proactive] scheduler already active');
+      return;
+    }
+    console.log('[Proactive] starting... intervalMs=', config.intervalMs);
+    if (config.immediateFirstRun) {
+      proactiveTick({}).catch((e) => console.error('[Proactive] initial tick error', e?.message));
+    }
+    intervalId = setInterval(() => {
+      proactiveTick({}).catch((e) => console.error('[Proactive] error', e?.message));
+    }, config.intervalMs);
+  }).catch((e) => console.error('[Proactive] config load failed', e?.message || e));
 }
 
 /**
@@ -116,21 +115,24 @@ export function startProactive() {
  */
 function startScheduler(intervalMinutes = 5) {
   stopProactive();
-  if (!config.enabled) {
-    console.log('[Proactive] disabled, not starting scheduler');
-    return;
-  }
-  const ms = Math.max(60000, intervalMinutes * 60 * 1000);
-  console.log(`[Proactive] startScheduler (compat) every ${intervalMinutes} min`);
-  if (config.immediateFirstRun) {
-    proactiveTick({}).catch((e) => console.error('[Proactive] initial tick error', e?.message));
-  }
-  intervalId = setInterval(() => {
-    proactiveTick({}).catch((e) => console.error('[Proactive] error', e?.message));
-  }, ms);
+  getProactiveConfig().then((config) => {
+    if (!config.enabled) {
+      console.log('[Proactive] disabled, not starting scheduler');
+      return;
+    }
+    const ms = Math.max(60000, intervalMinutes * 60 * 1000);
+    console.log(`[Proactive] startScheduler (compat) every ${intervalMinutes} min`);
+    if (config.immediateFirstRun) {
+      proactiveTick({}).catch((e) => console.error('[Proactive] initial tick error', e?.message));
+    }
+    intervalId = setInterval(() => {
+      proactiveTick({}).catch((e) => console.error('[Proactive] error', e?.message));
+    }, ms);
+  }).catch((e) => console.error('[Proactive] config load failed', e?.message || e));
 }
 
-function getStatus() {
+async function getStatus() {
+  const config = await getProactiveConfig();
   return {
     enabled: config.enabled,
     useLLM: config.useLLM,

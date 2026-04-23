@@ -3,10 +3,13 @@
  */
 
 import { query } from '../../utils/db.js';
-import config from './config.js';
+import { getProactiveConfig } from './config.js';
 
 const memDedupe = new Map();
-const memTtlMs = () => Math.max(60000, (config.dedupe.windowMinutes || 10) * 60 * 1000);
+const memTtlMs = async () => {
+  const config = await getProactiveConfig();
+  return Math.max(60000, (config.dedupe.windowMinutes || 10) * 60 * 1000);
+};
 
 function memKey(store, type) {
   return `${store}::${type}`;
@@ -21,6 +24,7 @@ async function shouldTrigger(anomaly) {
   const type = anomalyKey(anomaly);
 
   try {
+    const config = await getProactiveConfig();
     if (!store || !type) {
       console.log('[Proactive][Dedupe] Missing store or type, skip trigger');
       return false;
@@ -32,7 +36,7 @@ async function shouldTrigger(anomaly) {
 
     const mk = memKey(store, type);
     const prev = memDedupe.get(mk);
-    const ttl = memTtlMs();
+    const ttl = await memTtlMs();
     if (prev && Date.now() - prev < ttl) {
       console.log(`[Proactive][Dedupe] Memory skip: ${store}/${type}`);
       return false;
@@ -78,6 +82,7 @@ function resolveTriggerDate(anomaly) {
 
 async function recordTrigger(anomaly) {
   try {
+    await getProactiveConfig();
     const store = anomaly.store;
     const type = anomalyKey(anomaly);
     const severity = anomaly.severity || 'medium';

@@ -2268,8 +2268,11 @@ function chairmanTrainingTab(cfg) {
   const wrap = el('div');
   const brands = ['马己仙', '洪潮'];
   const audienceOptions = ['新入职员工', '新员工(3个月内)', '老员工', '店长', '厨师长', '前厅主管', '全部员工'];
-  const LEVEL_LABELS = { low: 'low仅', medium: 'medium+' };
   const SEVERITY_OPTS = ['low', 'medium', 'high'];
+  const ASSIGNEE_ROLE_OPTS = [
+    ['store_manager', '店长'],
+    ['store_production_manager', '厨师长']
+  ];
 
   wrap.appendChild(el('p', { className: 'text-sm text-gray-600 mb-4 bg-blue-50 p-3 rounded-lg' },
     '🎓 当异常触发时，系统可能自动创建培训任务。配置决定：哪种异常→哪些品牌→什么培训→培训谁→考核标准→冷却期。'
@@ -2302,6 +2305,9 @@ function chairmanTrainingTab(cfg) {
         g.appendChild(field('课程名', el('input', { type: 'text', value: String(brandCfg.course || ''), id: `tr_${key}_${brand}_course`, className: 'border border-blue-200 rounded-lg px-2 py-1.5 text-sm w-full', placeholder: '课程名' })));
         g.appendChild(field('培训内容', el('input', { type: 'text', value: String(brandCfg.content || ''), id: `tr_${key}_${brand}_content`, className: 'border border-blue-200 rounded-lg px-2 py-1.5 text-sm w-full', placeholder: '培训内容' })));
         g.appendChild(field('考核标准', el('input', { type: 'text', value: String(brandCfg.examPass || ''), id: `tr_${key}_${brand}_exam`, className: 'border border-blue-200 rounded-lg px-2 py-1.5 text-sm w-full', placeholder: '如: 考试≥90分' })));
+        const roleSel = el('select', { id: `tr_${key}_${brand}_assignTo`, className: 'border border-blue-200 rounded-lg px-2 py-1.5 text-sm w-full' });
+        ASSIGNEE_ROLE_OPTS.forEach(([rv, rl]) => roleSel.appendChild(el('option', { value: rv, selected: String(brandCfg.assignTo || entry.assignTo || 'store_manager') === rv }, rl)));
+        g.appendChild(field('责任岗位', roleSel));
         // Target audience multi-select
         const audDiv = el('div');
         audDiv.appendChild(lbl('培训对象'));
@@ -2323,6 +2329,16 @@ function chairmanTrainingTab(cfg) {
         SEVERITY_OPTS.forEach(sv => sevSel.appendChild(el('option', { value: sv, selected: (brandCfg.minSeverity || entry.minSeverity || 'medium') === sv }, sv + (sv === 'low' ? '(低也触发)' : sv === 'medium' ? '(中及以上)' : '(仅高)'))));
         sevDiv.appendChild(sevSel);
         g.appendChild(sevDiv);
+        const dispatchDiv = el('div');
+        dispatchDiv.appendChild(lbl('派发对象'));
+        const dispatchWrap = el('div', { className: 'flex flex-wrap gap-3 text-xs text-gray-700' });
+        const assigneeCb = el('input', { type: 'checkbox', id: `tr_${key}_${brand}_dispatch_assignee`, checked: brandCfg?.dispatchTo?.assignee !== false, className: 'mr-1' });
+        const mgmtCb = el('input', { type: 'checkbox', id: `tr_${key}_${brand}_dispatch_management`, checked: brandCfg?.dispatchTo?.management !== false, className: 'mr-1' });
+        const l1 = el('label', { className: 'cursor-pointer' }); l1.appendChild(assigneeCb); l1.appendChild(document.createTextNode(' 责任人'));
+        const l2 = el('label', { className: 'cursor-pointer' }); l2.appendChild(mgmtCb); l2.appendChild(document.createTextNode(' 管理员+总部营运'));
+        dispatchWrap.appendChild(l1); dispatchWrap.appendChild(l2);
+        dispatchDiv.appendChild(dispatchWrap);
+        g.appendChild(dispatchDiv);
         bDiv.appendChild(g);
         cardEl.appendChild(bDiv);
       });
@@ -2332,6 +2348,9 @@ function chairmanTrainingTab(cfg) {
       grid.appendChild(field('培训课程名', el('input', { type: 'text', value: String(entry.course || ''), id: `tr_${key}_course`, className: 'border border-blue-200 rounded-lg px-3 py-2 text-sm w-full', placeholder: '如: 服务流程SOP' })));
       grid.appendChild(field('培训内容', el('input', { type: 'text', value: String(entry.content || ''), id: `tr_${key}_content`, className: 'border border-blue-200 rounded-lg px-3 py-2 text-sm w-full', placeholder: '如: 迎宾→入座→点餐→上菜→结账全流程' })));
       grid.appendChild(field('考核标准', el('input', { type: 'text', value: String(entry.examPass || ''), id: `tr_${key}_exam`, className: 'border border-blue-200 rounded-lg px-3 py-2 text-sm w-full', placeholder: '如: 考试≥90分 / 出品合格率≥95%' })));
+      const roleSel = el('select', { id: `tr_${key}_assignTo`, className: 'border border-blue-200 rounded-lg px-3 py-2 text-sm w-full' });
+      ASSIGNEE_ROLE_OPTS.forEach(([rv, rl]) => roleSel.appendChild(el('option', { value: rv, selected: String(entry.assignTo || 'store_manager') === rv }, rl)));
+      grid.appendChild(field('责任岗位', roleSel));
       // Target audience
       const audDiv = el('div');
       audDiv.appendChild(lbl('培训对象（勾选）'));
@@ -2352,6 +2371,16 @@ function chairmanTrainingTab(cfg) {
       SEVERITY_OPTS.forEach(sv => sevSel.appendChild(el('option', { value: sv, selected: (entry.minSeverity || 'medium') === sv }, sv + (sv === 'low' ? '(低也触发)' : sv === 'medium' ? '(中及以上)' : '(仅高)'))));
       sevDiv.appendChild(sevSel);
       grid.appendChild(sevDiv);
+      const dispatchDiv = el('div');
+      dispatchDiv.appendChild(lbl('派发对象'));
+      const dispatchWrap = el('div', { className: 'flex flex-wrap gap-3 text-xs text-gray-700' });
+      const assigneeCb = el('input', { type: 'checkbox', id: `tr_${key}_dispatch_assignee`, checked: entry?.dispatchTo?.assignee !== false, className: 'mr-1' });
+      const mgmtCb = el('input', { type: 'checkbox', id: `tr_${key}_dispatch_management`, checked: entry?.dispatchTo?.management !== false, className: 'mr-1' });
+      const l1 = el('label', { className: 'cursor-pointer' }); l1.appendChild(assigneeCb); l1.appendChild(document.createTextNode(' 责任人'));
+      const l2 = el('label', { className: 'cursor-pointer' }); l2.appendChild(mgmtCb); l2.appendChild(document.createTextNode(' 管理员+总部营运'));
+      dispatchWrap.appendChild(l1); dispatchWrap.appendChild(l2);
+      dispatchDiv.appendChild(dispatchWrap);
+      grid.appendChild(dispatchDiv);
       cardEl.appendChild(grid);
     }
     wrap.appendChild(cardEl);
@@ -2387,9 +2416,14 @@ function chairmanTrainingTab(cfg) {
               course,
               content: $(`tr_${key}_${brand}_content`)?.value?.trim() || '',
               examPass: $(`tr_${key}_${brand}_exam`)?.value?.trim() || '',
+              assignTo: $(`tr_${key}_${brand}_assignTo`)?.value || 'store_manager',
               targetAudience: aud,
               cooldownDays: Number($(`tr_${key}_${brand}_cooldown`)?.value) || 14,
               minSeverity: $(`tr_${key}_${brand}_severity`)?.value || 'medium',
+              dispatchTo: {
+                assignee: !!$(`tr_${key}_${brand}_dispatch_assignee`)?.checked,
+                management: !!$(`tr_${key}_${brand}_dispatch_management`)?.checked
+              }
             });
           });
           if (brandConfigs.length) {
@@ -2405,9 +2439,14 @@ function chairmanTrainingTab(cfg) {
             course,
             content: $(`tr_${key}_content`)?.value?.trim() || '',
             examPass: $(`tr_${key}_exam`)?.value?.trim() || '',
+            assignTo: $(`tr_${key}_assignTo`)?.value || 'store_manager',
             targetAudience: aud,
             cooldownDays: Number($(`tr_${key}_cooldown`)?.value) || existing.cooldownDays || 14,
             minSeverity: $(`tr_${key}_severity`)?.value || existing.minSeverity || 'medium',
+            dispatchTo: {
+              assignee: !!$(`tr_${key}_dispatch_assignee`)?.checked,
+              management: !!$(`tr_${key}_dispatch_management`)?.checked
+            }
           };
         }
       });
@@ -2435,6 +2474,7 @@ function chairmanTrainingTab(cfg) {
 // ── Trend Thresholds ──
 function chairmanTrendTab(cfg) {
   const tr = cfg.trend_rules || {};
+  const proactive = cfg.proactive_rules || {};
   const storeOverrides = tr.storeOverrides || {};
   const stores = Object.keys(cfg.stores || {});
   const wrap = el('div');
@@ -2472,6 +2512,48 @@ function chairmanTrendTab(cfg) {
   }
 
   cards.forEach(c => wrap.appendChild(c));
+
+  const proactiveCard = el('div', { className: 'bg-white rounded-xl shadow-sm border p-4 mb-4' });
+  proactiveCard.appendChild(el('h3', { className: 'text-base font-bold text-gray-900 mb-2' }, '🔗 Proactive 桥配置'));
+  proactiveCard.appendChild(el('p', { className: 'text-sm text-gray-600 mb-4' }, '控制异常检测后是否进入 Proactive 桥、是否使用 LLM 决策、轮询周期与管理层同步策略。'));
+  const proactiveGrid = el('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' });
+  const boolWrap = el('div', { className: 'space-y-2' });
+  [
+    ['pr_enabled', '启用 Proactive 桥', proactive.enabled !== false],
+    ['pr_use_llm', '使用 LLM 决策', proactive.useLLM !== false],
+    ['pr_log', '记录详细日志', proactive.log !== false],
+    ['pr_immediate', '启动即跑一轮', proactive.immediateFirstRun !== false]
+  ].forEach(([id, labelText, checked]) => {
+    const lab = el('label', { className: 'flex items-center gap-2 text-sm text-gray-700 cursor-pointer' });
+    lab.appendChild(el('input', { id, type: 'checkbox', checked, className: 'w-4 h-4' }));
+    lab.appendChild(document.createTextNode(labelText));
+    boolWrap.appendChild(lab);
+  });
+  proactiveGrid.appendChild(boolWrap);
+  const cfgGrid = el('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-3' });
+  const providerSel = el('select', { id: 'pr_provider', className: 'border border-purple-200 rounded-lg px-3 py-2 text-sm w-full' });
+  ['deepseek', 'ollama'].forEach((v) => providerSel.appendChild(el('option', { value: v, selected: String(proactive.proactiveLLMProvider || 'deepseek') === v }, v)));
+  cfgGrid.appendChild(field('LLM 提供方', providerSel));
+  cfgGrid.appendChild(field('轮询间隔(ms)', el('input', { id: 'pr_interval', type: 'number', value: String(proactive.intervalMs ?? 300000), className: 'border border-purple-200 rounded-lg px-3 py-2 text-sm w-full', min: '60000', step: '1000' })));
+  cfgGrid.appendChild(field('去重窗口(分钟)', el('input', { id: 'pr_dedupe', type: 'number', value: String(proactive.dedupeWindowMinutes ?? 10), className: 'border border-purple-200 rounded-lg px-3 py-2 text-sm w-full', min: '1', max: '1440' })));
+  cfgGrid.appendChild(field('LLM 超时(ms)', el('input', { id: 'pr_timeout', type: 'number', value: String(proactive.llmTimeoutMs ?? 4000), className: 'border border-purple-200 rounded-lg px-3 py-2 text-sm w-full', min: '500', step: '100' })));
+  cfgGrid.appendChild(field('营收下降阈值(%)', el('input', { id: 'pr_revenue_drop', type: 'number', value: String(proactive.revenueDropThreshold ?? 20), className: 'border border-purple-200 rounded-lg px-3 py-2 text-sm w-full', min: '1', max: '100' })));
+  cfgGrid.appendChild(field('差评触发阈值(条)', el('input', { id: 'pr_bad_review', type: 'number', value: String(proactive.badReviewSpikeThreshold ?? 5), className: 'border border-purple-200 rounded-lg px-3 py-2 text-sm w-full', min: '1', max: '100' })));
+  const notifyWrap = el('div');
+  notifyWrap.appendChild(lbl('管理层同步角色'));
+  const notifyBox = el('div', { className: 'flex flex-wrap gap-3 text-xs text-gray-700' });
+  const notifyRoles = Array.isArray(proactive.notifyRoles) ? proactive.notifyRoles : ['admin', 'hq_manager'];
+  [['admin', '管理员'], ['hq_manager', '总部营运']].forEach(([rv, rl]) => {
+    const lab = el('label', { className: 'cursor-pointer' });
+    lab.appendChild(el('input', { id: `pr_notify_${rv}`, type: 'checkbox', checked: notifyRoles.includes(rv), className: 'mr-1' }));
+    lab.appendChild(document.createTextNode(' ' + rl));
+    notifyBox.appendChild(lab);
+  });
+  notifyWrap.appendChild(notifyBox);
+  cfgGrid.appendChild(notifyWrap);
+  proactiveGrid.appendChild(cfgGrid);
+  proactiveCard.appendChild(proactiveGrid);
+  wrap.appendChild(proactiveCard);
 
   // Per-store overrides
   wrap.appendChild(el('div', { className: 'flex justify-between items-center mb-3 mt-4' }, [
@@ -2524,6 +2606,25 @@ function chairmanTrendTab(cfg) {
       });
       await POST('/api/chairman/config', { trend_rules });
       msg('趋势阈值配置已保存');
+      const proactive_rules = {
+        enabled: !!$('pr_enabled')?.checked,
+        useLLM: !!$('pr_use_llm')?.checked,
+        log: !!$('pr_log')?.checked,
+        immediateFirstRun: !!$('pr_immediate')?.checked,
+        proactiveLLMProvider: $('pr_provider')?.value || 'deepseek',
+        intervalMs: Number($('pr_interval')?.value) || 300000,
+        dedupeWindowMinutes: Number($('pr_dedupe')?.value) || 10,
+        llmTimeoutMs: Number($('pr_timeout')?.value) || 4000,
+        revenueDropThreshold: Number($('pr_revenue_drop')?.value) || 20,
+        badReviewSpikeThreshold: Number($('pr_bad_review')?.value) || 5,
+        notifyRoles: ['admin', 'hq_manager'].filter((rv) => !!$(`pr_notify_${rv}`)?.checked),
+        dispatchDefaults: {
+          assignee: true,
+          management: true
+        }
+      };
+      await POST('/api/chairman/config', { proactive_rules });
+      msg('趋势阈值与 Proactive 配置已保存');
       go('chairman');
     }, 'bg-purple-600 text-white text-sm px-6 py-3 rounded-lg hover:bg-purple-700 font-semibold shadow-sm')
   ]));

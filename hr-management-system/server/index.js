@@ -13584,6 +13584,50 @@ async function fetchAgentsServiceHealthSnapshot() {
   }
 }
 
+function getAgentsServiceBaseUrl() {
+  return String(process.env.AGENTS_SERVICE_BASE_URL || 'http://127.0.0.1:3101').trim().replace(/\/$/, '');
+}
+
+function canManageChairmanConfig(user) {
+  const role = String(user?.role || '').trim();
+  return role === 'admin' || role === 'hq_manager' || role === 'hr_manager';
+}
+
+app.get('/api/chairman/config', authRequired, async (req, res) => {
+  if (!canManageChairmanConfig(req.user)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    const url = getAgentsServiceBaseUrl() + '/api/chairman/config';
+    const r = await axios.get(url, {
+      timeout: 8000,
+      validateStatus: () => true
+    });
+    if (r.status < 200 || r.status >= 300) {
+      return res.status(r.status || 502).json(r.data || { error: 'chairman_config_proxy_failed' });
+    }
+    return res.json(r.data || { ok: true, config: {} });
+  } catch (e) {
+    return res.status(502).json({ error: String(e?.message || e) });
+  }
+});
+
+app.post('/api/chairman/config', authRequired, async (req, res) => {
+  if (!canManageChairmanConfig(req.user)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    const url = getAgentsServiceBaseUrl() + '/api/chairman/config';
+    const r = await axios.post(url, req.body || {}, {
+      timeout: 10000,
+      validateStatus: () => true,
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (r.status < 200 || r.status >= 300) {
+      return res.status(r.status || 502).json(r.data || { error: 'chairman_config_proxy_failed' });
+    }
+    return res.json(r.data || { ok: true });
+  } catch (e) {
+    return res.status(502).json({ error: String(e?.message || e) });
+  }
+});
+
 let __lastDiskLarkNoticeAt = 0;
 
 /** 根分区空间（供 /api/health 与磁盘告警）；阈值偏保守，避免再次写满导致 PostgreSQL 宕机 */

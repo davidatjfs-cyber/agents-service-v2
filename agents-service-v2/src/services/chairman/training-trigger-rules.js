@@ -9,6 +9,30 @@
 import { query } from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { createTask } from '../task-state-machine.js';
+import { resolveSingleScoringUser } from '../../utils/scoring-assignee.js';
+import { sendCompanyNoticeToAssignees } from '../feishu-client.js';
+
+function buildDispatchConfig(effectiveRule, cfg) {
+  const explicit = effectiveRule?.dispatchTo;
+  const globalDispatch = cfg?.proactive_rules?.dispatchDefaults;
+  return {
+    assignee: explicit?.assignee !== false && globalDispatch?.assignee !== false,
+    management: explicit?.management !== false && globalDispatch?.management !== false
+  };
+}
+
+function buildTrainingNotice(task, payload) {
+  return [
+    `触发培训：${payload.course}`,
+    `门店：${payload.store}`,
+    `触发异常：${payload.anomalyKey}`,
+    `触发频次：${payload.count}次/${payload.countWindowDays}天`,
+    payload.content ? `培训内容：${payload.content}` : '',
+    payload.examPass ? `考核标准：${payload.examPass}` : '',
+    payload.targetAudience?.length ? `培训对象：${payload.targetAudience.join('、')}` : '',
+    payload.roleLabel ? `责任岗位：${payload.roleLabel}` : ''
+  ].filter(Boolean).join('\n');
+}
 
 /**
  * 异常→培训映射规则
@@ -85,14 +109,16 @@ export async function checkAndTriggerTraining(anomalyKey, store, severity) {
   // Try loading from DB config first (supports brand-differentiated config)
   let trainingConfig = null;
   let rule = TRAINING_TRIGGER_RULES.find(r => r.anomalyKey === anomalyKey);
+  let chairmanCfg = null;
 
   try {
     const r = await query(
       `SELECT data FROM hrms_state WHERE key = 'chairman_config'`
     );
     const cfg = r.rows?.[0]?.data;
-    if (cfg?.training_map?.[anomalyKey]) {
-      trainingConfig = cfg.training_map[anomalyKey];
+    chairmanCfg = typeof cfg === 'string' ? JSON.parse(cfg) : cfg;
+    if (chairmanCfg?.training_map?.[anomalyKey]) {
+      trainingConfig = chairmanCfg.training_map[anomalyKey];
       // If brand-differentiated, find the matching brand entry
       if (trainingConfig.brands && Array.isArray(trainingConfig.brands)) {
         const brandResult = await query(
@@ -159,6 +185,9 @@ export async function checkAndTriggerTraining(anomalyKey, store, severity) {
     const role = effectiveRule.assignTo || effectiveRule.training?.assignTo || 'store_manager';
     const roleLabel = role === 'store_production_manager' ? '厨师长' : '店长';
     const audienceLabel = targetAudience.length ? `培训对象: ${targetAudience.join('、')}\n` : '';
+    const assignee = await resolveSingleScoringUser(store, role).catch(() => null);
+    const assigneeUsername = String(assignee?.username || '').trim();
+    const dispatchTo = buildDispatchConfig(effectiveRule, chairmanCfg);
 
     const taskResult = await createTask({
       source: 'training_trigger',
@@ -168,8 +197,38 @@ export async function checkAndTriggerTraining(anomalyKey, store, severity) {
       brand,
       title: `培训任务: ${course}`,
       detail: `触发原因: ${anomalyKey}异常(${count}次/${countWindowDays}天)\n培训内容: ${content}\n考核标准: ${examPass}\n${audienceLabel}负责人: ${roleLabel}`,
+      sourceData: {
+        anomalyKey,
+        triggerCount: count,
+        countWindowDays,
+        course,
+        content,
+        examPass,
+        targetAudience,
+        dispatchTo,
+        notifyRoles: chairmanCfg?.proactive_rules?.notifyRoles || ['admin', 'hq_manager']
+      },
+      assigneeUsername,
       assigneeRole: role,
     });
+
+    if (taskResult?.taskId && (dispatchTo.assignee || dispatchTo.management)) {
+      const task = {
+        task_id: taskResult.taskId,
+        source: 'training_trigger',
+        store,
+        title: `培训任务: ${course}`,
+        assignee_username: assigneeUsername,
+        assignee_role: role
+      };
+      const noticeText = buildTrainingNotice(task, { anomalyKey, course, store, count, countWindowDays, content, examPass, targetAudience, roleLabel });
+      await sendCompanyNoticeToAssignees(task, noticeText, {
+        title: '培训任务通知',
+        type: 'training_trigger_notice',
+        sendToAssignee: dispatchTo.assignee,
+        sendToManagement: dispatchTo.management
+      }).catch((e) => logger.warn({ err: e?.message, taskId: taskResult.taskId }, 'training trigger notice failed'));
+    }
 
     logger.info({ anomalyKey, store, task: taskResult.taskId }, 'training triggered');
     return { triggered: true, taskId: taskResult.taskId, course };

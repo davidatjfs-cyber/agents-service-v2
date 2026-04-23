@@ -1,6 +1,9 @@
 /**
- * Proactive Configuration — 全部可通过环境变量开关，默认与历史行为兼容
+ * Proactive Configuration — 环境变量默认值 + chairman_config DB 覆盖
  */
+
+import { query } from '../../utils/db.js';
+import { logger } from '../../utils/logger.js';
 
 function envBool(name, defaultTrue = true) {
   const v = process.env[name];
@@ -8,7 +11,7 @@ function envBool(name, defaultTrue = true) {
   return !/^(0|false|no|off)$/i.test(String(v).trim());
 }
 
-export default {
+const ENV_DEFAULTS = {
   /** PROACTIVE_ENABLED=false 时关闭调度与 runOnce 内逻辑 */
   enabled: envBool('PROACTIVE_ENABLED', true),
 
@@ -58,3 +61,71 @@ export default {
       process.env.OLLAMA_OPERATIONS_MODEL || process.env.LLM_MODEL || 'gemma4:26b'
   }
 };
+
+let cachedConfig = null;
+let cachedAt = 0;
+const CACHE_TTL_MS = 60_000;
+
+function normalizeDbConfig(raw) {
+  const src = raw && typeof raw === 'object' ? raw : {};
+  return {
+    enabled: src.enabled !== false,
+    useLLM: src.useLLM !== false,
+    mockBridge: src.mockBridge === true,
+    testMode: src.testMode === true,
+    proactiveLLMProvider: String(src.proactiveLLMProvider || ENV_DEFAULTS.proactiveLLMProvider || 'deepseek').trim().toLowerCase(),
+    log: src.log !== false,
+    intervalMs: Math.max(60000, Number(src.intervalMs || ENV_DEFAULTS.intervalMs || 300000)),
+    immediateFirstRun: src.immediateFirstRun !== false,
+    llm: {
+      timeout: Math.max(500, Number(src.llmTimeoutMs || src?.llm?.timeout || ENV_DEFAULTS.llm.timeout || 4000)),
+      revenueDropThreshold: Number(src.revenueDropThreshold ?? src?.llm?.revenueDropThreshold ?? ENV_DEFAULTS.llm.revenueDropThreshold ?? 20),
+      badReviewSpikeThreshold: Number(src.badReviewSpikeThreshold ?? src?.llm?.badReviewSpikeThreshold ?? ENV_DEFAULTS.llm.badReviewSpikeThreshold ?? 5)
+    },
+    dedupe: {
+      windowMinutes: Math.max(1, Number(src.dedupeWindowMinutes || src?.dedupe?.windowMinutes || ENV_DEFAULTS.dedupe.windowMinutes || 10))
+    },
+    notifyRoles: Array.isArray(src.notifyRoles) ? src.notifyRoles.map((x) => String(x || '').trim()).filter(Boolean) : ['admin', 'hq_manager'],
+    dispatchDefaults: {
+      assignee: src?.dispatchDefaults?.assignee !== false,
+      management: src?.dispatchDefaults?.management !== false
+    }
+  };
+}
+
+function buildMergedConfig(dbCfg) {
+  return {
+    ...ENV_DEFAULTS,
+    ...dbCfg,
+    llm: { ...ENV_DEFAULTS.llm, ...(dbCfg.llm || {}) },
+    dedupe: { ...ENV_DEFAULTS.dedupe, ...(dbCfg.dedupe || {}) },
+    llmProvider: { ...ENV_DEFAULTS.llmProvider },
+    notifyRoles: Array.isArray(dbCfg.notifyRoles) ? dbCfg.notifyRoles : ['admin', 'hq_manager'],
+    dispatchDefaults: { assignee: true, management: true, ...(dbCfg.dispatchDefaults || {}) }
+  };
+}
+
+export async function getProactiveConfig(forceRefresh = false) {
+  if (!forceRefresh && cachedConfig && Date.now() - cachedAt < CACHE_TTL_MS) return cachedConfig;
+  try {
+    const r = await query(`SELECT data FROM hrms_state WHERE key = 'chairman_config' LIMIT 1`);
+    const cfg = r.rows?.[0]?.data;
+    const raw = typeof cfg === 'string' ? JSON.parse(cfg) : cfg;
+    const dbCfg = normalizeDbConfig(raw?.proactive_rules || {});
+    cachedConfig = buildMergedConfig(dbCfg);
+    cachedAt = Date.now();
+    return cachedConfig;
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'proactive config: load chairman_config failed, using env defaults');
+    cachedConfig = buildMergedConfig(normalizeDbConfig({}));
+    cachedAt = Date.now();
+    return cachedConfig;
+  }
+}
+
+export function invalidateProactiveConfigCache() {
+  cachedConfig = null;
+  cachedAt = 0;
+}
+
+export default ENV_DEFAULTS;

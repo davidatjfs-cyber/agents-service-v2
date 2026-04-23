@@ -2,7 +2,7 @@
  * LLM Decision — Proactive 专用：DeepSeek → Ollama → 规则兜底（静态 import llm-provider，无循环依赖）
  */
 
-import config from './config.js';
+import { getProactiveConfig } from './config.js';
 import { callDeepSeek, callOllamaLLM } from '../llm-provider.js';
 import { formatProactiveLlmPromptHints } from '../agent-memory.js';
 
@@ -102,9 +102,10 @@ async function callOllamaProactiveJson(prompt, timeoutMs) {
 }
 
 export async function decideWithLLM(anomaly) {
+  const config = await getProactiveConfig();
   if (!config.useLLM) {
     console.log('[LLM SOURCE]', 'rule');
-    return fallbackDecision(anomaly);
+    return fallbackDecision(anomaly, config);
   }
 
   if (config.testMode) {
@@ -140,7 +141,7 @@ export async function decideWithLLM(anomaly) {
       } catch (e2) {
         console.warn('[LLM] Ollama failed → fallback to rule', e2?.message || e2);
         console.log('[LLM SOURCE]', 'rule');
-        return fallbackDecision(anomaly);
+        return fallbackDecision(anomaly, config);
       }
     }
   } else {
@@ -150,7 +151,7 @@ export async function decideWithLLM(anomaly) {
     } catch (e2) {
       console.warn('[LLM] Ollama failed → fallback to rule', e2?.message || e2);
       console.log('[LLM SOURCE]', 'rule');
-      return fallbackDecision(anomaly);
+      return fallbackDecision(anomaly, config);
     }
   }
 
@@ -164,7 +165,7 @@ export async function decideWithLLM(anomaly) {
   if (!parsed || typeof parsed.triggered !== 'boolean') {
     console.warn('[LLM] invalid output → fallback');
     console.log('[LLM SOURCE]', 'rule');
-    return fallbackDecision(anomaly);
+    return fallbackDecision(anomaly, config);
   }
 
   return {
@@ -177,9 +178,10 @@ export async function decideWithLLM(anomaly) {
   };
 }
 
-export function fallbackDecision(anomaly) {
+export function fallbackDecision(anomaly, cfg) {
   const type = anomaly.type || anomaly.rule || '';
-  const { revenueDropThreshold, badReviewSpikeThreshold } = config.llm;
+  const active = cfg && cfg.llm ? cfg : { llm: { revenueDropThreshold: 20, badReviewSpikeThreshold: 5 } };
+  const { revenueDropThreshold, badReviewSpikeThreshold } = active.llm;
   const sev = String(anomaly.severity || '').toLowerCase();
   const value = anomaly.value;
 

@@ -12400,6 +12400,68 @@
                 </div>
             </div>
         </div>
+
+        <div id="agents-page" class="hidden">
+            <div class="dr-shell">
+                <header class="rep-page-head">
+                    <div>
+                        <span class="rep-page-head__eyebrow">DATA CENTER</span>
+                        <h2>数据中心</h2>
+                        <p class="rep-page-head__sub">管理员可在手机端查看并操作全部扣分与备案记录失效。</p>
+                    </div>
+                </header>
+
+                <div class="card" style="margin-bottom:14px;padding:18px 16px;">
+                    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px;">
+                        <div>
+                            <div style="font-weight:800;font-size:16px;color:rgba(226,232,240,0.96);">绩效审核</div>
+                            <div style="margin-top:4px;font-size:12px;color:rgba(200,215,230,0.68);">仅管理员 / 总部营运 / 总部人事可见。支持查询周度扣分、备案与失效记录。</div>
+                        </div>
+                        <div id="mobile-perf-audit-status" style="font-size:11px;color:rgba(148,163,184,0.78);white-space:nowrap;">待查询</div>
+                    </div>
+                    <div id="mobile-perf-audit-body">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                            <div>
+                                <label style="display:block;font-size:12px;color:rgba(200,215,230,0.7);margin-bottom:6px;">月份</label>
+                                <input id="mobile-perf-audit-period" type="month" class="form-input">
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:12px;color:rgba(200,215,230,0.7);margin-bottom:6px;">账号</label>
+                                <input id="mobile-perf-audit-username" type="text" class="form-input" placeholder="留空查全部">
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:10px;margin-top:12px;">
+                            <button type="button" class="btn" style="flex:1;" onclick="loadMobilePerformanceAuditRecords()">查询记录</button>
+                            <button type="button" class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('mobile-perf-audit-username').value=''; initMobilePerformanceAuditDefaults(); loadMobilePerformanceAuditRecords();">重置</button>
+                        </div>
+
+                        <div style="margin-top:16px;">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                                <div style="font-weight:700;color:rgba(226,232,240,0.94);">周度扣分</div>
+                                <div id="mobile-perf-audit-weekly-count" style="font-size:11px;color:rgba(148,163,184,0.78);">0 条</div>
+                            </div>
+                            <div id="mobile-perf-audit-weekly-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+                        </div>
+
+                        <div style="margin-top:16px;">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                                <div style="font-weight:700;color:rgba(226,232,240,0.94);">备案记录</div>
+                                <div id="mobile-perf-audit-filing-count" style="font-size:11px;color:rgba(148,163,184,0.78);">0 条</div>
+                            </div>
+                            <div id="mobile-perf-audit-filing-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+                        </div>
+
+                        <div style="margin-top:16px;">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                                <div style="font-weight:700;color:rgba(226,232,240,0.94);">失效记录</div>
+                                <div id="mobile-perf-audit-invalidation-count" style="font-size:11px;color:rgba(148,163,184,0.78);">0 条</div>
+                            </div>
+                            <div id="mobile-perf-audit-invalidation-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div id="org-dict-modal" class="modal ui-modal">
@@ -15856,7 +15918,7 @@ th { background: #f5f5f5; font-weight: 700; }
         }
 
         function getHomePageName() {
-            return 'profile';
+            return isMobileAdminDataCenterEnabled() ? 'agents' : 'profile';
         }
         
         // 更新调试信息
@@ -16072,6 +16134,8 @@ th { background: #f5f5f5; font-weight: 700; }
                 <div style="font-size: 11px; opacity: 0.8; margin-top: 5px;">${currentUser.store}</div>
             `;
 
+            updateMobileNavForRole();
+
             // users management is removed — merged into employees
             const usersNav = document.querySelector('.nav-item[data-page="users"]');
             if (usersNav) usersNav.style.display = 'none';
@@ -16254,6 +16318,7 @@ th { background: #f5f5f5; font-weight: 700; }
                 const titleEl = document.getElementById('mobile-topbar-title');
                 if (titleEl) {
                     const map = {
+                        agents: '数据中心',
                         'daily-report': '营业日报',
                         reports: '分析报表',
                         approvals: '待审批',
@@ -16371,6 +16436,9 @@ th { background: #f5f5f5; font-weight: 700; }
                     break;
                 case 'attendance':
                     loadAttendanceData();
+                    break;
+                case 'agents':
+                    loadMobilePerformanceAuditRecords();
                     break;
                 case 'settings':
                     loadSettingsData();
@@ -32997,6 +33065,160 @@ ${body}
             }
         }
 
+        function isMobileAdminDataCenterEnabled() {
+            const role = String(currentUser?.role || '').trim();
+            return role === ROLES.ADMIN || role === ROLES.HQ_MANAGER || role === ROLES.HR_MANAGER;
+        }
+
+        function getMobilePrimaryPage() {
+            return isMobileAdminDataCenterEnabled() ? 'agents' : 'dashboard';
+        }
+
+        function initMobilePerformanceAuditDefaults() {
+            const periodEl = document.getElementById('mobile-perf-audit-period');
+            if (periodEl && !periodEl.value) {
+                const d = new Date();
+                d.setDate(1);
+                d.setMonth(d.getMonth() - 1);
+                periodEl.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+            }
+        }
+
+        function renderMobilePerformanceAuditSection(data, period) {
+            const weeklyList = document.getElementById('mobile-perf-audit-weekly-list');
+            const filingList = document.getElementById('mobile-perf-audit-filing-list');
+            const invalidationList = document.getElementById('mobile-perf-audit-invalidation-list');
+            const weeklyCount = document.getElementById('mobile-perf-audit-weekly-count');
+            const filingCount = document.getElementById('mobile-perf-audit-filing-count');
+            const invalidationCount = document.getElementById('mobile-perf-audit-invalidation-count');
+            if (!weeklyList || !filingList || !invalidationList) return;
+            const weekly = Array.isArray(data?.weekly) ? data.weekly : [];
+            const filings = Array.isArray(data?.filings) ? data.filings : [];
+            const invalidations = Array.isArray(data?.invalidations) ? data.invalidations : [];
+            if (weeklyCount) weeklyCount.textContent = `${weekly.length} 条`;
+            if (filingCount) filingCount.textContent = `${filings.length} 条`;
+            if (invalidationCount) invalidationCount.textContent = `${invalidations.length} 条`;
+            const emptyCard = (text) => `<div style="padding:14px 12px;border-radius:12px;background:rgba(15,23,42,0.42);border:1px dashed rgba(148,163,184,0.2);color:rgba(200,215,230,0.58);font-size:12px;text-align:center;">${escapeHtml(text)}</div>`;
+            weeklyList.innerHTML = weekly.length ? weekly.map((w) => {
+                const inv = !!w.invalidated;
+                return `
+                    <div style="padding:14px 12px;border-radius:14px;background:rgba(15,23,42,0.5);border:1px solid rgba(148,163,184,0.14);">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                            <div style="font-weight:800;color:rgba(226,232,240,0.96);">${escapeHtml(w.username || '-')}</div>
+                            <div style="font-size:11px;color:${inv ? '#f87171' : 'rgba(148,163,184,0.78)'};">${inv ? '已失效' : '周度扣分'}</div>
+                        </div>
+                        <div style="margin-top:6px;font-size:12px;color:rgba(200,215,230,0.72);">门店：${escapeHtml(w.store || '-')}</div>
+                        <div style="margin-top:6px;font-size:12px;color:rgba(200,215,230,0.72);">分值：${escapeHtml(String(w.score ?? '-'))}｜来源：${escapeHtml(String(w.reason || w.metric_key || '-'))}</div>
+                        <div style="margin-top:6px;font-size:11px;color:rgba(148,163,184,0.78);">记录ID：${escapeHtml(String(w.id || '-'))}</div>
+                        ${inv ? '' : `<button type="button" class="btn btn-secondary" style="margin-top:10px;width:100%;padding:8px 12px;font-size:12px;border-color:rgba(239,68,68,0.3);color:#fda4af;" onclick="mobileInvalidatePerformanceRecord('agent_scores_weekly','${escapeJsString(String(w.id || ''))}','${escapeJsString(String(w.username || ''))}','${escapeJsString(String(w.store || ''))}','${escapeJsString(period)}')">标记失效</button>`}
+                    </div>
+                `;
+            }).join('') : emptyCard('本期暂无周度扣分记录');
+            filingList.innerHTML = filings.length ? filings.map((f) => {
+                const inv = !!f.invalidated;
+                return `
+                    <div style="padding:14px 12px;border-radius:14px;background:rgba(15,23,42,0.5);border:1px solid rgba(148,163,184,0.14);">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                            <div style="font-weight:800;color:rgba(226,232,240,0.96);">${escapeHtml(f.assignee_username || '-')}</div>
+                            <div style="font-size:11px;color:${inv ? '#f87171' : 'rgba(148,163,184,0.78)'};">${inv ? '已失效' : '备案记录'}</div>
+                        </div>
+                        <div style="margin-top:6px;font-size:12px;color:rgba(200,215,230,0.72);">门店：${escapeHtml(f.store || '-')}</div>
+                        <div style="margin-top:6px;font-size:12px;color:rgba(200,215,230,0.72);">任务：${escapeHtml(f.title || f.task_id || '-')}</div>
+                        <div style="margin-top:6px;font-size:11px;color:rgba(148,163,184,0.78);">任务ID：${escapeHtml(String(f.task_id || '-'))}</div>
+                        ${inv ? '' : `<button type="button" class="btn btn-secondary" style="margin-top:10px;width:100%;padding:8px 12px;font-size:12px;border-color:rgba(239,68,68,0.3);color:#fda4af;" onclick="mobileInvalidatePerformanceRecord('master_tasks_filing','${escapeJsString(String(f.task_id || ''))}','${escapeJsString(String(f.assignee_username || ''))}','${escapeJsString(String(f.store || ''))}','${escapeJsString(period)}')">标记失效</button>`}
+                    </div>
+                `;
+            }).join('') : emptyCard('本期暂无备案记录');
+            invalidationList.innerHTML = invalidations.length ? invalidations.map((inv) => `
+                <div style="padding:14px 12px;border-radius:14px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                        <div style="font-weight:800;color:#fecaca;">${escapeHtml(inv.username || inv.target_username || '-')}</div>
+                        <div style="font-size:11px;color:#fca5a5;">${escapeHtml(inv.source_type || '-')}</div>
+                    </div>
+                    <div style="margin-top:6px;font-size:12px;color:rgba(254,202,202,0.88);">门店：${escapeHtml(inv.store || '-')}</div>
+                    <div style="margin-top:6px;font-size:12px;color:rgba(254,202,202,0.88);">原因：${escapeHtml(inv.reason || '管理员手动失效')}</div>
+                    <div style="margin-top:6px;font-size:11px;color:rgba(252,165,165,0.84);">时间：${escapeHtml(String(inv.created_at || inv.invalidated_at || '-')).replace('T',' ').slice(0,16)}</div>
+                </div>
+            `).join('') : emptyCard('暂无失效操作记录');
+        }
+
+        async function loadMobilePerformanceAuditRecords() {
+            if (!isMobileAdminDataCenterEnabled()) {
+                showNotification('仅管理员可查看绩效审核', 'warning');
+                return;
+            }
+            initMobilePerformanceAuditDefaults();
+            const period = String(document.getElementById('mobile-perf-audit-period')?.value || '').trim();
+            const username = String(document.getElementById('mobile-perf-audit-username')?.value || '').trim();
+            const status = document.getElementById('mobile-perf-audit-status');
+            const body = document.getElementById('mobile-perf-audit-body');
+            if (!period) {
+                showNotification('请选择月份', 'warning');
+                return;
+            }
+            if (status) status.textContent = '加载中...';
+            if (body) body.style.opacity = '0.55';
+            try {
+                const params = new URLSearchParams();
+                params.set('period', period);
+                if (username) params.set('username', username);
+                const data = await HRMS_API.request('/api/admin/performance-records?' + params.toString(), { method: 'GET' });
+                renderMobilePerformanceAuditSection(data, period);
+                if (status) status.textContent = '已更新';
+            } catch (e) {
+                if (status) status.textContent = '加载失败';
+                showNotification('绩效审核加载失败：' + String(e?.message || e), 'error');
+            } finally {
+                if (body) body.style.opacity = '1';
+            }
+        }
+
+        async function mobileInvalidatePerformanceRecord(sourceType, sourceId, username, store, period) {
+            if (!isMobileAdminDataCenterEnabled()) {
+                showNotification('仅管理员可执行失效操作', 'warning');
+                return;
+            }
+            if (!confirm(`确认将 ${username || '该记录'} 的记录标记为失效？此操作会触发分数回算。`)) return;
+            try {
+                await HRMS_API.request('/api/admin/performance-invalidate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sourceType,
+                        sourceId,
+                        username,
+                        store,
+                        period,
+                        reason: '管理员手机端操作失效'
+                    })
+                });
+                showNotification('已标记失效', 'success');
+                await loadMobilePerformanceAuditRecords();
+            } catch (e) {
+                showNotification('失效操作失败：' + String(e?.message || e), 'error');
+            }
+        }
+
+        function updateMobileNavForRole() {
+            const primary = document.querySelector('.mobile-nav-item[data-page="dashboard"], .mobile-nav-item[data-page="agents"]');
+            if (!primary) return;
+            if (isMobileAdminDataCenterEnabled()) {
+                primary.setAttribute('data-page', 'agents');
+                primary.setAttribute('onclick', "mobileNavigateTo('agents')");
+                const icon = primary.querySelector('.mobile-nav-icon');
+                const label = primary.querySelector('.mobile-nav-label');
+                if (icon) icon.textContent = '📊';
+                if (label) label.textContent = '数据中心';
+            } else {
+                primary.setAttribute('data-page', 'dashboard');
+                primary.setAttribute('onclick', "mobileNavigateTo('dashboard')");
+                const icon = primary.querySelector('.mobile-nav-icon');
+                const label = primary.querySelector('.mobile-nav-label');
+                if (icon) icon.textContent = '🏠';
+                if (label) label.textContent = '首页';
+            }
+        }
+
         // Mobile navigation functions
         function mobileNavigateTo(page) {
             console.log('Mobile navigate to:', page);
@@ -33018,6 +33240,14 @@ ${body}
             
             // Navigate to corresponding page
             switch(page) {
+                case 'agents':
+                    if (!isMobileAdminDataCenterEnabled()) {
+                        showNotification('暂无数据中心权限', 'warning');
+                        showPage(getHomePageName());
+                        break;
+                    }
+                    showPage('agents');
+                    break;
                 case 'dashboard':
                     showPage('dashboard');
                     break;
@@ -33039,7 +33269,7 @@ ${body}
                     showPage('profile-page');
                     break;
                 default:
-                    showPage('dashboard');
+                    showPage(getMobilePrimaryPage());
             }
             
             // Add haptic feedback if available
@@ -33110,6 +33340,7 @@ ${body}
         function syncMobileNavigation(pageId) {
             if (window.innerWidth <= 768) {
                 const pageMap = {
+                    'agents-page': 'agents',
                     'dashboard': 'dashboard',
                     'attendance-page': 'attendance',
                     'rewards-page': 'approvals',

@@ -181,6 +181,8 @@ function cloneMgmtCcInteractiveCard(baseCard, noticeTitle) {
 export async function sendCompanyNoticeToAssignees(task, body, opts = {}) {
   const text = String(body || '').trim();
   if (!text) return { targets: 0, sentCards: 0, sentTexts: 0 };
+  const sendToAssignee = opts.sendToAssignee !== false;
+  const sendToManagement = opts.sendToManagement !== false;
   const oids = await lookupAssigneeOpenIds(task);
 
   // 同时写入 HRMS 档案公司通知表，使责任人在 HRMS 里也能看到
@@ -237,17 +239,19 @@ export async function sendCompanyNoticeToAssignees(task, body, opts = {}) {
     opts.card && typeof opts.card === 'object'
       ? opts.card
       : buildDefaultCompanyNoticeInteractiveCard(noticeTitle, plain);
-  for (const oid of oids) {
-    const cardRes = await sendCard(oid, assigneeInteractiveCard, 'open_id');
-    if (cardRes?.ok) sentCards += 1;
-    else {
-      const txtRes = await sendText(oid, `【${noticeTitle}】\n${text}`, 'open_id');
-      if (txtRes?.ok) sentTexts += 1;
+  if (sendToAssignee) {
+    for (const oid of oids) {
+      const cardRes = await sendCard(oid, assigneeInteractiveCard, 'open_id');
+      if (cardRes?.ok) sentCards += 1;
+      else {
+        const txtRes = await sendText(oid, `【${noticeTitle}】\n${text}`, 'open_id');
+        if (txtRes?.ok) sentTexts += 1;
+      }
     }
   }
-  if (!oids.length) {
+  if (sendToAssignee && !oids.length) {
     logger.warn({ taskId: task?.task_id, store: task?.store }, 'company notice: no assignee open_id');
-  } else {
+  } else if (sendToAssignee) {
     logger.info(
       { taskId: task?.task_id, targets: oids.length, sentCards, sentTexts },
       'company notice to assignee'
@@ -256,6 +260,7 @@ export async function sendCompanyNoticeToAssignees(task, body, opts = {}) {
 
   // 管理层抄送：admin + hq_manager 实时收到绩效/工作态度通知
   try {
+    if (!sendToManagement) return { targets: sendToAssignee ? oids.length : 0, sentCards, sentTexts };
     const mgR = await query(
       `SELECT DISTINCT open_id, COALESCE(NULLIF(TRIM(name),''), username) AS name
        FROM feishu_users WHERE role IN ('admin','hq_manager') AND registered = true AND open_id IS NOT NULL`

@@ -2,7 +2,7 @@
  * Anomaly Bridge — proactive：dedupe → LLM 决策 → dispatch agent
  */
 
-import config from './config.js';
+import { getProactiveConfig } from './config.js';
 import triggerDedupe from './trigger-dedupe.js';
 const { shouldTrigger, recordTrigger } = triggerDedupe;
 import llmDecision from './llm-decision.js';
@@ -17,6 +17,7 @@ function normalizeAnomaly(raw) {
 }
 
 async function handleAnomalies(anomalies) {
+  const config = await getProactiveConfig();
   if (config.mockBridge) {
     console.log('[Proactive][MOCK BRIDGE] skip trigger');
     return { processed: 0, triggered: 0, skipped: 0, mockBridge: true };
@@ -77,7 +78,7 @@ async function handleAnomalies(anomalies) {
 
       if (decision.triggered) {
         try {
-          const ctx = buildContext(anomaly, decision);
+          const ctx = buildContext(anomaly, decision, config);
           console.log('[Proactive][Bridge] Executing trigger', ctx.type, ctx.store);
           await handleTrigger(ctx);
           await recordTrigger(anomaly);
@@ -105,7 +106,7 @@ async function handleAnomalies(anomalies) {
   return stats;
 }
 
-function buildContext(anomaly, decision) {
+function buildContext(anomaly, decision, config) {
   return {
     source: 'proactive',
     type: anomaly.type || anomaly.rule,
@@ -115,7 +116,11 @@ function buildContext(anomaly, decision) {
       ...anomaly,
       llmReason: decision.reason,
       llmPriority: decision.priority,
-      llmActions: Array.isArray(decision.actions) ? decision.actions : []
+      llmActions: Array.isArray(decision.actions) ? decision.actions : [],
+      proactiveConfigSnapshot: {
+        notifyRoles: Array.isArray(config?.notifyRoles) ? config.notifyRoles : ['admin', 'hq_manager'],
+        dispatchDefaults: config?.dispatchDefaults || { assignee: true, management: true }
+      }
     }
   };
 }
