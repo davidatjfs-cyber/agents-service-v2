@@ -9360,8 +9360,13 @@
                 </div>
                 <div class="nav-item" data-page="knowledge">
                     <a href="#" class="nav-link" onclick="showPage('knowledge')">
-                        <i>🤖</i> <span>智能助手</span>
+                        <i>📚</i> <span>知识库</span>
                         <span class="nav-badge" id="nav-badge-knowledge" style="display:none;">0</span>
+                    </a>
+                </div>
+                <div class="nav-item" data-page="smart-assistant">
+                    <a href="#" class="nav-link" onclick="openMobileSmartAssistantBridge(); return false;">
+                        <i>🤖</i> <span>智能助手</span>
                     </a>
                 </div>
                 <div class="nav-item" data-page="agents" style="display:none;">
@@ -11242,7 +11247,7 @@
                     <header class="rep-page-head kb-mobile-header">
                         <div>
                             <span class="rep-page-head__eyebrow">KNOWLEDGE BASE</span>
-                            <h2>智能助手</h2>
+                            <h2>知识库</h2>
                             <p class="kb-rep-sub">知识库、部门分身与 Agent 监控的统一入口</p>
                         </div>
                         <div class="rep-page-head__actions">
@@ -16346,7 +16351,8 @@ th { background: #f5f5f5; font-weight: 700; }
                         profile: '我的档案',
                         employees: '员工管理',
                         users: '用户管理',
-                        knowledge: '智能助手',
+                        knowledge: '知识库',
+                        'smart-assistant': '智能助手',
                         stores: '门店管理',
                         roles: '角色权限',
                         exam: '考试测评',
@@ -33181,7 +33187,7 @@ ${body}
         }
 
         function getMobilePrimaryPage() {
-            return 'dashboard';
+            return 'profile';
         }
 
         function initMobilePerformanceAuditDefaults() {
@@ -33411,17 +33417,26 @@ ${body}
         }
 
         function updateMobileNavForRole() {
-            const primary = document.querySelector('.mobile-nav-item[data-page="dashboard"]');
+            const primary = document.querySelector('.mobile-nav-item[data-page="profile"]');
             if (!primary) return;
-            primary.setAttribute('data-page', 'dashboard');
-            primary.setAttribute('onclick', "mobileNavigateTo('dashboard')");
+            primary.setAttribute('data-page', 'profile');
+            primary.setAttribute('onclick', "mobileNavigateTo('profile')");
             const icon = primary.querySelector('.mobile-nav-icon');
             const label = primary.querySelector('.mobile-nav-label');
-            if (icon) icon.textContent = '🏠';
-            if (label) label.textContent = '首页';
+            if (icon) icon.textContent = '👤';
+            if (label) label.textContent = '档案';
         }
 
         // Mobile navigation functions
+        function openMobileSmartAssistantBridge() {
+            try { closeMobileSidebar(); } catch (e) {}
+            try {
+                window.location.href = '/working-fixed.html#smart-assistant';
+            } catch (e) {
+                showNotification('打开智能助手失败：' + String(e?.message || e), 'error');
+            }
+        }
+
         function mobileNavigateTo(page) {
             console.log('Mobile navigate to:', page);
             
@@ -33429,6 +33444,12 @@ ${body}
             if (event) {
                 event.preventDefault();
                 event.stopPropagation();
+            }
+
+            if (page === 'more') {
+                openMobileSidebar();
+                if (navigator.vibrate) navigator.vibrate(30);
+                return;
             }
             
             // Update active state
@@ -33450,22 +33471,11 @@ ${body}
                     }
                     showPage('agents');
                     break;
-                case 'dashboard':
-                    showPage('dashboard');
+                case 'daily-report':
+                    showPage('daily-report');
                     break;
-                case 'attendance':
-                    showPage('attendance');
-                    break;
-                case 'approvals':
-                    // Show approvals based on user role
-                    if (currentUser?.role === 'admin' || currentUser?.role === 'hr_manager') {
-                        showPage('rewards-page');
-                    } else if (currentUser?.role === 'store_manager' || currentUser?.role === 'hq_manager') {
-                        showPage('payment-page');
-                    } else {
-                        showPage('dashboard');
-                        showNotification('暂无审批权限', 'warning');
-                    }
+                case 'reports':
+                    showPage('reports');
                     break;
                 case 'profile':
                     showPage('profile');
@@ -33546,11 +33556,11 @@ ${body}
             if (window.innerWidth <= 768) {
                 const pageMap = {
                     'agents-page': 'agents',
-                    'dashboard': 'dashboard',
-                    'attendance-page': 'attendance',
-                    'attendance': 'attendance',
-                    'rewards-page': 'approvals',
-                    'payment-page': 'approvals',
+                    'dashboard': 'profile',
+                    'daily-report-page': 'daily-report',
+                    'daily-report': 'daily-report',
+                    'reports-page': 'reports',
+                    'reports': 'reports',
                     'profile-page': 'profile',
                     'profile': 'profile',
                     'knowledge-page': 'knowledge',
@@ -34126,21 +34136,25 @@ ${body}
 
     <!-- Mobile Bottom Navigation -->
     <nav class="mobile-nav" id="mobile-nav">
-        <div class="mobile-nav-item active" data-page="dashboard" onclick="mobileNavigateTo('dashboard')">
-            <span class="mobile-nav-icon">🏠</span>
-            <span class="mobile-nav-label">首页</span>
-        </div>
-        <div class="mobile-nav-item" data-page="attendance" onclick="mobileNavigateTo('attendance')">
+        <div class="mobile-nav-item active" data-page="profile" onclick="mobileNavigateTo('profile')">
             <span class="mobile-nav-icon">👤</span>
-            <span class="mobile-nav-label">打卡</span>
+            <span class="mobile-nav-label">档案</span>
         </div>
-        <div class="mobile-nav-item" data-page="approvals" onclick="mobileNavigateTo('approvals')">
-            <span class="mobile-nav-icon">📋</span>
-            <span class="mobile-nav-label">审批</span>
+        <div class="mobile-nav-item" data-page="daily-report" onclick="mobileNavigateTo('daily-report')">
+            <span class="mobile-nav-icon">📒</span>
+            <span class="mobile-nav-label">日报</span>
         </div>
-        <div class="mobile-nav-item" data-page="knowledge" onclick="mobileNavigateTo('knowledge')">
-            <span class="mobile-nav-icon">🤖</span>
-            <span class="mobile-nav-label">智能助手</span>
+        <div class="mobile-nav-item" data-page="reports" onclick="mobileNavigateTo('reports')">
+            <span class="mobile-nav-icon">📈</span>
+            <span class="mobile-nav-label">报表</span>
+        </div>
+        <div class="mobile-nav-item" data-page="agents" onclick="mobileNavigateTo('agents')">
+            <span class="mobile-nav-icon">📊</span>
+            <span class="mobile-nav-label">数据中心</span>
+        </div>
+        <div class="mobile-nav-item" data-page="more" onclick="mobileNavigateTo('more')">
+            <span class="mobile-nav-icon">☰</span>
+            <span class="mobile-nav-label">更多</span>
         </div>
     </nav>
 </body>

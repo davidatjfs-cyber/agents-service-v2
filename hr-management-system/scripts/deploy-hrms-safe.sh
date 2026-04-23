@@ -13,10 +13,21 @@ if [[ ! -f "${REPO_ROOT}/scripts/deploy-hrms-server-ecs.sh" ]]; then
   exit 1
 fi
 
+echo ">>> deploy-hrms-safe: 本地结构校验（智能助手 / 知识库 / 移动端导航）"
+rg -n 'mobile-nav-label">档案<' "${HRMS_DIR}/mobile-nav-production.html" >/dev/null
+rg -n 'mobile-nav-label">日报<' "${HRMS_DIR}/mobile-nav-production.html" >/dev/null
+rg -n 'mobile-nav-label">报表<' "${HRMS_DIR}/mobile-nav-production.html" >/dev/null
+rg -n 'mobile-nav-label">数据中心<' "${HRMS_DIR}/mobile-nav-production.html" >/dev/null
+rg -n 'mobile-nav-label">更多<' "${HRMS_DIR}/mobile-nav-production.html" >/dev/null
+rg -n '<span>知识库</span>' "${HRMS_DIR}/mobile-nav-production.html" >/dev/null
+rg -n '<span>智能助手</span>' "${HRMS_DIR}/mobile-nav-production.html" >/dev/null
+rg -n 'openMobileSmartAssistantBridge' "${HRMS_DIR}/mobile-nav-production.html" >/dev/null
+rg -n '自动读取 sales_raw|刷新 sales_raw 样本' "${HRMS_DIR}/working-fixed.html" >/dev/null
+
 echo ">>> deploy-hrms-safe: 服务端 (rsync + pm2 hrms-service)"
 bash "${REPO_ROOT}/scripts/deploy-hrms-server-ecs.sh"
 
-echo ">>> deploy-hrms-safe: 前端静态 (working-fixed / mobile-nav / sw.js + nginx)"
+echo ">>> deploy-hrms-safe: 前端静态 (working-fixed / mobile-nav / sw.js / forecast.html + nginx)"
 bash "${REPO_ROOT}/scripts/deploy-hrms-frontend.sh"
 
 echo ">>> deploy-hrms-safe: 完成。"

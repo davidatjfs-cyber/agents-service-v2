@@ -18691,6 +18691,7 @@ th { background: #f5f5f5; font-weight: 700; }
                 updateUserInfo();
                 restoreSidebarState();
                 showPage(getHomePageName());
+                maybeOpenSmartAssistantFromRoute();
 
                 // 后台异步加载state和角色模块
                 hrmsLoadStateFromServer().then(() => {
@@ -19050,6 +19051,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                 updateUserInfo();
                 restoreSidebarState();
                 showPage(getHomePageName());
+                maybeOpenSmartAssistantFromRoute();
                 showNotification(`欢迎回来，${currentUser.name}！`, 'success');
                 updateDebug(`用户登录: ${currentUser.name} (${getRoleDisplayName(currentUser.role)})`);
                 // 心跳：每5分钟上报一次在线状态，用于统计员工在线时长
@@ -37830,6 +37832,20 @@ tr:nth-child(even) td { background: #fafafa; }
             });
         }
 
+        function maybeOpenSmartAssistantFromRoute() {
+            const hash = String(window.location.hash || '').trim().toLowerCase();
+            if (hash !== '#smart-assistant' && hash !== '#inventory-forecast' && hash !== '#gross-margin') return false;
+            try { showPage('reports'); } catch (e) {}
+            try { showReportsTab('inventory-forecast'); } catch (e) {}
+            try { loadReportsData(); } catch (e) {}
+            try {
+                if (window.history && window.history.replaceState) {
+                    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+                }
+            } catch (e) {}
+            return true;
+        }
+
         async function loadAttentionReport() {
             const box = document.getElementById('rep-attention-box');
             if (!box) return;
@@ -38297,150 +38313,8 @@ tr:nth-child(even) td { background: #fafafa; }
 
         async function repInventoryForecastUpload() {
             if (!currentUser) return;
-            if (!isAdminUser()) { showNotification('仅管理员可上传销售数据', 'warning'); return; }
-            const state = repCollectInventoryForecastState();
-            const bizLabelLocal = (b) => (b === 'dinein' ? '堂食' : '外卖');
-            const slotLabelLocal = (s) => (s === 'dinner' ? '晚市' : (s === 'afternoon' ? '下午茶' : '午市'));
-            const store = String(document.getElementById('rep-store')?.value || '').trim();
-            const fileEl = document.getElementById('rep-inv-file');
-            const files = Array.from(fileEl?.files || []);
-            if (!store) {
-                showNotification('请先选择门店', 'warning');
-                return;
-            }
-            if (!files.length) {
-                showNotification('请先选择CSV/Excel/JSON文件', 'warning');
-                return;
-            }
-            try {
-                const detectKind = (name) => {
-                    const ext = String(name || '').toLowerCase();
-                    if (ext.endsWith('.xlsx') || ext.endsWith('.xls') || ext.endsWith('.csv')) return 'sheet';
-                    if (ext.endsWith('.pdf')) return 'pdf';
-                    if (ext.endsWith('.json')) return 'json';
-                    return '';
-                };
-                const firstKind = detectKind(files[0]?.name || '');
-                if (!firstKind) {
-                    showNotification('仅支持 CSV/Excel/JSON/PDF 文件', 'warning');
-                    return;
-                }
-                const mixed = files.find((f) => detectKind(f?.name || '') !== firstKind);
-                if (mixed) {
-                    showNotification('一次上传请只选择同类型文件（全Excel/CSV、全PDF或全JSON）', 'warning');
-                    return;
-                }
-
-                if (firstKind === 'sheet' || firstKind === 'pdf') {
-                    let accepted = 0;
-                    let skipped = 0;
-                    let evaluated = 0;
-                    let grouped = 0;
-                    let parsedRows = 0;
-                    let inserted = 0;
-                    let updated = 0;
-                    const detailRows = [];
-                    let successCount = 0;
-                    const failed = [];
-
-                    for (let i = 0; i < files.length; i += 1) {
-                        const file = files[i];
-                        try {
-                            const formData = new FormData();
-                            formData.append('store', store);
-                            formData.append('bizType', state.historyBizType);
-                            formData.append('file', file);
-                            const resp = await HRMS_API.uploadInventoryForecastHistoryFile(formData);
-                            successCount += 1;
-                            accepted += Number(resp?.accepted || 0);
-                            skipped += Number(resp?.skipped || 0);
-                            evaluated += Number(resp?.evaluated || 0);
-                            grouped += Number(resp?.grouped || 0);
-                            parsedRows += Number(resp?.parsedRows || 0);
-                            inserted += Number(resp?.inserted || 0);
-                            updated += Number(resp?.updated || 0);
-                            const breakdown = Array.isArray(resp?.groupedBreakdown) ? resp.groupedBreakdown : [];
-                            breakdown.forEach((x) => detailRows.push(x));
-                        } catch (e) {
-                            failed.push(`${file.name}: ${String(e?.message || e)}`);
-                        }
-                    }
-
-                    if (!successCount) {
-                        showNotification('上传失败：' + String(failed[0] || '未知错误'), 'error');
-                        return;
-                    }
-                    const detail = detailRows.slice(0, 4).map((x) => `${bizLabelLocal(String(x?.bizType || ''))}${slotLabelLocal(String(x?.slot || ''))}:${Number(x?.rows || 0)}条`).join('，');
-                    const failMsg = failed.length ? `；失败 ${failed.length} 个（${failed[0]}）` : '';
-                    showNotification(`上传完成：成功 ${successCount}/${files.length}，解析 ${parsedRows} 条，有效 ${accepted} 条（新增 ${inserted} / 更新 ${updated} / 跳过 ${skipped}），自动分组 ${grouped} 个，完成对比 ${evaluated} 条${detail ? `；${detail}` : ''}${failMsg}`, failed.length ? 'warning' : 'success');
-                    if (fileEl) fileEl.value = '';
-                    loadReportsData();
-                    return;
-                }
-
-                let rows = [];
-                for (let i = 0; i < files.length; i += 1) {
-                    const file = files[i];
-                    const ext = String(file.name || '').toLowerCase();
-                    const text = await file.text();
-                    let parsedRows = [];
-                    try {
-                        if (ext.endsWith('.json')) {
-                            const parsed = JSON.parse(text);
-                            parsedRows = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.rows) ? parsed.rows : []);
-                        } else {
-                            parsedRows = repParseInventoryCsvRows(text);
-                        }
-                    } catch (e) {
-                        showNotification(`文件解析失败：${file.name}`, 'error');
-                        return;
-                    }
-                    rows = rows.concat(Array.isArray(parsedRows) ? parsedRows : []);
-                }
-                if (!rows.length) {
-                    showNotification('未识别到有效历史数据', 'warning');
-                    return;
-                }
-
-                const groupedByType = new Map();
-                rows.forEach((row) => {
-                    const bizType = repNormalizeForecastBizTypeInput(row?.__bizType) || state.historyBizType;
-                    const slot = repNormalizeForecastSlotInput(row?.__slot);
-                    if (!slot) return;
-                    const key = `${bizType}||${slot}`;
-                    const pureRow = {
-                        date: row?.date,
-                        weather: row?.weather,
-                        isHoliday: row?.isHoliday,
-                        expectedRevenue: row?.expectedRevenue,
-                        productQuantities: row?.productQuantities
-                    };
-                    const prev = groupedByType.get(key) || { bizType, slot, rows: [] };
-                    prev.rows.push(pureRow);
-                    groupedByType.set(key, prev);
-                });
-
-                let accepted = 0;
-                let skipped = 0;
-                let evaluated = 0;
-                for (const grp of Array.from(groupedByType.values())) {
-                    const resp = await HRMS_API.saveInventoryForecastHistoryBatch({
-                        store,
-                        bizType: grp.bizType,
-                        slot: grp.slot,
-                        rows: grp.rows
-                    });
-                    accepted += Number(resp?.accepted || 0);
-                    skipped += Number(resp?.skipped || 0);
-                    evaluated += Number(resp?.evaluated || 0);
-                }
-                const splitCount = groupedByType.size;
-                showNotification(`上传完成：有效 ${accepted} 条，跳过 ${skipped} 条，完成对比 ${evaluated} 条（已按${splitCount}个类型/时段分组）`, 'success');
-                if (fileEl) fileEl.value = '';
-                loadReportsData();
-            } catch (e) {
-                showNotification('上传失败：' + String(e?.message || e), 'error');
-            }
+            showNotification('智能助手已改为自动读取 sales_raw，无需再手动上传历史数据。', 'info');
+            loadReportsData();
         }
 
         function renderInventoryForecastReport(data, box) {
@@ -38645,14 +38519,14 @@ tr:nth-child(even) td { background: #fafafa; }
                                         `);
                                     });
                                 });
-                                return rows.length ? rows.join('') : '<tr><td colspan="6" style="text-align:center; color:rgba(200,215,230,0.6); padding:14px 0;">暂无预测明细（请先上传历史数据并刷新预测）</td></tr>';
+                                return rows.length ? rows.join('') : '<tr><td colspan="6" style="text-align:center; color:rgba(200,215,230,0.6); padding:14px 0;">暂无预测明细（当前按 sales_raw 自动汇总，可先检查销售明细是否已入库）</td></tr>';
                             })()}
                         </tbody>
                     </table>
                 </div>
 
                 ${isAdminUser() ? `<div style="margin-top:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px;">
-                    <div style="font-size:12px; font-weight:800; color:rgba(226,232,240,0.92); margin-bottom:8px;">历史销售数据上传（持续更新）</div>
+                    <div style="font-size:12px; font-weight:800; color:rgba(226,232,240,0.92); margin-bottom:8px;">历史销售样本（自动读取）</div>
                     <div style="display:grid; grid-template-columns:1fr; gap:8px; margin-bottom:8px;">
                         <select id="rep-inv-history-biz" style="width:100%; padding:9px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.16); background:rgba(255,255,255,0.08); color:#fff;">
                             <option value="takeaway" ${historyBizType === 'takeaway' ? 'selected' : ''}>外卖模块</option>
@@ -38660,11 +38534,9 @@ tr:nth-child(even) td { background: #fafafa; }
                         </select>
                     </div>
                     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-                        <input id="rep-inv-file" type="file" accept=".csv,.json,.xlsx,.xls,.pdf" multiple style="font-size:12px; color:rgba(226,232,240,0.9);" />
-                        <button class="btn btn-secondary" type="button" onclick="repInventoryForecastUpload()" style="padding:8px 12px; border-radius:8px;">上传历史数据</button>
-                        <button class="btn btn-secondary" type="button" onclick="repInventoryForecastRun()" style="padding:8px 12px; border-radius:8px;">刷新历史</button>
+                        <button class="btn btn-secondary" type="button" onclick="repInventoryForecastRun()" style="padding:8px 12px; border-radius:8px;">刷新 sales_raw 样本</button>
                     </div>
-                    <div style="margin-top:8px; font-size:11px; color:rgba(200,215,230,0.62);">支持 CSV/Excel/PDF，可一次选择多个同类型文件（全Excel/CSV或全PDF），并按所选门店和业务类型上传校验</div>
+                    <div style="margin-top:8px; font-size:11px; color:rgba(200,215,230,0.62);">智能助手现在直接按所选门店、业态与日期范围汇总 sales_raw，不再依赖手工上传第二份历史文件。</div>
                 </div>` : ''}
 
                 <div style="margin-top:12px; font-size:12px; font-weight:800; color:rgba(226,232,240,0.92);">历史样本（${bizLabel(historyBizType)}）</div>
@@ -42258,8 +42130,8 @@ ${body}
                 { icon:'💎', label:'员工积分', page:'points' },
                 { icon:'⏰', label:'考勤打卡', page:'attendance' },
                 { icon:'📊', label:'分析报表', page:'reports', roles:['admin','hr_manager','hq_manager','store_manager'] },
-                // 智能助手：独立页 forecast（门店角色仅本店数据）；管理员走上方「数据中心」
-                { icon:'📦', label:'智能助手', href:'/forecast.html', roles:['hq_manager','store_manager','store_production_manager'] },
+                // 智能助手：独立页 forecast.html（与主壳同源部署）；管理员/门店/总部均需可见（此前误排除 admin 导致「更多」里消失）
+                { icon:'📦', label:'智能助手', href:'/forecast.html', roles:['admin','hr_manager','hq_manager','store_manager','store_production_manager'] },
                 { icon:'⚙️', label:'系统设置', page:'settings', roles:['admin'] },
             ];
             const role = currentUser?.role || '';
