@@ -5459,6 +5459,57 @@ async function mergeSharedStateFields(patches, arrayIdFields = {}) {
 }
 
 /**
+ * 将当前 hrms_state 整包写入 hrms_state_snapshots（定时任务用），并按保留策略裁剪旧行。
+ * 失败由调用方 catch 后走 notifyAdminsDualWriteFailure。
+ */
+async function captureHrmsStateSnapshotToDb(opts = {}) {
+  if (String(process.env.HRMS_STATE_SNAPSHOT_DISABLED || '').toLowerCase() === 'true') {
+    return { ok: true, skipped: true, reason: 'disabled' };
+  }
+  const source = String(opts.source || 'scheduled').slice(0, 64);
+  const key = String(opts.stateKey || 'default').trim() || 'default';
+  const r = await pool.query('SELECT data FROM hrms_state WHERE key = $1 LIMIT 1', [key]);
+  const row = r.rows?.[0];
+  if (!row) return { ok: true, skipped: true, reason: 'no_row' };
+  let payload = row.data;
+  if (payload == null) payload = {};
+  if (typeof payload === 'string') {
+    try {
+      payload = JSON.parse(payload);
+    } catch {
+      payload = {};
+    }
+  }
+  if (typeof payload !== 'object' || Array.isArray(payload)) payload = {};
+  const jsonStr = JSON.stringify(payload);
+  const byteSize = Buffer.byteLength(jsonStr, 'utf8');
+  await pool.query(
+    `INSERT INTO hrms_state_snapshots (state_key, data, byte_size, source)
+     VALUES ($1, $2::jsonb, $3, $4)`,
+    [key, jsonStr, byteSize, source]
+  );
+  const retainDays = Math.max(1, Math.min(365, Number(process.env.HRMS_STATE_SNAPSHOT_RETAIN_DAYS || 30)));
+  await pool.query(
+    `DELETE FROM hrms_state_snapshots WHERE state_key = $1 AND created_at < NOW() - ($2::int * INTERVAL '1 day')`,
+    [key, retainDays]
+  );
+  const retainRows = Math.max(10, Math.min(5000, Number(process.env.HRMS_STATE_SNAPSHOT_MAX_ROWS || 400)));
+  await pool.query(
+    `DELETE FROM hrms_state_snapshots s
+     USING (
+       SELECT id FROM (
+         SELECT id, ROW_NUMBER() OVER (PARTITION BY state_key ORDER BY created_at DESC) AS rn
+         FROM hrms_state_snapshots
+         WHERE state_key = $1
+       ) x WHERE x.rn > $2
+     ) d
+     WHERE s.id = d.id`,
+    [key, retainRows]
+  );
+  return { ok: true, byteSize };
+}
+
+/**
  * 双写失败时仅通知飞书 admin（不推送给总部营运；与 agents 失败告警口径一致）。
  * 当前已接入告警的范围（遗漏新增双写时请同步调用本函数）：
  * - dualWriteStateToDB 全量块（employees / leave / reward_punishment / notifications）
@@ -5469,6 +5520,7 @@ async function mergeSharedStateFields(patches, arrayIdFields = {}) {
  * - daily_reports（营业日报：hrms_state 与 PostgreSQL 表同步失败时告警，避免 BI/绩效读库缺数）
  * - sales_raw（Excel 上传 / 目录 SALES_RAW_IMPORT_DIR 自动入库失败或抛错）
  * - 飞书表格→PG（feishu-sync 定时按表失败；Webhook bitable 异步处理失败；手动多维表同步失败）
+ * - hrms_state 定时快照写入 hrms_state_snapshots（captureHrmsStateSnapshotToDb）
  */
 async function notifyAdminsDualWriteFailure(scopeLabel, err) {
   try {
@@ -8434,6 +8486,141 @@ function normalizeForecastStoreKey(input) {
   return normalizeForecastStoreName(input).replace(/\s+/g, '').toLowerCase();
 }
 
+function shiftForecastDate(dateStr, deltaDays) {
+  const safe = safeDateOnly(dateStr);
+  if (!safe) return '';
+  const dt = new Date(`${safe}T00:00:00Z`);
+  if (!Number.isFinite(dt.getTime())) return '';
+  dt.setUTCDate(dt.getUTCDate() + Number(deltaDays || 0));
+  return dt.toISOString().slice(0, 10);
+}
+
+function forecastHistoryRowKey(row) {
+  return [
+    String(row?.store || '').trim(),
+    String(row?.bizType || '').trim(),
+    String(row?.slot || '').trim(),
+    String(row?.date || '').trim()
+  ].join('||');
+}
+
+function sortForecastHistoryRows(rows, limit = 0) {
+  const sorted = (Array.isArray(rows) ? rows : []).slice().sort((a, b) => {
+    const aDate = String(a?.date || '');
+    const bDate = String(b?.date || '');
+    if (aDate !== bDate) return bDate.localeCompare(aDate);
+    return String(b?.updatedAt || b?.createdAt || '').localeCompare(String(a?.updatedAt || a?.createdAt || ''));
+  });
+  if (limit > 0) return sorted.slice(0, limit);
+  return sorted;
+}
+
+function mergePreferredForecastHistoryRows(primaryRows, fallbackRows, limit = 0) {
+  const map = new Map();
+  (Array.isArray(primaryRows) ? primaryRows : []).forEach((row) => {
+    map.set(forecastHistoryRowKey(row), row);
+  });
+  (Array.isArray(fallbackRows) ? fallbackRows : []).forEach((row) => {
+    const key = forecastHistoryRowKey(row);
+    if (!map.has(key)) map.set(key, row);
+  });
+  return sortForecastHistoryRows(Array.from(map.values()), limit);
+}
+
+async function loadInventoryForecastHistoryFromSalesRaw({ storeScope, bizType, slot, startDate, endDate }) {
+  const stores = Array.isArray(storeScope)
+    ? Array.from(new Set(storeScope.map((x) => String(x || '').trim()).filter(Boolean)))
+    : [];
+  if (!stores.length) return [];
+  const storeKeys = stores.map((x) => normalizeStoreKey(x)).filter(Boolean);
+  if (!storeKeys.length) return [];
+
+  const qBizType = normalizeForecastBizType(bizType);
+  const qSlot = normalizeForecastSlot(slot);
+  const start = safeDateOnly(startDate);
+  const end = safeDateOnly(endDate);
+  const where = [`lower(regexp_replace(COALESCE(store,''),'\\s+','','g')) = ANY($1)`];
+  const params = [storeKeys];
+  if (start) {
+    params.push(start);
+    where.push(`date >= $${params.length}::date`);
+  }
+  if (end) {
+    params.push(end);
+    where.push(`date <= $${params.length}::date`);
+  }
+  if (qBizType) {
+    params.push(qBizType);
+    where.push(`(
+      ($${params.length} = 'takeaway' AND lower(regexp_replace(COALESCE(biz_type,''),'\\s+','','g')) IN ('takeaway','delivery','外卖','外送'))
+      OR
+      ($${params.length} = 'dinein' AND lower(regexp_replace(COALESCE(biz_type,''),'\\s+','','g')) IN ('dinein','堂食','店内','堂食点餐'))
+    )`);
+  }
+
+  const sql = `
+    SELECT
+      store,
+      date::text AS date,
+      biz_type,
+      COALESCE(slot, '') AS slot,
+      dish_name,
+      ROUND(SUM(COALESCE(qty, 0))::numeric, 2) AS qty,
+      ROUND(SUM(COALESCE(sales_amount, 0))::numeric, 2) AS sales_amount,
+      ROUND(SUM(COALESCE(revenue, 0))::numeric, 2) AS revenue,
+      ROUND(SUM(COALESCE(discount, 0))::numeric, 2) AS discount
+    FROM sales_raw
+    WHERE ${where.join(' AND ')}
+    GROUP BY store, date, biz_type, slot, dish_name
+    ORDER BY date DESC
+  `;
+
+  const resp = await pool.query(sql, params);
+  const grouped = new Map();
+  for (const raw of (resp.rows || [])) {
+    const date = safeDateOnly(raw?.date);
+    const biz = normalizeForecastBizType(raw?.biz_type);
+    const slotName = normalizeForecastSlot(raw?.slot);
+    const product = String(raw?.dish_name || '').trim();
+    const qty = safeNumber(raw?.qty);
+    const salesAmount = safeNumber(raw?.sales_amount);
+    const revenue = safeNumber(raw?.revenue);
+    const discount = safeNumber(raw?.discount);
+    if (!date || !biz || !slotName || !product || !Number.isFinite(qty) || qty <= 0) continue;
+    if (qBizType && biz !== qBizType) continue;
+    if (qSlot && slotName !== qSlot) continue;
+
+    const key = `${String(raw?.store || '').trim()}||${biz}||${slotName}||${date}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        id: `sales_raw:${key}`,
+        store: String(raw?.store || '').trim(),
+        bizType: biz,
+        slot: slotName,
+        date,
+        weather: '',
+        isHoliday: !!(isKnownPublicHoliday(date) || isCNYPeriod(date)),
+        expectedRevenue: 0,
+        actualRevenue: 0,
+        totalDiscount: 0,
+        productQuantities: {},
+        source: 'sales_raw',
+        createdAt: `${date}T00:00:00.000Z`,
+        updatedAt: `${date}T23:59:59.000Z`
+      });
+    }
+    const row = grouped.get(key);
+    const expectedRevenueInc = Number.isFinite(salesAmount) && salesAmount > 0
+      ? salesAmount
+      : Math.max(0, Number(revenue || 0) + Number(discount || 0));
+    row.expectedRevenue = Number((Number(row.expectedRevenue || 0) + expectedRevenueInc).toFixed(2));
+    row.actualRevenue = Number((Number(row.actualRevenue || 0) + (Number.isFinite(revenue) ? revenue : 0)).toFixed(2));
+    row.totalDiscount = Number((Number(row.totalDiscount || 0) + (Number.isFinite(discount) ? discount : 0)).toFixed(2));
+    row.productQuantities[product] = Number((Number(row.productQuantities[product] || 0) + qty).toFixed(2));
+  }
+  return sortForecastHistoryRows(Array.from(grouped.values()));
+}
+
 const FORECAST_EXCLUDED_PRODUCTS = ['打包盒', '特色米饭', '年夜饭', '五常大米饭'];
 
 function isExcludedForecastProduct(name) {
@@ -10384,20 +10571,29 @@ app.get('/api/reports/inventory-forecast/history', authRequired, async (req, res
     const store = isForecastStoreScopedRole(role) ? myStore : qStore;
     if (!store) return res.status(400).json({ error: 'missing_store' });
 
-    let items = Array.isArray(state0.inventoryForecastHistory) ? state0.inventoryForecastHistory.slice() : [];
-    items = items.filter((x) => String(x?.store || '').trim() === store);
-    if (bizType) items = items.filter((x) => String(x?.bizType || '').trim() === bizType);
-    if (slot) items = items.filter((x) => String(x?.slot || '').trim() === slot);
-    if (start || end) {
-      items = items.filter((x) => inDateRange(String(x?.date || '').trim(), start, end));
-    }
-    items.sort((a, b) => {
-      const aDate = String(a?.date || '');
-      const bDate = String(b?.date || '');
-      if (aDate !== bDate) return bDate.localeCompare(aDate);
-      return String(b?.updatedAt || b?.createdAt || '').localeCompare(String(a?.updatedAt || a?.createdAt || ''));
+    const today = new Date().toISOString().slice(0, 10);
+    const salesRawItems = await loadInventoryForecastHistoryFromSalesRaw({
+      storeScope: [store],
+      bizType,
+      slot,
+      startDate: start || shiftForecastDate(end || today, -180),
+      endDate: end || today
     });
-    return res.json({ store, bizType: bizType || '', slot: slot || '', items: items.slice(0, limit) });
+    let stateItems = Array.isArray(state0.inventoryForecastHistory) ? state0.inventoryForecastHistory.slice() : [];
+    stateItems = stateItems.filter((x) => String(x?.store || '').trim() === store);
+    if (bizType) stateItems = stateItems.filter((x) => String(x?.bizType || '').trim() === bizType);
+    if (slot) stateItems = stateItems.filter((x) => String(x?.slot || '').trim() === slot);
+    if (start || end) {
+      stateItems = stateItems.filter((x) => inDateRange(String(x?.date || '').trim(), start, end));
+    }
+    const items = mergePreferredForecastHistoryRows(salesRawItems, stateItems, limit);
+    return res.json({
+      store,
+      bizType: bizType || '',
+      slot: slot || '',
+      storageSource: salesRawItems.length ? 'sales_raw' : 'inventoryForecastHistory',
+      items
+    });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
   }
@@ -11514,7 +11710,18 @@ app.get('/api/reports/inventory-forecast/gross-profit-profiles', authRequired, a
     items.sort((a, b) => String(a?.product || '').localeCompare(String(b?.product || ''), 'zh-Hans-CN'));
 
     // Enrich with avg price from history for margin rate computation
-    const historyRows = Array.isArray(state0.inventoryForecastHistory) ? state0.inventoryForecastHistory : [];
+    const today = new Date().toISOString().slice(0, 10);
+    const salesRawHistoryRows = await loadInventoryForecastHistoryFromSalesRaw({
+      storeScope: scope.storeScope,
+      bizType: qBizType || '',
+      startDate: shiftForecastDate(today, -180),
+      endDate: today
+    });
+    const stateHistoryRows = (Array.isArray(state0.inventoryForecastHistory) ? state0.inventoryForecastHistory : [])
+      .filter((x) => scope.storeScope.includes(String(x?.store || '').trim()))
+      .filter((x) => !qBizType || String(x?.bizType || '').trim() === qBizType)
+      .slice(0, 5000);
+    const historyRows = mergePreferredForecastHistoryRows(salesRawHistoryRows, stateHistoryRows, 5000);
     const aliasLookup = buildForecastProductAliasLookup(state0, { store: scope.store, brandId: scope.brandId });
     const priceMap = computeAvgPricePerProduct(historyRows, scope.storeScope, aliasLookup);
     const enriched = items.map((x) => {
@@ -11553,7 +11760,16 @@ app.post('/api/reports/inventory-forecast/gross-profit-profiles', authRequired, 
     if (!normalizedItems.length) return res.status(400).json({ error: 'invalid_items' });
 
     // Compute avg prices for cost→gross conversion
-    const historyRows = Array.isArray(state0.inventoryForecastHistory) ? state0.inventoryForecastHistory : [];
+    const today = new Date().toISOString().slice(0, 10);
+    const salesRawHistoryRows = await loadInventoryForecastHistoryFromSalesRaw({
+      storeScope: scope.storeScope,
+      startDate: shiftForecastDate(today, -180),
+      endDate: today
+    });
+    const stateHistoryRows = (Array.isArray(state0.inventoryForecastHistory) ? state0.inventoryForecastHistory : [])
+      .filter((x) => scope.storeScope.includes(String(x?.store || '').trim()))
+      .slice(0, 5000);
+    const historyRows = mergePreferredForecastHistoryRows(salesRawHistoryRows, stateHistoryRows, 5000);
     const aliasLookup = buildForecastProductAliasLookup(state0, { store: scope.store, brandId: scope.brandId });
     const priceMap = computeAvgPricePerProduct(historyRows, scope.storeScope, aliasLookup);
 
@@ -11710,9 +11926,18 @@ app.post('/api/reports/inventory-forecast/gross-margin-estimate', authRequired, 
     const scope = resolveForecastScope(state0, username, role, req.body?.store, req.body?.brandId);
     if (!scope.brandId || !scope.storeScope.length) return res.status(400).json({ error: 'missing_brand_or_store_scope' });
 
-    const historyRows = (Array.isArray(state0.inventoryForecastHistory) ? state0.inventoryForecastHistory : [])
+    const salesRawHistoryRows = await loadInventoryForecastHistoryFromSalesRaw({
+      storeScope: scope.storeScope,
+      bizType,
+      startDate,
+      endDate
+    });
+    const stateHistoryRows = (Array.isArray(state0.inventoryForecastHistory) ? state0.inventoryForecastHistory : [])
       .filter((x) => scope.storeScope.includes(String(x?.store || '').trim()))
+      .filter((x) => !bizType || String(x?.bizType || '').trim() === bizType)
+      .filter((x) => inDateRange(String(x?.date || '').trim(), startDate, endDate))
       .slice(0, 5000);
+    const historyRows = mergePreferredForecastHistoryRows(salesRawHistoryRows, stateHistoryRows, 5000);
     let profiles = (Array.isArray(state0.forecastGrossProfitProfiles) ? state0.forecastGrossProfitProfiles : [])
       .filter((x) => normalizeBrandId(x?.brandId || resolveStoreBrandContext(state0, String(x?.store || '').trim()).brandId) === scope.brandId)
       .slice(0, 5000);
@@ -11811,7 +12036,15 @@ app.post('/api/reports/inventory-forecast/predict', authRequired, async (req, re
 
     const all = Array.isArray(state0.inventoryForecastHistory) ? state0.inventoryForecastHistory : [];
     const aliasLookup = buildForecastProductAliasLookup(state0, store);
-    const historyRowsRaw = all
+    const historyWindowStart = shiftForecastDate(date, -180);
+    const salesRawSlotRows = await loadInventoryForecastHistoryFromSalesRaw({
+      storeScope: [store],
+      bizType,
+      slot,
+      startDate: historyWindowStart,
+      endDate: date
+    });
+    const stateHistoryRowsRaw = all
       .filter((x) => String(x?.store || '').trim() === store)
       .filter((x) => String(x?.bizType || '').trim() === bizType)
       .filter((x) => String(x?.slot || '').trim() === slot)
@@ -11820,12 +12053,28 @@ app.post('/api/reports/inventory-forecast/predict', authRequired, async (req, re
         return !d || d <= date;
       })
       .slice(0, 400);
+    const historyRowsRaw = mergePreferredForecastHistoryRows(salesRawSlotRows, stateHistoryRowsRaw, 400);
     const historyRows = canonicalizeForecastRows(historyRowsRaw, aliasLookup);
 
     // ── Slot revenue split: frontend sends total biz-type revenue for the whole day.
     // Historical rows are per-slot, so we must split the incoming revenue by slot share
     // to avoid each slot thinking it owns the full day's revenue (which inflates qty ~3x).
-    const slotSplit = computeSlotRevenueShare(all, store, bizType, slot, date);
+    const salesRawAllSlotRows = await loadInventoryForecastHistoryFromSalesRaw({
+      storeScope: [store],
+      bizType,
+      startDate: historyWindowStart,
+      endDate: date
+    });
+    const stateAllSlotRows = all
+      .filter((x) => String(x?.store || '').trim() === store)
+      .filter((x) => String(x?.bizType || '').trim() === bizType)
+      .filter((x) => {
+        const d = String(x?.date || '').trim();
+        return !d || d <= date;
+      })
+      .slice(0, 1200);
+    const slotShareRows = mergePreferredForecastHistoryRows(salesRawAllSlotRows, stateAllSlotRows, 1200);
+    const slotSplit = computeSlotRevenueShare(slotShareRows, store, bizType, slot, date);
     const slotExpectedRevenue = Number((expectedRevenue * slotSplit.slotShare).toFixed(2));
 
     const target = {
@@ -16226,6 +16475,20 @@ app.listen(PORT, HOST, async () => {
     `).catch(e => console.warn('[migration] hrms_user_notifications table:', e?.message));
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_hrms_notif_user_created ON hrms_user_notifications (target_username, created_at DESC)`).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_hrms_notif_task_id ON hrms_user_notifications ((meta->>'task_id'))`).catch(() => {});
+    // Runtime migration: hrms_state 定时快照（整包 JSONB，供灾难恢复/对账；不依赖 ALLOW_SCHEMA_CHANGES）
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hrms_state_snapshots (
+        id BIGSERIAL PRIMARY KEY,
+        state_key TEXT NOT NULL DEFAULT 'default',
+        data JSONB NOT NULL,
+        byte_size INTEGER,
+        source TEXT NOT NULL DEFAULT 'scheduled',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `).catch(e => console.warn('[migration] hrms_state_snapshots table:', e?.message));
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_hrms_state_snapshots_key_created ON hrms_state_snapshots (state_key, created_at DESC)`
+    ).catch(() => {});
     // Runtime migration: dedup unique index on agent_messages(record_id, content_type)
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_messages_record_content_uniq ON agent_messages (record_id, content_type) WHERE record_id IS NOT NULL AND record_id != ''`).catch(e => console.warn('[migration] dedup index:', e?.message));
     assertCriticalFunctions();
@@ -17198,6 +17461,29 @@ app.listen(PORT, HOST, async () => {
       onHeartbeat: beatHeartbeat
     });
     startSalesRawFolderImporter();
+
+    // hrms_state → 快照表（定时 INSERT；环境变量：HRMS_STATE_SNAPSHOT_INTERVAL_MINUTES / _MAX_ROWS / _RETAIN_DAYS / HRMS_STATE_SNAPSHOT_DISABLED）
+    const snapIntervalMin = Math.max(5, Math.min(24 * 60, Number(process.env.HRMS_STATE_SNAPSHOT_INTERVAL_MINUTES || 15)));
+    const runHrmsStateSnapshot = () => {
+      captureHrmsStateSnapshotToDb({ source: 'scheduled' }).catch((e) => {
+        console.error('[hrms_state_snapshot] tick:', e?.message || e);
+        void notifyAdminsDualWriteFailure('hrms_state 定时快照（hrms_state_snapshots）', e);
+      });
+    };
+    if (String(process.env.HRMS_STATE_SNAPSHOT_DISABLED || '').toLowerCase() !== 'true') {
+      setTimeout(runHrmsStateSnapshot, 120_000);
+      setInterval(runHrmsStateSnapshot, snapIntervalMin * 60 * 1000);
+      console.log(
+        '[hrms_state_snapshot] scheduler on, interval_min=',
+        snapIntervalMin,
+        'retain_days=',
+        process.env.HRMS_STATE_SNAPSHOT_RETAIN_DAYS || 30,
+        'max_rows=',
+        process.env.HRMS_STATE_SNAPSHOT_MAX_ROWS || 400
+      );
+    } else {
+      console.log('[hrms_state_snapshot] disabled (HRMS_STATE_SNAPSHOT_DISABLED=true)');
+    }
   } catch (e) {
     console.error('[agents] init failed:', e?.message || e);
   }

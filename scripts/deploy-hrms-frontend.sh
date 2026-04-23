@@ -21,7 +21,7 @@ REMOTE_DIR="/opt/hrms"
 LOCAL_SRC="$(cd "$(dirname "$0")/../hr-management-system" && pwd)"
 
 echo ">>> [1/4] 验证本地源文件..."
-for f in working-fixed.html mobile-nav-production.html sw.js; do
+for f in working-fixed.html mobile-nav-production.html sw.js forecast.html; do
   [[ -f "$LOCAL_SRC/$f" ]] || { echo "ERROR: 找不到 $LOCAL_SRC/$f"; exit 1; }
 done
 echo "    本地源: $LOCAL_SRC"
@@ -31,6 +31,7 @@ rsync -avz --checksum -e ssh \
   "$LOCAL_SRC/working-fixed.html" \
   "$LOCAL_SRC/mobile-nav-production.html" \
   "$LOCAL_SRC/sw.js" \
+  "$LOCAL_SRC/forecast.html" \
   "$ECS_HOST:$REMOTE_DIR/"
 
 echo ">>> [3/4] 远端：确保 nginx 对 HTML 禁用 HTTP 缓存 + reload..."

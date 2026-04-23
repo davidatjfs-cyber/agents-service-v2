@@ -43,6 +43,18 @@ jobs:
           test -f hr-management-system/working-fixed.html
           test -f hr-management-system/mobile-nav-production.html
           test -f hr-management-system/sw.js
+          test -f hr-management-system/forecast.html
+      - name: Smart assistant and mobile nav integrity
+        run: |
+          rg -n 'mobile-nav-label">档案<' hr-management-system/mobile-nav-production.html
+          rg -n 'mobile-nav-label">日报<' hr-management-system/mobile-nav-production.html
+          rg -n 'mobile-nav-label">报表<' hr-management-system/mobile-nav-production.html
+          rg -n 'mobile-nav-label">数据中心<' hr-management-system/mobile-nav-production.html
+          rg -n 'mobile-nav-label">更多<' hr-management-system/mobile-nav-production.html
+          rg -n '<span>知识库</span>' hr-management-system/mobile-nav-production.html
+          rg -n '<span>智能助手</span>' hr-management-system/mobile-nav-production.html
+          rg -n 'openMobileSmartAssistantBridge' hr-management-system/mobile-nav-production.html
+          rg -n '自动读取 sales_raw|刷新 sales_raw 样本' hr-management-system/working-fixed.html
 
   deploy-ecs:
     needs: verify
