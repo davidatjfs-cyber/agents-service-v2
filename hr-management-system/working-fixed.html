@@ -11079,20 +11079,32 @@
                                 </div>
                             </div>
                             <div id="perf-audit-results" style="display:none;">
-                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-                                    <div style="font-size:13px;font-weight:700;color:#94a3b8;">周度扣分记录</div>
-                                    <span id="perf-audit-weekly-count" style="font-size:12px;color:#64748b;"></span>
-                                </div>
-                                <div id="perf-audit-weekly-list" style="display:flex;flex-direction:column;gap:8px;"></div>
-                                <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;">
-                                    <div style="font-size:13px;font-weight:700;color:#94a3b8;">备案记录</div>
-                                    <span id="perf-audit-filing-count" style="font-size:12px;color:#64748b;"></span>
-                                </div>
-                                <div id="perf-audit-filing-list" style="display:flex;flex-direction:column;gap:8px;"></div>
-                                <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;">
-                                    <div style="font-size:13px;font-weight:700;color:#94a3b8;">失效操作记录</div>
-                                </div>
-                                <div id="perf-audit-invalidation-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+                                <div id="perf-audit-monthly-hint" style="font-size:12px;color:#94a3b8;line-height:1.55;margin-bottom:10px;"></div>
+                                <details style="margin-bottom:10px;border:1px solid rgba(148,163,184,0.14);border-radius:10px;background:rgba(15,23,42,0.35);">
+                                    <summary style="cursor:pointer;padding:10px 12px;font-size:13px;font-weight:700;color:#e2e8f0;list-style:none;display:flex;align-items:center;justify-content:space-between;"><span>周度扣分记录</span><span id="perf-audit-weekly-count" style="font-size:12px;color:#64748b;"></span></summary>
+                                    <div style="padding:0 12px 12px;">
+                                        <p style="margin:0 0 8px;font-size:11px;color:#64748b;line-height:1.5;">周汇总对应 <code style="font-size:10px;">anomaly_rollups_v2</code>；按日原始触发见下一折叠。</p>
+                                        <div id="perf-audit-weekly-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+                                    </div>
+                                </details>
+                                <details style="margin-bottom:10px;border:1px solid rgba(148,163,184,0.14);border-radius:10px;background:rgba(15,23,42,0.35);">
+                                    <summary style="cursor:pointer;padding:10px 12px;font-size:13px;font-weight:700;color:#e2e8f0;list-style:none;display:flex;align-items:center;justify-content:space-between;"><span>BI 按日触发</span><span id="perf-audit-daily-count" style="font-size:12px;color:#64748b;"></span></summary>
+                                    <div style="padding:0 12px 12px;">
+                                        <div id="perf-audit-daily-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+                                    </div>
+                                </details>
+                                <details style="margin-bottom:10px;border:1px solid rgba(148,163,184,0.14);border-radius:10px;background:rgba(15,23,42,0.35);">
+                                    <summary style="cursor:pointer;padding:10px 12px;font-size:13px;font-weight:700;color:#e2e8f0;list-style:none;display:flex;align-items:center;justify-content:space-between;"><span>备案记录</span><span id="perf-audit-filing-count" style="font-size:12px;color:#64748b;"></span></summary>
+                                    <div style="padding:0 12px 12px;">
+                                        <div id="perf-audit-filing-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+                                    </div>
+                                </details>
+                                <details style="margin-bottom:10px;border:1px solid rgba(148,163,184,0.14);border-radius:10px;background:rgba(15,23,42,0.35);">
+                                    <summary style="cursor:pointer;padding:10px 12px;font-size:13px;font-weight:700;color:#e2e8f0;list-style:none;">失效操作记录</summary>
+                                    <div style="padding:0 12px 12px;">
+                                        <div id="perf-audit-invalidation-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+                                    </div>
+                                </details>
                             </div>
                         </div>
                     </div><!-- /.acm-body -->
@@ -12938,6 +12950,14 @@
                     #agents-page.dc-v2 .dc-perf-card .dc-perf-s { font-size: 10px; color: #64748b; margin-top: 6px; line-height: 1.35; }
                     #agents-page.dc-v2 #dc-alerts-body { max-height: 280px; overflow-y: auto; }
                     #agents-page.dc-v2 .dc-foot { margin: 22px 0 8px; font-size: 11px; color: #64748b; line-height: 1.55; }
+                    #agents-page.dc-v2 details.dc-perf-audit-fold { margin: 0 0 12px; border-radius: 14px; border: 1px dashed rgba(148,163,184,0.2); background: rgba(2,6,23,0.28); }
+                    #agents-page.dc-v2 details.dc-perf-audit-fold > summary {
+                        cursor: pointer; padding: 12px 14px; font-size: 13px; font-weight: 700; color: #e2e8f0;
+                        list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+                    }
+                    #agents-page.dc-v2 details.dc-perf-audit-fold > summary::-webkit-details-marker { display: none; }
+                    #agents-page.dc-v2 details.dc-perf-audit-fold[open] > summary { border-bottom: 1px solid rgba(148,163,184,0.1); }
+                    #agents-page.dc-v2 details.dc-perf-audit-fold .dc-perf-audit-fold-body { padding: 12px 14px 14px; }
                     @keyframes dc-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
                     #agents-page.dc-v2 .dc-kpi { animation: dc-rise 0.42s cubic-bezier(.2,.8,.2,1) backwards; }
                     #agents-page.dc-v2 .dc-kpi:nth-child(1) { animation-delay: 0.03s; }
@@ -13010,20 +13030,33 @@
                                 <button type="button" class="dc-btn-go" onclick="loadDataCenterPerformanceAuditRecords()">查询</button>
                             </div>
                             <div style="padding:12px 18px 18px;">
-                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-                                    <div style="font-size:13px;font-weight:700;color:#94a3b8;">周度扣分记录</div>
-                                    <span id="dc-perf-audit-weekly-count" style="font-size:12px;color:#64748b;">0 条</span>
-                                </div>
-                                <div id="dc-perf-audit-weekly-list" style="display:flex;flex-direction:column;gap:8px;"></div>
-                                <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;">
-                                    <div style="font-size:13px;font-weight:700;color:#94a3b8;">备案记录</div>
-                                    <span id="dc-perf-audit-filing-count" style="font-size:12px;color:#64748b;">0 条</span>
-                                </div>
-                                <div id="dc-perf-audit-filing-list" style="display:flex;flex-direction:column;gap:8px;"></div>
-                                <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;">
-                                    <div style="font-size:13px;font-weight:700;color:#94a3b8;">失效操作记录</div>
-                                </div>
-                                <div id="dc-perf-audit-invalidation-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+                                <div id="dc-perf-audit-monthly-hint" style="font-size:12px;color:#94a3b8;line-height:1.55;margin-bottom:10px;"></div>
+                                <details class="dc-perf-audit-fold">
+                                    <summary>周度扣分记录 <span id="dc-perf-audit-weekly-count" style="font-size:12px;color:#64748b;font-weight:600;">0 条</span></summary>
+                                    <div class="dc-perf-audit-fold-body">
+                                        <p style="margin:0 0 10px;font-size:11px;color:#64748b;line-height:1.55;">以下为 <code style="font-size:10px;">agent_scores</code> 中按自然周汇总的 BI 扣分行；充值、差评、食安等<strong>按日命中</strong>的原始记录在下方「BI 按日触发」中展示，并汇总进对应周行。</p>
+                                        <div id="dc-perf-audit-weekly-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+                                    </div>
+                                </details>
+                                <details class="dc-perf-audit-fold">
+                                    <summary>BI 异常按日触发（门店+触发日） <span id="dc-perf-audit-daily-count" style="font-size:12px;color:#64748b;font-weight:600;">0 条</span></summary>
+                                    <div class="dc-perf-audit-fold-body">
+                                        <p style="margin:0 0 10px;font-size:11px;color:#64748b;line-height:1.55;">库表 <code style="font-size:10px;">anomaly_triggers</code>。筛选员工账号时，仅展示该账号在飞书资料中<strong>所属门店</strong>的触发记录。</p>
+                                        <div id="dc-perf-audit-daily-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+                                    </div>
+                                </details>
+                                <details class="dc-perf-audit-fold">
+                                    <summary>备案记录 <span id="dc-perf-audit-filing-count" style="font-size:12px;color:#64748b;font-weight:600;">0 条</span></summary>
+                                    <div class="dc-perf-audit-fold-body">
+                                        <div id="dc-perf-audit-filing-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+                                    </div>
+                                </details>
+                                <details class="dc-perf-audit-fold">
+                                    <summary>失效操作记录</summary>
+                                    <div class="dc-perf-audit-fold-body">
+                                        <div id="dc-perf-audit-invalidation-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+                                    </div>
+                                </details>
                             </div>
                         </section>
                         <section class="dc-panel">
@@ -22351,6 +22384,24 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             else if (src) parts.push('来源：' + src);
             return parts.length ? parts.join(' · ') : '';
         }
+        function perfAuditMasterSourceZh(src) {
+            const map = {
+                random_inspection: '随机抽检',
+                scheduled_inspection: '定时巡检',
+                bi_anomaly: 'BI异常',
+                auto_collab: '自动协同',
+                data_auditor: '数据稽核'
+            };
+            const k = String(src || '').trim();
+            return map[k] || k;
+        }
+        function perfAuditDeductionLabelZh(raw) {
+            const s = String(raw || '').trim();
+            if (!s) return '';
+            const a = dcDeductionCategoryZh(s);
+            if (a && a !== s) return a;
+            return dcDeductionAnomalyKeyZh(s);
+        }
         function formatDcDeductionsPreview(raw) {
             const t = String(raw || '').trim();
             if (!t) return '';
@@ -24424,8 +24475,11 @@ ${knowledgeContent.slice(0, 30000)}`;
         function getPerformanceAuditDom(prefix) {
             return {
                 results: document.getElementById(prefix + 'results'),
+                monthlyHint: document.getElementById(prefix + 'monthly-hint'),
                 weeklyList: document.getElementById(prefix + 'weekly-list'),
                 weeklyCount: document.getElementById(prefix + 'weekly-count'),
+                dailyList: document.getElementById(prefix + 'daily-list'),
+                dailyCount: document.getElementById(prefix + 'daily-count'),
                 filingList: document.getElementById(prefix + 'filing-list'),
                 filingCount: document.getElementById(prefix + 'filing-count'),
                 invalidationList: document.getElementById(prefix + 'invalidation-list')
@@ -24459,6 +24513,19 @@ ${knowledgeContent.slice(0, 30000)}`;
             const results = dom?.results;
             if (results) results.style.display = 'block';
 
+            const monthly = dom?.monthlyHint;
+            const emRows = data.employee_monthly_scores || [];
+            if (monthly) {
+                if (emRows.length) {
+                    monthly.innerHTML = emRows.map((r) => {
+                        const sc = r.total_score != null ? Number(r.total_score).toFixed(1) : '—';
+                        return `<span style="display:block;margin-bottom:4px;"><strong>本月累计绩效（employee_scores）</strong> · ${escapeHtml(r.store || '—')} · ${escapeHtml(r.role || '—')}：<strong style="color:#fde68a;">${escapeHtml(sc)}</strong> 分（执行力 ${escapeHtml(r.execution_rating || '—')} · 态度 ${escapeHtml(r.attitude_rating || '—')} · 能力 ${escapeHtml(r.ability_rating || '—')}）</span>`;
+                    }).join('');
+                } else {
+                    monthly.innerHTML = '<span style="color:#64748b;">未查到该统计月在 <code style="font-size:10px;">employee_scores</code> 中的月度汇总（可能未到关账日或尚未写入）。卡片上的「100 分」等为<strong>当周周度 BI 汇总行</strong>得分，与月度累计不同；最终绩效以月度汇总为准。填写账号后再次查询可核对本人月度行。</span>';
+                }
+            }
+
             const weeklyList = dom?.weeklyList;
             const weeklyCount = dom?.weeklyCount;
             const weeks = data.weekly_scores || [];
@@ -24472,18 +24539,44 @@ ${knowledgeContent.slice(0, 30000)}`;
                         const deductions = (() => {
                             try { const d = typeof w.deductions === 'string' ? JSON.parse(w.deductions) : w.deductions; return Array.isArray(d) ? d : []; } catch { return []; }
                         })();
-                        const dedLines = deductions.filter(d => Number(d?.points || 0) > 0).map(d => `${escapeHtml(d.category || d.reason || '')} -${d.points}`).join('、');
+                        const dedLines = deductions.filter(d => Number(d?.points || 0) > 0).map(d => `${escapeHtml(perfAuditDeductionLabelZh(d.category || d.reason || d.metric_key))} -${d.points}`).join('、');
                         const bgStyle = inv
                             ? 'background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);opacity:0.6;'
                             : 'background:rgba(30,41,59,0.5);border:1px solid rgba(255,255,255,0.06);';
+                        const scNum = Number(w.total_score);
+                        const scDisp = (w.total_score !== null && w.total_score !== undefined && String(w.total_score).trim() !== '' && Number.isFinite(scNum))
+                            ? scNum.toFixed(1)
+                            : escapeHtml(String(w.total_score ?? '—'));
+                        const scColor = Number.isFinite(scNum) && scNum < 100 ? '#fb923c' : '#22c55e';
                         return `<div style="padding:10px 12px;border-radius:8px;${bgStyle}">
                             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
                                 <span style="font-size:13px;font-weight:600;color:#f1f5f9;">${escapeHtml(w.name || w.username)} <span style="color:#64748b;font-weight:400;">(${escapeHtml(w.username)})</span></span>
-                                <span style="font-size:14px;font-weight:700;color:${Number(w.total_score) < 100 ? '#fb923c' : '#22c55e'};">${w.total_score}分</span>
+                                <span style="font-size:14px;font-weight:700;color:${scColor};">${scDisp}分</span>
                             </div>
                             <div style="font-size:12px;color:#94a3b8;margin-bottom:4px;">${escapeHtml(w.period)} · ${escapeHtml(w.store)}</div>
                             ${dedLines ? `<div style="font-size:12px;color:#fb923c;margin-bottom:4px;">${dedLines}</div>` : ''}
                             ${inv ? '<div style="font-size:12px;color:#ef4444;font-weight:600;">已失效</div>' : `<button onclick="invalidatePerformanceRecord('agent_scores_weekly','${escapeHtml(String(w.id))}','${escapeHtml(w.username)}','${escapeHtml(w.store || '')}','${escapeHtml(period)}')" style="margin-top:6px;font-size:12px;padding:4px 12px;border-radius:6px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);cursor:pointer;">标记失效</button>`}
+                        </div>`;
+                    }).join('');
+                }
+            }
+
+            const dailyList = dom?.dailyList;
+            const dailyCount = dom?.dailyCount;
+            const dailyRows = data.daily_bi_triggers || [];
+            if (dailyCount) dailyCount.textContent = dailyRows.length + ' 条';
+            if (dailyList) {
+                if (!dailyRows.length) {
+                    dailyList.innerHTML = `<div class="${emptyClassName}">本月无 BI 按日触发记录（或请先输入账号以按门店过滤）</div>`;
+                } else {
+                    dailyList.innerHTML = dailyRows.map((r) => {
+                        const dt = r.trigger_date ? escapeHtml(String(r.trigger_date)) : '—';
+                        const sev = escapeHtml(dcDeductionSeverityZh(r.severity));
+                        const st = escapeHtml(String(r.status || '—'));
+                        const ak = escapeHtml(dcDeductionAnomalyKeyZh(r.anomaly_key));
+                        return `<div style="padding:8px 10px;border-radius:8px;background:rgba(30,41,59,0.45);border:1px solid rgba(255,255,255,0.06);font-size:12px;color:#cbd5e1;">
+                            <div style="display:flex;justify-content:space-between;gap:8px;"><span style="font-weight:600;color:#e2e8f0;">${dt}</span><span style="color:#64748b;">${sev} · ${st}</span></div>
+                            <div style="margin-top:4px;color:#94a3b8;">${escapeHtml(r.store || '')} · ${ak}</div>
                         </div>`;
                     }).join('');
                 }
@@ -24504,10 +24597,14 @@ ${knowledgeContent.slice(0, 30000)}`;
                             ? 'background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);opacity:0.6;'
                             : 'background:rgba(30,41,59,0.5);border:1px solid rgba(255,255,255,0.06);';
                         const dt = f.dispatched_at ? new Date(f.dispatched_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) : '';
+                        const dispName = String(f.assignee_name || f.name || '').trim();
+                        const who = dispName && dispName !== f.assignee_username
+                            ? `${escapeHtml(dispName)}（${escapeHtml(f.assignee_username || '')}）`
+                            : `${escapeHtml(f.assignee_username || dispName || '—')}`;
                         return `<div style="padding:10px 12px;border-radius:8px;${bgStyle}">
                             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-                                <span style="font-size:13px;font-weight:600;color:#f1f5f9;">${escapeHtml(f.assignee_username || '')}</span>
-                                <span style="font-size:11px;color:#64748b;">${escapeHtml(f.source || '')}</span>
+                                <span style="font-size:13px;font-weight:600;color:#f1f5f9;">${who}</span>
+                                <span style="font-size:11px;color:#64748b;">${escapeHtml(perfAuditMasterSourceZh(f.source))}</span>
                             </div>
                             <div style="font-size:12px;color:#94a3b8;margin-bottom:4px;">${escapeHtml(f.title || f.category || '')}</div>
                             <div style="font-size:11px;color:#64748b;margin-bottom:4px;">${dt} · ${escapeHtml(f.store || '')}</div>
@@ -24563,7 +24660,9 @@ ${knowledgeContent.slice(0, 30000)}`;
 
         async function invalidatePerformanceRecord(sourceType, sourceId, username, store, period) {
             if (!confirm(`确认失效该记录？\n\n类型：${sourceType === 'agent_scores_weekly' ? '周度扣分' : '备案记录'}\n员工：${username}\n\n失效后系统将自动重新计算绩效并通知变更。`)) return;
-            const token = localStorage.getItem('hrms_token');
+            const token = (typeof HRMS_API !== 'undefined' && HRMS_API && typeof HRMS_API.token === 'function')
+                ? HRMS_API.token()
+                : String(localStorage.getItem('HRMS_API_TOKEN') || localStorage.getItem('hrms_token') || '').trim();
             try {
                 const resp = await fetch('/api/admin/performance-invalidate', {
                     method: 'POST',

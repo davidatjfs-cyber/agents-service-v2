@@ -12435,29 +12435,36 @@
                             <button type="button" class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('mobile-perf-audit-username').value=''; initMobilePerformanceAuditDefaults(); loadMobilePerformanceAuditRecords();">重置</button>
                         </div>
 
-                        <div style="margin-top:16px;">
-                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-                                <div style="font-weight:700;color:rgba(226,232,240,0.94);">周度扣分</div>
-                                <div id="mobile-perf-audit-weekly-count" style="font-size:11px;color:rgba(148,163,184,0.78);">0 条</div>
-                            </div>
-                            <div id="mobile-perf-audit-weekly-list" style="display:flex;flex-direction:column;gap:10px;"></div>
-                        </div>
+                        <div id="mobile-perf-audit-monthly-hint" style="margin-top:12px;font-size:12px;color:rgba(200,215,230,0.72);line-height:1.55;"></div>
 
-                        <div style="margin-top:16px;">
-                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-                                <div style="font-weight:700;color:rgba(226,232,240,0.94);">备案记录</div>
-                                <div id="mobile-perf-audit-filing-count" style="font-size:11px;color:rgba(148,163,184,0.78);">0 条</div>
+                        <details style="margin-top:12px;border-radius:14px;border:1px solid rgba(148,163,184,0.16);background:rgba(15,23,42,0.42);">
+                            <summary style="cursor:pointer;padding:12px 14px;font-weight:800;color:rgba(226,232,240,0.96);list-style:none;display:flex;align-items:center;justify-content:space-between;"><span>周度扣分</span><span id="mobile-perf-audit-weekly-count" style="font-size:11px;color:rgba(148,163,184,0.78);">0 条</span></summary>
+                            <div style="padding:0 14px 14px;">
+                                <p style="margin:0 0 10px;font-size:11px;color:rgba(148,163,184,0.78);line-height:1.5;">按自然周汇总；日粒度见下一项。</p>
+                                <div id="mobile-perf-audit-weekly-list" style="display:flex;flex-direction:column;gap:10px;"></div>
                             </div>
-                            <div id="mobile-perf-audit-filing-list" style="display:flex;flex-direction:column;gap:10px;"></div>
-                        </div>
+                        </details>
 
-                        <div style="margin-top:16px;">
-                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-                                <div style="font-weight:700;color:rgba(226,232,240,0.94);">失效记录</div>
-                                <div id="mobile-perf-audit-invalidation-count" style="font-size:11px;color:rgba(148,163,184,0.78);">0 条</div>
+                        <details style="margin-top:10px;border-radius:14px;border:1px solid rgba(148,163,184,0.16);background:rgba(15,23,42,0.42);">
+                            <summary style="cursor:pointer;padding:12px 14px;font-weight:800;color:rgba(226,232,240,0.96);list-style:none;display:flex;align-items:center;justify-content:space-between;"><span>BI按日触发</span><span id="mobile-perf-audit-daily-count" style="font-size:11px;color:rgba(148,163,184,0.78);">0 条</span></summary>
+                            <div style="padding:0 14px 14px;">
+                                <div id="mobile-perf-audit-daily-list" style="display:flex;flex-direction:column;gap:10px;"></div>
                             </div>
-                            <div id="mobile-perf-audit-invalidation-list" style="display:flex;flex-direction:column;gap:10px;"></div>
-                        </div>
+                        </details>
+
+                        <details style="margin-top:10px;border-radius:14px;border:1px solid rgba(148,163,184,0.16);background:rgba(15,23,42,0.42);">
+                            <summary style="cursor:pointer;padding:12px 14px;font-weight:800;color:rgba(226,232,240,0.96);list-style:none;display:flex;align-items:center;justify-content:space-between;"><span>备案记录</span><span id="mobile-perf-audit-filing-count" style="font-size:11px;color:rgba(148,163,184,0.78);">0 条</span></summary>
+                            <div style="padding:0 14px 14px;">
+                                <div id="mobile-perf-audit-filing-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+                            </div>
+                        </details>
+
+                        <details style="margin-top:10px;border-radius:14px;border:1px solid rgba(148,163,184,0.16);background:rgba(15,23,42,0.42);">
+                            <summary style="cursor:pointer;padding:12px 14px;font-weight:800;color:rgba(226,232,240,0.96);list-style:none;display:flex;align-items:center;justify-content:space-between;"><span>失效记录</span><span id="mobile-perf-audit-invalidation-count" style="font-size:11px;color:rgba(148,163,184,0.78);">0 条</span></summary>
+                            <div style="padding:0 14px 14px;">
+                                <div id="mobile-perf-audit-invalidation-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+                            </div>
+                        </details>
                     </div>
                 </div>
             </div>
@@ -33084,14 +33091,66 @@ ${body}
             }
         }
 
+        function mobilePerfAuditSourceZh(src) {
+            const map = {
+                random_inspection: '随机抽检',
+                scheduled_inspection: '定时巡检',
+                bi_anomaly: 'BI异常',
+                auto_collab: '自动协同',
+                data_auditor: '数据稽核'
+            };
+            const k = String(src || '').trim();
+            return map[k] || k;
+        }
+        function mobilePerfAuditCategoryZh(raw) {
+            const s = String(raw || '').trim();
+            if (!s) return '';
+            const catMap = {
+                revenue_anomaly: '营收/实收异常',
+                efficiency_anomaly: '人效异常',
+                recharge_anomaly: '充值异常',
+                table_visit_anomaly: '桌访相关异常',
+                table_visit_ratio_anomaly: '桌访占比异常',
+                margin_anomaly: '毛利异常',
+                product_review: '产品差评异常',
+                service_review: '服务差评异常',
+                private_room_anomaly: '包房使用异常',
+                food_safety: '食品安全（含总部判罚）'
+            };
+            if (catMap[s]) return catMap[s];
+            const akMap = {
+                revenue_achievement: '实收营收异常',
+                labor_efficiency: '人效值异常',
+                recharge_zero: '充值异常',
+                table_visit_product: '桌访产品异常',
+                table_visit_ratio: '桌访占比异常',
+                gross_margin: '总实收毛利率异常',
+                bad_review_product: '差评产品异常',
+                bad_review_service: '差评服务异常',
+                hongchao_jiuguang_private_room: '洪潮久光包房使用异常',
+                food_safety: '食品安全异常'
+            };
+            return akMap[s] || s;
+        }
+        function mobilePerfAuditSeverityZh(sev) {
+            const x = String(sev || '').trim().toLowerCase();
+            if (x === 'high') return '高';
+            if (x === 'medium') return '中';
+            if (x === 'low') return '低';
+            return sev || '—';
+        }
+
         function renderMobilePerformanceAuditSection(data, period) {
             const weeklyList = document.getElementById('mobile-perf-audit-weekly-list');
+            const dailyList = document.getElementById('mobile-perf-audit-daily-list');
             const filingList = document.getElementById('mobile-perf-audit-filing-list');
             const invalidationList = document.getElementById('mobile-perf-audit-invalidation-list');
             const weeklyCount = document.getElementById('mobile-perf-audit-weekly-count');
+            const dailyCount = document.getElementById('mobile-perf-audit-daily-count');
             const filingCount = document.getElementById('mobile-perf-audit-filing-count');
             const invalidationCount = document.getElementById('mobile-perf-audit-invalidation-count');
-            if (!weeklyList || !filingList || !invalidationList) return;
+            const monthlyHint = document.getElementById('mobile-perf-audit-monthly-hint');
+            if (!weeklyList || !dailyList || !filingList || !invalidationList) return;
             const payload = data && typeof data === 'object' ? (data.data && typeof data.data === 'object' ? data.data : data) : {};
             const weekly = Array.isArray(payload?.weekly) ? payload.weekly : Array.isArray(payload?.weekly_scores) ? payload.weekly_scores.map((w) => ({
                 ...w,
@@ -33099,37 +33158,77 @@ ${body}
                 score: typeof w?.score !== 'undefined' ? w.score : w?.total_score,
                 reason: w?.reason || w?.summary || w?.metric_key || ''
             })) : [];
+            const dailyRows = Array.isArray(payload?.daily_bi_triggers) ? payload.daily_bi_triggers : [];
             const filings = Array.isArray(payload?.filings) ? payload.filings.map((f) => ({
                 ...f,
                 invalidated: !!f?.invalidated || !!f?.is_invalidated
             })) : [];
             const invalidations = Array.isArray(payload?.invalidations) ? payload.invalidations : [];
+            const emRows = Array.isArray(payload?.employee_monthly_scores) ? payload.employee_monthly_scores : [];
+            if (monthlyHint) {
+                if (emRows.length) {
+                    monthlyHint.innerHTML = emRows.map((r) => {
+                        const sc = r.total_score != null ? Number(r.total_score).toFixed(1) : '—';
+                        return `<div style="margin-bottom:6px;"><strong>本月累计</strong> ${escapeHtml(r.store || '—')} · ${escapeHtml(r.role || '—')}：<strong style="color:#fde68a;">${escapeHtml(sc)}</strong> 分（执行力 ${escapeHtml(r.execution_rating || '—')}）</div>`;
+                    }).join('');
+                } else {
+                    monthlyHint.innerHTML = '<span style="color:rgba(148,163,184,0.85);">填写账号查询后显示「本月累计绩效」。列表中的周分 100 为当周 BI 汇总行得分，与月度累计不同。</span>';
+                }
+            }
             if (weeklyCount) weeklyCount.textContent = `${weekly.length} 条`;
+            if (dailyCount) dailyCount.textContent = `${dailyRows.length} 条`;
             if (filingCount) filingCount.textContent = `${filings.length} 条`;
             if (invalidationCount) invalidationCount.textContent = `${invalidations.length} 条`;
             const emptyCard = (text) => `<div style="padding:14px 12px;border-radius:12px;background:rgba(15,23,42,0.42);border:1px dashed rgba(148,163,184,0.2);color:rgba(200,215,230,0.58);font-size:12px;text-align:center;">${escapeHtml(text)}</div>`;
             weeklyList.innerHTML = weekly.length ? weekly.map((w) => {
                 const inv = !!w.invalidated;
+                const deductions = (() => {
+                    try { const d = typeof w.deductions === 'string' ? JSON.parse(w.deductions) : w.deductions; return Array.isArray(d) ? d : []; } catch { return []; }
+                })();
+                const dedLines = deductions.filter((d) => Number(d?.points || 0) > 0).map((d) => `${escapeHtml(mobilePerfAuditCategoryZh(d.category || d.reason || d.metric_key))} -${d.points}`).join('、');
+                const scNum = Number(w.score);
+                const scDisp = (w.score !== null && w.score !== undefined && String(w.score).trim() !== '' && Number.isFinite(scNum))
+                    ? scNum.toFixed(1)
+                    : escapeHtml(String(w.score ?? '-'));
+                const nm = String(w.name || '').trim();
+                const who = nm ? `${escapeHtml(nm)}（${escapeHtml(w.username || '-')}）` : escapeHtml(w.username || '-');
                 return `
                     <div style="padding:14px 12px;border-radius:14px;background:rgba(15,23,42,0.5);border:1px solid rgba(148,163,184,0.14);">
                         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-                            <div style="font-weight:800;color:rgba(226,232,240,0.96);">${escapeHtml(w.username || '-')}</div>
-                            <div style="font-size:11px;color:${inv ? '#f87171' : 'rgba(148,163,184,0.78)'};">${inv ? '已失效' : '周度扣分'}</div>
+                            <div style="font-weight:800;color:rgba(226,232,240,0.96);">${who}</div>
+                            <div style="font-size:11px;color:${inv ? '#f87171' : 'rgba(148,163,184,0.78)'};">${inv ? '已失效' : '周度'}</div>
                         </div>
                         <div style="margin-top:6px;font-size:12px;color:rgba(200,215,230,0.72);">门店：${escapeHtml(w.store || '-')}</div>
-                        <div style="margin-top:6px;font-size:12px;color:rgba(200,215,230,0.72);">分值：${escapeHtml(String(w.score ?? '-'))}｜来源：${escapeHtml(String(w.reason || w.metric_key || '-'))}</div>
-                        <div style="margin-top:6px;font-size:11px;color:rgba(148,163,184,0.78);">记录ID：${escapeHtml(String(w.id || '-'))}</div>
+                        <div style="margin-top:6px;font-size:12px;color:rgba(253,224,71,0.92);">周得分：${scDisp} 分</div>
+                        ${dedLines ? `<div style="margin-top:6px;font-size:12px;color:#fb923c;line-height:1.45;">${dedLines}</div>` : ''}
+                        <div style="margin-top:6px;font-size:11px;color:rgba(148,163,184,0.78);">周期：${escapeHtml(String(w.period || '-'))}</div>
                         ${inv ? '' : `<button type="button" class="btn btn-secondary" style="margin-top:10px;width:100%;padding:8px 12px;font-size:12px;border-color:rgba(239,68,68,0.3);color:#fda4af;" onclick="mobileInvalidatePerformanceRecord('agent_scores_weekly','${escapeJsString(String(w.id || ''))}','${escapeJsString(String(w.username || ''))}','${escapeJsString(String(w.store || ''))}','${escapeJsString(period)}')">标记失效</button>`}
                     </div>
                 `;
             }).join('') : emptyCard('本期暂无周度扣分记录');
+            dailyList.innerHTML = dailyRows.length ? dailyRows.map((r) => {
+                const dt = escapeHtml(String(r.trigger_date || '—'));
+                const ak = escapeHtml(mobilePerfAuditCategoryZh(r.anomaly_key));
+                const sev = escapeHtml(mobilePerfAuditSeverityZh(r.severity));
+                const st = escapeHtml(String(r.status || '—'));
+                return `
+                    <div style="padding:12px;border-radius:12px;background:rgba(15,23,42,0.5);border:1px solid rgba(148,163,184,0.12);font-size:12px;color:rgba(226,232,240,0.9);">
+                        <div style="display:flex;justify-content:space-between;gap:8px;"><span style="font-weight:700;">${dt}</span><span style="color:rgba(148,163,184,0.85);">${sev} · ${st}</span></div>
+                        <div style="margin-top:6px;color:rgba(200,215,230,0.78);">${escapeHtml(r.store || '')} · ${ak}</div>
+                    </div>
+                `;
+            }).join('') : emptyCard('本月无按日 BI 触发或未填账号过滤');
             filingList.innerHTML = filings.length ? filings.map((f) => {
                 const inv = !!f.invalidated;
+                const dispName = String(f.assignee_name || f.name || '').trim();
+                const who = dispName && dispName !== f.assignee_username
+                    ? `${escapeHtml(dispName)}（${escapeHtml(f.assignee_username || '')}）`
+                    : `${escapeHtml(f.assignee_username || dispName || '-')}`;
                 return `
                     <div style="padding:14px 12px;border-radius:14px;background:rgba(15,23,42,0.5);border:1px solid rgba(148,163,184,0.14);">
                         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-                            <div style="font-weight:800;color:rgba(226,232,240,0.96);">${escapeHtml(f.assignee_username || '-')}</div>
-                            <div style="font-size:11px;color:${inv ? '#f87171' : 'rgba(148,163,184,0.78)'};">${inv ? '已失效' : '备案记录'}</div>
+                            <div style="font-weight:800;color:rgba(226,232,240,0.96);">${who}</div>
+                            <div style="font-size:11px;color:${inv ? '#f87171' : 'rgba(148,163,184,0.78)'};">${inv ? '已失效' : escapeHtml(mobilePerfAuditSourceZh(f.source))}</div>
                         </div>
                         <div style="margin-top:6px;font-size:12px;color:rgba(200,215,230,0.72);">门店：${escapeHtml(f.store || '-')}</div>
                         <div style="margin-top:6px;font-size:12px;color:rgba(200,215,230,0.72);">任务：${escapeHtml(f.title || f.task_id || '-')}</div>

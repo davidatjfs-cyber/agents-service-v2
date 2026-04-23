@@ -115,25 +115,28 @@ export function registerPerformanceInvalidationRoutes(app, authRequired) {
       );
 
       const mtSources = ['random_inspection', 'scheduled_inspection', 'bi_anomaly', 'auto_collab', 'data_auditor'];
-      let mtWhere = `WHERE source = ANY($1::text[])
-        AND COALESCE(hr_performance_recorded, false) = true
-        AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date >= $2::date
-        AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date <= $3::date`;
+      let mtWhere = `WHERE mt.source = ANY($1::text[])
+        AND COALESCE(mt.hr_performance_recorded, false) = true
+        AND (mt.dispatched_at AT TIME ZONE 'Asia/Shanghai')::date >= $2::date
+        AND (mt.dispatched_at AT TIME ZONE 'Asia/Shanghai')::date <= $3::date`;
       const mtParams = [mtSources, `${period}-01`, weekEnd];
       if (username) {
-        mtWhere += ` AND LOWER(TRIM(COALESCE(assignee_username, ''))) = LOWER(TRIM($${mtParams.length + 1}))`;
+        mtWhere += ` AND LOWER(TRIM(COALESCE(mt.assignee_username, ''))) = LOWER(TRIM($${mtParams.length + 1}))`;
         mtParams.push(username);
       }
 
       const filings = await p.query(
-        `SELECT task_id, store, assignee_username, assignee_role, source, category, title, detail,
-                dispatched_at,
+        `SELECT mt.task_id, mt.store, mt.assignee_username, mt.assignee_role, mt.source, mt.category, mt.title, mt.detail,
+                mt.dispatched_at,
+                COALESCE(NULLIF(TRIM(fu.name), ''), mt.assignee_username) AS assignee_name,
                 EXISTS (
                   SELECT 1 FROM performance_invalidation_records pir
-                  WHERE pir.source_type = 'master_tasks_filing' AND pir.source_id = master_tasks.task_id
+                  WHERE pir.source_type = 'master_tasks_filing' AND pir.source_id = mt.task_id
                 ) AS is_invalidated
-         FROM master_tasks ${mtWhere}
-         ORDER BY dispatched_at DESC`,
+         FROM master_tasks mt
+         LEFT JOIN feishu_users fu ON LOWER(TRIM(fu.username)) = LOWER(TRIM(mt.assignee_username))
+         ${mtWhere}
+         ORDER BY mt.dispatched_at DESC`,
         mtParams
       );
 
@@ -144,12 +147,52 @@ export function registerPerformanceInvalidationRoutes(app, authRequired) {
         username ? [period, username] : [period]
       );
 
+      let dailyBi = { rows: [] };
+      if (/^\d{4}-\d{2}$/.test(String(period || '').trim())) {
+        const monthStart = `${period}-01`;
+        const monthEnd = weekEnd;
+        const dailyParams = [monthStart, monthEnd];
+        let dailyWhere = `WHERE at.trigger_date >= $1::date AND at.trigger_date <= $2::date`;
+        if (username) {
+          dailyWhere += ` AND at.store IN (
+              SELECT DISTINCT TRIM(store)
+              FROM feishu_users
+              WHERE LOWER(TRIM(username)) = LOWER(TRIM($3))
+                AND TRIM(COALESCE(store, '')) <> ''
+            )`;
+          dailyParams.push(username);
+        }
+        const dailyLimit = username ? 800 : 300;
+        dailyBi = await p.query(
+          `SELECT at.id, at.anomaly_key, at.store, at.severity, at.trigger_date, at.status, at.created_at
+           FROM anomaly_triggers at
+           ${dailyWhere}
+           ORDER BY at.trigger_date DESC, at.created_at DESC
+           LIMIT ${dailyLimit}`,
+          dailyParams
+        );
+      }
+
+      let employeeMonthlyScores = [];
+      if (username && /^\d{4}-\d{2}$/.test(String(period || '').trim())) {
+        const em = await p.query(
+          `SELECT store, role, total_score, execution_rating, attitude_rating, ability_rating, updated_at
+           FROM employee_scores
+           WHERE LOWER(TRIM(username)) = LOWER(TRIM($1)) AND period = $2
+           ORDER BY updated_at DESC NULLS LAST`,
+          [username, period]
+        );
+        employeeMonthlyScores = em.rows;
+      }
+
       res.json({
         success: true,
         data: {
           weekly_scores: weekly.rows,
           filings: filings.rows,
-          invalidations: invalidations.rows
+          invalidations: invalidations.rows,
+          daily_bi_triggers: dailyBi.rows,
+          employee_monthly_scores: employeeMonthlyScores
         }
       });
     } catch (e) {
