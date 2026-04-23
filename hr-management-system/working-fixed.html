@@ -1,7 +1,9 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<head>
+ <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-store">
+    <script>if('caches'in window){caches.keys().then(function(k){k.forEach(function(n){caches.delete(n)})})}</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#0a0a0b">
     <link rel="manifest" href="/manifest.json">
@@ -18455,7 +18457,10 @@ th { background: #f5f5f5; font-weight: 700; }
         };
         async function loadRoleModulesFromServer() {
             try {
-                const r = await fetch('/api/role-modules', { credentials: 'include' });
+                const headers = {};
+                const tok = (HRMS_API && typeof HRMS_API.token === 'function') ? HRMS_API.token() : (localStorage.getItem('hrms_token') || localStorage.getItem('HRMS_API_TOKEN') || '');
+                if (tok) headers['Authorization'] = 'Bearer ' + tok;
+                const r = await fetch('/api/role-modules', { credentials: 'include', headers });
                 if (r.ok) { const d = await r.json(); if (d?.config) _serverRoleModules = d.config; }
             } catch (e) { console.warn('[role-modules] load failed:', e); }
         }
@@ -42050,14 +42055,13 @@ ${body}
 
             try {
                 if ('serviceWorker' in navigator) {
-                    // Clean old caches, keep current version only
-                    const currentCache = 'hrms-pwa-v237';
+                    // Force clear ALL old caches to ensure fresh content
                     if (typeof caches !== 'undefined') {
                         caches.keys().then(keys => {
-                            keys.forEach(k => { if (k !== currentCache) caches.delete(k); });
+                            keys.forEach(k => { caches.delete(k); });
                         }).catch(() => {});
                     }
-                    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((reg) => {
+                    navigator.serviceWorker.register('/sw.js?v=' + Date.now(), { updateViaCache: 'none' }).then((reg) => {
                         if (reg.waiting) { reg.waiting.postMessage({ type: 'SKIP_WAITING' }); }
                         reg.addEventListener('updatefound', () => {
                             const newSW = reg.installing;
