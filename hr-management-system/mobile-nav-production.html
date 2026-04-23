@@ -26483,6 +26483,30 @@ ${knowledgeContent.slice(0, 30000)}`;
             HRMS_STORE.setUsers(users);
             showNotification('密码已重置', 'success');
         }
+
+        function viewEmployeePassword(username) {
+            if (!isAdminUser()) {
+                showNotification('仅管理员可查看密码', 'warning');
+                return;
+            }
+            const users = HRMS_STORE.getUsers() || [];
+            const idx = users.findIndex(u => String(u?.username || '').trim() === String(username || '').trim());
+            const user = idx >= 0 ? users[idx] : null;
+            const employees = HRMS_STORE.getEmployees() || [];
+            const empIdx = employees.findIndex(e => String(e?.username || '').trim() === String(username || '').trim());
+            const emp = empIdx >= 0 ? employees[empIdx] : null;
+            const pwd = String(user?.password || emp?.password || '').trim();
+            const name = String(user?.name || emp?.name || username || '');
+            if (pwd) {
+                if (typeof hrmsConfirm === 'function') {
+                    hrmsConfirm({ title: `🔐 ${name || username} 的密码`, message: `用户名：${username || ''}\n密码：${pwd}`, okText: '关闭' });
+                } else {
+                    alert(`🔐 ${name || username} 的密码\n用户名：${username || ''}\n密码：${pwd}`);
+                }
+            } else {
+                showNotification(`未找到用户「${username}」的密码`, 'warning');
+            }
+        }
         
         function toggleUserStatus(username) {
             if (!isAdminUser()) {
@@ -26570,6 +26594,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 const act = canManage ? `
                     <button class="btn" style="padding:4px 8px;font-size:12px;" onclick="editUser('${escapeHtml(uname)}')">编辑</button>
                     <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" onclick="resetUserPassword('${escapeHtml(uname)}')">重置密码</button>
+                    <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;background:#3b82f6;border-color:#3b82f6;" onclick="viewEmployeePassword('${escapeHtml(uname)}')">查看密码</button>
                     <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" onclick="toggleUserStatus('${escapeHtml(uname)}')">启用/禁用</button>
                     <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;color:#ef4444;" onclick="deleteUser('${escapeHtml(uname)}')">删除</button>
                 ` : '-';
@@ -26600,6 +26625,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                         const act = isAdminUser() ? `
                             <button class="btn" type="button" style="padding:10px 14px;font-size:14px;" onclick="editUser('${escapeHtml(uname)}')">编辑</button>
                             <button class="btn btn-secondary" type="button" style="padding:10px 14px;font-size:14px;" onclick="resetUserPassword('${escapeHtml(uname)}')">重置密码</button>
+                            <button class="btn btn-secondary" type="button" style="padding:10px 14px;font-size:14px;background:#3b82f6;border-color:#3b82f6;" onclick="viewEmployeePassword('${escapeHtml(uname)}')">查看密码</button>
                             <button class="btn btn-secondary" type="button" style="padding:10px 14px;font-size:14px;" onclick="toggleUserStatus('${escapeHtml(uname)}')">启用/禁用</button>
                             <button class="btn btn-secondary" type="button" style="padding:10px 14px;font-size:14px;color:#ef4444;" onclick="deleteUser('${escapeHtml(uname)}')">删除</button>
                         ` : '';
