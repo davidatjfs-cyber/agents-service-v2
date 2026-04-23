@@ -15579,14 +15579,19 @@
                 const text = await resp.text();
                 const data = hrmsSafeParseJson(text) || { raw: text };
                 if (!resp.ok) {
-                    // Single-device login: force immediate logout if session replaced
                     if (resp.status === 401 && String(data?.error || '') === 'session_replaced') {
                         if (!window.__HRMS_SESSION_REPLACED_SHOWN) {
                             window.__HRMS_SESSION_REPLACED_SHOWN = true;
-                            try { HRMS_API.clearToken(); } catch (e) {}
-                            try { isLoggedIn = false; currentUser = null; } catch (e) {}
-                            alert('您的账号已在其他设备登录，当前会话已失效，请重新登录');
-                            try { location.reload(); } catch (e) {}
+                            try {
+                                HRMS_API.clearToken();
+                                isLoggedIn = false;
+                                currentUser = null;
+                                const loginEl = document.getElementById('login');
+                                const mainEl = document.getElementById('main-app');
+                                if (loginEl) loginEl.classList.remove('hidden');
+                                if (mainEl) mainEl.classList.add('hidden');
+                                showNotification('您的账号已在其他设备登录，请重新输入密码', 'warning');
+                            } catch (e) {}
                         }
                         const err = new Error('session_replaced');
                         err.status = 401;
@@ -15750,10 +15755,14 @@
                         if (xhr.status === 401 && String(data?.error || '') === 'session_replaced') {
                             if (!window.__HRMS_SESSION_REPLACED_SHOWN) {
                                 window.__HRMS_SESSION_REPLACED_SHOWN = true;
-                                try { HRMS_API.clearToken(); } catch (e) {}
-                                try { isLoggedIn = false; currentUser = null; } catch (e) {}
-                                alert('您的账号已在其他设备登录，当前会话已失效，请重新登录');
-                                try { location.reload(); } catch (e) {}
+                                try {
+                                    HRMS_API.clearToken(); isLoggedIn = false; currentUser = null;
+                                    const loginEl = document.getElementById('login');
+                                    const mainEl = document.getElementById('main-app');
+                                    if (loginEl) loginEl.classList.remove('hidden');
+                                    if (mainEl) mainEl.classList.add('hidden');
+                                    showNotification('您的账号已在其他设备登录，请重新输入密码', 'warning');
+                                } catch (e) {}
                             }
                             const err = new Error('session_replaced');
                             err.status = 401;
