@@ -289,7 +289,7 @@ export async function runBiAnomalyNotifyPipeline({
           `SELECT open_id, username, role, store,
                   COALESCE(NULLIF(TRIM(name), ''), username) AS display_name
            FROM feishu_users
-           WHERE registered = true AND open_id IS NOT NULL AND role = ANY($1)`,
+           WHERE registered = true AND open_id IS NOT NULL AND open_id NOT LIKE '%probe%' AND role = ANY($1)`,
           [missingHqRoles]
         );
         for (const hq of hqR.rows || []) {

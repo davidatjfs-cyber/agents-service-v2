@@ -143,7 +143,7 @@ export async function sendWeeklyReview() {
     }
 
     const hqUsers = await query(
-      `SELECT open_id, username FROM feishu_users WHERE role IN ('admin', 'hq_manager') AND registered = true`
+      `SELECT open_id, username FROM feishu_users WHERE role IN ('admin', 'hq_manager') AND registered = true AND open_id IS NOT NULL AND open_id NOT LIKE '%probe%'`
     );
 
     for (const user of (hqUsers.rows || [])) {

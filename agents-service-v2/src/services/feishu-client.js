@@ -263,7 +263,7 @@ export async function sendCompanyNoticeToAssignees(task, body, opts = {}) {
     if (!sendToManagement) return { targets: sendToAssignee ? oids.length : 0, sentCards, sentTexts };
     const mgR = await query(
       `SELECT DISTINCT open_id, COALESCE(NULLIF(TRIM(name),''), username) AS name
-       FROM feishu_users WHERE role IN ('admin','hq_manager') AND registered = true AND open_id IS NOT NULL`
+       FROM feishu_users WHERE role IN ('admin','hq_manager') AND registered = true AND open_id IS NOT NULL AND open_id NOT LIKE '%probe%'`
     );
     const mgRows = mgR.rows || [];
     if (mgRows.length) {
@@ -756,7 +756,7 @@ export async function pushRhythmReport(content) {
   try {
     const r = await (await import('../utils/db.js')).query(
       `SELECT open_id FROM feishu_users
-       WHERE registered = true AND open_id IS NOT NULL AND role IN ('admin','hq_manager')`
+       WHERE registered = true AND open_id IS NOT NULL AND role IN ('admin','hq_manager') AND open_id NOT LIKE '%probe%'`
     );
     let sent = 0;
     for (const u of (r.rows || [])) {
@@ -775,7 +775,7 @@ export async function pushRhythmCard(card) {
   try {
     const r = await (await import('../utils/db.js')).query(
       `SELECT open_id FROM feishu_users
-       WHERE registered = true AND open_id IS NOT NULL AND role IN ('admin','hq_manager')`
+       WHERE registered = true AND open_id IS NOT NULL AND role IN ('admin','hq_manager') AND open_id NOT LIKE '%probe%'`
     );
     let sent = 0;
     for (const u of (r.rows || [])) {
@@ -1046,8 +1046,9 @@ export async function handleWebhookEvent(body) {
                AND mt.status IN ('pending_response','pending_review')
                AND mt.source IN ('random_inspection','scheduled_inspection','bi_anomaly')
                AND (
-                 fu.role IN ('admin','hq_manager')
-                 OR (COALESCE(fu.store,'') <> '' AND fu.store = mt.store)
+                  fu.role IN ('admin','hq_manager')
+                  AND fu.open_id NOT LIKE '%probe%'
+                  OR (COALESCE(fu.store,'') <> '' AND fu.store = mt.store)
                  OR lower(COALESCE(mt.assignee_username,'')) = lower(COALESCE(fu.username,''))
                  OR (
                    jsonb_typeof(COALESCE(mt.source_data->'assignee_open_ids', '[]'::jsonb)) = 'array'

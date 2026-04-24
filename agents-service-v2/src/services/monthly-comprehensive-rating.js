@@ -870,7 +870,7 @@ async function sendAbilityMonthlyFiling(results, period) {
   const adminRecipients = await query(
     `SELECT open_id, username FROM feishu_users
      WHERE registered = true AND open_id IS NOT NULL
-       AND role IN ('admin', 'hq_manager')`
+       AND role IN ('admin', 'hq_manager') AND open_id NOT LIKE '%probe%'`
   );
   const summaryCard = buildAbilityMonthlyAdminSummaryCard(results, period);
   for (const rec of adminRecipients.rows || []) {
@@ -988,7 +988,7 @@ async function sendMonthlyRatingNotifications(results, period, supplementaryData
   const adminRecipients = await query(
     `SELECT open_id, username, role FROM feishu_users 
      WHERE registered = true AND open_id IS NOT NULL AND open_id != ''
-     AND role IN ('admin', 'hq_manager')`
+     AND role IN ('admin', 'hq_manager') AND open_id NOT LIKE '%probe%'`
   );
 
   if (adminRecipients.rows.length > 0 && results.length > 0) {

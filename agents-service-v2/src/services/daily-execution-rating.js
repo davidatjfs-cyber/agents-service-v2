@@ -412,7 +412,7 @@ async function sendExecutionRatingNotifications(results, date) {
   const adminRecipients = await query(
     `SELECT open_id, username, role FROM feishu_users
      WHERE registered = true AND open_id IS NOT NULL AND open_id != ''
-      AND role IN ('admin', 'hq_manager')`
+      AND role IN ('admin', 'hq_manager') AND open_id NOT LIKE '%probe%'`
   );
 
   const summaryCard = buildAdminFilingCard(results, date);

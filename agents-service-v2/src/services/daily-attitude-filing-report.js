@@ -263,7 +263,7 @@ export async function runDailyAttitudeFilingReport(opts = {}) {
 
   const hq = await query(
     `SELECT username, open_id FROM feishu_users
-     WHERE registered = true AND open_id IS NOT NULL AND role IN ('admin', 'hq_manager')`
+     WHERE registered = true AND open_id IS NOT NULL AND role IN ('admin', 'hq_manager') AND open_id NOT LIKE '%probe%'`
   ).catch(() => ({ rows: [] }));
 
   for (const u of hq.rows || []) {

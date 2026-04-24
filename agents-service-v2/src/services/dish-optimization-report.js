@@ -303,7 +303,7 @@ function splitMarkdownChunks(md, maxLen = 3400) {
 
 async function sendDishOptimizationCardsToHq(fullMd, cardHeaderTitle) {
   const hq = await query(
-    `SELECT open_id, username FROM feishu_users WHERE registered = true AND open_id IS NOT NULL AND role IN ('admin','hq_manager')`
+    `SELECT open_id, username FROM feishu_users WHERE registered = true AND open_id IS NOT NULL AND role IN ('admin','hq_manager') AND open_id NOT LIKE '%probe%'`
   );
   const chunks = splitMarkdownChunks(fullMd, 3400);
   const n = chunks.length;

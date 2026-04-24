@@ -145,7 +145,7 @@ async function notifyBiMonthlyBonus({
   try {
     const mg = await query(
       `SELECT DISTINCT open_id FROM feishu_users
-       WHERE role IN ('admin','hq_manager') AND registered = true AND open_id IS NOT NULL`
+       WHERE role IN ('admin','hq_manager') AND registered = true AND open_id IS NOT NULL AND open_id NOT LIKE '%probe%'`
     );
     mgmtOpenIds = (mg.rows || []).map((r) => r.open_id).filter(Boolean);
   } catch (_e) {

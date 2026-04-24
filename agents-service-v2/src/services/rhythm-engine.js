@@ -770,7 +770,7 @@ export async function dailyAttendanceReport() {
   // admin + hq_manager 收到所有门店
   const hq = await query(
     `SELECT open_id, username FROM feishu_users
-     WHERE registered = true AND open_id IS NOT NULL AND role IN ('admin','hq_manager')`
+     WHERE registered = true AND open_id IS NOT NULL AND role IN ('admin','hq_manager') AND open_id NOT LIKE '%probe%'`
   );
   for (const u of hq.rows || []) {
     deliveryAttempted++;

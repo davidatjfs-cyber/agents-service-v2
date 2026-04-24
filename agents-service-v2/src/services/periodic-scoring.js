@@ -124,7 +124,7 @@ async function recordDeductionNotifications({
   try {
     const mg = await query(
       `SELECT DISTINCT open_id FROM feishu_users
-       WHERE role IN ('admin','hq_manager') AND registered = true AND open_id IS NOT NULL`
+       WHERE role IN ('admin','hq_manager') AND registered = true AND open_id IS NOT NULL AND open_id NOT LIKE '%probe%'`
     );
     mgmtOpenIds = (mg.rows || []).map((r) => r.open_id).filter(Boolean);
   } catch (_e) { /* ignore */ }
@@ -726,7 +726,7 @@ export async function sendWeeklyPerformanceFeishu(periodMonday, options = {}) {
     list = (list || []).filter((row) => !shouldExcludeRollupRowFromReports(row));
     const hq = await query(
       `SELECT open_id, username FROM feishu_users
-       WHERE registered = true AND open_id IS NOT NULL AND role IN ('admin','hq_manager')`
+       WHERE registered = true AND open_id IS NOT NULL AND role IN ('admin','hq_manager') AND open_id NOT LIKE '%probe%'`
     );
     // 管理端汇总：每一行 agent_scores（每店×店长/出品）都列出，避免仅绑定用户才进汇总
     const hqLines = list.map((row) => {
