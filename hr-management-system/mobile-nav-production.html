@@ -34112,7 +34112,18 @@ ${body}
                             keys.forEach(k => { caches.delete(k); });
                         }).catch(() => {});
                     }
-                    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((reg) => {
+                    navigator.serviceWorker.register('/sw.js?v=' + Date.now(), { updateViaCache: 'none' }).then((reg) => {
+                        if (reg.waiting) { reg.waiting.postMessage({ type: 'SKIP_WAITING' }); }
+                        reg.addEventListener('updatefound', () => {
+                            const newSW = reg.installing;
+                            if (newSW) {
+                                newSW.addEventListener('statechange', () => {
+                                    if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+                                        newSW.postMessage({ type: 'SKIP_WAITING' });
+                                    }
+                                });
+                            }
+                        });
                         try { reg.update(); } catch (e) {}
                         try {
                             const reloadOnControllerChange = () => {

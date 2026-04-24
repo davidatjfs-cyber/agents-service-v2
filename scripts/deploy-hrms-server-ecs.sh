@@ -63,11 +63,16 @@ echo ">>> rsync web (nginx root) -> ${ECS_HOST}:${REMOTE_WEB_ROOT}/ (+ optional 
 # Express `webRootDir` is `path.resolve(__dirname, '..')` relative to server/index.js,
 # which maps to `/opt/hrms` on ECS (NOT `/opt/hrms/server`). If we only rsync server/,
 # frontend HTML changes will never reach production.
+HRMS_SW_TMP="$(mktemp)"
+HRMS_SW_VER="hrms-pwa-$(date +%Y%m%d%H%M%S)"
+sed -E "s/^const CACHE_NAME = '[^']+'/const CACHE_NAME = '${HRMS_SW_VER}'/" "${LOCAL_WEB}/sw.js" > "$HRMS_SW_TMP"
+trap 'rm -f "$HRMS_SW_TMP"' EXIT
+echo "    (sw.js 部署使用 CACHE_NAME=${HRMS_SW_VER})"
 rsync -avz -e ssh \
   "${LOCAL_WEB}/working-fixed.html" \
   "${LOCAL_WEB}/mobile-nav-production.html" \
-  "${LOCAL_WEB}/sw.js" \
   "${ECS_HOST}:${REMOTE_WEB_ROOT}/"
+rsync -avz -e ssh "$HRMS_SW_TMP" "${ECS_HOST}:${REMOTE_WEB_ROOT}/sw.js"
 
 # Keep legacy mirror paths in sync if they exist on the host (best-effort).
 ssh -o ConnectTimeout=60 "${ECS_HOST}" "bash -s" <<EOS2

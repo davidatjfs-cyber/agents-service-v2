@@ -26,13 +26,21 @@ for f in working-fixed.html mobile-nav-production.html sw.js forecast.html; do
 done
 echo "    本地源: $LOCAL_SRC"
 
-echo ">>> [2/4] rsync 静态文件 -> $ECS_HOST:$REMOTE_DIR/"
+# 每次部署生成「唯一 CACHE_NAME」的 sw.js 再上传（不修改仓库内 sw.js，避免未提交的版本号漂移）。
+# 否则仅改 HTML 时 sw 脚本字节不变 → 浏览器可能不 reinstall → activate 不删旧 Cache Storage；
+# 与 deploy 日志里「SW 已升级」的表述也不一致。
+HRMS_SW_TMP="$(mktemp)"
+HRMS_SW_VER="hrms-pwa-$(date +%Y%m%d%H%M%S)"
+sed -E "s/^const CACHE_NAME = '[^']+'/const CACHE_NAME = '${HRMS_SW_VER}'/" "$LOCAL_SRC/sw.js" > "$HRMS_SW_TMP"
+trap 'rm -f "$HRMS_SW_TMP"' EXIT
+
+echo ">>> [2/4] rsync 静态文件 -> $ECS_HOST:$REMOTE_DIR/（sw.js CACHE_NAME=$HRMS_SW_VER）"
 rsync -avz --checksum -e ssh \
   "$LOCAL_SRC/working-fixed.html" \
   "$LOCAL_SRC/mobile-nav-production.html" \
-  "$LOCAL_SRC/sw.js" \
   "$LOCAL_SRC/forecast.html" \
   "$ECS_HOST:$REMOTE_DIR/"
+rsync -avz --checksum -e ssh "$HRMS_SW_TMP" "$ECS_HOST:$REMOTE_DIR/sw.js"
 
 echo ">>> [3/4] 远端：确保 nginx 对 HTML 禁用 HTTP 缓存 + reload..."
 ssh -o ConnectTimeout=30 "$ECS_HOST" bash -s <<'REMOTE'
@@ -131,6 +139,5 @@ REMOTE
 echo ""
 echo "✅  部署完成。"
 echo ""
-echo "  清除浏览器缓存提示："
-echo "  1. 因 SW 版本已升级，用户刷新页面后 SW 会自动更新 → 无需手动清缓存"
-echo "  2. 若仍看到旧页面：手机端长按刷新 / 强制刷新 / 清除站点数据"
+echo "  Service Worker：本次已上传独立 CACHE_NAME 的 sw.js，激活后会清理旧 Cache Storage。"
+echo "  若仍看到旧页面：关闭该站点全部标签页再打开，或系统设置里清除站点数据。"
