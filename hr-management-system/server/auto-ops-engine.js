@@ -59,7 +59,11 @@ const AGENTS_V2_REMINDER_SOURCES = new Set([
   'scheduled_inspection',
   'bi_anomaly',
   'auto_collab',
-  'data_auditor'
+  'data_auditor',
+  // Proactive LLM 任务卡由 agents-v2 建单；勿在本引擎对门店再催/再升级，避免与 PLLM-* 重复打扰
+  'proactive_llm',
+  // HRMS 定时检查单 OPS-*：升级/催办改由管理员侧统一处理，避免门店多人收到「任务升级」混乱
+  'scheduled_checklist'
 ]);
 
 export async function inspectionClosedLoopTick() {
@@ -148,10 +152,10 @@ async function sendReminder(task, reminderNum, hoursWaiting) {
     elements: [
       {
         tag: 'div',
-        text: { tag: 'lark_md', content: `**门店**: ${task.store || '-'}\n**异常**: ${task.title || '-'}\n**已等待**: ${hoursWaiting.toFixed(1)}小时\n\n⚠️ 请尽快回复整改说明和照片，超过${ESCALATE_HOURS}小时未回复将自动升级至上级处理。` }
+        text: { tag: 'lark_md', content: `**门店**: ${task.store || '-'}\n**异常**: ${task.title || '-'}\n**已等待**: ${hoursWaiting.toFixed(1)}小时\n\n⚠️ 请尽快在任务卡回复整改说明和照片。超过${ESCALATE_HOURS}小时未闭环时，**仅**会向系统管理员发送升级提醒（不再自动推送给门店其他岗位）。` }
       },
       { tag: 'hr' },
-      { tag: 'note', elements: [{ tag: 'plain_text', content: `小年 · 自动催办 · 任务编号 ${task.task_id}` }] }
+      { tag: 'note', elements: [{ tag: 'plain_text', content: `小年 · 自动催办 · ${task.task_id}` }] }
     ]
   };
 
@@ -166,27 +170,36 @@ async function sendReminder(task, reminderNum, hoursWaiting) {
 }
 
 async function escalateTask(task, hoursWaiting) {
-  if (!_lookupFeishuUser || !_sendLarkCard || !_findStoreManager) return;
+  if (!_sendLarkCard) return;
 
-  // 找到上级: 如果当前是出品经理 → 升级到店长; 如果是店长 → 升级到HQ
+  // 产品口径：超时升级仅通知「系统管理员」飞书账号，由管理员决定是否再下发门店；不向店长/出品/原责任人推送，避免多人收到混淆文案（如 OPS-* / 遗留任务）。
   let escalateTo = null;
-  if (task.assignee_role === 'store_production_manager') {
-    escalateTo = await _findStoreManager(task.store);
+  try {
+    const admR = await pool().query(
+      `SELECT f.open_id, u.username, u.real_name
+       FROM feishu_users f
+       JOIN users u ON f.username = u.username
+       WHERE u.role = 'admin' AND u.is_active = true
+         AND f.registered = true AND f.open_id IS NOT NULL AND trim(f.open_id) <> ''
+         AND f.open_id NOT LIKE '%probe%'
+       ORDER BY f.updated_at DESC
+       LIMIT 1`
+    );
+    if (admR.rows?.length) {
+      escalateTo = {
+        open_id: admR.rows[0].open_id,
+        username: admR.rows[0].username,
+        name: admR.rows[0].real_name
+      };
+    }
+  } catch (e) {
+    console.warn('[auto-ops] escalate admin lookup failed:', e?.message);
   }
 
-  // 如果找不到上级或已经是店长, 升级到HQ admin
-  if (!escalateTo) {
-    try {
-      const hqR = await pool().query(
-        `SELECT f.open_id, u.username, u.real_name FROM feishu_users f JOIN users u ON f.username = u.username WHERE u.role IN ('admin', 'hq_manager') AND u.is_active = true AND f.registered = true AND f.open_id IS NOT NULL AND trim(f.open_id) <> '' AND f.open_id NOT LIKE '%probe%' ORDER BY f.updated_at DESC LIMIT 1`
-      );
-      if (hqR.rows?.length) {
-        escalateTo = { open_id: hqR.rows[0].open_id, username: hqR.rows[0].username, name: hqR.rows[0].real_name };
-      }
-    } catch (e) {}
+  if (!escalateTo?.open_id) {
+    console.warn('[auto-ops] escalate skipped: no admin open_id for task', task?.task_id);
+    return;
   }
-
-  if (!escalateTo?.open_id) return;
 
   const card = {
     config: { wide_screen_mode: true },
@@ -197,10 +210,13 @@ async function escalateTask(task, hoursWaiting) {
     elements: [
       {
         tag: 'div',
-        text: { tag: 'lark_md', content: `**门店**: ${task.store || '-'}\n**异常**: ${task.title || '-'}\n**原责任人**: ${task.assignee_username}\n**已等待**: ${hoursWaiting.toFixed(1)}小时\n\n🔴 该任务超过${ESCALATE_HOURS}小时未得到回复，已自动升级至您处理。\n\n请协调跟进或直接回复整改方案。` }
+        text: {
+          tag: 'lark_md',
+          content: `**门店**: ${task.store || '-'}\n**任务来源**: ${String(task.source || '-')}\n**异常/标题**: ${task.title || '-'}\n**原责任人**: ${task.assignee_username || '-'}\n**已等待**: ${hoursWaiting.toFixed(1)}小时\n\n🔴 该任务超过${ESCALATE_HOURS}小时未在任务卡闭环，**本消息仅发系统管理员**。请判断是否需联系门店或关闭任务，勿自动当作「门店上级待办」。`
+        }
       },
       { tag: 'hr' },
-      { tag: 'note', elements: [{ tag: 'plain_text', content: `小年 · 自动升级 · 原责任人未响应` }] }
+      { tag: 'note', elements: [{ tag: 'plain_text', content: '小年 · 任务超时 · 仅通知系统管理员' }] }
     ]
   };
 
@@ -212,16 +228,10 @@ async function escalateTask(task, hoursWaiting) {
         escalated: true,
         escalated_to: escalateTo.username,
         escalated_at: new Date().toISOString(),
-        escalate_reason: `超过${hoursWaiting.toFixed(1)}小时未回复`
+        escalate_reason: `超过${hoursWaiting.toFixed(1)}小时未回复（仅通知管理员）`
       }), task.task_id]
     );
-    console.log(`[auto-ops] task ${task.task_id} escalated to ${escalateTo.username}`);
-
-    // 同时通知原责任人已升级
-    const origFu = await _lookupFeishuUser(task.assignee_username);
-    if (origFu?.open_id && _sendLarkMessage) {
-      await _sendLarkMessage(origFu.open_id, `⚠️ 任务 [${task.task_id}] 因超时未回复已升级至上级处理。请尽快配合处理。`);
-    }
+    console.log(`[auto-ops] task ${task.task_id} escalated to admin ${escalateTo.username}`);
   }
 }
 
