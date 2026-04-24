@@ -367,7 +367,8 @@ export function registerPerformanceInvalidationRoutes(app, authRequired) {
           const adminOpenId = await p.query(
             `SELECT open_id FROM feishu_users
              WHERE LOWER(TRIM(username)) = LOWER(TRIM($1)) AND registered = TRUE AND open_id IS NOT NULL AND open_id <> ''
-             LIMIT 1`,
+               AND open_id NOT LIKE '%probe%'
+             ORDER BY updated_at DESC LIMIT 1`,
             [adminUser]
           );
           if (adminOpenId.rows?.[0]?.open_id) {

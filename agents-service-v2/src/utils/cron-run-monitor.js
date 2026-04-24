@@ -113,6 +113,7 @@ async function notifyAdminsOnFailure(jobKey, errorMsg) {
       `SELECT open_id FROM feishu_users
        WHERE registered = true AND open_id IS NOT NULL
          AND role = 'admin'
+         AND open_id NOT LIKE '%probe%'
        LIMIT 20`
     );
     const { ymd, hour, minute } = getShanghaiNowClock();

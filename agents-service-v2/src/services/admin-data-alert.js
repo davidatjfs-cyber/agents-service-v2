@@ -139,6 +139,7 @@ export async function notifyAdminsDataIssue(opts) {
       `SELECT open_id, username FROM feishu_users
        WHERE registered = true AND open_id IS NOT NULL AND open_id <> ''
          AND role = 'admin'
+         AND open_id NOT LIKE '%probe%'
        ORDER BY username
        LIMIT 30`
     );

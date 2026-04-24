@@ -21,12 +21,12 @@ function fmtMinutes(totalMin) {
 
 async function getAdminOpenIds() {
   const result = await query(
-    `SELECT DISTINCT open_id FROM feishu_users WHERE role = 'admin' AND open_id IS NOT NULL AND open_id != ''`
+    `SELECT DISTINCT open_id FROM feishu_users WHERE role = 'admin' AND registered = true AND open_id IS NOT NULL AND open_id != '' AND open_id NOT LIKE '%probe%'`
   );
   if (result.rows.length > 0) return result.rows.map(r => r.open_id);
 
   const fallback = await query(
-    `SELECT DISTINCT open_id FROM feishu_users WHERE LOWER(TRIM(username)) = 'admin' AND open_id IS NOT NULL AND open_id != ''`
+    `SELECT DISTINCT open_id FROM feishu_users WHERE LOWER(TRIM(username)) = 'admin' AND registered = true AND open_id IS NOT NULL AND open_id != '' AND open_id NOT LIKE '%probe%'`
   );
   return fallback.rows.map(r => r.open_id);
 }

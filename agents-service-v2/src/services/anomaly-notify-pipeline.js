@@ -94,7 +94,7 @@ async function pickUsersForStoreAndRoles(store, dbRoles) {
     `SELECT open_id, username, role, store,
             COALESCE(NULLIF(TRIM(name), ''), username) AS display_name
      FROM feishu_users
-     WHERE registered = true AND open_id IS NOT NULL`
+     WHERE registered = true AND open_id IS NOT NULL AND open_id NOT LIKE '%probe%'`
   );
   const rows = (r.rows || []).filter(
     (u) => dbRoles.includes(u.role) && sameStore(u.store, store)
@@ -122,7 +122,7 @@ async function fetchFeishuUserRow(username) {
       `SELECT open_id, username, role, store,
               COALESCE(NULLIF(TRIM(name), ''), username) AS display_name
        FROM feishu_users
-       WHERE registered = true AND open_id IS NOT NULL AND LOWER(username) = LOWER($1)
+       WHERE registered = true AND open_id IS NOT NULL AND open_id NOT LIKE '%probe%' AND LOWER(username) = LOWER($1)
        LIMIT 1`,
       [u]
     );
@@ -164,7 +164,8 @@ async function pickUsersForFoodSafety(store, dbRoles) {
       `SELECT open_id, username, role, store,
               COALESCE(NULLIF(TRIM(name), ''), username) AS display_name
        FROM feishu_users
-       WHERE registered = true AND open_id IS NOT NULL AND role IN ('hq_manager','admin')`
+       WHERE registered = true AND open_id IS NOT NULL AND role IN ('hq_manager','admin')
+       AND open_id NOT LIKE '%probe%'`
     );
     hqRows = r.rows || [];
   } catch (_e) {

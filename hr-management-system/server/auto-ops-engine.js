@@ -178,7 +178,7 @@ async function escalateTask(task, hoursWaiting) {
   if (!escalateTo) {
     try {
       const hqR = await pool().query(
-        `SELECT f.open_id, u.username, u.real_name FROM feishu_users f JOIN users u ON f.username = u.username WHERE u.role IN ('admin', 'hq_manager') AND u.is_active = true LIMIT 1`
+        `SELECT f.open_id, u.username, u.real_name FROM feishu_users f JOIN users u ON f.username = u.username WHERE u.role IN ('admin', 'hq_manager') AND u.is_active = true AND f.registered = true AND f.open_id IS NOT NULL AND trim(f.open_id) <> '' AND f.open_id NOT LIKE '%probe%' ORDER BY f.updated_at DESC LIMIT 1`
       );
       if (hqR.rows?.length) {
         escalateTo = { open_id: hqR.rows[0].open_id, username: hqR.rows[0].username, name: hqR.rows[0].real_name };
@@ -351,7 +351,7 @@ export async function biProactivePushTick() {
         // 同时推送给HQ管理员
         try {
           const hqR = await pool().query(
-            `SELECT f.open_id FROM feishu_users f JOIN users u ON f.username = u.username WHERE u.role = 'admin' AND u.is_active = true LIMIT 1`
+            `SELECT f.open_id FROM feishu_users f JOIN users u ON f.username = u.username WHERE u.role = 'admin' AND u.is_active = true AND f.registered = true AND f.open_id IS NOT NULL AND trim(f.open_id) <> '' AND f.open_id NOT LIKE '%probe%' ORDER BY f.updated_at DESC LIMIT 1`
           );
           if (hqR.rows?.[0]?.open_id) {
             const hqMsg = `📊 【${storeName}】昨日预警:\n${alerts.join('\n')}`;

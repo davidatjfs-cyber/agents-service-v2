@@ -130,7 +130,13 @@ export async function sendCard(receiveId, card, idType = 'open_id') {
       data: r.data,
       error: ok ? undefined : (msg || `feishu_code_${r.data?.code ?? '?'}`)
     };
-  } catch (e) { return { ok: false, error: e?.message }; }
+  } catch (e) {
+    const respData = e?.response?.data;
+    if (respData) {
+      logger.warn({ receiveId, idType, feishuCode: respData.code, feishuMsg: respData.msg }, 'sendCard Feishu API error response');
+    }
+    return { ok: false, error: respData?.msg || e?.message, data: respData };
+  }
 }
 
 export async function sendGroup(chatId, text) { return sendText(chatId, text, 'chat_id'); }
@@ -490,7 +496,7 @@ export async function bindFeishuUserToEmployee(openId, username) {
 
 export async function pushAnomalyAlert(store, anomalyKey, severity, detail, taskId) {
   const emoji = severity === 'high' ? '🚨' : '⚠️';
-  const users = await query('SELECT open_id FROM feishu_users WHERE store = $1 AND role IN (\'store_manager\',\'admin\',\'hq_manager\') AND registered = TRUE', [store]);
+  const users = await query('SELECT open_id FROM feishu_users WHERE store = $1 AND role IN (\'store_manager\',\'admin\',\'hq_manager\') AND registered = TRUE AND open_id NOT LIKE \'%probe%\'', [store]);
   const results = [];
   for (const u of (users.rows || [])) {
     const card = buildAnomalyCard(store, anomalyKey, severity, detail, taskId);

@@ -39,6 +39,7 @@ export async function resolveAssigneeOpenIdsForTask(task) {
     const r = await query(
       `SELECT open_id FROM feishu_users
        WHERE lower(username) = lower($1) AND registered = true AND open_id IS NOT NULL AND trim(open_id) <> ''
+         AND open_id NOT LIKE '%probe%'
        LIMIT 3`,
       [un]
     );
@@ -51,7 +52,8 @@ export async function resolveAssigneeOpenIdsForTask(task) {
   const r2 = await query(
     `SELECT open_id FROM feishu_users
      WHERE registered = true AND open_id IS NOT NULL AND trim(open_id) <> '' AND role = $1
-       AND trim(store) = ANY($2::text[])`,
+       AND trim(store) = ANY($2::text[])
+       AND open_id NOT LIKE '%probe%'`,
     [role, variants]
   );
   if (r2.rows?.length) return uniq(r2.rows.map((x) => x.open_id));
@@ -59,7 +61,8 @@ export async function resolveAssigneeOpenIdsForTask(task) {
   const taskSet = new Set(variants);
   const r3 = await query(
     `SELECT open_id, store FROM feishu_users
-     WHERE registered = true AND open_id IS NOT NULL AND trim(open_id) <> '' AND role = $1`,
+     WHERE registered = true AND open_id IS NOT NULL AND trim(open_id) <> '' AND role = $1
+       AND open_id NOT LIKE '%probe%'`,
     [role]
   );
   const out = [];

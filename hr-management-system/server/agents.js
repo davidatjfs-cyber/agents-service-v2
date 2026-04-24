@@ -7125,6 +7125,7 @@ export async function lookupFeishuUserByUsername(username) {
       `SELECT *
        FROM feishu_users
        WHERE lower(username) = lower($1) AND registered = TRUE
+         AND open_id NOT LIKE '%probe%'
        ORDER BY updated_at DESC, created_at DESC
        LIMIT 1`,
       [username]
@@ -9713,6 +9714,7 @@ async function notifyBitablePipelineFailure(scopeLabel, err, opts = {}) {
       `SELECT open_id FROM feishu_users
        WHERE registered = true AND open_id IS NOT NULL
          AND role IN ('admin', 'hq_manager')
+         AND open_id NOT LIKE '%probe%'
        LIMIT 20`
     );
     const rows = r.rows || [];
@@ -11190,7 +11192,8 @@ async function pushScoresToFeishu() {
             `SELECT username, open_id, name FROM feishu_users
              WHERE COALESCE(registered, false) = true
                AND TRIM(COALESCE(open_id, '')) <> ''
-               AND role IN ('admin', 'hq_manager')`
+               AND role IN ('admin', 'hq_manager')
+               AND open_id NOT LIKE '%probe%'`
           );
           const seenOid = new Set([String(fu.open_id || '').trim()]);
           const cardBase = typeof structuredClone === 'function' ? structuredClone(card) : JSON.parse(JSON.stringify(card));

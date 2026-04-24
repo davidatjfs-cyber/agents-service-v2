@@ -186,6 +186,7 @@ async function getBriefingRecipients() {
          open_id, username, name, store, role
        FROM feishu_users
        WHERE registered = true AND open_id IS NOT NULL AND trim(open_id) <> ''
+         AND open_id NOT LIKE '%probe%'
          AND role IN ('store_manager','store_production_manager','hq_manager','admin')
        ORDER BY lower(trim(username)),
          CASE WHEN trim(open_id) ILIKE '%probe%' OR trim(open_id) ILIKE 'ou_probe%' THEN 1 ELSE 0 END,
@@ -611,6 +612,8 @@ async function sendMorningBriefingToUser(user, storeContent, store) {
   };
 
   try {
+    const contentJson = JSON.stringify(card);
+    logger.info({ user: user.username, store, openId: user.open_id, payloadBytes: Buffer.byteLength(contentJson, 'utf8') }, 'morning briefing sending card');
     const result = await sendCard(user.open_id, card);
     if (result?.ok === false) {
       logger.warn({ user: user.username, store, error: result.error, data: result.data }, 'morning briefing send FAILED (Feishu API error)');

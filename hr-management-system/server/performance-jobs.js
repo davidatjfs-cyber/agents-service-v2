@@ -177,7 +177,7 @@ async function notifyHrmsPerfAdmins(taskName, err) {
     `⚠️ 【HRMS 定时任务失败】\n任务：${taskName}\n时间：${timeStr}（上海）\n错误：${msg}\n\n请检查服务日志并在必要时联系运维补跑或补发。`;
   try {
     const hq = await pool().query(
-      `SELECT username FROM feishu_users WHERE registered = true AND role IN ('admin','hq_manager')`
+      `SELECT username FROM feishu_users WHERE registered = true AND role IN ('admin','hq_manager') AND open_id NOT LIKE '%probe%'`
     );
     for (const h of hq.rows || []) {
       const fu = await lookupFeishuUserByUsername(h.username);
@@ -523,7 +523,7 @@ function splitMarkdownChunks(md, maxLen = 3400) {
 
 async function sendDishReportCardsToHq(fullMd, cardHeaderTitle) {
   const hq = await pool().query(
-    `SELECT username FROM feishu_users WHERE registered = true AND role IN ('admin','hq_manager')`
+    `SELECT username FROM feishu_users WHERE registered = true AND role IN ('admin','hq_manager') AND open_id NOT LIKE '%probe%'`
   );
   const chunks = splitMarkdownChunks(fullMd, 3400);
   const n = chunks.length;

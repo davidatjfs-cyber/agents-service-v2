@@ -19,23 +19,55 @@ import { notifyAdminsDataIssue } from './admin-data-alert.js';
 /** 任务类型 → 中文标签 */
 function taskTypeLabel(type) {
   if (!type) return '其它';
-  switch (type) {
-    case 'opening_lunch': return '午市开档';
-    case 'opening_dinner': return '晚市开档';
-    case 'prep_lunch': return '午市备货';
-    case 'prep_dinner': return '晚市备货';
-    case 'table_visit_tracking': return '桌访记录';
-    case 'bad_review_followup': return '差评跟踪';
-    case 'patrol_am': return '上午巡检';
-    case 'patrol_pm': return '下午巡检';
-    case 'tasting': return '试味';
-    case 'table_visit_product': return '桌访产品异常';
-    case 'table_visit_ratio': return '桌访占比异常';
-    case 'recharge_zero': return '充值异常';
-    default:
-      if (type.startsWith('custom_')) return '试味';
-      return type;
-  }
+  const map = {
+    opening_lunch: '午市开档',
+    opening_dinner: '晚市开档',
+    prep_lunch: '午市备货',
+    prep_dinner: '晚市备货',
+    table_visit_tracking: '桌访记录',
+    bad_review_followup: '差评跟踪',
+    bad_review_product: '差评（产品）',
+    bad_review_service: '差评（服务）',
+    patrol_am: '上午巡检',
+    patrol_pm: '下午巡检',
+    tasting: '试味',
+    table_visit_product: '桌访产品异常',
+    table_visit_ratio: '桌访占比异常',
+    table_visit_anomaly: '桌访异常',
+    recharge_zero: '充值异常',
+    recharge_anomaly: '充值异常',
+    food_safety: '食品安全',
+    gross_margin: '毛利率异常',
+    revenue_anomaly: '营收异常',
+    revenue_achievement: '营收达成异常',
+    labor_efficiency: '人效异常',
+    efficiency_anomaly: '人效异常',
+    traffic_decline: '客流下滑',
+    action_plan: '行动计划',
+    manual_campaign: '营销活动',
+    training: '培训',
+    hongchao_jiuguang_private_room: '包间管理',
+  };
+  if (map[type]) return map[type];
+  if (type.startsWith('custom_')) return '试味';
+  const zhMatch = /[\u4e00-\u9fff]/.test(type);
+  if (zhMatch) return type;
+  const anomalyMap = {
+    '人效值异常': '人效异常',
+    '充值异常': '充值异常',
+    '原料收货异常': '原料收货异常',
+    '总实收毛利率异常': '毛利率异常',
+    '桌访产品异常': '桌访产品异常',
+    '桌访占比异常': '桌访占比异常',
+    '桌访异常': '桌访异常',
+    '桌访连续投诉': '桌访连续投诉',
+    '食安抽检': '食安抽检',
+    '试味测试': '试味',
+    '营收提升': '营收提升',
+    '营销活动': '营销活动',
+  };
+  if (anomalyMap[type]) return anomalyMap[type];
+  return type;
 }
 
 /** 任务状态 → 中文 */
@@ -49,7 +81,20 @@ function taskStatusZh(status) {
     case 'pending_response': return '待回复';
     case 'pending_review': return '待审核';
     case 'dispatched': return '已派发';
-    default: return status || '未知';
+    case 'in_progress': return '进行中';
+    case 'cancelled': return '已取消';
+    default: {
+      const m = {
+        '已完成': '已完成',
+        '已闭环': '已闭环',
+        '已备案': '已备案',
+        '已逾期': '已逾期',
+        '待处理': '待处理',
+        '进行中': '进行中',
+        '已取消': '已取消',
+      };
+      return m[status] || status || '未知';
+    }
   }
 }
 
@@ -58,6 +103,8 @@ function roleLabelZh(role) {
   switch (role) {
     case 'store_manager': return '店长';
     case 'store_production_manager': return '出品经理';
+    case 'hq_manager': return '营运经理';
+    case 'admin': return '管理员';
     default: return role || '';
   }
 }
@@ -139,6 +186,7 @@ async function getRecipients() {
        open_id, username, name, store, role
      FROM feishu_users
      WHERE registered = true AND open_id IS NOT NULL AND trim(open_id) <> ''
+       AND open_id NOT LIKE '%probe%'
        AND role IN ('store_manager', 'store_production_manager', 'hq_manager', 'admin')
      ORDER BY lower(trim(username)),
        CASE WHEN trim(open_id) ILIKE '%probe%' OR trim(open_id) ILIKE 'ou_probe%' THEN 1 ELSE 0 END,
