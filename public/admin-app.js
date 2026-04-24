@@ -79,6 +79,24 @@ function fmtDate(d) { if (!d) return '-'; return String(typeof d === 'string' ? 
 function fmtTime(d) { if (!d) return '-'; const s = String(typeof d === 'string' ? d : d.toISOString?.() || ''); return s.length > 16 ? s.slice(11, 16) : s; }
 const STS = { planned: '🟡 计划中', active: '🟢 执行中', completed: '✅ 已完成', cancelled: '⛔ 已取消' };
 const SEV_CLS = { high: 'bg-red-100 text-red-700', medium: 'bg-orange-100 text-orange-700', low: 'bg-yellow-100 text-yellow-700' };
+const ANOMALY_LABELS = {
+  revenue_achievement: '营收达成',
+  revenue_achievement_monthly: '月营收达成',
+  revenue_drop: '营收骤降',
+  traffic_decline: '客流下降',
+  labor_efficiency: '人效不足',
+  gross_margin: '毛利异常',
+  bad_review_service: '差评-服务',
+  bad_review_product: '差评-出品',
+  table_visit_product: '桌访-出品',
+  table_visit_ratio: '桌访占比低',
+  recharge_zero: '充值异常',
+  food_safety: '食品安全',
+  weekday_trend: '同日环比趋势',
+  meal_balance: '午晚市失衡',
+  dish_decline: '菜品衰退',
+  hongchao_jiuguang_private_room: '洪潮久光包房使用',
+};
 function showModal(title, contentEl) {
   const modal = el('div', { className: 'fixed inset-0 bg-black/50 flex items-center justify-center z-50', onclick: e => { if (e.target === modal) modal.remove(); } });
   const box = el('div', { className: 'bg-white rounded-2xl shadow-2xl p-6 w-full max-w-4xl max-h-[80vh] overflow-auto mx-4' });
@@ -157,7 +175,7 @@ async function openDrill(type) {
       const tr = el('tr', { className: 'hover:bg-gray-50 border-b border-gray-100' });
       if (type === 'anomalies') {
         tr.appendChild(el('td', { className: 'p-2 text-xs font-medium' }, it.store || '-'));
-        tr.appendChild(el('td', { className: 'p-2 text-xs' }, it.anomaly_key || it.category || '-'));
+        tr.appendChild(el('td', { className: 'p-2 text-xs' }, ANOMALY_LABELS[it.anomaly_key || it.category] || it.anomaly_key || it.category || '-'));
         const sevBadge = el('span', { className: 'text-xs px-2 py-0.5 rounded-full font-medium ' + (SEV_CLS[it.severity] || 'bg-gray-100') }, it.severity || '-');
         tr.appendChild(el('td', { className: 'p-2' }, sevBadge));
         tr.appendChild(el('td', { className: 'p-2 text-xs max-w-xs truncate' }, (it.description || '-').slice(0,60)));
@@ -381,7 +399,7 @@ function viewActivity() {
     anomalies.forEach(a => {
       const tr = el('tr', { className: 'border-b border-gray-100 hover:bg-gray-50' });
       tr.appendChild(el('td', { className: 'p-2 text-xs font-medium' }, a.store || '-'));
-      tr.appendChild(el('td', { className: 'p-2 text-xs' }, a.anomaly_key || '-'));
+      tr.appendChild(el('td', { className: 'p-2 text-xs' }, ANOMALY_LABELS[a.anomaly_key] || a.anomaly_key || '-'));
       tr.appendChild(el('td', { className: 'p-2' }, el('span', { className: 'text-xs px-2 py-0.5 rounded-full font-medium ' + (SEV_CLS[a.severity] || 'bg-gray-100') }, a.severity || '-')));
       tr.appendChild(el('td', { className: 'p-2 text-xs max-w-xs truncate' }, (a.description || '-').slice(0, 50)));
       tr.appendChild(el('td', { className: 'p-2 text-xs' }, a.status || '-'));

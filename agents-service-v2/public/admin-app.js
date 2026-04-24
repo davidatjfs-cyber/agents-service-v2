@@ -155,6 +155,111 @@ function formatAnomalyTriggerDisplay(row) {
     }
     if (parts.length) return parts.join('；');
   }
+
+  // 营收达成
+  if (key === 'revenue_achievement' || key === 'revenue_achievement_monthly') {
+    const parts = [];
+    if (v.weekRev != null) parts.push('实收 ¥' + Number(v.weekRev).toLocaleString());
+    if (v.weekTarget != null) parts.push('目标 ¥' + Number(v.weekTarget).toLocaleString());
+    if (v.gapPct != null) parts.push('差距 ' + v.gapPct + '%');
+    if (v.gapAmount != null) parts.push('差额 ¥' + Number(v.gapAmount).toLocaleString());
+    return parts.length ? parts.join(' ｜ ') : JSON.stringify(v).slice(0, 160);
+  }
+
+  // 营收骤降
+  if (key === 'revenue_drop') {
+    const parts = [];
+    if (v.dropPct != null) parts.push('下降 ' + v.dropPct + '%');
+    if (v.currRev != null) parts.push('当期 ¥' + Number(v.currRev).toLocaleString());
+    if (v.prevRev != null) parts.push('前期 ¥' + Number(v.prevRev).toLocaleString());
+    return parts.length ? parts.join(' ｜ ') : JSON.stringify(v).slice(0, 160);
+  }
+
+  // 差评
+  if (key === 'bad_review_service' || key === 'bad_review_product') {
+    const parts = [];
+    if (v.count != null) parts.push(v.count + ' 条');
+    if (v.platform) parts.push(v.platform === 'dianping_only' ? '大众点评' : v.platform);
+    if (v.weekStart && v.weekEnd) parts.push(v.weekStart.slice(5) + '~' + v.weekEnd.slice(5));
+    if (v.deduction_production != null) parts.push('出品扣 ' + v.deduction_production + ' 分');
+    if (v.deduction_manager != null) parts.push('管理扣 ' + v.deduction_manager + ' 分');
+    return parts.length ? '差评 ' + parts.join('｜') : JSON.stringify(v).slice(0, 160);
+  }
+
+  // 充值异常
+  if (key === 'recharge_zero') {
+    return '今日充值 ¥' + (v.today ?? 0) + ' · 昨日充值 ¥' + (v.yesterday ?? 0);
+  }
+
+  // 桌访-出品
+  if (key === 'table_visit_product') {
+    const products = Array.isArray(v.products) ? v.products : [];
+    if (products.length > 0) {
+      const items = products.slice(0, 3).map(p => (p.complaint || p.name || '').slice(0, 24));
+      return '问题菜品：' + items.join('、') + (products.length > 3 ? ' 等' + products.length + ' 项' : '');
+    }
+    if (v.window) return '统计周期 ' + v.window;
+    return JSON.stringify(v).slice(0, 160);
+  }
+
+  // 桌访占比
+  if (key === 'table_visit_ratio') {
+    return '桌访率 ' + (v.ratio || '0') + '%（' + (v.visitCount || 0) + ' 桌 / 共 ' + (v.totalOrders || 0) + ' 单）';
+  }
+
+  // 毛利异常
+  if (key === 'gross_margin') {
+    return (v.brand || '') + ' 毛利率 ' + (v.avgMargin || '—') + '%';
+  }
+
+  // 食品安全
+  if (key === 'food_safety') {
+    const content = v.content || '';
+    return '食安评价：' + (content.length > 120 ? content.slice(0, 117) + '…' : content);
+  }
+
+  // 洪潮久光包房使用
+  if (key === 'hongchao_jiuguang_private_room') {
+    return '包房使用 ' + (v.uses ?? 0) + ' 次（目标 ' + (v.target ?? '—') + ' 次）';
+  }
+
+  // 午晚市失衡
+  if (key === 'meal_balance') {
+    const parts = [];
+    if (v.lunch != null) parts.push('午市 ¥' + Number(v.lunch).toLocaleString());
+    if (v.dinner != null) parts.push('晚市 ¥' + Number(v.dinner).toLocaleString());
+    if (v.ratio != null) parts.push('午/晚比 ' + v.ratio);
+    return parts.length ? parts.join(' ｜ ') : JSON.stringify(v).slice(0, 160);
+  }
+
+  // 菜品衰退
+  if (key === 'dish_decline') {
+    const dishes = Array.isArray(v.dishes) ? v.dishes : [];
+    if (dishes.length > 0) {
+      const names = dishes.slice(0, 5).map(d => (typeof d === 'string' ? d : d.name || '')).filter(Boolean);
+      return '衰退菜品：' + names.join('、') + (dishes.length > 5 ? ' 等' + dishes.length + ' 项' : '');
+    }
+    return JSON.stringify(v).slice(0, 160);
+  }
+
+  // 同日环比趋势
+  if (key === 'weekday_trend') {
+    const parts = [];
+    if (v.thisWeek != null) parts.push('本周 ¥' + Number(v.thisWeek).toLocaleString());
+    if (v.lastWeek != null) parts.push('上周 ¥' + Number(v.lastWeek).toLocaleString());
+    if (v.changePct != null) parts.push('同比 ' + v.changePct + '%');
+    return parts.length ? parts.join(' ｜ ') : JSON.stringify(v).slice(0, 160);
+  }
+
+  // 人效
+  if (key === 'labor_efficiency' || key === 'labor_efficiency_drop') {
+    const parts = [];
+    if (v.efficiency != null) parts.push('人效 ' + v.efficiency);
+    if (v.target != null) parts.push('目标 ' + v.target);
+    if (v.dropPct != null) parts.push('下降 ' + v.dropPct + '%');
+    return parts.length ? parts.join(' ｜ ') : JSON.stringify(v).slice(0, 160);
+  }
+
   try {
     const s = JSON.stringify(v);
     return s.length > 160 ? s.slice(0, 157) + '…' : s;
@@ -284,7 +389,7 @@ async function openDrill(type) {
       const tr = el('tr', { className: 'hover:bg-gray-50 border-b border-gray-100' });
       if (type === 'anomalies') {
         tr.appendChild(el('td', { className: 'p-2 text-xs font-medium' }, it.store || '-'));
-        tr.appendChild(el('td', { className: 'p-2 text-xs' }, it.anomaly_key || it.category || '-'));
+        tr.appendChild(el('td', { className: 'p-2 text-xs' }, ANOMALY_LABELS[it.anomaly_key || it.category] || it.anomaly_key || it.category || '-'));
         const sevBadge = el('span', { className: 'text-xs px-2 py-0.5 rounded-full font-medium ' + (SEV_CLS[it.severity] || 'bg-gray-100') }, it.severity || '-');
         tr.appendChild(el('td', { className: 'p-2' }, sevBadge));
         {
@@ -676,7 +781,7 @@ function viewActivity() {
     anomalies.forEach(a => {
       const tr = el('tr', { className: 'border-b border-gray-100 hover:bg-gray-50' });
       tr.appendChild(el('td', { className: 'p-2 text-xs font-medium' }, a.store || '-'));
-      tr.appendChild(el('td', { className: 'p-2 text-xs' }, a.anomaly_key || '-'));
+      tr.appendChild(el('td', { className: 'p-2 text-xs' }, ANOMALY_LABELS[a.anomaly_key] || a.anomaly_key || '-'));
       tr.appendChild(el('td', { className: 'p-2' }, el('span', { className: 'text-xs px-2 py-0.5 rounded-full font-medium ' + (SEV_CLS[a.severity] || 'bg-gray-100') }, a.severity || '-')));
       tr.appendChild(el('td', { className: 'p-2 text-xs font-mono whitespace-nowrap text-gray-700' }, a.trigger_date || '-'));
       {
@@ -1857,6 +1962,8 @@ const ANOMALY_LABELS = {
   weekday_trend: '同日环比趋势',
   meal_balance: '午晚市失衡',
   dish_decline: '菜品衰退',
+  hongchao_jiuguang_private_room: '洪潮久光包房使用',
+  labor_efficiency_drop: '人效下降',
 };
 
 const SCENARIO_LIST = [
