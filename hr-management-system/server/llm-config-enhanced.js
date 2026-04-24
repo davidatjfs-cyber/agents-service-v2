@@ -18,7 +18,7 @@ export const ENHANCED_MODEL_CONFIG = {
   primary: {
     deepseek: {
       chat: 'deepseek-chat',
-      coder: 'deepseek-coder',
+      coder: 'deepseek-chat',
       reasoner: 'deepseek-reasoner'
     }
   },
@@ -59,7 +59,7 @@ export const ENHANCED_MODEL_CONFIG = {
     },
     // 代码生成/分析
     code_analysis: {
-      models: ['deepseek-coder', 'deepseek-chat'],
+      models: ['deepseek-chat', 'deepseek-chat'],
       temperature: 0.2,
       maxTokens: 8192,
       timeout: 45000

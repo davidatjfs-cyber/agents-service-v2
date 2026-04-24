@@ -13,6 +13,7 @@
  * - OLLAMA_HEALTH_CHECK_INTERVAL：健康检查间隔 ms（默认 30000）
  */
 const LOCAL_MODEL = process.env.OLLAMA_OPERATIONS_MODEL || 'gemma4:26b';
+const DEEPSEEK_FALLBACK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
 const LOCAL_ONLY = process.env.OLLAMA_USE_LOCAL_ONLY !== 'false'; // 默认 true
 const LOCAL_FALLBACK = process.env.OLLAMA_LOCAL_FALLBACK !== 'false'; // 默认 true
 
@@ -73,12 +74,12 @@ export function selectModel({ intent, complexity, mode }) {
   const m = String(mode || 'single');
 
   // workflow 模式始终走 API（需要工具调用/复杂编排）
-  if (m === 'workflow') return 'deepseek-chat';
+  if (m === 'workflow') return DEEPSEEK_FALLBACK_MODEL;
 
   // 本地优先模式
   if (LOCAL_ONLY) {
     if (isOllamaHealthy()) return LOCAL_MODEL;
-    if (LOCAL_FALLBACK) return 'deepseek-chat';
+    if (LOCAL_FALLBACK) return DEEPSEEK_FALLBACK_MODEL;
     return LOCAL_MODEL; // 即使不健康也尝试本地
   }
 
@@ -86,13 +87,13 @@ export function selectModel({ intent, complexity, mode }) {
   const c = String(complexity || 'low').toLowerCase();
   if (intent === 'query') {
     if (c === 'low') return LOCAL_MODEL;
-    return isOllamaHealthy() ? LOCAL_MODEL : 'deepseek-chat';
+    return isOllamaHealthy() ? LOCAL_MODEL : DEEPSEEK_FALLBACK_MODEL;
   }
   if (intent === 'analysis') {
-    return isOllamaHealthy() ? LOCAL_MODEL : 'deepseek-chat';
+    return isOllamaHealthy() ? LOCAL_MODEL : DEEPSEEK_FALLBACK_MODEL;
   }
   if (intent === 'action') {
-    return isOllamaHealthy() ? LOCAL_MODEL : 'deepseek-chat';
+    return isOllamaHealthy() ? LOCAL_MODEL : DEEPSEEK_FALLBACK_MODEL;
   }
-  return isOllamaHealthy() ? LOCAL_MODEL : 'deepseek-chat';
+  return isOllamaHealthy() ? LOCAL_MODEL : DEEPSEEK_FALLBACK_MODEL;
 }

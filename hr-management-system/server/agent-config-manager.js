@@ -234,7 +234,7 @@ function normalizeOpsAgentConfig(cfg) {
     ...c,
     llmModels: {
       reasoningModel: normalizeModelName(c?.llmModels?.reasoningModel, DEFAULT_OPS_AGENT_CONFIG.llmModels.reasoningModel),
-      visionModel: String(c?.llmModels?.visionModel || '').startsWith('doubao-')
+      visionModel: String(c?.llmModels?.visionModel || '').startsWith('doubao-') || String(c?.llmModels?.visionModel || '').startsWith('ep-')
         ? String(c.llmModels.visionModel)
         : DEFAULT_OPS_AGENT_CONFIG.llmModels.visionModel
     },
@@ -337,7 +337,7 @@ export const DEFAULT_OPS_AGENT_CONFIG = {
   dispatchers: ['store_manager', 'store_production_manager'], // 派单人员角色
   llmModels: {
     reasoningModel: 'deepseek-chat',
-    visionModel: 'doubao-seed-2-0-pro-260215'
+    visionModel: 'ep-20260424183833-7lr9g'
   },
   scheduledTasks: {
     dailyInspections: [],

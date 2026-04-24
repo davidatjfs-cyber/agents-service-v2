@@ -34,7 +34,7 @@ HRMS_SW_VER="hrms-pwa-$(date +%Y%m%d%H%M%S)"
 sed -E "s/^const CACHE_NAME = '[^']+'/const CACHE_NAME = '${HRMS_SW_VER}'/" "$LOCAL_SRC/sw.js" > "$HRMS_SW_TMP"
 trap 'rm -f "$HRMS_SW_TMP"' EXIT
 
-echo ">>> [2/4] rsync 静态文件 -> $ECS_HOST:$REMOTE_DIR/（sw.js CACHE_NAME=$HRMS_SW_VER）"
+echo ">>> [2/4] rsync 静态文件 -> ${ECS_HOST}:${REMOTE_DIR}/ (sw.js CACHE_NAME=${HRMS_SW_VER})"
 rsync -avz --checksum -e ssh \
   "$LOCAL_SRC/working-fixed.html" \
   "$LOCAL_SRC/mobile-nav-production.html" \

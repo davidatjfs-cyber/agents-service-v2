@@ -93,7 +93,7 @@ import {
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
 const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com';
 const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
-const DEEPSEEK_VISION_MODEL = process.env.DEEPSEEK_VISION_MODEL || 'doubao-seed-2-0-pro-260215';
+const DEEPSEEK_VISION_MODEL = process.env.DEEPSEEK_VISION_MODEL || 'ep-20260424183833-7lr9g';
 const QWEN_API_KEY = process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY || '';
 const QWEN_BASE_URL = process.env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 const QWEN_MODEL = process.env.QWEN_MODEL || 'qwen-max';
@@ -2426,7 +2426,7 @@ function resolveModelProvider(modelName, forceProvider) {
   if (forceProvider) return forceProvider;
   const m = String(modelName || '').trim().toLowerCase();
   if (m.startsWith('qwen') || m.includes('dashscope')) return 'qwen';
-  if (m.startsWith('doubao') || m.includes('volces') || m.includes('ark')) return 'doubao';
+  if (m.startsWith('doubao') || m.startsWith('ep-') || m.includes('volces') || m.includes('ark')) return 'doubao';
   return 'deepseek';
 }
 
@@ -2656,8 +2656,8 @@ function getOpsReasoningModel() {
 
 function getOpsVisionModel() {
   const model = String(OPS_AGENT_CONFIG?.llmModels?.visionModel || '').trim();
-  if (model.startsWith('doubao-')) return model;
-  return String(DEEPSEEK_VISION_MODEL || '').startsWith('doubao-') ? DEEPSEEK_VISION_MODEL : 'doubao-seed-2-0-pro-260215';
+  if (model.startsWith('doubao-') || model.startsWith('ep-')) return model;
+  return String(DEEPSEEK_VISION_MODEL || '').startsWith('doubao-') || String(DEEPSEEK_VISION_MODEL || '').startsWith('ep-') ? DEEPSEEK_VISION_MODEL : 'ep-20260424183833-7lr9g';
 }
 
 function getBiReasoningModel() {
@@ -7728,7 +7728,7 @@ export async function runDataAuditor(checkMode = 'daily') {
 let OPS_AGENT_CONFIG = {
   llmModels: {
     reasoningModel: 'deepseek-chat',
-    visionModel: 'doubao-seed-2-0-pro-260215'
+    visionModel: 'ep-20260424183833-7lr9g'
   },
   // 任务调度与主动触发
   scheduledTasks: {

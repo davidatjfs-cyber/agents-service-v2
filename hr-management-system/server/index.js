@@ -10,7 +10,7 @@ import { fileURLToPath } from 'url';
 import { randomUUID, createDecipheriv } from 'crypto';
 import multer from 'multer';
 import https from 'https';
-import { execFileSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import OSS from 'ali-oss';
 import COS from 'cos-nodejs-sdk-v5';
 import pg from 'pg';
@@ -5553,6 +5553,47 @@ async function notifyAdminsDualWriteFailure(scopeLabel, err) {
     }
   } catch (e) {
     console.error('[dual-write] notify admins failed:', e?.message);
+  }
+}
+
+/**
+ * 知识库文件 OCR/解析失败时飞书告警管理员
+ * @param {string} itemTitle   文件标题
+ * @param {string} fileType    类型描述（如图片、PDF、PDF 扫描件）
+ * @param {string} reason      失败原因
+ */
+async function notifyAdminsOcrFailed(itemTitle, fileType, reason) {
+  try {
+    const r = await pool.query(
+      `SELECT open_id FROM feishu_users
+       WHERE registered = true AND open_id IS NOT NULL
+         AND role = 'admin'
+         AND open_id NOT LIKE '%probe%'
+       LIMIT 20`
+    );
+    const rows = r.rows || [];
+    if (!rows.length) {
+      console.warn('[knowledge-ocr] no admin open_id for Feishu alert');
+      return;
+    }
+    const timeStr = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' }).replace('T', ' ');
+    const msg =
+`【知识库文件解析失败告警】
+文件：${itemTitle}
+类型：${fileType || '未知'}
+原因：${String(reason || '未知错误').slice(0, 500)}
+时间：${timeStr}（上海）
+说明：该文件自动解析失败，如需使用请在知识库中重新上传或手动填写内容。请检查视觉模型配置或服务器依赖（poppler-utils）是否正常安装。`;
+    const sends = rows.map(row =>
+      sendLarkMessage(row.open_id, msg, { skipDedup: true }).catch(e => ({ err: e?.message || e }))
+    );
+    const settled = await Promise.all(sends);
+    const failed = settled.filter(x => x && x.err);
+    if (failed.length) {
+      console.error('[knowledge-ocr] some Feishu admin alerts failed:', failed.length, failed[0]?.err);
+    }
+  } catch (e) {
+    console.error('[knowledge-ocr] notify admins failed:', e?.message);
   }
 }
 
@@ -15267,10 +15308,17 @@ app.post('/api/knowledge', authRequired, knowledgeUpload.single('file'), async (
         const declaredType = String(req.body?.type || '').trim();
         const mime0 = String(req.file?.mimetype || '').trim();
         const origName = String(req.file?.originalname || '');
+        const itemTitle = title || origName.replace(/\.[^.]+$/, '') || '未命名文件';
         const looksLikeImage =
           /^image\//i.test(mime0) ||
           declaredType === 'img' ||
           /\.(png|jpe?g|gif|webp|bmp|heic)$/i.test(origName);
+        const looksLikePDF =
+          /^application\/pdf/i.test(mime0) ||
+          declaredType === 'pdf' ||
+          /\.pdf$/i.test(origName);
+        let parseSuccess = false;
+
         if (looksLikeImage) {
           try {
             const { callVisionLLM } = await import('./agents.js');
@@ -15284,14 +15332,77 @@ app.post('/api/knowledge', authRequired, knowledgeUpload.single('file'), async (
                 String(vr.content).trim(),
                 inserted.id
               ]);
+              parseSuccess = true;
+            } else {
+              const reason = vr?.error || '视觉模型返回内容为空';
+              console.warn('[knowledge] image OCR failed:', reason);
+              void notifyAdminsOcrFailed(itemTitle, '图片', reason);
             }
           } catch (ocrErr) {
-            console.warn('[knowledge] image OCR failed:', ocrErr?.message || ocrErr);
+            const reason = String(ocrErr?.message || ocrErr);
+            console.warn('[knowledge] image OCR error:', reason);
+            void notifyAdminsOcrFailed(itemTitle, '图片', reason);
+          }
+        }
+
+        // PDF — try pdftotext first, then pdftoppm + vision for scanned PDFs
+        if (looksLikePDF) {
+          try {
+            // Try extracting embedded text (for text-based PDFs)
+            try {
+              const text = execFileSync('pdftotext', [localPath, '-'], { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }).trim();
+              if (text) {
+                await pool.query('UPDATE knowledge_base SET content = $1, updated_at = now() WHERE id = $2', [text, inserted.id]);
+                parseSuccess = true;
+              }
+            } catch (pdftotextErr) {
+              // pdftotext not available or PDF is scanned — fall through
+            }
+
+            // Scanned PDF — convert to images and OCR with vision model
+            if (!parseSuccess) {
+              let tmpDir = null;
+              try {
+                tmpDir = `/tmp/pdf_ocr_${inserted.id}`;
+                fs.mkdirSync(tmpDir, { recursive: true });
+                execFileSync('pdftoppm', ['-png', '-r', '200', localPath, `${tmpDir}/page`], { encoding: 'utf-8', timeout: 30000 });
+                const pages = fs.readdirSync(tmpDir).filter(f => f.endsWith('.png')).sort();
+                if (pages.length > 0) {
+                  const { callVisionLLM } = await import('./agents.js');
+                  const content = [
+                    { type: 'text', text: '请完整提取这份文档中所有文字内容，包括标题、正文、列表等，按阅读顺序输出，使用简体中文。' }
+                  ];
+                  for (const page of pages) {
+                    const buf = fs.readFileSync(`${tmpDir}/${page}`);
+                    content.push({ type: 'image_url', image_url: { url: `data:image/png;base64,${buf.toString('base64')}` } });
+                  }
+                  const vr = await callVisionLLM(content, '', { maxTokens: 8192 });
+                  if (vr?.ok && String(vr.content || '').trim()) {
+                    await pool.query('UPDATE knowledge_base SET content = $1, updated_at = now() WHERE id = $2', [String(vr.content).trim(), inserted.id]);
+                    parseSuccess = true;
+                  } else {
+                    const reason = vr?.error || 'PDF 图片转换后视觉模型返回为空';
+                    console.warn('[knowledge] PDF OCR failed:', reason);
+                    void notifyAdminsOcrFailed(itemTitle, 'PDF 扫描件', reason);
+                  }
+                } else {
+                  void notifyAdminsOcrFailed(itemTitle, 'PDF', 'pdftoppm 转换 PDF 页面数为 0');
+                }
+              } finally {
+                if (tmpDir) {
+                  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) { /* ignore cleanup error */ }
+                }
+              }
+            }
+          } catch (pdfErr) {
+            const reason = String(pdfErr?.message || pdfErr);
+            console.warn('[knowledge] PDF parse error:', reason);
+            void notifyAdminsOcrFailed(itemTitle, 'PDF', reason);
           }
         }
       }
     } catch (e) {
-      console.warn('[knowledge] image OCR block:', e?.message || e);
+      console.warn('[knowledge] file parse block:', e?.message || e);
     }
     try {
       if (!localPath || !inserted?.id) return;

@@ -22,7 +22,7 @@ const PROVIDERS = {
   doubao: {
     apiKey: process.env.ARK_API_KEY || process.env.DOUBAO_API_KEY || '',
     baseUrl: process.env.DOUBAO_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3',
-    defaultModel: process.env.DEEPSEEK_VISION_MODEL || 'doubao-seed-2-0-pro-260215'
+    defaultModel: process.env.DEEPSEEK_VISION_MODEL || 'ep-20260424183833-7lr9g'
   }
 };
 
@@ -286,7 +286,7 @@ export async function callLLM(messages, options = {}) {
     const o = await callOllamaLLM(messages, options);
     if (o.ok && o.content) return o;
     // 本地失败，记录警告并继续走 API 兜底
-    logger.warn({ err: o.error, fallbackTo: 'deepseek-chat' }, `Ollama (${localModel}) 失败，自动降级到 API`);
+    logger.warn({ err: o.error, fallbackTo: PROVIDERS.deepseek.defaultModel }, `Ollama (${localModel}) 失败，自动降级到 API`);
   }
 
   // 确定主模型（优先使用路由结果，其次 API 默认）
