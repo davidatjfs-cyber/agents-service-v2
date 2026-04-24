@@ -1198,17 +1198,29 @@ async function buildMonthComparisonSummary(store) {
     ].filter(l => l !== null);
 
     if (hasPrevData && prevRev > 0) {
-      const revDiff = pct(curRev, prevRev);
-      const trafficDiff = prevTraffic > 0 ? pct(curTraffic, prevTraffic) : null;
-      const deliveryDiff = prevDelivery > 0 ? pct(curDelivery, prevDelivery) : null;
-      lines.push(`📅 **环比上月（${moName(prevMo)}，来源：营业日报）**`);
-      lines.push(`- 上月总营收：¥${Math.round(prevRev).toLocaleString()}（${prevDays}天）`);
+      // 按日均对比，避免本月天数不完整时与上月直接比总额导致失真
+      const curDailyRev = curDays > 0 ? curRev / curDays : 0;
+      const prevDailyRev = prevDays > 0 ? prevRev / prevDays : 0;
+      const revDiff = curDailyRev > 0 && prevDailyRev > 0 ? pct(curDailyRev, prevDailyRev) : null;
+      const curDailyTraffic = curDays > 0 ? curTraffic / curDays : 0;
+      const prevDailyTraffic = prevDays > 0 ? prevTraffic / prevDays : 0;
+      const trafficDiff = prevDailyTraffic > 0 && curDailyTraffic > 0 ? pct(curDailyTraffic, prevDailyTraffic) : prevTraffic > 0 ? pct(curTraffic, prevTraffic) : null;
+      const curDailyDelivery = curDays > 0 ? curDelivery / curDays : 0;
+      const prevDailyDelivery = prevDays > 0 ? prevDelivery / prevDays : 0;
+      const deliveryDiff = prevDailyDelivery > 0 && curDailyDelivery > 0 ? pct(curDailyDelivery, prevDailyDelivery) : prevDelivery > 0 ? pct(curDelivery, prevDelivery) : null;
+      lines.push(`📅 **环比上月（${moName(prevMo)}，来源：营业日报；日均对比）**`);
+      lines.push(`- 上月累计 ¥${Math.round(prevRev).toLocaleString()}（${prevDays}天，日均 ¥${Math.round(prevDailyRev).toLocaleString()}）`);
+      lines.push(`- 本月累计 ¥${Math.round(curRev).toLocaleString()}（${curDays}天，日均 ¥${Math.round(curDailyRev).toLocaleString()}）`);
       if (revDiff !== null) {
         const isDown = parseFloat(revDiff) < 0;
-        lines.push(`- 营收变化：${arrow(revDiff)} ${isDown ? '📉 本月营收低于上月，需关注' : '📈 本月营收高于上月'}`);
+        lines.push(`- 日均营收变化：${arrow(revDiff)} ${isDown ? '📉 本月日均低于上月' : '📈 本月日均高于上月'}`);
       }
-      if (trafficDiff !== null) lines.push(`- 客流变化：${arrow(trafficDiff)}`);
-      if (deliveryDiff !== null) lines.push(`- 外卖变化：${arrow(deliveryDiff)}`);
+      if (trafficDiff !== null) {
+        lines.push(`- 日均客流变化：${arrow(trafficDiff)}（本月日均 ${Math.round(curDailyTraffic)}人，上月日均 ${Math.round(prevDailyTraffic)}人）`);
+      }
+      if (deliveryDiff !== null) {
+        lines.push(`- 日均外卖变化：${arrow(deliveryDiff)}（本月日均 ¥${Math.round(curDailyDelivery).toLocaleString()}，上月日均 ¥${Math.round(prevDailyDelivery).toLocaleString()}）`);
+      }
     } else {
       lines.push(`📅 **上月（${moName(prevMo)}）**：暂无营业日报数据，无法进行月度对比。`);
       lines.push(`  （月度对比需要上月的实际营业日报记录，请确认 ${prevMo}月 日报已录入系统）`);
