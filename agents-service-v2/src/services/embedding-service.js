@@ -111,6 +111,13 @@ export async function generateEmbedding(text) {
 
     if (res.status === 200 && res.data?.data?.[0]?.embedding) {
       const vec = res.data.data[0].embedding;
+      if (!Array.isArray(vec) || vec.length !== EMBEDDING_DIM) {
+        logger.warn(
+          { dim: Array.isArray(vec) ? vec.length : 0, expected: EMBEDDING_DIM, model: EMBEDDING_MODEL },
+          'embedding-service: unexpected embedding dimension; set EMBEDDING_DIM to match API or adjust EMBEDDING_MODEL'
+        );
+        return null;
+      }
       // 缓存
       if (embedCache.size >= EMBED_CACHE_MAX) {
         const firstKey = embedCache.keys().next().value;
