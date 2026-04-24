@@ -280,8 +280,8 @@ export async function runBiAnomalyNotifyPipeline({
   let users =
     ruleKey === 'food_safety' ? await pickUsersForFoodSafety(store, roles) : await pickUsersForStoreAndRoles(store, roles);
   users = await collapseProductionManagerNotifyRecipients(store, users);
-  const isBadReview = ruleKey === 'bad_review_product' || ruleKey === 'bad_review_service';
-  if (!isBadReview) {
+  const isFoodSafety = ruleKey === 'food_safety';
+  if (isFoodSafety) {
     const missingHqRoles = ['admin', 'hq_manager'].filter(r => !roles.includes(r));
     if (missingHqRoles.length) {
       try {
