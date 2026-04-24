@@ -172,7 +172,7 @@ export async function recallMemory(opts) {
     const out = [];
     for (const row of ordered) {
       let sc = Number(row?.metadata?.score);
-      if (!Number.isFinite(sc)) sc = usedDeepseekOrder ? 0.72 : 0;
+      if (!Number.isFinite(sc)) sc = usedLlmOrder ? 0.72 : 0;
       if (sc < minScore) continue;
       const content = String(row?.content ?? '');
       if (!content) continue;

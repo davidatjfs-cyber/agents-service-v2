@@ -23,6 +23,7 @@ import { getBrandForStore, getConfig } from './config-service.js';
 import { toFeishuStoreName, resolveAgentCanonicalStore } from '../config/store-mapping.js';
 import { feishuStoreSearchPatterns } from '../utils/store-sql-patterns.js';
 import { estimateMarginForStore } from './margin-from-sales.js';
+import { unifiedRetrieve, formatUnifiedRetrievalForPrompt } from './unified-retriever.js';
 import {
   fetchMergedTableVisitEntries,
   tableVisitEntryIsDissatisfied,
@@ -2033,6 +2034,16 @@ async function handleDataAuditor(text, ctx) {
       }
     } catch (e) { logger.debug({ err: e?.message }, "query fallback skipped"); }
   }
+  // 统一知识库检索（P0: 非 train_advisor agent 也能访问知识库 + wiki + mempalace）
+  let unifiedKnowledgeBlock_dataAuditor = '';
+  if (store) {
+    try {
+      const urResult = await unifiedRetrieve(text, { store, agent: 'data_auditor', role: ctx.role, limit: 4 });
+      if (urResult.parts.length) {
+        unifiedKnowledgeBlock_dataAuditor = formatUnifiedRetrievalForPrompt(urResult);
+      }
+    } catch (e) { /* fail-soft — unified retriever not available */ }
+  }
   const businessHint = isBusinessOverview
     ? '\n重要：用户问的是整体生意/经营情况，请以营收、达成率、毛利、客流为主作答；若仅有桌访等单项数据或无营收日报，需先说明「暂无该时段营业日报数据」再简述已有数据，不要只回复桌访。\n'
     : '';
@@ -2135,6 +2146,7 @@ ${businessHint}
 3. 最后一段必须以 **总结** 或 **分析说明** 或 **简要分析** 开头，紧跟一句总结语。
 4. 禁止编造数字，无数据时写"暂无此数据"或"昨日无营业数据"。回复不超400字。
 ${wikiStructuredOutput}
+${unifiedKnowledgeBlock_dataAuditor}
 ${ds}
 ${metricExperienceAppendix}
 
@@ -2185,6 +2197,16 @@ ${metricExperienceAppendix}
       result: outcome.result,
       score: outcome.score
     });
+    // P2: 同时写入 mempalace（得分高且决策模式下）
+    if (mode === 'decision' && outcome.score >= 0.7 && process.env.ENABLE_MEMPALACE === 'true') {
+      saveMemPalaceMemory({
+        agent: 'data_auditor',
+        store,
+        type: 'outcome',
+        content: '问题:' + (structured.problem || '') + '\n原因:' + (structured.cause || '') + '\n策略:' + (structured.action || '') + '\n结果:' + outcome.result,
+        metadata: { score: outcome.score }
+      }).catch(e => logger.debug({ err: e?.message }, 'data_auditor mempalace failed'));
+    }
   } catch (e) { logger.warn({ err: e?.message }, 'recordOutcome failed'); }
   // V1 格式：报告类型标题（由 pipeline 拼成 小年：📊 标题 (门店 · 时间)）
   const reportTitle = inferDataAuditorReportTitle(text, ctx);
@@ -2410,6 +2432,16 @@ async function handleOpsSupervisor(text, ctx) {
       logger.warn({ err: e?.message }, 'ops_supervisor experience hint skipped');
     }
   }
+  // 统一知识库检索（P0: ops_supervisor 也能访问知识库 + wiki + mempalace）
+  let unifiedKnowledgeBlock_ops = '';
+  if (store) {
+    try {
+      const urResult = await unifiedRetrieve(text, { store, agent: 'ops_supervisor', role: ctx.role, limit: 4 });
+      if (urResult.parts.length) {
+        unifiedKnowledgeBlock_ops = formatUnifiedRetrievalForPrompt(urResult);
+      }
+    } catch (e) { /* fail-soft */ }
+  }
   let sysPrompt = (await adminAgentPromptPrefix('ops_supervisor')) + `【角色定义】
 你不是问答助手，你是餐饮企业中的“岗位负责人”（营运督导岗）。
 
@@ -2426,6 +2458,7 @@ KPI + 审批闭环在下游完成，本步不做任何数据库写入。
 
 【输出约束】
 用 - **项**: 值 分条，最后可加 **分析说明**：... 禁止编造数据，回复不超300字。
+${unifiedKnowledgeBlock_ops}
 ${opsData}
 ${metricExperienceAppendixOps}
 
@@ -2478,6 +2511,14 @@ async function handleChiefEvaluator(text, ctx) {
   if (!evidence) evidence = '\n[暂无绩效评分数据]';
   // P2: 记忆回调
   try { const mem = await recallMemories('chief_evaluator', store, '', 3); if (mem.length) evidence += '\n[历史评估] ' + mem.map(m => m.content.slice(0,80)).join('; '); } catch(e) {}
+  // 统一知识库检索
+  let unifiedKnowledgeBlock_ce = '';
+  if (store) {
+    try {
+      const urResult = await unifiedRetrieve(text, { store, agent: 'chief_evaluator', role: ctx.role, limit: 4 });
+      if (urResult.parts.length) unifiedKnowledgeBlock_ce = formatUnifiedRetrievalForPrompt(urResult);
+    } catch (e) { /* fail-soft */ }
+  }
   let sysPrompt = (await adminAgentPromptPrefix('chief_evaluator')) + `【角色定义】
 你不是问答助手，你是餐饮企业中的“岗位负责人”（绩效考核岗位）。
 
@@ -2497,6 +2538,7 @@ Planner/Workflow 已完成任务拆解；Model Router 已选择模型；KPI 与�
 
 【输出约束】
 不超400字，内容必须可用于绩效闭环沟通与后续整改动作跟进。
+${unifiedKnowledgeBlock_ce}
 ${evidence}
 
 `;
@@ -2589,6 +2631,19 @@ ${kbData}${trainingCtx}
     }
   );
   saveMemory('train_advisor', store, (r.content || '').slice(0, 500), { query: text.slice(0, 200) }).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
+  // P2: 写入 mempalace（训练回答质量较高时可长久留存）
+  if (process.env.ENABLE_MEMPALACE === 'true' && r.content && r.content.length > 100) {
+    try {
+      const { saveMemory: saveMempalace } = await import('./memory-adapter.js');
+      await saveMempalace({
+        agent: 'train_advisor',
+        store,
+        type: 'knowledge',
+        content: '用户提问:' + text.slice(0, 200) + '\n回答:' + (r.content || '').slice(0, 2000),
+        metadata: { score: kbBlockPresent ? 0.75 : 0.5 }
+      });
+    } catch (e) { /* fail-soft */ }
+  }
   return { agent: 'train_advisor', response: r.content || '请描述培训需求', data: kbData + trainingCtx, store };
 }
 // ── 5. Appeal (对标V1: 申诉记录入库+扣分核实+公正处理) ──
@@ -2625,6 +2680,14 @@ async function handleAppeal(text, ctx) {
   if (!appealData) appealData = '\n[暂无评分/扣分记录]';
   // P2: 记忆回调
   try { const mem = await recallMemories('appeal', store, '', 3); if (mem.length) appealData += '\n[历史申诉记忆] ' + mem.map(m => m.content.slice(0,80)).join('; '); } catch(e) {}
+  // 统一知识库检索
+  let unifiedKnowledgeBlock_appeal = '';
+  if (store) {
+    try {
+      const urResult = await unifiedRetrieve(text, { store, agent: 'appeal', role: ctx.role, limit: 3 });
+      if (urResult.parts.length) unifiedKnowledgeBlock_appeal = formatUnifiedRetrievalForPrompt(urResult);
+    } catch (e) { /* fail-soft */ }
+  }
   let sysPrompt = (await adminAgentPromptPrefix('appeal')) + `【角色定义】
 你不是问答助手，你是餐饮企业中的“岗位负责人”（申诉处理岗位）。
 
@@ -2643,6 +2706,7 @@ Planner/Workflow 已拆解为“核实+预计处理路径”。你只负责给�
 
 【输出约束】
 专业、公正、简短不超300字。
+${unifiedKnowledgeBlock_appeal}
 ${appealData}
 
 `;
@@ -2872,6 +2936,15 @@ async function handleMarketingPlanner(text, ctx) {
     mktData = '【弱数据模式】门店侧日报字段不可用或未拉取到数据。请仍输出可执行营销方案（含≥3条活动），禁止仅回答「无数据」或拒答。';
   }
 
+  // 统一知识库检索（P0: marketing_planner 也能访问知识库 + wiki + mempalace）
+  let unifiedKnowledgeBlock_mkt = '';
+  if (store) {
+    try {
+      const urResult = await unifiedRetrieve(text, { store, agent: 'marketing_planner', role: ctx.role, limit: 4 });
+      if (urResult.parts.length) unifiedKnowledgeBlock_mkt = formatUnifiedRetrievalForPrompt(urResult);
+    } catch (e) { /* fail-soft */ }
+  }
+
   const hasData = data && Object.keys(data).length > 0;
 
   const storeKey = String(ctx.storeId || ctx.store || store || '').trim();
@@ -2905,6 +2978,7 @@ async function handleMarketingPlanner(text, ctx) {
 当前时间：${NOW_CN()}。门店：${store || '未指定'}${brand ? `（${brand}）` : ''}。
 ${sessionPrompt}
 
+${unifiedKnowledgeBlock_mkt}
 【门店数据摘要】（扩写时可引用其中数字，禁止整段抄成营收日报）
 ${mktData}
 
@@ -3081,6 +3155,15 @@ async function handleMarketingExecutor(text, ctx) {
 
   if (!execData) execData = '暂无营销活动数据';
 
+  // 统一知识库检索（P0）
+  let unifiedKnowledgeBlock_exec = '';
+  if (store) {
+    try {
+      const urResult = await unifiedRetrieve(text, { store, agent: 'marketing_executor', role: ctx.role, limit: 3 });
+      if (urResult.parts.length) unifiedKnowledgeBlock_exec = formatUnifiedRetrievalForPrompt(urResult);
+    } catch (e) { /* fail-soft */ }
+  }
+
   const sysPrompt =
     (await adminAgentPromptPrefix('marketing_executor')) +
     `你是餐饮连锁的营销执行跟踪员。当前时间：${NOW_CN()}。门店：${store || '未指定'}${brand ? `（${brand}）` : ''}。
@@ -3088,6 +3171,7 @@ async function handleMarketingExecutor(text, ctx) {
 【你的唯一职责】
 追踪、评估已有营销活动的执行结果。你不制定新方案，不提出新活动创意。
 
+${unifiedKnowledgeBlock_exec}
 【真实执行数据】
 ${execData}
 
@@ -3191,6 +3275,14 @@ async function handleMaster(t, c) {
       }
     } catch(e) { /* silent */ }
   }
+  // 统一知识库检索（P0: master 也能访问知识库 + wiki + mempalace）
+  let unifiedKnowledgeBlock_master = '';
+  if (store) {
+    try {
+      const urResult = await unifiedRetrieve(t, { store, agent: 'master', role: c.role, limit: 3 });
+      if (urResult.parts.length) unifiedKnowledgeBlock_master = formatUnifiedRetrievalForPrompt(urResult);
+    } catch (e) { /* fail-soft */ }
+  }
   let sysPrompt = (await adminAgentPromptPrefix('master')) + `【角色定义】
 你不是问答助手，你是餐饮企业中的「岗位负责人」（调度中枢岗位）。
 
@@ -3211,6 +3303,7 @@ async function handleMaster(t, c) {
 数据审计、营运检查、绩效查询、SOP咨询、申诉处理、营销活动规划引导。
 
 【输出约束】
+${unifiedKnowledgeBlock_master}
 回复极简不超200字，优先给出可执行的下一步要点，禁止输出 JSON。${memories.join('')}${taskCtx}
 `;
   const r = await callLLM([{ role: 'system', content: sysPrompt }, { role: 'user', content: t }],
