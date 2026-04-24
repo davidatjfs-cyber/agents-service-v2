@@ -9,6 +9,10 @@ import { isMarketingPlanningIntent } from '../utils/marketing-intent.js';
 import { isExternalEnabled } from '../utils/safety.js';
 import { isMajixianPmObserverUsername } from '../utils/scoring-assignee.js';
 import { callLLM, callVisionLLM } from './llm-provider.js';
+import {
+  isOpenIdCrossAppFeishuError,
+  normalizeMobileForFeishuBatchGet
+} from '../utils/feishu-open-id-helpers.js';
 
 /** ECS 偶发 resolv 异常导致 ENOTFOUND：可用 FEISHU_DNS_SERVERS=223.5.5.5,114.114.114.114 */
 const _dnsList = String(process.env.FEISHU_DNS_SERVERS || '')
@@ -109,34 +113,206 @@ export async function getTenantToken() {
   return '';
 }
 
+function feishuSkipOpenIdResolve() {
+  const v = String(process.env.FEISHU_SKIP_OPEN_ID_RESOLVE || '').trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes';
+}
+
+/**
+ * 用当前应用 tenant_access_token 调通讯录 batch_get_id，得到本应用可用的 open_id，并尽量回写 feishu_users。
+ * 解决「DB 里存了另一套飞书应用写入的 open_id」导致的 IM 报错 open_id cross app（晨报/达成率等定时任务常见）。
+ */
+export async function resolveOpenIdForCurrentFeishuApp(row) {
+  const username = String(row?.username || '').trim();
+  let current = String(row?.open_id || '').trim();
+  if (!username && !current) return current;
+
+  let mobile = normalizeMobileForFeishuBatchGet(row?.mobile);
+  if (!mobile && username) {
+    try {
+      const r = await query(
+        `SELECT NULLIF(trim(mobile), '') AS m FROM feishu_users WHERE lower(trim(username)) = lower(trim($1)) LIMIT 1`,
+        [username]
+      );
+      mobile = normalizeMobileForFeishuBatchGet(r.rows?.[0]?.m);
+    } catch (e) {
+      logger.warn({ err: e?.message, username }, 'resolveOpenId: feishu_users mobile lookup failed');
+    }
+  }
+  let emails = [];
+  if (!mobile && username) {
+    try {
+      const r = await query(
+        `SELECT NULLIF(trim(phone), '') AS p FROM users WHERE lower(trim(username)) = lower(trim($1)) LIMIT 1`,
+        [username]
+      );
+      mobile = normalizeMobileForFeishuBatchGet(r.rows?.[0]?.p);
+    } catch (e) {
+      logger.warn({ err: e?.message, username }, 'resolveOpenId: users.phone lookup failed');
+    }
+    if (!mobile) {
+      try {
+        const r2 = await query(
+          `SELECT NULLIF(trim(lower(email)), '') AS e FROM users WHERE lower(trim(username)) = lower(trim($1)) LIMIT 1`,
+          [username]
+        );
+        const e = r2.rows?.[0]?.e;
+        if (e) emails.push(String(e).trim());
+      } catch (e) {
+        logger.warn({ err: e?.message, username }, 'resolveOpenId: users.email lookup failed');
+      }
+    }
+  }
+
+  const body = {};
+  if (mobile) body.mobiles = [mobile];
+  if (emails.length) body.emails = emails;
+  if (!body.mobiles && !body.emails) {
+    logger.warn({ username, hasOpenId: !!current }, 'resolveOpenId: no mobile/email to batch_get_id');
+    return current;
+  }
+
+  const t = await getTenantToken();
+  if (!t) return current;
+
+  try {
+    const r = await axios.post(
+      `${BASE}/contact/v3/users/batch_get_id`,
+      body,
+      {
+        headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json; charset=utf-8' },
+        params: { user_id_type: 'open_id' },
+        timeout: 15000
+      }
+    );
+    if (r.data?.code !== 0) {
+      logger.warn(
+        { username, code: r.data?.code, msg: r.data?.msg },
+        'resolveOpenId: batch_get_id failed'
+      );
+      return current;
+    }
+    const list = r.data?.data?.user_list;
+    const item = Array.isArray(list) ? list[0] : null;
+    const resolved = String(item?.user_id || '').trim();
+    if (!resolved) {
+      logger.warn({ username }, 'resolveOpenId: batch_get_id returned empty user_id');
+      return current;
+    }
+    if (resolved === current) return current;
+
+    if (username) {
+      try {
+        const conflict = await query(
+          `SELECT username FROM feishu_users
+           WHERE open_id = $1 AND lower(trim(username)) <> lower(trim($2)) LIMIT 1`,
+          [resolved, username]
+        );
+        if (conflict.rows?.length) {
+          logger.warn(
+            { username, resolved, other: conflict.rows[0].username },
+            'resolveOpenId: resolved open_id already bound to another row; skip DB update, still use for send'
+          );
+          return resolved;
+        }
+        await query(
+          `UPDATE feishu_users SET open_id = $1, updated_at = NOW()
+           WHERE lower(trim(username)) = lower(trim($2))`,
+          [resolved, username]
+        );
+        logger.info({ username, from: current, to: resolved }, 'resolveOpenId: feishu_users.open_id updated for current app');
+      } catch (e) {
+        logger.warn({ err: e?.message, username }, 'resolveOpenId: feishu_users UPDATE failed (send may still succeed)');
+      }
+    }
+    return resolved;
+  } catch (e) {
+    logger.warn({ err: e?.message, username }, 'resolveOpenId: batch_get_id exception');
+    return current;
+  }
+}
+
+/** IM 投递失败且为 cross-app 时，按 feishu_users.open_id 反查行并解析本应用 open_id */
+async function refreshFeishuUserOpenIdForImDelivery(staleOpenId) {
+  const stale = String(staleOpenId || '').trim();
+  if (!stale) return null;
+  let r;
+  try {
+    r = await query(
+      `SELECT username, open_id, mobile FROM feishu_users WHERE open_id = $1 LIMIT 1`,
+      [stale]
+    );
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'refreshFeishuOpenId: lookup failed');
+    return null;
+  }
+  const row = r.rows?.[0];
+  if (!row?.username) {
+    logger.warn({ stale }, 'refreshFeishuOpenId: no feishu_users row for this open_id');
+    return null;
+  }
+  const resolved = await resolveOpenIdForCurrentFeishuApp(row);
+  return resolved && resolved !== stale ? resolved : null;
+}
+
 export async function sendText(receiveId, text, idType = 'open_id') {
   if (!isExternalEnabled()) return { ok: false, error: 'external_disabled' };
   const t = await getTenantToken(); if (!t) return { ok: false, error: 'no_token' };
-  try {
-    const r = await axios.post(BASE + '/im/v1/messages', { receive_id: receiveId, msg_type: 'text', content: JSON.stringify({ text }) }, { headers: { Authorization: 'Bearer ' + t }, params: { receive_id_type: idType }, timeout: 10000 });
-    return { ok: r.data?.code === 0, data: r.data };
-  } catch (e) { return { ok: false, error: e?.message }; }
+  const post = async (rid) => {
+    try {
+      const r = await axios.post(BASE + '/im/v1/messages', { receive_id: rid, msg_type: 'text', content: JSON.stringify({ text }) }, { headers: { Authorization: 'Bearer ' + t }, params: { receive_id_type: idType }, timeout: 10000 });
+      return { ok: r.data?.code === 0, data: r.data, error: r.data?.code === 0 ? undefined : String(r.data?.msg || '').trim() || `feishu_code_${r.data?.code ?? '?'}` };
+    } catch (e) {
+      return { ok: false, error: e?.response?.data?.msg || e?.message, data: e?.response?.data };
+    }
+  };
+  let rid = String(receiveId || '').trim();
+  let out = await post(rid);
+  if (out.ok || idType !== 'open_id' || feishuSkipOpenIdResolve()) return out;
+  const code = out.data?.code;
+  if (isOpenIdCrossAppFeishuError(code, out.error)) {
+    const fixed = await refreshFeishuUserOpenIdForImDelivery(rid);
+    if (fixed && fixed !== rid) {
+      logger.warn({ from: rid, to: fixed }, 'sendText: retry after cross-app open_id resolve');
+      out = await post(fixed);
+    }
+  }
+  return out;
 }
 
 export async function sendCard(receiveId, card, idType = 'open_id') {
   if (!isExternalEnabled()) return { ok: false, error: 'external_disabled' };
   const t = await getTenantToken(); if (!t) return { ok: false, error: 'no_token' };
-  try {
-    const r = await axios.post(BASE + '/im/v1/messages', { receive_id: receiveId, msg_type: 'interactive', content: JSON.stringify(card) }, { headers: { Authorization: 'Bearer ' + t }, params: { receive_id_type: idType }, timeout: 10000 });
-    const ok = r.data?.code === 0;
-    const msg = String(r.data?.msg || '').trim();
-    return {
-      ok,
-      data: r.data,
-      error: ok ? undefined : (msg || `feishu_code_${r.data?.code ?? '?'}`)
-    };
-  } catch (e) {
-    const respData = e?.response?.data;
-    if (respData) {
-      logger.warn({ receiveId, idType, feishuCode: respData.code, feishuMsg: respData.msg }, 'sendCard Feishu API error response');
+  const post = async (rid) => {
+    try {
+      const r = await axios.post(BASE + '/im/v1/messages', { receive_id: rid, msg_type: 'interactive', content: JSON.stringify(card) }, { headers: { Authorization: 'Bearer ' + t }, params: { receive_id_type: idType }, timeout: 10000 });
+      const ok = r.data?.code === 0;
+      const msg = String(r.data?.msg || '').trim();
+      return {
+        ok,
+        data: r.data,
+        error: ok ? undefined : (msg || `feishu_code_${r.data?.code ?? '?'}`)
+      };
+    } catch (e) {
+      const respData = e?.response?.data;
+      if (respData) {
+        logger.warn({ receiveId: rid, idType, feishuCode: respData.code, feishuMsg: respData.msg }, 'sendCard Feishu API error response');
+      }
+      return { ok: false, error: respData?.msg || e?.message, data: respData };
     }
-    return { ok: false, error: respData?.msg || e?.message, data: respData };
+  };
+  let rid = String(receiveId || '').trim();
+  let out = await post(rid);
+  if (out.ok || idType !== 'open_id' || feishuSkipOpenIdResolve()) return out;
+  const code = out.data?.code;
+  if (isOpenIdCrossAppFeishuError(code, out.error)) {
+    const fixed = await refreshFeishuUserOpenIdForImDelivery(rid);
+    if (fixed && fixed !== rid) {
+      logger.warn({ from: rid, to: fixed }, 'sendCard: retry after cross-app open_id resolve');
+      out = await post(fixed);
+    }
   }
+  return out;
 }
 
 export async function sendGroup(chatId, text) { return sendText(chatId, text, 'chat_id'); }
