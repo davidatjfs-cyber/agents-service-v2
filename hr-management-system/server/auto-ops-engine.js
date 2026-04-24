@@ -50,6 +50,11 @@ const REMINDER_HOURS = 2;    // 2小时未回复 → 催办
 const ESCALATE_HOURS = 4;    // 4小时未回复 → 升级上级
 const MAX_REMINDERS = 3;     // 最多催办3次
 
+/** 默认关闭：历史上每 15min 重复扫描 pending_response，升级成功后状态未变 → 同任务连发多条「任务升级」。需催办/升级时设 HRMS_ENABLE_INSPECTION_CLOSED_LOOP=true */
+function isInspectionClosedLoopReminderEnabled() {
+  return String(process.env.HRMS_ENABLE_INSPECTION_CLOSED_LOOP || '').toLowerCase() === 'true';
+}
+
 /**
  * 已由 agents-service-v2 `task-card-reminders.js` 统一催办（1h 间隔、3 次、小年·催办通知）。
  * 本引擎若再跑会用 source_data.reminder_count，与库列 remind_count 脱节 → 重复发「催办提醒/自动催办」。
@@ -68,8 +73,10 @@ const AGENTS_V2_REMINDER_SOURCES = new Set([
 
 export async function inspectionClosedLoopTick() {
   let actions = 0;
+  const reminderEscalationOn = isInspectionClosedLoopReminderEnabled();
 
-  // ── 1a. 催办: pending_response 超过2小时 ──
+  // ── 1a. 催办 + 升级（默认关闭，避免飞书刷屏；见 isInspectionClosedLoopReminderEnabled）──
+  if (reminderEscalationOn) {
   try {
     const r = await pool().query(
       `SELECT t.*, 
@@ -111,6 +118,10 @@ export async function inspectionClosedLoopTick() {
     }
   } catch (e) {
     console.error('[auto-ops] inspection reminder error:', e?.message);
+  }
+  } else if (!globalThis.__hrmsInspectionLoopDisabledLogged) {
+    globalThis.__hrmsInspectionLoopDisabledLogged = true;
+    console.log('[auto-ops] 巡检催办/任务升级已关闭（未设置 HRMS_ENABLE_INSPECTION_CLOSED_LOOP=true）');
   }
 
   // ── 1b. 自动验收跟踪: 任务resolved后记录闭环时间 ──
@@ -171,6 +182,16 @@ async function sendReminder(task, reminderNum, hoursWaiting) {
 
 async function escalateTask(task, hoursWaiting) {
   if (!_sendLarkCard) return;
+
+  let prevSd = task?.source_data;
+  if (prevSd && typeof prevSd === 'string') {
+    try {
+      prevSd = JSON.parse(prevSd);
+    } catch {
+      prevSd = {};
+    }
+  }
+  if (prevSd && typeof prevSd === 'object' && prevSd.escalated === true) return;
 
   // 产品口径：超时升级仅通知「系统管理员」飞书账号，由管理员决定是否再下发门店；不向店长/出品/原责任人推送，避免多人收到混淆文案（如 OPS-* / 遗留任务）。
   let escalateTo = null;
