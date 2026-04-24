@@ -7,7 +7,7 @@
  *  - 双重缓存：内存缓存最近 embedding + 数据库持久化
  *
  * 用法：
- *   import { generateEmbedding, getEmbeddingOrFallback } from './embedding-service.js';
+ *   import { generateEmbedding, searchByEmbedding, ensureEmbeddingSchema } from './embedding-service.js';
  *   const vec = await generateEmbedding('用户提问');
  *   // 若 vec 为 null，调用方应回退到 ILIKE
  */

@@ -199,12 +199,13 @@ async function retrieveFromRag(text, ctx) {
     }
 
     if (!rows.length) {
-      // fallback：去掉 scope 限制
+      // fallback：去掉 scope 限制（占位符须从 $1 起，与上面 orClauses 的 $2… 区分，避免参数错位）
+      const fbClauses = patterns.map((_, i) => `(title ILIKE $${i + 1} OR content ILIKE $${i + 1})`).join(' OR ');
       const r2 = await query(
         `SELECT id::text AS id, title, content, tags
          FROM knowledge_base
          WHERE (enabled IS NULL OR enabled = true)
-         AND (${orClauses})
+         AND (${fbClauses})
          ORDER BY created_at DESC NULLS LAST
          LIMIT 20`,
         patterns
