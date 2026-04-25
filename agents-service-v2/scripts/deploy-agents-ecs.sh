@@ -96,7 +96,7 @@ ensure_kv .env BITABLE_TASK_RESP_APP_ID "\${BITABLE_TASK_RESP_APP_ID}"
 ensure_kv .env BITABLE_TASK_RESP_APP_SECRET "\${BITABLE_TASK_RESP_APP_SECRET}"
 [[ -f .env.production ]] && ensure_kv .env.production PORT 3101 || true
 [[ -f .env.production ]] && ensure_kv .env.production CONFIRM_PRODUCTION true || true
-[[ -f .env.production ]] && [[ -n "${ADMIN_PASSWORD:-}" ]] && ensure_kv .env.production ADMIN_PASSWORD "${ADMIN_PASSWORD}" || true
+[[ -f .env.production ]] && [[ -n "\${ADMIN_PASSWORD:-}" ]] && ensure_kv .env.production ADMIN_PASSWORD "\${ADMIN_PASSWORD}" || true
 (npm ci --omit=dev 2>/dev/null || npm install --omit=dev)
 node scripts/apply-analysis-sop-sql.mjs
 node scripts/apply-strategy-rules-sql.mjs
