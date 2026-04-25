@@ -6288,7 +6288,7 @@ async function sendAdminSystemAlert(msg, options = {}) {
       `SELECT username
        FROM users
        WHERE role IN ('admin','hq_manager','hr_manager')
-         AND status = 'active'
+         AND is_active = true
        LIMIT 8`
     );
     recipients = uniqUsernames((admins.rows || []).map(r => r.username));
