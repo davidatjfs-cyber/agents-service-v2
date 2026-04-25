@@ -1,26 +1,101 @@
 #!/bin/bash
 # 部署前自动备份脚本 - 生产环境使用
+#
+# 备份保留策略（可调环境变量，默认偏保守以保磁盘）：
+#   DEPLOY_BACKUP_KEEP_HRMS_TGZ   保留 HRMS 代码包数量（默认 3）
+#   DEPLOY_BACKUP_KEEP_DB_SQL     保留数据库全量/结构 SQL 数量（默认 3）
+#   DEPLOY_BACKUP_KEEP_AGENTS_TGZ 保留 agents 代码包数量（默认 5）
+#   DEPLOY_BACKUP_KEEP_DAYS       超过该天数的 tar/sql 由 find 删除（默认 7）
+#   DEPLOY_BACKUP_KEEP_LOGS       保留 backup_*.log 条数（默认 25）
+#   DEPLOY_BACKUP_KEEP_ENV        每目录保留 env_* 快照条数（默认 30）
+# 紧急裁剪阈值（KiB，df -Pk 第4列）：
+#   DEPLOY_BACKUP_WARN_FREE_KIB   低于此值先裁剪一轮（默认约 5GiB）
+#   DEPLOY_BACKUP_CRIT_FREE_KIB   清理后仍低于此值再收紧（默认约 1GiB）
+#
+# 仅执行保留策略（不写新备份），便于 cron 周清理：
+#   /opt/scripts/deploy-backup.sh --retention-only
 set -u
 BACKUP_DIR="/opt/deploy-backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_FILE="$BACKUP_DIR/backup_${TIMESTAMP}.log"
 ALLOW_NO_DB_BACKUP="${ALLOW_NO_DB_BACKUP:-false}"
 
+DEPLOY_BACKUP_KEEP_HRMS_TGZ="${DEPLOY_BACKUP_KEEP_HRMS_TGZ:-3}"
+DEPLOY_BACKUP_KEEP_DB_SQL="${DEPLOY_BACKUP_KEEP_DB_SQL:-3}"
+DEPLOY_BACKUP_KEEP_AGENTS_TGZ="${DEPLOY_BACKUP_KEEP_AGENTS_TGZ:-5}"
+DEPLOY_BACKUP_KEEP_DAYS="${DEPLOY_BACKUP_KEEP_DAYS:-7}"
+DEPLOY_BACKUP_KEEP_LOGS="${DEPLOY_BACKUP_KEEP_LOGS:-25}"
+DEPLOY_BACKUP_KEEP_ENV="${DEPLOY_BACKUP_KEEP_ENV:-30}"
+# 5GiB / 1GiB
+DEPLOY_BACKUP_WARN_FREE_KIB="${DEPLOY_BACKUP_WARN_FREE_KIB:-5242880}"
+DEPLOY_BACKUP_CRIT_FREE_KIB="${DEPLOY_BACKUP_CRIT_FREE_KIB:-1048576}"
+
 mkdir -p "$BACKUP_DIR/agents" "$BACKUP_DIR/hrms" "$BACKUP_DIR/database"
 
-# 根分区可用过低时先裁剪旧备份（仅靠 mtime+10 在频繁部署 + 大库 dump 时会堆积满盘，曾导致 PostgreSQL 崩溃无法登录）
+# 根分区可用过低时先裁剪旧备份（仅靠 mtime 在频繁部署 + 大库 dump 时会堆积满盘，曾导致 PostgreSQL 崩溃无法登录）
 avail_kb() { df -Pk / 2>/dev/null | tail -1 | awk '{print $4}'; }
+
+# 参数：保留 HRMS tar 份数、保留 DB SQL 份数、保留 agents tar 份数
 prune_backups_by_count() {
-  local keep_hrms_tar="${1:-8}"
-  local keep_db_sql="${2:-6}"
+  local keep_hrms_tar="${1:-$DEPLOY_BACKUP_KEEP_HRMS_TGZ}"
+  local keep_db_sql="${2:-$DEPLOY_BACKUP_KEEP_DB_SQL}"
+  local keep_agents="${3:-$DEPLOY_BACKUP_KEEP_AGENTS_TGZ}"
+  (cd "$BACKUP_DIR/agents" 2>/dev/null && ls -1t agents_*.tar.gz 2>/dev/null | tail -n +$((keep_agents + 1)) | xargs -r rm -f)
   (cd "$BACKUP_DIR/hrms" 2>/dev/null && ls -1t hrms_*.tar.gz 2>/dev/null | tail -n +$((keep_hrms_tar + 1)) | xargs -r rm -f)
   (cd "$BACKUP_DIR/hrms" 2>/dev/null && ls -1t hrms_*.sql hrms_schema_*.sql 2>/dev/null | tail -n +$((keep_db_sql + 1)) | xargs -r rm -f)
   (cd "$BACKUP_DIR/database" 2>/dev/null && ls -1t hrms_*.sql hrms_schema_*.sql 2>/dev/null | tail -n +$((keep_db_sql + 1)) | xargs -r rm -f)
 }
+
+prune_backup_logs_by_count() {
+  local keep="${1:-$DEPLOY_BACKUP_KEEP_LOGS}"
+  (cd "$BACKUP_DIR" 2>/dev/null && ls -1t backup_*.log 2>/dev/null | tail -n +$((keep + 1)) | xargs -r rm -f)
+}
+
+prune_env_snippets_by_count() {
+  local keep="${1:-$DEPLOY_BACKUP_KEEP_ENV}"
+  for sub in agents hrms; do
+    (cd "$BACKUP_DIR/$sub" 2>/dev/null && ls -1t env_* 2>/dev/null | tail -n +$((keep + 1)) | xargs -r rm -f)
+  done
+}
+
+run_deploy_backup_retention() {
+  find "$BACKUP_DIR/agents" -name "agents_*.tar.gz" -mtime +"$DEPLOY_BACKUP_KEEP_DAYS" -delete 2>/dev/null
+  find "$BACKUP_DIR/hrms" -name "hrms_*.tar.gz" -mtime +"$DEPLOY_BACKUP_KEEP_DAYS" -delete 2>/dev/null
+  find "$BACKUP_DIR/database" -name "*.sql" -mtime +"$DEPLOY_BACKUP_KEEP_DAYS" -delete 2>/dev/null
+  prune_backups_by_count "$DEPLOY_BACKUP_KEEP_HRMS_TGZ" "$DEPLOY_BACKUP_KEEP_DB_SQL" "$DEPLOY_BACKUP_KEEP_AGENTS_TGZ"
+  prune_backup_logs_by_count "$DEPLOY_BACKUP_KEEP_LOGS"
+  prune_env_snippets_by_count "$DEPLOY_BACKUP_KEEP_ENV"
+}
+
+# 仅裁剪备份目录（不写新备份），供 cron 使用，例如：
+#   0 3 * * 0 /bin/bash /opt/scripts/deploy-backup.sh --retention-only
+if [ "${1:-}" = "--retention-only" ]; then
+  PRUNE_LOG="$BACKUP_DIR/prune_$(date +%Y%m%d_%H%M%S).log"
+  {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 仅执行 $BACKUP_DIR 保留策略（无新备份）"
+    echo "HRMS包≤${DEPLOY_BACKUP_KEEP_HRMS_TGZ}, SQL≤${DEPLOY_BACKUP_KEEP_DB_SQL}, agents≤${DEPLOY_BACKUP_KEEP_AGENTS_TGZ}, 超${DEPLOY_BACKUP_KEEP_DAYS}天删除, backup日志≤${DEPLOY_BACKUP_KEEP_LOGS}, env≤${DEPLOY_BACKUP_KEEP_ENV}"
+    echo "[before]"
+    df -h /
+    run_deploy_backup_retention
+    POST_AVAIL=$(avail_kb)
+    if [ "${POST_AVAIL:-0}" -lt "$DEPLOY_BACKUP_CRIT_FREE_KIB" ]; then
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠️ 仍低于临界可用空间，二次收紧为 2/2/2"
+      prune_backups_by_count 2 2 2
+      prune_backup_logs_by_count 15
+      prune_env_snippets_by_count 15
+    fi
+    echo "[after]"
+    df -h /
+    du -sh "$BACKUP_DIR" "$BACKUP_DIR/database" "$BACKUP_DIR/hrms" "$BACKUP_DIR/agents" 2>/dev/null || true
+  } | tee -a "$PRUNE_LOG"
+  echo "日志: $PRUNE_LOG"
+  exit 0
+fi
+
 PRE_AVAIL=$(avail_kb)
-if [ "${PRE_AVAIL:-0}" -lt 3145728 ]; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠️ 根分区可用不足约 3GiB（${PRE_AVAIL} KiB），紧急按数量裁剪旧 HRMS/DB 备份..." | tee -a "$LOG_FILE"
-  prune_backups_by_count 4 3
+if [ "${PRE_AVAIL:-0}" -lt "$DEPLOY_BACKUP_WARN_FREE_KIB" ]; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠️ 根分区可用偏低（${PRE_AVAIL} KiB < ${DEPLOY_BACKUP_WARN_FREE_KIB} KiB），先按数量裁剪旧备份..." | tee -a "$LOG_FILE"
+  prune_backups_by_count 3 2 3
 fi
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] 开始部署前备份..." | tee -a "$LOG_FILE"
@@ -140,16 +215,14 @@ else
   echo "✅ 数据库备份成功" | tee -a "$LOG_FILE"
 fi
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] 清理旧备份..." | tee -a "$LOG_FILE"
-find "$BACKUP_DIR/agents" -name "*.tar.gz" -mtime +10 -delete 2>/dev/null
-find "$BACKUP_DIR/hrms" -name "*.tar.gz" -mtime +10 -delete 2>/dev/null
-find "$BACKUP_DIR/database" -name "*.sql" -mtime +10 -delete 2>/dev/null
-# 按数量上限保留（防止 10 天内高频部署 + 大体积 pg_dump 占满磁盘）
-prune_backups_by_count 8 6
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 清理旧备份（保留策略: HRMS包≤${DEPLOY_BACKUP_KEEP_HRMS_TGZ}, SQL≤${DEPLOY_BACKUP_KEEP_DB_SQL}, agents包≤${DEPLOY_BACKUP_KEEP_AGENTS_TGZ}, 超过${DEPLOY_BACKUP_KEEP_DAYS}天删除）..." | tee -a "$LOG_FILE"
+run_deploy_backup_retention
 POST_AVAIL=$(avail_kb)
-if [ "${POST_AVAIL:-0}" -lt 1048576 ]; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠️ 清理后根分区仍不足约 1GiB，进一步只保留最新 3 份 HRMS tar 与 2 份 SQL" | tee -a "$LOG_FILE"
-  prune_backups_by_count 3 2
+if [ "${POST_AVAIL:-0}" -lt "$DEPLOY_BACKUP_CRIT_FREE_KIB" ]; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠️ 清理后根分区仍不足约 1GiB（${POST_AVAIL} KiB），进一步只保留最新 2 份 HRMS tar、2 份 SQL、2 份 agents" | tee -a "$LOG_FILE"
+  prune_backups_by_count 2 2 2
+  prune_backup_logs_by_count 15
+  prune_env_snippets_by_count 15
 fi
 
 echo "$TIMESTAMP" > "$BACKUP_DIR/latest.txt"
