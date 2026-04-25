@@ -9743,9 +9743,52 @@ app.get('/api/reports/turnover', authRequired, async (req, res) => {
       ? allEmployees.filter(e => String(e?.store || '').trim() === store)
       : allEmployees;
 
+    // ── Step 1: query offboarding approvals for this month (used by both departed & voluntary sections) ──
+    const offDeparted = new Map(); // username → { resignDate, reason, isVoluntary }
+    try {
+      const obRes = await pool.query(
+        `SELECT applicant_username, payload, status
+         FROM approval_requests
+         WHERE type = 'offboarding'
+           AND status IN ('approved', 'pending')
+           AND substring(COALESCE(
+             payload->>'resignDate', payload->>'date', payload->>'resignationDate',
+             created_at::text
+           ), 1, 7) = $1
+         ORDER BY created_at DESC`,
+        [month]
+      );
+      for (const ob of (obRes.rows || [])) {
+        const p = typeof ob.payload === 'string' ? JSON.parse(ob.payload) : (ob.payload || {});
+        const uname = String(ob.applicant_username || p?.username || p?.applicant || '').trim().toLowerCase();
+        if (!uname || offDeparted.has(uname)) continue;
+        const rd = safeDateOnly(p?.resignDate || p?.date || p?.resignationDate);
+        const reason = String(p?.reason || '').trim();
+        const depType = String(p?.departureType || '').trim();
+        let isVoluntary = true;
+        if (depType === 'involuntary' || depType === '被动') isVoluntary = false;
+        else if (/劝退|辞退|裁员|开除|解雇|淘汰/.test(reason)) isVoluntary = false;
+        offDeparted.set(uname, { resignDate: rd, reason, isVoluntary });
+      }
+    } catch (_) {}
+
+    // ── Step 2: ensure offboarding applicants are in storeEmps ──
+    const empByLower = new Map(storeEmps.map(e => [String(e?.username || '').trim().toLowerCase(), e]));
+    for (const [uname, info] of offDeparted) {
+      if (!empByLower.has(uname)) {
+        const stateEmp = Array.isArray(state0.employees) ? state0.employees.find(e => String(e?.username || '').toLowerCase() === uname) : null;
+        const emp = stateEmp || {};
+        emp.username = emp.username || uname;
+        emp.name = emp.name || uname;
+        emp.status = emp.status || '离职';
+        emp.offboardingDate = emp.offboardingDate || info.resignDate || '';
+        emp.resignedAt = emp.resignedAt || info.resignDate || '';
+        storeEmps.push(emp);
+        empByLower.set(uname, emp);
+      }
+    }
+
     // ── Identify departed employees this month ──
-    // An employee is "departed this month" if:
-    //   status === '离职' AND (offboardingDate or resignedAt) falls within the month
     const departedThisMonth = storeEmps.filter(e => {
       if (String(e?.status || '').trim() !== '离职') return false;
       const depDate = String(e?.offboardingDate || e?.resignedAt || '').trim();
@@ -9757,7 +9800,6 @@ app.get('/api/reports/turnover', authRequired, async (req, res) => {
     const activeOrDepartedThisMonth = storeEmps.filter(e => {
       const st = String(e?.status || '').trim();
       if (st === 'active') return true;
-      // departed this month counts as was-active
       if (st === '离职') {
         const depDate = String(e?.offboardingDate || e?.resignedAt || '').trim();
         if (depDate && depDate >= month + '-01') return true;
@@ -9790,68 +9832,32 @@ app.get('/api/reports/turnover', authRequired, async (req, res) => {
     const newHireRetentionRate = 1 - newHireTurnoverRate;
 
     // ── C. Voluntary vs Involuntary ──
-    // Check offboarding approval payloads for departure reason
     let voluntaryCount = 0;
     let involuntaryCount = 0;
     const departedDetails = [];
 
-    // Fetch offboarding approvals for this month
-    try {
-      const offboardingResult = await pool.query(
-        `SELECT id, applicant_username, payload, status, created_at, updated_at
-         FROM approval_requests
-         WHERE type = 'offboarding'
-           AND status IN ('approved', 'pending')
-           AND substring(COALESCE(
-             payload->>'resignDate',
-             payload->>'date',
-             payload->>'resignationDate',
-             created_at::text
-           ), 1, 7) = $1
-         ORDER BY created_at DESC`,
-        [month]
-      );
-      const offRows = offboardingResult.rows || [];
-      for (const ob of offRows) {
-        const payload = typeof ob.payload === 'string' ? JSON.parse(ob.payload) : (ob.payload || {});
-        const reason = String(payload?.reason || '').trim();
-        const detail = String(payload?.detail || '').trim();
-        const depType = String(payload?.departureType || '').trim();
-        const empUsername = String(ob.applicant_username || '').trim();
-        const empRec = storeEmps.find(e => String(e?.username || '').toLowerCase() === empUsername.toLowerCase());
-        if (store && empRec && String(empRec?.store || '').trim() !== store) continue;
+    for (const [uname, info] of offDeparted) {
+      const empRec = empByLower.get(uname.toLowerCase()) || null;
+      if (store && empRec && String(empRec?.store || '').trim() !== store) continue;
 
-        // Determine voluntary vs involuntary
-        let isVoluntary = true; // default: voluntary (resignation)
-        if (depType === 'involuntary' || depType === '被动') {
-          isVoluntary = false;
-        } else if (/劝退|辞退|裁员|开除|解雇|淘汰/.test(reason) || /劝退|辞退|裁员|开除|解雇|淘汰/.test(detail)) {
-          isVoluntary = false;
-        }
+      if (info.isVoluntary) voluntaryCount++;
+      else involuntaryCount++;
 
-        if (isVoluntary) voluntaryCount++;
-        else involuntaryCount++;
-
-        departedDetails.push({
-          username: empUsername,
-          name: String(empRec?.name || payload?.name || empUsername).trim(),
-          store: String(empRec?.store || payload?.store || '').trim(),
-          position: String(empRec?.position || '').trim(),
-          level: String(empRec?.level || '').trim(),
-          joinDate: String(empRec?.joinDate || empRec?.createdAt || '').trim().slice(0, 10),
-          departureDate: String(payload?.resignDate || payload?.date || '').trim(),
-          reason: reason,
-          departureType: isVoluntary ? 'voluntary' : 'involuntary',
-          isCoreTalent: empRec ? isCoreTalent(empRec) : false,
-          isNewHire: empRec ? isNewHire(empRec) : false
-        });
-      }
-    } catch (e) {
-      // If no approval data, fall back to counting all as voluntary
-      voluntaryCount = totalDeparted;
+      departedDetails.push({
+        username: uname,
+        name: String(empRec?.name || uname).trim(),
+        store: String(empRec?.store || '').trim(),
+        position: String(empRec?.position || '').trim(),
+        level: String(empRec?.level || '').trim(),
+        joinDate: String(empRec?.joinDate || empRec?.createdAt || '').trim().slice(0, 10),
+        departureDate: info.resignDate || '',
+        reason: info.reason,
+        departureType: info.isVoluntary ? 'voluntary' : 'involuntary',
+        isCoreTalent: empRec ? isCoreTalent(empRec) : false,
+        isNewHire: empRec ? isNewHire(empRec) : false
+      });
     }
 
-    // If no approval records found but we have departed employees, default all to voluntary
     if (voluntaryCount === 0 && involuntaryCount === 0 && totalDeparted > 0) {
       voluntaryCount = totalDeparted;
     }
