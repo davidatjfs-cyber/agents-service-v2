@@ -15251,6 +15251,10 @@ app.post('/api/knowledge/batch', authRequired, knowledgeUpload.array('files', 20
   const tags = normalizeKnowledgeTags(req.body?.tags, feedAgent, brandScopeTag);
   const kbScope = ['public','business','sensitive'].includes(req.body?.scope) ? req.body.scope : 'public';
   const version = String(req.body?.version || '').trim() || null;
+  const batchTitleMode = ['filename', 'custom'].includes(String(req.body?.batchTitleMode || '').trim())
+    ? String(req.body?.batchTitleMode || '').trim()
+    : 'filename';
+  const customPrefix = String(req.body?.customPrefix || '').trim();
   const audienceObj = parseKnowledgeAudienceFromBody(req.body);
   if (!category) return res.status(400).json({ error: 'missing_category' });
   if (!feedAgent) return res.status(400).json({ error: 'missing_feed_agent' });

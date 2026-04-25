@@ -21712,6 +21712,8 @@ ${knowledgeContent.slice(0, 30000)}`;
                 return;
             }
             window.__KB_UPLOAD_IN_PROGRESS = false;
+            window.__KB_UPLOAD_USER_ABORTED = false;
+            window.__KB_UPLOAD_ABORT_CONTROLLER = null;
             const modal = document.getElementById('knowledge-upload-modal');
             if (!modal) return;
             const title = document.getElementById('knowledge-upload-title');
@@ -21741,6 +21743,16 @@ ${knowledgeContent.slice(0, 30000)}`;
         function closeKnowledgeUploadModal() {
             if (window.__KB_UPLOAD_IN_PROGRESS) {
                 try {
+                    const controller = window.__KB_UPLOAD_ABORT_CONTROLLER;
+                    if (controller) {
+                        window.__KB_UPLOAD_USER_ABORTED = true;
+                        controller.abort();
+                        window.__KB_UPLOAD_ABORT_CONTROLLER = null;
+                        window.__KB_UPLOAD_IN_PROGRESS = false;
+                        const statusEl = document.getElementById('knowledge-upload-file-status');
+                        if (statusEl) statusEl.textContent = '';
+                        showNotification('已取消上传，请重新上传', 'warning');
+                    } else {
                     const xhr = window.__KB_UPLOAD_XHR;
                     if (xhr && xhr.readyState !== 4) {
                         xhr.abort();
@@ -21752,6 +21764,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                     } else {
                         showNotification('正在写入中，请稍候完成后自动关闭', 'info');
                         return;
+                    }
                     }
                 } catch (e) {
                     showNotification('正在写入中，请稍候完成后自动关闭', 'info');

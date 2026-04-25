@@ -16004,9 +16004,48 @@
                         url += (url.indexOf('?') >= 0 ? '&' : '?') + 'access_token=' + encodeURIComponent(token);
                     }
                 } catch (e) {}
-                const resp = await fetch(url, { method: 'POST', headers: token ? { 'Authorization': 'Bearer ' + token } : {}, body: formData });
-                const text = await resp.text();
-                try { return JSON.parse(text); } catch (e) { return { raw: text }; }
+                return await new Promise((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    window.__KB_UPLOAD_XHR = xhr;
+                    xhr.open('POST', url, true);
+                    if (token) xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+                    xhr.timeout = 10 * 60 * 1000;
+
+                    const statusEl = document.getElementById('knowledge-upload-file-status');
+                    xhr.upload.onprogress = (ev) => {
+                        if (!statusEl) return;
+                        if (!ev || !ev.lengthComputable || !ev.total) {
+                            statusEl.textContent = '批量上传中...';
+                            return;
+                        }
+                        const pct = Math.max(0, Math.min(100, Math.floor((ev.loaded / ev.total) * 100)));
+                        const msg = pct >= 100
+                            ? '文件已上传，服务器写入中...'
+                            : `批量上传中... ${pct}%（${formatFileSize(ev.loaded)}/${formatFileSize(ev.total)}）`;
+                        renderKnowledgeUploadProgress(pct, msg);
+                    };
+
+                    xhr.onerror = () => reject(new Error('上传失败（网络错误）'));
+                    xhr.ontimeout = () => reject(new Error('上传超时，请稍后重试'));
+                    xhr.onload = () => {
+                        const text = String(xhr.responseText || '');
+                        let data = {};
+                        try { data = JSON.parse(text); } catch (e) { data = { raw: text }; }
+                        if (xhr.status >= 200 && xhr.status < 300) return resolve(data);
+                        const err = new Error(String(data?.message || data?.error || ('HTTP ' + xhr.status)));
+                        err.status = xhr.status;
+                        err.data = data;
+                        return reject(err);
+                    };
+                    xhr.onloadend = () => {
+                        try { if (window.__KB_UPLOAD_XHR === xhr) window.__KB_UPLOAD_XHR = null; } catch (e) {}
+                    };
+                    try {
+                        xhr.send(formData);
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
             },
             async uploadKnowledge(formData) {
                 let rel = '/api/knowledge';
@@ -27987,6 +28026,8 @@ ${knowledgeContent.slice(0, 30000)}`;
                 return;
             }
             window.__KB_UPLOAD_IN_PROGRESS = false;
+            window.__KB_UPLOAD_USER_ABORTED = false;
+            window.__KB_UPLOAD_ABORT_CONTROLLER = null;
             const modal = document.getElementById('knowledge-upload-modal');
             if (!modal) return;
             const title = document.getElementById('knowledge-upload-title');
@@ -28017,6 +28058,16 @@ ${knowledgeContent.slice(0, 30000)}`;
         function closeKnowledgeUploadModal() {
             if (window.__KB_UPLOAD_IN_PROGRESS) {
                 try {
+                    const controller = window.__KB_UPLOAD_ABORT_CONTROLLER;
+                    if (controller) {
+                        window.__KB_UPLOAD_USER_ABORTED = true;
+                        controller.abort();
+                        window.__KB_UPLOAD_ABORT_CONTROLLER = null;
+                        window.__KB_UPLOAD_IN_PROGRESS = false;
+                        const statusEl = document.getElementById('knowledge-upload-file-status');
+                        if (statusEl) statusEl.textContent = '';
+                        showNotification('已取消上传，请重新上传', 'warning');
+                    } else {
                     const xhr = window.__KB_UPLOAD_XHR;
                     if (xhr && xhr.readyState !== 4) {
                         xhr.abort();
@@ -28028,6 +28079,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                     } else {
                         showNotification('正在写入中，请稍候完成后自动关闭', 'info');
                         return;
+                    }
                     }
                 } catch (e) {
                     showNotification('正在写入中，请稍候完成后自动关闭', 'info');
@@ -28248,6 +28300,21 @@ ${knowledgeContent.slice(0, 30000)}`;
             if (closeBtn) closeBtn.disabled = false;
             const statusEl = document.getElementById('knowledge-upload-file-status');
             if (statusEl && text != null) statusEl.textContent = String(text);
+        }
+
+        function renderKnowledgeUploadProgress(pct, text) {
+            const statusEl = document.getElementById('knowledge-upload-file-status');
+            if (!statusEl) return;
+            const p = Math.max(0, Math.min(100, Number(pct || 0)));
+            const label = String(text || `上传中... ${p}%`);
+            statusEl.innerHTML = `
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                    <div style="font-size:12px;color:#c7d2e5;">${escapeHtml(label)}</div>
+                    <div style="height:8px;border-radius:999px;background:rgba(255,255,255,0.14);overflow:hidden;">
+                        <div style="height:100%;width:${p}%;background:linear-gradient(90deg,#4f8cff,#f59e0b);transition:width .2s ease;"></div>
+                    </div>
+                </div>
+            `;
         }
 
         function populateKnowledgeAudienceOptions() {
@@ -28539,7 +28606,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                     fd.append('batchTitleMode', batchTitleMode);
                     if (customPrefix) fd.append('customPrefix', customPrefix);
 
-                    if (statusEl) statusEl.textContent = `批量上传 ${files.length} 个文件中...`;
+                    renderKnowledgeUploadProgress(1, `批量上传 ${files.length} 个文件中...`);
                     const result = await HRMS_API.batchUploadKnowledge(fd);
                     setKnowledgeUploadBusy(false);
                     closeKnowledgeUploadModal();
@@ -28554,6 +28621,10 @@ ${knowledgeContent.slice(0, 30000)}`;
                     console.error(e);
                     setKnowledgeUploadBusy(false);
                     if (statusEl) statusEl.textContent = '';
+                    if (window.__KB_UPLOAD_USER_ABORTED) {
+                        window.__KB_UPLOAD_USER_ABORTED = false;
+                        return;
+                    }
                     showNotification('批量上传失败：' + String(e?.message || e), 'error');
                     return;
                 }
