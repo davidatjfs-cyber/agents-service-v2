@@ -37,6 +37,11 @@ import {
   pgGetMonthlyAttitudeFilingCount
 } from './lib/performance-filing-counts-pg.js';
 import { safeExecute, safeErrorLog } from './utils/error-handler.js';
+import {
+  feishuSkipOpenIdResolveHrms,
+  isOpenIdCrossAppFeishuError,
+  refreshFeishuUserOpenIdForImDeliveryHrms
+} from './utils/feishu-open-id-cross-app.js';
 import { handleMarginMessage } from './margin-message-handler.js';
 import { deduplicateMessage } from './message-deduplication.js';
 import { getOpsAgentConfig, getBiAgentConfig, getCategoryAssigneeRoleMap, AGENT_FEATURE_FLAGS } from './agent-config-manager.js';
@@ -6858,6 +6863,14 @@ async function fetchStoreRatingForProfileDisplay(storeLabel, lockedPeriodYm = nu
   return { rating: row?.rating || null, period: row?.period || null };
 }
 
+function feishuOpenIdResolveDeps() {
+  return {
+    query: (sql, params) => pool().query(sql, params),
+    warn: (...args) => console.warn(...args),
+    info: (...args) => console.log(...args)
+  };
+}
+
 // ─────────────────────────────────────────────
 // Send plain text message to a user by open_id
 export async function sendLarkMessage(openId, text, options = {}) {
@@ -6868,43 +6881,53 @@ export async function sendLarkMessage(openId, text, options = {}) {
   if (!options.skipDedup && !deduplicateMessage(text, openId)) {
     return { ok: true, deduplicated: true };
   }
-  
+
   const token = await getLarkTenantToken();
-  if (!token) { console.error('[feishu] cannot send: no token'); return { ok: false, error: 'no_token' }; }
-  try {
-    const resp = await axios.post(
-      'https://open.feishu.cn/open-apis/im/v1/messages',
-      { receive_id: openId, msg_type: 'text', content: JSON.stringify({ text }) },
-      { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, params: { receive_id_type: 'open_id' }, timeout: 10000 }
-    );
-    console.log('[feishu] message sent to', openId, '→', resp.data?.code === 0 ? 'ok' : resp.data?.msg);
-    if (resp.data?.code === 99992361 || String(resp.data?.msg || '').includes('open_id cross app')) {
-      try {
-        await pool().query(
-          `UPDATE feishu_users
-           SET registered = FALSE, updated_at = NOW()
-           WHERE open_id = $1`,
-          [String(openId || '').trim()]
-        );
-      } catch (e) {}
-    }
-    return { ok: resp.data?.code === 0, data: resp.data };
-  } catch (e) {
-    const code = Number(e?.response?.data?.code || 0);
-    const msg = String(e?.response?.data?.msg || '').toLowerCase();
-    if (code === 99992361 || msg.includes('open_id cross app')) {
-      try {
-        await pool().query(
-          `UPDATE feishu_users
-           SET registered = FALSE, updated_at = NOW()
-           WHERE open_id = $1`,
-          [String(openId || '').trim()]
-        );
-      } catch (err) {}
-    }
-    console.error('[feishu] send message failed:', e?.response?.data || e?.message);
-    return { ok: false, error: String(e?.message || e) };
+  if (!token) {
+    console.error('[feishu] cannot send: no token');
+    return { ok: false, error: 'no_token' };
   }
+
+  const deps = feishuOpenIdResolveDeps();
+  const postTextOnce = async (rid) => {
+    const ridTrim = String(rid || '').trim();
+    try {
+      const resp = await axios.post(
+        'https://open.feishu.cn/open-apis/im/v1/messages',
+        { receive_id: ridTrim, msg_type: 'text', content: JSON.stringify({ text }) },
+        {
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          params: { receive_id_type: 'open_id' },
+          timeout: 10000
+        }
+      );
+      const ok = resp.data?.code === 0;
+      console.log('[feishu] message sent to', ridTrim, '→', ok ? 'ok' : resp.data?.msg);
+      return { ok, data: resp.data, errText: String(resp.data?.msg || '') };
+    } catch (e) {
+      const d = e?.response?.data;
+      console.error('[feishu] send message failed:', d || e?.message);
+      const code = Number(d?.code || 0);
+      const errText = String(d?.msg || e?.message || '');
+      return { ok: false, data: d, errText, httpCode: code };
+    }
+  };
+
+  let rid = String(openId || '').trim();
+  let out = await postTextOnce(rid);
+  if (!out.ok && !feishuSkipOpenIdResolveHrms()) {
+    const code = Number(out.data?.code ?? out.httpCode ?? 0);
+    const errStr = String(out.errText || out.data?.msg || '');
+    if (isOpenIdCrossAppFeishuError(code, errStr)) {
+      const fixed = await refreshFeishuUserOpenIdForImDeliveryHrms(deps, token, rid);
+      if (fixed && fixed !== rid) {
+        console.warn('[feishu] open_id cross app: retry text after resolve');
+        out = await postTextOnce(fixed);
+      }
+    }
+  }
+
+  return { ok: !!out.ok, data: out.data, error: out.ok ? undefined : String(out.errText || out.data?.msg || '') };
 }
 
 // Send interactive card (rich message) to a user
@@ -6916,17 +6939,46 @@ export async function sendLarkCard(openId, card) {
   }
   const token = await getLarkTenantToken();
   if (!token) return { ok: false, error: 'no_token' };
-  try {
-    const resp = await axios.post(
-      'https://open.feishu.cn/open-apis/im/v1/messages',
-      { receive_id: openId, msg_type: 'interactive', content: JSON.stringify(card) },
-      { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, params: { receive_id_type: 'open_id' }, timeout: 10000 }
-    );
-    return { ok: resp.data?.code === 0, data: resp.data };
-  } catch (e) {
-    console.error('[feishu] send card failed:', e?.response?.data || e?.message);
-    return { ok: false, error: String(e?.message || e) };
+
+  const deps = feishuOpenIdResolveDeps();
+  const postCardOnce = async (rid) => {
+    const ridTrim = String(rid || '').trim();
+    try {
+      const resp = await axios.post(
+        'https://open.feishu.cn/open-apis/im/v1/messages',
+        { receive_id: ridTrim, msg_type: 'interactive', content: JSON.stringify(card) },
+        {
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          params: { receive_id_type: 'open_id' },
+          timeout: 10000
+        }
+      );
+      const ok = resp.data?.code === 0;
+      return { ok, data: resp.data, errText: String(resp.data?.msg || '') };
+    } catch (e) {
+      const d = e?.response?.data;
+      console.error('[feishu] send card failed:', d || e?.message);
+      const code = Number(d?.code || 0);
+      const errText = String(d?.msg || e?.message || '');
+      return { ok: false, data: d, errText, httpCode: code };
+    }
+  };
+
+  let rid = String(openId || '').trim();
+  let out = await postCardOnce(rid);
+  if (!out.ok && !feishuSkipOpenIdResolveHrms()) {
+    const code = Number(out.data?.code ?? out.httpCode ?? 0);
+    const errStr = String(out.errText || out.data?.msg || '');
+    if (isOpenIdCrossAppFeishuError(code, errStr)) {
+      const fixed = await refreshFeishuUserOpenIdForImDeliveryHrms(deps, token, rid);
+      if (fixed && fixed !== rid) {
+        console.warn('[feishu] open_id cross app: retry card after resolve');
+        out = await postCardOnce(fixed);
+      }
+    }
   }
+
+  return { ok: !!out.ok, data: out.data, error: out.ok ? undefined : String(out.errText || out.data?.msg || '') };
 }
 
 // Download image from Feishu message
