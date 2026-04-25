@@ -55,6 +55,7 @@ import { ensureSOPDistributionSchema, registerSOPDistributionRoutes } from './so
 import { setDataExecutorPool, purgeExpiredCache, updateMetricVersion } from './data-executor.js';
 import fileRoutes from './file-routes.js';
 import { enforceRuntimeSafetyOrExit, configureDbSessionSafety, isSchemaChangeAllowed, getAppEnv, isWebhookEnabled, isExternalEnabled } from './safety.js';
+import { expandAgentStoreLabels, resolveAgentCanonicalStore } from './v2-store-alignment.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = String(process.env.HOST || '0.0.0.0');
@@ -5897,8 +5898,13 @@ async function dbListEmployeesForReports({ store, includeInactive }) {
     const params = [];
     const where = [];
     if (store) {
-      params.push(store);
-      where.push(`store = $${params.length}`);
+      const storeLabels = [
+        ...new Set(expandAgentStoreLabels(store).map((s) => String(s).trim()).filter(Boolean))
+      ];
+      if (storeLabels.length) {
+        params.push(storeLabels);
+        where.push(`trim(store) = ANY($${params.length}::text[])`);
+      }
     }
     if (!includeInactive) {
       where.push(`coalesce(status, '') not in ('inactive', '离职')`);
@@ -9708,6 +9714,30 @@ function normalizeEmployeeDepartureDateForTurnover(emp) {
   return '';
 }
 
+/** 洪潮「大宁久光店」与「久光店」等双轨店名与报表所选门店对齐 */
+function employeeStoreMatchesTurnoverReportFilter(empStore, reportStore) {
+  const rs = String(reportStore || '').trim();
+  if (!rs) return true;
+  const es = String(empStore || '').trim();
+  if (!es) return false;
+  return resolveAgentCanonicalStore(es) === resolveAgentCanonicalStore(rs);
+}
+
+/** 视为已离职：含 inactive/disabled 且已有离职日期（与账号停用口径一致） */
+function isEmployeeDepartedForTurnoverReport(emp) {
+  const st = String(emp?.status || '').trim().toLowerCase();
+  if (['离职', 'resigned', 'terminated', 'offboarded', 'left', 'departed'].includes(st)) return true;
+  if (st === 'inactive' || st === 'disabled') {
+    return !!normalizeEmployeeDepartureDateForTurnover(emp);
+  }
+  return false;
+}
+
+function isEmployeeActiveLikeForTurnoverReport(emp) {
+  const st = String(emp?.status || '').trim().toLowerCase();
+  return !st || st === 'active' || st === 'onboard' || st === 'probation';
+}
+
 /**
  * 关键人才：与报表 A 区文案一致——① 档案勾选 coreTalent；② 职级 level ≥ 3（数字或可解析数字）；
  * ③ 职务/部门含管理类关键词；④ 店长/总部管理/出品与前厅负责人等 role。
@@ -9794,9 +9824,9 @@ app.get('/api/reports/turnover', authRequired, async (req, res) => {
     const monthStart = new Date(yr, mo - 1, 1);
     const monthEnd = new Date(yr, mo, 0); // last day of month
 
-    // Filter employees by store if specified
+    // Filter employees by store（与 v2-store-alignment 一致：洪潮大宁久光店 ↔ 洪潮久光店 等）
     const storeEmps = store
-      ? allEmployees.filter(e => String(e?.store || '').trim() === store)
+      ? allEmployees.filter((e) => employeeStoreMatchesTurnoverReportFilter(e?.store, store))
       : allEmployees;
 
     // ── Step 1: query offboarding approvals for this month (used by both departed & voluntary sections) ──
@@ -9844,19 +9874,87 @@ app.get('/api/reports/turnover', authRequired, async (req, res) => {
       }
     }
 
+    // ── Step 2b: employment_records 离职（部分流程只写 PG、未同步 state 的离职日/状态）──
+    try {
+      const labels = store
+        ? [...new Set(expandAgentStoreLabels(store).map((s) => String(s).trim()).filter(Boolean))]
+        : [];
+      const erParams = [month];
+      let erSql = `
+        SELECT DISTINCT ON (lower(trim(employee_username)))
+          employee_username AS username,
+          employee_name AS name,
+          trim(store) AS store,
+          position, department,
+          action_date::text AS "actionDate",
+          action_type
+        FROM employment_records
+        WHERE lower(trim(action_type)) IN ('resign', 'terminate', 'termination')
+          AND (
+            lower(trim(coalesce(status, ''))) = 'approved'
+            OR trim(coalesce(status, '')) = ''
+            OR status IS NULL
+          )
+          AND to_char(action_date, 'YYYY-MM') = $1`;
+      if (labels.length) {
+        erParams.push(labels);
+        erSql += ` AND trim(store) = ANY($${erParams.length}::text[])`;
+      }
+      erSql += ` ORDER BY lower(trim(employee_username)), action_date DESC`;
+      const erRes = await pool.query(erSql, erParams);
+      for (const row of erRes.rows || []) {
+        const un = String(row.username || '').trim().toLowerCase();
+        if (!un) continue;
+        const synDate = normalizeEmployeeDepartureDateForTurnover({
+          offboardingDate: row.actionDate,
+          resignedAt: row.actionDate
+        });
+        if (!synDate || synDate < month + '-01' || synDate > month + '-31') continue;
+        const existing = empByLower.get(un);
+        if (existing) {
+          if (!normalizeEmployeeDepartureDateForTurnover(existing)) {
+            existing.offboardingDate = existing.offboardingDate || row.actionDate;
+            existing.resignedAt = existing.resignedAt || row.actionDate;
+          }
+          const st0 = String(existing.status || '').trim().toLowerCase();
+          if (!isEmployeeDepartedForTurnoverReport(existing) && synDate) {
+            existing.status = '离职';
+          }
+          continue;
+        }
+        const syn = {
+          username: row.username,
+          name: row.name || row.username,
+          store: String(row.store || '').trim(),
+          position: String(row.position || '').trim(),
+          department: String(row.department || '').trim(),
+          role: '',
+          level: '',
+          status: '离职',
+          offboardingDate: synDate,
+          resignedAt: synDate,
+          joinDate: '',
+          coreTalent: false
+        };
+        storeEmps.push(syn);
+        empByLower.set(un, syn);
+      }
+    } catch (e) {
+      console.warn('[reports/turnover] employment_records merge:', e?.message);
+    }
+
     // ── Identify departed employees this month ──
-    const departedThisMonth = storeEmps.filter(e => {
-      if (String(e?.status || '').trim() !== '离职') return false;
+    const departedThisMonth = storeEmps.filter((e) => {
+      if (!isEmployeeDepartedForTurnoverReport(e)) return false;
       const depDate = normalizeEmployeeDepartureDateForTurnover(e);
       if (!depDate) return false;
       return depDate >= month + '-01' && depDate <= month + '-31';
     });
 
     // Total active employees at start of month (active + those who departed this month)
-    const activeOrDepartedThisMonth = storeEmps.filter(e => {
-      const st = String(e?.status || '').trim();
-      if (st === 'active') return true;
-      if (st === '离职') {
+    const activeOrDepartedThisMonth = storeEmps.filter((e) => {
+      if (isEmployeeActiveLikeForTurnoverReport(e)) return true;
+      if (isEmployeeDepartedForTurnoverReport(e)) {
         const depDate = normalizeEmployeeDepartureDateForTurnover(e);
         if (depDate && depDate >= month + '-01') return true;
       }
@@ -9894,7 +9992,7 @@ app.get('/api/reports/turnover', authRequired, async (req, res) => {
 
     for (const [uname, info] of offDeparted) {
       const empRec = empByLower.get(uname.toLowerCase()) || null;
-      if (store && empRec && String(empRec?.store || '').trim() !== store) continue;
+      if (store && empRec && !employeeStoreMatchesTurnoverReportFilter(empRec?.store, store)) continue;
 
       if (info.isVoluntary) voluntaryCount++;
       else involuntaryCount++;
@@ -9922,11 +10020,21 @@ app.get('/api/reports/turnover', authRequired, async (req, res) => {
     const voluntaryRate = totalDepartedForRatio > 0 ? voluntaryCount / totalDepartedForRatio : 0;
     const involuntaryRate = totalDepartedForRatio > 0 ? involuntaryCount / totalDepartedForRatio : 0;
 
-    // ── Store breakdown ──
-    const stores = [...new Set(storeEmps.map(e => String(e?.store || '').trim()).filter(Boolean))];
-    const storeBreakdown = stores.map(s => {
-      const sEmps = activeOrDepartedThisMonth.filter(e => String(e?.store || '').trim() === s);
-      const sDep = departedThisMonth.filter(e => String(e?.store || '').trim() === s);
+    // ── Store breakdown ──（按规范店名归组，避免洪潮双轨店名拆成两行）
+    const stores = [
+      ...new Set(
+        storeEmps
+          .map((e) => resolveAgentCanonicalStore(String(e?.store || '').trim()) || String(e?.store || '').trim())
+          .filter(Boolean)
+      )
+    ];
+    const storeBreakdown = stores.map((s) => {
+      const sEmps = activeOrDepartedThisMonth.filter(
+        (e) => (resolveAgentCanonicalStore(String(e?.store || '').trim()) || String(e?.store || '').trim()) === s
+      );
+      const sDep = departedThisMonth.filter(
+        (e) => (resolveAgentCanonicalStore(String(e?.store || '').trim()) || String(e?.store || '').trim()) === s
+      );
       const sCore = sEmps.filter(isCoreTalent);
       const sCoreDep = sDep.filter(isCoreTalent);
       const sNew = sEmps.filter(isNewHire);
