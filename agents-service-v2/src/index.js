@@ -63,7 +63,8 @@ import {
   isTaskReminderCronEnabled,
   isWebhookEnabled,
   isLoginEnabled,
-  isWeakAuthAllowed
+  isWeakAuthAllowed,
+  isExternalEnabled
 } from './utils/safety.js';
 import { REPLY_ENGINE_BUILD } from './reply-engine-version.js';
 
@@ -222,6 +223,8 @@ app.get('/health', async (req, res) => {
     redis,
     /** 为 false 时不会启动大部分 cron；每日巡检见 dailyInspectionCron */
     automations: isAutomationsEnabled(),
+    /** 为 false 时飞书 tenant token / 发消息会失败（external_disabled），用户侧表现为「全都没收到」 */
+    feishuExternal: isExternalEnabled(),
     dailyInspectionCron: isDailyInspectionCronEnabled(),
     weeklyScoringCron: isWeeklyScoringCronEnabled(),
     taskReminderCron: isTaskReminderCronEnabled(),
