@@ -624,7 +624,7 @@ export async function processTaskCardReminders() {
 
 export function startTaskCardReminderScheduler() {
   cron.schedule(
-    '*/10 * * * *',
+    '*/5 * * * *',
     async () => {
       try {
         await runWithCronLog('task_card_reminders', () => processTaskCardReminders(), { recordSuccess: false });
@@ -634,5 +634,5 @@ export function startTaskCardReminderScheduler() {
     },
     { timezone: 'Asia/Shanghai' }
   );
-  logger.info('Task card reminder scheduler started (每10分钟, Asia/Shanghai)');
+  logger.info('Task card reminder scheduler started (每5分钟, Asia/Shanghai)');
 }

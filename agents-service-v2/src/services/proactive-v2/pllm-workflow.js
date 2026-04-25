@@ -22,6 +22,17 @@ function shanghaiYmd() {
   return new Date().toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
 }
 
+function shanghaiHm() {
+  const p = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Shanghai',
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit'
+  }).formatToParts(new Date());
+  const get = (k) => p.find((x) => x.type === k)?.value || '00';
+  return { hh: Number(get('hour') || 0), mm: Number(get('minute') || 0) };
+}
+
 async function resolvePllmRecipientsFromTask(task) {
   const sd = parseSourceData(task.source_data);
   const frozen = Array.isArray(sd.assignee_open_ids)
@@ -268,8 +279,17 @@ function prevMonthYm(nowYmd) {
 }
 
 export async function sendPllmMonthlyReportIfDue() {
+  return sendPllmMonthlyReport({ force: false });
+}
+
+export async function sendPllmMonthlyReport({ force = false } = {}) {
   const ymd = shanghaiYmd();
-  if (!/\d{4}-\d{2}-01/.test(ymd)) return { skipped: 'not_month_first' };
+  if (!/\d{4}-\d{2}-01/.test(ymd) && !force) return { skipped: 'not_month_first' };
+  const { hh, mm } = shanghaiHm();
+  if (!force) {
+    const inWindow = hh === 9 && mm >= 45 && mm <= 49;
+    if (!inWindow) return { skipped: 'not_0945_window', now: `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}` };
+  }
   const month = prevMonthYm(ymd);
   await ensureMonthlyReportLogTable();
   const already = await query(`SELECT 1 FROM agent_v2_pllm_monthly_report_log WHERE report_month = $1 LIMIT 1`, [month]);
@@ -289,24 +309,52 @@ export async function sendPllmMonthlyReportIfDue() {
     [month]
   );
   const s = stat.rows?.[0] || {};
+  const byStoreR = await query(
+    `SELECT COALESCE(NULLIF(trim(store), ''), '未标注门店') AS store,
+            COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE COALESCE(source_data->>'pllm_decision','') = 'execute')::int AS execute_count,
+            COUNT(*) FILTER (WHERE resolution_code = 'pllm_plan_submitted')::int AS plan_submitted_count,
+            COUNT(*) FILTER (WHERE resolution_code = 'pllm_not_suitable')::int AS not_suitable_count,
+            COUNT(*) FILTER (WHERE resolution_code = 'pllm_failed_no_plan')::int AS failed_count,
+            COUNT(*) FILTER (WHERE status NOT IN ('closed','settled','resolved'))::int AS open_count
+     FROM master_tasks
+     WHERE source = 'proactive_llm'
+       AND to_char(created_at AT TIME ZONE 'Asia/Shanghai', 'YYYY-MM') = $1
+     GROUP BY 1
+     ORDER BY total DESC, store ASC
+     LIMIT 50`,
+    [month]
+  );
+  const byStore = byStoreR.rows || [];
   const msg = [
-    `📊【PLLM 月报】${month}`,
+    `📊【PLLM任务月报】${month}`,
     `总任务数：${Number(s.total || 0)}`,
     `选择执行：${Number(s.execute_count || 0)}`,
     `计划已提交（明确计划）：${Number(s.plan_submitted_count || 0)}`,
     `不适合（自动结束）：${Number(s.not_suitable_count || 0)}`,
     `失败（3天仍无明确计划）：${Number(s.failed_count || 0)}`,
-    `当前未结束：${Number(s.open_count || 0)}`
+    `当前未结束：${Number(s.open_count || 0)}`,
+    '',
+    '【门店细分】',
+    ...byStore.map((x) =>
+      `• ${x.store}｜总${x.total}｜执行${x.execute_count}｜已提交${x.plan_submitted_count}｜不适合${x.not_suitable_count}｜失败${x.failed_count}｜未结束${x.open_count}`
+    )
   ].join('\n');
 
   const rr = await query(
-    `SELECT open_id FROM feishu_users
+    `SELECT open_id, role, username FROM feishu_users
      WHERE registered = true
        AND role IN ('admin','hq_manager')
        AND open_id IS NOT NULL AND trim(open_id) <> '' AND open_id NOT LIKE '%probe%'
      ORDER BY role = 'admin' DESC, updated_at DESC NULLS LAST`
   );
-  const recipients = (rr.rows || []).map((x) => String(x.open_id || '').trim()).filter(Boolean);
+  const rows = rr.rows || [];
+  const admin = rows.find((x) => String(x.role || '') === 'admin');
+  const hq = rows.find((x) => String(x.role || '') === 'hq_manager');
+  const recipients = [admin, hq]
+    .filter(Boolean)
+    .map((x) => String(x.open_id || '').trim())
+    .filter(Boolean);
   let sent = 0;
   for (const oid of recipients) {
     const r0 = await sendText(oid, msg, 'open_id').catch(() => ({ ok: false }));
@@ -319,6 +367,6 @@ export async function sendPllmMonthlyReportIfDue() {
      ON CONFLICT (report_month) DO NOTHING`,
     [month, recipients.length, sent]
   );
-  return { month, recipientCount: recipients.length, sentCount: sent };
+  return { month, recipientCount: recipients.length, sentCount: sent, storeCount: byStore.length };
 }
 

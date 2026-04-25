@@ -126,8 +126,30 @@ export async function getProactiveLlmOutcomeHints(store, limit = 12) {
 }
 
 export async function formatProactiveLlmPromptHints(store) {
+  const s = String(store || '').trim();
+  if (!s) return '';
   const { high, low } = await getProactiveLlmOutcomeHints(store, 14);
-  if (!high.length && !low.length) return '';
+  let notSuitableReasons = [];
+  try {
+    const rr = await query(
+      `SELECT response_text
+       FROM master_tasks
+       WHERE source = 'proactive_llm'
+         AND store = $1
+         AND resolution_code = 'pllm_not_suitable'
+         AND response_text IS NOT NULL
+         AND trim(response_text) <> ''
+       ORDER BY updated_at DESC
+       LIMIT 6`,
+      [s]
+    );
+    notSuitableReasons = (rr.rows || [])
+      .map((x) => String(x.response_text || '').trim())
+      .filter(Boolean);
+  } catch (e) {
+    logger.warn({ err: e?.message, store: s }, 'formatProactiveLlmPromptHints: not suitable reasons load failed');
+  }
+  if (!high.length && !low.length && !notSuitableReasons.length) return '';
   let block = '\n【同店历史方案反馈（proactive_llm，用于优先参考 / 低分降权）】\n';
   if (high.length) {
     block += '高评分（≥7）可优先参考类似可执行动作：\n';
@@ -142,6 +164,14 @@ export async function formatProactiveLlmPromptHints(store) {
     block += low
       .slice(0, 4)
       .map((x) => `- [${x.outcome_score}分] ${String(x.content || '').slice(0, 160)}`)
+      .join('\n');
+    block += '\n';
+  }
+  if (notSuitableReasons.length) {
+    block += '门店标记「不适合」的历史原因（应避免同类建议）：\n';
+    block += notSuitableReasons
+      .slice(0, 4)
+      .map((x) => `- ${x.slice(0, 160)}`)
       .join('\n');
     block += '\n';
   }

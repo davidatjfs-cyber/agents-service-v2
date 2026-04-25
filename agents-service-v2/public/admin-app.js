@@ -42,7 +42,7 @@ function shanghaiTodayInputDate() {
 // ── State ──
 const AN = { master: 'Master调度中枢', data_auditor: '数据审计', ops_supervisor: '运营督导', chief_evaluator: '绩效考核', train_advisor: '培训顾问', appeal: '申诉处理', marketing_planner: '营销策划', marketing_executor: '营销执行', procurement_advisor: '采购建议' };
 let tab = 'dashboard';
-let S = { hl: {}, st: {}, fs: {}, bitableSyncHealth: null, agents: {}, rules: [], scores: {}, campaigns: [], templates: [], evalReport: {}, auditItems: [], cfgs: [], schedCfg: {}, anomalyCfg: {}, perfCfg: {}, ratingCfg: {}, kpiTargets: [], kbItems: [], memoryItems: [], knowledgeSources: null, knowledgeSourcesErr: '', featureFlags: {}, selectedAgent: 'data_auditor', activity: {}, activityDate: shanghaiTodayInputDate(), drillData: [], bitableStatus: {}, chairmanCfg: {}, chairmanTab: 'stores', agentSkills: {} };
+let S = { hl: {}, st: {}, fs: {}, bitableSyncHealth: null, agents: {}, rules: [], scores: {}, campaigns: [], templates: [], evalReport: {}, auditItems: [], cfgs: [], schedCfg: {}, anomalyCfg: {}, perfCfg: {}, ratingCfg: {}, kpiTargets: [], kbItems: [], memoryItems: [], knowledgeSources: null, knowledgeSourcesErr: '', featureFlags: {}, selectedAgent: 'data_auditor', activity: {}, activityDate: shanghaiTodayInputDate(), drillData: [], bitableStatus: {}, chairmanCfg: {}, chairmanTab: 'stores', agentSkills: {}, pllmDashboard: { month: '', summary: {}, byStore: [], recent: [] } };
 
 // ── DOM Helpers ──
 function $(id) { return document.getElementById(id); }
@@ -2836,6 +2836,104 @@ function viewDataSources() {
   return w;
 }
 
+function viewPllm() {
+  const w = el('div');
+  const d = S.pllmDashboard || {};
+  const month = String(d.month || '');
+  const sum = d.summary || {};
+  const byStore = Array.isArray(d.byStore) ? d.byStore : [];
+  const recent = Array.isArray(d.recent) ? d.recent : [];
+
+  w.appendChild(card('PLLM 任务可视化面板', [
+    el('p', { className: 'text-sm text-gray-600 mb-3' }, `统计月份：${month || '-'}（仅 proactive_llm）`),
+    el('div', { className: 'flex flex-wrap gap-2' }, [
+      btn('🔄 刷新面板', () => go('pllm'), 'bg-blue-50 text-blue-700 text-sm px-4 py-2 rounded-lg hover:bg-blue-100 border border-blue-200 font-medium'),
+      btn('📨 手动触发月报(联通测试)', async () => {
+        try {
+          const r = await POST('/api/admin/pllm/monthly-report/trigger', {});
+          msg(`月报触发完成：发送 ${Number(r?.out?.sentCount || 0)}/${Number(r?.out?.recipientCount || 0)} 人`);
+        } catch (e) {
+          msg('触发失败：' + (e?.message || e), true);
+        }
+      }, 'bg-emerald-50 text-emerald-700 text-sm px-4 py-2 rounded-lg hover:bg-emerald-100 border border-emerald-200 font-medium')
+    ])
+  ]));
+
+  w.appendChild(el('div', { className: 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4' }, [
+    stat(Number(sum.total || 0), '总任务数', 'text-purple-600'),
+    stat(Number(sum.execute_count || 0), '选择执行数', 'text-blue-600'),
+    stat(Number(sum.plan_submitted_count || 0), '计划已提交数', 'text-emerald-600'),
+    stat(Number(sum.not_suitable_count || 0), '不适合数', 'text-gray-600'),
+    stat(Number(sum.failed_count || 0), '失败数', 'text-red-600'),
+    stat(Number(sum.open_count || 0), '未结束数', 'text-amber-600')
+  ]));
+
+  w.appendChild(card('门店细分', (() => {
+    if (!byStore.length) return el('p', { className: 'text-sm text-gray-500' }, '暂无数据');
+    const tbl = el('table', { className: 'w-full text-sm' });
+    tbl.innerHTML = '<thead><tr class="border-b border-gray-100"><th class="text-left py-2 px-2">门店</th><th class="text-left py-2 px-2">总任务数</th><th class="text-left py-2 px-2">选择执行数</th><th class="text-left py-2 px-2">计划已提交数</th><th class="text-left py-2 px-2">不适合数</th><th class="text-left py-2 px-2">失败数</th><th class="text-left py-2 px-2">未结束数</th></tr></thead>';
+    const tb = el('tbody');
+    byStore.forEach((x) => {
+      const tr = el('tr', { className: 'border-b border-gray-50 hover:bg-gray-50' });
+      tr.appendChild(el('td', { className: 'py-2 px-2 font-medium' }, String(x.store || '未标注门店')));
+      tr.appendChild(el('td', { className: 'py-2 px-2' }, String(x.total || 0)));
+      tr.appendChild(el('td', { className: 'py-2 px-2' }, String(x.execute_count || 0)));
+      tr.appendChild(el('td', { className: 'py-2 px-2' }, String(x.plan_submitted_count || 0)));
+      tr.appendChild(el('td', { className: 'py-2 px-2' }, String(x.not_suitable_count || 0)));
+      tr.appendChild(el('td', { className: 'py-2 px-2' }, String(x.failed_count || 0)));
+      tr.appendChild(el('td', { className: 'py-2 px-2' }, String(x.open_count || 0)));
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb);
+    return tbl;
+  })()));
+
+  w.appendChild(card(`最近任务（${recent.length}）`, (() => {
+    if (!recent.length) return el('p', { className: 'text-sm text-gray-500' }, '暂无任务');
+    const tbl = el('table', { className: 'w-full text-sm' });
+    tbl.innerHTML = '<thead><tr class="border-b border-gray-100"><th class="text-left py-2 px-2">任务ID</th><th class="text-left py-2 px-2">标题</th><th class="text-left py-2 px-2">门店</th><th class="text-left py-2 px-2">状态</th><th class="text-left py-2 px-2">不适合原因</th><th class="text-left py-2 px-2">责任人</th><th class="text-left py-2 px-2">创建时间</th><th class="text-left py-2 px-2">操作</th></tr></thead>';
+    const tb = el('tbody');
+    recent.forEach((x) => {
+      const tr = el('tr', { className: 'border-b border-gray-50 hover:bg-gray-50' });
+      tr.appendChild(el('td', { className: 'py-2 px-2 font-mono text-xs' }, String(x.task_id || '-')));
+      tr.appendChild(el('td', { className: 'py-2 px-2' }, String(x.title || '-')));
+      tr.appendChild(el('td', { className: 'py-2 px-2' }, String(x.store || '-')));
+      tr.appendChild(el('td', { className: 'py-2 px-2' }, String(x.status || '-')));
+      const nsReason = String(x.resolution_code || '') === 'pllm_not_suitable' ? String(x.response_text || '').trim() : '';
+      tr.appendChild(el('td', { className: 'py-2 px-2 text-xs text-gray-600 max-w-xs' }, nsReason || '-'));
+      tr.appendChild(el('td', { className: 'py-2 px-2' }, String(x.assignee_username || '-')));
+      tr.appendChild(el('td', { className: 'py-2 px-2 text-xs text-gray-500' }, String(x.created_at || '-').replace('T', ' ').slice(0, 19)));
+      const op = el('td', { className: 'py-2 px-2 flex gap-1' });
+      op.appendChild(btn('执行', async () => {
+        try {
+          await POST('/api/admin/pllm/' + encodeURIComponent(String(x.task_id || '')) + '/decision', { decision: 'execute' });
+          msg('已设为执行');
+          await go('pllm');
+        } catch (e) { msg('操作失败：' + (e?.message || e), true); }
+      }, 'bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded hover:bg-blue-100 border border-blue-200'));
+      op.appendChild(btn('不适合', async () => {
+        try {
+          const reasonRaw = window.prompt('可选：请填写“不适合”原因（可留空）\n用于系统后续优化 PLLM 建议质量。', '');
+          if (reasonRaw === null) return;
+          const reason = String(reasonRaw || '').trim();
+          await POST('/api/admin/pllm/' + encodeURIComponent(String(x.task_id || '')) + '/decision', {
+            decision: 'not_suitable',
+            planText: reason
+          });
+          msg('已设为不适合');
+          await go('pllm');
+        } catch (e) { msg('操作失败：' + (e?.message || e), true); }
+      }, 'bg-gray-50 text-gray-700 text-xs px-2 py-1 rounded hover:bg-gray-100 border border-gray-200'));
+      tr.appendChild(op);
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb);
+    return tbl;
+  })()));
+
+  return w;
+}
+
 // ═══════════════════════════════════════════════════════
 // DATA LOADER
 // ═══════════════════════════════════════════════════════
@@ -2914,6 +3012,7 @@ async function load(t) {
     if (t === 'datasources') { S.bitableStatus = await G('/api/bitable-status').catch(e => { catchNonAuth(e); return {}; }); }
     if (t === 'chairman') { S.chairmanCfg = (await G('/api/chairman/config').catch(e => { catchNonAuth(e); return { ok: true, config: {} }; })).config || {}; }
     if (t === 'skills') { S.agentSkills = (await G('/api/agent-skills').catch(e => { catchNonAuth(e); return { agents: {} }; })).agents || {}; }
+    if (t === 'pllm') { S.pllmDashboard = await G('/api/admin/pllm/dashboard').catch(e => { catchNonAuth(e); return { month: '', summary: {}, byStore: [], recent: [] }; }); }
   } catch (e) { if (e.message === 'auth') { localStorage.removeItem('aat'); renderLogin(); return 'auth'; } }
 }
 
@@ -2933,12 +3032,13 @@ const TABS = [
   ['evaluation', '🔍 Agent评估'],
   ['knowledge', '📚 知识库'],
   ['memory', '🧠 记忆'],
+  ['pllm', '🧩 PLLM面板'],
   ['flags', '🚩 开关'],
   ['configs', '⚙️ 配置'],
   ['chairman', '👔 董事长配置'],
   ['audit', '📝 审计']
 ];
-const VW = { dashboard: viewDash, activity: viewActivity, skills: viewSkills, datasources: viewDataSources, agents: viewAgents, scheduled: viewScheduled, anomaly: viewAnomaly, performance: viewPerformance, marketing: viewMarketing, evaluation: viewEval, knowledge: viewKnowledge, memory: viewMemory, flags: viewFlags, configs: viewCfgs, chairman: viewChairman, audit: viewAudit };
+const VW = { dashboard: viewDash, activity: viewActivity, skills: viewSkills, datasources: viewDataSources, agents: viewAgents, scheduled: viewScheduled, anomaly: viewAnomaly, performance: viewPerformance, marketing: viewMarketing, evaluation: viewEval, knowledge: viewKnowledge, memory: viewMemory, pllm: viewPllm, flags: viewFlags, configs: viewCfgs, chairman: viewChairman, audit: viewAudit };
 
 function viewSkills() {
   const w = el('div');
@@ -3016,7 +3116,7 @@ function render() {
     const cls =
       'px-3 py-1.5 text-xs sm:text-sm cursor-pointer whitespace-nowrap rounded-lg font-medium transition-colors ' +
       (on ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900');
-    nvInner.appendChild(el('div', { className: cls, onclick: () => go(k) }, l));
+    nvInner.appendChild(el('button', { type: 'button', className: cls, onclick: () => go(k) }, l));
   });
   nv.appendChild(nvInner);
   a.appendChild(nv);
@@ -3030,7 +3130,31 @@ function render() {
   a.appendChild(el('footer', { className: 'max-w-7xl mx-auto px-6 py-4 text-xs text-gray-400 text-center border-t border-gray-100 mt-8' }, '© 2026 Agent Ops Admin — ' + Object.keys(AN).length + ' Agents | Phase 7'));
 }
 
-async function go(t) { tab = t; const r = await load(t); if (r === 'auth') return; render(); }
+let _syncingHash = false;
+async function go(t) {
+  tab = t;
+  try {
+    const nextHash = '#' + encodeURIComponent(String(t || 'dashboard'));
+    if (window.location.hash !== nextHash) {
+      _syncingHash = true;
+      window.location.hash = nextHash;
+      setTimeout(() => { _syncingHash = false; }, 0);
+    }
+  } catch (_e) {}
+  const r = await load(t);
+  if (r === 'auth') return;
+  render();
+}
 
 // ── Init ──
-if (localStorage.getItem('aat')) go('dashboard'); else renderLogin();
+const initialTab = (() => {
+  const h = String(window.location.hash || '').replace(/^#/, '').trim();
+  return h ? decodeURIComponent(h) : 'dashboard';
+})();
+window.addEventListener('hashchange', () => {
+  if (_syncingHash) return;
+  const h = String(window.location.hash || '').replace(/^#/, '').trim();
+  const next = h ? decodeURIComponent(h) : 'dashboard';
+  if (next && next !== tab) go(next);
+});
+if (localStorage.getItem('aat')) go(initialTab); else renderLogin();

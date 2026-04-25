@@ -11,6 +11,7 @@ import { scheduleProactiveOutcomeOnClose } from '../services/proactive-v2/proact
 import { sendUsageWeeklyReport } from '../services/usage-weekly-report.js';
 import { AGENT_SKILLS } from '../services/agent-handlers.js';
 import { applyPllmDecision } from '../services/proactive-v2/pllm-workflow.js';
+import { sendPllmMonthlyReport } from '../services/proactive-v2/pllm-workflow.js';
 
 const r = Router();
 const admin = [authRequired, requireRole('admin','hq_manager')];
@@ -127,6 +128,73 @@ r.post('/admin/pllm/:taskId/decision', authRequired, requireRole('admin', 'hq_ma
     return res.json({ ok: true, ...result });
   } catch (e) {
     return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+/** PLLM 可视化面板数据：总览 + 门店细分 + 最近任务 */
+r.get('/admin/pllm/dashboard', ...admin, async (req, res) => {
+  try {
+    const month = String(req.query?.month || '').trim();
+    const ym = /^\d{4}-\d{2}$/.test(month)
+      ? month
+      : new Date().toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 7);
+
+    const summaryR = await query(
+      `SELECT
+         COUNT(*)::int AS total,
+         COUNT(*) FILTER (WHERE COALESCE(source_data->>'pllm_decision','') = 'execute')::int AS execute_count,
+         COUNT(*) FILTER (WHERE resolution_code = 'pllm_plan_submitted')::int AS plan_submitted_count,
+         COUNT(*) FILTER (WHERE resolution_code = 'pllm_not_suitable')::int AS not_suitable_count,
+         COUNT(*) FILTER (WHERE resolution_code = 'pllm_failed_no_plan')::int AS failed_count,
+         COUNT(*) FILTER (WHERE status NOT IN ('closed','settled','resolved'))::int AS open_count
+       FROM master_tasks
+       WHERE source = 'proactive_llm'
+         AND to_char(created_at AT TIME ZONE 'Asia/Shanghai', 'YYYY-MM') = $1`,
+      [ym]
+    );
+    const byStoreR = await query(
+      `SELECT COALESCE(NULLIF(trim(store), ''), '未标注门店') AS store,
+              COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE COALESCE(source_data->>'pllm_decision','') = 'execute')::int AS execute_count,
+              COUNT(*) FILTER (WHERE resolution_code = 'pllm_plan_submitted')::int AS plan_submitted_count,
+              COUNT(*) FILTER (WHERE resolution_code = 'pllm_not_suitable')::int AS not_suitable_count,
+              COUNT(*) FILTER (WHERE resolution_code = 'pllm_failed_no_plan')::int AS failed_count,
+              COUNT(*) FILTER (WHERE status NOT IN ('closed','settled','resolved'))::int AS open_count
+       FROM master_tasks
+       WHERE source = 'proactive_llm'
+         AND to_char(created_at AT TIME ZONE 'Asia/Shanghai', 'YYYY-MM') = $1
+       GROUP BY 1
+       ORDER BY total DESC, store ASC`,
+      [ym]
+    );
+    const recentR = await query(
+      `SELECT task_id, title, store, status, assignee_username, assignee_role, resolution_code, created_at, updated_at, source_data, response_text
+       FROM master_tasks
+       WHERE source = 'proactive_llm'
+         AND to_char(created_at AT TIME ZONE 'Asia/Shanghai', 'YYYY-MM') = $1
+       ORDER BY created_at DESC
+       LIMIT 200`,
+      [ym]
+    );
+    res.json({
+      ok: true,
+      month: ym,
+      summary: summaryR.rows?.[0] || {},
+      byStore: byStoreR.rows || [],
+      recent: recentR.rows || []
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+/** 管理端手动触发 PLLM 任务月报（联通测试） */
+r.post('/admin/pllm/monthly-report/trigger', ...admin, async (_req, res) => {
+  try {
+    const out = await sendPllmMonthlyReport({ force: true });
+    res.json({ ok: true, out });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
   }
 });
 
