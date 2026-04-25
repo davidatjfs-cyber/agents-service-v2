@@ -10,6 +10,7 @@ import { scheduleProactiveOutcomeOnClose } from '../services/proactive-v2/proact
 
 import { sendUsageWeeklyReport } from '../services/usage-weekly-report.js';
 import { AGENT_SKILLS } from '../services/agent-handlers.js';
+import { applyPllmDecision } from '../services/proactive-v2/pllm-workflow.js';
 
 const r = Router();
 const admin = [authRequired, requireRole('admin','hq_manager')];
@@ -107,6 +108,25 @@ r.post('/admin/task/:taskId/close', authRequired, requireRole(...CLOSE_TASK_ROLE
     return res.json({ ok: true, taskId: upd.rows[0].task_id });
   } catch (e) {
     return res.status(500).json({ error: e.message });
+  }
+});
+
+/** PLLM 决策：执行 / 不适合（admin 或 hq_manager 任一人操作即生效） */
+r.post('/admin/pllm/:taskId/decision', authRequired, requireRole('admin', 'hq_manager'), async (req, res) => {
+  try {
+    const taskId = String(req.params.taskId || '').trim();
+    const decision = String(req.body?.decision || '').trim().toLowerCase();
+    const planText = String(req.body?.planText || req.body?.responseText || '').trim();
+    if (!taskId) return res.status(400).json({ error: 'taskId required' });
+    if (!['execute', 'not_suitable'].includes(decision)) {
+      return res.status(400).json({ error: 'decision must be execute | not_suitable' });
+    }
+    const op = String(req.user?.username || '').trim() || 'unknown';
+    const result = await applyPllmDecision(taskId, decision, op, planText);
+    if (!result?.ok) return res.status(400).json(result);
+    return res.json({ ok: true, ...result });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
   }
 });
 

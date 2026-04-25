@@ -7,6 +7,7 @@ import { logger } from '../../utils/logger.js';
 import { getBrandForStore } from '../config-service.js';
 import { saveOutcome } from '../agent-memory.js';
 import { getProactiveConfig } from './config.js';
+import { sendCard, sendText } from '../feishu-client.js';
 
 /** 与异常类型绑定的经营指标维度 */
 export function inferMetricFocus(anomalyType) {
@@ -26,7 +27,7 @@ function priorityToInitialScore(priority) {
 
 function isProactivePllmCreateEnabled() {
   const v = String(process.env.PROACTIVE_PLLM_CREATE_ENABLED || '').trim().toLowerCase();
-  if (!v) return false; // 默认暂停 PLLM 自动建单，避免门店被持续骚扰
+  if (!v) return true; // 默认开启；由职责策略保证仅管理员+总部营运接收
   return ['1', 'true', 'yes', 'on'].includes(v);
 }
 
@@ -74,9 +75,40 @@ async function resolveAdminAssignees() {
   }
 }
 
-async function rerouteOpenProactiveTasksToAdmin(primaryAdminUsername) {
+async function resolvePllmResponsibles() {
+  try {
+    const r = await query(
+      `SELECT DISTINCT ON (lower(trim(username)))
+         username, role, open_id
+       FROM feishu_users
+       WHERE registered = true
+         AND role IN ('admin', 'hq_manager')
+         AND username IS NOT NULL
+         AND trim(username) <> ''
+         AND open_id IS NOT NULL
+         AND trim(open_id) <> ''
+         AND open_id NOT LIKE '%probe%'
+       ORDER BY lower(trim(username)), updated_at DESC NULLS LAST`
+    );
+    const rows = Array.isArray(r.rows) ? r.rows : [];
+    return rows
+      .map((x) => ({
+        username: String(x.username || '').trim(),
+        role: String(x.role || '').trim(),
+        open_id: String(x.open_id || '').trim()
+      }))
+      .filter((x) => x.username && x.role && x.open_id);
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'proactive-llm-actions: resolvePllmResponsibles failed');
+    return [];
+  }
+}
+
+async function rerouteOpenProactiveTasksToAdmin(primaryAdminUsername, responsibles = []) {
   const target = String(primaryAdminUsername || '').trim();
-  if (!target) return 0;
+  if (!target) return { updated: 0 };
+  const usernames = responsibles.map((x) => String(x.username || '').trim()).filter(Boolean);
+  const openIds = responsibles.map((x) => String(x.open_id || '').trim()).filter(Boolean);
   try {
     const r = await query(
       `UPDATE master_tasks
@@ -92,15 +124,54 @@ async function rerouteOpenProactiveTasksToAdmin(primaryAdminUsername) {
         JSON.stringify({
           reassigned_to_admin: true,
           reassigned_at: new Date().toISOString(),
-          reassigned_reason: 'suppress_store_disturbance'
+          reassigned_reason: 'suppress_store_disturbance',
+          pllm_responsible_usernames: usernames,
+          assignee_open_ids: openIds,
+          pllm_mode: 'shared_admin_hq'
         })
       ]
     );
-    return Number(r.rowCount || 0);
+    return { updated: Number(r.rowCount || 0), usernames, openIds };
   } catch (e) {
     logger.warn({ err: e?.message }, 'proactive-llm-actions: rerouteOpenProactiveTasksToAdmin failed');
-    return 0;
+    return { updated: 0, usernames, openIds };
   }
+}
+
+function buildPllmDecisionCard({ taskId, store, title, line, metricFocus }) {
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: '🧭 PLLM 建议任务（请先决策）' },
+      template: 'blue'
+    },
+    elements: [
+      {
+        tag: 'div',
+        text: {
+          tag: 'lark_md',
+          content:
+            `**门店**：${store}\n` +
+            `**任务ID**：${taskId}\n` +
+            `**任务标题**：${title}\n` +
+            `**建议动作**：${line}\n` +
+            `**指标侧重**：${metricFocus}`
+        }
+      },
+      { tag: 'hr' },
+      {
+        tag: 'div',
+        text: {
+          tag: 'lark_md',
+          content:
+            '请先选择：\n' +
+            '1）回复“执行”→ 进入跟踪模式（每日提醒，最多3天）\n' +
+            '2）回复“不适合”→ 自动结束并计入月报\n\n' +
+            '提示：管理员与总部营运任一人操作即可，无需两人重复操作。'
+        }
+      }
+    ]
+  };
 }
 
 /**
@@ -124,14 +195,17 @@ export async function acceptProactiveLlmActionPlan(ctx) {
   const proactiveCfg = await getProactiveConfig().catch(() => ({}));
   const assigneeEnabled = proactiveCfg?.dispatchDefaults?.assignee !== false;
 
-  const admins = await resolveAdminAssignees();
-  const primaryAdmin = admins[0] || null;
-  if (!primaryAdmin?.username) {
-    logger.warn({ store }, 'proactive-llm-actions: no admin assignee found, skip PLLM task creation');
-    return { ok: false, error: 'no_admin_assignee', createdTasks: [] };
+  const responsibles = await resolvePllmResponsibles();
+  const primaryAdmin = responsibles.find((x) => x.role === 'admin') || responsibles[0] || null;
+  if (!primaryAdmin?.username || !responsibles.length) {
+    logger.warn({ store }, 'proactive-llm-actions: no admin/hq responsible found, skip PLLM task creation');
+    return { ok: false, error: 'no_admin_or_hq_responsible', createdTasks: [] };
   }
+  const responsibleUsernames = responsibles.map((x) => x.username);
+  const responsibleOpenIds = responsibles.map((x) => x.open_id);
 
-  const rerouted = await rerouteOpenProactiveTasksToAdmin(primaryAdmin.username);
+  const rerouteRes = await rerouteOpenProactiveTasksToAdmin(primaryAdmin.username, responsibles);
+  const rerouted = rerouteRes.updated;
   if (rerouted > 0) {
     logger.warn(
       { rerouted, to: primaryAdmin.username },
@@ -182,7 +256,14 @@ export async function acceptProactiveLlmActionPlan(ctx) {
       action_index: i,
       original_line: line,
       assigned_scope: 'admin_only',
-      assigned_policy: 'suppress_store_disturbance'
+      assigned_policy: 'shared_admin_hq',
+      assignee_open_ids: responsibleOpenIds,
+      pllm_responsible_usernames: responsibleUsernames,
+      pllm_responsible_roles: responsibles.map((x) => x.role),
+      pllm_mode: 'shared_admin_hq',
+      pllm_decision: 'pending',
+      pllm_tracking_enabled: false,
+      pllm_remind_count: 0
     };
 
     await query(
@@ -216,6 +297,24 @@ export async function acceptProactiveLlmActionPlan(ctx) {
       assigneeUsername,
       metricFocus
     });
+
+    const decisionCard = buildPllmDecisionCard({
+      taskId,
+      store,
+      title,
+      line,
+      metricFocus
+    });
+    for (const oid of responsibleOpenIds) {
+      const r0 = await sendCard(oid, decisionCard).catch(() => ({ ok: false }));
+      if (!r0?.ok) {
+        await sendText(
+          oid,
+          `【PLLM 建议任务】${store}\n任务ID：${taskId}\n动作：${line}\n请回复“执行”或“不适合”（管理员/总部营运任一人操作即可）。`,
+          'open_id'
+        ).catch(() => {});
+      }
+    }
 
     const outcomeScore = Math.min(
       10,

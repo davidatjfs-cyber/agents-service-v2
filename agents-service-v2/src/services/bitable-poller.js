@@ -9,6 +9,7 @@ import { logger } from '../utils/logger.js';
 import { notifyAdminsDataIssue } from './admin-data-alert.js';
 import { getConfig } from './config-service.js';
 import { parseFeishuRatioOrPercentString } from '../utils/feishu-percent.js';
+import { applyPllmDecision } from './proactive-v2/pllm-workflow.js';
 
 // ── Bitable Table Configurations ──
 const BITABLE_CONFIGS = {
@@ -685,14 +686,36 @@ async function processTaskResponse(fields, recordId) {
   const status = extractText(fields['处理状态']);
   if (!taskId) return;
   try {
+    const taskR = await query(`SELECT task_id, source, status FROM master_tasks WHERE task_id = $1 LIMIT 1`, [taskId]).catch(() => ({ rows: [] }));
+    const task = taskR.rows?.[0];
+    const isPllm = String(task?.source || '') === 'proactive_llm';
+    const replyNorm = String(reply || '').trim();
+    if (isPllm && replyNorm) {
+      if (/不适合|不执行|暂不执行|不采用|不落地/.test(replyNorm)) {
+        await applyPllmDecision(taskId, 'not_suitable', 'feishu_reply', replyNorm).catch(() => {});
+      } else if (/执行|开始执行|已执行|安排执行|马上做/.test(replyNorm)) {
+        await applyPllmDecision(taskId, 'execute', 'feishu_reply', replyNorm).catch(() => {});
+      } else {
+        await query(
+          `UPDATE master_tasks
+           SET response_text = COALESCE(NULLIF($2, ''), response_text),
+               updated_at = NOW()
+           WHERE task_id = $1`,
+          [taskId, replyNorm]
+        ).catch(() => {});
+      }
+    }
+
     // Update master_tasks status if reply provided
     if (reply) {
       const st = String(status || '').trim();
       await query(
         `UPDATE master_tasks SET status = CASE WHEN $1 = '已处理' THEN 'closed' WHEN $1 = '已回复' THEN 'pending_response' ELSE status END,
-         closed_at = CASE WHEN $1 = '已处理' THEN NOW() ELSE closed_at END
+         closed_at = CASE WHEN $1 = '已处理' THEN NOW() ELSE closed_at END,
+         response_text = COALESCE(NULLIF($3, ''), response_text),
+         updated_at = NOW()
          WHERE task_id = $2`,
-        [status, taskId]
+        [status, taskId, reply]
       );
       if (st === '已处理') {
         setImmediate(() => {

@@ -22,6 +22,7 @@ import {
   getMonthlyAttitudeFilingCount,
   getMonthlyAttitudeFilingCountForStore
 } from '../utils/performance-filing-counts.js';
+import { processPllmWorkflowTick, sendPllmMonthlyReportIfDue } from './proactive-v2/pllm-workflow.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -432,6 +433,20 @@ async function recordHrPerformancePenalty(task) {
 }
 
 export async function processTaskCardReminders() {
+  // PLLM 专用工作流：执行/不适合决策后的每日跟踪提醒、3日失败判定、每月1号月报
+  try {
+    const pllmr = await processPllmWorkflowTick();
+    logger.info({ pllmr }, 'task-card-reminder: pllm workflow tick');
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'task-card-reminder: pllm workflow tick failed');
+  }
+  try {
+    const mr = await sendPllmMonthlyReportIfDue();
+    if (mr && !mr.skipped) logger.info({ mr }, 'task-card-reminder: pllm monthly report sent');
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'task-card-reminder: pllm monthly report failed');
+  }
+
   await ensureReminderColumns();
 
   const r2 = await query(
