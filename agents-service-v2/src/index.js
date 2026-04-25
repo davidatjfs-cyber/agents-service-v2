@@ -154,6 +154,65 @@ app.get('/health', async (req, res) => {
   } catch (e) {
     wikiKnowledge = { ok: false, error: String(e?.message || e) };
   }
+  /** 鉴权失败统计（24h）：来源 IP 聚合 + 用户名聚合 + 弱认证命中 */
+  let authFailures = { total24h: 0, topIps: [], topUsers: [], weakAuthHits24h: 0 };
+  try {
+    const authR = await query(`
+      WITH failures AS (
+        SELECT username, ip_address,
+               CASE WHEN session_nonce = 'failed' THEN 1 ELSE 0 END AS is_failure,
+               CASE WHEN session_nonce = 'weak_auth' THEN 1 ELSE 0 END AS is_weak
+        FROM user_login_log
+        WHERE login_at > NOW() - INTERVAL '24h'
+      )
+      SELECT
+        COUNT(*)::int AS total24h,
+        COALESCE(SUM(is_failure)::int, 0) AS failure_count,
+        COALESCE(SUM(is_weak)::int, 0) AS weak_auth_count
+      FROM failures
+    `);
+    const base = authR.rows?.[0] || {};
+    authFailures.total24h = base.total24h || 0;
+    authFailures.failureCount24h = base.failure_count || 0;
+    authFailures.weakAuthHits24h = base.weak_auth_count || 0;
+    const ipR = await query(`
+      SELECT ip_address, COUNT(*)::int AS cnt
+      FROM user_login_log
+      WHERE login_at > NOW() - INTERVAL '24h' AND ip_address IS NOT NULL AND ip_address != ''
+      GROUP BY ip_address ORDER BY cnt DESC LIMIT 5
+    `);
+    authFailures.topIps = (ipR.rows || []).map(r => ({ ip: r.ip_address, count: r.cnt }));
+    const userR = await query(`
+      SELECT username, COUNT(*)::int AS cnt
+      FROM user_login_log
+      WHERE login_at > NOW() - INTERVAL '24h'
+      GROUP BY username ORDER BY cnt DESC LIMIT 5
+    `);
+    authFailures.topUsers = (userR.rows || []).map(r => ({ username: r.username, count: r.cnt }));
+  } catch (_e) {
+    authFailures = { total24h: -1, error: 'query_failed' };
+  }
+
+  /** cron 定时任务失败统计（7d）：按 job_key 聚合失败次数 */
+  let cronErrors7d = { total: 0, byJobKey: {} };
+  try {
+    const cronR = await query(`
+      SELECT job_key, COUNT(*)::int AS cnt
+      FROM agent_v2_cron_runs
+      WHERE created_at > NOW() - INTERVAL '7 days' AND ok = false
+      GROUP BY job_key ORDER BY cnt DESC
+    `);
+    const byJob = {};
+    let totalCronErr = 0;
+    for (const row of (cronR.rows || [])) {
+      byJob[row.job_key] = row.cnt;
+      totalCronErr += row.cnt;
+    }
+    cronErrors7d = { total: totalCronErr, byJobKey: byJob };
+  } catch (_e) {
+    cronErrors7d = { total: -1, byJobKey: {}, error: 'query_failed' };
+  }
+
   res.json({
     ok: db,
     service: 'agents-service-v2',
@@ -175,7 +234,17 @@ app.get('/health', async (req, res) => {
     /** 营销策划长期记忆（ENABLE_MEMPALACE=true 时参与 recall）；服务未起时 strategy 仍可跑，仅无记忆注入 */
     mempalace,
     /** 本地 Markdown 经验库（knowledge/wiki），供 experience-builder 检索 */
-    wikiKnowledge
+    wikiKnowledge,
+    /**
+     * 鉴权安全统计（24h 窗口，依赖 user_login_log 表；-1 表示查询失败）。
+     * 配合关卡1默认口令移除，通过此字段可观察是否有人依赖旧口令登录。
+     */
+    authFailures,
+    /**
+     * cron 定时任务失败统计（7d 窗口，依赖 agent_v2_cron_runs 表；-1 表示查询失败）。
+     * 用于基线评估：登录前确认哪些任务存在持续错误。
+     */
+    cronErrors7d
   });
 });
 
@@ -187,13 +256,39 @@ app.post('/api/login', async (req, res) => {
   if (!isLoginEnabled()) return res.status(403).json({ error: 'login_disabled' });
   const { username, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'Missing credentials' });
+  const clientIp = String(req.ip || req.socket?.remoteAddress || 'unknown').replace('::ffff:', '');
+  const normUser = String(username).toLowerCase().trim();
+
+  /** 将登录事件写入 user_login_log（成功：仅记录 IP；失败：标记 session_nonce=failed） */
+  const writeLoginLog = async (isSuccess, extra) => {
+    try {
+      if (isSuccess) {
+        await query(
+          `INSERT INTO user_login_log (username, ip_address) VALUES ($1, $2)`,
+          [normUser, clientIp]
+        );
+      } else {
+        const nonce = extra?.weakAuth ? 'weak_auth' : 'failed';
+        await query(
+          `INSERT INTO user_login_log (username, ip_address, session_nonce, logout_at) VALUES ($1, $2, $3, NOW())`,
+          [normUser, clientIp, nonce]
+        );
+      }
+    } catch (_e) { /* 日志写入失败不阻塞登录响应 */ }
+  };
+
   try {
     const weakAllowed = isWeakAuthAllowed();
     // Check hardcoded admin first
     const adminUser = process.env.ADMIN_USERNAME || 'admin';
-    const adminPass = process.env.ADMIN_PASSWORD || 'admin123';
-    // 显式管理员凭据独立于 weak auth：用于运维后台登录，不受“用户名=密码”弱认证开关影响
+    const adminPass = process.env.ADMIN_PASSWORD;
+    if (!adminPass) {
+      logger.fatal('ADMIN_PASSWORD environment variable is required');
+      return res.status(500).json({ error: 'server_config_error' });
+    }
+    // 显式管理员凭据独立于 weak auth：用于运维后台登录，不受”用户名=密码”弱认证开关影响
     if (username === adminUser && password === adminPass) {
+      await writeLoginLog(true);
       const token = jwt.sign({ username, role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '30d' });
       return res.json({ ok: true, token, user: { username, role: 'admin' } });
     }
@@ -206,10 +301,13 @@ app.post('/api/login', async (req, res) => {
       const u = r.rows[0];
       // For DB users, password is their username (simple) or can be extended
       if (weakAllowed && (password === username || password === adminPass)) {
+        await writeLoginLog(true);
         const token = jwt.sign({ username: u.username, role: u.role, store: u.store }, process.env.JWT_SECRET, { expiresIn: '30d' });
         return res.json({ ok: true, token, user: { username: u.username, role: u.role, store: u.store } });
       }
     }
+    // 登录失败：记录日志（区分普通失败 / 弱认证路径失败）
+    await writeLoginLog(false, { weakAuth: weakAllowed && r.rows?.[0] != null });
     res.status(401).json({ error: '用户名或密码错误' });
   } catch (e) {
     logger.error({ err: e?.message }, 'Login failed');

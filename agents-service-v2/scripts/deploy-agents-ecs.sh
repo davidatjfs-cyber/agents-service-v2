@@ -163,6 +163,22 @@ if ! echo "\$H" | grep -q '"replyEngine"'; then
   fi
   exit 1
 fi
+# --- pm2 错误日志尾采（关卡0：可观测性基线）---
+echo '--- pm2 最近错误日志（agents-service-v2）---'
+AGENTS_ERR_LOG=\$(ls -t /root/.pm2/logs/agents-service-v2-error-*.log 2>/dev/null | head -1)
+if [[ -n "\$AGENTS_ERR_LOG" ]]; then
+  tail -15 "\$AGENTS_ERR_LOG" 2>/dev/null || echo '（无错误日志）'
+else
+  echo '（无错误日志文件）'
+fi
+echo '--- pm2 最近错误日志（hrms-service）---'
+HRMS_ERR_LOG=\$(ls -t /root/.pm2/logs/hrms-service-error-*.log 2>/dev/null | head -1)
+if [[ -n "\$HRMS_ERR_LOG" ]]; then
+  tail -15 "\$HRMS_ERR_LOG" 2>/dev/null || echo '（无错误日志）'
+else
+  echo '（无错误日志文件或 hrms-service 未运行）'
+fi
+# --- 日志尾采结束 ---
 echo '--- mempalace /health (disk persistence) ---'
 curl -sS -m 6 http://127.0.0.1:3001/health | grep -q '"persistence":"disk"' && echo 'OK: MemPalace persistence=disk' || echo 'WARN: MemPalace /health 未返回 persistence=disk（检查 pm2 mempalace-http）'
 echo '--- verify knowledge / DeepSeek→Ollama / wiki / mempalace ---'

@@ -14169,7 +14169,10 @@ function getAgentsServiceBaseUrl() {
 async function getAgentsServiceAdminToken() {
   const url = getAgentsServiceBaseUrl() + '/api/login';
   const username = String(process.env.AGENTS_ADMIN_USERNAME || 'admin').trim() || 'admin';
-  const password = String(process.env.AGENTS_ADMIN_PASSWORD || 'admin123').trim() || 'admin123';
+  const password = String(process.env.AGENTS_ADMIN_PASSWORD || '').trim();
+  if (!password) {
+    throw new Error('AGENTS_ADMIN_PASSWORD environment variable is required for hrms-server to authenticate with agents-service-v2');
+  }
   const r = await axios.post(url, { username, password }, {
     timeout: 8000,
     validateStatus: () => true,

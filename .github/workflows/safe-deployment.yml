@@ -43,6 +43,24 @@ jobs:
       - name: Verify agents-service-v2
         run: bash agents-service-v2/scripts/verify-agents-local.sh
 
+      - name: Run unit tests
+        run: |
+          cd agents-service-v2
+          npm test
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgres://localhost:5432/nonexistent
+          REDIS_URL: redis://localhost:6379
+
+      - name: Check for console.log in src (non-blocking)
+        run: |
+          FOUND=$(grep -rn "console\.log\|console\.warn\|console\.error" agents-service-v2/src/services/ --include='*.js' | grep -v "// debug\|// temp\|// TODO" | head -20 || true)
+          if [ -n "$FOUND" ]; then
+            echo "::warning::Found console.* calls in service files (should use structured logger):"
+            echo "$FOUND"
+          fi
+        continue-on-error: true
+
   deploy-ecs:
     needs: verify
     if: >-

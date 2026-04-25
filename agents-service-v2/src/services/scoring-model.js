@@ -21,6 +21,7 @@ function ruleAppliesToRole(r, role) {
 export function calcDeductions(anomalies, role) {
   let t = 0;
   const d = [];
+  if (!anomalies || !Array.isArray(anomalies)) return { total: 0, details: [] };
   for (const a of anomalies) {
     const r = RULES[a.category];
     if (!r || !ruleAppliesToRole(r, role)) continue;
