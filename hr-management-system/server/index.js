@@ -5228,8 +5228,17 @@ async function ensureCheckinTable() {
     );
     await pool.query(`create index if not exists idx_checkin_username_time on checkin_records (username, check_time)`);
     await pool.query(`create index if not exists idx_checkin_store_time on checkin_records (store, check_time)`);
+    await pool.query(`create index if not exists idx_checkin_time on checkin_records (check_time)`);
   } catch (e) {
     console.error('ensureCheckinTable failed:', e);
+  }
+}
+
+async function ensureSalesRawIndex() {
+  try {
+    await pool.query(`create index if not exists idx_sales_raw_lookup on sales_raw (store, date, biz_type, slot, dish_name)`);
+  } catch (e) {
+    console.error('ensureSalesRawIndex failed:', e);
   }
 }
 
@@ -5895,7 +5904,10 @@ async function dbListEmployeesForReports({ store, includeInactive }) {
       where.push(`coalesce(status, '') not in ('inactive', '离职')`);
     }
     const sql = `select username, name, role, store, department, position, status,
-                        join_date as "joinDate", created_at as "createdAt"
+                        join_date as "joinDate", created_at as "createdAt",
+                        extra_json->>'offboardingDate' as "offboardingDate",
+                        extra_json->>'resignedAt' as "resignedAt",
+                        coalesce(extra_json->>'coreTalent', 'false')::boolean as "coreTalent"
                    from employees
                    ${where.length ? ('where ' + where.join(' and ')) : ''}
                   order by name asc, username asc`;
@@ -9692,8 +9704,35 @@ app.get('/api/reports/turnover', authRequired, async (req, res) => {
     const store = role === 'store_manager' ? myStore : storeQ;
 
     let allEmployees = Array.isArray(state0.employees) ? state0.employees : [];
-    if (!allEmployees.length) {
-      allEmployees = await dbListEmployeesForReports({ store: store || '', includeInactive: true });
+    const dbEmps = await dbListEmployeesForReports({ store: store || '', includeInactive: true });
+    if (dbEmps.length) {
+      const stateEmpByLower = new Map(allEmployees.map(e => [String(e?.username || '').trim().toLowerCase(), e]));
+      const merged = [];
+      const seen = new Set();
+      for (const dbEmp of dbEmps) {
+        const lower = String(dbEmp?.username || '').trim().toLowerCase();
+        if (!lower || seen.has(lower)) continue;
+        seen.add(lower);
+        const stateEmp = stateEmpByLower.get(lower);
+        if (stateEmp) {
+          merged.push({
+            ...dbEmp,
+            ...stateEmp,
+            status: String(stateEmp?.status || dbEmp?.status || ''),
+            offboardingDate: stateEmp?.offboardingDate || dbEmp?.offboardingDate || '',
+            resignedAt: stateEmp?.resignedAt || dbEmp?.resignedAt || ''
+          });
+        } else {
+          merged.push(dbEmp);
+        }
+      }
+      for (const e of allEmployees) {
+        const lower = String(e?.username || '').trim().toLowerCase();
+        if (!lower || seen.has(lower)) continue;
+        seen.add(lower);
+        merged.push(e);
+      }
+      allEmployees = merged;
     }
     const [yr, mo] = month.split('-').map(Number);
     const monthStart = new Date(yr, mo - 1, 1);
@@ -9730,16 +9769,8 @@ app.get('/api/reports/turnover', authRequired, async (req, res) => {
     const overallTurnoverRate = totalHeadcount > 0 ? totalDeparted / totalHeadcount : 0;
 
     // ── A. Critical Talent Turnover ──
-    // Core talent: level >= 3, or role in [store_manager, hq_manager, hr_manager], or position contains 经理/主管/店长
-    const isCoreTalent = (e) => {
-      const level = Number(e?.level || 0);
-      const r = String(e?.role || '').trim();
-      const pos = String(e?.position || '').trim();
-      if (level >= 3) return true;
-      if (['store_manager', 'hq_manager', 'hr_manager'].includes(r)) return true;
-      if (/经理|主管|店长|总监|主任/.test(pos)) return true;
-      return false;
-    };
+    // 核心人才判定以员工档案中的 coreTalent 字段为准（在员工管理页面勾选）
+    const isCoreTalent = (e) => !!e?.coreTalent;
     const coreTalentAll = activeOrDepartedThisMonth.filter(isCoreTalent);
     const coreTalentDeparted = departedThisMonth.filter(isCoreTalent);
     const criticalTurnoverRate = coreTalentAll.length > 0 ? coreTalentDeparted.length / coreTalentAll.length : 0;
@@ -10034,25 +10065,35 @@ app.get('/api/reports/attendance', authRequired, async (req, res) => {
       let idx = 3;
       if (store) { conditions.push(`c.store = $${idx}`); params.push(store); idx++; }
       const where = 'where ' + conditions.join(' and ');
-      const sql = `select c.* from checkin_records c ${where} order by c.check_time desc limit 5000`;
+      const sql = `select c.username, c.store, c.check_time, c.status, c.type, c.confirmed_by, c.confirmed_at from checkin_records c ${where} order by c.check_time desc limit 5000`;
       const cr = await pool.query(sql, params);
       const employeesList = Array.isArray(state0.employees) ? state0.employees : [];
       const usersList = Array.isArray(state0.users) ? state0.users : [];
-      let dbNameByLower = null;
-      if (!employeesList.length && !usersList.length) {
+      let nameByLower = null;
+      if (employeesList.length || usersList.length) {
+        nameByLower = new Map();
+        for (const e of employeesList) {
+          const u = String(e?.username || '').trim().toLowerCase();
+          if (!u) continue;
+          if (!nameByLower.has(u)) nameByLower.set(u, String(e?.name || '').trim() || String(e?.username || '').trim());
+        }
+        for (const e of usersList) {
+          const u = String(e?.username || '').trim().toLowerCase();
+          if (!u || nameByLower.has(u)) continue;
+          nameByLower.set(u, String(e?.name || '').trim() || String(e?.username || '').trim());
+        }
+      } else {
         const dbEmps = await dbListEmployeesForReports({ store, includeInactive: false });
-        dbNameByLower = new Map();
+        nameByLower = new Map();
         for (const e of dbEmps) {
           const u = String(e?.username || '').trim().toLowerCase();
           if (!u) continue;
-          dbNameByLower.set(u, String(e?.name || '').trim() || String(e?.username || '').trim());
+          nameByLower.set(u, String(e?.name || '').trim() || String(e?.username || '').trim());
         }
       }
       checkinDetails = (cr.rows || []).map(r => {
         const lower = String(r.username || '').trim().toLowerCase();
-        const emp = employeesList.find(e => String(e?.username || '').toLowerCase() === lower);
-        const usr = usersList.find(e => String(e?.username || '').toLowerCase() === lower);
-        r.display_name = emp?.name || usr?.name || (dbNameByLower ? dbNameByLower.get(lower) : null) || r.username;
+        r.display_name = (nameByLower ? nameByLower.get(lower) : null) || r.username;
         return r;
       });
     } catch (e) {}
@@ -10547,7 +10588,7 @@ app.get('/api/reports/promotion-records', authRequired, async (req, res) => {
       [limit]
     );
 
-    const items = [];
+    let items = [];
     for (const row of (r.rows || [])) {
       let payload = row?.payload || {};
       if (typeof payload === 'string') {
@@ -10621,14 +10662,7 @@ app.get('/api/reports/inventory-forecast/history', authRequired, async (req, res
       startDate: start || shiftForecastDate(end || today, -180),
       endDate: end || today
     });
-    let stateItems = Array.isArray(state0.inventoryForecastHistory) ? state0.inventoryForecastHistory.slice() : [];
-    stateItems = stateItems.filter((x) => String(x?.store || '').trim() === store);
-    if (bizType) stateItems = stateItems.filter((x) => String(x?.bizType || '').trim() === bizType);
-    if (slot) stateItems = stateItems.filter((x) => String(x?.slot || '').trim() === slot);
-    if (start || end) {
-      stateItems = stateItems.filter((x) => inDateRange(String(x?.date || '').trim(), start, end));
-    }
-    const items = mergePreferredForecastHistoryRows(salesRawItems, stateItems, limit);
+    const items = salesRawItems.slice(0, limit);
     return res.json({
       store,
       bizType: bizType || '',
@@ -11578,8 +11612,16 @@ app.get('/api/reports/inventory-forecast/analytics', authRequired, async (req, r
     const startDate = safeDateOnly(req.query?.startDate);
     const endDate = safeDateOnly(req.query?.endDate);
 
-    const all = Array.isArray(state0.inventoryForecastHistory) ? state0.inventoryForecastHistory : [];
-    let filtered = all.filter(x => String(x?.store || '').trim() === store);
+    let filtered = [];
+    if (startDate && endDate) {
+      const salesRawRows = await loadInventoryForecastHistoryFromSalesRaw({
+        storeScope: [store],
+        bizType,
+        startDate,
+        endDate
+      });
+      filtered = salesRawRows.filter(x => String(x?.store || '').trim() === store);
+    }
     if (bizType) filtered = filtered.filter(x => String(x?.bizType || '').trim() === bizType);
     if (startDate) filtered = filtered.filter(x => String(x?.date || '').trim() >= startDate);
     if (endDate) filtered = filtered.filter(x => String(x?.date || '').trim() <= endDate);
@@ -12076,46 +12118,26 @@ app.post('/api/reports/inventory-forecast/predict', authRequired, async (req, re
     const store = isForecastStoreScopedRole(role) ? myStore : qStore;
     if (!store) return res.status(400).json({ error: 'missing_store' });
 
-    const all = Array.isArray(state0.inventoryForecastHistory) ? state0.inventoryForecastHistory : [];
     const aliasLookup = buildForecastProductAliasLookup(state0, store);
     const historyWindowStart = shiftForecastDate(date, -180);
-    const salesRawSlotRows = await loadInventoryForecastHistoryFromSalesRaw({
+    const historyRowsRaw = await loadInventoryForecastHistoryFromSalesRaw({
       storeScope: [store],
       bizType,
       slot,
       startDate: historyWindowStart,
       endDate: date
     });
-    const stateHistoryRowsRaw = all
-      .filter((x) => String(x?.store || '').trim() === store)
-      .filter((x) => String(x?.bizType || '').trim() === bizType)
-      .filter((x) => String(x?.slot || '').trim() === slot)
-      .filter((x) => {
-        const d = String(x?.date || '').trim();
-        return !d || d <= date;
-      })
-      .slice(0, 400);
-    const historyRowsRaw = mergePreferredForecastHistoryRows(salesRawSlotRows, stateHistoryRowsRaw, 400);
     const historyRows = canonicalizeForecastRows(historyRowsRaw, aliasLookup);
 
     // ── Slot revenue split: frontend sends total biz-type revenue for the whole day.
     // Historical rows are per-slot, so we must split the incoming revenue by slot share
     // to avoid each slot thinking it owns the full day's revenue (which inflates qty ~3x).
-    const salesRawAllSlotRows = await loadInventoryForecastHistoryFromSalesRaw({
+    const slotShareRows = await loadInventoryForecastHistoryFromSalesRaw({
       storeScope: [store],
       bizType,
       startDate: historyWindowStart,
       endDate: date
     });
-    const stateAllSlotRows = all
-      .filter((x) => String(x?.store || '').trim() === store)
-      .filter((x) => String(x?.bizType || '').trim() === bizType)
-      .filter((x) => {
-        const d = String(x?.date || '').trim();
-        return !d || d <= date;
-      })
-      .slice(0, 1200);
-    const slotShareRows = mergePreferredForecastHistoryRows(salesRawAllSlotRows, stateAllSlotRows, 1200);
     const slotSplit = computeSlotRevenueShare(slotShareRows, store, bizType, slot, date);
     const slotExpectedRevenue = Number((expectedRevenue * slotSplit.slotShare).toFixed(2));
 
@@ -12129,13 +12151,7 @@ app.post('/api/reports/inventory-forecast/predict', authRequired, async (req, re
       expectedRevenue: slotExpectedRevenue
     };
 
-    const evaluations = Array.isArray(state0.inventoryForecastEvaluations) ? state0.inventoryForecastEvaluations : [];
-    const evalRows = evaluations
-      .filter((x) => String(x?.store || '').trim() === store)
-      .filter((x) => String(x?.bizType || '').trim() === bizType)
-      .filter((x) => String(x?.slot || '').trim() === slot)
-      .slice(0, 600);
-    const calibration = buildForecastCalibrationFactors(evalRows, date);
+    const calibration = buildForecastCalibrationFactors([], date);
 
     const heuristic = buildForecastByHeuristic(historyRows, target, topN);
     let source = 'heuristic';
@@ -18424,6 +18440,7 @@ if (__ALLOW_SCHEMA_CHANGES__) {
   ensureAgentConfigTables();
 
   ensureCheckinTable();
+  ensureSalesRawIndex();
   ensureOpsTasksTable();
   ensureFeishuSyncTable();
   ensureFeishuGenericRecordsTable();
