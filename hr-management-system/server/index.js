@@ -5907,7 +5907,8 @@ async function dbListEmployeesForReports({ store, includeInactive }) {
                         join_date as "joinDate", created_at as "createdAt",
                         extra_json->>'offboardingDate' as "offboardingDate",
                         extra_json->>'resignedAt' as "resignedAt",
-                        coalesce(extra_json->>'coreTalent', 'false')::boolean as "coreTalent"
+                        coalesce(extra_json->>'coreTalent', 'false')::boolean as "coreTalent",
+                        nullif(trim(coalesce(extra_json->>'level', extra_json->>'jobLevel', '')), '') as level
                    from employees
                    ${where.length ? ('where ' + where.join(' and ')) : ''}
                   order by name asc, username asc`;
@@ -9687,6 +9688,57 @@ app.get('/api/reports/business', authRequired, async (req, res) => {
   }
 });
 
+/** 离职日期统一为 YYYY-MM-DD，兼容 2026/4/5、ISO 前缀等，供本月离职判定 */
+function normalizeEmployeeDepartureDateForTurnover(emp) {
+  const raw = String(emp?.offboardingDate || emp?.resignedAt || '').trim();
+  if (!raw) return '';
+  const mIso = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (mIso) return mIso[1];
+  const mSlash = raw.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if (mSlash) {
+    const y = mSlash[1];
+    const mo = String(mSlash[2]).padStart(2, '0');
+    const d = String(mSlash[3]).padStart(2, '0');
+    return `${y}-${mo}-${d}`;
+  }
+  const mCn = raw.match(/^(\d{4})[年\-](\d{1,2})[月\-](\d{1,2})/);
+  if (mCn) {
+    return `${mCn[1]}-${String(mCn[2]).padStart(2, '0')}-${String(mCn[3]).padStart(2, '0')}`;
+  }
+  return '';
+}
+
+/**
+ * 关键人才：与报表 A 区文案一致——① 档案勾选 coreTalent；② 职级 level ≥ 3（数字或可解析数字）；
+ * ③ 职务/部门含管理类关键词；④ 店长/总部管理/出品与前厅负责人等 role。
+ */
+function isEmployeeCoreTalentForTurnoverReport(emp) {
+  if (!emp || typeof emp !== 'object') return false;
+  const c = emp.coreTalent;
+  if (c === true || c === 'true' || c === 1) return true;
+
+  const lvStr = String(emp.level ?? '').trim();
+  if (lvStr) {
+    let n = NaN;
+    if (/^\d+$/.test(lvStr)) n = parseInt(lvStr, 10);
+    else {
+      const m = lvStr.match(/^L\s*(\d+)$/i) || lvStr.match(/(\d+)/);
+      if (m) n = parseInt(m[1], 10);
+    }
+    if (Number.isFinite(n) && n >= 3) return true;
+  }
+
+  const blob = `${String(emp.position || '')} ${String(emp.department || '')}`;
+  if (/经理|主管|店长|总监|负责人|厨师长|副店长|店助|店总|前厅经理|营运|督导|部长|主任|副理|值班经理|副厨|主厨|领班/i.test(blob)) {
+    return true;
+  }
+
+  const r = String(emp.role || '').trim().toLowerCase();
+  if (['store_manager', 'hq_manager', 'store_production_manager', 'front_manager'].includes(r)) return true;
+
+  return false;
+}
+
 // ── Turnover Analysis Report ──
 app.get('/api/reports/turnover', authRequired, async (req, res) => {
   const username = String(req.user?.username || '').trim();
@@ -9715,12 +9767,16 @@ app.get('/api/reports/turnover', authRequired, async (req, res) => {
         seen.add(lower);
         const stateEmp = stateEmpByLower.get(lower);
         if (stateEmp) {
+          const lv =
+            String(stateEmp?.level || '').trim() ||
+            String(dbEmp?.level || '').trim();
           merged.push({
             ...dbEmp,
             ...stateEmp,
             status: String(stateEmp?.status || dbEmp?.status || ''),
             offboardingDate: stateEmp?.offboardingDate || dbEmp?.offboardingDate || '',
-            resignedAt: stateEmp?.resignedAt || dbEmp?.resignedAt || ''
+            resignedAt: stateEmp?.resignedAt || dbEmp?.resignedAt || '',
+            level: lv
           });
         } else {
           merged.push(dbEmp);
@@ -9791,7 +9847,7 @@ app.get('/api/reports/turnover', authRequired, async (req, res) => {
     // ── Identify departed employees this month ──
     const departedThisMonth = storeEmps.filter(e => {
       if (String(e?.status || '').trim() !== '离职') return false;
-      const depDate = String(e?.offboardingDate || e?.resignedAt || '').trim();
+      const depDate = normalizeEmployeeDepartureDateForTurnover(e);
       if (!depDate) return false;
       return depDate >= month + '-01' && depDate <= month + '-31';
     });
@@ -9801,7 +9857,7 @@ app.get('/api/reports/turnover', authRequired, async (req, res) => {
       const st = String(e?.status || '').trim();
       if (st === 'active') return true;
       if (st === '离职') {
-        const depDate = String(e?.offboardingDate || e?.resignedAt || '').trim();
+        const depDate = normalizeEmployeeDepartureDateForTurnover(e);
         if (depDate && depDate >= month + '-01') return true;
       }
       return false;
@@ -9811,8 +9867,8 @@ app.get('/api/reports/turnover', authRequired, async (req, res) => {
     const overallTurnoverRate = totalHeadcount > 0 ? totalDeparted / totalHeadcount : 0;
 
     // ── A. Critical Talent Turnover ──
-    // 核心人才判定以员工档案中的 coreTalent 字段为准（在员工管理页面勾选）
-    const isCoreTalent = (e) => !!e?.coreTalent;
+    // 与报表文案一致：勾选 coreTalent，或职级≥3，或管理职务/关键 role（见 isEmployeeCoreTalentForTurnoverReport）
+    const isCoreTalent = isEmployeeCoreTalentForTurnoverReport;
     const coreTalentAll = activeOrDepartedThisMonth.filter(isCoreTalent);
     const coreTalentDeparted = departedThisMonth.filter(isCoreTalent);
     const criticalTurnoverRate = coreTalentAll.length > 0 ? coreTalentDeparted.length / coreTalentAll.length : 0;
@@ -9853,7 +9909,7 @@ app.get('/api/reports/turnover', authRequired, async (req, res) => {
         departureDate: info.resignDate || '',
         reason: info.reason,
         departureType: info.isVoluntary ? 'voluntary' : 'involuntary',
-        isCoreTalent: empRec ? isCoreTalent(empRec) : false,
+        isCoreTalent: empRec ? !!isCoreTalent(empRec) : false,
         isNewHire: empRec ? isNewHire(empRec) : false
       });
     }

@@ -31421,7 +31421,7 @@ tr:nth-child(even) td { background: #fafafa; }
 
                 <!-- A. Critical Talent Turnover -->
                 ${section('A. 关键人才流失率', red, `
-                    <div style="font-size:12px; color:rgba(200,215,230,0.6); margin-bottom:12px;">核心人才：级别≥3 / 管理岗位（经理、主管、店长等）</div>
+                    <div style="font-size:12px; color:rgba(200,215,230,0.6); margin-bottom:12px;">核心人才：员工档案勾选「核心人才」<b>或</b>职级≥3 / 管理岗位（经理、主管、店长等）</div>
                     <div style="display:flex; justify-content:center; margin-bottom:14px;">
                         ${gaugeRing('关键人才流失率', ct.rate || 0, ct.rate > 0.1 ? red : (ct.rate > 0.05 ? orange : green), 120)}
                     </div>
