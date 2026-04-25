@@ -13296,6 +13296,21 @@ function inferContentType({ declaredType, originalName, mimeType }) {
   return 'application/octet-stream';
 }
 
+function normalizeMultipartFilename(name) {
+  const raw = String(name || '').trim();
+  if (!raw) return '';
+  // Browser multipart can carry UTF-8 bytes decoded as latin1 by parser; recover when possible.
+  try {
+    const recovered = Buffer.from(raw, 'latin1').toString('utf8');
+    const hasCjk = /[\u4e00-\u9fff]/.test(recovered);
+    const rawLooksMojibake = /[ÃÂæçéèêëåäöø]/.test(raw);
+    if (recovered && !recovered.includes('\uFFFD') && (hasCjk || rawLooksMojibake)) {
+      return recovered;
+    }
+  } catch (e) {}
+  return raw;
+}
+
 function requireEnv() {
   const missing = [];
   if (!DATABASE_URL) missing.push('DATABASE_URL');
@@ -15237,7 +15252,7 @@ app.put('/api/knowledge/:id', authRequired, async (req, res) => {
   }
 });
 
-app.post('/api/knowledge/batch', authRequired, knowledgeUpload.array('files', 20), async (req, res) => {
+app.post('/api/knowledge/batch', authRequired, knowledgeUpload.array('files', 10), async (req, res) => {
   if (String(req.user?.role || '') !== 'admin') {
     return res.status(403).json({ error: 'admin_only' });
   }
@@ -15265,9 +15280,10 @@ app.post('/api/knowledge/batch', authRequired, knowledgeUpload.array('files', 20
 
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
-    let fileTitle = title || String(f.originalname || '').replace(/\.[^.]+$/, '');
+    const normalizedOriginalName = normalizeMultipartFilename(String(f.originalname || ''));
+    let fileTitle = title || String(normalizedOriginalName || '').replace(/\.[^.]+$/, '');
     if (batchTitleMode === 'filename') {
-      fileTitle = String(f.originalname || '').replace(/\.[^.]+$/, '');
+      fileTitle = String(normalizedOriginalName || '').replace(/\.[^.]+$/, '');
     } else if (batchTitleMode === 'custom' && customPrefix) {
       fileTitle = customPrefix + (files.length > 1 ? ` (${i + 1}/${files.length})` : '');
     }
@@ -15316,9 +15332,9 @@ app.post('/api/knowledge/batch', authRequired, knowledgeUpload.array('files', 20
         } catch (e) {
           console.log('Batch knowledge cloud upload failed for', insertedId, e?.message || e);
         }
-      })(r.rows?.[0]?.id, String(f.path || ''), String(f.originalname || ''), String(f.mimetype || ''));
+      })(r.rows?.[0]?.id, String(f.path || ''), String(normalizedOriginalName || ''), String(f.mimetype || ''));
     } catch (e) {
-      errors.push({ file: f.originalname, error: String(e?.message || e) });
+      errors.push({ file: normalizedOriginalName || String(f.originalname || ''), error: String(e?.message || e) });
     }
   }
 

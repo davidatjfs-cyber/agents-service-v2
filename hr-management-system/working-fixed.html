@@ -15251,6 +15251,54 @@
 
         const HRMS_SCHEMA_VERSION = 1;
         const HRMS_STORAGE_KEY = 'hrms_data_v' + HRMS_SCHEMA_VERSION;
+        const HRMS_LS_CLEANUP_ONCE_KEY = 'HRMS_LS_CLEANUP_V2_20260426';
+
+        function hrmsCleanupOversizedLocalStorageOnce() {
+            try {
+                if (localStorage.getItem(HRMS_LS_CLEANUP_ONCE_KEY) === '1') return;
+                const keys = [];
+                for (let i = 0; i < localStorage.length; i += 1) {
+                    const k = localStorage.key(i);
+                    if (k) keys.push(String(k));
+                }
+
+                for (const key of keys) {
+                    if (!key) continue;
+                    const raw = localStorage.getItem(key);
+                    const size = raw ? raw.length : 0;
+                    if (!size) continue;
+
+                    if (key.startsWith('hrms_data') && key !== HRMS_STORAGE_KEY) {
+                        localStorage.removeItem(key);
+                        continue;
+                    }
+
+                    if (/^HRMS_KB_FLASHCARDS_/.test(key)) {
+                        localStorage.removeItem(key);
+                        continue;
+                    }
+
+                    if (/^HRMS_KB_FILTERS_/.test(key) && size > 200000) {
+                        localStorage.removeItem(key);
+                        continue;
+                    }
+
+                    if (key !== HRMS_STORAGE_KEY) continue;
+                    if (size < 1500000) continue;
+                    const parsed = hrmsSafeParseJson(raw);
+                    if (!parsed || typeof parsed !== 'object') continue;
+
+                    if (Array.isArray(parsed.knowledge)) parsed.knowledge = [];
+                    if (Array.isArray(parsed.trainingMaterials)) parsed.trainingMaterials = [];
+                    if (Array.isArray(parsed.questionBank)) parsed.questionBank = [];
+                    localStorage.setItem(HRMS_STORAGE_KEY, JSON.stringify(parsed));
+                }
+
+                localStorage.setItem(HRMS_LS_CLEANUP_ONCE_KEY, '1');
+            } catch (e) {}
+        }
+
+        hrmsCleanupOversizedLocalStorageOnce();
 
         function hrmsTryLoadLegacyStoreData() {
             try {
@@ -15778,12 +15826,14 @@
                 this.set(data);
             },
             getKnowledge() {
+                if (Array.isArray(window.__HRMS_KNOWLEDGE_CACHE)) return window.__HRMS_KNOWLEDGE_CACHE;
                 return this.ensure().knowledge || [];
             },
             setKnowledge(knowledge) {
-                const data = this.ensure();
-                data.knowledge = knowledge;
-                this.set(data);
+                const next = Array.isArray(knowledge) ? knowledge : [];
+                window.__HRMS_KNOWLEDGE_CACHE = next;
+                // Avoid localStorage quota overflow: knowledge list is server source of truth.
+                // Keep runtime cache only; do not persist full list into HRMS_STATE blob.
             },
             getSettings() {
                 return this.ensure().settings || {};
@@ -21898,6 +21948,18 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             }
         }
 
+        function normalizeKnowledgeTextDisplay(input) {
+            const raw = String(input || '');
+            if (!raw) return '';
+            try {
+                const recovered = decodeURIComponent(escape(raw));
+                const hasCjk = /[\u4e00-\u9fff]/.test(recovered);
+                const rawLooksMojibake = /[ÃÂæçéèêëåäöø]/.test(raw);
+                if (recovered && !recovered.includes('\uFFFD') && (hasCjk || rawLooksMojibake)) return recovered;
+            } catch (e) {}
+            return raw;
+        }
+
         function renderKnowledgeList() {
             const list = document.getElementById('knowledge-list');
             const empty = document.getElementById('knowledge-list-empty');
@@ -22081,7 +22143,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         } catch (e) { /* keep default */ }
                         return {
                             id: String(r?.id || ''),
-                            title: String(r?.title || ''),
+                            title: normalizeKnowledgeTextDisplay(String(r?.title || '')),
                             category: String(r?.category || ''),
                             type,
                             tags: Array.isArray(r?.tags) ? r.tags : [],
@@ -22090,7 +22152,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                             audience: aud,
                             // file_path 是磁盘路径，不是 IndexedDB 的 fileId；留空避免 readKnowledgeItemBlob 误查库
                             fileId: '',
-                            fileName: String(r?.title || filePath || ''),
+                            fileName: normalizeKnowledgeTextDisplay(String(r?.title || filePath || '')),
                             mimeType: String(r?.file_type || ''),
                             size: Number(r?.file_size || 0),
                             createdAt,
@@ -28109,7 +28171,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             if (isBatch) {
                 if (fileEl) fileEl.setAttribute('multiple', 'multiple');
                 if (titleGroup) titleGroup.style.display = '';
-                if (hint) hint.textContent = '已开启多选模式，可同时选择多个文件（最多20个）';
+                if (hint) hint.textContent = '已开启多选模式，可同时选择多个文件（最多10个）';
             } else {
                 if (fileEl) fileEl.removeAttribute('multiple');
                 if (titleGroup) titleGroup.style.display = 'none';
@@ -28433,6 +28495,13 @@ ${knowledgeContent.slice(0, 30000)}`;
             const isBatch = batchCb && batchCb.checked;
 
             if (isBatch) {
+                const maxBatchFiles = 10;
+                if (files.length > maxBatchFiles) {
+                    if (statusEl) statusEl.textContent = `批量上传最多 ${maxBatchFiles} 个文件，请分批上传`;
+                    showNotification(`批量上传最多 ${maxBatchFiles} 个文件，请分批上传`, 'warning');
+                    event.target.value = '';
+                    return;
+                }
                 // 批量模式：显示已选择文件数量和总大小
                 const total = files.length;
                 const totalSize = files.reduce((sum, f) => sum + Number(f.size || 0), 0);

@@ -16,8 +16,8 @@ import { query } from '../utils/db.js';
 import axios from 'axios';
 
 /* ── 配置 ── */
-const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'deepseek-chat';
-const EMBEDDING_DIM = 1536; // OpenAI-compatible dimension
+const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'shaw/dmeta-embedding-zh';
+const EMBEDDING_DIM = Number(process.env.EMBEDDING_DIM) || 768; // dmeta-embedding-zh -> 768
 
 /* ── embedding 缓存 ── */
 const embedCache = new Map();
@@ -57,7 +57,15 @@ export async function isEmbeddingAvailable() {
  */
 export async function ensureEmbeddingSchema() {
   try {
-    await query(`CREATE EXTENSION IF NOT EXISTS vector`);
+    const ext = await query(`SELECT 1 FROM pg_extension WHERE extname = 'vector' LIMIT 1`);
+    if (!(ext.rows || []).length) {
+      try {
+        await query(`CREATE EXTENSION IF NOT EXISTS vector`);
+      } catch (_e) {
+        // 非 superuser 无法 CREATE EXTENSION；扩展可能已由管理员创建
+        // 跳过，后续检查列是否存在
+      }
+    }
     const col = await query(`
       SELECT 1 FROM information_schema.columns
       WHERE table_name = 'knowledge_base' AND column_name = 'embedding'
@@ -85,32 +93,28 @@ export async function generateEmbedding(text) {
   const t = String(text || '').trim();
   if (!t) return null;
 
+  // dmeta-embedding-zh 是 BERT 模型，max 512 tokens → 约 1000 汉字
+  // 超长文本 API 返回 500「input length exceeds context length」
+  const MAX_CHARS = 1000;
+  const truncated = t.length > MAX_CHARS ? t.slice(0, MAX_CHARS) : t;
+
   // 检查缓存
-  const ck = cacheKey(t);
+  const ck = cacheKey(truncated);
   const cached = embedCache.get(ck);
   if (cached) return cached;
 
   try {
-    const apiKey = String(process.env.DEEPSEEK_API_KEY || '').trim();
-    if (!apiKey) return null;
-
-    const body = {
-      model: EMBEDDING_MODEL,
-      input: t,
-      encoding_format: 'float'
-    };
-    const url = String(process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '') + '/v1/embeddings';
+    const ollamaUrl = String(process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').replace(/\/+$/, '');
+    const body = { model: EMBEDDING_MODEL, prompt: truncated };
+    const url = `${ollamaUrl}/api/embeddings`;
 
     const res = await axios.post(url, body, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      timeout: 30000
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 60000
     });
 
-    if (res.status === 200 && res.data?.data?.[0]?.embedding) {
-      const vec = res.data.data[0].embedding;
+    if (res.status === 200 && Array.isArray(res.data?.embedding)) {
+      const vec = res.data.embedding;
       if (!Array.isArray(vec) || vec.length !== EMBEDDING_DIM) {
         logger.warn(
           { dim: Array.isArray(vec) ? vec.length : 0, expected: EMBEDDING_DIM, model: EMBEDDING_MODEL },
@@ -151,7 +155,10 @@ export async function backfillEmbeddings(batchSize = 5) {
     }
   }
   const apiKey = String(process.env.DEEPSEEK_API_KEY || '').trim();
-  if (!apiKey) return { processed: 0, failed: 0, reason: 'no DEEPSEEK_API_KEY' };
+  if (!apiKey) {
+    // 无 DeepSeek Key 则使用本地 Ollama 生成 embedding（按 EMBEDDING_MODEL 配置）
+    logger.info('embedding-service: no DEEPSEEK_API_KEY, using Ollama for embeddings');
+  }
 
   let processed = 0;
   let failed = 0;

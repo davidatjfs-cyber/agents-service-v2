@@ -13151,6 +13151,54 @@
 
         const HRMS_SCHEMA_VERSION = 1;
         const HRMS_STORAGE_KEY = 'hrms_data_v' + HRMS_SCHEMA_VERSION;
+        const HRMS_LS_CLEANUP_ONCE_KEY = 'HRMS_LS_CLEANUP_V2_20260426';
+
+        function hrmsCleanupOversizedLocalStorageOnce() {
+            try {
+                if (localStorage.getItem(HRMS_LS_CLEANUP_ONCE_KEY) === '1') return;
+                const keys = [];
+                for (let i = 0; i < localStorage.length; i += 1) {
+                    const k = localStorage.key(i);
+                    if (k) keys.push(String(k));
+                }
+
+                for (const key of keys) {
+                    if (!key) continue;
+                    const raw = localStorage.getItem(key);
+                    const size = raw ? raw.length : 0;
+                    if (!size) continue;
+
+                    if (key.startsWith('hrms_data') && key !== HRMS_STORAGE_KEY) {
+                        localStorage.removeItem(key);
+                        continue;
+                    }
+
+                    if (/^HRMS_KB_FLASHCARDS_/.test(key)) {
+                        localStorage.removeItem(key);
+                        continue;
+                    }
+
+                    if (/^HRMS_KB_FILTERS_/.test(key) && size > 200000) {
+                        localStorage.removeItem(key);
+                        continue;
+                    }
+
+                    if (key !== HRMS_STORAGE_KEY) continue;
+                    if (size < 1500000) continue;
+                    const parsed = hrmsSafeParseJson(raw);
+                    if (!parsed || typeof parsed !== 'object') continue;
+
+                    if (Array.isArray(parsed.knowledge)) parsed.knowledge = [];
+                    if (Array.isArray(parsed.trainingMaterials)) parsed.trainingMaterials = [];
+                    if (Array.isArray(parsed.questionBank)) parsed.questionBank = [];
+                    localStorage.setItem(HRMS_STORAGE_KEY, JSON.stringify(parsed));
+                }
+
+                localStorage.setItem(HRMS_LS_CLEANUP_ONCE_KEY, '1');
+            } catch (e) {}
+        }
+
+        hrmsCleanupOversizedLocalStorageOnce();
 
         function hrmsTryLoadLegacyStoreData() {
             try {
@@ -13678,12 +13726,14 @@
                 this.set(data);
             },
             getKnowledge() {
+                if (Array.isArray(window.__HRMS_KNOWLEDGE_CACHE)) return window.__HRMS_KNOWLEDGE_CACHE;
                 return this.ensure().knowledge || [];
             },
             setKnowledge(knowledge) {
-                const data = this.ensure();
-                data.knowledge = knowledge;
-                this.set(data);
+                const next = Array.isArray(knowledge) ? knowledge : [];
+                window.__HRMS_KNOWLEDGE_CACHE = next;
+                // Avoid localStorage quota overflow: knowledge list is server source of truth.
+                // Keep runtime cache only; do not persist full list into HRMS_STATE blob.
             },
             getSettings() {
                 return this.ensure().settings || {};
@@ -18681,6 +18731,18 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             body.innerHTML = `<iframe title="doc" style="width:100%; height: 560px; border: 0; border-radius: 12px; background: rgba(255,255,255,0.03);" src="${escapeHtml(src)}"></iframe>`;
         }
 
+        function normalizeKnowledgeTextDisplay(input) {
+            const raw = String(input || '');
+            if (!raw) return '';
+            try {
+                const recovered = decodeURIComponent(escape(raw));
+                const hasCjk = /[\u4e00-\u9fff]/.test(recovered);
+                const rawLooksMojibake = /[ÃÂæçéèêëåäöø]/.test(raw);
+                if (recovered && !recovered.includes('\uFFFD') && (hasCjk || rawLooksMojibake)) return recovered;
+            } catch (e) {}
+            return raw;
+        }
+
         function renderKnowledgeList() {
             const list = document.getElementById('knowledge-list');
             const empty = document.getElementById('knowledge-list-empty');
@@ -18811,12 +18873,12 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         } catch (e) { /* keep default */ }
                         return {
                             id: String(r?.id || ''),
-                            title: String(r?.title || ''),
+                            title: normalizeKnowledgeTextDisplay(String(r?.title || '')),
                             category: String(r?.category || ''),
                             type,
                             audience: aud,
                             fileId: '',
-                            fileName: String(r?.title || filePath || ''),
+                            fileName: normalizeKnowledgeTextDisplay(String(r?.title || filePath || '')),
                             mimeType: String(r?.file_type || ''),
                             size: Number(r?.file_size || 0),
                             createdAt,
