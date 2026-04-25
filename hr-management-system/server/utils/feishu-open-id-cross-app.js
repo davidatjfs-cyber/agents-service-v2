@@ -134,7 +134,7 @@ export async function resolveOpenIdForCurrentFeishuAppHrms(deps, tenantToken, ro
           return resolved;
         }
         await query(
-          `UPDATE feishu_users SET open_id = $1, updated_at = NOW()
+          `UPDATE feishu_users SET open_id = $1, updated_at = NOW(), registered = TRUE
            WHERE lower(trim(username)) = lower(trim($2))`,
           [resolved, username]
         );
@@ -158,6 +158,7 @@ export async function resolveOpenIdForCurrentFeishuAppHrms(deps, tenantToken, ro
  */
 export async function refreshFeishuUserOpenIdForImDeliveryHrms(deps, tenantToken, staleOpenId) {
   const warn = deps.warn || ((...a) => console.warn('[feishu/refresh]', ...a));
+  const query = deps.query;
   const stale = String(staleOpenId || '').trim();
   if (!stale) return null;
   let r;
@@ -176,5 +177,26 @@ export async function refreshFeishuUserOpenIdForImDeliveryHrms(deps, tenantToken
     return null;
   }
   const resolved = await resolveOpenIdForCurrentFeishuAppHrms(deps, tenantToken, row);
-  return resolved && resolved !== stale ? resolved : null;
+  if (resolved && resolved !== stale) return resolved;
+
+  // 降级：手机号/邮箱解析失败时，尝试同一 username 其他行
+  try {
+    const altR = await query(
+      `SELECT open_id FROM feishu_users
+       WHERE lower(trim(username)) = lower(trim($1))
+       AND open_id IS NOT NULL AND trim(open_id) <> ''
+       AND open_id <> $2
+       ORDER BY updated_at DESC NULLS LAST LIMIT 1`,
+      [row.username, stale]
+    );
+    if (altR.rows?.[0]?.open_id) {
+      const alt = String(altR.rows[0].open_id).trim();
+      warn('refreshFeishuOpenId: fallback to alternative row open_id', { username: row.username, from: stale, to: alt });
+      return alt;
+    }
+  } catch (e) {
+    warn('refreshFeishuOpenId: fallback lookup failed', e?.message, row.username);
+  }
+
+  return null;
 }

@@ -6,7 +6,7 @@
  */
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
-import { sendCard } from './feishu-client.js';
+import { sendCard, refreshFeishuUserOpenIdForImDelivery } from './feishu-client.js';
 import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
 import {
   isMajixianStore,
@@ -190,7 +190,7 @@ async function getRecipients() {
        AND role IN ('store_manager', 'store_production_manager', 'hq_manager', 'admin')
      ORDER BY lower(trim(username)),
        CASE WHEN trim(open_id) ILIKE '%probe%' OR trim(open_id) ILIKE 'ou_probe%' THEN 1 ELSE 0 END,
-       created_at ASC NULLS LAST`
+       updated_at DESC NULLS LAST`
   );
   return result.rows || [];
 }
@@ -396,6 +396,21 @@ export async function sendDailyTaskCompletionReport(opts = {}) {
       (r) =>
         ['admin', 'hq_manager'].includes(r.role) && !isMajixianPmObserverUsername(r.username)
     );
+
+    // 投递前主动验证/修复 admin/hq_manager 的 open_id，避免投递时跨应用失败
+    for (const r of hqRecipients) {
+      if (!r.open_id) continue;
+      try {
+        const _old = r.open_id;
+        const fixed = await refreshFeishuUserOpenIdForImDelivery(_old);
+        if (fixed && fixed !== _old) {
+          r.open_id = fixed;
+          logger.info({ username: r.username, from: _old, to: fixed }, 'preResolve: HQ recipient open_id proactively fixed');
+        }
+      } catch (e) {
+        logger.warn({ err: e?.message, username: r.username }, 'preResolve: HQ recipient open_id check failed');
+      }
+    }
 
     let sentCount = 0;
     let failedCount = 0;
