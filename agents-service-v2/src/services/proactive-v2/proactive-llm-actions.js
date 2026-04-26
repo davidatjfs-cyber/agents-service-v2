@@ -5,6 +5,7 @@
 import { query } from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { getBrandForStore } from '../config-service.js';
+import { getStoreProfileAsync } from '../../config/store-profile.js';
 import { saveOutcome } from '../agent-memory.js';
 import { getProactiveConfig } from './config.js';
 import { sendCard, sendText } from '../feishu-client.js';
@@ -47,18 +48,67 @@ export function dedupeActionLines(actions) {
   return out;
 }
 
-function getPllmTaskCaps() {
-  const maxPerBatchRaw = Number(process.env.PROACTIVE_PLLM_MAX_TASKS_PER_BATCH || 2);
-  const maxOpenRaw = Number(process.env.PROACTIVE_PLLM_MAX_OPEN_TASKS_PER_STORE || 3);
-  const maxPerBatch = Number.isFinite(maxPerBatchRaw) ? Math.max(1, Math.min(5, Math.floor(maxPerBatchRaw))) : 2;
-  const maxOpenPerStore = Number.isFinite(maxOpenRaw) ? Math.max(1, Math.min(12, Math.floor(maxOpenRaw))) : 3;
-  return { maxPerBatch, maxOpenPerStore };
+function qualityTokensFromProfile(profile = {}) {
+  const tokens = [];
+  const brand = String(profile.brand || '').trim();
+  const positioning = String(profile.positioning || '').trim();
+  const strategy = String(profile.coreStrategy || '').trim();
+  if (brand) tokens.push(brand);
+  if (positioning) tokens.push(positioning);
+  if (strategy) tokens.push(strategy);
+  for (const d of profile.topDishes || []) {
+    const name = String(d?.name || '').trim();
+    if (name) tokens.push(name);
+  }
+  return tokens.filter(Boolean);
 }
 
-export function computePllmSlots(currentOpen, maxOpenPerStore, maxPerBatch) {
-  const open = Math.max(0, Number(currentOpen) || 0);
-  const remain = Math.max(0, (Number(maxOpenPerStore) || 0) - open);
-  return Math.max(0, Math.min(remain, Number(maxPerBatch) || 0));
+export function scoreActionQuality(line, ctx = {}) {
+  const s = String(line || '').trim();
+  if (!s) return 0;
+  let score = 0;
+  const metric = String(ctx.metricFocus || '').toLowerCase();
+  const avgPrice = Number(ctx.profile?.avgPrice || 0);
+  const hasTakeout = !!ctx.profile?.hasTakeout;
+  const tokens = qualityTokensFromProfile(ctx.profile);
+
+  if (/\d/.test(s)) score += 2;
+  if (/元|折|%|分钟|小时|天|周|单|份|桌|次|券|核销|曝光|转化|客流|毛利|营收|复购/.test(s)) score += 2;
+  if (/今天|明天|本周|下周|午市|晚市|闭店|开档|门店|社群|美团|抖音|点评|企微/.test(s)) score += 1;
+  if (/谁|负责人|店长|出品|营运|前厅|后厨|由.+负责/.test(s)) score += 1;
+  if (/优化服务|提升体验|加强管理|改善品质|做好培训|提高人效/.test(s)) score -= 3;
+
+  if (metric === 'revenue' && /(营收|客单|毛利|套餐|定价|加价|折扣)/.test(s)) score += 2;
+  if (metric === 'traffic' && /(客流|曝光|引流|到店|核销|社群|投放)/.test(s)) score += 2;
+  if (metric === 'conversion' && /(转化|复购|点评|差评|会员|核销|体验)/.test(s)) score += 2;
+
+  if (avgPrice >= 180) {
+    if (/(包房|宴请|高客单|品质|酒水|菜品结构)/.test(s)) score += 2;
+    if (/(9\.9|19\.9|低价秒杀|地推小卡)/.test(s)) score -= 2;
+  } else if (avgPrice > 0) {
+    if (/(套餐|团购|券|核销|翻台|午市|引流)/.test(s)) score += 2;
+  }
+  if (hasTakeout && /(外卖|平台|打包|配送)/.test(s)) score += 1;
+  if (!hasTakeout && /(外卖|配送)/.test(s)) score -= 1;
+
+  if (tokens.some((t) => s.includes(t))) score += 1;
+  return score;
+}
+
+export function filterQualityActions(actions, ctx = {}) {
+  const scored = (actions || [])
+    .map((line) => ({ line, score: scoreActionQuality(line, ctx) }))
+    .filter((x) => x.score >= 4)
+    .sort((a, b) => b.score - a.score);
+  const unique = [];
+  const seen = new Set();
+  for (const x of scored) {
+    const k = String(x.line || '').trim();
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    unique.push(k);
+  }
+  return unique;
 }
 
 function priorityToInitialScore(priority) {
@@ -287,36 +337,22 @@ export async function acceptProactiveLlmActionPlan(ctx) {
 
   const deduped = dedupeActionLines(actions);
   const metricZh = metricFocusLabelZh(metricFocus);
-  const { maxPerBatch, maxOpenPerStore } = getPllmTaskCaps();
-  const openRes = await query(
-    `SELECT COUNT(*)::int AS c
-     FROM master_tasks
-     WHERE source = 'proactive_llm'
-       AND store = $1
-       AND status IN ('pending_response','pending_review','pending_dispatch','dispatched','escalated')`,
-    [store]
-  ).catch(() => ({ rows: [{ c: 0 }] }));
-  const currentOpen = Number(openRes.rows?.[0]?.c || 0);
-  const slots = computePllmSlots(currentOpen, maxOpenPerStore, maxPerBatch);
-  if (slots <= 0) {
-    logger.info(
-      { store, currentOpen, maxOpenPerStore, maxPerBatch },
-      'proactive-llm-actions: skip create due to open task cap'
-    );
-    return { ok: true, createdTasks: [], count: 0, rerouted, skipped: 'open_task_cap' };
-  }
+  const profile = await getStoreProfileAsync(store).catch(() => null);
+  const qualityFiltered = filterQualityActions(deduped, { metricFocus, profile });
+  const finalActions = qualityFiltered.length ? qualityFiltered : deduped;
 
   console.log('[Proactive][accept_action_plan] auto (proactive_llm)', {
     store,
     nIn: actions.length,
     nDeduped: deduped.length,
+    nQuality: qualityFiltered.length,
     metricFocus
   });
 
   const createdTasks = [];
 
   async function runPlanBatch(targetStore, targetBrand, lines) {
-    const capped = lines.slice(0, slots);
+    const capped = lines;
     const storeSlug = String(targetStore || 'st').replace(/[^\w\u4e00-\u9fff]/g, '').slice(0, 12) || 'st';
     for (let i = 0; i < capped.length; i++) {
       const line = String(capped[i] || '').trim();
@@ -452,9 +488,9 @@ export async function acceptProactiveLlmActionPlan(ctx) {
     }
   }
 
-  await runPlanBatch(store, brand, deduped);
+  await runPlanBatch(store, brand, finalActions);
 
-  const planBody = deduped.map((l, j) => `${j + 1}. ${l}`).join('\n');
+  const planBody = finalActions.map((l, j) => `${j + 1}. ${l}`).join('\n');
   await logProactiveDecision({
     store,
     brand,

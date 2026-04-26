@@ -214,9 +214,15 @@ export async function decideWithLLM(anomaly) {
       raw = await callOllamaProactiveJson(prompt, timeoutMs);
       source = 'ollama';
     } catch (e2) {
-      console.warn('[LLM] Ollama failed → fallback to rule', e2?.message || e2);
-      console.log('[LLM SOURCE]', 'rule');
-      return fallbackDecision(anomaly, config);
+      console.warn('[LLM] Ollama failed → fallback to DeepSeek', e2?.message || e2);
+      try {
+        raw = await callDeepSeek(prompt, { timeoutMs });
+        source = 'deepseek';
+      } catch (e3) {
+        console.warn('[LLM] DeepSeek failed → fallback to rule', e3?.message || e3);
+        console.log('[LLM SOURCE]', 'rule');
+        return fallbackDecision(anomaly, config);
+      }
     }
   }
 
