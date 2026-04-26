@@ -19258,10 +19258,17 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
         }
 
         var __profileAttPollTimer = null;
+        var __profileNotifPollTimer = null;
         function stopProfileAttendanceAutoRefresh() {
             if (__profileAttPollTimer) {
                 clearInterval(__profileAttPollTimer);
                 __profileAttPollTimer = null;
+            }
+        }
+        function stopProfileNotificationAutoRefresh() {
+            if (__profileNotifPollTimer) {
+                clearInterval(__profileNotifPollTimer);
+                __profileNotifPollTimer = null;
             }
         }
         function startProfileAttendanceAutoRefresh() {
@@ -19274,6 +19281,23 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                 } catch (e) {}
             }, 45000);
         }
+        function startProfileNotificationAutoRefresh() {
+            stopProfileNotificationAutoRefresh();
+            __profileNotifPollTimer = setInterval(function () {
+                try {
+                    if (typeof currentPage === 'string' && currentPage !== 'profile') return;
+                    if (document.visibilityState !== 'visible') return;
+                    if (typeof renderProfileNotifications === 'function') renderProfileNotifications();
+                } catch (e) {}
+            }, 30000);
+        }
+        document.addEventListener('visibilitychange', function () {
+            try {
+                if (document.visibilityState !== 'visible') return;
+                if (typeof currentPage === 'string' && currentPage !== 'profile') return;
+                if (typeof renderProfileNotifications === 'function') renderProfileNotifications();
+            } catch (e) {}
+        });
 
         function startDcDashboardAutoRefresh() {
             stopDcDashboardAutoRefresh();
@@ -19295,6 +19319,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
         function showPage(pageName) {
             stopDcDashboardAutoRefresh();
             stopProfileAttendanceAutoRefresh();
+            stopProfileNotificationAutoRefresh();
             console.log('切换到页面:', pageName);
             updateDebug('当前页面: ' + pageName);
 
@@ -19457,7 +19482,10 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             }
             try { refreshUnreadBadges(); } catch (e) {}
             closeMobileSidebar();
-            if (pageName === 'profile') startProfileAttendanceAutoRefresh();
+            if (pageName === 'profile') {
+                startProfileAttendanceAutoRefresh();
+                startProfileNotificationAutoRefresh();
+            }
             if (pageName === 'agents') startDcDashboardAutoRefresh();
         }
 
@@ -35510,7 +35538,8 @@ tr:nth-child(even) td { background: #fafafa; }
                     ? HRMS_STORE.token()
                     : String(localStorage.getItem('HRMS_API_TOKEN') || localStorage.getItem('hrms_token') || '').trim();
                 const r = await fetch('/api/hrms-notifications/me?limit=100', {
-                    headers: { 'Authorization': 'Bearer ' + token }
+                    headers: { 'Authorization': 'Bearer ' + token },
+                    cache: 'no-store'
                 });
                 if (r.ok) {
                     const j = await r.json();

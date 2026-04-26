@@ -1148,6 +1148,9 @@ export async function handleWebhookEvent(body) {
     const topKeys = raw && typeof raw === 'object' ? Object.keys(raw).slice(0, 20) : [];
     const evtKeys = evt && typeof evt === 'object' ? Object.keys(evt).slice(0, 20) : [];
     logger.warn({ topKeys, evtKeys, hasEncrypt: !!raw?.encrypt, hasChallenge: !!raw?.challenge }, 'Feishu webhook unknown event schema');
+    if (raw?.action && typeof raw.action === 'object') {
+      return handleCardAction(raw);
+    }
   }
 
   // 卡片交互必须返回飞书认可的 toast/card 结构；且不可套用 im 消息的 dedup 体（会导致 200672）
@@ -1527,11 +1530,26 @@ export async function handleWebhookEvent(body) {
         if (u && ['admin', 'hq_manager'].includes(role)) {
           const { applyPllmDecision } = await import('./proactive-v2/pllm-workflow.js');
           const op = String(u.username || '').trim() || 'unknown';
-          const r = await applyPllmDecision(pendingPllm.taskId, pendingPllm.decision, op, parsedText);
+          let decision = pendingPllm.decision;
+          let planText = parsedText;
+          if (decision === 'choose') {
+            const m = parsedText.match(/^\s*(执行|不适合)\s*[:：,，\s]*(.+)?$/);
+            if (!m) {
+              await replyMsg(msg.message_id, `请以「执行：具体计划」或「不适合：具体原因」回复，任务：${pendingPllm.taskId}`).catch(() => {});
+              return { ok: true, eventType, mode: 'pllm_pending_decision_need_choice', taskId: pendingPllm.taskId };
+            }
+            decision = m[1] === '执行' ? 'execute' : 'not_suitable';
+            planText = String(m[2] || '').trim();
+            if (!planText) {
+              await replyMsg(msg.message_id, `请补充具体${decision === 'execute' ? '执行计划' : '不适合原因'}，任务：${pendingPllm.taskId}`).catch(() => {});
+              return { ok: true, eventType, mode: 'pllm_pending_decision_need_detail', taskId: pendingPllm.taskId };
+            }
+          }
+          const r = await applyPllmDecision(pendingPllm.taskId, decision, op, planText);
           await clearPendingPllmDecision(openId);
           if (r?.ok) {
             const okText =
-              pendingPllm.decision === 'execute'
+              decision === 'execute'
                 ? `✅ 已记录执行计划并进入跟踪：${pendingPllm.taskId}`
                 : `✅ 已记录不适合原因并结案：${pendingPllm.taskId}`;
             await replyMsg(msg.message_id, okText).catch(() => {});
@@ -1612,6 +1630,15 @@ export async function handleCardAction(body) {
   const norm = body?.open_id !== undefined || body?.action !== undefined ? body : normalizeCardActionBody(body);
   const openId = String(norm?.open_id || '').trim();
   const action = norm?.action || {};
+  const callbackMessageId = String(
+    norm?.open_message_id ||
+    norm?.openMessageId ||
+    body?.open_message_id ||
+    body?.openMessageId ||
+    body?.event?.context?.open_message_id ||
+    body?.event?.open_message_id ||
+    ''
+  ).trim();
   let value = {};
   try {
     value =
@@ -1645,12 +1672,28 @@ export async function handleCardAction(body) {
   if (!taskId) {
     taskId = String(value.task_id || value.id || action?.task_id || '').trim();
   }
+  if (!taskId && callbackMessageId) {
+    const hit = await query(
+      `SELECT task_id
+       FROM master_tasks
+       WHERE source = 'proactive_llm'
+         AND EXISTS (
+           SELECT 1 FROM jsonb_array_elements_text(COALESCE(feishu_msg_ids, '[]'::jsonb)) AS mid
+           WHERE mid = $1
+         )
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [callbackMessageId]
+    ).catch(() => ({ rows: [] }));
+    taskId = String(hit.rows?.[0]?.task_id || '').trim();
+  }
   logger.info(
     {
       openId,
       actionType,
       taskId,
       actionName,
+      callbackMessageId,
       actionHasValue: !!action?.value,
       formKeys: Object.keys(formValue || {})
     },
@@ -1733,6 +1776,24 @@ export async function handleCardAction(body) {
   }
 
   /** PLLM 智能经营助手：移动端按钮（与食安任务卡一致走 card action 回调） */
+  if (!actionType && taskId) {
+    const taskHit = await query(
+      `SELECT 1 FROM master_tasks WHERE task_id = $1 AND source = 'proactive_llm' LIMIT 1`,
+      [taskId]
+    ).catch(() => ({ rows: [] }));
+    if (taskHit.rows?.length) {
+      if (openId) {
+        await upsertPendingPllmDecision(openId, taskId, 'choose');
+        sendText(
+          openId,
+          `这张 PLLM 旧卡的飞书回调没有带上“执行/不适合”的按钮字段，系统已识别任务：${taskId}。\n\n请直接回复：\n执行：写明执行计划（何时/谁负责/怎么做/目标）\n或\n不适合：写明原因\n\n我会自动记录。`,
+          'open_id'
+        ).catch(() => {});
+      }
+      return { toast: { type: 'info', content: '旧卡缺少按钮字段，请按聊天提示回复' } };
+    }
+  }
+
   if ((actionType === 'pllm_execute' || actionType === 'pllm_not_suitable') && taskId) {
     try {
       const u = await lookupUser(openId);
