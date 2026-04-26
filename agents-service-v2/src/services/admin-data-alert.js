@@ -14,6 +14,7 @@
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { sendText } from './feishu-client.js';
+import { ensureHrmsUserNotificationsTable } from '../utils/hrms-user-notifications.js';
 
 const TABLE = 'agent_v2_data_alert_dedupe';
 const LOG_TABLE = 'agent_admin_alert_log';
@@ -28,6 +29,7 @@ const ALERT_TYPE_LABEL_ZH = {
   execution_rating_feishu_partial_fail: '执行力日评：飞书卡片部分发送失败',
   morning_briefing_partial_fail: '每日晨报：部分收件人飞书投递失败',
   daily_task_completion_partial_fail: '每日任务达成率：部分收件人飞书投递失败',
+  ollama_unavailable: '本地模型不可用（已降级到外部模型）',
   data_issue: '数据异常'
 };
 
@@ -180,6 +182,31 @@ export async function notifyAdminsDataIssue(opts) {
     }
     logger.info({ alertType, dedupeKey, recipients: recipients.length, sent }, 'admin data alert sent');
     if (sent > 0) {
+      try {
+        await ensureHrmsUserNotificationsTable();
+        for (const row of recipients) {
+          const username = String(row?.username || '').trim();
+          if (!username) continue;
+          await query(
+            `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
+             VALUES ($1, $2, $3, 'admin_alert', $4::jsonb)`,
+            [
+              username,
+              `【${tierLabel}】${title}`.slice(0, 180),
+              text.slice(0, 3600),
+              JSON.stringify({
+                alert_type: alertType,
+                dedupe_key: dedupeKey,
+                priority,
+                sent_count: sent,
+                recipient_count: recipients.length
+              })
+            ]
+          ).catch(() => {});
+        }
+      } catch (e) {
+        logger.warn({ err: e?.message, alertType, dedupeKey }, 'admin data alert: sync company notice failed');
+      }
       try {
         await query(
           `INSERT INTO ${TABLE} (dedupe_key, sent_at) VALUES ($1, NOW())

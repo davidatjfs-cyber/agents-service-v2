@@ -2636,10 +2636,19 @@ async function handleTrainAdvisor(text, ctx) {
 不需要三段式。关键是把文档数据讲全、讲清楚，让用户读完觉得有收获。
 ${kbData}${trainingCtx}
 `;
+  const requestSeed = Date.now() + Math.floor(Math.random() * 1000);
+  const reinforcedUserText = `请回答：${text}
+
+【输出要求 — 严格遵守】
+- 禁止使用【】括起来的标题，禁止出现「核心问题」「今日重点动作」「执行要求」「为什么是这个动作」
+- 禁止出现「score」「成功率」「趋势 up」「weightedScore」
+- 禁止出现「谁做：」「什么时候完成：」「如何留痕验收：」
+- 每次回答应从不同角度切入，同一问题多次问时结构内容都不一样
+（querySeed: ${requestSeed}）`;
   const r = await callLLM(
-    [{ role: 'system', content: sysPrompt }, { role: 'user', content: text }],
+    [{ role: 'system', content: sysPrompt }, { role: 'user', content: reinforcedUserText }],
     {
-      temperature: kbBlockPresent ? 0.35 : 0.1,
+      temperature: kbBlockPresent ? 0.4 : 0.1,
       max_tokens: kbBlockPresent ? 4096 : 600,
       purpose: 'train_advisor',
       ...(ctx.llmContext ? { context: ctx.llmContext } : {})

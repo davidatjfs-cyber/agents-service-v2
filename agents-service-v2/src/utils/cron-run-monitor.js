@@ -106,13 +106,36 @@ async function insertRun(jobKey, runYmd, ok, error, source) {
   );
 }
 
+async function syncAdminAlertToCompanyNotice(adminRows, title, message, jobKey, alertType) {
+  try {
+    const { ensureHrmsUserNotificationsTable } = await import('./hrms-user-notifications.js');
+    await ensureHrmsUserNotificationsTable();
+    for (const row of adminRows || []) {
+      const username = String(row?.username || '').trim();
+      if (!username) continue;
+      await query(
+        `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
+         VALUES ($1, $2, $3, 'admin_alert', $4::jsonb)`,
+        [
+          username,
+          title.slice(0, 180),
+          String(message || '').slice(0, 3600),
+          JSON.stringify({ job_key: jobKey, alert_type: alertType })
+        ]
+      ).catch(() => {});
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message, jobKey, alertType }, 'cron alert sync company notice failed');
+  }
+}
+
 /** 向所有 admin 发飞书告警文本（失败类告警不推送给 hq_manager） */
 /** 关键定时「未执行成功」（非抛错）时提醒 admin，例如进程错过整点后当日无 cron 记录 */
 export async function notifyAdminsCronMissed(jobKey, detailMsg) {
   try {
     const { sendText } = await import('../services/feishu-client.js');
     const r = await query(
-      `SELECT open_id FROM feishu_users
+      `SELECT open_id, username FROM feishu_users
        WHERE registered = true AND open_id IS NOT NULL
          AND role = 'admin'
          AND open_id NOT LIKE '%probe%'
@@ -125,6 +148,7 @@ export async function notifyAdminsCronMissed(jobKey, detailMsg) {
     for (const row of r.rows || []) {
       sendText(row.open_id, text, 'open_id').catch(() => {});
     }
+    await syncAdminAlertToCompanyNotice(r.rows || [], `【定时未成功】${cronJobLabelZh(jobKey)}`, text, jobKey, 'cron_missed');
   } catch (e) {
     logger.warn({ err: e?.message, jobKey }, 'notifyAdminsCronMissed failed');
   }
@@ -134,7 +158,7 @@ async function notifyAdminsOnFailure(jobKey, errorMsg) {
   try {
     const { sendText } = await import('../services/feishu-client.js');
     const r = await query(
-      `SELECT open_id FROM feishu_users
+      `SELECT open_id, username FROM feishu_users
        WHERE registered = true AND open_id IS NOT NULL
          AND role = 'admin'
          AND open_id NOT LIKE '%probe%'
@@ -146,6 +170,7 @@ async function notifyAdminsOnFailure(jobKey, errorMsg) {
     for (const row of (r.rows || [])) {
       sendText(row.open_id, text, 'open_id').catch(() => {});
     }
+    await syncAdminAlertToCompanyNotice(r.rows || [], `【定时失败】${cronJobLabelZh(jobKey)}`, text, jobKey, 'cron_failed');
   } catch (e) {
     logger.warn({ err: e?.message, jobKey }, 'notifyAdminsOnFailure: failed to send alert');
   }

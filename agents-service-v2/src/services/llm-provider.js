@@ -287,6 +287,23 @@ export async function callLLM(messages, options = {}) {
     if (o.ok && o.content) return o;
     // 本地失败，记录警告并继续走 API 兜底
     logger.warn({ err: o.error, fallbackTo: PROVIDERS.deepseek.defaultModel }, `Ollama (${localModel}) 失败，自动降级到 API`);
+    try {
+      const { notifyAdminsDataIssue } = await import('./admin-data-alert.js');
+      await notifyAdminsDataIssue({
+        alertType: 'ollama_unavailable',
+        title: `本地模型不可用：${localModel}`,
+        dedupeKey: `ollama_unavailable:${localModel}:${new Date().toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 13)}`,
+        dedupeHours: 1,
+        priority: 'A',
+        lines: [
+          `错误：${String(o.error || 'unknown').slice(0, 280)}`,
+          `已自动降级：${PROVIDERS.deepseek.defaultModel}`,
+          '说明：该告警已同步到公司通知（管理员）。'
+        ]
+      }).catch(() => {});
+    } catch (_) {
+      // ignore alert path errors
+    }
   }
 
   // 确定主模型（优先使用路由结果，其次 API 默认）
