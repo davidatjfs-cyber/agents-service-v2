@@ -7,10 +7,28 @@
 #       rsync 与下面两段 ssh 可能各提示一次密码。建议配置 ssh-copy-id 免密。
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "${ROOT}/.." && pwd)"
 ECS_HOST="${ECS_HOST:-root@47.100.96.30}"
 REMOTE_DIR="${REMOTE_DIR:-/opt/agents-service-v2}"
 BITABLE_TASK_RESP_APP_ID="${BITABLE_TASK_RESP_APP_ID:-cli_a9fc0d13c838dcd6}"
 BITABLE_TASK_RESP_APP_SECRET="${BITABLE_TASK_RESP_APP_SECRET:-pRVuBmiWc0hzqP1YzZDqzGUPFlaProDN}"
+
+# 与「部署到ECS-看这里.md」一致：src 有变更时必须同范围递增 reply-engine-version.js，否则 /health 无法反映真实发布
+if [[ "${SKIP_REPLY_ENGINE_BUMP_CHECK:-0}" != "1" ]] && git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  BASE_REF="${AGENTS_DEPLOY_BASE_REF:-origin/main}"
+  if git -C "${REPO_ROOT}" rev-parse "${BASE_REF}" >/dev/null 2>&1; then
+    _SRC_DIFF="$(git -C "${REPO_ROOT}" diff --name-only "${BASE_REF}...HEAD" -- agents-service-v2/src/ 2>/dev/null || true)"
+    if echo "${_SRC_DIFF}" | grep -q .; then
+      if echo "${_SRC_DIFF}" | grep -qv '^agents-service-v2/src/reply-engine-version.js$'; then
+        if ! echo "${_SRC_DIFF}" | grep -q '^agents-service-v2/src/reply-engine-version.js$'; then
+          echo "::error::agents-service-v2/src 相对 ${BASE_REF} 有变更，但未在同一提交范围内修改 agents-service-v2/src/reply-engine-version.js（REPLY_ENGINE_BUILD）。" >&2
+          echo "请先递增 REPLY_ENGINE_BUILD 并提交，或 SKIP_REPLY_ENGINE_BUMP_CHECK=1 跳过此检查。" >&2
+          exit 1
+        fi
+      fi
+    fi
+  fi
+fi
 
 if [[ "${SKIP_VERIFY:-0}" != "1" ]]; then
   bash "${ROOT}/scripts/verify-agents-local.sh"
@@ -55,7 +73,6 @@ rsync -avz -e ssh \
   --exclude 'dist' \
   "${ROOT}/" "${ECS_HOST}:${REMOTE_DIR}/"
 
-REPO_ROOT="$(cd "${ROOT}/.." && pwd)"
 MP_LOCAL="${REPO_ROOT}/mempalace"
 if [[ -d "${MP_LOCAL}" && -f "${MP_LOCAL}/package.json" ]]; then
   echo ">>> rsync mempalace -> ${ECS_HOST}:/opt/mempalace/"
@@ -195,7 +212,8 @@ else
 fi
 EOS
 echo ""
-echo "Done. replyEngine 应与 src/reply-engine-version.js 中 REPLY_ENGINE_BUILD 一致。"
+LOCAL_RE="$(grep -oE "REPLY_ENGINE_BUILD = '[^']+'" "${ROOT}/src/reply-engine-version.js" | sed "s/.*'\([^']*\)'.*/\1/")"
+echo "Done. 本次包内 REPLY_ENGINE_BUILD=${LOCAL_RE}；远端 /health 的 replyEngine 应与之相同。"
 
 # HRMS 静态入口（nginx /opt/hrms）：与 agents 同 ECS 时随本次部署一并发布；独立仓库无 ../scripts 则跳过
 HRMS_FRONTEND_DEPLOY="${HRMS_FRONTEND_DEPLOY:-1}"
