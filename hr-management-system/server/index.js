@@ -6282,7 +6282,8 @@ async function sendAdminSystemAlert(msg, options = {}) {
   const text = String(msg || '').trim();
   if (!text) return { recipients: [], feishuSent: 0, feishuFailed: 0 };
 
-  let recipients = uniqUsernames(Array.isArray(options?.usernames) ? options.usernames : []);
+  const explicitUsernames = uniqUsernames(Array.isArray(options?.usernames) ? options.usernames : []);
+  let recipients = explicitUsernames.slice();
   if (!recipients.length) {
     const admins = await pool.query(
       `SELECT username
@@ -6337,24 +6338,26 @@ async function sendAdminSystemAlert(msg, options = {}) {
       // ignore single user mapping failure, below会走角色兜底
     }
   }
-  // 用户名绑定可能不完整：兜底按角色发，避免“公司通知有、飞书没收到”
-  try {
-    const roleRows = await pool.query(
-      `SELECT DISTINCT open_id
-       FROM feishu_users
-       WHERE registered = true
-         AND role IN ('admin','hq_manager','hr_manager')
-         AND TRIM(COALESCE(open_id, '')) <> ''
-         AND open_id NOT LIKE '%probe%'`
-    );
-    for (const row of roleRows.rows || []) {
-      const oid = String(row?.open_id || '').trim();
-      if (!oid || seenOpenId.has(oid)) continue;
-      seenOpenId.add(oid);
-      sendTargets.push(oid);
+  // 仅在“群发管理员”场景启用 role 兜底；单人演练/定向告警必须严格按指定用户名发送
+  if (!explicitUsernames.length) {
+    try {
+      const roleRows = await pool.query(
+        `SELECT DISTINCT open_id
+         FROM feishu_users
+         WHERE registered = true
+           AND role IN ('admin','hq_manager','hr_manager')
+           AND TRIM(COALESCE(open_id, '')) <> ''
+           AND open_id NOT LIKE '%probe%'`
+      );
+      for (const row of roleRows.rows || []) {
+        const oid = String(row?.open_id || '').trim();
+        if (!oid || seenOpenId.has(oid)) continue;
+        seenOpenId.add(oid);
+        sendTargets.push(oid);
+      }
+    } catch (e) {
+      console.error('[system-alert] feishu role fallback query failed:', e?.message || e);
     }
-  } catch (e) {
-    console.error('[system-alert] feishu role fallback query failed:', e?.message || e);
   }
 
   for (const openId of sendTargets) {
