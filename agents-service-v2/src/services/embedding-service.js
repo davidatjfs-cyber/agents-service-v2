@@ -95,8 +95,10 @@ export async function generateEmbedding(text) {
 
   // dmeta-embedding-zh 是 BERT 模型，max 512 tokens → 约 1000 汉字
   // 超长文本 API 返回 500「input length exceeds context length」
-  const MAX_CHARS = 1000;
-  const truncated = t.length > MAX_CHARS ? t.slice(0, MAX_CHARS) : t;
+  // dmeta-embedding-zh max 512 tokens → 约 900 汉字；\f 等控制符先剥离再截断
+  const MAX_CHARS = 900;
+  const clean = t.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  const truncated = clean.length > MAX_CHARS ? clean.slice(0, MAX_CHARS) : clean;
 
   // 检查缓存
   const ck = cacheKey(truncated);

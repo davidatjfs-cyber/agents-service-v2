@@ -127,6 +127,7 @@ function buildContext(anomaly, decision, config) {
 
 async function handleTrigger(ctx) {
   const { type, store } = ctx;
+  const cfgLog = (await getProactiveConfig().catch(() => ({}))).log !== false;
 
   console.log(`[Proactive][Trigger] ${type} @ ${store}`);
 
@@ -134,7 +135,7 @@ async function handleTrigger(ctx) {
   if (Array.isArray(llmActions) && llmActions.length > 0) {
     try {
       const acceptRes = await acceptProactiveLlmActionPlan(ctx);
-      if (config.log) {
+      if (cfgLog) {
         console.log('[Proactive][accept_action_plan] auto proactive_llm', {
           created: acceptRes.count,
           taskIds: (acceptRes.createdTasks || []).map((t) => t.taskId)

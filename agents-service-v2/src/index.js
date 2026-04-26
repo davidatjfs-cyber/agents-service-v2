@@ -6,7 +6,13 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import cron from 'node-cron';
 import { logger } from './utils/logger.js';
-import { runWithCronLog, startCronRetrySweeper } from './utils/cron-run-monitor.js';
+import {
+  runWithCronLog,
+  startCronRetrySweeper,
+  hasSuccessToday,
+  notifyAdminsCronMissed,
+  getShanghaiNowClock
+} from './utils/cron-run-monitor.js';
 import { checkDbHealth } from './utils/db.js';
 import { checkRedisHealth } from './utils/queue.js';
 import { startAnomalyQueueWorker, getAnomalyQueueStats } from './services/anomaly-queue.js';
@@ -1057,6 +1063,22 @@ function startKpiScheduler() {
   logger.info('✅ KPI Scheduler started (每日01:03计算，错开整点)');
 }
 
+/** 进程在 07:40 之后才起来时，补跑一次晨报（与 07:45 定时补跑二选一即可成功） */
+function scheduleMorningBriefingStartupCatchup() {
+  setTimeout(() => {
+    void (async () => {
+      try {
+        const clk = getShanghaiNowClock();
+        if (clk.minuteOfDay < 7 * 60 + 40) return;
+        if (await hasSuccessToday('morning_briefing', clk.ymd)) return;
+        await runWithCronLog('morning_briefing', () => sendMorningBriefing(), { source: 'startup_catchup' });
+      } catch (e) {
+        logger.warn({ err: e?.message }, 'morning_briefing startup catchup failed');
+      }
+    })();
+  }, 120000);
+}
+
 // ─── Startup ───
 async function start() {
   const db = await checkDbHealth();
@@ -1112,13 +1134,49 @@ async function start() {
       'Task reminder cron DISABLED (ENABLE_TASK_REMINDER_CRON=false 或与 ENABLE_DAILY_INSPECTION_CRON / ENABLE_AUTOMATIONS 全关)'
     );
   }
-  // 每日晨报：固定 07:30（Asia/Shanghai），业务约定勿改时刻/时区
-  cron.schedule('30 7 * * *', () => {
+  // 每日晨报：07:40（Asia/Shanghai），晚于 PM2 常见内存重启尖峰（曾约 07:30），减少整点错过 cron
+  cron.schedule('40 7 * * *', () => {
     runWithCronLog('morning_briefing', () => sendMorningBriefing()).catch((e) =>
       logger.warn({ err: e?.message }, 'morning briefing cron error')
     );
   }, { timezone: 'Asia/Shanghai' });
-  logger.info('Morning briefing cron scheduled at 07:30 Asia/Shanghai (fixed)');
+  logger.info('Morning briefing cron scheduled at 07:40 Asia/Shanghai');
+  // 07:45：若当日仍无晨报成功记录则补跑（进程晚于 07:40 启动等）
+  cron.schedule(
+    '45 7 * * *',
+    () => {
+      void (async () => {
+        try {
+          const clk = getShanghaiNowClock();
+          if (await hasSuccessToday('morning_briefing', clk.ymd)) return;
+          await runWithCronLog('morning_briefing', () => sendMorningBriefing(), { source: 'catchup_0745' });
+        } catch (e) {
+          logger.warn({ err: e?.message }, 'morning briefing 07:45 catchup error');
+        }
+      })();
+    },
+    { timezone: 'Asia/Shanghai' }
+  );
+  logger.info('Morning briefing catchup cron at 07:45 Asia/Shanghai if no success row today');
+  // 07:47：补跑后仍无成功记录则仅告警 admin（非抛错类遗漏）
+  cron.schedule(
+    '47 7 * * *',
+    () => {
+      void (async () => {
+        try {
+          const clk = getShanghaiNowClock();
+          if (await hasSuccessToday('morning_briefing', clk.ymd)) return;
+          await notifyAdminsCronMissed(
+            'morning_briefing_missed_guard',
+            '07:45 补跑后 agent_v2_cron_runs 仍无 morning_briefing 成功记录；请查 PM2/日志或人工 POST /api/briefing/send-now'
+          );
+        } catch (e) {
+          logger.warn({ err: e?.message }, 'morning briefing missed guard error');
+        }
+      })();
+    },
+    { timezone: 'Asia/Shanghai' }
+  );
 
   // 员工系统使用周报：每周一 07:00 Asia/Shanghai
   cron.schedule('0 7 * * 1', () => {
@@ -1318,6 +1376,7 @@ async function start() {
           m.startProactive?.();
         })
         .catch((e) => logger.warn({ err: e?.message }, 'proactive runner start failed'));
+      scheduleMorningBriefingStartupCatchup();
       resolve();
     });
     server.on('error', async (err) => {
@@ -1335,6 +1394,7 @@ async function start() {
                 m.startProactive?.();
               })
               .catch((e) => logger.warn({ err: e?.message }, 'proactive runner start failed'));
+            scheduleMorningBriefingStartupCatchup();
             resolve();
           });
           server2.on('error', (err2) => {

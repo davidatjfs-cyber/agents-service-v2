@@ -60,7 +60,7 @@ function hasExplicitExecutionPlan(text) {
 }
 
 function buildPllmReminderCard(task, remindSeq) {
-  const title = String(task.title || '').slice(0, 80) || 'PLLM 建议任务';
+  const title = String(task.title || '').slice(0, 80) || 'PLLM智能经营助手';
   const store = String(task.store || '').trim();
   const taskId = String(task.task_id || '').trim();
   const deadline = new Date(Date.now() + DAY_MS).toLocaleString('zh-CN', {
@@ -74,7 +74,7 @@ function buildPllmReminderCard(task, remindSeq) {
   return {
     config: { wide_screen_mode: true },
     header: {
-      title: { tag: 'plain_text', content: `📌 PLLM 跟踪提醒 ${remindSeq}/3` },
+      title: { tag: 'plain_text', content: `📌 PLLM智能经营助手 · 跟踪 ${remindSeq}/3` },
       template: remindSeq >= 3 ? 'red' : 'orange'
     },
     elements: [

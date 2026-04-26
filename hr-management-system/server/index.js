@@ -7961,10 +7961,15 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
     // dailyReports 以 store+date 为去重 key
     const drPatches = Array.isArray(nextState.dailyReports) ? nextState.dailyReports : [];
     const notifPatches = Array.isArray(nextState.notifications) ? nextState.notifications : [];
-    await mergeSharedStateFields(
-      { dailyReports: drPatches, notifications: notifPatches },
-      { dailyReports: ['store', 'date'], notifications: 'id' }
-    );
+    try {
+      await mergeSharedStateFields(
+        { dailyReports: drPatches, notifications: notifPatches },
+        { dailyReports: ['store', 'date'], notifications: 'id' }
+      );
+    } catch (mergeErr) {
+      void notifyAdminsDualWriteFailure('daily_reports（营业日报 state 合并）', mergeErr);
+      return res.status(502).json({ error: 'state_merge_failed', message: String(mergeErr?.message || mergeErr) });
+    }
     return res.json({ item });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
@@ -7987,10 +7992,15 @@ app.delete('/api/daily-reports', authRequired, async (req, res) => {
     const list = Array.isArray(state0.dailyReports) ? state0.dailyReports.slice() : [];
     const next = list.filter(r => !(String(r?.store || '').trim() === store && String(r?.date || '').trim() === date));
     // 原子合并 dailyReports，避免 saveSharedState 全量写回与并发请求互相覆盖
-    await mergeSharedStateFields(
-      { dailyReports: next },
-      { dailyReports: ['store', 'date'] }
-    );
+    try {
+      await mergeSharedStateFields(
+        { dailyReports: next },
+        { dailyReports: ['store', 'date'] }
+      );
+    } catch (mergeErr) {
+      void notifyAdminsDualWriteFailure('daily_reports（营业日报删除 state 合并）', mergeErr);
+      return res.status(502).json({ error: 'state_merge_failed', message: String(mergeErr?.message || mergeErr) });
+    }
     return res.json({ ok: true });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });

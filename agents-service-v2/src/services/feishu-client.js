@@ -1615,6 +1615,33 @@ export async function handleCardAction(body) {
       return { toast: { type: 'info', content: '已驳回' } };
     } catch (e) { return { toast: { type: 'error', content: '审批失败: ' + (e?.message || '') } }; }
   }
+
+  /** PLLM 智能经营助手：移动端按钮（与食安任务卡一致走 card action 回调） */
+  if ((actionType === 'pllm_execute' || actionType === 'pllm_not_suitable') && taskId) {
+    try {
+      const u = await lookupUser(openId);
+      const role = String(u?.role || '').trim();
+      if (!u || !['admin', 'hq_manager'].includes(role)) {
+        return { toast: { type: 'error', content: '仅管理员或总部营运可操作 PLLM 决策' } };
+      }
+      const op = String(u.username || '').trim() || 'unknown';
+      const { applyPllmDecision } = await import('./proactive-v2/pllm-workflow.js');
+      const decision = actionType === 'pllm_execute' ? 'execute' : 'not_suitable';
+      const r = await applyPllmDecision(taskId, decision, op, '');
+      if (!r?.ok) {
+        return { toast: { type: 'error', content: String(r?.error || '操作失败') } };
+      }
+      return {
+        toast: {
+          type: 'success',
+          content: decision === 'execute' ? '已选择执行，已进入跟踪模式' : '已标记为不适合并结案'
+        }
+      };
+    } catch (e) {
+      return { toast: { type: 'error', content: 'PLLM 操作失败: ' + (e?.message || '') } };
+    }
+  }
+
   return { toast: { type: 'info', content: '已收到' } };
 }
 

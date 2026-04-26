@@ -383,10 +383,12 @@ export async function pollBitableTable(configKey) {
   await seedDedup();
   logger.info({ configKey }, 'bitable polling...');
 
-  const allRecords = [];
+  /** 逐页处理、不在内存中堆积全表，降低大表轮询峰值 RSS（曾触发 PM2 600M 重启） */
   let pageToken = '';
   let page = 0;
   let truncated = false;
+  let totalFetched = 0;
+  let newCount = 0;
   // 大表会撞上固定页数上限，表现为“轮询成功但部分门店当天查不到数据”。
   // 对桌访、开档、收档放宽页数；若仍 hit 上限且 has_more=true，则视为“疑似截断”并告警。
   const maxPages = bitableMaxPages(configKey);
@@ -398,21 +400,10 @@ export async function pollBitableTable(configKey) {
       notifyBitablePollFetchFailed(configKey, config, result.error);
       return;
     }
-    allRecords.push(...(result.records || []));
-    if (!result.hasMore || !result.nextPageToken) break;
-    if (page + 1 >= maxPages) {
-      truncated = true;
-      logger.warn({ configKey, maxPages, fetched: allRecords.length }, 'bitable polling hit page cap; records may be truncated');
-      break;
-    }
-    pageToken = result.nextPageToken;
-    page++;
-    // Yield to event loop between pages so webhook requests aren't starved
-    await new Promise(r => setImmediate(r));
-  }
+    const pageRecords = result.records || [];
+    totalFetched += pageRecords.length;
 
-  let newCount = 0;
-  for (const record of allRecords) {
+    for (const record of pageRecords) {
     const recordId = record.record_id;
     const dedupKey = `${config.appToken}_${config.tableId}_${recordId}`;
     const wasInDedupSet = !config.skipDedup && _processedIds.has(dedupKey);
@@ -450,16 +441,27 @@ export async function pollBitableTable(configKey) {
         oldest.forEach(id => _processedIds.delete(id));
       }
     }
+    }
+
+    if (!result.hasMore || !result.nextPageToken) break;
+    if (page + 1 >= maxPages) {
+      truncated = true;
+      logger.warn({ configKey, maxPages, fetched: totalFetched }, 'bitable polling hit page cap; records may be truncated');
+      break;
+    }
+    pageToken = result.nextPageToken;
+    page++;
+    await new Promise((r) => setImmediate(r));
   }
 
   if (newCount > 0) {
-    logger.info({ configKey, newCount, total: allRecords.length, skipDedup: !!config.skipDedup }, 'bitable new record ids this poll');
+    logger.info({ configKey, newCount, total: totalFetched, skipDedup: !!config.skipDedup }, 'bitable new record ids this poll');
   }
   _lastPollMeta[configKey] = {
     ok: true,
     at: Date.now(),
     truncated,
-    recordsThisPoll: allRecords.length,
+    recordsThisPoll: totalFetched,
     newCountThisPoll: newCount
   };
 
@@ -470,7 +472,7 @@ export async function pollBitableTable(configKey) {
       lines: [
         `配置键：${configKey}`,
         `表名：${config?.name || '-'}`,
-        `已抓取记录数：${allRecords.length}`,
+        `已抓取记录数：${totalFetched}`,
         `页上限：${maxPages}`,
         '现象：本轮 has_more 仍为 true，但已到代码页上限，说明该表体量超过当前轮询窗口。',
         '影响：部分门店/当天数据可能未进入 feishu_generic_records 与结构化表，导致助手查询显示“暂无数据”。'

@@ -1,7 +1,7 @@
 /**
  * morning-briefing.js
- * 每日 07:30（上海时区）自动推送昨日经营数据 + 待办任务到飞书。
- * 定时任务在 src/index.js：`cron.schedule('30 7 * * *', …, { timezone: 'Asia/Shanghai' })`，请勿改时刻。
+ * 每日 07:40（上海时区）自动推送昨日经营数据 + 待办任务到飞书（与 PM2 内存重启尖峰错开）。
+ * 定时任务在 src/index.js：`cron.schedule('40 7 * * *', …, { timezone: 'Asia/Shanghai' })`。
  */
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';

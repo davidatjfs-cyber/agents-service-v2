@@ -9,13 +9,50 @@ import { saveOutcome } from '../agent-memory.js';
 import { getProactiveConfig } from './config.js';
 import { sendCard, sendText } from '../feishu-client.js';
 
-/** 与异常类型绑定的经营指标维度 */
+/** 与异常类型绑定的经营指标维度（内部存英文键，便于查询/记忆标签） */
 export function inferMetricFocus(anomalyType) {
   const t = String(anomalyType || '').toLowerCase();
   if (/revenue|recharge|achievement|margin|gross/.test(t)) return 'revenue';
   if (/traffic|flow|customer_flow|客流/.test(t)) return 'traffic';
   if (/review|bad_review|投诉|转化|核销|券/.test(t)) return 'conversion';
   return 'mixed';
+}
+
+/** 卡片与详情展示用中文指标名 */
+export function metricFocusLabelZh(metricKey) {
+  const k = String(metricKey || '').toLowerCase();
+  if (k === 'revenue') return '营收与毛利/实收';
+  if (k === 'traffic') return '客流与到店';
+  if (k === 'conversion') return '转化与体验（点评/核销等）';
+  if (k === 'mixed') return '综合经营';
+  return metricKey || '综合经营';
+}
+
+/** 同案对标：洪潮 ↔ 马己仙 双店各收一套 PLLM 任务（可 PROACTIVE_PLLM_DISABLE_CROSS_BRAND_MIRROR=true 关闭） */
+export function resolveTwinBrandStore(originStore) {
+  const o = String(originStore || '');
+  if (/洪潮|大宁|久光/i.test(o)) return '马己仙上海音乐广场店';
+  if (/马己仙|音乐广场/i.test(o)) return '洪潮大宁久光店';
+  return null;
+}
+
+/** LLM 常输出重复条；按「去编号、去空白、小写」去重，保证一种建议只发一条 */
+export function dedupeActionLines(actions) {
+  if (!Array.isArray(actions)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const raw of actions) {
+    const line = String(raw || '').trim();
+    if (!line) continue;
+    const key = line
+      .replace(/^\s*[\d０-９]+[\.)．、]\s*/, '')
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(line);
+  }
+  return out;
 }
 
 function priorityToInitialScore(priority) {
@@ -138,11 +175,11 @@ async function rerouteOpenProactiveTasksToAdmin(primaryAdminUsername, responsibl
   }
 }
 
-function buildPllmDecisionCard({ taskId, store, title, line, metricFocus }) {
+function buildPllmDecisionCard({ taskId, store, title, line, metricFocusZh }) {
   return {
     config: { wide_screen_mode: true },
     header: {
-      title: { tag: 'plain_text', content: '🧭 PLLM 建议任务（请先决策）' },
+      title: { tag: 'plain_text', content: '🧭 PLLM智能经营助手' },
       template: 'blue'
     },
     elements: [
@@ -155,7 +192,7 @@ function buildPllmDecisionCard({ taskId, store, title, line, metricFocus }) {
             `**任务ID**：${taskId}\n` +
             `**任务标题**：${title}\n` +
             `**建议动作**：${line}\n` +
-            `**指标侧重**：${metricFocus}`
+            `**指标侧重**：${metricFocusZh}`
         }
       },
       { tag: 'hr' },
@@ -164,11 +201,28 @@ function buildPllmDecisionCard({ taskId, store, title, line, metricFocus }) {
         text: {
           tag: 'lark_md',
           content:
-            '请先选择：\n' +
-            '1）回复“执行”→ 进入跟踪模式（每日提醒，最多3天）\n' +
-            '2）回复“不适合”→ 自动结束并计入月报\n\n' +
-            '提示：管理员与总部营运任一人操作即可，无需两人重复操作。'
+            '请先选择（手机点按钮即可，与食安任务卡一致）：\n' +
+            '· **执行** → 进入跟踪模式（每日提醒，最多 3 天）\n' +
+            '· **不适合** → 自动结束并计入月报\n\n' +
+            '管理员与总部营运任一人操作即可。仍可在对话中回复「执行」「不适合」作为备选。'
         }
+      },
+      {
+        tag: 'action',
+        actions: [
+          {
+            tag: 'button',
+            text: { tag: 'plain_text', content: '执行' },
+            type: 'primary',
+            value: JSON.stringify({ action: 'pllm_execute', taskId })
+          },
+          {
+            tag: 'button',
+            text: { tag: 'plain_text', content: '不适合' },
+            type: 'default',
+            value: JSON.stringify({ action: 'pllm_not_suitable', taskId })
+          }
+        ]
       }
     ]
   };
@@ -225,121 +279,155 @@ export async function acceptProactiveLlmActionPlan(ctx) {
     return { ok: true, createdTasks: [], count: 0, rerouted, paused: true };
   }
 
+  const deduped = dedupeActionLines(actions);
+  const metricZh = metricFocusLabelZh(metricFocus);
+
   console.log('[Proactive][accept_action_plan] auto (proactive_llm)', {
     store,
-    n: actions.length,
+    nIn: actions.length,
+    nDeduped: deduped.length,
     metricFocus
   });
 
   const createdTasks = [];
-  const capped = actions.slice(0, 5);
 
-  for (let i = 0; i < capped.length; i++) {
-    const line = String(capped[i] || '').trim();
-    if (!line) continue;
+  async function runPlanBatch(targetStore, targetBrand, lines, mirrorOfStore) {
+    const capped = lines.slice(0, 5);
+    const storeSlug = String(targetStore || 'st').replace(/[^\w\u4e00-\u9fff]/g, '').slice(0, 12) || 'st';
+    for (let i = 0; i < capped.length; i++) {
+      const line = String(capped[i] || '').trim();
+      if (!line) continue;
 
-    const assigneeUsername = primaryAdmin.username;
-    const assigneeRoleValue = 'admin';
-    const userSlug = assigneeUsername.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24) || `admin`;
-    const taskId = `PLLM-${nowStr.replace(/-/g, '')}-${String(i + 1).padStart(2, '0')}-${userSlug}-${Math.random().toString(36).slice(2, 6)}`;
-    const timeoutAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    const title = `${store} · Proactive行动${i + 1}：${line.slice(0, 56)}`;
+      const assigneeUsername = primaryAdmin.username;
+      const assigneeRoleValue = 'admin';
+      const userSlug = assigneeUsername.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24) || `admin`;
+      const taskId = `PLLM-${nowStr.replace(/-/g, '')}-${String(i + 1).padStart(2, '0')}-${storeSlug}-${userSlug}-${Math.random().toString(36).slice(2, 8)}`;
+      const timeoutAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const title = mirrorOfStore
+        ? `${targetStore} · 【对标·${mirrorOfStore}】行动${i + 1}：${line.slice(0, 48)}`
+        : `${targetStore} · Proactive行动${i + 1}：${line.slice(0, 56)}`;
 
-    const sourceData = {
-      source: 'proactive_llm',
-      accept_action_plan: true,
-      metric_focus: metricFocus,
-      planned_at: plannedAt,
-      due_at: timeoutAt.toISOString(),
-      anomaly_type: anomalyType,
-      llm_priority: llmPriority,
-      action_index: i,
-      original_line: line,
-      assigned_scope: 'admin_only',
-      assigned_policy: 'shared_admin_hq',
-      assignee_open_ids: responsibleOpenIds,
-      pllm_responsible_usernames: responsibleUsernames,
-      pllm_responsible_roles: responsibles.map((x) => x.role),
-      pllm_mode: 'shared_admin_hq',
-      pllm_decision: 'pending',
-      pllm_tracking_enabled: false,
-      pllm_remind_count: 0
-    };
+      const sourceData = {
+        source: 'proactive_llm',
+        accept_action_plan: true,
+        metric_focus: metricFocus,
+        metric_focus_zh: metricZh,
+        planned_at: plannedAt,
+        due_at: timeoutAt.toISOString(),
+        anomaly_type: anomalyType,
+        llm_priority: llmPriority,
+        action_index: i,
+        original_line: line,
+        assigned_scope: 'admin_only',
+        assigned_policy: 'shared_admin_hq',
+        assignee_open_ids: responsibleOpenIds,
+        pllm_responsible_usernames: responsibleUsernames,
+        pllm_responsible_roles: responsibles.map((x) => x.role),
+        pllm_mode: 'shared_admin_hq',
+        pllm_decision: 'pending',
+        pllm_tracking_enabled: false,
+        pllm_remind_count: 0,
+        pllm_mirror_of_store: mirrorOfStore || null
+      };
 
-    await query(
-      `INSERT INTO master_tasks
+      const detailLines = [
+        '来源：Proactive LLM 自动接受行动计划',
+        `指标侧重：${metricZh}（${metricFocus}）`,
+        `计划时间：${plannedAt}`,
+        `原始动作：${line}`,
+        '责任人策略：仅管理员（避免门店骚扰）'
+      ];
+      if (mirrorOfStore) detailLines.push(`对标来源门店：${mirrorOfStore}`);
+
+      await query(
+        `INSERT INTO master_tasks
          (task_id, status, source, category, store, brand, assignee_username, assignee_role,
           title, detail, source_data, feishu_msg_ids, dispatched_at, timeout_at, remind_count)
        VALUES
          ($1, 'pending_response', $2, 'action_plan', $3, $4, $5, $6,
           $7, $8, $9::jsonb, '[]'::jsonb, NOW(), $10, 0)
        ON CONFLICT (task_id) DO NOTHING`,
-      [
-        taskId,
-        'proactive_llm',
-        store,
-        brand,
-        assigneeUsername,
-        assigneeRoleValue,
-        title,
-        `来源：Proactive LLM 自动接受行动计划\n指标侧重：${metricFocus}\n计划时间：${plannedAt}\n原始动作：${line}\n责任人策略：仅管理员（避免门店骚扰）`,
-        JSON.stringify(sourceData),
-        timeoutAt.toISOString()
-      ]
-    ).catch((e) => {
-      logger.warn({ err: e?.message, taskId }, 'proactive-llm-actions: master_tasks insert failed');
-    });
-
-    createdTasks.push({
-      taskId,
-      title: line.slice(0, 80),
-      role: assigneeRoleValue,
-      assigneeUsername,
-      metricFocus
-    });
-
-    const decisionCard = buildPllmDecisionCard({
-      taskId,
-      store,
-      title,
-      line,
-      metricFocus
-    });
-    for (const oid of responsibleOpenIds) {
-      const r0 = await sendCard(oid, decisionCard).catch(() => ({ ok: false }));
-      if (!r0?.ok) {
-        await sendText(
-          oid,
-          `【PLLM 建议任务】${store}\n任务ID：${taskId}\n动作：${line}\n请回复“执行”或“不适合”（管理员/总部营运任一人操作即可）。`,
-          'open_id'
-        ).catch(() => {});
-      }
-    }
-
-    const outcomeScore = Math.min(
-      10,
-      Math.max(1, Math.round((baseScore + (capped.length - 1 - i) * 0.15) * 10) / 10)
-    );
-    await saveOutcome(
-      'proactive_llm',
-      store,
-      line,
-      'plan_dispatched',
-      outcomeScore,
-      {
-        tags: [
+        [
+          taskId,
           'proactive_llm',
-          `store:${store}`,
-          `metric:${metricFocus}`,
-          `anomaly:${anomalyType}`,
-          `task_id:${taskId}`,
-          'assignee:admin_only'
+          targetStore,
+          targetBrand,
+          assigneeUsername,
+          assigneeRoleValue,
+          title,
+          detailLines.join('\n'),
+          JSON.stringify(sourceData),
+          timeoutAt.toISOString()
         ]
+      ).catch((e) => {
+        logger.warn({ err: e?.message, taskId }, 'proactive-llm-actions: master_tasks insert failed');
+      });
+
+      createdTasks.push({
+        taskId,
+        title: line.slice(0, 80),
+        role: assigneeRoleValue,
+        assigneeUsername,
+        metricFocus,
+        store: targetStore
+      });
+
+      const decisionCard = buildPllmDecisionCard({
+        taskId,
+        store: targetStore,
+        title,
+        line,
+        metricFocusZh: metricZh
+      });
+      for (const oid of responsibleOpenIds) {
+        const r0 = await sendCard(oid, decisionCard).catch(() => ({ ok: false }));
+        if (!r0?.ok) {
+          await sendText(
+            oid,
+            `【PLLM智能经营助手】${targetStore}\n任务ID：${taskId}\n动作：${line}\n请在手机点卡片按钮「执行 / 不适合」，或回复这两词之一。`,
+            'open_id'
+          ).catch(() => {});
+        }
       }
-    ).catch(() => {});
+
+      const outcomeScore = Math.min(
+        10,
+        Math.max(1, Math.round((baseScore + (capped.length - 1 - i) * 0.15) * 10) / 10)
+      );
+      await saveOutcome(
+        'proactive_llm',
+        targetStore,
+        line,
+        'plan_dispatched',
+        outcomeScore,
+        {
+          tags: [
+            'proactive_llm',
+            `store:${targetStore}`,
+            `metric:${metricFocus}`,
+            `anomaly:${anomalyType}`,
+            `task_id:${taskId}`,
+            'assignee:admin_only',
+            mirrorOfStore ? `mirror_of:${mirrorOfStore}` : 'primary_store'
+          ]
+        }
+      ).catch(() => {});
+    }
   }
 
-  const planBody = capped.map((l, j) => `${j + 1}. ${l}`).join('\n');
+  await runPlanBatch(store, brand, deduped, null);
+
+  const mirror =
+    String(process.env.PROACTIVE_PLLM_DISABLE_CROSS_BRAND_MIRROR || '').trim().toLowerCase() === 'true'
+      ? null
+      : resolveTwinBrandStore(store);
+  if (mirror && mirror !== store) {
+    const brandM = (await getBrandForStore(mirror).catch(() => null)) || '';
+    logger.info({ store, mirror }, 'proactive-llm-actions: PLLM twin-brand mirror batch');
+    await runPlanBatch(mirror, brandM, deduped, store);
+  }
+
+  const planBody = deduped.map((l, j) => `${j + 1}. ${l}`).join('\n');
   await logProactiveDecision({
     store,
     brand,

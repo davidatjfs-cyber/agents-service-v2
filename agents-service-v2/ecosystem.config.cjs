@@ -11,7 +11,8 @@ module.exports = {
       instances: 1,
       exec_mode: 'fork',
       watch: false,
-      max_memory_restart: '600M',
+      /** 原 600M 与每日 ~07:30 内存尖峰叠加 PM2 重启，易错过 07:40 晨报；提高到 1.5G 并配合 bitable 流式轮询降峰值 */
+      max_memory_restart: '1536M',
       env: {
         NODE_ENV: 'production',
         PORT: '3101',

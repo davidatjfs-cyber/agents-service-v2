@@ -39,7 +39,8 @@ const CRON_JOB_LABEL_ZH = {
   bi_anomaly_notify_flush: 'BI异常任务卡片发送（09:05延迟队列刷新）',
   dissatisfied_product_daily: '不满意产品日报',
   dissatisfied_product_weekly: '不满意产品周报',
-  dissatisfied_product_monthly: '不满意产品月报'
+  dissatisfied_product_monthly: '不满意产品月报',
+  morning_briefing_missed_guard: '每日晨报（仍未成功·仅告警）'
 };
 
 function cronJobLabelZh(jobKey) {
@@ -106,6 +107,29 @@ async function insertRun(jobKey, runYmd, ok, error, source) {
 }
 
 /** 向所有 admin 发飞书告警文本（失败类告警不推送给 hq_manager） */
+/** 关键定时「未执行成功」（非抛错）时提醒 admin，例如进程错过整点后当日无 cron 记录 */
+export async function notifyAdminsCronMissed(jobKey, detailMsg) {
+  try {
+    const { sendText } = await import('../services/feishu-client.js');
+    const r = await query(
+      `SELECT open_id FROM feishu_users
+       WHERE registered = true AND open_id IS NOT NULL
+         AND role = 'admin'
+         AND open_id NOT LIKE '%probe%'
+       LIMIT 20`
+    );
+    const { ymd, hour, minute } = getShanghaiNowClock();
+    const timeStr = `${ymd} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    const text =
+      `⚠️ 【定时任务未成功告警】\n任务：${cronJobLabelZh(jobKey)}\n时间：${timeStr}（上海）\n说明：${String(detailMsg || '当日未见成功执行记录').slice(0, 900)}\n\n请检查 agents-service-v2 是否在整点附近被 PM2 重启、或查看日志后人工补发。`;
+    for (const row of r.rows || []) {
+      sendText(row.open_id, text, 'open_id').catch(() => {});
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message, jobKey }, 'notifyAdminsCronMissed failed');
+  }
+}
+
 async function notifyAdminsOnFailure(jobKey, errorMsg) {
   try {
     const { sendText } = await import('../services/feishu-client.js');
