@@ -28,14 +28,6 @@ export function metricFocusLabelZh(metricKey) {
   return metricKey || '综合经营';
 }
 
-/** 同案对标：洪潮 ↔ 马己仙 双店各收一套 PLLM 任务（可 PROACTIVE_PLLM_DISABLE_CROSS_BRAND_MIRROR=true 关闭） */
-export function resolveTwinBrandStore(originStore) {
-  const o = String(originStore || '');
-  if (/洪潮|大宁|久光/i.test(o)) return '马己仙上海音乐广场店';
-  if (/马己仙|音乐广场/i.test(o)) return '洪潮大宁久光店';
-  return null;
-}
-
 /** LLM 常输出重复条；按「去编号、去空白、小写」去重，保证一种建议只发一条 */
 export function dedupeActionLines(actions) {
   if (!Array.isArray(actions)) return [];
@@ -53,6 +45,20 @@ export function dedupeActionLines(actions) {
     out.push(line);
   }
   return out;
+}
+
+function getPllmTaskCaps() {
+  const maxPerBatchRaw = Number(process.env.PROACTIVE_PLLM_MAX_TASKS_PER_BATCH || 2);
+  const maxOpenRaw = Number(process.env.PROACTIVE_PLLM_MAX_OPEN_TASKS_PER_STORE || 3);
+  const maxPerBatch = Number.isFinite(maxPerBatchRaw) ? Math.max(1, Math.min(5, Math.floor(maxPerBatchRaw))) : 2;
+  const maxOpenPerStore = Number.isFinite(maxOpenRaw) ? Math.max(1, Math.min(12, Math.floor(maxOpenRaw))) : 3;
+  return { maxPerBatch, maxOpenPerStore };
+}
+
+export function computePllmSlots(currentOpen, maxOpenPerStore, maxPerBatch) {
+  const open = Math.max(0, Number(currentOpen) || 0);
+  const remain = Math.max(0, (Number(maxOpenPerStore) || 0) - open);
+  return Math.max(0, Math.min(remain, Number(maxPerBatch) || 0));
 }
 
 function priorityToInitialScore(priority) {
@@ -281,6 +287,24 @@ export async function acceptProactiveLlmActionPlan(ctx) {
 
   const deduped = dedupeActionLines(actions);
   const metricZh = metricFocusLabelZh(metricFocus);
+  const { maxPerBatch, maxOpenPerStore } = getPllmTaskCaps();
+  const openRes = await query(
+    `SELECT COUNT(*)::int AS c
+     FROM master_tasks
+     WHERE source = 'proactive_llm'
+       AND store = $1
+       AND status IN ('pending_response','pending_review','pending_dispatch','dispatched','escalated')`,
+    [store]
+  ).catch(() => ({ rows: [{ c: 0 }] }));
+  const currentOpen = Number(openRes.rows?.[0]?.c || 0);
+  const slots = computePllmSlots(currentOpen, maxOpenPerStore, maxPerBatch);
+  if (slots <= 0) {
+    logger.info(
+      { store, currentOpen, maxOpenPerStore, maxPerBatch },
+      'proactive-llm-actions: skip create due to open task cap'
+    );
+    return { ok: true, createdTasks: [], count: 0, rerouted, skipped: 'open_task_cap' };
+  }
 
   console.log('[Proactive][accept_action_plan] auto (proactive_llm)', {
     store,
@@ -291,21 +315,30 @@ export async function acceptProactiveLlmActionPlan(ctx) {
 
   const createdTasks = [];
 
-  async function runPlanBatch(targetStore, targetBrand, lines, mirrorOfStore) {
-    const capped = lines.slice(0, 5);
+  async function runPlanBatch(targetStore, targetBrand, lines) {
+    const capped = lines.slice(0, slots);
     const storeSlug = String(targetStore || 'st').replace(/[^\w\u4e00-\u9fff]/g, '').slice(0, 12) || 'st';
     for (let i = 0; i < capped.length; i++) {
       const line = String(capped[i] || '').trim();
       if (!line) continue;
+      const dup = await query(
+        `SELECT 1
+         FROM master_tasks
+         WHERE source = 'proactive_llm'
+           AND store = $1
+           AND status IN ('pending_response','pending_review','pending_dispatch','dispatched','escalated')
+           AND COALESCE(source_data->>'original_line','') = $2
+         LIMIT 1`,
+        [targetStore, line]
+      ).catch(() => ({ rows: [] }));
+      if (dup.rows?.length) continue;
 
       const assigneeUsername = primaryAdmin.username;
       const assigneeRoleValue = 'admin';
       const userSlug = assigneeUsername.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24) || `admin`;
       const taskId = `PLLM-${nowStr.replace(/-/g, '')}-${String(i + 1).padStart(2, '0')}-${storeSlug}-${userSlug}-${Math.random().toString(36).slice(2, 8)}`;
       const timeoutAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-      const title = mirrorOfStore
-        ? `${targetStore} · 【对标·${mirrorOfStore}】行动${i + 1}：${line.slice(0, 48)}`
-        : `${targetStore} · Proactive行动${i + 1}：${line.slice(0, 56)}`;
+      const title = `${targetStore} · Proactive行动${i + 1}：${line.slice(0, 56)}`;
 
       const sourceData = {
         source: 'proactive_llm',
@@ -327,17 +360,22 @@ export async function acceptProactiveLlmActionPlan(ctx) {
         pllm_decision: 'pending',
         pllm_tracking_enabled: false,
         pllm_remind_count: 0,
-        pllm_mirror_of_store: mirrorOfStore || null
+        pllm_trigger_data: {
+          rule: String(ctx?.type || ctx?.data?.type || ctx?.data?.rule || ''),
+          severity: String(ctx?.severity || ''),
+          detail: String(ctx?.data?.detail || '').slice(0, 800),
+          value: ctx?.data?.value ?? null
+        }
       };
 
       const detailLines = [
         '来源：Proactive LLM 自动接受行动计划',
+        `触发异常：${String(ctx?.type || ctx?.data?.type || ctx?.data?.rule || 'unknown')}`,
         `指标侧重：${metricZh}（${metricFocus}）`,
         `计划时间：${plannedAt}`,
         `原始动作：${line}`,
         '责任人策略：仅管理员（避免门店骚扰）'
       ];
-      if (mirrorOfStore) detailLines.push(`对标来源门店：${mirrorOfStore}`);
 
       await query(
         `INSERT INTO master_tasks
@@ -407,25 +445,14 @@ export async function acceptProactiveLlmActionPlan(ctx) {
             `metric:${metricFocus}`,
             `anomaly:${anomalyType}`,
             `task_id:${taskId}`,
-            'assignee:admin_only',
-            mirrorOfStore ? `mirror_of:${mirrorOfStore}` : 'primary_store'
+            'assignee:admin_only'
           ]
         }
       ).catch(() => {});
     }
   }
 
-  await runPlanBatch(store, brand, deduped, null);
-
-  const mirror =
-    String(process.env.PROACTIVE_PLLM_DISABLE_CROSS_BRAND_MIRROR || '').trim().toLowerCase() === 'true'
-      ? null
-      : resolveTwinBrandStore(store);
-  if (mirror && mirror !== store) {
-    const brandM = (await getBrandForStore(mirror).catch(() => null)) || '';
-    logger.info({ store, mirror }, 'proactive-llm-actions: PLLM twin-brand mirror batch');
-    await runPlanBatch(mirror, brandM, deduped, store);
-  }
+  await runPlanBatch(store, brand, deduped);
 
   const planBody = deduped.map((l, j) => `${j + 1}. ${l}`).join('\n');
   await logProactiveDecision({

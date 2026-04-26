@@ -1064,8 +1064,9 @@ export function normalizeCardActionBody(raw) {
   if (raw.schema === '2.0' && raw.event && typeof raw.event === 'object') {
     const ev = raw.event;
     const op = ev.operator && typeof ev.operator === 'object' ? ev.operator : {};
+    const opId = op.operator_id && typeof op.operator_id === 'object' ? op.operator_id : {};
     return {
-      open_id: String(op.open_id || '').trim(),
+      open_id: String(op.open_id || opId.open_id || '').trim(),
       action: ev.action && typeof ev.action === 'object' ? ev.action : {}
     };
   }

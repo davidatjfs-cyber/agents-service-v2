@@ -32,7 +32,7 @@ import {
   calculateKpiAchievement, getConfigAuditLog
 } from './services/config-service.js';
 import { verifyLLMHealth, getProviderHealthStatus, getCostStats, getPerformanceMetrics } from './services/llm-provider.js';
-import { handleWebhookEvent, handleCardAction, getFeishuStatus, sendText as feishuSendText } from './services/feishu-client.js';
+import { handleWebhookEvent, getFeishuStatus, sendText as feishuSendText } from './services/feishu-client.js';
 import { routeMessage, checkPermission, VALID_ROUTES } from './services/message-router.js';
 import { createTask, transitionTask, getTask, getTasksByStore, getTaskStats, scanEscalations, STATUS_FLOW } from './services/task-state-machine.js';
 import { processMessage } from './services/message-pipeline.js';
@@ -796,7 +796,8 @@ app.post('/api/webhook/feishu/card', feishuWebhookRaw, async (req, res) => {
     if (body == null) {
       return res.status(200).json({ toast: { type: 'error', content: '请求体无效' } });
     }
-    const out = await handleCardAction(body);
+    // 统一走 handleWebhookEvent，兼容 encrypt + schema2.0 事件体，避免移动端卡片回调 200671
+    const out = await handleWebhookEvent(body);
     return res.status(200).json(out && typeof out === 'object' ? out : { toast: { type: 'info', content: 'ok' } });
   } catch (e) {
     logger.error({ err: e?.message }, 'Feishu card webhook error');
