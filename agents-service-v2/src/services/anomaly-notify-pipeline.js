@@ -343,7 +343,13 @@ export async function runBiAnomalyNotifyPipeline({
     const mid = extractMessageId(r);
     if (mid) msgIds.push(mid);
 
-    // ── 2) BI异常情况扣分卡（纯通知，无任务提示）──
+    // ── 2) BI异常情况扣分卡（周度/日度已落分者的「备案」样式）──
+    // 食安：绩效扣分仅在总部营运「记录」判罚后写入（见 food-safety-hq-ruling.js + notifyInstantDeductionFeishu），
+    // 触发当下任何人（含管理员/总部营运）都不应收到「已扣 20 分」类卡片，避免与「管理员仅同步知情」冲突。
+    if (ruleKey === 'food_safety') {
+      continue;
+    }
+
     const { weekStart: weekStartVal } = shanghaiWeekMonSunContaining(getShanghaiYmdParts().ymd);
     const weekPeriod = `week_${weekStartVal}`;
     const curScore = await fetchLatestAnomalyRollupScore(u.username, store, weekPeriod);
@@ -377,12 +383,6 @@ export async function runBiAnomalyNotifyPipeline({
       periodZh = ws ? `自然周 ${ws}~${we}（每日触发，自然周递进扣分）` : '';
       reasonZh = '差评服务异常';
       dataSourceNote = '数据来源：日频检测写入 anomaly_triggers（飞书 bitable 差评分产品/服务分类）；绩效扣分在周一「周度门店评分」中按自然周内各日 penalty 累加后写入 anomaly_rollups_v2。';
-    } else if (ruleKey === 'food_safety') {
-      pts = 20;
-      const { weekStart: fsWs, weekEnd: fsWe } = shanghaiWeekMonSunContaining(getShanghaiYmdParts().ymd);
-      periodZh = `自然周 ${fsWs}~${fsWe}`;
-      reasonZh = '食品安全异常';
-      dataSourceNote = '数据来源：实时检测+日频扫描写入 anomaly_triggers（食安红色通道）；绩效扣分在周一「周度门店评分」中按自然周内各日 penalty 累加后写入 anomaly_rollups_v2。';
     } else if (ruleKey === 'table_visit_product') {
       pts = value?.deduction_points_total ?? 0;
       periodZh = value?.weekPeriod || '';

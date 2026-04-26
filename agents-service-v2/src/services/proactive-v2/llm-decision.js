@@ -32,6 +32,71 @@ function normalizeActions(parsed) {
     .filter(Boolean);
 }
 
+/**
+ * LLM/规则兜底在 triggered=true 时必须给出可执行动作，否则 proactive 不会建 PLLM 任务卡。
+ * 每条含门店名 + 数字或渠道，满足 buildPrompt 的可核对要求。
+ */
+export function fallbackActionsForAnomaly(anomaly) {
+  const store = String(anomaly?.store || '本门店').trim() || '本门店';
+  const type = String(anomaly?.type || anomaly?.rule || '').toLowerCase();
+  const sev = String(anomaly?.severity || '').toLowerCase();
+
+  if (/recharge|充值/.test(type)) {
+    return [
+      `在企微社群推送「${store}」储值满500元送80元券包（券包有效期14天），当日22:00前统计新增储值笔数并截图发营运群`,
+      `检查${store}收银台美团/抖音核销入口：11:00-13:00、17:00-19:00各抽30分钟现场拍照，记录异常笔数`
+    ];
+  }
+  if (/bad_review|差评/.test(type)) {
+    return [
+      `打开大众点评${store}近7天新增差评，逐条复制首条差评全文到飞书「差评台账」，并标出出现最多的关键词1个`,
+      `针对上述关键词，店长手写3条整改动作（每条≤35字，含责任岗位+完成日），当日18:00前发飞书`
+    ];
+  }
+  if (/margin|毛利|gross/.test(type)) {
+    return [
+      `导出${store}近14天菜品销售明细（含成本价字段），标出毛利率低于45%的SKU前5名并附销售额`,
+      `对上述SKU中Top2制定「周内调价或套餐重组」方案：写出原价¥?、新价¥?或新套餐名，3日内执行`
+    ];
+  }
+  if (/labor|人效|人工/.test(type)) {
+    return [
+      `统计${store}本周排班表：每日高峰时段（11:30-13:30、17:30-20:00）在岗人数与营业额，填表并附1张现场照片`,
+      `若午市人效低于上周同期10%以上，列出2条可执行排班调整（具体到时段与人数），次日执行并复盘`
+    ];
+  }
+  if (/traffic|客流/.test(type)) {
+    return [
+      `在美团/抖音上架「${store}」午市双人套餐¥88（原价标注¥108），连续投放7天，每日截图曝光与核销数`,
+      `本周内完成3次店门口10分钟客流计数（12:00/18:00/20:00），数字填入「客流登记表」并发群`
+    ];
+  }
+  if (/revenue|营收|达成/.test(type)) {
+    return [
+      `盘点${store}近7天午市（11:00-14:00）实收与订单数，与再上一周同日对比，列出跌幅>8%的2个具体时段`,
+      `针对跌幅最大时段，推出限时单品（写明菜品名+折后价¥?），连续执行5天并每日汇报核销单数`
+    ];
+  }
+  if (/food_safety|食安/.test(type)) {
+    return [
+      `当日闭店前完成${store}冷柜温度记录2次（拍照含温度计读数℃），异常立即报总部营运`,
+      `后厨解冻/留样记录补齐近3天台账（日期+品名+克数），拍照存档并发营运群备查`
+    ];
+  }
+  if (/table_visit|桌访/.test(type)) {
+    return [
+      `从桌访系统导出${store}本周差评菜品Top3（含菜品名与出现次数），店长与出品经理各写1条整改动作（≤40字）`,
+      `对上述Top1菜品连续3天出品拍照（同一角度），标注时间与当班出品负责人姓名`
+    ];
+  }
+
+  const sevHint = /high|critical|严重/.test(sev) ? '（高优先级）' : '';
+  return [
+    `今日18:00前完成${store}堂食客流踏勘：每整点计数15分钟${sevHint}，填「客流踏勘表」并附门店门口照片1张`,
+    `盘点${store}大众点评近7天新增评价中关键词Top2，各写1条可执行整改（含责任岗位+完成日期），发飞书营运群`
+  ];
+}
+
 function buildPrompt(anomaly, historyBlock = '') {
   const store = anomaly.store || '';
   const type = anomaly.type || anomaly.rule || 'unknown';
@@ -117,7 +182,7 @@ export async function decideWithLLM(anomaly) {
       triggered: true,
       reason: 'test mode',
       priority: 'high',
-      actions: []
+      actions: fallbackActionsForAnomaly(anomaly)
     };
   }
 
@@ -168,13 +233,18 @@ export async function decideWithLLM(anomaly) {
     return fallbackDecision(anomaly, config);
   }
 
+  let actions = normalizeActions(parsed);
+  if (parsed.triggered === true && actions.length === 0) {
+    actions = fallbackActionsForAnomaly(anomaly);
+  }
+
   return {
     triggered: parsed.triggered === true,
     reason: parsed.reason || 'no reason',
     priority: ['low', 'medium', 'high'].includes(String(parsed.priority))
       ? parsed.priority
       : 'medium',
-    actions: normalizeActions(parsed)
+    actions
   };
 }
 
@@ -185,12 +255,14 @@ export function fallbackDecision(anomaly, cfg) {
   const sev = String(anomaly.severity || '').toLowerCase();
   const value = anomaly.value;
 
+  const fa = () => fallbackActionsForAnomaly(anomaly);
+
   if (['high', 'critical', '严重'].some((x) => sev.includes(x))) {
     return {
       triggered: true,
       reason: '严重程度较高（规则兜底）',
       priority: 'high',
-      actions: []
+      actions: fa()
     };
   }
 
@@ -201,7 +273,7 @@ export function fallbackDecision(anomaly, cfg) {
         triggered: true,
         reason: `营收下降${dropPercent}%超过阈值`,
         priority: 'high',
-        actions: []
+        actions: fa()
       };
     }
   }
@@ -218,25 +290,25 @@ export function fallbackDecision(anomaly, cfg) {
         triggered: true,
         reason: `差评${count}条超过阈值`,
         priority: 'high',
-        actions: []
+        actions: fa()
       };
     }
   }
 
   if (type === 'gross_margin') {
-    return { triggered: true, reason: '毛利率异常需分析', priority: 'high', actions: [] };
+    return { triggered: true, reason: '毛利率异常需分析', priority: 'high', actions: fa() };
   }
 
   if (type === 'labor' || type === 'labor_cost' || type === 'labor_efficiency') {
-    return { triggered: true, reason: '人工/人效异常', priority: 'medium', actions: [] };
+    return { triggered: true, reason: '人工/人效异常', priority: 'medium', actions: fa() };
   }
 
   if (type === 'traffic' || type === 'customer_flow') {
-    return { triggered: true, reason: '客流异常需分析', priority: 'medium', actions: [] };
+    return { triggered: true, reason: '客流异常需分析', priority: 'medium', actions: fa() };
   }
 
   if (type === 'recharge_zero' || type === 'recharge') {
-    return { triggered: true, reason: '充值数据异常', priority: 'medium', actions: [] };
+    return { triggered: true, reason: '充值数据异常', priority: 'medium', actions: fa() };
   }
 
   const seriousRules =
@@ -246,7 +318,7 @@ export function fallbackDecision(anomaly, cfg) {
       triggered: true,
       reason: '业务规则命中（兜底）',
       priority: 'medium',
-      actions: []
+      actions: fa()
     };
   }
 
@@ -281,5 +353,6 @@ function extractCount(value) {
 export default {
   decideWithLLM,
   fallbackDecision,
-  safeParseJSON
+  safeParseJSON,
+  fallbackActionsForAnomaly
 };

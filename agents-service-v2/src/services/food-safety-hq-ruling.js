@@ -1,7 +1,8 @@
 /**
  * 食品安全 BI 异常（agents-service-v2 / Feishu 任务回复）
  *
- * 通知：卡片仍发店长、出品经理、总部营运、管理员（管理员仅知情，不参与判罚）。
+ * 通知：异常告警卡仍发店长、出品经理、总部营运、管理员（管理员仅知情，不参与判罚）。
+ * 食安触发当下不发「BI异常情况扣分」预览卡（见 anomaly-notify-pipeline）；扣分卡仅在总部判罚后由本模块 notifyInstantDeductionFeishu 发出。
  * 判罚：仅总部营运（feishu_users.role = hq_manager）的回复会触发本模块；管理员回复不进入此处。
  *
  * 总部营运回复：

@@ -10,10 +10,26 @@ let intervalId = null;
 let isRunning = false;
 
 async function getActiveStores() {
-  const r = await query(
-    `SELECT DISTINCT store FROM daily_reports WHERE date >= CURRENT_DATE - 30 AND store IS NOT NULL`
+  const r1 = await query(
+    `SELECT DISTINCT TRIM(store) AS store FROM daily_reports
+     WHERE date >= CURRENT_DATE - 30 AND store IS NOT NULL AND TRIM(store) <> ''`
   );
-  return (r.rows || []).map((row) => row.store).filter(Boolean);
+  const r2 = await query(
+    `SELECT DISTINCT TRIM(store) AS store FROM feishu_users
+     WHERE registered = true AND store IS NOT NULL AND TRIM(store) <> ''
+       AND role IN ('store_manager','store_production_manager')
+       AND open_id IS NOT NULL AND TRIM(open_id) <> ''`
+  );
+  const set = new Set();
+  for (const row of r1.rows || []) {
+    const s = String(row.store || '').trim();
+    if (s) set.add(s);
+  }
+  for (const row of r2.rows || []) {
+    const s = String(row.store || '').trim();
+    if (s) set.add(s);
+  }
+  return [...set];
 }
 
 async function proactiveTick(options = {}) {
