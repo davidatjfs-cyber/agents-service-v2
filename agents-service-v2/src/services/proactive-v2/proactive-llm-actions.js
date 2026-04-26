@@ -267,6 +267,22 @@ function buildPllmDecisionCard({ taskId, store, title, line, metricFocusZh }) {
         tag: 'action',
         actions: [
           {
+            tag: 'input',
+            name: 'pllm_execute_plan',
+            placeholder: {
+              tag: 'plain_text',
+              content: '点击「执行」前请填写：执行计划（何时/谁负责/怎么做/目标）'
+            }
+          },
+          {
+            tag: 'input',
+            name: 'pllm_not_suitable_reason',
+            placeholder: {
+              tag: 'plain_text',
+              content: '点击「不适合」前请填写：不适合原因（可执行性/门店定位/时机）'
+            }
+          },
+          {
             tag: 'button',
             text: { tag: 'plain_text', content: '执行' },
             type: 'primary',

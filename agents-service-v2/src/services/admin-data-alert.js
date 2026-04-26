@@ -38,6 +38,30 @@ function alertTypeLabelZh(alertType) {
   return ALERT_TYPE_LABEL_ZH[k] || '数据异常';
 }
 
+async function resolveAdminNoticeUsernamesFromRecipients(recipients = []) {
+  const set = new Set();
+  for (const row of recipients || []) {
+    const u = String(row?.username || '').trim().toLowerCase();
+    if (u) set.add(u);
+  }
+  try {
+    const r = await query(
+      `SELECT username FROM users
+       WHERE role = 'admin'
+         AND COALESCE(is_active, true) = true
+       ORDER BY username
+       LIMIT 50`
+    );
+    for (const row of r.rows || []) {
+      const u = String(row?.username || '').trim().toLowerCase();
+      if (u) set.add(u);
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'resolveAdminNoticeUsernamesFromRecipients: users fallback failed');
+  }
+  return Array.from(set);
+}
+
 function shanghaiTimeLine() {
   return new Date().toLocaleString('zh-CN', {
     timeZone: 'Asia/Shanghai',
@@ -184,8 +208,9 @@ export async function notifyAdminsDataIssue(opts) {
     if (sent > 0) {
       try {
         await ensureHrmsUserNotificationsTable();
-        for (const row of recipients) {
-          const username = String(row?.username || '').trim();
+        const usernames = await resolveAdminNoticeUsernamesFromRecipients(recipients);
+        for (const uname of usernames) {
+          const username = String(uname || '').trim();
           if (!username) continue;
           await query(
             `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)

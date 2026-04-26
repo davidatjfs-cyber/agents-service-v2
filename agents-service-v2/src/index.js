@@ -761,7 +761,7 @@ app.get('/api/llm/cost', authRequired, (req, res) => {
 app.get('/api/webhook/feishu', (_req, res) => {
   res.status(200).json({ ok: true, service: 'agents-v2', message: 'use POST for events' });
 });
-app.post('/api/webhook/feishu', feishuWebhookRaw, async (req, res) => {
+async function handleFeishuWebhookPost(req, res) {
   try {
     const body = parseFeishuWebhookBody(req);
     const bodyIsBuffer = Buffer.isBuffer(req.body);
@@ -785,9 +785,12 @@ app.post('/api/webhook/feishu', feishuWebhookRaw, async (req, res) => {
     logger.error({ err: e?.message }, 'Feishu webhook handler error');
     return res.status(200).json({ toast: { type: 'error', content: '服务异常，请稍后重试' } });
   }
-});
+}
+app.post('/api/webhook/feishu', feishuWebhookRaw, handleFeishuWebhookPost);
+// 兼容历史配置路径（避免飞书后台仍指向 /api/feishu/webhook 导致 404 + 客户端 200671）
+app.post('/api/feishu/webhook', feishuWebhookRaw, handleFeishuWebhookPost);
 
-app.post('/api/webhook/feishu/card', feishuWebhookRaw, async (req, res) => {
+async function handleFeishuCardWebhookPost(req, res) {
   try {
     if (!isWebhookEnabled()) {
       return res.status(200).json({ toast: { type: 'info', content: '回调未启用' } });
@@ -811,7 +814,10 @@ app.post('/api/webhook/feishu/card', feishuWebhookRaw, async (req, res) => {
     logger.error({ err: e?.message }, 'Feishu card webhook error');
     return res.status(200).json({ toast: { type: 'error', content: '服务异常，请稍后重试' } });
   }
-});
+}
+app.post('/api/webhook/feishu/card', feishuWebhookRaw, handleFeishuCardWebhookPost);
+// 兼容历史卡片回调路径
+app.post('/api/feishu/webhook/card', feishuWebhookRaw, handleFeishuCardWebhookPost);
 
 app.get('/api/feishu/status', authRequired, (req, res) => {
   res.json(getFeishuStatus());

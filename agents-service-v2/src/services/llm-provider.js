@@ -68,6 +68,10 @@ const _metrics={totalCalls:0,errorCount:0,avgResponseTime:0,cacheHits:0};
 export function getPerformanceMetrics(){return{..._metrics,providerHealth:getProviderHealthStatus()};}
 
 function isRetryable(e){if(!e)return false;const s=e?.response?.status;return s===429||s===502||s===503||s===504||e.code==='ECONNABORTED'||e.code==='ETIMEDOUT';}
+function isAbortLikeError(msg){
+  const s=String(msg||'').toLowerCase();
+  return s.includes('aborted') || s.includes('aborterror') || s.includes('econnreset') || s.includes('socket hang up');
+}
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 
 function normalizeRouterContext(ctx) {
@@ -283,7 +287,12 @@ export async function callLLM(messages, options = {}) {
 
   // 如果路由到本地模型，优先尝试 Ollama
   if (!hasTools && routedModel === localModel) {
-    const o = await callOllamaLLM(messages, options);
+    let o = await callOllamaLLM(messages, options);
+    // gemma4 在高并发下偶发连接中断，先快速重试一次，避免误报不可用
+    if ((!o.ok || !o.content) && isAbortLikeError(o.error)) {
+      logger.warn({ err: o.error, model: localModel }, 'Ollama aborted once, retrying');
+      o = await callOllamaLLM(messages, options);
+    }
     if (o.ok && o.content) return o;
     // 本地失败，记录警告并继续走 API 兜底
     logger.warn({ err: o.error, fallbackTo: PROVIDERS.deepseek.defaultModel }, `Ollama (${localModel}) 失败，自动降级到 API`);

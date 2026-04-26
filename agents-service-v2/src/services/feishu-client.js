@@ -1538,6 +1538,21 @@ export async function handleCardAction(body) {
   } catch (e) {
     value = {};
   }
+  const formValue =
+    action?.form_value && typeof action.form_value === 'object'
+      ? action.form_value
+      : {};
+  const pickFormText = (keys = []) => {
+    for (const k of keys) {
+      const v = formValue?.[k];
+      if (typeof v === 'string' && v.trim()) return v.trim();
+      if (v && typeof v === 'object') {
+        const t = String(v.value || v.text || v.content || '').trim();
+        if (t) return t;
+      }
+    }
+    return '';
+  };
   const actionType = String(value.action || '').trim();
   const taskId = String(value.taskId || '').trim();
   logger.info({ openId, actionType, taskId }, 'Card action callback');
@@ -1628,14 +1643,31 @@ export async function handleCardAction(body) {
       const op = String(u.username || '').trim() || 'unknown';
       const { applyPllmDecision } = await import('./proactive-v2/pllm-workflow.js');
       const decision = actionType === 'pllm_execute' ? 'execute' : 'not_suitable';
-      const r = await applyPllmDecision(taskId, decision, op, '');
+      const executePlan = pickFormText(['pllm_execute_plan', 'execute_plan', 'plan', 'plan_text']);
+      const rejectReason = pickFormText(['pllm_not_suitable_reason', 'not_suitable_reason', 'reason', 'reason_text']);
+      const planText = decision === 'execute' ? executePlan : rejectReason;
+      if (!planText) {
+        const hint =
+          decision === 'execute'
+            ? '请先填写执行计划（何时/谁负责/怎么做/目标）再提交。'
+            : '请先填写不适合原因后再提交。';
+        return { toast: { type: 'error', content: hint } };
+      }
+      const r = await applyPllmDecision(taskId, decision, op, planText);
       if (!r?.ok) {
         return { toast: { type: 'error', content: String(r?.error || '操作失败') } };
+      }
+      if (openId) {
+        const ack =
+          decision === 'execute'
+            ? `✅ PLLM任务 ${taskId} 已登记为「执行」。\n执行计划：${planText}`
+            : `✅ PLLM任务 ${taskId} 已登记为「不适合」。\n原因：${planText}`;
+        sendText(openId, ack.slice(0, 1600), 'open_id').catch(() => {});
       }
       return {
         toast: {
           type: 'success',
-          content: decision === 'execute' ? '已选择执行，已进入跟踪模式' : '已标记为不适合并结案'
+          content: decision === 'execute' ? '已提交执行计划，进入跟踪模式' : '已提交不适合原因并结案'
         }
       };
     } catch (e) {

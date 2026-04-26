@@ -19,7 +19,7 @@ import { evaluateOutcome } from './knowledge/outcome-evaluator.js';
 import { saveMemory as saveMemPalaceMemory, recallMemory as recallMemPalaceMemory } from './memory-adapter.js';
 import { decideStrategy } from './marketing-strategy-engine.js';
 import { generateProcurementAdvice } from './procurement-agent.js';
-import { getBrandForStore, getConfig } from './config-service.js';
+import { getBrandForStore, getBrandPositioning, getConfig } from './config-service.js';
 import { toFeishuStoreName, resolveAgentCanonicalStore } from '../config/store-mapping.js';
 import { feishuStoreSearchPatterns } from '../utils/store-sql-patterns.js';
 import { estimateMarginForStore } from './margin-from-sales.js';
@@ -2563,6 +2563,7 @@ ${unifiedKnowledgeBlock_ce}
 async function handleTrainAdvisor(text, ctx) {
   const store = ctx.store || '', user = ctx.username || '';
   const brand = store ? await getBrandForStore(store).catch(() => null) : null;
+  const brandPos = brand ? await getBrandPositioning(brand).catch(() => null) : null;
   let kbData = '';
   // 1) HRMS 知识库 PDF 正文：多关键词 OR 检索 + 长文本注入（禁止只依赖「菜单内容」四字匹配）
   try {
@@ -2620,7 +2621,14 @@ async function handleTrainAdvisor(text, ctx) {
 
 当前时间：${NOW_CN()}。
 门店：${store || '未指定'}${brand ? `（${brand}）` : ''}，用户：${ctx.name || user || '未知'}
-
+${brandPos ? `【品牌定位】（用于针对性建议，融入分析中而非直接复述）
+- 菜品风格：${brandPos.cuisine}
+- 定位：${brandPos.positioning}
+- 主要客群：${brandPos.targetCustomers}
+- 风格特点：${brandPos.style}
+- 价位区间：${brandPos.priceRange}
+- 核心竞争力：${brandPos.strengths}
+` : ''}
 ❌ **严格禁止 — 出现以下任一种即视为不合格回答：**
 - 禁止使用【】括起来的标题，如「核心问题」「今日重点动作」「为什么是这个动作」「执行要求」
 - 禁止出现「score」「成功率」「趋势 up」等评分类字段
@@ -2631,7 +2639,7 @@ async function handleTrainAdvisor(text, ctx) {
 用自然的分析口吻，把文档内容讲给用户听。可以参考这个结构（但别用【】标题）：
 - 先点出文档的核心观点（一句话说清）
 - 然后展开具体内容：分类框架、数字对比、操作方法——这些是用户最看重的干货
-- 最后结合门店（${store || '该门店'}）情况，给出关注方向的建议
+- 最后结合门店（${store || '该门店'}）的菜品定位和目标客群特点，给出有针对性的关注方向和行动建议
 
 不需要三段式。关键是把文档数据讲全、讲清楚，让用户读完觉得有收获。
 ${kbData}${trainingCtx}

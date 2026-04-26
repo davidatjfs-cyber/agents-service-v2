@@ -6317,6 +6317,8 @@ async function sendAdminSystemAlert(msg, options = {}) {
 
   let feishuSent = 0;
   let feishuFailed = 0;
+  const sendTargets = [];
+  const seenOpenId = new Set();
   for (const username of recipients) {
     try {
       let fu = await lookupFeishuUserByUsername(username);
@@ -6328,16 +6330,44 @@ async function sendAdminSystemAlert(msg, options = {}) {
         );
         openId = String(r.rows?.[0]?.open_id || '').trim();
       }
-      if (!openId) {
-        feishuFailed += 1;
-        continue;
-      }
-      const result = await sendLarkMessage(openId, text, { skipDedup: true });
-      if (result?.ok) feishuSent += 1;
-      else feishuFailed += 1;
+      if (!openId || seenOpenId.has(openId)) continue;
+      seenOpenId.add(openId);
+      sendTargets.push(openId);
     } catch (e) {
-      feishuFailed += 1;
+      // ignore single user mapping failure, below会走角色兜底
     }
+  }
+  // 用户名绑定可能不完整：兜底按角色发，避免“公司通知有、飞书没收到”
+  try {
+    const roleRows = await pool.query(
+      `SELECT DISTINCT open_id
+       FROM feishu_users
+       WHERE registered = true
+         AND role IN ('admin','hq_manager','hr_manager')
+         AND TRIM(COALESCE(open_id, '')) <> ''
+         AND open_id NOT LIKE '%probe%'`
+    );
+    for (const row of roleRows.rows || []) {
+      const oid = String(row?.open_id || '').trim();
+      if (!oid || seenOpenId.has(oid)) continue;
+      seenOpenId.add(oid);
+      sendTargets.push(oid);
+    }
+  } catch (e) {
+    console.error('[system-alert] feishu role fallback query failed:', e?.message || e);
+  }
+
+  for (const openId of sendTargets) {
+    const result = await sendLarkMessage(openId, text, { skipDedup: true }).catch((e) => ({ ok: false, error: e?.message }));
+    if (result?.ok) feishuSent += 1;
+    else feishuFailed += 1;
+  }
+
+  if (sendTargets.length === 0) {
+    feishuFailed = recipients.length || 1;
+  }
+  if (feishuSent === 0) {
+    console.error('[system-alert] feishu send all failed:', { recipients, sendTargetsCount: sendTargets.length, feishuFailed });
   }
 
   return { recipients, feishuSent, feishuFailed };
@@ -17491,11 +17521,22 @@ app.listen(PORT, HOST, async () => {
       }
     }
 
+    const HEARTBEAT_ALERT_THRESHOLDS_MIN = {
+      cache_purge: 390, // cache_purge 每 2 小时一次，放宽到 6.5 小时避免夜间误报
+      default: 180
+    };
+    const heartbeatAlertDedup = new Map();
+
     // 带心跳的缓存清理（覆盖原 setInterval）
     setInterval(async () => {
       await purgeExpiredCache().catch(() => {});
       await beatHeartbeat('cache_purge');
     }, 2 * 60 * 60 * 1000);
+    // 启动即执行一次并写心跳，避免重启后首个 2 小时窗口误判为“任务停摆”
+    setTimeout(async () => {
+      await purgeExpiredCache().catch(() => {});
+      await beatHeartbeat('cache_purge');
+    }, 15 * 1000);
 
     // ── P0-3: 每 30 分钟检查心跳是否存活 ────────────────────────
     setInterval(async () => {
@@ -17504,12 +17545,23 @@ app.listen(PORT, HOST, async () => {
           SELECT task_name,
                  EXTRACT(EPOCH FROM (NOW() - last_beat)) / 60 AS minutes_ago
           FROM scheduler_heartbeat
-          WHERE last_beat < NOW() - INTERVAL '3 hours'
         `);
-        if (r.rows.length > 0) {
-          const dead = r.rows.map(row =>
-            `${row.task_name}（${Math.floor(row.minutes_ago)}分钟前）`
-          ).join('、');
+        const staleRows = (r.rows || []).filter((row) => {
+          const name = String(row?.task_name || '').trim();
+          const mins = Number(row?.minutes_ago || 0);
+          const th = Number(HEARTBEAT_ALERT_THRESHOLDS_MIN[name] || HEARTBEAT_ALERT_THRESHOLDS_MIN.default);
+          return Number.isFinite(mins) && mins >= th;
+        });
+        if (staleRows.length > 0) {
+          const dead = staleRows
+            .map(row => `${row.task_name}（${Math.floor(Number(row.minutes_ago || 0))}分钟前）`)
+            .join('、');
+          const dedupeKey = staleRows
+            .map((row) => `${row.task_name}:${Math.floor(Number(row.minutes_ago || 0) / 30)}`)
+            .join('|');
+          const lastSent = Number(heartbeatAlertDedup.get(dedupeKey) || 0);
+          if (Date.now() - lastSent < 2 * 60 * 60 * 1000) return;
+          heartbeatAlertDedup.set(dedupeKey, Date.now());
           const msg = `🚨 [HRMS] 定时任务心跳异常\n停止任务：${dead}\n请登录服务器检查：\nsystemctl status hrms.service`;
           console.error('[monitor] Dead tasks:', dead);
           await sendSystemAlert(msg);

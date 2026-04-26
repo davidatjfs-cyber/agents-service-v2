@@ -175,6 +175,16 @@ export async function getBrandForStore(storeName) {
   return null;
 }
 
+/**
+ * 获取品牌定位信息，用于个性化回复
+ */
+export async function getBrandPositioning(brand) {
+  if (!brand) return null;
+  const cfg = await getConfig('brand_positioning');
+  if (cfg?.[brand]) return cfg[brand];
+  return null;
+}
+
 // ─── KPI Targets ───
 
 /**

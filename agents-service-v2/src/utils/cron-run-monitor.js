@@ -110,8 +110,29 @@ async function syncAdminAlertToCompanyNotice(adminRows, title, message, jobKey, 
   try {
     const { ensureHrmsUserNotificationsTable } = await import('./hrms-user-notifications.js');
     await ensureHrmsUserNotificationsTable();
+    const users = new Set();
     for (const row of adminRows || []) {
-      const username = String(row?.username || '').trim();
+      const username = String(row?.username || '').trim().toLowerCase();
+      if (username) users.add(username);
+    }
+    // feishu_users.username 可能为空：兜底 users 表，确保公司通知不丢
+    try {
+      const extra = await query(
+        `SELECT username FROM users
+         WHERE role = 'admin'
+           AND COALESCE(is_active, true) = true
+         ORDER BY username
+         LIMIT 50`
+      );
+      for (const row of extra.rows || []) {
+        const u = String(row?.username || '').trim().toLowerCase();
+        if (u) users.add(u);
+      }
+    } catch (e) {
+      logger.warn({ err: e?.message, jobKey, alertType }, 'cron alert company notice users fallback failed');
+    }
+    for (const uname of users) {
+      const username = String(uname || '').trim();
       if (!username) continue;
       await query(
         `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
