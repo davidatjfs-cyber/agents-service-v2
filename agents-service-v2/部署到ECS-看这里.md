@@ -1,5 +1,56 @@
 # 部署到 ECS（给非开发同事看的）
 
+## 部署入口速查：该跑哪个脚本？
+
+以下路径均以 **HRMS monorepo 根目录** 为基准（与 `agents-service-v2` 同级有 `hr-management-system/`、`scripts/`）。先把终端 `cd` 到你的仓库根，例如：
+
+```bash
+cd /你的路径/HRMS
+export ECS_HOST=root@你的ECS公网IP或SSH别名
+```
+
+| 场景 | 实际执行的部署文件（入口） | 命令（在 monorepo 根执行） |
+|------|---------------------------|---------------------------|
+| **只发 Agents Service V2**（Node 服务 + pm2，**默认会顺带发 HRMS 静态**） | `agents-service-v2/scripts/deploy-agents-ecs.sh`（推荐）或薄封装 `agents-service-v2/scripts/deploy-safe.sh` | `bash agents-service-v2/scripts/deploy-agents-ecs.sh`<br>或：`cd agents-service-v2 && bash scripts/deploy-safe.sh` |
+| **只发 Agents、不要动 HRMS 前端静态** | 同上，但关前端联动 | `HRMS_FRONTEND_DEPLOY=0 bash agents-service-v2/scripts/deploy-agents-ecs.sh` |
+| **只发 HRMS（后端 + 前端静态，标准入口）** | `hr-management-system/scripts/deploy-hrms-safe.sh`（内部依次调用下面两行） | `cd hr-management-system && bash scripts/deploy-hrms-safe.sh` |
+| **只发 HRMS 后端**（`hrms-service` pm2） | `scripts/deploy-hrms-server-ecs.sh` | `bash scripts/deploy-hrms-server-ecs.sh` |
+| **只发 HRMS 前端静态**（`working-fixed.html` / `sw.js` 等到 `/opt/hrms`） | `scripts/deploy-hrms-frontend.sh` | `bash scripts/deploy-hrms-frontend.sh` |
+| **全量安全发布**（数据库备份 + agents + HRMS 等，步骤多、最慢） | `scripts/deploy-safe.sh` | `bash scripts/deploy-safe.sh` |
+
+**说明：**
+
+- **Agents 与 HRMS 静态**：`deploy-agents-ecs.sh` 末尾若存在 `HRMS/scripts/deploy-hrms-frontend.sh`（即完整 monorepo），默认 `HRMS_FRONTEND_DEPLOY=1` 会再跑一遍 HRMS 静态部署。只改 agents 且不想碰前端时务必加 `HRMS_FRONTEND_DEPLOY=0`。
+- **CI**：Agents 对应 `.github/workflows/safe-deployment.yml`；HRMS 对应 `hrms-safe-deployment.yml`（见各 workflow 内调用的脚本，与上表一致）。
+- **回滚**：ECS 上 `/opt/scripts/deploy-rollback.sh`（见根目录 `scripts/deploy-safe.sh` 头部注释）。
+
+---
+
+## 易错清单（部署前对照）
+
+1. **`replyEngine` 与 `admin.html` 里 `?v=` 不是一回事**：`/health` 里的 `replyEngine` 只来自 `agents-service-v2/src/reply-engine-version.js`；`public/admin.html` 里 `admin-app.js?v=…` 只影响浏览器缓存静态 JS。改了一边忘改另一边会造成「界面像新版本、健康检查仍是旧构建号」的错觉。
+2. **`src/` 有改动必须递增 `REPLY_ENGINE_BUILD`**（同一推送范围内）。部署脚本默认会对比 `origin/main...HEAD`；若被误拦，先确认已提交 `reply-engine-version.js`，或紧急 `SKIP_REPLY_ENGINE_BUMP_CHECK=1`（不推荐常态使用）。
+3. **在 ECS 上 `git pull` 无效**：`/opt/agents-service-v2` 一般是 **rsync 同步目录，没有 `.git`**，更新代码必须来自本机脚本或 GitHub Actions，而不是在服务器上 pull。
+4. **在 ECS 家目录执行 `bash agents-service-v2/...`**：会报找不到文件；脚本应在 **本机** 从 monorepo 路径执行，或 Actions 里配置的工作目录执行。
+5. **用公网域名测 `/health` 可能 404 或路径不对**：以 **ECS 本机** `curl -sS http://127.0.0.1:3101/health` 为准（或你们 nginx 已正确反代后的 URL）；不要把「未配置反代的路径」当成没部署成功。
+6. **HRMS 静态必须进 `/opt/hrms/` 根**：不要只拷到 `/opt/hrms/hr-management-system/` 子目录；nginx `root` 与 `deploy-hrms-frontend.sh` 约定见该脚本头部注释。
+7. **只 `pm2 restart` 不 rsync**：若本机代码未同步，重启的仍是旧磁盘文件。
+8. **未配置 SSH**：`ECS_HOST` 无法连接时，只能改用 GitHub Actions 或请已配密钥的同事执行。
+
+### `deploy-agents-ecs.sh` 常用环境变量
+
+| 变量 | 默认 | 含义 |
+|------|------|------|
+| `ECS_HOST` | `root@47.100.96.30` | SSH 目标 |
+| `REMOTE_DIR` | `/opt/agents-service-v2` | 远端目录 |
+| `SKIP_VERIFY` | `0` | `1` 跳过本地 `verify-agents-local.sh`（紧急用） |
+| `SKIP_REPLY_ENGINE_BUMP_CHECK` | `0` | `1` 跳过「src 变更必须带 version 文件」检查 |
+| `AGENTS_DEPLOY_BASE_REF` | `origin/main` | 上述检查时的 git 基线 |
+| `HRMS_FRONTEND_DEPLOY` | `1` | `0` 不调用 `scripts/deploy-hrms-frontend.sh` |
+| `AGENTS_BACKUP_BEFORE_DEPLOY` / `AGENTS_DEPLOY_REQUIRE_BACKUP` | `1` | 远端 tar 备份；失败是否阻断 |
+
+---
+
 ## 强制：每次更新 Agents Service V2 必须同步更新 `replyEngine`
 
 **规则**：只要本次发布改动了 `agents-service-v2` 下的业务代码、依赖、配置逻辑或任何会影响线上行为的内容，**必须在同一提交（或紧挨着的提交）里递增** `src/reply-engine-version.js` 中的 **`REPLY_ENGINE_BUILD`**（例如 `20260415A` → `20260415B`）。

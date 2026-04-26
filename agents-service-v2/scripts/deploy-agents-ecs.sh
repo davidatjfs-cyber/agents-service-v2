@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # 将本地 agents-service-v2 同步到阿里云 ECS 并重启 pm2。
+# 部署入口 / 易错点 / 其它场景脚本：见同目录上级文档 agents-service-v2/部署到ECS-看这里.md
 # 默认先跑 verify-agents-local.sh；跳过验证：SKIP_VERIFY=1
+# 默认在 monorepo 下会顺带跑 ../scripts/deploy-hrms-frontend.sh；仅 agents：HRMS_FRONTEND_DEPLOY=0
 # 用法：ECS_HOST=root@47.100.96.30 REMOTE_DIR=/opt/agents-service-v2 ./scripts/deploy-agents-ecs.sh
 #
 # 说明：若使用「密码」登录 SSH，请不要在脚本里加 BatchMode=yes（会禁止交互密码）；
