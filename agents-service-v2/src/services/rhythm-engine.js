@@ -1327,27 +1327,8 @@ export function startRhythmScheduler() {
     }
   }, { timezone: 'Asia/Shanghai' });
 
-  // 周一 08:30 — 菜品优化周报（按大类维度四象限分类）
-  cron.schedule('30 8 * * 1', async () => {
-    try {
-      await runWithCronLog('weekly_dish_optimization', async () => {
-        await sendWeeklyDishOptimizationReport();
-      });
-    } catch (e) {
-      logger.error({ err: e }, 'Cron: weekly dish optimization report failed');
-    }
-  }, { timezone: 'Asia/Shanghai' });
-
-  // 每月1日 08:10 — 菜品优化月报
-  cron.schedule('10 8 1 * *', async () => {
-    try {
-      await runWithCronLog('monthly_dish_optimization', async () => {
-        await sendMonthlyDishOptimizationReport();
-      });
-    } catch (e) {
-      logger.error({ err: e }, 'Cron: monthly dish optimization report failed');
-    }
-  }, { timezone: 'Asia/Shanghai' });
+  // 菜品优化周报/月报 cron 已按业务要求取消。
+  // 仅保留手动 API 触发，避免自动发送干扰管理员验收。
 
   // 每日 22:00 — 不满意产品日报
   cron.schedule('0 22 * * *', async () => {
@@ -1383,6 +1364,6 @@ export function startRhythmScheduler() {
   }, { timezone: 'Asia/Shanghai' });
 
   logger.info(
-    '✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+日频BI(每日05:08)+BI通知发送(每日09:05)+月收(每月1日08:12)+周报(周一10:06)+月评(每月1日10:18)+考勤(每日22:30+补跑23:10)+菜品优化周报(周一08:30)+菜品优化月报(每月1日08:10)+不满意产品日报(每日22:00)+不满意产品周报(周一09:00)+不满意产品月报(每月1日09:00)'
+    '✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+日频BI(每日05:08)+BI通知发送(每日09:05)+月收(每月1日08:12)+周报(周一10:06)+月评(每月1日10:18)+考勤(每日22:30+补跑23:10)+不满意产品日报(每日22:00)+不满意产品周报(周一09:00)+不满意产品月报(每月1日09:00)'
   );
 }

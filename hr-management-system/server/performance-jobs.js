@@ -621,17 +621,8 @@ export function startHrmsPerformanceJobs(options = {}) {
       const { y, m, d, hour, minute } = cal;
       const slotBase = `${y}-${m}-${d}_${hour}`;
 
-      if (d === 10 && hour === 1 && minute < 12) {
-        if (_slotMonthlyCalc !== slotBase) {
-          _slotMonthlyCalc = slotBase;
-          try {
-            await runMonthlyPerformanceClose();
-          } catch (e) {
-            console.error('[perf-jobs] monthly close failed', e?.message || e);
-            await notifyHrmsPerfAdmins('月度绩效关账（每月10日01:00）', e);
-          }
-        }
-      }
+      // 2026-04 起：月度绩效统一由 agents-service-v2 monthly-comprehensive-rating 生成并发送。
+      // HRMS runMonthlyPerformanceClose/sendFeishuPerformanceDigest 若继续运行，会与 agents 月报并行写库/发卡，造成错分与重复。
 
       if (hour === 8 && minute < 12) {
         // 菜品优化周/月报默认由 agents-service-v2 rhythm-engine 发送；仅当 HRMS_ENABLE_DISH_OPTIMIZATION_CRON=true 时本进程才发，避免双发与旧版式
@@ -651,18 +642,7 @@ export function startHrmsPerformanceJobs(options = {}) {
           }
         }
 
-        if (d === 10) {
-          if (_slotMonthlyPush !== slotBase) {
-            _slotMonthlyPush = slotBase;
-            const period = prevMonthPeriod(cal);
-            try {
-              await sendFeishuPerformanceDigest(period);
-            } catch (e) {
-              console.error('[perf-jobs] performance digest failed', e?.message || e);
-              await notifyHrmsPerfAdmins(`月度绩效摘要推送（每月10日·${period}）`, e);
-            }
-          }
-        }
+        // legacy monthly digest disabled — agents-service-v2 owns monthly score delivery
 
         // 周一 8:00–11:59 任意 5 分钟 tick 触发一次（原仅 minute<12 易在 8:15 重启等服务错过整周）
         if (hrmsDishCron && isShanghaiMonday() && hour >= 8 && hour < 12) {

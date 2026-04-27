@@ -19436,7 +19436,21 @@ app.get('/api/admin/usage-weekly', authRequired, async (req, res) => {
         COUNT(*) AS login_count,
         ROUND(
           EXTRACT(EPOCH FROM (
-            COALESCE(SUM(LEAST(COALESCE(l.logout_at, l.login_at + INTERVAL '5 minutes'), l.login_at + INTERVAL '12 hours') - l.login_at), INTERVAL '0')
+            COALESCE(
+              SUM(
+                LEAST(
+                  COALESCE(
+                    l.logout_at,
+                    LEAST(
+                      (($2::text || ' 23:59:59')::timestamp AT TIME ZONE 'Asia/Shanghai'),
+                      l.login_at + INTERVAL '12 hours'
+                    )
+                  ),
+                  l.login_at + INTERVAL '12 hours'
+                ) - l.login_at
+              ),
+              INTERVAL '0'
+            )
           )) / 60.0
         , 1) AS online_minutes
       FROM user_login_log l

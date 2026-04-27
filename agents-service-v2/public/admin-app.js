@@ -42,7 +42,7 @@ function shanghaiTodayInputDate() {
 // ── State ──
 const AN = { master: 'Master调度中枢', data_auditor: '数据审计', ops_supervisor: '运营督导', chief_evaluator: '绩效考核', train_advisor: '培训顾问', appeal: '申诉处理', marketing_planner: '营销策划', marketing_executor: '营销执行', procurement_advisor: '采购建议' };
 let tab = 'dashboard';
-let S = { hl: {}, st: {}, fs: {}, bitableSyncHealth: null, agents: {}, rules: [], scores: {}, campaigns: [], templates: [], evalReport: {}, auditItems: [], cfgs: [], schedCfg: {}, anomalyCfg: {}, perfCfg: {}, ratingCfg: {}, kpiTargets: [], kbItems: [], memoryItems: [], knowledgeSources: null, knowledgeSourcesErr: '', featureFlags: {}, selectedAgent: 'data_auditor', activity: {}, activityDate: shanghaiTodayInputDate(), drillData: [], bitableStatus: {}, chairmanCfg: {}, chairmanTab: 'stores', agentSkills: {}, pllmDashboard: { month: '', summary: {}, byStore: [], recent: [] } };
+let S = { hl: {}, st: {}, fs: {}, bitableSyncHealth: null, agents: {}, rules: [], scores: {}, campaigns: [], templates: [], evalReport: {}, auditItems: [], cfgs: [], schedCfg: {}, anomalyCfg: {}, perfCfg: {}, ratingCfg: {}, kpiTargets: [], kbItems: [], memoryItems: [], knowledgeSources: null, knowledgeSourcesErr: '', featureFlags: {}, selectedAgent: 'data_auditor', activity: {}, activityDate: shanghaiTodayInputDate(), drillData: [], bitableStatus: {}, chairmanCfg: {}, chairmanTab: 'stores', agentSkills: {}, pllmDashboard: { month: '', summary: {}, byStore: [], recent: [] }, performanceMonthlyQuery: { period: shanghaiTodayInputDate().slice(0, 7), store: '', keyword: '', role: '', min_score: '', max_score: '', execution_rating: '', attitude_rating: '', ability_rating: '', record_focus: 'all', items: [], totalMatched: 0, scannedSubjects: 0, generatedAt: '' } };
 
 // ── DOM Helpers ──
 function $(id) { return document.getElementById(id); }
@@ -90,6 +90,115 @@ function msg(t, isErr) {
 }
 function fmtDate(d) { if (!d) return '-'; return String(typeof d === 'string' ? d : d.toISOString?.() || '').slice(0, 10); }
 function fmtTime(d) { if (!d) return '-'; const s = String(typeof d === 'string' ? d : d.toISOString?.() || ''); return s.length > 16 ? s.slice(11, 16) : s; }
+function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])); }
+function roleZh(role) { return role === 'store_manager' ? '店长' : role === 'store_production_manager' ? '出品经理' : role || '—'; }
+function monthInputValue() { return shanghaiTodayInputDate().slice(0, 7); }
+function pmqBriefExecutionEvidence(row) {
+  const ev = row && row.evidence_urls;
+  if (!ev || typeof ev !== 'object') return '';
+  const bits = [];
+  if (ev.rating) bits.push('日评 ' + String(ev.rating));
+  if (Array.isArray(ev.missing) && ev.missing.length) bits.push('未达标：' + ev.missing.map((x) => String(x)).join('、'));
+  return bits.join(' · ');
+}
+function openPerformanceMonthlyPrint(record) {
+  const focus = String(record.record_focus || 'all').toLowerCase();
+  const dr = record.deduction_records || [];
+  let weekly;
+  if (dr.length) {
+    const byWeek = {};
+    dr.forEach((d) => {
+      const wk = d.week_period || '—';
+      if (!byWeek[wk]) byWeek[wk] = [];
+      byWeek[wk].push(d);
+    });
+    weekly = Object.keys(byWeek).sort().map((wk) => {
+      const deductions = byWeek[wk].map((d) => {
+        const keyText = d.anomaly_key_label || d.anomaly_key || '';
+        const note = d.detail_note ? `<div class="note">${escHtml(d.detail_note)}</div>` : '';
+        return `<li><strong>${escHtml(d.category_label || d.category || '异常扣分')}</strong>${keyText ? `（${escHtml(keyText)}）` : ''}：-${escHtml(d.points)} 分${note}</li>`;
+      }).join('');
+      return `<section class="block"><h3>${escHtml(wk)}</h3><ul>${deductions}</ul></section>`;
+    }).join('');
+  } else {
+    weekly = '<section class="block"><p class="muted">暂无周度扣分记录，或本次查询在「展示范围」中未包含扣分项。</p></section>';
+  }
+  const execRows = (record.execution_filings || []).map((r) => `<tr><td>${escHtml(r.biz_date || '')}</td><td>${escHtml(r.title || '')}</td><td>${escHtml(r.status || '')}</td><td>${escHtml(pmqBriefExecutionEvidence(r))}</td></tr>`).join('');
+  const execBlock = execRows
+    ? `<table class="t"><thead><tr><th>业务日</th><th>标题</th><th>状态</th><th>摘要</th></tr></thead><tbody>${execRows}</tbody></table>`
+    : (focus === 'attitude' || focus === 'deductions'
+      ? '<p class="muted">本次查询未加载执行力备案明细。</p>'
+      : '<p class="muted">本月无执行力备案（本门店）</p>');
+  const attClip = (s, n) => { const t = String(s || ''); return t.length <= n ? t : t.slice(0, n) + '…'; };
+  const attRows = (record.attitude_filings || []).map((r) => `<tr><td>${escHtml(r.dispatch_date || '')}</td><td>${escHtml(r.store || '')}</td><td>${escHtml(r.title || '')}</td><td>${escHtml(r.status || '')}</td><td>${escHtml(r.source || '')}</td><td class="mono">${escHtml(r.task_id || '')}</td><td>${escHtml(attClip(r.detail_preview, 200))}</td></tr>`).join('');
+  const attBlock = attRows
+    ? `<table class="t"><thead><tr><th>派发日</th><th>门店</th><th>标题</th><th>状态</th><th>来源</th><th>任务ID</th><th>摘要</th></tr></thead><tbody>${attRows}</tbody></table>`
+    : (focus === 'execution' || focus === 'deductions'
+      ? '<p class="muted">本次查询未加载工作态度备案明细。</p>'
+      : '<p class="muted">本月无工作态度备案（本人全门店）</p>');
+  const html = `<!doctype html>
+  <html lang="zh-CN"><head><meta charset="utf-8"><title>月度绩效查询打印</title>
+  <style>
+    body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;padding:24px;color:#111827;line-height:1.55}
+    h1{font-size:22px;margin:0 0 8px} h2{font-size:16px;margin:24px 0 8px}
+    .meta{color:#4b5563;font-size:13px;margin-bottom:12px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px}
+    .box{border:1px solid #e5e7eb;border-radius:12px;padding:14px 16px;margin:14px 0}.tag{display:inline-block;background:#eef2ff;color:#4338ca;border-radius:999px;padding:2px 8px;font-size:12px;margin-left:8px}
+    .block{border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin:10px 0}.summary{color:#374151;font-size:13px;margin:6px 0 8px}.note{color:#6b7280;font-size:12px;margin-top:4px}
+    ul{margin:8px 0 0 18px;padding:0} li{margin:4px 0} .muted{color:#6b7280}
+    table.t{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+    table.t th,table.t td{border:1px solid #e5e7eb;padding:6px 8px;text-align:left;vertical-align:top}
+    table.t th{background:#f9fafb;font-weight:600} table.t td.mono{font-family:ui-monospace,Menlo,monospace;font-size:11px}
+    @media print { body{padding:0 8px} }
+  </style></head><body>
+    <h1>员工月度绩效查询</h1>
+    <div class="meta">生成时间：${escHtml(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }))}</div>
+    <div class="box">
+      <div><strong>${escHtml(record.name || record.username)}</strong><span class="tag">${escHtml(record.period)}</span></div>
+      <div class="grid" style="margin-top:10px">
+        <div>门店：${escHtml(record.store || '—')}</div>
+        <div>岗位：${escHtml(record.role_label || roleZh(record.role))}</div>
+        <div>绩效分数：${escHtml(record.performance_score)} 分</div>
+        <div>分数口径：${record.is_finalized ? '已关账月报' : '实时月内快照'}</div>
+        <div>工作执行力：${escHtml(record.execution_rating || '未关账')}</div>
+        <div>工作态度：${escHtml(record.attitude_rating || '未关账')}</div>
+        <div>工作能力：${escHtml(record.ability_rating || '未关账')}</div>
+        <div>门店级别：${escHtml(record.store_rating || '未关账')}</div>
+        <div>执行力备案：${escHtml(record.execution_filing_count)} 次</div>
+        <div>态度备案：${escHtml(record.attitude_filing_count)} 次</div>
+      </div>
+      ${record.finalized_summary ? `<div class="summary" style="margin-top:10px">月报摘要：${escHtml(record.finalized_summary)}</div>` : '<div class="summary" style="margin-top:10px">当前月份尚未关账，评级字段以最终月报为准。</div>'}
+    </div>
+    <h2>月内周度扣分记录</h2>
+    ${weekly}
+    <h2>工作执行力备案明细</h2>
+    ${execBlock}
+    <h2>工作态度备案明细</h2>
+    ${attBlock}
+  </body></html>`;
+  let iframe = document.getElementById('pmq_print_frame');
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = 'pmq_print_frame';
+    iframe.title = 'print';
+    iframe.setAttribute('aria-hidden', 'true');
+    Object.assign(iframe.style, { position: 'fixed', width: '0', height: '0', border: '0', left: '0', bottom: '0', opacity: '0', pointerEvents: 'none' });
+    document.body.appendChild(iframe);
+  }
+  const idoc = iframe.contentDocument || iframe.contentWindow.document;
+  idoc.open();
+  idoc.write(html);
+  idoc.close();
+  const win = iframe.contentWindow;
+  const runPrint = () => {
+    try {
+      win.focus();
+      win.print();
+    } catch (e) {
+      msg('打印失败：' + (e?.message || e), true);
+    }
+  };
+  setTimeout(runPrint, 200);
+}
 
 /** 从 JWT 解析 payload（仅读 role，不做签名校验；补全 aau 缺失时的权限判断） */
 function readJwtPayload() {
@@ -1315,6 +1424,227 @@ function viewPerformance() {
       } catch (e) { msg('失败：' + (e?.message || e), true); }
     }, 'bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700'));
     return d;
+  })()));
+  w.appendChild(card('员工月度绩效查询（支持打印为 PDF）', (() => {
+    const q = S.performanceMonthlyQuery || {};
+    const ratingOpts = [['', '不限'], ['A', 'A'], ['B', 'B'], ['C', 'C'], ['__open__', '未关账']];
+    function pmqRatingSelect(id, current) {
+      const sel = el('select', { id, className: 'border border-gray-300 rounded-lg px-2 py-2 text-sm w-full' });
+      ratingOpts.forEach(([v, t]) => {
+        const opt = el('option', { value: v }, t);
+        if (String(current || '') === v) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      return sel;
+    }
+    function pmqMiniCard(title, inner) {
+      const c = el('div', { className: 'rounded-lg border border-gray-200 bg-white p-4 shadow-sm' });
+      c.appendChild(el('h4', { className: 'font-semibold text-sm text-gray-900 mb-3 border-b border-gray-100 pb-2' }, title));
+      c.appendChild(inner);
+      return c;
+    }
+    const wrap = el('div', { className: 'space-y-4' });
+    const banner = el('div', { className: 'rounded-lg border border-indigo-100 bg-gradient-to-r from-indigo-50 to-violet-50 px-4 py-3 text-sm text-indigo-950' });
+    banner.appendChild(el('div', { className: 'font-medium' }, '筛选、备案明细与打印'));
+    banner.appendChild(el('div', { className: 'text-xs text-indigo-800/90 mt-1 leading-relaxed' }, '打印 / 导出 PDF 使用页内隐藏 iframe 调起系统打印对话框，无需新窗口弹窗。「展示范围」选「仅执行力备案」可只看执行力备案与汇总，不加载扣分与其它备案明细。'));
+    wrap.appendChild(banner);
+
+    const row1 = el('div', { className: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3' });
+    const periodInput = el('input', { id: 'pmq_period', type: 'month', value: q.period || monthInputValue(), className: 'border border-gray-300 rounded-lg px-3 py-2 text-sm w-full' });
+    const storeInput = inp('pmq_store', '支持模糊匹配'); storeInput.value = q.store || '';
+    const keywordInput = inp('pmq_keyword', '如：王世波 / NNYXWSB39'); keywordInput.value = q.keyword || '';
+    row1.appendChild(field('月份', periodInput));
+    row1.appendChild(field('门店', storeInput));
+    row1.appendChild(field('姓名/账号', keywordInput));
+    const roleSel = el('select', { id: 'pmq_role', className: 'border border-gray-300 rounded-lg px-3 py-2 text-sm w-full' });
+    [['', '全部岗位'], ['store_manager', '店长'], ['store_production_manager', '出品经理']].forEach(([v, t]) => {
+      const opt = el('option', { value: v }, t);
+      if (String(q.role || '') === v) opt.selected = true;
+      roleSel.appendChild(opt);
+    });
+    row1.appendChild(field('岗位', roleSel));
+    wrap.appendChild(row1);
+
+    const row2 = el('div', { className: 'grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3' });
+    const minScoreInp = el('input', { id: 'pmq_min_score', type: 'number', placeholder: '如 0', value: q.min_score || '', className: 'border border-gray-300 rounded-lg px-3 py-2 text-sm w-full' });
+    const maxScoreInp = el('input', { id: 'pmq_max_score', type: 'number', placeholder: '如 100', value: q.max_score || '', className: 'border border-gray-300 rounded-lg px-3 py-2 text-sm w-full' });
+    row2.appendChild(field('绩效分 ≥', minScoreInp));
+    row2.appendChild(field('绩效分 ≤', maxScoreInp));
+    row2.appendChild(field('执行力评级', pmqRatingSelect('pmq_exec_rating', q.execution_rating)));
+    row2.appendChild(field('态度评级', pmqRatingSelect('pmq_att_rating', q.attitude_rating)));
+    row2.appendChild(field('能力评级', pmqRatingSelect('pmq_abi_rating', q.ability_rating)));
+    const focusSel = el('select', { id: 'pmq_record_focus', className: 'border border-gray-300 rounded-lg px-2 py-2 text-sm w-full' });
+    [['all', '全部（扣分+备案）'], ['execution', '仅执行力备案'], ['attitude', '仅态度备案'], ['deductions', '仅周度扣分']].forEach(([v, t]) => {
+      const opt = el('option', { value: v }, t);
+      if (String(q.record_focus || 'all') === v) opt.selected = true;
+      focusSel.appendChild(opt);
+    });
+    row2.appendChild(field('展示范围', focusSel));
+    wrap.appendChild(row2);
+
+    const btnRow = el('div', { className: 'flex flex-wrap items-center gap-2' });
+    btnRow.appendChild(btn('查询', async () => {
+      try {
+        const next = {
+          period: $('pmq_period')?.value || monthInputValue(),
+          store: $('pmq_store')?.value?.trim() || '',
+          keyword: $('pmq_keyword')?.value?.trim() || '',
+          role: $('pmq_role')?.value || '',
+          min_score: $('pmq_min_score')?.value?.trim() || '',
+          max_score: $('pmq_max_score')?.value?.trim() || '',
+          execution_rating: $('pmq_exec_rating')?.value || '',
+          attitude_rating: $('pmq_att_rating')?.value || '',
+          ability_rating: $('pmq_abi_rating')?.value || '',
+          record_focus: $('pmq_record_focus')?.value || 'all'
+        };
+        const qs = new URLSearchParams();
+        if (next.period) qs.set('period', next.period);
+        if (next.store) qs.set('store', next.store);
+        if (next.keyword) qs.set('keyword', next.keyword);
+        if (next.role) qs.set('role', next.role);
+        if (next.min_score) qs.set('min_score', next.min_score);
+        if (next.max_score) qs.set('max_score', next.max_score);
+        if (next.execution_rating) qs.set('execution_rating', next.execution_rating);
+        if (next.attitude_rating) qs.set('attitude_rating', next.attitude_rating);
+        if (next.ability_rating) qs.set('ability_rating', next.ability_rating);
+        if (next.record_focus && next.record_focus !== 'all') qs.set('record_focus', next.record_focus);
+        const res = await G('/api/performance-monthly-query?' + qs.toString());
+        S.performanceMonthlyQuery = {
+          ...next,
+          items: res.items || [],
+          totalMatched: res.totalMatched || 0,
+          scannedSubjects: res.scannedSubjects ?? 0,
+          generatedAt: res.generatedAt || ''
+        };
+        go('performance');
+      } catch (e) { msg('查询失败：' + (e?.message || e), true); }
+    }, 'bg-indigo-600 text-white text-sm px-5 py-2 rounded-lg hover:bg-indigo-700'));
+    btnRow.appendChild(btnGhost('清空', () => {
+      S.performanceMonthlyQuery = {
+        period: monthInputValue(), store: '', keyword: '', role: '',
+        min_score: '', max_score: '', execution_rating: '', attitude_rating: '', ability_rating: '',
+        record_focus: 'all', items: [], totalMatched: 0, scannedSubjects: 0, generatedAt: ''
+      };
+      go('performance');
+    }));
+    wrap.appendChild(btnRow);
+
+    wrap.appendChild(el('div', { className: 'text-xs text-gray-500' },
+      '说明：当月默认展示「实时月内快照」；已关账月展示正式月报。态度备案列表为本人全门店（与系统计数口径一致）；执行力备案列表仅当前行门店。'));
+
+    const items = q.items || [];
+    if (!items.length) {
+      wrap.appendChild(el('div', { className: 'text-sm text-gray-500 border border-dashed border-gray-200 rounded-xl px-4 py-8 text-center bg-gray-50/50' }, '设置月份、姓名或门店后点击「查询」。若加了分数或评级条件，本页最多扫描 250 名候选人再截取前 20 条命中。'));
+      return wrap;
+    }
+
+    const scanHint = (Number(q.scannedSubjects) >= 250 && items.length >= 20)
+      ? '；提示：已顺序扫描满 250 名候选人且本页已满 20 条，更靠后的人选可能被截断，可缩小门店/姓名或放宽分数与评级筛选'
+      : '';
+    wrap.appendChild(el('div', { className: 'text-xs text-gray-600 flex flex-wrap gap-x-3 gap-y-1' }, [
+      el('span', {}, `姓名/门店命中：${q.totalMatched || items.length} 人`),
+      el('span', { className: 'font-medium text-indigo-700' }, `本页展示：${items.length} 人`),
+      el('span', { className: 'text-gray-500' }, `顺序扫描候选：${q.scannedSubjects != null ? q.scannedSubjects : '—'} 人${scanHint}`),
+      el('span', { className: 'text-gray-400' }, `生成于 ${q.generatedAt ? new Date(q.generatedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) : '—'}`)
+    ]));
+
+    const tbl = el('table', { className: 'w-full text-sm border border-gray-200 rounded-xl overflow-hidden bg-white' });
+    tbl.innerHTML = '<thead><tr class="bg-slate-100 text-slate-700"><th class="text-left px-3 py-2.5 text-xs font-semibold whitespace-nowrap border-b border-gray-200">姓名</th><th class="text-left px-3 py-2.5 text-xs font-semibold whitespace-nowrap border-b border-gray-200">门店</th><th class="text-left px-3 py-2.5 text-xs font-semibold whitespace-nowrap border-b border-gray-200">岗位</th><th class="text-left px-3 py-2.5 text-xs font-semibold whitespace-nowrap border-b border-gray-200">月份</th><th class="text-left px-3 py-2.5 text-xs font-semibold whitespace-nowrap border-b border-gray-200">绩效分</th><th class="text-left px-3 py-2.5 text-xs font-semibold whitespace-nowrap border-b border-gray-200">执行/态度/能力</th><th class="text-left px-3 py-2.5 text-xs font-semibold whitespace-nowrap border-b border-gray-200">备案汇总</th><th class="text-left px-3 py-2.5 text-xs font-semibold whitespace-nowrap border-b border-gray-200">操作</th></tr></thead>';
+    const tbody = el('tbody');
+    items.forEach((item, idx) => {
+      const tr = el('tr', { className: idx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/40 hover:bg-slate-50' });
+      const nameTd = el('td', { className: 'px-3 py-3 border-b border-gray-100 align-middle' });
+      nameTd.appendChild(el('div', { className: 'font-medium text-gray-900' }, item.name || item.username));
+      if (item.username) nameTd.appendChild(el('div', { className: 'text-xs text-gray-500 mt-0.5' }, item.username));
+      tr.appendChild(nameTd);
+      tr.appendChild(el('td', { className: 'px-3 py-3 border-b border-gray-100 align-middle text-gray-800' }, item.store || '—'));
+      tr.appendChild(el('td', { className: 'px-3 py-3 border-b border-gray-100 align-middle' }, item.role_label || roleZh(item.role)));
+      tr.appendChild(el('td', { className: 'px-3 py-3 border-b border-gray-100 align-middle tabular-nums' }, item.period || '—'));
+      tr.appendChild(el('td', { className: 'px-3 py-3 border-b border-gray-100 align-middle font-semibold tabular-nums ' + (item.is_finalized ? 'text-indigo-700' : 'text-emerald-700') }, `${item.performance_score} 分${item.is_finalized ? '' : '（实时）'}`));
+      tr.appendChild(el('td', { className: 'px-3 py-3 border-b border-gray-100 align-middle text-xs text-gray-700 leading-relaxed' }, `执行 ${item.execution_rating || '未关账'}\n态度 ${item.attitude_rating || '未关账'}\n能力 ${item.ability_rating || '未关账'}`));
+      tr.appendChild(el('td', { className: 'px-3 py-3 border-b border-gray-100 align-middle text-xs text-gray-600' }, `执行力 ${item.execution_filing_count || 0} 次\n态度 ${item.attitude_filing_count || 0} 次`));
+      tr.appendChild(el('td', { className: 'px-3 py-3 border-b border-gray-100 align-middle' }, el('div', { className: 'flex flex-wrap gap-2' }, [
+        btnGhost('导出PDF', () => openPerformanceMonthlyPrint(item)),
+        btnGhost('展开详情', () => {
+          const detail = $('pmq_detail_' + idx);
+          if (detail) detail.style.display = detail.style.display === 'none' ? 'table-row' : 'none';
+        })
+      ])));
+      tbody.appendChild(tr);
+
+      const detailTr = el('tr', { id: 'pmq_detail_' + idx, style: 'display:none' });
+      const detailTd = el('td', { className: 'px-4 py-5 bg-slate-100/80 border-b border-gray-200', colspan: '8' });
+      const detailWrap = el('div', { className: 'grid grid-cols-1 xl:grid-cols-3 gap-4' });
+
+      const ul = el('ul', { className: 'list-disc ml-4 text-sm text-gray-700 space-y-1.5 max-h-80 overflow-y-auto' });
+      const deductionRows = item.deduction_records || [];
+      if (!deductionRows.length) ul.appendChild(el('li', { className: 'text-gray-400 list-none -ml-4' }, '暂无扣分记录'));
+      else deductionRows.forEach((d) => {
+        const txt = `${d.week_period || '—'}｜${d.category_label || d.category || '异常扣分'}${d.anomaly_key_label ? `（${d.anomaly_key_label}）` : ''}：-${d.points} 分${d.detail_note ? `｜${d.detail_note}` : ''}`;
+        ul.appendChild(el('li', {}, txt));
+      });
+      detailWrap.appendChild(pmqMiniCard('月内周度扣分', ul));
+
+      const exTable = el('table', { className: 'w-full text-xs border-collapse' });
+      const exThead = el('thead'); const exThr = el('tr');
+      ['业务日', '标题', '状态', '摘要'].forEach((h) => exThr.appendChild(el('th', { className: 'text-left font-semibold text-gray-600 border-b border-gray-200 py-1.5 pr-2' }, h)));
+      exThead.appendChild(exThr); exTable.appendChild(exThead);
+      const exBody = el('tbody');
+      const exList = item.execution_filings || [];
+      if (!exList.length) exBody.appendChild(el('tr', {}, el('td', { className: 'text-gray-400 py-2', colspan: '4' }, '暂无执行力备案')));
+      else exList.forEach((r) => {
+        const er = el('tr', { className: 'border-b border-gray-100' });
+        er.appendChild(el('td', { className: 'py-1.5 pr-2 align-top whitespace-nowrap' }, r.biz_date || '—'));
+        er.appendChild(el('td', { className: 'py-1.5 pr-2 align-top' }, r.title || ''));
+        er.appendChild(el('td', { className: 'py-1.5 pr-2 align-top whitespace-nowrap' }, r.status || ''));
+        er.appendChild(el('td', { className: 'py-1.5 text-gray-600 align-top' }, pmqBriefExecutionEvidence(r)));
+        exBody.appendChild(er);
+      });
+      exTable.appendChild(exBody);
+      detailWrap.appendChild(pmqMiniCard('工作执行力备案（本门店）', exTable));
+
+      const summaryCol = el('div', { className: 'space-y-4' });
+      const sumInner = el('div', { className: 'text-sm text-gray-700 space-y-1.5' });
+      sumInner.appendChild(el('div', {}, `分数口径：${item.is_finalized ? '已关账月报' : '实时月内快照（未关账）'}`));
+      sumInner.appendChild(el('div', {}, `执行力评级：${item.execution_rating || '未关账'}`));
+      sumInner.appendChild(el('div', {}, `态度评级：${item.attitude_rating || '未关账'}`));
+      sumInner.appendChild(el('div', {}, `能力评级：${item.ability_rating || '未关账'}`));
+      sumInner.appendChild(el('div', { className: 'text-xs text-gray-500 pt-1' }, `执行力备案 ${item.execution_filing_count || 0} 次 · 态度备案 ${item.attitude_filing_count || 0} 次`));
+      if (item.finalized_summary) sumInner.appendChild(el('div', { className: 'text-xs text-gray-500 border-t border-gray-100 pt-2 mt-2' }, item.finalized_summary));
+      summaryCol.appendChild(pmqMiniCard('月度评级摘要', sumInner));
+
+      const attTable = el('table', { className: 'w-full text-xs border-collapse' });
+      const attThead = el('thead'); const attThr = el('tr');
+      ['派发日', '门店', '标题', '状态', '来源', '任务ID', '摘要'].forEach((h) => attThr.appendChild(el('th', { className: 'text-left font-semibold text-gray-600 border-b border-gray-200 py-1.5 pr-2' }, h)));
+      attThead.appendChild(attThr); attTable.appendChild(attThead);
+      const attBody = el('tbody');
+      const attList = item.attitude_filings || [];
+      const clip = (s, n) => { const t = String(s || ''); return t.length <= n ? t : t.slice(0, n) + '…'; };
+      if (!attList.length) attBody.appendChild(el('tr', {}, el('td', { className: 'text-gray-400 py-2', colspan: '7' }, '暂无工作态度备案')));
+      else attList.forEach((r) => {
+        const ar = el('tr', { className: 'border-b border-gray-100' });
+        ar.appendChild(el('td', { className: 'py-1.5 pr-2 align-top whitespace-nowrap' }, r.dispatch_date || '—'));
+        ar.appendChild(el('td', { className: 'py-1.5 pr-2 align-top' }, r.store || ''));
+        ar.appendChild(el('td', { className: 'py-1.5 pr-2 align-top' }, r.title || ''));
+        ar.appendChild(el('td', { className: 'py-1.5 pr-2 align-top whitespace-nowrap' }, r.status || ''));
+        ar.appendChild(el('td', { className: 'py-1.5 pr-2 align-top text-gray-600 whitespace-nowrap' }, r.source || ''));
+        ar.appendChild(el('td', { className: 'py-1.5 pr-2 align-top font-mono text-[11px] text-gray-500' }, r.task_id || ''));
+        ar.appendChild(el('td', { className: 'py-1.5 align-top text-gray-600 max-w-[220px]' }, clip(r.detail_preview, 160)));
+        attBody.appendChild(ar);
+      });
+      attTable.appendChild(attBody);
+      const attHint = el('p', { className: 'text-xs text-gray-400 mt-2' }, '摘要来自任务 detail 前 800 字；更长内容请在管理台下钻 master_tasks 查看。');
+      const attWrap = el('div', {}, [attTable, attHint]);
+      summaryCol.appendChild(pmqMiniCard('工作态度备案（本人全门店）', attWrap));
+      detailWrap.appendChild(summaryCol);
+
+      detailTd.appendChild(detailWrap);
+      detailTr.appendChild(detailTd);
+      tbody.appendChild(detailTr);
+    });
+    tbl.appendChild(tbody);
+    wrap.appendChild(tbl);
+    return wrap;
   })()));
   const perfCfg = S.perfCfg || {};
 

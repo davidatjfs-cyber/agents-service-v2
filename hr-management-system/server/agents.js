@@ -8214,6 +8214,12 @@ async function getStoresForBrand(brandName) {
 export async function runChiefEvaluator(period) {
   const p = String(period || '').trim();
   if (!p) return { error: 'missing_period' };
+  // 旧 HRMS 周评（2026-W03 这类）已被 anomaly_rollups_v2 取代。
+  // 继续写 new_model 周评会制造一批错误的 100 分历史行，并被旧补发链路误发到飞书。
+  // 仅允许月度 period（YYYY-MM）；周度 period 直接跳过。
+  if (/^\d{4}-W\d{2}$/i.test(p)) {
+    return { period: p, evaluated: 0, results: [], model: 'legacy_weekly_disabled', skipped: true };
+  }
 
   const state = await getSharedState();
   const stores = getStoresFromState(state);
@@ -11076,265 +11082,10 @@ function currentAndPrevMonthPeriodStrForPush() {
 // Push performance scores to users via Feishu
 async function pushScoresToFeishu() {
   try {
-    // new_model_monthly：由 agents-service 月度绩效成绩单统一发卡片并批量标记已通知；
-    // 若仍走本通道，会在每月 10 日 01:00～01:18 之间用「周报」版式误发上月月评数据（与 01:18 正式月评卡矛盾）。
-    //
-    // 防「历史周/历史月积压」被 5 分钟重试一次连续刷屏：周度异常仅允许「上一完整自然周」；new_model 仅允许当前月与上月；
-    // 其它模型仅允许近期 updated 行（避免误把 feishu_notified 批量打回 false 后重发全年）。
-    const weekMon = lastCompletedWeekMondayShanghaiForPush();
-    const weekPrefix = `week_${weekMon}`;
-    const { cur: curMonth, prev: prevMonth } = currentAndPrevMonthPeriodStrForPush();
-    const r = await pool().query(
-      `SELECT * FROM agent_scores
-       WHERE feishu_notified = FALSE
-         AND COALESCE(score_model, '') <> 'new_model_monthly'
-         AND (
-           (COALESCE(score_model, '') = 'anomaly_rollups_v2' AND (period = $1 OR period LIKE $2))
-           OR (COALESCE(score_model, '') = 'new_model' AND period IN ($3, $4))
-           OR (
-             COALESCE(score_model, '') NOT IN ('anomaly_rollups_v2', 'new_model')
-             AND COALESCE(updated_at, created_at) >= NOW() - INTERVAL '21 days'
-           )
-         )
-       ORDER BY created_at DESC
-       LIMIT 20`,
-      [weekPrefix, `${weekPrefix}%`, curMonth, prevMonth]
-    );
-    if (!r.rows?.length) return 0;
-
-    let pushed = 0;
-    for (const score of r.rows) {
-      const sm = String(score.score_model || '').trim();
-      if (sm === 'anomaly_rollups_v2' && !isShanghaiMondayNow()) {
-        continue;
-      }
-      const fu = await lookupFeishuUserByUsername(score.username);
-      if (!fu?.open_id) continue;
-
-      const DEDUCTION_CAT_ZH = {
-        revenue_anomaly: '营收/实收异常',
-        efficiency_anomaly: '人效异常',
-        recharge_anomaly: '充值异常',
-        table_visit_anomaly: '桌访相关异常',
-        table_visit_ratio_anomaly: '桌访占比异常',
-        margin_anomaly: '毛利异常',
-        product_review: '产品差评异常',
-        service_review: '服务差评异常',
-        private_room_anomaly: '包房使用异常',
-        gross_margin: '毛利率异常'
-      };
-      const ANOMALY_KEY_ZH = {
-        revenue_achievement: '实收营收异常',
-        labor_efficiency: '人效值异常',
-        recharge_zero: '充值异常',
-        table_visit_product: '桌访产品异常',
-        table_visit_ratio: '桌访占比异常',
-        gross_margin: '总实收毛利率异常',
-        bad_review_product: '差评产品异常',
-        bad_review_service: '差评服务异常',
-        hongchao_jiuguang_private_room: '洪潮久光包房使用异常',
-        food_safety: '食品安全异常'
-      };
-      const SCORE_MODEL_ZH = {
-        anomaly_rollups_v2: '周度异常汇总',
-        new_model: '人力资源综合模型',
-        new_model_monthly: '月度自动评分',
-        task_reminder_v1: '任务催办绩效记录'
-      };
-      const ROLE_ZH = {
-        store_manager: '店长',
-        store_production_manager: '出品经理',
-        hq_manager: '总部主管',
-        admin: '管理员',
-        admin_hq: '总部管理',
-        'admin/hq': '总部管理'
-      };
-      const roleLabel = ROLE_ZH[score.role] || (score.role ? '门店岗位' : '员工');
-
-      let deductions = score.deductions;
-      if (typeof deductions === 'string') {
-        try {
-          deductions = JSON.parse(deductions);
-        } catch {
-          deductions = [];
-        }
-      }
-      deductions = Array.isArray(deductions) ? deductions : [];
-      const deductionText = deductions.length
-        ? deductions
-            .map((d) => {
-              const cat = DEDUCTION_CAT_ZH[d.category] || '异常扣分';
-              const kz = ANOMALY_KEY_ZH[d.anomaly_key] ? `（${ANOMALY_KEY_ZH[d.anomaly_key]}）` : '';
-              return `  • ${cat}${kz}：-${d.points} 分`;
-            })
-            .join('\n')
-        : '  无扣分项';
-
-      const modelKey = String(score.score_model || '').trim();
-      const modelLine =
-        modelKey && SCORE_MODEL_ZH[modelKey]
-          ? `\n📌 评分类型：**${SCORE_MODEL_ZH[modelKey]}**`
-          : modelKey
-            ? `\n📌 评分类型：**其他自动评分**`
-            : '';
-
-      let periodLabel = String(score.period || '').trim();
-      if (periodLabel.startsWith('week_')) {
-        periodLabel = `考核周期：${periodLabel.slice('week_'.length)} 起的一周`;
-      } else if (periodLabel.startsWith('month_')) {
-        periodLabel = `考核月度：${periodLabel.slice('month_'.length)}`;
-      } else if (periodLabel) {
-        periodLabel = `考核周期：${periodLabel}`;
-      } else {
-        periodLabel = '考核周期：—';
-      }
-
-      // 兜底中文化：有些历史/异常数据可能把内部字段名直接写进 summary（例如 store_rating/execution_rating/new_model_monthly）
-      // 为保证“画圈区域全中文”，这里做最后一层文本替换。
-      let summaryZh = score.summary ? String(score.summary) : '';
-      summaryZh = summaryZh
-        .replace(/\bstore_production_manager\b/g, '出品经理')
-        .replace(/\bstore_manager\b/g, '店长')
-        .replace(/\bnew_model_monthly\b/g, '月度自动评分')
-        .replace(/\bnew_model\b/g, '人力资源综合模型')
-        .replace(/(\bstore_rating)\s*[:：]\s*null\b/gi, '门店级别：待评估')
-        .replace(/(\bstore_rating)\s*[:：]\s*'?(A|B|C|D|null)'?\s*分?\b/gi, (m, _k, v) => (v === 'null' ? '门店级别：待评估' : `门店级别：${v}级`))
-        .replace(/(\bexecution_rating)\s*[:：]\s*'?(A|B|C|D)'?\s*分?\b/gi, (m, _k, v) => `执行力：${v}级`)
-        .replace(/(\battitude_rating)\s*[:：]\s*'?(A|B|C|D)'?\s*分?\b/gi, (m, _k, v) => `工作态度：${v}级`)
-        .replace(/(\bability_rating)\s*[:：]\s*'?(A|B|C|D)'?\s*分?\b/gi, (m, _k, v) => `工作能力：${v}级`);
-      summaryZh = sanitizePerformanceZhText(summaryZh);
-
-      const bd = score.breakdown && typeof score.breakdown === 'object' ? score.breakdown : {};
-      const dimLines = [];
-      if (bd.store_rating != null && String(bd.store_rating).trim() !== '') dimLines.push(`• 门店级别：${String(bd.store_rating).trim()}级`);
-      if (bd.ability_rating != null && String(bd.ability_rating).trim() !== '') dimLines.push(`• 工作能力：${String(bd.ability_rating).trim()}级`);
-      if (bd.attitude_rating != null && String(bd.attitude_rating).trim() !== '') dimLines.push(`• 工作态度：${String(bd.attitude_rating).trim()}级`);
-      if (bd.execution_rating != null && String(bd.execution_rating).trim() !== '') dimLines.push(`• 执行力：${String(bd.execution_rating).trim()}级`);
-      const dimText = dimLines.length ? dimLines.join('\n') : '• 暂无维度评级';
-
-      const shanghaiTodayYmd = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
-      let execFilingN = 0;
-      let attFilingN = 0;
-      try {
-        if (score.username && score.store) {
-          execFilingN = await pgGetMonthlyExecutionFilingCount(pool(), score.username, score.store, shanghaiTodayYmd);
-        }
-        if (score.username) {
-          attFilingN = await pgGetMonthlyAttitudeFilingCount(pool(), score.username, shanghaiTodayYmd);
-        }
-      } catch (_e) {
-        /* ignore */
-      }
-
-      const isWeeklyAnomalyRollup = modelKey === 'anomaly_rollups_v2';
-      const midSectionTitle = isWeeklyAnomalyRollup ? '本月累计备案（自然月至今）' : '核心评级（A-D）';
-      const midSectionBody = isWeeklyAnomalyRollup
-        ? `• 工作执行力：**${execFilingN}** 次（执行力日评备案）\n• 工作态度：**${attFilingN}** 次（任务催办态度备案）`
-        : dimText;
-      const msgMidLabel = isWeeklyAnomalyRollup ? '本月累计备案' : '评分维度';
-
-      const isMonthlyModel =
-        modelKey === 'new_model_monthly' ||
-        (modelKey === 'new_model' && /^\d{4}-\d{2}$/.test(String(score.period || '').trim()));
-      const perfTitle = isMonthlyModel ? '绩效考核月报' : '绩效考核周报';
-      const perfKind = isMonthlyModel
-        ? '月度绩效摘要（与上方「月度绩效成绩单」卡片同源数据时请以卡片为准）'
-        : '绩效考核周报（与月度总结区分：本条对应系统刚写入的一条评分记录）';
-      const msgText = `📊 ${perfTitle}\n\n${fu.name || score.username}，你好！以下是你在${score.store}（${score.brand}）的${perfKind}。\n\n📋 岗位：${roleLabel}\n🗓️ ${periodLabel}${modelLine}\n\n📊 本期总分：**${score.total_score} 分**（满分100）\n\n${msgMidLabel}：\n${midSectionBody}\n\n扣分明细：\n${deductionText}\n\n${summaryZh ? '说明：' + summaryZh + '\n\n' : ''}如有异议，请回复「申诉」并说明原因。`;
-      const msg = prefixWithAgentName('chief_evaluator', msgText);
-
-      const scoreNum = Number(score.total_score || 0);
-      const cardTemplate = scoreNum >= 85 ? 'green' : scoreNum >= 70 ? 'blue' : scoreNum >= 60 ? 'yellow' : 'red';
-      const riskHint = isMonthlyModel
-        ? scoreNum < 70
-          ? '⚠️ 月度得分低于70，建议优先整改异常项。'
-          : '✅ 月度分数处于安全区间，请继续保持。'
-        : scoreNum < 70
-          ? '⚠️ 本期分数低于70，建议优先整改本周高频异常项。'
-          : '✅ 本期分数处于安全区间，请继续保持。';
-
-      const card = {
-        header: {
-          title: { tag: 'plain_text', content: `📊 ${perfTitle}` },
-          template: cardTemplate
-        },
-        elements: [
-          {
-            tag: 'div',
-            text: {
-              tag: 'lark_md',
-              content:
-                `👤 **${fu.name || score.username}** ｜ ${roleLabel}\n` +
-                `🏬 **${score.store}（${score.brand}）**\n` +
-                `📋 岗位：${roleLabel}\n` +
-                `🗓️ ${periodLabel}${modelLine ? modelLine.replace('\n📌 ', '\n📌 ') : ''}\n\n` +
-                `📊 **本期总分：${score.total_score} 分 / 100**`
-            }
-          },
-          { tag: 'hr' },
-          { tag: 'div', text: { tag: 'lark_md', content: `**${midSectionTitle}**\n${midSectionBody}` } },
-          { tag: 'div', text: { tag: 'lark_md', content: `**扣分明细（本期）**\n${deductionText}` } },
-          { tag: 'div', text: { tag: 'lark_md', content: `**管理提示**\n${riskHint}` } },
-          ...(summaryZh ? [{ tag: 'div', text: { tag: 'lark_md', content: `**说明**\n${summaryZh}` } }] : []),
-          { tag: 'note', elements: [{ tag: 'plain_text', content: '如有异议，请回复“申诉”并说明原因。' }] }
-        ]
-      };
-
-      let sendResult = await sendLarkCard(fu.open_id, card);
-      if (!sendResult.ok) {
-        sendResult = await sendLarkMessage(fu.open_id, msg);
-      }
-      if (sendResult.ok) {
-        await pool().query(`UPDATE agent_scores SET feishu_notified = TRUE WHERE id = $1`, [score.id]);
-        pushed++;
-        try {
-          const ccR = await pool().query(
-            `SELECT username, open_id, name FROM feishu_users
-             WHERE COALESCE(registered, false) = true
-               AND TRIM(COALESCE(open_id, '')) <> ''
-               AND role IN ('admin', 'hq_manager')
-               AND open_id NOT LIKE '%probe%'`
-          );
-          const seenOid = new Set([String(fu.open_id || '').trim()]);
-          const cardBase = typeof structuredClone === 'function' ? structuredClone(card) : JSON.parse(JSON.stringify(card));
-          for (const row of ccR.rows || []) {
-            const oid = String(row.open_id || '').trim();
-            if (!oid || seenOid.has(oid)) continue;
-            seenOid.add(oid);
-            const cardCc = typeof structuredClone === 'function' ? structuredClone(cardBase) : JSON.parse(JSON.stringify(cardBase));
-            cardCc.elements = [
-              {
-                tag: 'div',
-                text: {
-                  tag: 'lark_md',
-                  content:
-                    `📋 **抄送**｜${perfTitle}（与当事人同内容）\n` +
-                    `👤 考核对象：**${fu.name || score.username}**｜${score.store}（${score.brand}）`
-                }
-              },
-              { tag: 'hr' },
-              ...(cardCc.elements || [])
-            ];
-            let ccSend = await sendLarkCard(oid, cardCc);
-            if (!ccSend.ok) {
-              const ccMsg = prefixWithAgentName(
-                'chief_evaluator',
-                `📋 抄送·${perfTitle}\n对象：${fu.name || score.username}｜${score.store}\n\n${msgText}`
-              );
-              ccSend = await sendLarkMessage(oid, ccMsg);
-            }
-            if (!ccSend.ok) {
-              console.warn('[feishu] perf score CC failed:', row.username, ccSend?.error || ccSend);
-            }
-          }
-        } catch (ccErr) {
-          console.error('[feishu] perf score CC error:', ccErr?.message);
-        }
-      }
-    }
-    return pushed;
+    console.log('[perf] pushScoresToFeishu disabled: agents-service-v2 owns weekly/monthly score delivery');
+    return 0;
   } catch (e) {
-    console.error('[feishu] push scores failed:', e?.message);
+    console.error('[feishu] push scores disabled path failed:', e?.message);
     return 0;
   }
 }
@@ -11543,16 +11294,14 @@ export function startAgentScheduler() {
     } catch(e){ console.error('[scheduler] weekly audit err:', e?.message); }
   };
 
-  // Weekly evaluation (Monday 9am) — 仅计算评分，不再推送飞书（由 V2 Agent 统一推送）
+  // Legacy weekly evaluation (Monday 9am) — 已停用。
+  // 真实周评仅允许 agents-service-v2 的 anomaly_rollups_v2 写入和推送；
+  // 此处若继续跑 runChiefEvaluator(2026-Wxx) 会重新制造错误的 new_model 周评行。
   const evalTick = async () => {
     try {
       const now = new Date();
       if (now.getDay() === 1 && now.getHours() === 9) {
-        const weekNum = Math.ceil((now.getDate() + new Date(now.getFullYear(), now.getMonth(), 1).getDay()) / 7);
-        const period = `${now.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
-        const result = await runChiefEvaluator(period);
-        console.log(`[scheduler] Chief Evaluator: ${result.evaluated} staff for ${period}`);
-        // 不再推送飞书，由 V2 Agent 的 periodic-scoring.js 统一推送
+        console.log('[scheduler] Chief Evaluator weekly legacy disabled; anomaly_rollups_v2 owns weekly performance');
       }
     } catch (e) {
       console.error('[scheduler] eval tick error:', e?.message);

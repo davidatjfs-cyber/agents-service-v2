@@ -288,7 +288,7 @@ export async function callLLM(messages, options = {}) {
   // 如果路由到本地模型，优先尝试 Ollama
   if (!hasTools && routedModel === localModel) {
     let o = await callOllamaLLM(messages, options);
-    // gemma4 在高并发下偶发连接中断，先快速重试一次，避免误报不可用
+    // Qwen3.6 在高并发下偶发连接中断，先快速重试一次，避免误报不可用
     if ((!o.ok || !o.content) && isAbortLikeError(o.error)) {
       logger.warn({ err: o.error, model: localModel }, 'Ollama aborted once, retrying');
       o = await callOllamaLLM(messages, options);

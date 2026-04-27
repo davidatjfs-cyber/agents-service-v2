@@ -13,12 +13,274 @@ import { sendWeeklyDishOptimizationReport } from '../services/dish-optimization-
 import { AGENT_SKILLS } from '../services/agent-handlers.js';
 import { applyPllmDecision } from '../services/proactive-v2/pllm-workflow.js';
 import { sendPllmMonthlyReport } from '../services/proactive-v2/pllm-workflow.js';
+import {
+  getMonthlyExecutionFilingCount,
+  getMonthlyAttitudeFilingCount,
+  listMonthlyExecutionFilings,
+  listMonthlyAttitudeFilings
+} from '../utils/performance-filing-counts.js';
 
 const r = Router();
 const admin = [authRequired, requireRole('admin','hq_manager')];
 
 /** 与 canViewAllStores 对齐：可手动关闭任务的角色（JWT / feishu_users.role） */
 const CLOSE_TASK_ROLES = ['admin', 'hq_manager', 'hr_manager'];
+
+const MONTHLY_QUERY_ROLE_ZH = {
+  store_manager: '店长',
+  store_production_manager: '出品经理',
+  admin: '管理员',
+  hq_manager: '总部主管'
+};
+
+const MONTHLY_QUERY_CAT_ZH = {
+  revenue_anomaly: '营收/实收异常',
+  efficiency_anomaly: '人效异常',
+  recharge_anomaly: '充值异常',
+  table_visit_anomaly: '桌访相关异常',
+  table_visit_ratio_anomaly: '桌访占比异常',
+  margin_anomaly: '毛利异常',
+  product_review: '产品差评异常',
+  service_review: '服务差评异常',
+  private_room_anomaly: '包房使用异常',
+  gross_margin: '毛利率异常',
+  food_safety: '食品安全异常'
+};
+
+const MONTHLY_QUERY_ANOMALY_KEY_ZH = {
+  revenue_achievement: '实收营收异常',
+  labor_efficiency: '人效值异常',
+  recharge_zero: '充值异常',
+  table_visit_product: '桌访产品异常',
+  table_visit_ratio: '桌访占比异常',
+  gross_margin: '总实收毛利率异常',
+  bad_review_product: '差评产品异常',
+  bad_review_service: '差评服务异常',
+  hongchao_jiuguang_private_room: '洪潮久光包房使用异常',
+  food_safety: '食品安全异常'
+};
+
+function getShanghaiNowYmd() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+}
+
+function daysInMonth(period) {
+  const [y, m] = String(period || '').split('-').map((x) => Number(x));
+  if (!y || !m) return 31;
+  return new Date(y, m, 0).getDate();
+}
+
+function monthEndYmd(period) {
+  return `${String(period).slice(0, 7)}-${String(daysInMonth(period)).padStart(2, '0')}`;
+}
+
+function effectivePeriodEndYmd(period) {
+  const today = getShanghaiNowYmd();
+  return String(period || '') === today.slice(0, 7) ? today : monthEndYmd(period);
+}
+
+function parseMaybeJson(v, fallback) {
+  if (v == null) return fallback;
+  if (typeof v === 'object') return v;
+  if (typeof v !== 'string') return fallback;
+  try {
+    return JSON.parse(v);
+  } catch (_e) {
+    return fallback;
+  }
+}
+
+async function listMonthlyPerformanceSubjects({ store = '', keyword = '', role = '' } = {}) {
+  const r0 = await query(
+    `SELECT
+       TRIM(username) AS username,
+       COALESCE(NULLIF(TRIM(name), ''), TRIM(username)) AS name,
+       role,
+       TRIM(store) AS store,
+       CASE
+         WHEN store ILIKE '%洪潮%' THEN '洪潮'
+         WHEN store ILIKE '%马己仙%' THEN '马己仙'
+         ELSE '未知'
+       END AS brand
+     FROM feishu_users
+     WHERE registered = true
+       AND role IN ('store_manager', 'store_production_manager')
+       AND TRIM(COALESCE(store, '')) <> ''
+       AND LOWER(TRIM(COALESCE(username, ''))) <> 'nnyxcs35'
+       AND COALESCE(TRIM(name), '') NOT ILIKE '%测试%'
+       AND COALESCE(TRIM(username), '') NOT ILIKE '%测试%'`
+  );
+  const rows = r0.rows || [];
+  const kw = String(keyword || '').trim().toLowerCase();
+  const st = String(store || '').trim().toLowerCase();
+  const rl = String(role || '').trim();
+  const seen = new Set();
+  const out = [];
+  for (const row of rows) {
+    const user = String(row.username || '').trim();
+    const nm = String(row.name || '').trim();
+    const sr = String(row.store || '').trim();
+    const rr = String(row.role || '').trim();
+    if (!user || !sr || !rr) continue;
+    if (st && !sr.toLowerCase().includes(st)) continue;
+    if (kw && !user.toLowerCase().includes(kw) && !nm.toLowerCase().includes(kw)) continue;
+    if (rl && rr !== rl) continue;
+    const key = `${user.toLowerCase()}__${sr.toLowerCase()}__${rr}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      username: user,
+      name: nm || user,
+      role: rr,
+      role_label: MONTHLY_QUERY_ROLE_ZH[rr] || rr,
+      store: sr,
+      brand: String(row.brand || '未知')
+    });
+  }
+  out.sort((a, b) => `${a.store}-${a.role}-${a.name}`.localeCompare(`${b.store}-${b.role}-${b.name}`, 'zh-Hans-CN'));
+  return out;
+}
+
+async function loadMonthlyWeeklyRollups(username, period) {
+  const startDate = `${String(period).slice(0, 7)}-01`;
+  const endDate = monthEndYmd(period);
+  const monthKey = String(period || '').replace('-', '');
+  const r0 = await query(
+    `SELECT id, period, total_score, deductions, summary, updated_at
+     FROM agent_scores
+     WHERE LOWER(TRIM(username)) = LOWER(TRIM($1))
+       AND score_model = 'anomaly_rollups_v2'
+       AND COALESCE(is_invalidated, false) = false
+       AND (store IS NULL OR store !~* '(测试门店|SAFE_TEST|_SAFE_TEST|沙箱|sandbox)')
+       AND COALESCE(username,'') NOT LIKE '__periodic%'
+       AND LOWER(TRIM(COALESCE(username,''))) <> 'nnyxcs35'
+       AND (
+         (POSITION('__' IN period) = 0
+          AND substring(period from 6 for 10)::date >= $2::date
+          AND substring(period from 6 for 10)::date <= $3::date)
+         OR
+         (POSITION('__' IN period) > 0 AND split_part(period, '__', 2) = $4)
+       )
+     ORDER BY period ASC, updated_at DESC`,
+    [username, startDate, endDate, monthKey]
+  );
+  return (r0.rows || []).map((row) => {
+    const deductions = parseMaybeJson(row.deductions, []);
+    return {
+      id: row.id,
+      period: row.period,
+      total_score: Number(row.total_score || 0),
+      summary: String(row.summary || ''),
+      updated_at: row.updated_at,
+      deductions: Array.isArray(deductions) ? deductions : []
+    };
+  });
+}
+
+function monthlyRowRatingMatchesFilter(value, filterRaw) {
+  const f = String(filterRaw || '').trim();
+  if (!f) return true;
+  if (f === '__open__') return value == null || String(value).trim() === '';
+  return String(value || '').trim() === f;
+}
+
+function monthlyRowScoreInRange(score, minRaw, maxRaw) {
+  const n = Number(score);
+  if (Number.isNaN(n)) return false;
+  const minS = String(minRaw ?? '').trim();
+  const maxS = String(maxRaw ?? '').trim();
+  if (minS !== '' && !Number.isNaN(Number(minS)) && n < Number(minS)) return false;
+  if (maxS !== '' && !Number.isNaN(Number(maxS)) && n > Number(maxS)) return false;
+  return true;
+}
+
+async function buildMonthlyPerformanceQueryRow(subject, period, recordFocus = 'all') {
+  const focus = String(recordFocus || 'all').toLowerCase();
+  const wantDeductions = focus === 'all' || focus === 'deductions';
+  const wantExecF = focus === 'all' || focus === 'execution';
+  const wantAttF = focus === 'all' || focus === 'attitude';
+
+  const periodEndYmd = effectivePeriodEndYmd(period);
+  const weeklyRows = await loadMonthlyWeeklyRollups(subject.username, period);
+  const realtimeScore = weeklyRows.length
+    ? Math.round(weeklyRows.reduce((sum, row) => sum + Number(row.total_score || 0), 0) / weeklyRows.length)
+    : 100;
+  const finalizedR = await query(
+    `SELECT total_score, breakdown, deductions, summary, updated_at
+     FROM agent_scores
+     WHERE LOWER(TRIM(username)) = LOWER(TRIM($1))
+       AND LOWER(TRIM(store)) = LOWER(TRIM($2))
+       AND role = $3
+       AND period = $4
+       AND score_model = 'new_model_monthly'
+       AND COALESCE(is_invalidated, false) = false
+     ORDER BY updated_at DESC
+     LIMIT 1`,
+    [subject.username, subject.store, subject.role, period]
+  );
+  const finalized = finalizedR.rows?.[0] || null;
+  const breakdown = parseMaybeJson(finalized?.breakdown, {});
+  const detailBag = parseMaybeJson(finalized?.deductions, {});
+
+  const [executionFilingCount, attitudeFilingCount, execution_filings, attitude_filings] = await Promise.all([
+    getMonthlyExecutionFilingCount(subject.username, subject.store, periodEndYmd),
+    getMonthlyAttitudeFilingCount(subject.username, periodEndYmd),
+    wantExecF ? listMonthlyExecutionFilings(subject.username, subject.store, periodEndYmd) : Promise.resolve([]),
+    wantAttF ? listMonthlyAttitudeFilings(subject.username, periodEndYmd) : Promise.resolve([])
+  ]);
+
+  const deductionRecords = [];
+  if (wantDeductions) {
+    for (const row of weeklyRows) {
+      for (const d of row.deductions || []) {
+        deductionRecords.push({
+          week_period: row.period,
+          points: Number(d?.points || 0),
+          category: String(d?.category || ''),
+          category_label: MONTHLY_QUERY_CAT_ZH[String(d?.category || '')] || String(d?.category || '异常扣分'),
+          anomaly_key: String(d?.anomaly_key || ''),
+          anomaly_key_label: MONTHLY_QUERY_ANOMALY_KEY_ZH[String(d?.anomaly_key || '')] || String(d?.anomaly_key || ''),
+          severity: String(d?.severity || ''),
+          detail_note: String(d?.detail_note || '')
+        });
+      }
+    }
+  }
+  return {
+    period,
+    is_finalized: !!finalized,
+    score_source: finalized ? 'new_model_monthly' : 'realtime_anomaly_rollups',
+    username: subject.username,
+    name: subject.name,
+    role: subject.role,
+    role_label: subject.role_label,
+    store: subject.store,
+    brand: subject.brand,
+    performance_score: finalized ? Number(finalized.total_score || 0) : realtimeScore,
+    realtime_month_score: realtimeScore,
+    execution_rating: breakdown?.execution_rating || null,
+    attitude_rating: breakdown?.attitude_rating || null,
+    ability_rating: breakdown?.ability_rating || null,
+    store_rating: breakdown?.store_rating || null,
+    execution_filing_count: executionFilingCount,
+    attitude_filing_count: attitudeFilingCount,
+    execution_filings,
+    attitude_filings,
+    execution_detail: detailBag?.execution_data || null,
+    attitude_detail: detailBag?.attitude_data || null,
+    ability_detail: detailBag?.ability_data || null,
+    finalized_summary: finalized?.summary || '',
+    finalized_updated_at: finalized?.updated_at || null,
+    weekly_rollups: weeklyRows,
+    deduction_records: deductionRecords,
+    record_focus: focus
+  };
+}
 
 function isMissingColumnError(e) {
   return /column .* does not exist/i.test(String(e?.message || ''));
@@ -820,6 +1082,73 @@ r.post('/trigger-usage-weekly-report', ...admin, async (req, res) => {
     res.json({ ok: true, message: '员工系统使用周报已发送' });
   } catch (e) {
     logger.error({ err: e?.message }, 'trigger-usage-weekly-report failed');
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// ─── 月度绩效查询（管理台：支持当月实时快照 + 已关账月详情） ───
+r.get('/performance-monthly-query', ...admin, async (req, res) => {
+  try {
+    const sh = getShanghaiYmdParts();
+    const period = String(req.query?.period || sh.ymd.slice(0, 7)).trim();
+    if (!/^\d{4}-\d{2}$/.test(period)) {
+      return res.status(400).json({ error: 'period 格式必须为 YYYY-MM' });
+    }
+    const store = String(req.query?.store || '').trim();
+    const keyword = String(req.query?.keyword || req.query?.name || req.query?.username || '').trim();
+    const role = String(req.query?.role || '').trim();
+    const limit = Math.min(50, Math.max(1, Number(req.query?.limit || 20)));
+    const minScore = String(req.query?.min_score ?? '').trim();
+    const maxScore = String(req.query?.max_score ?? '').trim();
+    const executionRating = String(req.query?.execution_rating ?? '').trim();
+    const attitudeRating = String(req.query?.attitude_rating ?? '').trim();
+    const abilityRating = String(req.query?.ability_rating ?? '').trim();
+    const recordFocus = String(req.query?.record_focus || req.query?.filing_focus || 'all').trim().toLowerCase();
+    const focusAllowed = new Set(['all', 'execution', 'attitude', 'deductions']);
+    const recordFocusNorm = focusAllowed.has(recordFocus) ? recordFocus : 'all';
+
+    const rowFiltersActive =
+      minScore !== '' ||
+      maxScore !== '' ||
+      executionRating !== '' ||
+      attitudeRating !== '' ||
+      abilityRating !== '';
+
+    const subjects = await listMonthlyPerformanceSubjects({ store, keyword, role });
+    const scanCap = rowFiltersActive ? Math.min(250, subjects.length) : limit;
+    const picked = subjects.slice(0, scanCap);
+    const items = [];
+    for (const subject of picked) {
+      const row = await buildMonthlyPerformanceQueryRow(subject, period, recordFocusNorm);
+      if (!monthlyRowScoreInRange(row.performance_score, minScore, maxScore)) continue;
+      if (!monthlyRowRatingMatchesFilter(row.execution_rating, executionRating)) continue;
+      if (!monthlyRowRatingMatchesFilter(row.attitude_rating, attitudeRating)) continue;
+      if (!monthlyRowRatingMatchesFilter(row.ability_rating, abilityRating)) continue;
+      items.push(row);
+      if (items.length >= limit) break;
+    }
+    res.json({
+      ok: true,
+      period,
+      generatedAt: new Date().toISOString(),
+      filters: {
+        store,
+        keyword,
+        role,
+        limit,
+        min_score: minScore,
+        max_score: maxScore,
+        execution_rating: executionRating,
+        attitude_rating: attitudeRating,
+        ability_rating: abilityRating,
+        record_focus: recordFocusNorm
+      },
+      totalMatched: subjects.length,
+      scannedSubjects: picked.length,
+      items
+    });
+  } catch (e) {
+    logger.error({ err: e?.message }, 'performance-monthly-query failed');
     res.status(500).json({ error: String(e?.message || e) });
   }
 });

@@ -264,24 +264,25 @@ function buildPllmDecisionCard({ taskId, store, title, line, metricFocusZh }) {
         }
       },
       {
+        tag: 'input',
+        name: 'pllm_execute_plan',
+        placeholder: {
+          tag: 'plain_text',
+          content: '点击「执行」前请填写：执行计划（何时/谁负责/怎么做/目标）'
+        }
+      },
+      {
+        tag: 'input',
+        name: 'pllm_not_suitable_reason',
+        placeholder: {
+          tag: 'plain_text',
+          content: '点击「不适合」前请填写：不适合原因（可执行性/门店定位/时机）'
+        }
+      },
+      { tag: 'hr' },
+      {
         tag: 'action',
         actions: [
-          {
-            tag: 'input',
-            name: 'pllm_execute_plan',
-            placeholder: {
-              tag: 'plain_text',
-              content: '点击「执行」前请填写：执行计划（何时/谁负责/怎么做/目标）'
-            }
-          },
-          {
-            tag: 'input',
-            name: 'pllm_not_suitable_reason',
-            placeholder: {
-              tag: 'plain_text',
-              content: '点击「不适合」前请填写：不适合原因（可执行性/门店定位/时机）'
-            }
-          },
           {
             tag: 'button',
             text: { tag: 'plain_text', content: '执行' },
@@ -469,15 +470,25 @@ export async function acceptProactiveLlmActionPlan(ctx) {
         line,
         metricFocusZh: metricZh
       });
+      const sentMsgIds = [];
       for (const oid of responsibleOpenIds) {
         const r0 = await sendCard(oid, decisionCard).catch(() => ({ ok: false }));
-        if (!r0?.ok) {
+        if (r0?.ok) {
+          const msgId = r0?.data?.data?.message_id;
+          if (msgId) sentMsgIds.push(msgId);
+        } else {
           await sendText(
             oid,
             `【PLLM智能经营助手】${targetStore}\n任务ID：${taskId}\n动作：${line}\n请在手机点卡片按钮「执行 / 不适合」，或回复这两词之一。`,
             'open_id'
           ).catch(() => {});
         }
+      }
+      if (sentMsgIds.length) {
+        await query(
+          `UPDATE master_tasks SET feishu_msg_ids = COALESCE(feishu_msg_ids, '[]'::jsonb) || $1::jsonb WHERE task_id = $2`,
+          [JSON.stringify(sentMsgIds), taskId]
+        ).catch((e) => logger.warn({ err: e?.message, taskId }, 'proactive-llm-actions: save msg_ids failed'));
       }
 
       const outcomeScore = Math.min(

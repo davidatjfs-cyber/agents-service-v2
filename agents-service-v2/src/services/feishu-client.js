@@ -1845,6 +1845,43 @@ export async function handleCardAction(body) {
     }
   }
 
+  /* PLLM 兜底：检测三种场景
+       1) taskId 在手且匹配 PLLM 任务（新卡 action.value 正确时）
+       2) callbackMessageId 匹配 feishu_msg_ids（存储了 msg_id 的老卡）
+       3) formValue 含 pllm_execute_plan/pllm_not_suitable_reason 键（input 在 action 内的旧卡） */
+  const pllmFormKeys = ['pllm_execute_plan', 'pllm_not_suitable_reason'];
+  const hasPllmForm = pllmFormKeys.some(k => Object.prototype.hasOwnProperty.call(formValue, k));
+  if ((taskId || callbackMessageId || hasPllmForm) && openId) {
+    try {
+      let matchedTaskId = String(taskId || '').trim();
+      if (!matchedTaskId && callbackMessageId) {
+        const msgHit = await query(
+          `SELECT task_id FROM master_tasks WHERE source = 'proactive_llm' AND status NOT IN ('closed','settled') AND feishu_msg_ids @> $1::jsonb LIMIT 1`,
+          [JSON.stringify([callbackMessageId])]
+        ).catch(() => ({ rows: [] }));
+        if (msgHit.rows?.[0]) matchedTaskId = String(msgHit.rows[0].task_id || '').trim();
+      }
+      if (matchedTaskId) {
+        await upsertPendingPllmDecision(openId, matchedTaskId, 'choose');
+        sendText(
+          openId,
+          `PLLM 任务 ${matchedTaskId}：按钮类型未识别，请直接回复：\n执行：写明执行计划\n或\n不适合：写明原因`,
+          'open_id'
+        ).catch(() => {});
+        return { toast: { type: 'info', content: '请在聊天中回复「执行」或「不适合」' } };
+      }
+      /* 能识别到 PLLM 表单键但无法匹配 taskId（老卡且未存 msg_id），引导用户 */
+      if (hasPllmForm) {
+        sendText(
+          openId,
+          `检测到 PLLM 任务卡片，请回复「执行：计划」或「不适合：原因」，并注明任务ID（如有）。`,
+          'open_id'
+        ).catch(() => {});
+        return { toast: { type: 'info', content: '请在聊天中回复 PLLM 决策与理由' } };
+      }
+    } catch (_) { /* fallback silent */ }
+  }
+
   return { toast: { type: 'info', content: '已收到' } };
 }
 
