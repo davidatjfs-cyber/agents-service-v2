@@ -33,17 +33,32 @@ function bizThreshold(bizType) {
 }
 
 async function ensureSalesRawSchema(client) {
+  let hasDishCode = true;
+  let hasCategory = true;
   try {
     await client.query(`ALTER TABLE sales_raw ADD COLUMN IF NOT EXISTS dish_code VARCHAR(120)`);
-    return true;
   } catch (e) {
     const msg = String(e?.message || e);
     if (/must be owner|permission denied|not owner/i.test(msg)) {
       console.warn('[sales-raw] skip schema alter for sales_raw.dish_code:', msg);
-      return false;
+      hasDishCode = false;
+    } else {
+      throw e;
     }
-    throw e;
   }
+  try {
+    await client.query(`ALTER TABLE sales_raw ADD COLUMN IF NOT EXISTS category VARCHAR(200)`);
+    await client.query(`ALTER TABLE sales_raw ADD COLUMN IF NOT EXISTS category_code VARCHAR(120)`);
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (/must be owner|permission denied|not owner/i.test(msg)) {
+      console.warn('[sales-raw] skip schema alter for sales_raw category columns:', msg);
+      hasCategory = false;
+    } else {
+      throw e;
+    }
+  }
+  return { hasDishCode, hasCategory };
 }
 
 async function buildAliasMap(store, bizType) {
@@ -243,6 +258,9 @@ export function parseSalesRawRows(matrix, defBiz, defStore, opts = {}) {
   const iCT=idx(['结账时间','结算时间']);
   const iSt=idx(['门店','店铺','门店名称']);
   const iSku=idx(['sku','sku编码','sku码','商品编码','商品id','菜品编码','菜品id']);
+  /** 与菜品优化周报、数据源表头对齐：大类名称/编码 */
+  const iCat=idx(['大类名称','商品大类','大类','类别名称','一级分类','主类','category','categoryname']);
+  const iCatCode=idx(['大类编码','商品大类编码','类别编码','一级编码','主类编码','categorycode','category_code']);
   const pn=v=>{const s=String(v==null?'':v).replace(/[,，\s¥￥]/g,'');if(!s)return NaN;const x=Number(s);return Number.isFinite(x)?x:NaN;};
   const nd=v=>{const s=n(v);const m=s.match(/(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})/);return m?`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`:'';}
   const nb=v=>{const s=n(v).toLowerCase();if(/外卖|takeaway|delivery/.test(s))return'takeaway';if(/堂食|dinein/.test(s))return'dinein';return'';};
@@ -265,10 +283,12 @@ export function parseSalesRawRows(matrix, defBiz, defStore, opts = {}) {
     const revenue=rv>0?rv:Math.max(0,sa-di);
     const wd=(()=>{const d=new Date(date+'T00:00:00');const w=d.getDay();return w===0?7:w;})();
     const dishCode = n(iSku>=0?L[iSku]:'');
+    const category = n(iCat>=0?L[iCat]:'');
+    const categoryCode = n(iCatCode>=0?L[iCatCode]:'');
     let oTime=null,cTime=null;
     if(iOT>=0){try{const t=n(L[iOT]).replace(/：/g,':');const d=new Date(`${date}T${t}`);if(!isNaN(d))oTime=d.toISOString();}catch(e){}}
     if(iCT>=0){try{const t=n(L[iCT]).replace(/：/g,':');const d=new Date(`${date}T${t}`);if(!isNaN(d))cTime=d.toISOString();}catch(e){}}
-    res.push({store,date,biz_type:biz,dish_name:prod,dish_code:dishCode,qty:+qty.toFixed(2),sales_amount:+sa.toFixed(2),revenue:+revenue.toFixed(2),discount:+di.toFixed(2),slot,order_time:oTime,checkout_time:cTime,weekday:wd});
+    res.push({store,date,biz_type:biz,dish_name:prod,dish_code:dishCode,category,category_code:categoryCode,qty:+qty.toFixed(2),sales_amount:+sa.toFixed(2),revenue:+revenue.toFixed(2),discount:+di.toFixed(2),slot,order_time:oTime,checkout_time:cTime,weekday:wd});
   }
   return res;
 }
@@ -277,24 +297,35 @@ export async function insertSalesRawRows(rows, store, bizType, minDate, maxDate)
   const p = gp();
   const client = await p.connect();
   try {
-    const hasDishCodeColumn = await ensureSalesRawSchema(client);
+    const { hasDishCode: hasDishCodeColumn, hasCategory: hasCategoryColumns } = await ensureSalesRawSchema(client);
     await client.query('BEGIN');
     const del = await client.query('DELETE FROM sales_raw WHERE store=$1 AND biz_type=$2 AND date BETWEEN $3 AND $4',[store,bizType,minDate,maxDate]);
     console.log(`[sales-raw] deleted ${del.rowCount} old rows ${store}/${bizType} ${minDate}~${maxDate}`);
     let cnt=0;
-    for(const r of rows){
-      if (hasDishCodeColumn) {
-        await client.query(`INSERT INTO sales_raw(store,date,biz_type,dish_name,dish_code,qty,sales_amount,revenue,discount,slot,order_time,checkout_time,weekday) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-          [r.store,r.date,r.biz_type,r.dish_name,String(r.dish_code||''),r.qty,r.sales_amount,r.revenue,r.discount,r.slot,r.order_time,r.checkout_time,r.weekday]);
+    for (const r of rows) {
+      const cat = String(r.category || '').trim() || null;
+      const ccode = String(r.category_code || '').trim() || null;
+      if (hasDishCodeColumn && hasCategoryColumns) {
+        await client.query(
+          `INSERT INTO sales_raw(store,date,biz_type,dish_name,dish_code,category,category_code,qty,sales_amount,revenue,discount,slot,order_time,checkout_time,weekday) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+          [r.store, r.date, r.biz_type, r.dish_name, String(r.dish_code || ''), cat, ccode, r.qty, r.sales_amount, r.revenue, r.discount, r.slot, r.order_time, r.checkout_time, r.weekday]
+        );
+      } else if (hasDishCodeColumn) {
+        await client.query(
+          `INSERT INTO sales_raw(store,date,biz_type,dish_name,dish_code,qty,sales_amount,revenue,discount,slot,order_time,checkout_time,weekday) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+          [r.store, r.date, r.biz_type, r.dish_name, String(r.dish_code || ''), r.qty, r.sales_amount, r.revenue, r.discount, r.slot, r.order_time, r.checkout_time, r.weekday]
+        );
       } else {
-        await client.query(`INSERT INTO sales_raw(store,date,biz_type,dish_name,qty,sales_amount,revenue,discount,slot,order_time,checkout_time,weekday) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-          [r.store,r.date,r.biz_type,r.dish_name,r.qty,r.sales_amount,r.revenue,r.discount,r.slot,r.order_time,r.checkout_time,r.weekday]);
+        await client.query(
+          `INSERT INTO sales_raw(store,date,biz_type,dish_name,qty,sales_amount,revenue,discount,slot,order_time,checkout_time,weekday) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+          [r.store, r.date, r.biz_type, r.dish_name, r.qty, r.sales_amount, r.revenue, r.discount, r.slot, r.order_time, r.checkout_time, r.weekday]
+        );
       }
       cnt++;
     }
     await client.query('COMMIT');
-    return {deleted:del.rowCount,inserted:cnt};
-  } catch(e) {
+    return { deleted: del.rowCount, inserted: cnt };
+  } catch (e) {
     await client.query('ROLLBACK');
     throw e;
   } finally {

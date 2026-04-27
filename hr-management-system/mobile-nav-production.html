@@ -13790,6 +13790,8 @@
                 const t = String(token || '');
                 localStorage.setItem('HRMS_API_TOKEN', t);
                 localStorage.setItem('hrms_token', t);
+                if (t) { try { this._startSessionHeartbeat(); } catch (e) { /* ignore */ } }
+                else { try { this._stopSessionHeartbeat(); } catch (e) { /* ignore */ } }
                 try {
                     const v = String(localStorage.getItem('HRMS_API_BASE_URL') || '').trim();
                     if (!v) return;
@@ -13804,8 +13806,38 @@
                 } catch (e) { /* ignore */ }
             },
             clearToken() {
+                try { this._stopSessionHeartbeat(); } catch (e) { /* ignore */ }
                 localStorage.removeItem('HRMS_API_TOKEN');
                 localStorage.removeItem('hrms_token');
+            },
+            _sessionHeartbeatId: null,
+            /** 登录后每 5 分钟打 HRMS 心跳，延长 user_login_log 当前会话，员工系统使用周报在线时长更准 */
+            _startSessionHeartbeat() {
+                try {
+                    this._stopSessionHeartbeat();
+                    if (!this.token()) return;
+                    const tick = () => {
+                        if (!this.token()) {
+                            this._stopSessionHeartbeat();
+                            return;
+                        }
+                        this.request('/api/auth/heartbeat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }).catch(function () { /* ignore */ });
+                    };
+                    tick();
+                    this._sessionHeartbeatId = setInterval(tick, 5 * 60 * 1000);
+                } catch (e) { /* ignore */ }
+            },
+            _stopSessionHeartbeat() {
+                try {
+                    if (this._sessionHeartbeatId) {
+                        clearInterval(this._sessionHeartbeatId);
+                        this._sessionHeartbeatId = null;
+                    }
+                } catch (e) { /* ignore */ }
+            },
+            ensureSessionHeartbeat() {
+                if (this.token()) this._startSessionHeartbeat();
+                else this._stopSessionHeartbeat();
             },
             async request(path, options) {
                 const opts = options || {};
@@ -15922,6 +15954,7 @@ th { background: #f5f5f5; font-weight: 700; }
                     status: 'active'
                 };
                 isLoggedIn = true;
+                try { HRMS_API.ensureSessionHeartbeat(); } catch (e2) { /* ignore */ }
 
                 // Load shared state so mobile/non-admin can see records.
                 await hrmsLoadStateFromServer();

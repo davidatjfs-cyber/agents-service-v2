@@ -619,6 +619,14 @@ function viewDash() {
     g.appendChild(btn('📝 查看审计日志', () => go('audit'), 'bg-gray-50 text-gray-700 text-sm px-4 py-2 rounded-lg hover:bg-gray-100 border border-gray-200 font-medium'));
     g.appendChild(btn('🧠 Agent记忆', () => go('memory'), 'bg-indigo-50 text-indigo-700 text-sm px-4 py-2 rounded-lg hover:bg-indigo-100 border border-indigo-200 font-medium'));
     g.appendChild(btn('📚 知识库管理', () => go('knowledge'), 'bg-amber-50 text-amber-700 text-sm px-4 py-2 rounded-lg hover:bg-amber-100 border border-amber-200 font-medium'));
+    g.appendChild(btn('🍽 补发菜品优化周报（仅 admin·验收）', async () => {
+      if (!window.confirm('将向后端请求补发「上一完整自然周」菜品优化周报到飞书（仅 admin 账号，可绕过当日去重）。确定？')) return;
+      try {
+        const o = await POST('/api/admin/trigger-dish-optimization-weekly', { force: true, onlyAdmin: true });
+        msg('已执行：' + (o.message || '') + (o.weekStart ? ' 周期 ' + o.weekStart + '～' + o.weekEnd : ''));
+        await go('dashboard');
+      } catch (e) { msg(String(e.message || e), true); }
+    }, 'bg-orange-50 text-orange-800 text-sm px-4 py-2 rounded-lg hover:bg-orange-100 border border-orange-200 font-medium'));
     return g;
   })()));
 
@@ -2906,7 +2914,10 @@ function viewPllm() {
       const op = el('td', { className: 'py-2 px-2 flex gap-1' });
       op.appendChild(btn('执行', async () => {
         try {
-          await POST('/api/admin/pllm/' + encodeURIComponent(String(x.task_id || '')) + '/decision', { decision: 'execute' });
+          const planRaw = window.prompt('请填写执行计划（何时/谁负责/怎么做/目标）：\n留空将进入聊天补充模式', '');
+          if (planRaw === null) return;
+          const planText = String(planRaw || '').trim();
+          await POST('/api/admin/pllm/' + encodeURIComponent(String(x.task_id || '')) + '/decision', { decision: 'execute', planText });
           msg('已设为执行');
           await go('pllm');
         } catch (e) { msg('操作失败：' + (e?.message || e), true); }

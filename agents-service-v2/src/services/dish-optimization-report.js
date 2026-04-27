@@ -303,10 +303,18 @@ function splitMarkdownChunks(md, maxLen = 3400) {
   return out;
 }
 
-async function sendDishOptimizationCardsToHq(fullMd, cardHeaderTitle) {
-  const hq = await query(
-    `SELECT open_id, username FROM feishu_users WHERE registered = true AND open_id IS NOT NULL AND role IN ('admin','hq_manager') AND open_id NOT LIKE '%probe%'`
-  );
+async function sendDishOptimizationCardsToHq(fullMd, cardHeaderTitle, opts = {}) {
+  const onlyAdmin = !!opts.onlyAdmin;
+  const force = opts.force === true;
+  const hq = onlyAdmin
+    ? await query(
+        `SELECT open_id, username FROM feishu_users
+         WHERE registered = true AND open_id IS NOT NULL AND role = 'admin' AND open_id NOT LIKE '%probe%'`
+      )
+    : await query(
+        `SELECT open_id, username FROM feishu_users
+         WHERE registered = true AND open_id IS NOT NULL AND role IN ('admin','hq_manager') AND open_id NOT LIKE '%probe%'`
+      );
   const chunks = splitMarkdownChunks(fullMd, 3400);
   const n = chunks.length;
   let sent = 0;
@@ -333,6 +341,7 @@ async function sendDishOptimizationCardsToHq(fullMd, cardHeaderTitle) {
           runYmd,
           username: h.username || h.open_id,
           scope: `chunk_${i}`,
+          force,
           sendFn: async () => {
             const res = await sendCard(h.open_id, card, 'open_id');
             return { ok: !!res?.ok, error: res?.error || '' };
@@ -347,19 +356,27 @@ async function sendDishOptimizationCardsToHq(fullMd, cardHeaderTitle) {
   return sent;
 }
 
-export async function sendWeeklyDishOptimizationReport() {
+/**
+ * @param {object} [opts]
+ * @param {boolean} [opts.force] 为 true 时忽略当日「已成功发送」去重，用于管理员验收补发
+ * @param {boolean} [opts.onlyAdmin] 为 true 时只发给飞书 role=admin（不发给 hq_manager）
+ */
+export async function sendWeeklyDishOptimizationReport(opts = {}) {
   const { weekStart, weekEnd } = shanghaiLastCompletedWeekBounds();
   const md = await buildDishOptimizationMarkdown({
     start: weekStart,
     end: weekEnd,
     reportTitle: `🍽 菜品优化周报（${weekStart}～${weekEnd}）`
   });
-  const sent = await sendDishOptimizationCardsToHq(md, `🍽 菜品优化周报 ${weekStart}～${weekEnd}`);
-  logger.info({ weekStart, weekEnd, sent }, 'dish optimization weekly report sent');
+  const sent = await sendDishOptimizationCardsToHq(md, `🍽 菜品优化周报 ${weekStart}～${weekEnd}`, {
+    force: opts.force === true,
+    onlyAdmin: !!opts.onlyAdmin
+  });
+  logger.info({ weekStart, weekEnd, sent, force: opts.force, onlyAdmin: opts.onlyAdmin }, 'dish optimization weekly report sent');
   return { ok: true, weekStart, weekEnd, sent };
 }
 
-export async function sendMonthlyDishOptimizationReport(period) {
+export async function sendMonthlyDishOptimizationReport(period, opts = {}) {
   period = period || prevMonthPeriod();
   const { start, end } = monthDateRange(period);
   const md = await buildDishOptimizationMarkdown({
@@ -367,7 +384,10 @@ export async function sendMonthlyDishOptimizationReport(period) {
     end,
     reportTitle: `🍽 ${period} 菜品优化月报`
   });
-  const sent = await sendDishOptimizationCardsToHq(md, `🍽 ${period} 菜品优化月报`);
+  const sent = await sendDishOptimizationCardsToHq(md, `🍽 ${period} 菜品优化月报`, {
+    force: opts.force === true,
+    onlyAdmin: !!opts.onlyAdmin
+  });
   logger.info({ period, sent }, 'dish optimization monthly report sent');
   return { ok: true, period, sent };
 }

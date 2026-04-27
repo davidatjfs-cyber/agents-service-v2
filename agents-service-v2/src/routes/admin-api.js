@@ -824,11 +824,13 @@ r.post('/trigger-usage-weekly-report', ...admin, async (req, res) => {
   }
 });
 
-/** 手动触发「菜品优化周报」→ admin/hq（与周一 cron 同逻辑，用于验收新版式） */
+/** 手动触发「菜品优化周报」→ 飞书（与周一 rhythm 同内容；默认可只发 admin 并强制重发去重，便于验收） */
 r.post('/trigger-dish-optimization-weekly', ...admin, async (req, res) => {
   try {
-    const out = await sendWeeklyDishOptimizationReport();
-    res.json({ ok: true, message: '菜品优化周报已尝试发送', ...out });
+    const force = req.body?.force !== false;
+    const onlyAdmin = req.body?.onlyAdmin !== false;
+    const out = await sendWeeklyDishOptimizationReport({ force, onlyAdmin });
+    res.json({ ok: true, message: '菜品优化周报已尝试发送', ...out, force, onlyAdmin });
   } catch (e) {
     logger.error({ err: e?.message }, 'trigger-dish-optimization-weekly failed');
     res.status(500).json({ error: String(e?.message || e) });

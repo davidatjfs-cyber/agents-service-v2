@@ -1470,10 +1470,12 @@ async function ensureDataGovernanceTables() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_dish_name_aliases_lookup ON dish_name_aliases (store, biz_type, alias_name) WHERE enabled = TRUE`);
   try {
     await pool.query(`ALTER TABLE sales_raw ADD COLUMN IF NOT EXISTS dish_code VARCHAR(120)`);
+    await pool.query(`ALTER TABLE sales_raw ADD COLUMN IF NOT EXISTS category VARCHAR(200)`);
+    await pool.query(`ALTER TABLE sales_raw ADD COLUMN IF NOT EXISTS category_code VARCHAR(120)`);
   } catch (e) {
     const msg = String(e?.message || e);
     if (/must be owner|permission denied|not owner/i.test(msg)) {
-      console.warn('[governance] skip schema alter for sales_raw.dish_code:', msg);
+      console.warn('[governance] skip schema alter for sales_raw columns:', msg);
       return;
     }
     throw e;
@@ -5175,6 +5177,10 @@ async function recordLogin(username, sessionNonce, req) {
   try {
     client = await pool.connect();
     await client.query('SET default_transaction_read_only = OFF');
+    await client.query(
+      `update user_login_log set logout_at = now() where lower(username) = $1 and logout_at is null`,
+      [key]
+    );
     await client.query(
       `insert into user_login_log (username, login_at, session_nonce, ip_address, user_agent) values ($1, now(), $2, $3, $4)`,
       [key, sessionNonce, ip, ua]
@@ -19385,13 +19391,16 @@ app.post('/api/auth/logout', authRequired, async (req, res) => {
 app.post('/api/auth/heartbeat', authRequired, async (req, res) => {
   const username = String(req.user?.username || '').trim();
   if (!username) return res.json({ ok: true });
+  const key = username.toLowerCase();
   let client;
   try {
     client = await pool.connect();
     await client.query('SET default_transaction_read_only = OFF');
+    // 与 agents-service 一致：只刷新「最近一条登录」的 logout_at，避免多开会话时误更新多行
     await client.query(
-      `update user_login_log set logout_at = now() where username = $1 and logout_at is null`,
-      [username.toLowerCase()]
+      `update user_login_log set logout_at = now()
+       where id = (select id from user_login_log where lower(username) = $1 order by login_at desc limit 1)`,
+      [key]
     );
   } catch (_e) { /* ignore heartbeat errors */ }
   finally { try { if (client) client.release(); } catch (_e2) { /* ignore */ } }
