@@ -33,9 +33,11 @@ const KEYWORD_RULES = [
     score: 4
   },
   { route: 'food_quality', rx: /(食品安全|食材.*过期|温度.*异常|卫生.*不合格|出品.*质量|菜品.*投诉)/i, score: 3 },
+  // 互联网搜索：仅 admin/hq_manager 可通过（权限在 ROLE_PERMISSIONS 控制）
+  { route: 'internet_search', rx: /(搜索|查一下|查资料|网上搜|互联网搜索|最新|帮我搜|搜一下|网上查|网络搜索|小红书|抖音.*热|微博.*热|热门话题|热门|热搜|流行趋势|最近.*火|现在.*流行|网红|新闻|资讯|推特|twitter|X上|X现在|X上面)/i, score: 3.5 },
 ];
 
-const VALID_ROUTES = ['data_auditor', 'ops_supervisor', 'chief_evaluator', 'train_advisor', 'appeal', 'marketing_planner', 'marketing_executor', 'marketing', 'food_quality', 'master', 'accept_action_plan'];
+const VALID_ROUTES = ['data_auditor', 'ops_supervisor', 'chief_evaluator', 'train_advisor', 'appeal', 'marketing_planner', 'marketing_executor', 'marketing', 'food_quality', 'master', 'accept_action_plan', 'internet_search'];
 
 function inferRouteByRules(text, hasImage) {
   if (hasImage) return { route: 'ops_supervisor', confidence: 1, reason: 'image_input' };
@@ -67,6 +69,7 @@ const ROUTE_SYSTEM_PROMPT = `你是HRMS系统的主控路由Agent。根据用户
 - marketing_planner: 营销策划(制定营销方案/活动策划/会员策略/引流拉新)
 - marketing_executor: 营销执行(活动进度跟踪/效果评估/ROI/预算消耗)
 - food_quality: 食品安全(食材/温度/卫生)
+- internet_search: 互联网搜索(查询新闻/搜索网络/查资料/查小红书/B站/Twitter)
 - master: 无法明确归类时由Master Agent综合处理`;
 async function routeByLLM(text, context) {
   try {

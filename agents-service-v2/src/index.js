@@ -483,11 +483,12 @@ app.post('/api/anomaly/food-safety-check', authRequired, async (req, res) => {
 app.post('/api/performance/weekly-digest/resend', authRequired, requireRole('admin', 'hq_manager'), async (req, res) => {
   try {
     const pm = String(req.body?.periodMonday || '').trim();
+    const onlyAdmin = req.body?.onlyAdmin === true;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(pm)) {
       return res.status(400).json({ error: 'periodMonday 必填，格式 YYYY-MM-DD（该绩效周周一）' });
     }
-    await sendWeeklyPerformanceFeishu(pm);
-    res.json({ ok: true, periodMonday: pm });
+    await sendWeeklyPerformanceFeishu(pm, { onlyAdmin });
+    res.json({ ok: true, periodMonday: pm, onlyAdmin });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

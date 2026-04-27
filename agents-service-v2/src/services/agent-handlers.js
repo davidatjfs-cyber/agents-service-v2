@@ -6,6 +6,7 @@ import { callLLM } from './llm-provider.js';
 import { sanitizeUserFacingLlmText } from '../utils/llm-output-sanitize.js';
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
+import { checkMcpHealth, callTool } from './mcp-client.js';
 import { executeMetrics, extractTimeRangeFromText, parseTimeRange, getAllMetricDefs, quickQuery, getTimeLabelChinese } from './data-executor.js';
 import { saveMemory, recallMemories, getOutcomeStats } from './agent-memory.js';
 import {
@@ -2595,7 +2596,7 @@ async function handleTrainAdvisor(text, ctx) {
     } catch (e) { /* training_tasks may not exist */ }
   }
   if (!kbData && !trainingCtx) kbData = '\n[暂无匹配知识库记录]\n';
-  // P1：与 data_auditor 对齐，注入 Wiki 磁盘检索 + agent_memory 近期记录（buildExperienceBlock 内已 recall）
+  // P1：注入历史经验 + wiki 检索（buildExperienceBlock 提供"必须引用经验"的强制力）
   try {
     const expBlock = await buildExperienceBlock({ agent: 'train_advisor', store, query: text });
     if (expBlock && String(expBlock).trim()) {
@@ -3539,6 +3540,148 @@ async function handleAcceptActionPlan(text, ctx) {
   };
 }
 
+/**
+ * 互联网搜索处理程序
+ *
+ * 通过 MCP Client 调本地 agent-reach MCP 服务器（Tailscale），
+ * 将搜索结果注入 LLM 提示并生成回复。
+ * 仅 admin/hq_manager 有权限触发（权限在 message-router.js 控制）。
+ */
+async function handleInternetSearch(text, ctx) {
+  const store = ctx?.store || '';
+
+  // 0. 全局开关（AGENT_REACH_ENABLED=false 时切断）
+  if (process.env.AGENT_REACH_ENABLED !== 'true') {
+    return {
+      agent: 'internet_search',
+      response: '小年：联网搜索功能已关闭。',
+      store
+    };
+  }
+
+  // 1. 健康检查（快速失败）
+  let health;
+  try {
+    health = await checkMcpHealth();
+  } catch (e) {
+    logger.warn({ err: e?.message, agent: 'internet_search' }, 'MCP health check failed');
+    return {
+      agent: 'internet_search',
+      response: '小年：抱歉，联网搜索功能暂不可用（本地搜索服务未连接）。请联系管理员。',
+      store
+    };
+  }
+  if (!health?.ok) {
+    return {
+      agent: 'internet_search',
+      response: '小年：抱歉，联网搜索服务暂不可用。请稍后再试。',
+      store
+    };
+  }
+
+  // 2. 检测搜索类型
+  const urlMatch = text.match(/https?:\/\/[^\s]+/);
+  const isGithubCmd = /github|gh\s+|代码|仓库|repo/i.test(text);
+
+  // 检测社交媒体平台关键词
+  const platformMatch = text.match(/(小红书|xhs|红书|B站|bilibili|bili|哔哩哔哩|推特|twitter|X上|X现在|X上面|reddit|雪球|股票|V2EX|v2ex|抖音)/i);
+  const platformMap = {
+    xhs: 'xiaohongshu', 小红书: 'xiaohongshu', 红书: 'xiaohongshu',
+    b站: 'bilibili', bilibili: 'bilibili', bili: 'bilibili', 哔哩哔哩: 'bilibili',
+    推特: 'twitter', twitter: 'twitter', x上: 'twitter', x现在: 'twitter', x上面: 'twitter',
+    reddit: 'reddit',
+    雪球: 'xueqiu', 股票: 'xueqiu',
+    v2ex: 'v2ex', V2EX: 'v2ex'
+  };
+
+  // 3. 调用 MCP 工具
+  let searchResult = '';
+  try {
+    if (urlMatch) {
+      searchResult = await callTool('read_url', { url: urlMatch[0] });
+    } else if (isGithubCmd) {
+      const query = text.replace(/github|gh|代码|仓库|搜索|查一下|帮我搜|搜一下|查资料|最新/g, '').trim().slice(0, 100) || text.slice(0, 100);
+      searchResult = await callTool('github_search', { query, type: 'repos', limit: 5 });
+    } else if (platformMatch) {
+      // 社交媒体搜索（小红书/B站/Twitter等）
+      const platformKey = platformMatch[1].toLowerCase();
+      const mapped = platformMap[platformKey] || platformKey;
+      // 去掉平台词和意图词，只保留实际搜索内容
+      let query;
+      if (mapped === 'xueqiu') {
+        // 雪球：保留逗号分隔的股票名（如：泡泡玛特,谷歌,腾讯）
+        query = text.replace(/搜索|查一下|帮我搜|搜一下|搜下|查资料|网上|互联网|最新|雪球|股票|热门|的|是|在|了|和|或|有|没|看|要|最|上给我|给我|上|财报|年报|财务|报告/g, '').replace(/[\s。！？、；：""''【】《（）》\-\+]/g, '').trim();
+      } else {
+        query = text.replace(/搜索|查一下|帮我搜|搜一下|查资料|网上|互联网|最新|小红书|xhs|红书|B站|bilibili|哔哩哔哩|推特|twitter|x上|X上|X现在|X上面|reddit|雪球|股票|v2ex|V2EX|抖音|热门|新闻|热搜|最热门|现在|上面|是什么|什么|最|的|是|在|了|和|或|有|没|看|要|今天|火的|最火|全球|今天|昨天|明天|国内|国外|国际/g, '').replace(/[\s,，。！？、；：""''【】《（）》\-\+]/g, '').trim();
+      }
+      const defaultQueries = { twitter: 'news', xiaohongshu: '热门推荐', bilibili: '热门视频' };
+      if (mapped === 'twitter') {
+        // Twitter 搜索：英文结果才有意义；若 query 含中文则用默认
+        if (!query || /[一-鿿]/.test(query)) query = defaultQueries.twitter;
+      } else {
+        if (!query && defaultQueries[mapped]) query = defaultQueries[mapped];
+      }
+      if (mapped === 'xueqiu') {
+        // 雪球两步搜索：先搜股票代码，再逐只搜财报
+        searchResult = await callTool('social_search', { platform: mapped, query, limit: 5 });
+        // 补充：对每只股票单独搜索财报（避免多股票合并搜索只出一只的结果）
+        const stockNames = query.replace(/财报|最新|搜下|给我上|给我|上/g, '').trim();
+        if (stockNames) {
+          const stocks = stockNames.split(/[，,、]+/).filter(Boolean);
+          for (const stock of stocks.slice(0, 4)) {
+            const webResult = await callTool('web_search', { query: stock + ' 最新财报 年报 2025 2026', numResults: 3 });
+            if (webResult && !webResult.includes('[web') && !webResult.includes('需要登录')) {
+              searchResult += '\n\n【' + stock + '财报】\n' + webResult.slice(0, 3000);
+            }
+          }
+        }
+      } else {
+        searchResult = await callTool('social_search', { platform: mapped, query, limit: 5 });
+      }
+    } else {
+      searchResult = await callTool('web_search', {
+        query: text.replace(/搜索|查一下|帮我搜|搜一下|查资料|网上|互联网|最新|net|news/g, '').trim().slice(0, 200) || text.slice(0, 200),
+        numResults: 5,
+      });
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message, agent: 'internet_search' }, 'MCP call failed');
+    searchResult = `[搜索服务返回错误：${e.message}]`;
+  }
+
+  // 4. 截断搜索结果
+  const maxLen = 12000;
+  const truncated = searchResult.slice(0, maxLen);
+
+  // 5. 注入搜索结果到 LLM 提示
+  const userName = ctx?.name || ctx?.username || '未知';
+  const sysPrompt = `【角色定义】
+你是HRMS智能助手「小年」的联网搜索模块。用户请求进行互联网搜索，你已获得以下搜索结果。
+
+【搜索结果】
+${truncated}
+
+【指令】
+根据搜索结果回答用户问题。如果搜索结果为空或无关，请如实告知用户。
+用简体中文回复，简洁扼要，引用搜索结果时注明来源。回答不超过600字。
+
+当前用户：${userName}，门店：${store || '未指定'}`;
+
+  const r = await callLLM(
+    [
+      { role: 'system', content: sysPrompt },
+      { role: 'user', content: text },
+    ],
+    { temperature: 0.1, max_tokens: 800, purpose: 'internet_search' }
+  );
+
+  return {
+    agent: 'internet_search',
+    response: r?.content || '小年：搜索完成，但未能生成有效回答。请稍后重试。',
+    store,
+  };
+}
+
 const AGENT_SKILLS = Object.freeze({
   data_auditor: {
     name: '数据审计',
@@ -3612,12 +3755,13 @@ const AGENT_SKILLS = Object.freeze({
     name: 'Master调度中枢',
     skills: [
       { id: 'general_dispatch', name: '通用调度', desc: '路由未分类请求,给出下一步建议', trigger: '(兜底)' },
-      { id: 'task_context', name: '任务上下文', desc: '活跃任务查询与状态追踪', trigger: '任务|进度|状态' }
+      { id: 'task_context', name: '任务上下文', desc: '活跃任务查询与状态追踪', trigger: '任务|进度|状态' },
+      { id: 'internet_search', name: '互联网搜索', desc: '搜索网页/读URL/GitHub(需本地MCP服务)', trigger: '搜索|查一下|查资料|网上|互联网|最新|帮我搜' }
     ]
   }
 });
 
-const HANDLERS={data_auditor:handleDataAuditor,ops_supervisor:handleOpsSupervisor,chief_evaluator:handleChiefEvaluator,train_advisor:handleTrainAdvisor,appeal:handleAppeal,marketing_planner:handleMarketingPlanner,marketing_executor:handleMarketingExecutor,procurement_advisor:handleProcurementAdvisor,marketing:handleMarketingPlanner,food_quality:handleOpsSupervisor,master:handleMaster,accept_action_plan:handleAcceptActionPlan};
+const HANDLERS={data_auditor:handleDataAuditor,ops_supervisor:handleOpsSupervisor,chief_evaluator:handleChiefEvaluator,train_advisor:handleTrainAdvisor,appeal:handleAppeal,marketing_planner:handleMarketingPlanner,marketing_executor:handleMarketingExecutor,procurement_advisor:handleProcurementAdvisor,marketing:handleMarketingPlanner,food_quality:handleOpsSupervisor,master:handleMaster,accept_action_plan:handleAcceptActionPlan,internet_search:handleInternetSearch};
 
 /**
  * 处理 Proactive 触发
