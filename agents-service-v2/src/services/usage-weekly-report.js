@@ -32,7 +32,9 @@ async function getAdminOpenIds() {
 }
 
 async function getWeeklyUsageData(periodStart, periodEnd) {
-  const result = await query(`
+  // 未显式 logout 的会话：用「统计周最后一天 上海 23:59:59」与「登录+12h」的较早者作为结束时刻，避免被算成仅 5 分钟在线
+  const result = await query(
+    `
     SELECT
       l.username,
       COALESCE(e.name, u.real_name, l.username) AS name,
@@ -41,9 +43,24 @@ async function getWeeklyUsageData(periodStart, periodEnd) {
       COUNT(*) AS login_count,
       ROUND(
         EXTRACT(EPOCH FROM (
-          COALESCE(SUM(LEAST(COALESCE(l.logout_at, l.login_at + INTERVAL '5 minutes'), l.login_at + INTERVAL '12 hours') - l.login_at), INTERVAL '0'))
-        ) / 60.0
-      , 1) AS online_minutes
+          COALESCE(
+            SUM(
+              LEAST(
+                COALESCE(
+                  l.logout_at,
+                  LEAST(
+                    (($2::text || ' 23:59:59')::timestamp AT TIME ZONE 'Asia/Shanghai'),
+                    l.login_at + INTERVAL '12 hours'
+                  )
+                ),
+                l.login_at + INTERVAL '12 hours'
+              ) - l.login_at
+            ),
+            INTERVAL '0'
+          )
+        )) / 60.0,
+        1
+      ) AS online_minutes
     FROM user_login_log l
     LEFT JOIN employees e ON LOWER(TRIM(e.username)) = LOWER(TRIM(l.username))
     LEFT JOIN users u ON LOWER(TRIM(u.username)) = LOWER(TRIM(l.username))
@@ -54,7 +71,9 @@ async function getWeeklyUsageData(periodStart, periodEnd) {
       AND COALESCE(e.name, u.real_name, '') NOT IN ('系统管理员', 'test')
     GROUP BY l.username, e.name, u.real_name, e.store, fu.store, e.position, fu.role, u.role
     ORDER BY login_count DESC, online_minutes DESC
-  `, [periodStart, periodEnd]);
+    `,
+    [periodStart, periodEnd]
+  );
   return result.rows;
 }
 

@@ -1,17 +1,9 @@
 /**
- * 菜品优化周报/月报 — 按大类(category)维度四象限分类
+ * 菜品优化周报/月报
  *
- * 与 V1 performance-jobs.js buildDishOptimizationMarkdown() 的区别：
- * - 分组维度：store × biz_type × **category**（大类），而非 store × biz_type × dish_name
- * - 四象限中位数阈值按大类粒度计算（每个大类一条记录：总销量 + 总利润额）
- * - 象限内展示该大类下排名靠前的菜品明细
- *
- * 逻辑：
- * 1. 聚合 sales_raw 得到 每条 dish 的 qty + revenue
- * 2. 匹配 dish_library_costs 得到 unit_cost → profit = revenue - qty × unit_cost
- * 3. 向上聚合到 category 级别（SUM qty, SUM profit）
- * 4. 按 store × biz_type 分组，取组内 category 中位数 → 四象限划分
- * 5. 每个 category 象限内列出 TOP 菜品
+ * - 分组：**门店 × 堂食/外卖 × sales_raw 大类（category + 可选 category_code）**
+ * - 在每个大类内对**单品**（有成本匹配）用销量中位数 × 利润额中位数划四象限：明细 / 引流 / 潜力 / 淘汰
+ * - 每象限最多 5 道菜（按销量降序）
  */
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
@@ -49,7 +41,7 @@ function bizChannelZh(biz) {
   return '堂食';
 }
 
-function medianThreshold(getVal, arr) {
+export function medianThreshold(getVal, arr) {
   if (!arr.length) return 0;
   const vals = arr.map(getVal).filter((v) => Number.isFinite(v));
   if (!vals.length) return 0;
@@ -99,7 +91,7 @@ async function loadCostMap(storeNorm) {
   return { mapTakeaway, mapDinein, mapAny };
 }
 
-function classifyByQtyProfit(arr) {
+export function classifyByQtyProfit(arr) {
   if (arr.length < 2) return { star: [], traffic: [], potential: [], eliminate: [], sparse: arr };
   const midQty = medianThreshold((x) => x.qty, arr);
   const midProf = medianThreshold((x) => x.profit, arr);
@@ -128,20 +120,27 @@ function quadrantGuidance(q) {
   return '**营运**：评估下架或替换；清仓阶梯价清库存，减少占菜单位与备料资金。\n**营销**：不做主推与流量投放；若保留仅作凑单小份装，避免占用套餐与广告位。';
 }
 
-function formatCategoryQuadrantBlock(titleZh, catItems, q, topDishes) {
-  const g = quadrantGuidance(q);
-  const catLines = catItems
-    .slice(0, 8)
-    .map(c => `· **${c.category}** 销量 **${Math.round(c.qty)}** 份｜销额 ¥${c.revenue.toFixed(0)}｜**利润额 ¥${c.profit.toFixed(0)}**`)
-    .join('\n');
-  if (!catLines) return `**${titleZh}**\n_（无）_\n\n${g}\n`;
+const QUADRANT_TITLE = {
+  star: '⭐ 明细产品（高销量 · 高利润额）',
+  traffic: '🔻 引流产品（高销量 · 低利润额）',
+  potential: '📈 潜力产品（低销量 · 高利润额）',
+  eliminate: '🗑 淘汰产品（低销量 · 低利润额）'
+};
 
-  let block = `**${titleZh}**\n${catLines}\n`;
-  if (topDishes && topDishes.length) {
-    block += `\n> ${topDishes}\n`;
-  }
-  block += `\n${g}\n`;
-  return block;
+function fmtDishLine(d) {
+  const gp = d.revenue > 0 ? (d.profit / d.revenue) * 100 : 0;
+  return `· **${d.dish}** 销量 **${Math.round(d.qty)}** 份｜销额 ¥${d.revenue.toFixed(0)}｜利润额 ¥${d.profit.toFixed(
+    0
+  )}｜毛利率 **${gp.toFixed(1)}%**`;
+}
+
+function formatDishQuadrantBlock(qKey, dishes) {
+  const titleZh = QUADRANT_TITLE[qKey];
+  const g = quadrantGuidance(qKey);
+  const sorted = [...dishes].sort((a, b) => b.qty - a.qty).slice(0, 5);
+  const lines = sorted.map(fmtDishLine).join('\n');
+  if (!lines) return `**${titleZh}**\n_（无）_\n\n${g}\n`;
+  return `**${titleZh}**\n${lines}\n\n${g}\n`;
 }
 
 function prevMonthPeriod() {
@@ -160,15 +159,38 @@ function monthDateRange(period) {
 }
 
 export async function buildDishOptimizationMarkdown({ start, end, reportTitle }) {
-  const agg = await query(
-    `SELECT store, biz_type, category, dish_name,
-            SUM(COALESCE(qty, 0))::numeric AS qty,
-            SUM(COALESCE(revenue, 0))::numeric AS revenue
-     FROM sales_raw
-     WHERE date >= $1::date AND date <= $2::date AND COALESCE(dish_name, '') <> ''
-     GROUP BY store, biz_type, category, dish_name`,
-    [start, end]
-  );
+  let agg;
+  try {
+    agg = await query(
+      `SELECT store, biz_type,
+              COALESCE(NULLIF(TRIM(COALESCE(category::text, '')), ''), '未分类') AS category,
+              NULLIF(TRIM(COALESCE(category_code::text, '')), '') AS category_code,
+              dish_name,
+              SUM(COALESCE(qty, 0))::numeric AS qty,
+              SUM(COALESCE(revenue, 0))::numeric AS revenue
+       FROM sales_raw
+       WHERE date >= $1::date AND date <= $2::date AND COALESCE(dish_name, '') <> ''
+       GROUP BY store, biz_type, category, category_code, dish_name`,
+      [start, end]
+    );
+  } catch (e) {
+    if (e?.code === '42703') {
+      agg = await query(
+        `SELECT store, biz_type,
+                COALESCE(NULLIF(TRIM(COALESCE(category::text, '')), ''), '未分类') AS category,
+                NULL::text AS category_code,
+                dish_name,
+                SUM(COALESCE(qty, 0))::numeric AS qty,
+                SUM(COALESCE(revenue, 0))::numeric AS revenue
+         FROM sales_raw
+         WHERE date >= $1::date AND date <= $2::date AND COALESCE(dish_name, '') <> ''
+         GROUP BY store, biz_type, category, dish_name`,
+        [start, end]
+      );
+    } else {
+      throw e;
+    }
+  }
 
   const stores = [...new Set((agg.rows || []).map((r) => r.store).filter(Boolean))];
   const costMaps = new Map();
@@ -195,10 +217,13 @@ export async function buildDishOptimizationMarkdown({ start, end, reportTitle })
     if (unit == null || !Number.isFinite(unit)) continue;
     const profit = revenue - qty * unit;
     if (!Number.isFinite(profit)) continue;
+    const catName = String(r.category || '未分类').trim() || '未分类';
+    const code = r.category_code ? String(r.category_code).trim() : '';
+    const catDisplay = code ? `${catName}（大类编码 ${code}）` : catName;
     dishItems.push({
       store: r.store,
       channel: bizChannelZh(r.biz_type),
-      category: String(r.category || '未分类').trim() || '未分类',
+      catDisplay,
       dish: r.dish_name,
       qty,
       revenue,
@@ -206,78 +231,55 @@ export async function buildDishOptimizationMarkdown({ start, end, reportTitle })
     });
   }
 
-  // aggregate to category level
-  const catMap = new Map();
-  for (const it of dishItems) {
-    const k = `${it.store}||${it.channel}||${it.category}`;
-    if (!catMap.has(k)) catMap.set(k, { store: it.store, channel: it.channel, category: it.category, qty: 0, revenue: 0, profit: 0, dishes: [] });
-    const c = catMap.get(k);
-    c.qty += it.qty;
-    c.revenue += it.revenue;
-    c.profit += it.profit;
-    c.dishes.push(it);
-  }
-
-  // group by store × channel
+  /** store||channel -> Map(catDisplay -> dishes[]) */
   const byGroup = new Map();
-  for (const [, cat] of catMap) {
-    const k = `${cat.store}||${cat.channel}`;
-    if (!byGroup.has(k)) byGroup.set(k, []);
-    byGroup.get(k).push(cat);
-  }
-
-  // build top-dish strings per category for inline display
-  function topDishStringForCats(cats) {
-    const allDishes = [];
-    for (const cat of cats) {
-      const sorted = (cat.dishes || []).sort((a, b) => b.profit - a.profit);
-      for (const d of sorted.slice(0, 3)) {
-        allDishes.push(`${d.dish}(¥${d.profit.toFixed(0)})`);
-      }
-    }
-    const seen = new Set();
-    const unique = [];
-    for (const d of allDishes) {
-      if (seen.has(d)) continue;
-      seen.add(d);
-      unique.push(d);
-      if (unique.length >= 5) break;
-    }
-    return unique.length ? `代表菜品：${unique.join('、')}` : '';
+  for (const it of dishItems) {
+    const gk = `${it.store}||${it.channel}`;
+    if (!byGroup.has(gk)) byGroup.set(gk, new Map());
+    const cm = byGroup.get(gk);
+    if (!cm.has(it.catDisplay)) cm.set(it.catDisplay, []);
+    cm.get(it.catDisplay).push(it);
   }
 
   let md = `## ${reportTitle}\n\n`;
   md += `**统计周期**：${start} ～ ${end}（Asia/Shanghai）\n\n`;
-  md += `> **划分规则**：按「门店 × 堂食/外卖」分别取大类；**高/低销量**相对该组内大类销量中位数；**高/低利润**相对该组内**大类利润额（销额−销量×菜品库单位成本）**中位数。\n`;
-  md += `> 成本来源：**飞书同步表 \`dish_library_costs\`**（门店匹配 + 通配 \`*\`，\`biz_type\` 对齐堂食/外卖）。\n`;
-  md += `> 与 V1 按「菜品」维度不同，本报告按「大类」维度聚合，以便从产品结构层面决策。\n\n`;
+  md +=
+    '> **划分规则**：`sales_raw` 按 **大类名称**（及 **大类编码** `category_code`，有则展示）分组 → 在每个大类内对**有成本匹配的单品**用「销量中位数 × 利润额中位数」划四象限：**明细 / 引流 / 潜力 / 淘汰**；每象限最多 **5** 道菜（按销量降序）。\n';
+  md += '> 成本来源：**飞书 `dish_library_costs`**；毛利率 = 利润额 ÷ 销额。\n\n';
 
   const keys = [...byGroup.keys()].sort();
-  for (const k of keys) {
-    const [store, ch] = k.split('||');
-    const catArr = byGroup.get(k);
+  for (const gk of keys) {
+    const [store, ch] = gk.split('||');
+    const catMap = byGroup.get(gk);
+    const catKeys = [...catMap.keys()].sort((a, b) => {
+      const sum = (k) => catMap.get(k).reduce((s, d) => s + d.qty, 0);
+      return sum(b) - sum(a);
+    });
     md += `### ${store} · ${ch}\n\n`;
-    const { star, traffic, potential, eliminate, sparse } = classifyByQtyProfit(catArr);
-    if (sparse.length) {
-      for (const x of sparse) {
-        md += `_本组仅有 1 个大类匹配到成本，无法做四象限中位数划分：_\n`;
-        md += `· **${x.category}** 销量 **${Math.round(x.qty)}**｜销额 ¥${x.revenue.toFixed(0)}｜利润额 ¥${x.profit.toFixed(0)}\n\n`;
+    for (const catDisplay of catKeys) {
+      const dishes = catMap.get(catDisplay);
+      md += `#### 🏷 ${catDisplay}\n\n`;
+      if (dishes.length < 2) {
+        md += dishes
+          .slice()
+          .sort((a, b) => b.qty - a.qty)
+          .map(fmtDishLine)
+          .join('\n');
+        md += '\n\n_本大类仅有 1 道可匹配成本的菜品，不做四象限划分。_\n\n';
+        continue;
       }
-    } else {
-      const starDishes = topDishStringForCats(star);
-      const trafficDishes = topDishStringForCats(traffic);
-      const potentialDishes = topDishStringForCats(potential);
-      const eliminateDishes = topDishStringForCats(eliminate);
-      md += formatCategoryQuadrantBlock('⭐ 明星大类（高销量 · 高利润额）', star, 'star', starDishes);
-      md += formatCategoryQuadrantBlock('🔻 引流大类（高销量 · 低利润额）', traffic, 'traffic', trafficDishes);
-      md += formatCategoryQuadrantBlock('📈 潜力大类（低销量 · 高利润额）', potential, 'potential', potentialDishes);
-      md += formatCategoryQuadrantBlock('🗑 淘汰大类（低销量 · 低利润额）', eliminate, 'eliminate', eliminateDishes);
+      const { star, traffic, potential, eliminate } = classifyByQtyProfit(dishes);
+      md += formatDishQuadrantBlock('star', star);
+      md += formatDishQuadrantBlock('traffic', traffic);
+      md += formatDishQuadrantBlock('potential', potential);
+      md += formatDishQuadrantBlock('eliminate', eliminate);
     }
     md += '---\n\n';
   }
 
   if (!keys.length) {
-    md += '⚠️ **本周期无「销售明细 × 菜品库成本」可对齐的数据。**\n请确认已导入 `sales_raw`，且 `dish_library_costs` 已同步飞书菜品库/外卖菜品库成本。\n';
+    md +=
+      '⚠️ **本周期无「销售明细 × 菜品库成本」可对齐的数据。**\n请确认已导入 `sales_raw`（含 `category` / `category_code`），且 `dish_library_costs` 已同步。\n';
   }
 
   return md.trimEnd();
@@ -322,7 +324,7 @@ async function sendDishOptimizationCardsToHq(fullMd, cardHeaderTitle) {
         },
         elements: [
           { tag: 'div', text: { tag: 'lark_md', content: chunks[i].slice(0, 9800) } },
-          { tag: 'div', text: { tag: 'lark_md', content: '_数据来源：`sales_raw` + `dish_library_costs`（飞书菜品库/外卖库成本）· 按大类维度聚合_' } }
+          { tag: 'div', text: { tag: 'lark_md', content: '_数据来源：`sales_raw`（大类/编码）+ `dish_library_costs` · 大类内单品四象限_' } }
         ]
       };
       try {
@@ -352,7 +354,7 @@ export async function sendWeeklyDishOptimizationReport() {
     end: weekEnd,
     reportTitle: `🍽 菜品优化周报（${weekStart}～${weekEnd}）`
   });
-  const sent = await sendDishOptimizationCardsToHq(md, `🍽 周报 ${weekStart}～${weekEnd}`);
+  const sent = await sendDishOptimizationCardsToHq(md, `🍽 菜品优化周报 ${weekStart}～${weekEnd}`);
   logger.info({ weekStart, weekEnd, sent }, 'dish optimization weekly report sent');
   return { ok: true, weekStart, weekEnd, sent };
 }

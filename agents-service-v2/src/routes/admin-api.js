@@ -9,6 +9,7 @@ import { startRandomInspections } from '../services/random-inspection.js';
 import { scheduleProactiveOutcomeOnClose } from '../services/proactive-v2/proactive-task-outcome-on-close.js';
 
 import { sendUsageWeeklyReport } from '../services/usage-weekly-report.js';
+import { sendWeeklyDishOptimizationReport } from '../services/dish-optimization-report.js';
 import { AGENT_SKILLS } from '../services/agent-handlers.js';
 import { applyPllmDecision } from '../services/proactive-v2/pllm-workflow.js';
 import { sendPllmMonthlyReport } from '../services/proactive-v2/pllm-workflow.js';
@@ -819,6 +820,17 @@ r.post('/trigger-usage-weekly-report', ...admin, async (req, res) => {
     res.json({ ok: true, message: '员工系统使用周报已发送' });
   } catch (e) {
     logger.error({ err: e?.message }, 'trigger-usage-weekly-report failed');
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+/** 手动触发「菜品优化周报」→ admin/hq（与周一 cron 同逻辑，用于验收新版式） */
+r.post('/trigger-dish-optimization-weekly', ...admin, async (req, res) => {
+  try {
+    const out = await sendWeeklyDishOptimizationReport();
+    res.json({ ok: true, message: '菜品优化周报已尝试发送', ...out });
+  } catch (e) {
+    logger.error({ err: e?.message }, 'trigger-dish-optimization-weekly failed');
     res.status(500).json({ error: String(e?.message || e) });
   }
 });

@@ -490,11 +490,7 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
           ? `\n\n**（2）更早派发 · 仍待处理**　**${backlogTotal} 条**\n` +
             `_非昨日派发日的积压，便于排查是否漏处理。_\n` +
             bLines
-          : '') +
-        `\n\n**催办与 HR 备案**\n` +
-        '· **待回复**：约每 **1 小时**可催 1 次；**满 3 次催办 + 再等 1 小时**仍无有效闭环：**BI 异常任务卡、定时任务、随机抽检、数据审计、营销协作** → **仅**记入工作态度未完成（`hr_performance_recorded`），影响当月态度评级；**不因催办写入 agent_scores 扣分**。**BI 异常触发的绩效扣分**仅按 BI 规则在周度 **anomaly_rollups_v2** 中计算，与任务卡催办无关。均 **【公司通知】**（飞书卡片+文本）。\n' +
-        '· **待审核**：回复连续 **3 次**不合格 → **工作态度**备案（与任务卡说明一致：**不计**绩效分），并 **【公司通知】**。\n' +
-        '· 已打标 `hr_performance_recorded` 时行末显示「HR已备案」。'
+          : '')
     );
   } catch (e) { logger.warn({ err: e?.message, store }, 'briefing tasks'); }
 

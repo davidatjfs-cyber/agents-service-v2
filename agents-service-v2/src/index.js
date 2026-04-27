@@ -161,6 +161,13 @@ app.get('/health', async (req, res) => {
   } catch (e) {
     wikiKnowledge = { ok: false, error: String(e?.message || e) };
   }
+  let agentReachMcp = { reachable: false, error: 'not_probed' };
+  try {
+    const { checkMcpHealth } = await import('./services/mcp-client.js');
+    agentReachMcp = await checkMcpHealth();
+  } catch (e) {
+    agentReachMcp = { reachable: false, error: String(e?.message || e) };
+  }
   /** 鉴权失败统计（24h）：来源 IP 聚合 + 用户名聚合 + 弱认证命中 */
   let authFailures = { total24h: 0, topIps: [], topUsers: [], weakAuthHits24h: 0 };
   try {
@@ -244,6 +251,8 @@ app.get('/health', async (req, res) => {
     mempalace,
     /** 本地 Markdown 经验库（knowledge/wiki），供 experience-builder 检索 */
     wikiKnowledge,
+    /** 本地 agent-reach MCP 服务器（Tailscale）连接状态 */
+    agentReachMcp,
     /**
      * 鉴权安全统计（24h 窗口，依赖 user_login_log 表；-1 表示查询失败）。
      * 配合关卡1默认口令移除，通过此字段可观察是否有人依赖旧口令登录。
@@ -272,6 +281,11 @@ app.post('/api/login', async (req, res) => {
   const writeLoginLog = async (isSuccess, extra) => {
     try {
       if (isSuccess) {
+        // 关闭未显式退出的上一会话，避免「未 logout 再进」在统计上被算成超长单次或在线时长失真
+        await query(
+          `UPDATE user_login_log SET logout_at = NOW() WHERE LOWER(username) = LOWER($1) AND logout_at IS NULL`,
+          [normUser]
+        ).catch(() => {});
         await query(
           `INSERT INTO user_login_log (username, ip_address) VALUES ($1, $2)`,
           [normUser, clientIp]
@@ -333,8 +347,12 @@ app.post('/api/auth/heartbeat', authRequired, async (req, res) => {
   const username = String(req.user?.username || '').trim();
   if (username) {
     try {
+      // 将「最近一条登录记录」的 logout_at 刷新为当前时间，用于在线时长累计（不再用「首跳即关会话」的旧逻辑）
       await query(
-        `UPDATE user_login_log SET logout_at = NOW() WHERE username = LOWER($1) AND logout_at IS NULL`,
+        `UPDATE user_login_log SET logout_at = NOW()
+         WHERE id = (
+           SELECT id FROM user_login_log WHERE LOWER(username) = LOWER($1) ORDER BY login_at DESC LIMIT 1
+         )`,
         [username]
       );
     } catch (_e) { /* ignore */ }

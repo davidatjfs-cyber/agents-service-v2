@@ -561,23 +561,49 @@ async function sendDishReportCardsToHq(fullMd, cardHeaderTitle) {
 
 export async function sendMonthlyDishOptimizationReport(period) {
   const { start, end } = monthDateRange(period);
-  const md = await buildDishOptimizationMarkdown({
-    start,
-    end,
-    reportTitle: `🍽 ${period} 菜品优化月报`
-  });
-  await sendDishReportCardsToHq(md, `🍽 ${period} 菜品优化月报`);
+  const title = `🍽 ${period} 菜品优化月报`;
+  try {
+    const modUrl = new URL('../../agents-service-v2/src/services/dish-optimization-report.js', import.meta.url);
+    const mod = await import(modUrl.href);
+    if (typeof mod.buildDishOptimizationMarkdown === 'function') {
+      const md = await mod.buildDishOptimizationMarkdown({ start, end, reportTitle: title });
+      await sendDishReportCardsToHq(md, title);
+      console.log('[perf-jobs] dish MONTHLY (agents builder)', period);
+      return;
+    }
+  } catch (e) {
+    console.warn('[perf-jobs] agents dish-optimization import failed, fallback:', e?.message || e);
+  }
+  const md = await buildDishOptimizationMarkdown({ start, end, reportTitle: title });
+  await sendDishReportCardsToHq(md, title);
   console.log('[perf-jobs] dish MONTHLY cards sent for', period);
 }
 
 export async function sendWeeklyDishOptimizationReport(weekStart, weekEnd) {
+  const title = `🍽 菜品优化周报（${weekStart}～${weekEnd}）`;
+  try {
+    const modUrl = new URL('../../agents-service-v2/src/services/dish-optimization-report.js', import.meta.url);
+    const mod = await import(modUrl.href);
+    if (typeof mod.buildDishOptimizationMarkdown === 'function') {
+      const md = await mod.buildDishOptimizationMarkdown({
+        start: weekStart,
+        end: weekEnd,
+        reportTitle: title
+      });
+      await sendDishReportCardsToHq(md, `🍽 菜品优化周报 ${weekStart}～${weekEnd}`);
+      console.log('[perf-jobs] dish WEEKLY (agents builder)', weekStart, weekEnd);
+      return;
+    }
+  } catch (e) {
+    console.warn('[perf-jobs] agents dish-optimization import failed, fallback:', e?.message || e);
+  }
   const md = await buildDishOptimizationMarkdown({
     start: weekStart,
     end: weekEnd,
-    reportTitle: `🍽 菜品优化周报（${weekStart}～${weekEnd}）`
+    reportTitle: title
   });
-  await sendDishReportCardsToHq(md, `🍽 周报 ${weekStart}～${weekEnd}`);
-  console.log('[perf-jobs] dish WEEKLY cards sent', weekStart, weekEnd);
+  await sendDishReportCardsToHq(md, `🍽 菜品优化周报 ${weekStart}～${weekEnd}`);
+  console.log('[perf-jobs] dish WEEKLY cards sent (local fallback)', weekStart, weekEnd);
 }
 
 export function startHrmsPerformanceJobs(options = {}) {
@@ -608,8 +634,10 @@ export function startHrmsPerformanceJobs(options = {}) {
       }
 
       if (hour === 8 && minute < 12) {
+        // 菜品优化周/月报默认由 agents-service-v2 rhythm-engine 发送；仅当 HRMS_ENABLE_DISH_OPTIMIZATION_CRON=true 时本进程才发，避免双发与旧版式
+        const hrmsDishCron = String(process.env.HRMS_ENABLE_DISH_OPTIMIZATION_CRON || '').toLowerCase() === 'true';
         // 每月 1 日：上月菜品优化月报（原误配在 10 日与关账同日，现按业务约定改到月初）
-        if (d === 1) {
+        if (hrmsDishCron && d === 1) {
           const moKey = `dish-mo1-${slotBase}`;
           if (_slotDishMonthlyDay1 !== moKey) {
             _slotDishMonthlyDay1 = moKey;
@@ -637,7 +665,7 @@ export function startHrmsPerformanceJobs(options = {}) {
         }
 
         // 周一 8:00–11:59 任意 5 分钟 tick 触发一次（原仅 minute<12 易在 8:15 重启等服务错过整周）
-        if (isShanghaiMonday() && hour >= 8 && hour < 12) {
+        if (hrmsDishCron && isShanghaiMonday() && hour >= 8 && hour < 12) {
           const daySlot = `wk-${cal.ymd}`;
           if (_slotDishWeekly !== daySlot) {
             _slotDishWeekly = daySlot;
@@ -657,7 +685,7 @@ export function startHrmsPerformanceJobs(options = {}) {
     }
   }, 5 * 60 * 1000);
   console.log(
-    '[perf-jobs] scheduler on (5m tick): monthly close 10th 01:00; digest 10th 08:00; monthly dish 1st 08:00; weekly dish Mon 08:00–11:59 (Asia/Shanghai)'
+    '[perf-jobs] scheduler on (5m tick): monthly close 10th 01:00; digest 10th 08:00; dish reports: only if HRMS_ENABLE_DISH_OPTIMIZATION_CRON=true (else agents-service-v2)'
   );
 }
 

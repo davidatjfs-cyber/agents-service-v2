@@ -11043,18 +11043,62 @@ function isShanghaiMondayNow() {
   return wd === 'Mon';
 }
 
+/** 上海日历 yyyy-mm-dd */
+function shanghaiYmdCal(d = new Date()) {
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+}
+function addDaysYmdShanghaiPush(ymd, delta) {
+  const t = new Date(`${ymd}T12:00:00+08:00`);
+  t.setUTCDate(t.getUTCDate() + delta);
+  return t.toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+}
+/** 刚结束的自然周周一（与 agents 周评分对齐）：昨天所在周的周一 */
+function lastCompletedWeekMondayShanghaiForPush() {
+  const today = shanghaiYmdCal();
+  const yst = addDaysYmdShanghaiPush(today, -1);
+  return addDaysYmdShanghaiPush(yst, -6);
+}
+function currentAndPrevMonthPeriodStrForPush() {
+  const parts = shanghaiYmdCal().split('-');
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  const cur = `${y}-${String(m).padStart(2, '0')}`;
+  let pm = m - 1;
+  let py = y;
+  if (pm < 1) {
+    pm = 12;
+    py -= 1;
+  }
+  const prev = `${py}-${String(pm).padStart(2, '0')}`;
+  return { cur, prev };
+}
+
 // Push performance scores to users via Feishu
 async function pushScoresToFeishu() {
   try {
     // new_model_monthly：由 agents-service 月度绩效成绩单统一发卡片并批量标记已通知；
     // 若仍走本通道，会在每月 10 日 01:00～01:18 之间用「周报」版式误发上月月评数据（与 01:18 正式月评卡矛盾）。
+    //
+    // 防「历史周/历史月积压」被 5 分钟重试一次连续刷屏：周度异常仅允许「上一完整自然周」；new_model 仅允许当前月与上月；
+    // 其它模型仅允许近期 updated 行（避免误把 feishu_notified 批量打回 false 后重发全年）。
+    const weekMon = lastCompletedWeekMondayShanghaiForPush();
+    const weekPrefix = `week_${weekMon}`;
+    const { cur: curMonth, prev: prevMonth } = currentAndPrevMonthPeriodStrForPush();
     const r = await pool().query(
       `SELECT * FROM agent_scores
        WHERE feishu_notified = FALSE
-         AND created_at >= NOW() - INTERVAL '7 days'
          AND COALESCE(score_model, '') <> 'new_model_monthly'
+         AND (
+           (COALESCE(score_model, '') = 'anomaly_rollups_v2' AND (period = $1 OR period LIKE $2))
+           OR (COALESCE(score_model, '') = 'new_model' AND period IN ($3, $4))
+           OR (
+             COALESCE(score_model, '') NOT IN ('anomaly_rollups_v2', 'new_model')
+             AND COALESCE(updated_at, created_at) >= NOW() - INTERVAL '21 days'
+           )
+         )
        ORDER BY created_at DESC
-       LIMIT 20`
+       LIMIT 20`,
+      [weekPrefix, `${weekPrefix}%`, curMonth, prevMonth]
     );
     if (!r.rows?.length) return 0;
 
@@ -11189,9 +11233,13 @@ async function pushScoresToFeishu() {
         : dimText;
       const msgMidLabel = isWeeklyAnomalyRollup ? '本月累计备案' : '评分维度';
 
-      const isMonthlyModel = modelKey === 'new_model_monthly';
+      const isMonthlyModel =
+        modelKey === 'new_model_monthly' ||
+        (modelKey === 'new_model' && /^\d{4}-\d{2}$/.test(String(score.period || '').trim()));
       const perfTitle = isMonthlyModel ? '绩效考核月报' : '绩效考核周报';
-      const perfKind = isMonthlyModel ? '月度绩效摘要（与上方「月度绩效成绩单」卡片同源数据时请以卡片为准）' : '绩效考核周报（与月度总结区分：本条对应系统刚写入的一条评分记录）';
+      const perfKind = isMonthlyModel
+        ? '月度绩效摘要（与上方「月度绩效成绩单」卡片同源数据时请以卡片为准）'
+        : '绩效考核周报（与月度总结区分：本条对应系统刚写入的一条评分记录）';
       const msgText = `📊 ${perfTitle}\n\n${fu.name || score.username}，你好！以下是你在${score.store}（${score.brand}）的${perfKind}。\n\n📋 岗位：${roleLabel}\n🗓️ ${periodLabel}${modelLine}\n\n📊 本期总分：**${score.total_score} 分**（满分100）\n\n${msgMidLabel}：\n${midSectionBody}\n\n扣分明细：\n${deductionText}\n\n${summaryZh ? '说明：' + summaryZh + '\n\n' : ''}如有异议，请回复「申诉」并说明原因。`;
       const msg = prefixWithAgentName('chief_evaluator', msgText);
 
