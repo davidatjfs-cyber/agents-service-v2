@@ -199,6 +199,14 @@ function monthlyRowScoreInRange(score, minRaw, maxRaw) {
   return true;
 }
 
+export function getRealtimeMonthlyScoreFromWeeklyRows(weeklyRows) {
+  for (let i = (weeklyRows || []).length - 1; i >= 0; i -= 1) {
+    const score = Number(weeklyRows[i]?.total_score);
+    if (Number.isFinite(score)) return score;
+  }
+  return 100;
+}
+
 async function buildMonthlyPerformanceQueryRow(subject, period, recordFocus = 'all') {
   const focus = String(recordFocus || 'all').toLowerCase();
   const wantDeductions = focus === 'all' || focus === 'deductions';
@@ -207,9 +215,7 @@ async function buildMonthlyPerformanceQueryRow(subject, period, recordFocus = 'a
 
   const periodEndYmd = effectivePeriodEndYmd(period);
   const weeklyRows = await loadMonthlyWeeklyRollups(subject.username, period);
-  const realtimeScore = weeklyRows.length
-    ? Math.round(weeklyRows.reduce((sum, row) => sum + Number(row.total_score || 0), 0) / weeklyRows.length)
-    : 100;
+  const realtimeScore = getRealtimeMonthlyScoreFromWeeklyRows(weeklyRows);
   const finalizedR = await query(
     `SELECT total_score, breakdown, deductions, summary, updated_at
      FROM agent_scores

@@ -1,5 +1,6 @@
 /**
- * 工作态度评级备案日报 — 每日 08:05（上海）统计「昨日」已打标 hr_performance_recorded 的任务。
+ * 工作态度评级备案日报 — 每日 08:05（上海）统计「昨日」窗口内已打标 hr_performance_recorded 的任务。
+ * 入选窗口：**dispatched_at（上海日历）= 业务日 bizYmd**（任务进入「已派发」之日），与 source_data 内「异常实际营业日」可不同。
  * 门店角色仅看本店；admin / hq_manager 看全量汇总。
  */
 import { query } from '../utils/db.js';
@@ -109,7 +110,7 @@ function buildAttitudeFilingCard(title, bodyMd, template = 'blue') {
           {
             tag: 'plain_text',
             content:
-              '数据来源：master_tasks（昨日条数按 dispatched_at 落在业务日期口径内，与月度累计口径一致；「本月累计」按 dispatched_at 落在当月1日—业务日期）。卡片首行「业务日期」= 备案状态更新窗口日；每条「异常实际营业日」= 无充值/数据异常所指的营业日历日（与业务日期可不同）。 · 每日08:05'
+              '数据来源：master_tasks。卡片「业务日期」= 上海昨日统计日 bizYmd；昨日条数与「本月累计」均以 dispatched_at（上海）落在对应日期为准（与 SQL 一致）。每条「异常实际营业日」取自任务 source_data / 标题，可与业务日期不同。明细时间戳为 updated_at 仅供参考。 · 每日08:05'
           }
         ]
       }
@@ -155,7 +156,7 @@ async function buildHqBodyMarkdown(byStore, rows, bizYmd, nameMap, monthlyMap) {
     const n = byStore.get(k)?.length || 0;
     md += `· **${k}**：${n} 条\n`;
   }
-  md += `\n**明细**（按 HR 备案状态更新时间；与执行力备案一致展示「本月累计」）\n\n`;
+  md += `\n**明细**（按派发时间 dispatched_at；与执行力备案一致展示「本月累计」）\n\n`;
   for (const row of rows) {
     const st = String(row.store || '').trim() || '（未填门店）';
     const role = String(row.assignee_role || '').trim();
@@ -170,7 +171,7 @@ async function buildHqBodyMarkdown(byStore, rows, bizYmd, nameMap, monthlyMap) {
     md += `  · **异常实际营业日**：**${actualBiz}**（本条「无充值/异常」所指的**营业日历日**；与下方「业务日期 ${bizYmd}」可不同）\n`;
     md += `  · 摘要：${title}\n`;
     md += `  · 责任人：**${disp}**（\`${un || '—'}\`）｜状态：${row.status || '—'}\n`;
-    md += `  · **HR 备案更新时间**：${row.filed_at_sh || '—'}（因 \`updated_at\` 落在业务日期 **${bizYmd}** 而进入本日报）\n`;
+    md += `  · **本条最近更新时间**：${row.filed_at_sh || '—'}（\`updated_at\` 上海时间，仅展示；**纳入本日报**因任务 **\`dispatched_at\`（派发日，上海）= ${bizYmd}** 且已 HR 态度备案）\n`;
     md += `  · **本月累计（工作态度备案）**：**${monthCnt}** 次（截至 **${bizYmd}**；全门店 distinct task_id）\n\n`;
   }
   return md;
@@ -197,7 +198,7 @@ async function buildStoreBodyMarkdown(filtered, bizYmd, store, nameMap, monthlyM
 
 **昨日备案条数**：**${n}** 条
 
-**明细**（与执行力备案一致含「本月累计」）
+**明细**（按派发时间；与执行力备案一致含「本月累计」）
 
 `;
   for (const row of filtered) {
@@ -214,7 +215,7 @@ async function buildStoreBodyMarkdown(filtered, bizYmd, store, nameMap, monthlyM
     md += `  · **异常实际营业日**：**${actualBiz}**（本条异常所指的**营业日历日**；与业务日期 **${bizYmd}** 可不同）\n`;
     md += `  · 摘要：${title}\n`;
     md += `  · 责任人：**${disp}**（\`${un || '—'}\`）｜状态：${row.status || '—'}\n`;
-    md += `  · **HR 备案更新时间**：${row.filed_at_sh || '—'}（因 \`updated_at\` 落在业务日期 **${bizYmd}** 而进入本日报）\n`;
+    md += `  · **本条最近更新时间**：${row.filed_at_sh || '—'}（\`updated_at\` 上海时间，仅展示；**纳入本日报**因任务 **\`dispatched_at\`（派发日，上海）= ${bizYmd}** 且已 HR 态度备案）\n`;
     md += `  · **本月累计（工作态度备案）**：**${monthCnt}** 次（截至 **${bizYmd}**；本店 distinct task_id）\n\n`;
   }
   return md;
