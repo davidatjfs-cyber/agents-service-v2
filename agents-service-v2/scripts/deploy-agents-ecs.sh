@@ -123,6 +123,7 @@ node scripts/apply-strategy-rules-tags-sql.mjs
 node scripts/apply-agent-experience-context-sql.mjs
 node scripts/apply-anomaly-rules-v2.mjs
 node scripts/apply-private-room-column.mjs
+node scripts/apply-ops-execution-filing-status-zh.mjs
 
 # MemPalace：与 agents 同机 HTTP 记忆服务（营销策划 recall）；未同步 /opt/mempalace 时跳过
 if [[ -f /opt/mempalace/package.json ]]; then

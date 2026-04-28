@@ -19,6 +19,12 @@ import {
   listMonthlyExecutionFilings,
   listMonthlyAttitudeFilings
 } from '../utils/performance-filing-counts.js';
+import {
+  zhMasterTaskStatusForAttitudeFiling,
+  zhAttitudeFilingSource,
+  zhExecutionFilingStatus,
+  zhSeverity
+} from '../utils/status-display-zh.js';
 
 const r = Router();
 const admin = [authRequired, requireRole('admin','hq_manager')];
@@ -233,12 +239,21 @@ async function buildMonthlyPerformanceQueryRow(subject, period, recordFocus = 'a
   const breakdown = parseMaybeJson(finalized?.breakdown, {});
   const detailBag = parseMaybeJson(finalized?.deductions, {});
 
-  const [executionFilingCount, attitudeFilingCount, execution_filings, attitude_filings] = await Promise.all([
+  const [executionFilingCount, attitudeFilingCount, execRowsRaw, attRowsRaw] = await Promise.all([
     getMonthlyExecutionFilingCount(subject.username, subject.store, periodEndYmd),
     getMonthlyAttitudeFilingCount(subject.username, periodEndYmd),
     wantExecF ? listMonthlyExecutionFilings(subject.username, subject.store, periodEndYmd) : Promise.resolve([]),
     wantAttF ? listMonthlyAttitudeFilings(subject.username, periodEndYmd) : Promise.resolve([])
   ]);
+  const execution_filings = (execRowsRaw || []).map((row) => ({
+    ...row,
+    status: zhExecutionFilingStatus(row.status)
+  }));
+  const attitude_filings = (attRowsRaw || []).map((row) => ({
+    ...row,
+    status: zhMasterTaskStatusForAttitudeFiling(row.status),
+    source: zhAttitudeFilingSource(row.source)
+  }));
 
   const deductionRecords = [];
   if (wantDeductions) {
@@ -251,7 +266,7 @@ async function buildMonthlyPerformanceQueryRow(subject, period, recordFocus = 'a
           category_label: MONTHLY_QUERY_CAT_ZH[String(d?.category || '')] || String(d?.category || '异常扣分'),
           anomaly_key: String(d?.anomaly_key || ''),
           anomaly_key_label: MONTHLY_QUERY_ANOMALY_KEY_ZH[String(d?.anomaly_key || '')] || String(d?.anomaly_key || ''),
-          severity: String(d?.severity || ''),
+          severity: zhSeverity(d?.severity),
           detail_note: String(d?.detail_note || '')
         });
       }

@@ -2,7 +2,7 @@
  * daily-execution-rating.js
  * 每日执行力评级检查（08:00 Asia/Shanghai）
  * 检查昨日各门店店长/出品经理的执行力达标情况
- * 未达标项：记录HR备案 + 发送公司通知 + 飞书卡片通知
+ * 未达标项：记录 HR 备案（ops_tasks.status=「已备案」，非 master_tasks 待审流）+ 公司通知 + 飞书卡片
  * 
  * 数据源：
  * - 出品经理：开档/收档/原料收货均为 agent_messages（飞书 bitable 轮询写入，按业务日 + 档口齐套）
@@ -194,7 +194,7 @@ async function recordExecutionFiling({ store, username, role, date, rating, miss
         store,
         'execution_rating_daily',
         `${store} · 执行力日评未达标（${missing.join('/')}）· ${date}`,
-        'pending_review',
+        '已备案',
         username,
         role,
         'execution_rating',
