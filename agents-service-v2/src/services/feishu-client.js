@@ -1324,7 +1324,7 @@ export async function handleWebhookEvent(body) {
       }
 
       // 2b) 总部营运 · 食安 BI 判罚：引用/thread 未回传时无法命中 feishu_msg_ids（commit 97bfdc1 已移除「门店责任人 24h bi_anomaly」兜底以避免私聊问数误绑）。
-      //     此处仅 hq_manager + 正文像判罚 + pending food_safety 任务：按门店短名或「全局仅一条待判罚」解析任务号。
+      //     resolveFoodSafetyHqReplyTask：hq_manager + 判罚语气 → 按门店或 pending_review 优先 + 最新更新绑定任务。
       if (!taskId && hasParsedText && openId) {
         try {
           const { resolveFoodSafetyHqReplyTask } = await import('./food-safety-hq-ruling.js');
@@ -1333,13 +1333,6 @@ export async function handleWebhookEvent(body) {
             taskId = hqRes.taskId;
             matchedCardMessageId = null;
             logger.info({ eventId, taskId, mode: 'food_safety_hq_fallback_resolve' }, 'direct reply: HQ food safety task resolved without thread match');
-          } else if (hqRes?.ambiguous && msg?.message_id) {
-            const n = hqRes.pendingCount != null ? String(hqRes.pendingCount) : '多';
-            await replyMsg(
-              msg.message_id,
-              `⚠️ 当前有 **${n}** 条待总部判罚的食安任务。\n请在回复中写明任务号 **ANO-xxxxxxxx-xxxx**，或**引用对应任务卡片**后再发送判罚内容。`
-            ).catch(() => {});
-            return { ok: true, eventType, mode: 'food_safety_hq_ambiguous', pendingCount: hqRes.pendingCount };
           }
         } catch (e) {
           logger.warn({ err: e?.message, eventId }, 'food_safety_hq_fallback_resolve failed');

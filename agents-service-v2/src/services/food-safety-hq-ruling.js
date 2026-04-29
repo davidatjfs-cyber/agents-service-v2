@@ -115,10 +115,12 @@ export function parseFoodSafetyHqRuling(text) {
 
 /**
  * 2026-04 移除「门店责任人 24h 内 bi_anomaly 兜底匹配」后（避免私聊问数误绑任务），
- * 总部营运在飞书上引用/线程字段缺失时也无法命中 feishu_msg_ids，导致判罚落入通用对话管线并触发 validateEvidence。
- * 此处仅对 hq_manager + 食安 pending 任务做窄兜底：优先按正文门店短名，其次仅当全局恰有一条待判罚任务时绑定。
+ * 总部在引用/thread 未回传时可能无法命中 feishu_msg_ids。此处仅 hq_manager + 判罚语气：
+ * - 正文可解析出门店名则优先匹配该店待办；
+ * - 否则多条并发时：**pending_review 优先**，再 **updated_at 最新**（不必手写门店名）；
+ * - 依赖用户在原告警卡或其后「营运督导」文字上回复（督导文案的 message_id 已并入 feishu_msg_ids）。
  *
- * @returns {Promise<{ taskId: string | null, ambiguous?: boolean, pendingCount?: number, reason?: string }>}
+ * @returns {Promise<{ taskId: string | null, reason?: string }>}
  */
 export async function resolveFoodSafetyHqReplyTask({ openId, parsedText }) {
   const oid = String(openId || '').trim();
@@ -151,11 +153,16 @@ export async function resolveFoodSafetyHqReplyTask({ openId, parsedText }) {
     const mentionedStore = extractStoreFromText(text, storeNames);
 
     const windowSql = `COALESCE(mt.dispatched_at, mt.created_at) >= NOW() - INTERVAL '14 days'`;
+    const orderSql = `
+      ORDER BY CASE WHEN mt.status = 'pending_review' THEN 0 ELSE 1 END,
+               mt.updated_at DESC NULLS LAST,
+               mt.created_at DESC
+      LIMIT 1`;
 
     if (mentionedStore) {
       const sk = storeKey(mentionedStore);
       const hit = await query(
-        `SELECT task_id, store
+        `SELECT task_id
          FROM master_tasks mt
          WHERE mt.source = 'bi_anomaly'
            AND mt.category = 'food_safety'
@@ -165,31 +172,25 @@ export async function resolveFoodSafetyHqReplyTask({ openId, parsedText }) {
              trim(mt.store) = $1
              OR lower(regexp_replace(trim(mt.store), '\\s+', '', 'g')) LIKE $2
            )
-         ORDER BY mt.updated_at DESC NULLS LAST, mt.created_at DESC
-         LIMIT 3`,
+         ${orderSql}`,
         [mentionedStore, `%${sk}%`]
       ).catch(() => ({ rows: [] }));
-      const rows = hit.rows || [];
-      if (rows.length === 1) return { taskId: rows[0].task_id };
-      if (rows.length > 1) {
-        return { taskId: null, ambiguous: true, pendingCount: rows.length, reason: 'multiple_same_store' };
-      }
+      const row = hit.rows?.[0];
+      if (row?.task_id) return { taskId: row.task_id };
     }
 
     const allPending = await query(
-      `SELECT task_id, store
+      `SELECT task_id
        FROM master_tasks mt
        WHERE mt.source = 'bi_anomaly'
          AND mt.category = 'food_safety'
          AND mt.status IN ('pending_response', 'pending_review')
          AND ${windowSql}
-       ORDER BY mt.updated_at DESC NULLS LAST, mt.created_at DESC
-       LIMIT 4`
+       ${orderSql}`
     ).catch(() => ({ rows: [] }));
-    const rows = allPending.rows || [];
-    if (rows.length === 1) return { taskId: rows[0].task_id };
-    if (rows.length === 0) return { taskId: null, reason: 'no_pending_tasks' };
-    return { taskId: null, ambiguous: true, pendingCount: rows.length, reason: 'multiple_need_store_or_ano' };
+    const row = allPending.rows?.[0];
+    if (row?.task_id) return { taskId: row.task_id };
+    return { taskId: null, reason: 'no_pending_tasks' };
   } catch (e) {
     logger.warn({ err: e?.message, openId: oid }, 'resolveFoodSafetyHqReplyTask failed');
     return { taskId: null, reason: 'error' };

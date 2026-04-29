@@ -545,12 +545,30 @@ export async function runBiAnomalyNotifyPipeline({
 
 ${plannerText ? `📌 AI 改进建议摘要：\n${plannerText.slice(0, 1500)}${plannerText.length > 1500 ? '…' : ''}\n\n` : ''}请在本对话回复**具体整改措施 / 处理方案**，或在任务卡片上操作。系统将跟踪直至闭环归档。`;
 
+  const opMsgIds = [];
   for (const u of users) {
-    await sendText(u.open_id, opBody.slice(0, 4500), 'open_id').catch(() => {});
+    const tr = await sendText(u.open_id, opBody.slice(0, 4500), 'open_id').catch(() => ({ ok: false }));
+    const mid = extractMessageId(tr);
+    if (mid) opMsgIds.push(mid);
+  }
+  // 将「营运督导」文字的 message_id 并入任务，便于总部/店长引用该条回复（此前仅告警卡 msg_id 入库，引用督导句会无法命中）。
+  if (opMsgIds.length) {
+    try {
+      await query(
+        `UPDATE master_tasks
+         SET feishu_msg_ids = COALESCE(feishu_msg_ids, '[]'::jsonb) || $1::jsonb,
+             updated_at = NOW()
+         WHERE source = 'bi_anomaly'
+           AND (task_id = $2 OR task_id LIKE $3)`,
+        [JSON.stringify(opMsgIds), taskId, `${taskId}-%`]
+      );
+    } catch (e) {
+      logger.warn({ err: e?.message, taskId }, 'bi-anomaly: merge OP follow-up msg ids failed');
+    }
   }
 
   logger.info(
-    { taskId, store, ruleKey, recipients: users.length, msgIds: msgIds.length },
+    { taskId, store, ruleKey, recipients: users.length, alertMsgIds: msgIds.length, opFollowMsgIds: opMsgIds.length },
     'bi-anomaly pipeline completed'
   );
 
