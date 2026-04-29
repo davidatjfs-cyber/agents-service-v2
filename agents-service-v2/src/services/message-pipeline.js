@@ -20,6 +20,7 @@ import {
   bindFeishuUserToEmployee,
   feishuOpenIdIsMajixianPmObserver
 } from './feishu-client.js';
+import { extractStoreFromText } from '../utils/store-name-in-text.js';
 import { query } from '../utils/db.js';
 import { checkIdempotency, saveIdempotency } from '../middleware/idempotency.js';
 import sessionMiddleware from './agent-session/session-middleware.js';
@@ -39,26 +40,6 @@ async function getAllStoreNames() {
     _storeNamesCacheTs = Date.now();
   } catch(e) { _storeNamesCache = _storeNamesCache || []; }
   return _storeNamesCache;
-}
-
-function extractStoreFromText(text, storeNames) {
-  if (!text || !storeNames?.length) return '';
-  for (const s of storeNames) {
-    if (text.includes(s)) return s;
-  }
-  for (const s of storeNames) {
-    const short = s.replace(/店$/, '').trim();
-    if (text.includes(short)) return s;
-  }
-  // 短名匹配：洪潮、马己仙等 → 洪潮xxx店、马己仙xxx店
-  for (const s of storeNames) {
-    const noSuffix = s.replace(/店$/, '').trim();
-    for (let len = 2; len <= Math.min(6, noSuffix.length); len++) {
-      const prefix = noSuffix.slice(0, len);
-      if (text.includes(prefix)) return s;
-    }
-  }
-  return '';
 }
 
 /** 与 master-planner 的 plan 对齐，供子 Agent 的 callLLM context */

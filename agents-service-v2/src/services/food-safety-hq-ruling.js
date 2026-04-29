@@ -16,6 +16,7 @@
  */
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
+import { extractStoreFromText } from '../utils/store-name-in-text.js';
 import { getBrandForStore } from './config-service.js';
 import {
   getShanghaiYmdParts,
@@ -110,6 +111,89 @@ export function parseFoodSafetyHqRuling(text) {
     return { kind: 'unknown', reason: 'need_target' };
   }
   return { kind: 'unknown', reason: 'no_ruling' };
+}
+
+/**
+ * 2026-04 移除「门店责任人 24h 内 bi_anomaly 兜底匹配」后（避免私聊问数误绑任务），
+ * 总部营运在飞书上引用/线程字段缺失时也无法命中 feishu_msg_ids，导致判罚落入通用对话管线并触发 validateEvidence。
+ * 此处仅对 hq_manager + 食安 pending 任务做窄兜底：优先按正文门店短名，其次仅当全局恰有一条待判罚任务时绑定。
+ *
+ * @returns {Promise<{ taskId: string | null, ambiguous?: boolean, pendingCount?: number, reason?: string }>}
+ */
+export async function resolveFoodSafetyHqReplyTask({ openId, parsedText }) {
+  const oid = String(openId || '').trim();
+  const text = String(parsedText || '').trim();
+  const empty = { taskId: null, reason: 'empty' };
+  if (!oid || !text) return empty;
+
+  try {
+    const ur = await query(
+      `SELECT role FROM feishu_users WHERE open_id = $1 AND registered = true AND open_id NOT LIKE '%probe%' LIMIT 1`,
+      [oid]
+    );
+    const role = String(ur.rows?.[0]?.role || '').trim();
+    if (role !== 'hq_manager') return { taskId: null, reason: 'not_hq_manager' };
+
+    const ruling = parseFoodSafetyHqRuling(text);
+    const looksLikeHqFoodSafetyRuling =
+      ruling.kind === 'record' ||
+      ruling.kind === 'dismiss' ||
+      (ruling.kind === 'unknown' && ruling.reason === 'need_target') ||
+      /记录|不记录|扣分|属实|出品经理|店长|双方|情况属实/i.test(text);
+
+    if (!looksLikeHqFoodSafetyRuling) return { taskId: null, reason: 'not_ruling_like' };
+
+    const storesRes = await query(
+      `SELECT DISTINCT trim(store) AS store FROM feishu_users
+       WHERE store IS NOT NULL AND trim(store) <> '' AND trim(store) <> '总部'`
+    ).catch(() => ({ rows: [] }));
+    const storeNames = (storesRes.rows || []).map((r) => r.store).filter(Boolean);
+    const mentionedStore = extractStoreFromText(text, storeNames);
+
+    const windowSql = `COALESCE(mt.dispatched_at, mt.created_at) >= NOW() - INTERVAL '14 days'`;
+
+    if (mentionedStore) {
+      const sk = storeKey(mentionedStore);
+      const hit = await query(
+        `SELECT task_id, store
+         FROM master_tasks mt
+         WHERE mt.source = 'bi_anomaly'
+           AND mt.category = 'food_safety'
+           AND mt.status IN ('pending_response', 'pending_review')
+           AND ${windowSql}
+           AND (
+             trim(mt.store) = $1
+             OR lower(regexp_replace(trim(mt.store), '\\s+', '', 'g')) LIKE $2
+           )
+         ORDER BY mt.updated_at DESC NULLS LAST, mt.created_at DESC
+         LIMIT 3`,
+        [mentionedStore, `%${sk}%`]
+      ).catch(() => ({ rows: [] }));
+      const rows = hit.rows || [];
+      if (rows.length === 1) return { taskId: rows[0].task_id };
+      if (rows.length > 1) {
+        return { taskId: null, ambiguous: true, pendingCount: rows.length, reason: 'multiple_same_store' };
+      }
+    }
+
+    const allPending = await query(
+      `SELECT task_id, store
+       FROM master_tasks mt
+       WHERE mt.source = 'bi_anomaly'
+         AND mt.category = 'food_safety'
+         AND mt.status IN ('pending_response', 'pending_review')
+         AND ${windowSql}
+       ORDER BY mt.updated_at DESC NULLS LAST, mt.created_at DESC
+       LIMIT 4`
+    ).catch(() => ({ rows: [] }));
+    const rows = allPending.rows || [];
+    if (rows.length === 1) return { taskId: rows[0].task_id };
+    if (rows.length === 0) return { taskId: null, reason: 'no_pending_tasks' };
+    return { taskId: null, ambiguous: true, pendingCount: rows.length, reason: 'multiple_need_store_or_ano' };
+  } catch (e) {
+    logger.warn({ err: e?.message, openId: oid }, 'resolveFoodSafetyHqReplyTask failed');
+    return { taskId: null, reason: 'error' };
+  }
 }
 
 async function resolveScoringUsersForStore(store, role) {
