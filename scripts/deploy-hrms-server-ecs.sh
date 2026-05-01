@@ -93,7 +93,9 @@ mkdir -p "${REMOTE_WEB_ROOT}/server/uploads"
 if [[ -L "${REMOTE_WEB_ROOT}/uploads" ]]; then
   rm -f "${REMOTE_WEB_ROOT}/uploads"
 elif [[ -d "${REMOTE_WEB_ROOT}/uploads" ]]; then
-  if find "${REMOTE_WEB_ROOT}/uploads" -mindepth 1 -print -quit | grep -q .; then
+  # Check if uploads dir has files (capture to var to avoid pipefail+SIGPIPE)
+UPLOADS_HAS_FILES=$(find "${REMOTE_WEB_ROOT}/uploads" -mindepth 1 -print -quit 2>/dev/null || true)
+if [[ -n "$UPLOADS_HAS_FILES" ]]; then
     mv "${REMOTE_WEB_ROOT}/uploads" "${REMOTE_WEB_ROOT}/uploads.bak.$(date +%s)"
   else
     rmdir "${REMOTE_WEB_ROOT}/uploads" 2>/dev/null || mv "${REMOTE_WEB_ROOT}/uploads" "${REMOTE_WEB_ROOT}/uploads.bak.$(date +%s)"
@@ -156,7 +158,9 @@ pkill -9 -f "${REMOTE_DIR}/index.js" 2>/dev/null || true
 sleep 1
 fuser -k 3000/tcp 2>/dev/null || true
 sleep 2
-if ss -tlnp 2>/dev/null | grep -q ':3000 '; then
+# Verify port is free (capture to var first to avoid pipefail+SIGPIPE)
+PORT_LISTENING=$(ss -tlnp 2>/dev/null)
+if echo "$PORT_LISTENING" | grep -q ':3000 '; then
   echo '>>> WARNING: 3000 仍被占用，强制清理' >&2
   fuser -k 3000/tcp 2>/dev/null || true
   sleep 2
