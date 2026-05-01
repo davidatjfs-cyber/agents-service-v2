@@ -156,8 +156,8 @@ sleep 1
 fuser -k 3101/tcp 2>/dev/null || true
 sleep 2
 # Verify port is free (capture to var first to avoid pipefail+SIGPIPE)
-PORT_LISTENING=$(ss -tlnp 2>/dev/null)
-if echo "$PORT_LISTENING" | grep -q ':3101 '; then
+PORT_LISTENING=\$(ss -tlnp 2>/dev/null)
+if echo "\$PORT_LISTENING" | grep -q ':3101 '; then
   echo '>>> WARNING: 3101 仍被占用，强制清理' >&2
   fuser -k 3101/tcp 2>/dev/null || true
   sleep 2
