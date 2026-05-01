@@ -249,7 +249,7 @@ export async function checkAndTriggerTraining(anomalyKey, store, severity) {
         assignee_username: assigneeUsername,
         assignee_role: role
       };
-      const noticeText = buildTrainingNotice(task, { anomalyKey, course, store, count, countWindowDays, content, examPass, targetAudience, roleLabel });
+      const noticeText = buildTrainingNotice(task, { anomalyKey, course, store, count, countWindowDays, content: fullContent, examPass, targetAudience, roleLabel });
       await sendCompanyNoticeToAssignees(task, noticeText, {
         title: '培训任务通知',
         type: 'training_trigger_notice',

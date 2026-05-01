@@ -201,7 +201,12 @@ else
 fi
 # --- 日志尾采结束 ---
 echo '--- mempalace /health (disk persistence) ---'
-curl -sS -m 6 http://127.0.0.1:3001/health | grep -q '"persistence":"disk"' && echo 'OK: MemPalace persistence=disk' || echo 'WARN: MemPalace /health 未返回 persistence=disk（检查 pm2 mempalace-http）'
+MP_HEALTH="\$(curl -sS -m 6 http://127.0.0.1:3001/health || true)"
+if grep -q '"persistence":"disk"' <<<"\$MP_HEALTH"; then
+  echo 'OK: MemPalace persistence=disk'
+else
+  echo 'WARN: MemPalace /health 未返回 persistence=disk（检查 pm2 mempalace-http）'
+fi
 echo '--- verify knowledge / DeepSeek→Ollama / wiki / mempalace ---'
 VERIFY_KNOWLEDGE_STRICT="${VERIFY_KNOWLEDGE_STRICT:-0}"
 if cd "${REMOTE_DIR}" && node scripts/verify-knowledge-llm-chain.mjs 2>&1; then
