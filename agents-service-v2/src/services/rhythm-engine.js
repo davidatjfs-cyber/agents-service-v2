@@ -549,7 +549,7 @@ export async function monthlyEvaluation() {
     const block = await buildTableVisitKpiMarkdownSection(st, moStart, moEnd, { skipIfEmpty: true }).catch(() => '');
     if (block) moTv.push(block);
   }
-  const moBody = `📊 本月运营月报\n检测: ${summary.monthlyChecks} | 触发: ${summary.triggered}\n门店KPI: ${(summary.kpiByStore || []).length}店已汇总`;
+  let moBody = `📊 本月运营月报\n检测: ${summary.monthlyChecks} | 触发: ${summary.triggered}\n门店KPI: ${(summary.kpiByStore || []).length}店已汇总`;
 
   // ── 门店运营数据(上月，来自daily_reports) ──
   let moOpsData = [];
