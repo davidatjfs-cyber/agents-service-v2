@@ -155,8 +155,9 @@ pkill -9 -f "/usr/bin/node src/index.js" 2>/dev/null || true
 sleep 1
 fuser -k 3101/tcp 2>/dev/null || true
 sleep 2
-# Verify port is free
-if ss -tlnp 2>/dev/null | grep -q ':3101 '; then
+# Verify port is free (capture to var first to avoid pipefail+SIGPIPE)
+PORT_LISTENING=$(ss -tlnp 2>/dev/null)
+if echo "$PORT_LISTENING" | grep -q ':3101 '; then
   echo '>>> WARNING: 3101 仍被占用，强制清理' >&2
   fuser -k 3101/tcp 2>/dev/null || true
   sleep 2
@@ -185,14 +186,14 @@ if ! echo "\$H" | grep -q '"replyEngine"'; then
 fi
 # --- pm2 错误日志尾采（关卡0：可观测性基线）---
 echo '--- pm2 最近错误日志（agents-service-v2）---'
-AGENTS_ERR_LOG=\$(ls -t /root/.pm2/logs/agents-service-v2-error-*.log 2>/dev/null | head -1)
+AGENTS_ERR_LOG=\$(ls -t /root/.pm2/logs/agents-service-v2-error-*.log 2>/dev/null | head -1 || true)
 if [[ -n "\$AGENTS_ERR_LOG" ]]; then
   tail -15 "\$AGENTS_ERR_LOG" 2>/dev/null || echo '（无错误日志）'
 else
   echo '（无错误日志文件）'
 fi
 echo '--- pm2 最近错误日志（hrms-service）---'
-HRMS_ERR_LOG=\$(ls -t /root/.pm2/logs/hrms-service-error-*.log 2>/dev/null | head -1)
+HRMS_ERR_LOG=\$(ls -t /root/.pm2/logs/hrms-service-error-*.log 2>/dev/null | head -1 || true)
 if [[ -n "\$HRMS_ERR_LOG" ]]; then
   tail -15 "\$HRMS_ERR_LOG" 2>/dev/null || echo '（无错误日志）'
 else

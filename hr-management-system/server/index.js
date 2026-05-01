@@ -5361,16 +5361,45 @@ async function getSharedState() {
 }
 
 async function saveSharedState(nextData) {
-  await pool.query(
-    `insert into hrms_state (key, data, updated_at)
-     values ($1, $2::jsonb, now())
-     on conflict (key) do update set data = excluded.data, updated_at = now()`,
-    ['default', JSON.stringify(nextData || {})]
-  );
-  schedulePayrollDomainSync();
-  scheduleLeaveDomainSync();
-  // 全量双写：每次保存 state 时自动同步所有模块到独立 DB 表
-  await dualWriteStateToDB(nextData || {});
+  if (!nextData || typeof nextData !== 'object' || !Object.keys(nextData).length) return;
+
+  // 使用显式事务 + FOR UPDATE + 乐观锁，避免调用方传入陈旧 state 覆盖并发修改
+  // （与 mergeSharedStateFields 一致的事务保护模式）
+  const MAX_RETRY = 10;
+  for (let attempt = 0; attempt < MAX_RETRY; attempt++) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const r = await client.query('SELECT data, updated_at FROM hrms_state WHERE key = $1 FOR UPDATE', ['default']);
+      const current = (r.rows?.[0]?.data && typeof r.rows[0].data === 'object') ? r.rows[0].data : {};
+      const prevUpdatedAt = r.rows?.[0]?.updated_at;
+
+      // Merge: caller 的字段覆盖 current，但 nextData 未涉及的字段（如 dailyReports）保留 current 值
+      // 避免调用方传入的陈旧 state 覆盖其他模块的并发写入
+      const merged = { ...current, ...nextData };
+
+      const result = await client.query(
+        `UPDATE hrms_state SET data = $2::jsonb, updated_at = NOW() WHERE key = $1 AND updated_at = $3`,
+        ['default', JSON.stringify(merged), prevUpdatedAt]
+      );
+      if (result.rowCount > 0) {
+        await client.query('COMMIT');
+        client.release();
+        schedulePayrollDomainSync();
+        scheduleLeaveDomainSync();
+        await dualWriteStateToDB(merged);
+        return;
+      }
+      // 乐观锁冲突：回滚后重试
+      await client.query('ROLLBACK');
+      client.release();
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      client.release();
+      throw e;
+    }
+  }
+  throw new Error('saveSharedState: max retries exceeded');
 }
 
 /**
