@@ -201,8 +201,8 @@ else
 fi
 # --- 日志尾采结束 ---
 echo '--- mempalace /health (disk persistence) ---'
-MP_HEALTH="$(curl -sS -m 6 http://127.0.0.1:3001/health || true)"
-if grep -q '"persistence":"disk"' <<<"$MP_HEALTH"; then
+MP_HEALTH="\$(curl -sS -m 6 http://127.0.0.1:3001/health || true)"
+if grep -q '"persistence":"disk"' <<<"\$MP_HEALTH"; then
   echo 'OK: MemPalace persistence=disk'
 else
   echo 'WARN: MemPalace /health 未返回 persistence=disk（检查 pm2 mempalace-http）'
