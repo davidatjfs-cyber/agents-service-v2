@@ -5385,91 +5385,83 @@ async function saveSharedState(nextData) {
 async function mergeSharedStateFields(patches, arrayIdFields = {}) {
   if (!patches || typeof patches !== 'object' || !Object.keys(patches).length) return;
 
-  // Build postgres jsonb merge: do it in a single UPDATE that reads fresh state atomically
-  // We use a loop with retries and optimistic-locking via updated_at to prevent lost-writes.
+  // 原子合并 hrms_state：使用显式事务 + FOR UPDATE + 乐观锁（updated_at）
+  // 避免 auto-commit 模式下 FOR UPDATE 锁在 SELECT 后即释放导致的丢失更新竞态
   const MAX_RETRY = 10;
   for (let attempt = 0; attempt < MAX_RETRY; attempt++) {
-    const r = await pool.query('SELECT data, updated_at FROM hrms_state WHERE key = $1 FOR UPDATE', ['default']);
-    const row = r.rows?.[0];
-    const current = (row?.data && typeof row.data === 'object') ? row.data : {};
-    const prevUpdatedAt = row?.updated_at;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const r = await client.query('SELECT data, updated_at FROM hrms_state WHERE key = $1 FOR UPDATE', ['default']);
+      const row = r.rows?.[0];
+      const current = (row?.data && typeof row.data === 'object') ? row.data : {};
+      const prevUpdatedAt = row?.updated_at;
 
-    const next = { ...current };
-    for (const [field, patchValue] of Object.entries(patches)) {
-      if (Array.isArray(patchValue)) {
-        const idSpec = arrayIdFields[field];
-        const existing = Array.isArray(current[field]) ? current[field].slice() : [];
-        if (idSpec) {
-          // Merge: update existing items by id, prepend new ones
-          const getKey = Array.isArray(idSpec)
-            ? (item) => idSpec.map(k => String(item?.[k] || '')).join('|')
-            : (item) => String(item?.[idSpec] || '');
-          const existingMap = new Map(existing.map(e => [getKey(e), e]));
-          for (const item of patchValue) {
-            existingMap.set(getKey(item), item);
+      const next = { ...current };
+      for (const [field, patchValue] of Object.entries(patches)) {
+        if (Array.isArray(patchValue)) {
+          const idSpec = arrayIdFields[field];
+          const existing = Array.isArray(current[field]) ? current[field].slice() : [];
+          if (idSpec) {
+            // Merge: update existing items by id, prepend new ones
+            const getKey = Array.isArray(idSpec)
+              ? (item) => idSpec.map(k => String(item?.[k] || '')).join('|')
+              : (item) => String(item?.[idSpec] || '');
+            const existingMap = new Map(existing.map(e => [getKey(e), e]));
+            for (const item of patchValue) {
+              existingMap.set(getKey(item), item);
+            }
+            // Preserve original order, new items at front
+            const patchKeys = new Set(patchValue.map(getKey));
+            const retained = existing.filter(e => !patchKeys.has(getKey(e)));
+            next[field] = [...patchValue, ...retained];
+          } else {
+            // No id spec: prepend patch items
+            next[field] = [...patchValue, ...existing];
           }
-          // Preserve original order, new items at front
-          const patchKeys = new Set(patchValue.map(getKey));
-          const retained = existing.filter(e => !patchKeys.has(getKey(e)));
-          next[field] = [...patchValue, ...retained];
+        } else if (patchValue && typeof patchValue === 'object' && !Array.isArray(patchValue)) {
+          next[field] = { ...(current[field] && typeof current[field] === 'object' ? current[field] : {}), ...patchValue };
         } else {
-          // No id spec: prepend patch items
-          next[field] = [...patchValue, ...existing];
+          next[field] = patchValue;
         }
-      } else if (patchValue && typeof patchValue === 'object' && !Array.isArray(patchValue)) {
-        next[field] = { ...(current[field] && typeof current[field] === 'object' ? current[field] : {}), ...patchValue };
-      } else {
-        next[field] = patchValue;
       }
-    }
 
-    const updateResult = await pool.query(
-      `UPDATE hrms_state SET data = $2::jsonb, updated_at = NOW() WHERE key = $1`,
-      ['default', JSON.stringify(next)]
-    );
-    if (updateResult.rowCount > 0) {
-      if (Array.isArray(patches.employees) && patches.employees.length && arrayIdFields.employees === 'username') {
-        const mergedEmps = Array.isArray(next.employees) ? next.employees : [];
-        for (const item of patches.employees) {
-          const u = String(item?.username || '').trim();
-          if (!u) continue;
-          const rec = mergedEmps.find(e => String(e?.username || '').trim().toLowerCase() === u.toLowerCase());
-          if (rec) {
-            try {
-              await applyHrmsUserAccountGateFromEmployee(rec);
-            } catch (e) {
-              console.error('[mergeSharedStateFields][account-gate]', u, e?.message || e);
+      // 乐观锁：仅当 updated_at 未被其他事务修改时写入
+      const updateResult = await client.query(
+        `UPDATE hrms_state SET data = $2::jsonb, updated_at = NOW() WHERE key = $1 AND updated_at = $3`,
+        ['default', JSON.stringify(next), prevUpdatedAt]
+      );
+      if (updateResult.rowCount > 0) {
+        await client.query('COMMIT');
+        // (after commit the client is auto-released back to pool)
+        if (Array.isArray(patches.employees) && patches.employees.length && arrayIdFields.employees === 'username') {
+          const mergedEmps = Array.isArray(next.employees) ? next.employees : [];
+          for (const item of patches.employees) {
+            const u = String(item?.username || '').trim();
+            if (!u) continue;
+            const rec = mergedEmps.find(e => String(e?.username || '').trim().toLowerCase() === u.toLowerCase());
+            if (rec) {
+              try {
+                await applyHrmsUserAccountGateFromEmployee(rec);
+              } catch (e) {
+                console.error('[mergeSharedStateFields][account-gate]', u, e?.message || e);
+              }
             }
           }
         }
+        schedulePayrollDomainSync();
+        scheduleLeaveDomainSync();
+        client.release();
+        return;
       }
-      schedulePayrollDomainSync();
-      scheduleLeaveDomainSync();
-      return;
+      // 乐观锁冲突：其他事务已修改，回滚后重试
+      await client.query('ROLLBACK');
+      client.release();
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      client.release();
+      throw e;
     }
-    // If no row exists yet, insert
-    await pool.query(
-      `INSERT INTO hrms_state (key, data, updated_at) VALUES ($1, $2::jsonb, NOW()) ON CONFLICT (key) DO NOTHING`,
-      ['default', JSON.stringify(next)]
-    );
-    if (Array.isArray(patches.employees) && patches.employees.length && arrayIdFields.employees === 'username') {
-      const mergedEmps = Array.isArray(next.employees) ? next.employees : [];
-      for (const item of patches.employees) {
-        const u = String(item?.username || '').trim();
-        if (!u) continue;
-        const rec = mergedEmps.find(e => String(e?.username || '').trim().toLowerCase() === u.toLowerCase());
-        if (rec) {
-          try {
-            await applyHrmsUserAccountGateFromEmployee(rec);
-          } catch (e) {
-            console.error('[mergeSharedStateFields][account-gate]', u, e?.message || e);
-          }
-        }
-      }
-    }
-    schedulePayrollDomainSync();
-    scheduleLeaveDomainSync();
-    return;
   }
   throw new Error('mergeSharedStateFields: max retries exceeded');
 }
