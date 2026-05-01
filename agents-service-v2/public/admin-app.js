@@ -386,6 +386,7 @@ function showModal(title, contentEl) {
     btn('✕ 关闭', () => modal.remove(), 'text-sm text-gray-500 hover:text-red-500 bg-transparent font-bold')
   ]));
   box.appendChild(contentEl); modal.appendChild(box); document.body.appendChild(modal);
+  return modal;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2723,6 +2724,15 @@ function chairmanTrainingTab(cfg) {
     '🎓 当异常触发时，系统可能自动创建培训任务。配置决定：哪种异常→哪些品牌→什么培训→培训谁→考核标准→冷却期。'
   ));
 
+  // Master switch
+  const isEnabled = trainingMap.enabled !== false;
+  const toggleDiv = el('div', { className: 'flex items-center gap-3 mb-6 p-3 bg-white rounded-xl border shadow-sm' });
+  toggleDiv.appendChild(el('span', { className: 'text-sm font-semibold text-gray-700' }, '培训触发总开关'));
+  const toggleInput = el('input', { type: 'checkbox', id: 'training_enabled', checked: isEnabled, className: 'w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer' });
+  toggleDiv.appendChild(toggleInput);
+  toggleDiv.appendChild(el('span', { className: 'text-xs text-gray-500' }, isEnabled ? '已启用 — 异常触发后将自动创建培训任务' : '已关闭 — 不会创建任何培训任务'));
+  wrap.appendChild(toggleDiv);
+
   // Group training entries by anomaly key, then by brand
   const allKeys = [...new Set([...Object.keys(ANOMALY_LABELS), ...Object.keys(trainingMap)])];
 
@@ -2767,6 +2777,43 @@ function chairmanTrainingTab(cfg) {
         audDiv.appendChild(audWrap);
         g.appendChild(audDiv);
         g.appendChild(field('冷却天数', el('input', { type: 'number', value: String(brandCfg.cooldownDays ?? entry.cooldownDays ?? 14), id: `tr_${key}_${brand}_cooldown`, className: 'border border-blue-200 rounded-lg px-2 py-1.5 text-sm w-full', min: '1', max: '90' })));
+        g.appendChild(field('最低触发次数', el('input', { type: 'number', value: String(brandCfg.minCount ?? 2), id: `tr_${key}_${brand}_minCount`, className: 'border border-blue-200 rounded-lg px-2 py-1.5 text-sm w-full', min: '1', max: '99' })));
+        g.appendChild(field('统计窗口(天)', el('input', { type: 'number', value: String(brandCfg.countWindowDays ?? 7), id: `tr_${key}_${brand}_countWindowDays`, className: 'border border-blue-200 rounded-lg px-2 py-1.5 text-sm w-full', min: '1', max: '90' })));
+        // Knowledge selector
+        const kbDiv = el('div');
+        kbDiv.appendChild(lbl('关联知识库'));
+        const kbBtnWrap = el('div', { className: 'flex flex-wrap items-center gap-2' });
+        const kbIds = brandCfg.knowledge_ids || [];
+        const kbLabel = el('span', { id: `tr_${key}_${brand}_kb_label`, className: 'text-xs text-gray-500' }, kbIds.length ? `已选 ${kbIds.length} 项` : '未关联');
+        const kbBtn = el('button', { type: 'button', id: `tr_${key}_${brand}_kb_btn`, className: 'text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-full border border-gray-300 cursor-pointer' }, '选择知识条目');
+        kbBtn.onclick = async () => {
+          const { items } = await (await fetch('/api/knowledge-base')).json();
+          const selected = new Set(kbIds);
+          const list = el('div', { className: 'space-y-2 max-h-96 overflow-auto' });
+          (items || []).forEach(item => {
+            const row = el('div', { className: 'flex items-center gap-2 p-2 hover:bg-gray-50 rounded-lg' });
+            const cb = el('input', { type: 'checkbox', checked: selected.has(item.id), className: 'w-4 h-4 rounded border-gray-300 text-blue-600' });
+            cb.onchange = () => { if (cb.checked) selected.add(item.id); else selected.delete(item.id); };
+            row.appendChild(cb);
+            row.appendChild(el('span', { className: 'text-sm text-gray-800' }, item.title));
+            if (item.category) row.appendChild(el('span', { className: 'text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500' }, item.category));
+            list.appendChild(row);
+          });
+          const confirmBtn = btn('确定', () => {
+            const ids = [...selected];
+            const hiddenInput = document.getElementById(`tr_${key}_${brand}_knowledge_ids`);
+            if (hiddenInput) hiddenInput.value = ids.join(',');
+            const label = document.getElementById(`tr_${key}_${brand}_kb_label`);
+            if (label) label.textContent = ids.length ? `已选 ${ids.length} 项` : '未关联';
+            modal.remove();
+          }, 'bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700');
+          const modal = showModal('选择关联知识条目 — ' + key + ' - ' + brand, el('div', {}, [list, el('div', { className: 'flex justify-end mt-4' }, [confirmBtn])]));
+        };
+        kbBtnWrap.appendChild(kbBtn);
+        kbBtnWrap.appendChild(kbLabel);
+        kbBtnWrap.appendChild(el('input', { type: 'hidden', id: `tr_${key}_${brand}_knowledge_ids`, value: kbIds.join(',') }));
+        kbDiv.appendChild(kbBtnWrap);
+        g.appendChild(kbDiv);
         // Severity threshold
         const sevDiv = el('div');
         sevDiv.appendChild(lbl('最低严重度'));
@@ -2810,6 +2857,43 @@ function chairmanTrainingTab(cfg) {
       audDiv.appendChild(audWrap);
       grid.appendChild(audDiv);
       grid.appendChild(field('冷却天数', el('input', { type: 'number', value: String(entry.cooldownDays ?? 14), id: `tr_${key}_cooldown`, className: 'border border-blue-200 rounded-lg px-3 py-2 text-sm w-full', min: '1', max: '90' })));
+      grid.appendChild(field('最低触发次数', el('input', { type: 'number', value: String(entry.minCount ?? 2), id: `tr_${key}_minCount`, className: 'border border-blue-200 rounded-lg px-3 py-2 text-sm w-full', min: '1', max: '99' })));
+      grid.appendChild(field('统计窗口(天)', el('input', { type: 'number', value: String(entry.countWindowDays ?? 7), id: `tr_${key}_countWindowDays`, className: 'border border-blue-200 rounded-lg px-3 py-2 text-sm w-full', min: '1', max: '90' })));
+      // Knowledge selector
+      const kbDiv = el('div');
+      kbDiv.appendChild(lbl('关联知识库'));
+      const kbBtnWrap = el('div', { className: 'flex flex-wrap items-center gap-2' });
+      const kbIds = entry.knowledge_ids || [];
+      const kbLabel = el('span', { id: `tr_${key}_kb_label`, className: 'text-xs text-gray-500' }, kbIds.length ? `已选 ${kbIds.length} 项` : '未关联');
+      const kbBtn = el('button', { type: 'button', id: `tr_${key}_kb_btn`, className: 'text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-full border border-gray-300 cursor-pointer' }, '选择知识条目');
+      kbBtn.onclick = async () => {
+        const { items } = await (await fetch('/api/knowledge-base')).json();
+        const selected = new Set(kbIds);
+        const list = el('div', { className: 'space-y-2 max-h-96 overflow-auto' });
+        (items || []).forEach(item => {
+          const row = el('div', { className: 'flex items-center gap-2 p-2 hover:bg-gray-50 rounded-lg' });
+          const cb = el('input', { type: 'checkbox', checked: selected.has(item.id), className: 'w-4 h-4 rounded border-gray-300 text-blue-600' });
+          cb.onchange = () => { if (cb.checked) selected.add(item.id); else selected.delete(item.id); };
+          row.appendChild(cb);
+          row.appendChild(el('span', { className: 'text-sm text-gray-800' }, item.title));
+          if (item.category) row.appendChild(el('span', { className: 'text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500' }, item.category));
+          list.appendChild(row);
+        });
+        const confirmBtn = btn('确定', () => {
+          const ids = [...selected];
+          const hiddenInput = document.getElementById(`tr_${key}_knowledge_ids`);
+          if (hiddenInput) hiddenInput.value = ids.join(',');
+          const label = document.getElementById(`tr_${key}_kb_label`);
+          if (label) label.textContent = ids.length ? `已选 ${ids.length} 项` : '未关联';
+          modal.remove();
+        }, 'bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700');
+        const modal = showModal('选择关联知识条目 — ' + key, el('div', {}, [list, el('div', { className: 'flex justify-end mt-4' }, [confirmBtn])]));
+      };
+      kbBtnWrap.appendChild(kbBtn);
+      kbBtnWrap.appendChild(kbLabel);
+      kbBtnWrap.appendChild(el('input', { type: 'hidden', id: `tr_${key}_knowledge_ids`, value: kbIds.join(',') }));
+      kbDiv.appendChild(kbBtnWrap);
+      grid.appendChild(kbDiv);
       const sevDiv = el('div');
       sevDiv.appendChild(lbl('最低严重度'));
       const sevSel = el('select', { id: `tr_${key}_severity`, className: 'border border-blue-200 rounded-lg px-3 py-2 text-sm w-full' });
@@ -2840,6 +2924,38 @@ function chairmanTrainingTab(cfg) {
   customGrid.appendChild(field('培训内容', el('input', { type: 'text', id: 'tr_custom_content', className: 'border border-gray-300 rounded-lg px-3 py-2 text-sm w-full', placeholder: '培训内容' })));
   customGrid.appendChild(field('考核标准', el('input', { type: 'text', id: 'tr_custom_exam', className: 'border border-gray-300 rounded-lg px-3 py-2 text-sm w-full', placeholder: '考核标准' })));
   customCard.appendChild(customGrid);
+  // Knowledge selector for custom mapping
+  const customKbDiv = el('div', { className: 'mt-2 flex items-center gap-2' });
+  customKbDiv.appendChild(el('span', { className: 'text-xs font-medium text-gray-600' }, '关联知识库:'));
+  const customKbBtn = el('button', { type: 'button', className: 'text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-full border border-gray-300 cursor-pointer' }, '选择');
+  const customKbLabel = el('span', { id: 'tr_custom_kb_label', className: 'text-xs text-gray-500' }, '未关联');
+  customKbBtn.onclick = async () => {
+    const { items } = await (await fetch('/api/knowledge-base')).json();
+    const selected = new Set();
+    const list = el('div', { className: 'space-y-2 max-h-96 overflow-auto' });
+    (items || []).forEach(item => {
+      const row = el('div', { className: 'flex items-center gap-2 p-2 hover:bg-gray-50 rounded-lg' });
+      const cb = el('input', { type: 'checkbox', className: 'w-4 h-4 rounded border-gray-300 text-blue-600' });
+      cb.onchange = () => { if (cb.checked) selected.add(item.id); else selected.delete(item.id); };
+      row.appendChild(cb);
+      row.appendChild(el('span', { className: 'text-sm text-gray-800' }, item.title));
+      if (item.category) row.appendChild(el('span', { className: 'text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500' }, item.category));
+      list.appendChild(row);
+    });
+    const confirmBtn = btn('确定', () => {
+      const ids = [...selected];
+      const hiddenInput = document.getElementById('tr_custom_knowledge_ids');
+      if (hiddenInput) hiddenInput.value = ids.join(',');
+      const label = document.getElementById('tr_custom_kb_label');
+      if (label) label.textContent = ids.length ? `已选 ${ids.length} 项` : '未关联';
+      modal.remove();
+    }, 'bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700');
+    const modal = showModal('选择关联知识条目 — 自定义', el('div', {}, [list, el('div', { className: 'flex justify-end mt-4' }, [confirmBtn])]));
+  };
+  customKbDiv.appendChild(customKbBtn);
+  customKbDiv.appendChild(customKbLabel);
+  customKbDiv.appendChild(el('input', { type: 'hidden', id: 'tr_custom_knowledge_ids', value: '' }));
+  customCard.appendChild(customKbDiv);
   wrap.appendChild(customCard);
 
   wrap.appendChild(el('div', { className: 'flex justify-end mt-4' }, [
@@ -2864,11 +2980,14 @@ function chairmanTrainingTab(cfg) {
               assignTo: $(`tr_${key}_${brand}_assignTo`)?.value || 'store_manager',
               targetAudience: aud,
               cooldownDays: Number($(`tr_${key}_${brand}_cooldown`)?.value) || 14,
+              minCount: Number($(`tr_${key}_${brand}_minCount`)?.value) || 2,
+              countWindowDays: Number($(`tr_${key}_${brand}_countWindowDays`)?.value) || 7,
               minSeverity: $(`tr_${key}_${brand}_severity`)?.value || 'medium',
               dispatchTo: {
                 assignee: !!$(`tr_${key}_${brand}_dispatch_assignee`)?.checked,
                 management: !!$(`tr_${key}_${brand}_dispatch_management`)?.checked
-              }
+              },
+              knowledge_ids: $(`tr_${key}_${brand}_knowledge_ids`)?.value?.split(',').map(s => Number(s.trim())).filter(n => n > 0) || []
             });
           });
           if (brandConfigs.length) {
@@ -2887,11 +3006,14 @@ function chairmanTrainingTab(cfg) {
             assignTo: $(`tr_${key}_assignTo`)?.value || 'store_manager',
             targetAudience: aud,
             cooldownDays: Number($(`tr_${key}_cooldown`)?.value) || existing.cooldownDays || 14,
+            minCount: Number($(`tr_${key}_minCount`)?.value) || existing.minCount || 2,
+            countWindowDays: Number($(`tr_${key}_countWindowDays`)?.value) || existing.countWindowDays || 7,
             minSeverity: $(`tr_${key}_severity`)?.value || existing.minSeverity || 'medium',
             dispatchTo: {
               assignee: !!$(`tr_${key}_dispatch_assignee`)?.checked,
               management: !!$(`tr_${key}_dispatch_management`)?.checked
-            }
+            },
+            knowledge_ids: $(`tr_${key}_knowledge_ids`)?.value?.split(',').map(s => Number(s.trim())).filter(n => n > 0) || []
           };
         }
       });
@@ -2907,6 +3029,7 @@ function chairmanTrainingTab(cfg) {
           cooldownDays: 14, minSeverity: 'medium',
         };
       }
+      newMap.enabled = !!$('training_enabled')?.checked;
       await POST('/api/chairman/config', { training_map: newMap });
       msg('培训联动配置已保存');
       go('chairman');

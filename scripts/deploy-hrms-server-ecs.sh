@@ -94,8 +94,8 @@ if [[ -L "${REMOTE_WEB_ROOT}/uploads" ]]; then
   rm -f "${REMOTE_WEB_ROOT}/uploads"
 elif [[ -d "${REMOTE_WEB_ROOT}/uploads" ]]; then
   # Check if uploads dir has files (capture to var to avoid pipefail+SIGPIPE)
-UPLOADS_HAS_FILES=$(find "${REMOTE_WEB_ROOT}/uploads" -mindepth 1 -print -quit 2>/dev/null || true)
-if [[ -n "$UPLOADS_HAS_FILES" ]]; then
+  UPLOADS_HAS_FILES=$(find "${REMOTE_WEB_ROOT}/uploads" -mindepth 1 -print -quit 2>/dev/null || true)
+  if [[ -n "$UPLOADS_HAS_FILES" ]]; then
     mv "${REMOTE_WEB_ROOT}/uploads" "${REMOTE_WEB_ROOT}/uploads.bak.$(date +%s)"
   else
     rmdir "${REMOTE_WEB_ROOT}/uploads" 2>/dev/null || mv "${REMOTE_WEB_ROOT}/uploads" "${REMOTE_WEB_ROOT}/uploads.bak.$(date +%s)"

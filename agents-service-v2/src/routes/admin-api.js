@@ -731,6 +731,12 @@ r.get('/knowledge-base', ...admin, async (req, res) => {
   const result = await query('SELECT id, title, category, enabled, created_at, updated_at, LENGTH(content) as content_length FROM knowledge_base ORDER BY updated_at DESC LIMIT 100').catch(() => ({ rows: [] }));
   res.json({ items: result.rows });
 });
+r.get('/knowledge-base/batch', ...admin, async (req, res) => {
+  const ids = String(req.query.ids || '').split(',').map(s => Number(s.trim())).filter(n => n > 0);
+  if (!ids.length) return res.json({ items: [] });
+  const result = await query('SELECT id, title, content FROM knowledge_base WHERE id = ANY($1::int[]) AND enabled = true', [ids]).catch(() => ({ rows: [] }));
+  res.json({ items: result.rows });
+});
 r.get('/knowledge-base/:id', ...admin, async (req, res) => {
   const result = await query('SELECT * FROM knowledge_base WHERE id = $1', [req.params.id]).catch(() => ({ rows: [] }));
   res.json(result.rows[0] || {});

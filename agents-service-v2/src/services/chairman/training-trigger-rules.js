@@ -136,6 +136,11 @@ export async function checkAndTriggerTraining(anomalyKey, store, severity) {
     logger.warn({ err: e?.message }, 'Failed to load training config from DB');
   }
 
+  // Master switch: training_map.enabled === false 则跳过所有培训触发
+  if (chairmanCfg?.training_map?.enabled === false) {
+    return { triggered: false, reason: 'disabled' };
+  }
+
   // Use DB config if available, otherwise use hardcoded rule
   const effectiveRule = trainingConfig || rule;
   if (!effectiveRule) return { triggered: false };
@@ -179,7 +184,28 @@ export async function checkAndTriggerTraining(anomalyKey, store, severity) {
     }
 
     const course = effectiveRule.course || effectiveRule.training?.course || '培训';
-    const content = effectiveRule.content || effectiveRule.training?.content || '';
+    const manualContent = effectiveRule.content || effectiveRule.training?.content || '';
+
+    // Load knowledge entries if knowledge_ids is configured
+    let knowledgeBlock = '';
+    const knowledgeIds = effectiveRule.knowledge_ids || (effectiveRule.training?.knowledge_ids) || [];
+    if (knowledgeIds.length > 0) {
+      try {
+        const kbResult = await query(
+          'SELECT title, content FROM knowledge_base WHERE id = ANY($1::int[]) AND enabled = true',
+          [knowledgeIds]
+        );
+        if (kbResult.rows?.length) {
+          knowledgeBlock = '\n📚 关联知识：\n' + kbResult.rows.map(k =>
+            `- ${k.title}\n${k.content}`
+          ).join('\n');
+        }
+      } catch (e) {
+        logger.warn({ err: e?.message }, 'Failed to load knowledge entries for training');
+      }
+    }
+    const fullContent = manualContent + knowledgeBlock;
+
     const examPass = effectiveRule.examPass || effectiveRule.training?.examPass || '';
     const targetAudience = effectiveRule.targetAudience || [];
     const role = effectiveRule.assignTo || effectiveRule.training?.assignTo || 'store_manager';
@@ -196,13 +222,15 @@ export async function checkAndTriggerTraining(anomalyKey, store, severity) {
       store,
       brand,
       title: `培训任务: ${course}`,
-      detail: `触发原因: ${anomalyKey}异常(${count}次/${countWindowDays}天)\n培训内容: ${content}\n考核标准: ${examPass}\n${audienceLabel}负责人: ${roleLabel}`,
+      detail: `触发原因: ${anomalyKey}异常(${count}次/${countWindowDays}天)\n培训内容: ${fullContent}\n考核标准: ${examPass}\n${audienceLabel}负责人: ${roleLabel}`,
       sourceData: {
         anomalyKey,
         triggerCount: count,
         countWindowDays,
         course,
-        content,
+        content: fullContent,
+        manualContent,
+        knowledge_ids: knowledgeIds,
         examPass,
         targetAudience,
         dispatchTo,
