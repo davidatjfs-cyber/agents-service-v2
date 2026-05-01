@@ -34,9 +34,9 @@ function briefingStoreSqlPatterns(store) {
 
 /** 理论进度：截至昨日累计天数 / 本月自然天总数（上海当月） */
 function theoreticalProgressLine(todayYmd, yesterdayYmd, curMoYyyyMm) {
-  const ty = parseInt(todayYmd.slice(0, 4), 10);
-  const tm = parseInt(todayYmd.slice(5, 7), 10);
-  const daysInMonth = new Date(ty, tm, 0).getDate();
+  const cy = parseInt(curMoYyyyMm.slice(0, 4), 10);
+  const cm = parseInt(curMoYyyyMm.slice(5, 7), 10);
+  const daysInMonth = new Date(cy, cm, 0).getDate();
   const ymo = yesterdayYmd.slice(0, 7);
   const elapsed = ymo === curMoYyyyMm ? parseInt(yesterdayYmd.slice(8, 10), 10) || 0 : 0;
   const pct = daysInMonth > 0 ? ((elapsed / daysInMonth) * 100).toFixed(1) : '0.0';
@@ -343,7 +343,7 @@ async function buildStoreBriefing(store, { recipientName = '' } = {}) {
 
   // 2. 本月进度（每店固定展示一块，与是否有「月目标」配置无关，避免有的店缺一节）
   try {
-    const curMo = today.slice(0, 7);
+    const curMo = yesterday.slice(0, 7);
     const moR = await query(
       `SELECT COALESCE(SUM(actual_revenue), 0) AS cur_rev FROM daily_reports
        WHERE store ILIKE ANY($1::text[]) AND TO_CHAR(date,'YYYY-MM') = $2`,
