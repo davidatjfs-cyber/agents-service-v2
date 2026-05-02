@@ -701,6 +701,31 @@ r.post('/delivery-data', ...admin, async (req, res) => {
       params
     );
     if (!result.rows?.length) return res.status(404).json({ error: 'No daily_report found for this store/date' });
+    // Sync updated fields to hrms_state.dailyReports to prevent V1 self-healing from detecting lag
+    try {
+      const mergeFields = {};
+      for (const [k, v] of Object.entries(fields)) {
+        if (v !== undefined && v !== null) mergeFields[k] = v;
+      }
+      if (Object.keys(mergeFields).length) {
+        await query(
+          `UPDATE hrms_state SET data = jsonb_set(
+            COALESCE(data, '{}'::jsonb),
+            '{dailyReports}',
+            (SELECT COALESCE(jsonb_agg(
+              CASE WHEN elem->>'store' = $1 AND elem->>'date' = $2
+              THEN elem || $3::jsonb
+              ELSE elem END
+            ), '[]'::jsonb) FROM jsonb_array_elements(COALESCE(data->'dailyReports', '[]'::jsonb)) elem),
+            true
+          ), updated_at = NOW()
+          WHERE key = 'default'`,
+          [result.rows[0].store, String(result.rows[0].date).slice(0, 10), JSON.stringify(mergeFields)]
+        );
+      }
+    } catch (e) {
+      logger.warn({ err: e?.message, store, date }, 'state sync failed for daily report delivery update');
+    }
     res.json({ ok: true, updated: result.rows[0] });
   } catch (e) { res.status(500).json({ error: e?.message }); }
 });
