@@ -11,7 +11,7 @@ import { getConfig } from './config-service.js';
 import { parseFeishuRatioOrPercentString } from '../utils/feishu-percent.js';
 import { applyPllmDecision } from './proactive-v2/pllm-workflow.js';
 import { classifyBadReviewRecord } from './anomaly-engine.js';
-import { buildBadReviewCard, sendCard } from './feishu-client.js';
+import { buildBadReviewCard, buildTableVisitCard, sendCard } from './feishu-client.js';
 
 // ── Bitable Table Configurations ──
 const BITABLE_CONFIGS = {
@@ -443,6 +443,19 @@ export async function pollBitableTable(configKey) {
           logger.warn({ err: e?.message, recordId }, 'bad_review card send failed')
         );
       });
+    }
+
+    // Send table visit card notification for new records with dissatisfied dishes
+    if (configKey === 'table_visit' && !wasInDedupSet && !config.skipDedup) {
+      const rawFields = record.fields || {};
+      const dishField = extractText(rawFields['今天不满意的菜品'] || rawFields['今天不满意菜品'] || rawFields['今天 不满意的菜品'] || rawFields['今天 不满意菜品'] || rawFields['不满意菜品'] || rawFields['产品不满意项'] || '');
+      if (dishField) {
+        setImmediate(() => {
+          sendTableVisitProductIssueCard(rawFields).catch(e =>
+            logger.warn({ err: e?.message, recordId }, 'table_visit card send failed')
+          );
+        });
+      }
     }
 
     if (!config.skipDedup) {
@@ -1006,4 +1019,95 @@ async function resolveBadReviewRecipients(store) {
     [`%${store}%`]
   );
   return r.rows || [];
+}
+
+// ── Table Visit Product Issue Card Notification ──
+
+/**
+ * Send a Feishu card when a new table_visit record contains dissatisfied dishes.
+ * Recipients: store manager + production manager + all admin + all hq_manager.
+ */
+async function sendTableVisitProductIssueCard(fields) {
+  const store = extractText(fields['门店'] || fields['所属门店'] || fields['门店名称'] || '');
+  if (!store) return;
+
+  // Extract dish names for monthly count query
+  const rawDish = fields['今天不满意的菜品'] || fields['今天不满意菜品'] || fields['今天 不满意的菜品'] || fields['今天 不满意菜品'] || fields['不满意菜品'] || fields['产品不满意项'] || '';
+  const dishNames = extractDishList(rawDish);
+  if (!dishNames.length) return;
+
+  // Query monthly complaint count for the first (primary) product
+  const firstDish = dishNames[0];
+  const monthCount = await queryDishMonthCount(store, firstDish).catch(() => 0);
+
+  let card;
+  try {
+    card = buildTableVisitCard({ store, fields, dishes: dishNames, monthCount });
+  } catch (e) {
+    logger.warn({ err: e?.message, store }, 'table_visit: build card failed');
+    return;
+  }
+
+  const recipients = await resolveBadReviewRecipients(store).catch(() => []);
+  if (!recipients.length) {
+    logger.warn({ store }, 'table_visit card: no recipients found');
+    return;
+  }
+
+  for (const { open_id, username } of recipients) {
+    if (!open_id) continue;
+    try {
+      const result = await sendCard(open_id, card);
+      if (!result?.ok) {
+        logger.warn({ open_id, username, store, err: result?.error }, 'table_visit card send failed');
+      }
+    } catch (e) {
+      logger.warn({ open_id, username, err: e?.message }, 'table_visit card exception');
+    }
+  }
+}
+
+/**
+ * Extract dish names from raw Bitable field (handles array, comma-separated text, etc.)
+ */
+function extractDishList(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    const out = [];
+    for (const item of raw) {
+      if (typeof item === 'string') {
+        out.push(...item.split(/[,，、;]/).map(x => x.trim()).filter(Boolean));
+      } else if (item && typeof item === 'object') {
+        const t = item.text || '';
+        if (t) out.push(...t.split(/[,，、;]/).map(x => x.trim()).filter(Boolean));
+      }
+    }
+    return [...new Set(out)];
+  }
+  if (typeof raw === 'object' && raw.text) {
+    return String(raw.text).split(/[,，、;]/).map(x => x.trim()).filter(Boolean);
+  }
+  return String(raw).split(/[,，、;]/).map(x => x.trim()).filter(Boolean);
+}
+
+/**
+ * Count the number of times a specific dish has been reported dissatisfied this month,
+ * for the same store, across all table_visit records.
+ */
+async function queryDishMonthCount(store, dishName) {
+  if (!dishName) return 0;
+  const r = await query(
+    `SELECT COUNT(*) AS cnt FROM feishu_generic_records
+     WHERE config_key = 'table_visit'
+       AND fields->>'门店' ILIKE $1
+       AND date_trunc('month', (created_at AT TIME ZONE 'Asia/Shanghai')::timestamp)
+           = date_trunc('month', NOW() AT TIME ZONE 'Asia/Shanghai')
+       AND (
+         fields->>'今天不满意的菜品' ILIKE $2
+         OR fields->>'今天不满意菜品' ILIKE $2
+         OR fields->>'产品不满意项' ILIKE $2
+       )`,
+    [`%${store}%`, `%${dishName}%`]
+  );
+  return Number(r.rows?.[0]?.cnt ?? 0);
 }

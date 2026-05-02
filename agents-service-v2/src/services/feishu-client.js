@@ -925,6 +925,63 @@ ${content || '-'}
   };
 }
 
+/**
+ * 不满意桌访通知卡片 — 简洁信息卡（无按钮）
+ * 在 Bitable 轮询检测到新桌访含不满意菜品时由 bitable-poller 调用
+ */
+export function buildTableVisitCard({ store, fields, dishes, monthCount }) {
+  // Helper: extract text from field with multiple name variations
+  const ext = (variants) => {
+    for (const v of variants) {
+      const val = fields[v];
+      if (val == null) continue;
+      if (typeof val === 'string' && val.trim()) return val.trim();
+      if (typeof val === 'number') return String(val);
+      if (Array.isArray(val)) return val.map(x => (typeof x === 'object' && x?.text) || String(x)).join(', ');
+      if (typeof val === 'object' && val.text) return String(val.text);
+      if (typeof val === 'object' && val.name) return String(val.name);
+    }
+    return '-';
+  };
+
+  const date = ext(['记录日期', '提交时间', '日期', '创建日期']);
+  const tableNo = ext(['桌号', '台号']);
+  const amount = ext(['消费金额', '消费', '金额', '人均消费', '总消费']);
+  const guests = ext(['人数', '用餐人数', '就餐人数', '客人人数']);
+  const reservation = ext(['是否有预定', '是否有预订', '预订', '预定']);
+  const referral = ext(['哪里知道我们的', '怎么知道我们的', '来源', '渠道']);
+  const firstVisit = ext(['是否第一次来', '第一次来', '第几次来']);
+  const dishText = ext(['今天不满意的菜品', '今天不满意菜品', '今天 不满意的菜品', '今天 不满意菜品', '不满意菜品', '产品不满意项']);
+  const reason = ext(['不满意的主要原因是什么', '不满意的主要原因', '不满意原因']);
+  const mealReason = ext(['今天吃饭的原因', '吃饭的原因', '就餐原因']);
+  const rushDish = ext(['今天催菜内容', '催菜内容', '催菜']);
+
+  const hasRush = rushDish && rushDish !== '-' ? rushDish : '无';
+
+  const body = `**门店**：${store}
+**就餐时间**：${date}
+**桌号**：${tableNo}
+**消费金额**：${amount}元
+**人数**：${guests}位
+**是否有预订**：${reservation}
+**怎么知道我们**：${referral}
+**第几次来**：${firstVisit}
+**今天不满意菜品**：${dishText}
+**该产品本月投诉次数**：${monthCount}次
+**不满意的主要原因**：${reason}
+**今天吃饭的原因**：${mealReason}
+**今天是否有催菜**：${hasRush}`;
+
+  return {
+    header: { title: { tag: 'plain_text', content: `🍽️ 不满意桌访通知 · ${store}` }, template: 'red' },
+    elements: [
+      { tag: 'div', text: { tag: 'lark_md', content: body } },
+      { tag: 'hr' },
+      { tag: 'note', elements: [{ tag: 'plain_text', content: '差评对我们很重要，下次不要再发生' }] }
+    ]
+  };
+}
+
 export function buildRhythmReportCard(title, content, rhythmType) {
   return {
     header: { title: { tag: 'plain_text', content: title }, template: 'turquoise' },
