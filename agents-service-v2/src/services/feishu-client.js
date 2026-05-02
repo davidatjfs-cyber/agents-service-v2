@@ -1117,18 +1117,16 @@ const _processedEvents = new Set();
 function shouldTriggerOpsDiagnosis(text) {
   const t = String(text || '').trim().toLowerCase();
   if (!t) return false;
-  // 「生意下滑 + 要营销活动计划」曾被误判：只命中「生意下滑」而走空壳营运诊断，绕过真实营业数据
+  // 注意：不要在这里加「生意下滑」「经营下滑」「业绩下滑」「怎么提升」等关键词。
+  // 这些请求应走正常Agent管道（data_auditor），那里有完整的趋势分析和数据支撑。
+  // 此处只保留明确指向「诊断」「达成率」「问题在哪」这类运维检查用词。
   if (isMarketingPlanningIntent(text)) return false;
   const keywords = [
-    '生意下滑',
-    '经营下滑',
     '运营诊断',
     '营运诊断',
     '门店诊断',
     '达成率',
-    '业绩下滑',
     '问题在哪',
-    '怎么提升'
   ];
   return keywords.some(k => t.includes(k));
 }

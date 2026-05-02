@@ -1308,8 +1308,8 @@ async function buildDeterministicRevenueReply(store, start, end, periodLabel) {
     logger.warn({ err: e?.message, storeLike }, 'daily_reports first query failed, trying fallback');
     try {
       const r2 = await query(
-        `SELECT date, actual_revenue, actual_margin, dianping_rating, target_revenue,
-                dine_orders, target_revenue as budget, brand
+        `SELECT date, actual_revenue, actual_margin, dianping_rating, budget,
+                dine_orders, budget, brand
          FROM daily_reports
          WHERE lower(regexp_replace(coalesce(store,''), '\\s+', '', 'g')) LIKE $1 AND date >= $2 AND date <= $3
          ORDER BY date DESC LIMIT 60`,
@@ -1319,7 +1319,7 @@ async function buildDeterministicRevenueReply(store, start, end, periodLabel) {
         ...row,
         pre_discount_revenue: row.actual_revenue,
         total_discount: 0,
-        budget: row.target_revenue || 0,
+        budget: row.budget || 0,
         budget_rate: null,
         efficiency: null,
         labor_total: null,

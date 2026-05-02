@@ -21,7 +21,7 @@ export async function buildDailyOperationSummaries(dateStr, opts = {}) {
     const params = [date];
     let sql = `SELECT store, date::text AS date,
               COALESCE(actual_revenue, 0)::numeric(12,2) AS revenue,
-              COALESCE(target_revenue, 0)::numeric(12,2) AS target,
+              COALESCE(budget, target_revenue, 0)::numeric(12,2) AS target,
               COALESCE(dine_orders, 0) AS dine_orders,
               actual_margin, target_margin, dianping_rating
        FROM daily_reports
@@ -195,6 +195,7 @@ export async function runAIOperationsAnalysis(summaries) {
   "warnings": ["风险提示1"]
 }
 规则：
+0. **严格基于以下数据 JSON 中的实际 revenue/budget/rate 等字段作答。禁止声称「目标未设定/目标为0」——JSON 中 budget 均为实际值。若某字段为空则跳过，不得以数据缺失为由编造结论。**
 1. top_3_issues 必须最多3条，按优先级排序。
 2. actions 必须是“可执行动作”，禁止抽象词（如“加强管理”“提升服务质量”“优化流程”）。
 3. 每条 action 必须包含 role/action/deadline/metric 四个字段，且非空。
