@@ -2713,7 +2713,7 @@ function chairmanTrainingTab(cfg) {
   const trainingMap = cfg.training_map || {};
   const wrap = el('div');
   const brands = ['马己仙', '洪潮'];
-  const audienceOptions = ['新入职员工', '新员工(3个月内)', '老员工', '店长', '厨师长', '前厅主管', '全部员工'];
+  const CATEGORY_OPTS = ['新入职员工', '新员工', '核心员工'];
   const SEVERITY_OPTS = ['low', 'medium', 'high'];
   const ASSIGNEE_ROLE_OPTS = [
     ['store_manager', '店长'],
@@ -2763,19 +2763,6 @@ function chairmanTrainingTab(cfg) {
         const roleSel = el('select', { id: `tr_${key}_${brand}_assignTo`, className: 'border border-blue-200 rounded-lg px-2 py-1.5 text-sm w-full' });
         ASSIGNEE_ROLE_OPTS.forEach(([rv, rl]) => roleSel.appendChild(el('option', { value: rv, selected: String(brandCfg.assignTo || entry.assignTo || 'store_manager') === rv }, rl)));
         g.appendChild(field('责任岗位', roleSel));
-        // Target audience multi-select
-        const audDiv = el('div');
-        audDiv.appendChild(lbl('培训对象'));
-        const audWrap = el('div', { className: 'flex flex-wrap gap-1' });
-        const selAud = (brandCfg.targetAudience || []).reduce((m, a) => { m[a] = true; return m; }, {});
-        audienceOptions.forEach(ao => {
-          const cb = el('input', { type: 'checkbox', id: `tr_${key}_${brand}_aud_${ao}`, checked: !!selAud[ao], className: 'mr-1' });
-          const lab = el('label', { className: 'text-xs text-gray-700 cursor-pointer mr-2' });
-          lab.appendChild(cb); lab.appendChild(document.createTextNode(' ' + ao));
-          audWrap.appendChild(lab);
-        });
-        audDiv.appendChild(audWrap);
-        g.appendChild(audDiv);
         g.appendChild(field('冷却天数', el('input', { type: 'number', value: String(brandCfg.cooldownDays ?? entry.cooldownDays ?? 14), id: `tr_${key}_${brand}_cooldown`, className: 'border border-blue-200 rounded-lg px-2 py-1.5 text-sm w-full', min: '1', max: '90' })));
         g.appendChild(field('最低触发次数', el('input', { type: 'number', value: String(brandCfg.minCount ?? 2), id: `tr_${key}_${brand}_minCount`, className: 'border border-blue-200 rounded-lg px-2 py-1.5 text-sm w-full', min: '1', max: '99' })));
         g.appendChild(field('统计窗口(天)', el('input', { type: 'number', value: String(brandCfg.countWindowDays ?? 7), id: `tr_${key}_${brand}_countWindowDays`, className: 'border border-blue-200 rounded-lg px-2 py-1.5 text-sm w-full', min: '1', max: '90' })));
@@ -2787,7 +2774,7 @@ function chairmanTrainingTab(cfg) {
         const kbLabel = el('span', { id: `tr_${key}_${brand}_kb_label`, className: 'text-xs text-gray-500' }, kbIds.length ? `已选 ${kbIds.length} 项` : '未关联');
         const kbBtn = el('button', { type: 'button', id: `tr_${key}_${brand}_kb_btn`, className: 'text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-full border border-gray-300 cursor-pointer' }, '选择知识条目');
         kbBtn.onclick = async () => {
-          const { items } = await (await fetch('/api/knowledge-base')).json();
+          const { items } = await G('/api/knowledge-base');
           const selected = new Set(kbIds);
           const list = el('div', { className: 'space-y-2 max-h-96 overflow-auto' });
           (items || []).forEach(item => {
@@ -2821,17 +2808,33 @@ function chairmanTrainingTab(cfg) {
         SEVERITY_OPTS.forEach(sv => sevSel.appendChild(el('option', { value: sv, selected: (brandCfg.minSeverity || entry.minSeverity || 'medium') === sv }, sv + (sv === 'low' ? '(低也触发)' : sv === 'medium' ? '(中及以上)' : '(仅高)'))));
         sevDiv.appendChild(sevSel);
         g.appendChild(sevDiv);
-        const dispatchDiv = el('div');
-        dispatchDiv.appendChild(lbl('派发对象'));
-        const dispatchWrap = el('div', { className: 'flex flex-wrap gap-3 text-xs text-gray-700' });
-        const assigneeCb = el('input', { type: 'checkbox', id: `tr_${key}_${brand}_dispatch_assignee`, checked: brandCfg?.dispatchTo?.assignee !== false, className: 'mr-1' });
-        const mgmtCb = el('input', { type: 'checkbox', id: `tr_${key}_${brand}_dispatch_management`, checked: brandCfg?.dispatchTo?.management !== false, className: 'mr-1' });
-        const l1 = el('label', { className: 'cursor-pointer' }); l1.appendChild(assigneeCb); l1.appendChild(document.createTextNode(' 责任人'));
-        const l2 = el('label', { className: 'cursor-pointer' }); l2.appendChild(mgmtCb); l2.appendChild(document.createTextNode(' 管理员+总部营运'));
-        dispatchWrap.appendChild(l1); dispatchWrap.appendChild(l2);
-        dispatchDiv.appendChild(dispatchWrap);
-        g.appendChild(dispatchDiv);
         bDiv.appendChild(g);
+        // 选择对象：岗位/类别/门店（替换旧的targetAudience+dispatchTo）
+        (function() {
+          const tt = S.trainingTargets || {};
+          const tPositions = tt.positions || [];
+          const tStores = tt.stores || [];
+          const audienceData = brandCfg.audience || {};
+          const audSec = el('div', { className: 'border-t pt-2 mt-2' });
+          audSec.appendChild(el('div', { className: 'text-xs font-medium text-gray-700 mb-1' }, '选择对象（接收通知）'));
+          if (tPositions.length) {
+            const pDiv = el('div', { className: 'mb-1' }); pDiv.appendChild(el('label', { className: 'text-xs text-gray-500 block mb-1' }, '岗位'));
+            const pW = el('div', { className: 'flex flex-wrap gap-1' });
+            tPositions.forEach(p => { const cb = el('input', { type: 'checkbox', id: `tr_${key}_${brand}_pos_${p}`, checked: (audienceData.positions || []).includes(p), className: 'mr-1' }); const lab = el('label', { className: 'text-xs text-gray-700 cursor-pointer mr-2' }); lab.appendChild(cb); lab.appendChild(document.createTextNode(' ' + p)); pW.appendChild(lab); });
+            pDiv.appendChild(pW); audSec.appendChild(pDiv);
+          }
+          const cDiv = el('div', { className: 'mb-1' }); cDiv.appendChild(el('label', { className: 'text-xs text-gray-500 block mb-1' }, '员工类别'));
+          const cW = el('div', { className: 'flex flex-wrap gap-1' });
+          CATEGORY_OPTS.forEach(c => { const cb = el('input', { type: 'checkbox', id: `tr_${key}_${brand}_cat_${c}`, checked: (audienceData.categories || []).includes(c), className: 'mr-1' }); const lab = el('label', { className: 'text-xs text-gray-700 cursor-pointer mr-2' }); lab.appendChild(cb); lab.appendChild(document.createTextNode(' ' + c)); cW.appendChild(lab); });
+          cDiv.appendChild(cW); audSec.appendChild(cDiv);
+          if (tStores.length) {
+            const sDiv = el('div'); sDiv.appendChild(el('label', { className: 'text-xs text-gray-500 block mb-1' }, '门店'));
+            const sW = el('div', { className: 'flex flex-wrap gap-1' });
+            tStores.forEach(s => { const cb = el('input', { type: 'checkbox', id: `tr_${key}_${brand}_sto_${s}`, checked: (audienceData.stores || []).includes(s), className: 'mr-1' }); const lab = el('label', { className: 'text-xs text-gray-700 cursor-pointer mr-2' }); lab.appendChild(cb); lab.appendChild(document.createTextNode(' ' + s)); sW.appendChild(lab); });
+            sDiv.appendChild(sW); audSec.appendChild(sDiv);
+          }
+          bDiv.appendChild(audSec);
+        })();
         cardEl.appendChild(bDiv);
       });
     } else {
@@ -2843,19 +2846,6 @@ function chairmanTrainingTab(cfg) {
       const roleSel = el('select', { id: `tr_${key}_assignTo`, className: 'border border-blue-200 rounded-lg px-3 py-2 text-sm w-full' });
       ASSIGNEE_ROLE_OPTS.forEach(([rv, rl]) => roleSel.appendChild(el('option', { value: rv, selected: String(entry.assignTo || 'store_manager') === rv }, rl)));
       grid.appendChild(field('责任岗位', roleSel));
-      // Target audience
-      const audDiv = el('div');
-      audDiv.appendChild(lbl('培训对象（勾选）'));
-      const audWrap = el('div', { className: 'flex flex-wrap gap-1' });
-      const selAud = (entry.targetAudience || []).reduce((m, a) => { m[a] = true; return m; }, {});
-      audienceOptions.forEach(ao => {
-        const cb = el('input', { type: 'checkbox', id: `tr_${key}_aud_${ao}`, checked: !!selAud[ao], className: 'mr-1' });
-        const lab = el('label', { className: 'text-xs text-gray-700 cursor-pointer mr-2' });
-        lab.appendChild(cb); lab.appendChild(document.createTextNode(' ' + ao));
-        audWrap.appendChild(lab);
-      });
-      audDiv.appendChild(audWrap);
-      grid.appendChild(audDiv);
       grid.appendChild(field('冷却天数', el('input', { type: 'number', value: String(entry.cooldownDays ?? 14), id: `tr_${key}_cooldown`, className: 'border border-blue-200 rounded-lg px-3 py-2 text-sm w-full', min: '1', max: '90' })));
       grid.appendChild(field('最低触发次数', el('input', { type: 'number', value: String(entry.minCount ?? 2), id: `tr_${key}_minCount`, className: 'border border-blue-200 rounded-lg px-3 py-2 text-sm w-full', min: '1', max: '99' })));
       grid.appendChild(field('统计窗口(天)', el('input', { type: 'number', value: String(entry.countWindowDays ?? 7), id: `tr_${key}_countWindowDays`, className: 'border border-blue-200 rounded-lg px-3 py-2 text-sm w-full', min: '1', max: '90' })));
@@ -2867,7 +2857,7 @@ function chairmanTrainingTab(cfg) {
       const kbLabel = el('span', { id: `tr_${key}_kb_label`, className: 'text-xs text-gray-500' }, kbIds.length ? `已选 ${kbIds.length} 项` : '未关联');
       const kbBtn = el('button', { type: 'button', id: `tr_${key}_kb_btn`, className: 'text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-full border border-gray-300 cursor-pointer' }, '选择知识条目');
       kbBtn.onclick = async () => {
-        const { items } = await (await fetch('/api/knowledge-base')).json();
+        const { items } = await G('/api/knowledge-base');
         const selected = new Set(kbIds);
         const list = el('div', { className: 'space-y-2 max-h-96 overflow-auto' });
         (items || []).forEach(item => {
@@ -2900,17 +2890,31 @@ function chairmanTrainingTab(cfg) {
       SEVERITY_OPTS.forEach(sv => sevSel.appendChild(el('option', { value: sv, selected: (entry.minSeverity || 'medium') === sv }, sv + (sv === 'low' ? '(低也触发)' : sv === 'medium' ? '(中及以上)' : '(仅高)'))));
       sevDiv.appendChild(sevSel);
       grid.appendChild(sevDiv);
-      const dispatchDiv = el('div');
-      dispatchDiv.appendChild(lbl('派发对象'));
-      const dispatchWrap = el('div', { className: 'flex flex-wrap gap-3 text-xs text-gray-700' });
-      const assigneeCb = el('input', { type: 'checkbox', id: `tr_${key}_dispatch_assignee`, checked: entry?.dispatchTo?.assignee !== false, className: 'mr-1' });
-      const mgmtCb = el('input', { type: 'checkbox', id: `tr_${key}_dispatch_management`, checked: entry?.dispatchTo?.management !== false, className: 'mr-1' });
-      const l1 = el('label', { className: 'cursor-pointer' }); l1.appendChild(assigneeCb); l1.appendChild(document.createTextNode(' 责任人'));
-      const l2 = el('label', { className: 'cursor-pointer' }); l2.appendChild(mgmtCb); l2.appendChild(document.createTextNode(' 管理员+总部营运'));
-      dispatchWrap.appendChild(l1); dispatchWrap.appendChild(l2);
-      dispatchDiv.appendChild(dispatchWrap);
-      grid.appendChild(dispatchDiv);
       cardEl.appendChild(grid);
+      // 选择对象：岗位/类别/门店（替换旧的targetAudience+dispatchTo）
+      const tt = S.trainingTargets || {};
+      const tPositions = tt.positions || [];
+      const tStores = tt.stores || [];
+      const audienceData = entry.audience || {};
+      const audSec = el('div', { className: 'border-t pt-3 mt-3' });
+      audSec.appendChild(el('div', { className: 'text-sm font-medium text-gray-700 mb-2' }, '选择对象（接收培训通知的人员）'));
+      if (tPositions.length) {
+        const pDiv = el('div', { className: 'mb-2' }); pDiv.appendChild(el('label', { className: 'text-xs font-medium text-gray-600 block mb-1' }, '岗位（可多选）'));
+        const pW = el('div', { className: 'flex flex-wrap gap-1' });
+        tPositions.forEach(p => { const cb = el('input', { type: 'checkbox', id: `tr_${key}_pos_${p}`, checked: (audienceData.positions || []).includes(p), className: 'mr-1' }); const lab = el('label', { className: 'text-xs text-gray-700 cursor-pointer mr-2' }); lab.appendChild(cb); lab.appendChild(document.createTextNode(' ' + p)); pW.appendChild(lab); });
+        pDiv.appendChild(pW); audSec.appendChild(pDiv);
+      }
+      const cDiv = el('div', { className: 'mb-2' }); cDiv.appendChild(el('label', { className: 'text-xs font-medium text-gray-600 block mb-1' }, '员工类别（可多选）'));
+      const cW = el('div', { className: 'flex flex-wrap gap-1' });
+      CATEGORY_OPTS.forEach(c => { const cb = el('input', { type: 'checkbox', id: `tr_${key}_cat_${c}`, checked: (audienceData.categories || []).includes(c), className: 'mr-1' }); const lab = el('label', { className: 'text-xs text-gray-700 cursor-pointer mr-2' }); lab.appendChild(cb); lab.appendChild(document.createTextNode(' ' + c)); cW.appendChild(lab); });
+      cDiv.appendChild(cW); audSec.appendChild(cDiv);
+      if (tStores.length) {
+        const sDiv = el('div'); sDiv.appendChild(el('label', { className: 'text-xs font-medium text-gray-600 block mb-1' }, '门店（可多选，不选则不限制）'));
+        const sW = el('div', { className: 'flex flex-wrap gap-1' });
+        tStores.forEach(s => { const cb = el('input', { type: 'checkbox', id: `tr_${key}_sto_${s}`, checked: (audienceData.stores || []).includes(s), className: 'mr-1' }); const lab = el('label', { className: 'text-xs text-gray-700 cursor-pointer mr-2' }); lab.appendChild(cb); lab.appendChild(document.createTextNode(' ' + s)); sW.appendChild(lab); });
+        sDiv.appendChild(sW); audSec.appendChild(sDiv);
+      }
+      cardEl.appendChild(audSec);
     }
     wrap.appendChild(cardEl);
   });
@@ -2930,7 +2934,7 @@ function chairmanTrainingTab(cfg) {
   const customKbBtn = el('button', { type: 'button', className: 'text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-full border border-gray-300 cursor-pointer' }, '选择');
   const customKbLabel = el('span', { id: 'tr_custom_kb_label', className: 'text-xs text-gray-500' }, '未关联');
   customKbBtn.onclick = async () => {
-    const { items } = await (await fetch('/api/knowledge-base')).json();
+    const { items } = await G('/api/knowledge-base');
     const selected = new Set();
     const list = el('div', { className: 'space-y-2 max-h-96 overflow-auto' });
     (items || []).forEach(item => {
@@ -2970,23 +2974,21 @@ function chairmanTrainingTab(cfg) {
           brands.forEach(brand => {
             const course = $(`tr_${key}_${brand}_course`)?.value?.trim();
             if (!course) return;
-            const aud = [];
-            audienceOptions.forEach(ao => { if ($(`tr_${key}_${brand}_aud_${ao}`)?.checked) aud.push(ao); });
+            const tt = S.trainingTargets || {};
+            const audPositions = (tt.positions || []).filter(p => $(`tr_${key}_${brand}_pos_${p}`)?.checked);
+            const audCategories = CATEGORY_OPTS.filter(c => $(`tr_${key}_${brand}_cat_${c}`)?.checked);
+            const audStores = (tt.stores || []).filter(s => $(`tr_${key}_${brand}_sto_${s}`)?.checked);
             brandConfigs.push({
               brand,
               course,
               content: $(`tr_${key}_${brand}_content`)?.value?.trim() || '',
               examPass: $(`tr_${key}_${brand}_exam`)?.value?.trim() || '',
               assignTo: $(`tr_${key}_${brand}_assignTo`)?.value || 'store_manager',
-              targetAudience: aud,
+              audience: { positions: audPositions, categories: audCategories, stores: audStores },
               cooldownDays: Number($(`tr_${key}_${brand}_cooldown`)?.value) || 14,
               minCount: Number($(`tr_${key}_${brand}_minCount`)?.value) || 2,
               countWindowDays: Number($(`tr_${key}_${brand}_countWindowDays`)?.value) || 7,
               minSeverity: $(`tr_${key}_${brand}_severity`)?.value || 'medium',
-              dispatchTo: {
-                assignee: !!$(`tr_${key}_${brand}_dispatch_assignee`)?.checked,
-                management: !!$(`tr_${key}_${brand}_dispatch_management`)?.checked
-              },
               knowledge_ids: $(`tr_${key}_${brand}_knowledge_ids`)?.value?.split(',').map(s => Number(s.trim())).filter(n => n > 0) || []
             });
           });
@@ -2997,35 +2999,30 @@ function chairmanTrainingTab(cfg) {
           // Save simple config
           const course = $(`tr_${key}_course`)?.value?.trim();
           if (!course) return;
-          const aud = [];
-          audienceOptions.forEach(ao => { if ($(`tr_${key}_aud_${ao}`)?.checked) aud.push(ao); });
+          const tt = S.trainingTargets || {};
+          const audPositions = (tt.positions || []).filter(p => $(`tr_${key}_pos_${p}`)?.checked);
+          const audCategories = CATEGORY_OPTS.filter(c => $(`tr_${key}_cat_${c}`)?.checked);
+          const audStores = (tt.stores || []).filter(s => $(`tr_${key}_sto_${s}`)?.checked);
           newMap[key] = {
             course,
             content: $(`tr_${key}_content`)?.value?.trim() || '',
             examPass: $(`tr_${key}_exam`)?.value?.trim() || '',
             assignTo: $(`tr_${key}_assignTo`)?.value || 'store_manager',
-            targetAudience: aud,
+            audience: { positions: audPositions, categories: audCategories, stores: audStores },
             cooldownDays: Number($(`tr_${key}_cooldown`)?.value) || existing.cooldownDays || 14,
             minCount: Number($(`tr_${key}_minCount`)?.value) || existing.minCount || 2,
             countWindowDays: Number($(`tr_${key}_countWindowDays`)?.value) || existing.countWindowDays || 7,
             minSeverity: $(`tr_${key}_severity`)?.value || existing.minSeverity || 'medium',
-            dispatchTo: {
-              assignee: !!$(`tr_${key}_dispatch_assignee`)?.checked,
-              management: !!$(`tr_${key}_dispatch_management`)?.checked
-            },
             knowledge_ids: $(`tr_${key}_knowledge_ids`)?.value?.split(',').map(s => Number(s.trim())).filter(n => n > 0) || []
           };
         }
       });
       const customKey = $('tr_custom_key')?.value?.trim();
       if (customKey) {
-        const aud = [];
-        audienceOptions.forEach(ao => { if ($(`tr_${customKey}_aud_${ao}`)?.checked) aud.push(ao); });
         newMap[customKey] = {
           course: $('tr_custom_course')?.value?.trim() || '',
           content: $('tr_custom_content')?.value?.trim() || '',
           examPass: $('tr_custom_exam')?.value?.trim() || '',
-          targetAudience: aud,
           cooldownDays: 14, minSeverity: 'medium',
         };
       }
@@ -3474,7 +3471,7 @@ async function load(t) {
     if (t === 'audit') { S.auditItems = (await G('/api/audit-log?limit=50').catch(e => { catchNonAuth(e); return { log: [] }; })).log || []; }
     if (t === 'activity') { S.activity = await G('/api/agent-activity?date=' + S.activityDate).catch(e => { catchNonAuth(e); return {}; }); }
     if (t === 'datasources') { S.bitableStatus = await G('/api/bitable-status').catch(e => { catchNonAuth(e); return {}; }); }
-    if (t === 'chairman') { S.chairmanCfg = (await G('/api/chairman/config').catch(e => { catchNonAuth(e); return { ok: true, config: {} }; })).config || {}; }
+    if (t === 'chairman') { S.chairmanCfg = (await G('/api/chairman/config').catch(e => { catchNonAuth(e); return { ok: true, config: {} }; })).config || {}; S.trainingTargets = await G('/api/admin/training/targets').catch(() => ({ positions: [], stores: [] })); }
     if (t === 'skills') { S.agentSkills = (await G('/api/agent-skills').catch(e => { catchNonAuth(e); return { agents: {} }; })).agents || {}; }
     if (t === 'pllm') { S.pllmDashboard = await G('/api/admin/pllm/dashboard').catch(e => { catchNonAuth(e); return { month: '', summary: {}, byStore: [], recent: [] }; }); }
   } catch (e) { if (e.message === 'auth') { localStorage.removeItem('aat'); renderLogin(); return 'auth'; } }

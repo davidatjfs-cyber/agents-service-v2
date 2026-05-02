@@ -1201,4 +1201,21 @@ r.get('/agent-skills', ...admin, (_req, res) => {
   res.json({ ok: true, agents: result });
 });
 
+// 培训联动配置：可选岗位/门店列表
+r.get('/admin/training/targets', ...admin, async (_req, res) => {
+  try {
+    const [positions, stores] = await Promise.all([
+      query(`SELECT DISTINCT position FROM employees WHERE status = 'active' AND position IS NOT NULL AND position != '' ORDER BY position`).catch(() => ({ rows: [] })),
+      query(`SELECT DISTINCT store FROM employees WHERE status = 'active' AND store IS NOT NULL AND store != '' ORDER BY store`).catch(() => ({ rows: [] })),
+    ]);
+    res.json({
+      ok: true,
+      positions: positions.rows.map(r => r.position),
+      stores: stores.rows.map(r => r.store),
+    });
+  } catch (e) {
+    res.json({ ok: true, positions: [], stores: [] });
+  }
+});
+
 export default r;

@@ -79,10 +79,10 @@ function getDefaultConfig() {
     },
     training_map: {
       enabled: true,
-      bad_review_service: { course: '服务流程SOP', content: '迎宾→入座→点餐→上菜→结账全流程', examPass: '考试≥90分', targetAudience: ['全部员工', '新员工(3个月内)'], cooldownDays: 14, minSeverity: 'medium', assignTo: 'store_manager', dispatchTo: { assignee: true, management: true } },
-      bad_review_product: { course: '出品标准复训', content: '厨师长出品标准复检', examPass: '出品合格率≥95%', targetAudience: ['厨师长', '老员工'], cooldownDays: 14, minSeverity: 'medium', assignTo: 'store_production_manager', dispatchTo: { assignee: true, management: true } },
-      gross_margin: { course: '成本控制规范', content: '食材损耗控制、采购验收标准', examPass: '考试≥85分', targetAudience: ['店长', '厨师长'], cooldownDays: 30, minSeverity: 'medium', assignTo: 'store_production_manager', dispatchTo: { assignee: true, management: true } },
-      food_safety: { course: '食品安全紧急培训', content: '食品安全标准操作规程复训', examPass: '考试≥95分+现场检查通过', targetAudience: ['全部员工'], cooldownDays: 7, minSeverity: 'high', assignTo: 'store_manager', dispatchTo: { assignee: true, management: true } },
+      bad_review_service: { course: '服务流程SOP', content: '迎宾→入座→点餐→上菜→结账全流程', examPass: '考试≥90分', targetAudience: ['全部员工', '新员工(3个月内)'], cooldownDays: 14, minSeverity: 'medium', assignTo: 'store_manager' },
+      bad_review_product: { course: '出品标准复训', content: '厨师长出品标准复检', examPass: '出品合格率≥95%', targetAudience: ['厨师长', '老员工'], cooldownDays: 14, minSeverity: 'medium', assignTo: 'store_production_manager' },
+      gross_margin: { course: '成本控制规范', content: '食材损耗控制、采购验收标准', examPass: '考试≥85分', targetAudience: ['店长', '厨师长'], cooldownDays: 30, minSeverity: 'medium', assignTo: 'store_production_manager' },
+      food_safety: { course: '食品安全紧急培训', content: '食品安全标准操作规程复训', examPass: '考试≥95分+现场检查通过', targetAudience: ['全部员工'], cooldownDays: 7, minSeverity: 'high', assignTo: 'store_manager' },
     },
     proactive_rules: {
       enabled: true,

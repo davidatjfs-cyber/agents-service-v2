@@ -10,16 +10,6 @@ import { query } from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { createTask } from '../task-state-machine.js';
 import { resolveSingleScoringUser } from '../../utils/scoring-assignee.js';
-import { sendCompanyNoticeToAssignees } from '../feishu-client.js';
-
-function buildDispatchConfig(effectiveRule, cfg) {
-  const explicit = effectiveRule?.dispatchTo;
-  const globalDispatch = cfg?.proactive_rules?.dispatchDefaults;
-  return {
-    assignee: explicit?.assignee !== false && globalDispatch?.assignee !== false,
-    management: explicit?.management !== false && globalDispatch?.management !== false
-  };
-}
 
 function buildTrainingNotice(task, payload) {
   return [
@@ -28,9 +18,7 @@ function buildTrainingNotice(task, payload) {
     `触发异常：${payload.anomalyKey}`,
     `触发频次：${payload.count}次/${payload.countWindowDays}天`,
     payload.content ? `培训内容：${payload.content}` : '',
-    payload.examPass ? `考核标准：${payload.examPass}` : '',
-    payload.targetAudience?.length ? `培训对象：${payload.targetAudience.join('、')}` : '',
-    payload.roleLabel ? `责任岗位：${payload.roleLabel}` : ''
+    payload.examPass ? `考核标准：${payload.examPass}` : ''
   ].filter(Boolean).join('\n');
 }
 
@@ -207,13 +195,11 @@ export async function checkAndTriggerTraining(anomalyKey, store, severity) {
     const fullContent = manualContent + knowledgeBlock;
 
     const examPass = effectiveRule.examPass || effectiveRule.training?.examPass || '';
-    const targetAudience = effectiveRule.targetAudience || [];
+
+    // Task assignee for tracking (separate from audience notifications)
     const role = effectiveRule.assignTo || effectiveRule.training?.assignTo || 'store_manager';
-    const roleLabel = role === 'store_production_manager' ? '厨师长' : '店长';
-    const audienceLabel = targetAudience.length ? `培训对象: ${targetAudience.join('、')}\n` : '';
-    const assignee = await resolveSingleScoringUser(store, role).catch(() => null);
-    const assigneeUsername = String(assignee?.username || '').trim();
-    const dispatchTo = buildDispatchConfig(effectiveRule, chairmanCfg);
+    const taskAssignee = await resolveSingleScoringUser(store, role).catch(() => null);
+    const assigneeUsername = String(taskAssignee?.username || '').trim();
 
     const taskResult = await createTask({
       source: 'training_trigger',
@@ -222,7 +208,7 @@ export async function checkAndTriggerTraining(anomalyKey, store, severity) {
       store,
       brand,
       title: `培训任务: ${course}`,
-      detail: `触发原因: ${anomalyKey}异常(${count}次/${countWindowDays}天)\n培训内容: ${fullContent}\n考核标准: ${examPass}\n${audienceLabel}负责人: ${roleLabel}`,
+      detail: `触发原因: ${anomalyKey}异常(${count}次/${countWindowDays}天)\n培训内容: ${fullContent}\n考核标准: ${examPass}`,
       sourceData: {
         anomalyKey,
         triggerCount: count,
@@ -232,30 +218,30 @@ export async function checkAndTriggerTraining(anomalyKey, store, severity) {
         manualContent,
         knowledge_ids: knowledgeIds,
         examPass,
-        targetAudience,
-        dispatchTo,
-        notifyRoles: chairmanCfg?.proactive_rules?.notifyRoles || ['admin', 'hq_manager']
       },
       assigneeUsername,
       assigneeRole: role,
     });
 
-    if (taskResult?.taskId && (dispatchTo.assignee || dispatchTo.management)) {
-      const task = {
-        task_id: taskResult.taskId,
-        source: 'training_trigger',
-        store,
-        title: `培训任务: ${course}`,
-        assignee_username: assigneeUsername,
-        assignee_role: role
-      };
-      const noticeText = buildTrainingNotice(task, { anomalyKey, course, store, count, countWindowDays, content, examPass, targetAudience, roleLabel });
-      await sendCompanyNoticeToAssignees(task, noticeText, {
-        title: '培训任务通知',
-        type: 'training_trigger_notice',
-        sendToAssignee: dispatchTo.assignee,
-        sendToManagement: dispatchTo.management
-      }).catch((e) => logger.warn({ err: e?.message, taskId: taskResult.taskId }, 'training trigger notice failed'));
+    // Send training notification to all audience members via hrms_user_notifications
+    if (taskResult?.taskId) {
+      const noticeText = buildTrainingNotice({ task_id: taskResult.taskId, store },
+        { anomalyKey, course, store, count, countWindowDays, content: fullContent, examPass });
+      const targetUsernames = await resolveTrainingAudienceUsernames(effectiveRule);
+      for (const username of targetUsernames) {
+        if (!username) continue;
+        const dup = await query(
+          `SELECT 1 FROM hrms_user_notifications WHERE target_username = $1 AND meta->>'task_id' = $2 LIMIT 1`,
+          [username, String(taskResult.taskId)]
+        ).catch(() => ({ rows: [] }));
+        if (dup.rows?.length) continue;
+        await query(
+          `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
+           VALUES ($1, $2, $3, $4, $5::jsonb)`,
+          [username, '培训任务通知', noticeText, 'training_trigger_notice',
+           JSON.stringify({ task_id: taskResult.taskId, store, source: 'training_trigger' })]
+        ).catch((e) => logger.warn({ err: e?.message, username }, 'training: hrms notification failed'));
+      }
     }
 
     logger.info({ anomalyKey, store, task: taskResult.taskId }, 'training triggered');
@@ -264,6 +250,64 @@ export async function checkAndTriggerTraining(anomalyKey, store, severity) {
   } catch (e) {
     logger.warn({ err: e?.message, anomalyKey, store }, 'training trigger failed');
     return { triggered: false, error: e?.message };
+  }
+}
+
+/**
+ * Resolve target usernames from the new audience format (positions / categories / stores).
+ * Categories: 新入职员工=joined ≤7天, 新员工=joined ≤3个月, 核心员工=extra_json tag.
+ * Falls back to empty array if no audience configured (legacy configs skip notifications).
+ */
+async function resolveTrainingAudienceUsernames(effectiveRule) {
+  const audience = effectiveRule?.audience || {};
+  const positions = audience.positions || [];
+  const categories = audience.categories || [];
+  const stores = audience.stores || [];
+
+  if (!positions.length && !categories.length && !stores.length) {
+    return [];
+  }
+
+  const clauses = ["status = 'active'"];
+  const params = [];
+  let idx = 1;
+
+  if (positions.length) {
+    clauses.push(`position = ANY($${idx}::text[])`);
+    params.push(positions);
+    idx++;
+  }
+
+  if (stores.length) {
+    clauses.push(`store = ANY($${idx}::text[])`);
+    params.push(stores);
+    idx++;
+  }
+
+  const catClauses = [];
+  if (categories.includes('新入职员工')) {
+    catClauses.push(`join_date IS NOT NULL AND join_date != ''
+      AND TO_DATE(join_date, 'YYYY-MM-DD') >= CURRENT_DATE - INTERVAL '7 days'`);
+  }
+  if (categories.includes('新员工')) {
+    catClauses.push(`join_date IS NOT NULL AND join_date != ''
+      AND TO_DATE(join_date, 'YYYY-MM-DD') >= CURRENT_DATE - INTERVAL '3 months'`);
+  }
+  if (categories.includes('核心员工')) {
+    catClauses.push(`COALESCE(extra_json->>'tag', '') = 'core'
+      OR COALESCE(extra_json->>'is_core', '') = 'true'`);
+  }
+  if (catClauses.length) {
+    clauses.push(`(${catClauses.join(' OR ')})`);
+  }
+
+  try {
+    const sql = `SELECT DISTINCT username FROM employees WHERE ${clauses.join(' AND ')}`;
+    const result = await query(sql, params);
+    return result.rows.map(r => r.username).filter(Boolean);
+  } catch (e) {
+    logger.warn({ err: e?.message, audience }, 'resolveTrainingAudienceUsernames failed');
+    return [];
   }
 }
 
