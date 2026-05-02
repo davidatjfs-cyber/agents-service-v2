@@ -945,6 +945,7 @@ export function buildTableVisitCard({ store, fields, dishes, monthCount }) {
   };
 
   const date = ext(['就餐时间', '用餐时段', '餐段', '用餐时间']);
+  const visitDate = ext(['记录日期', '日期', '提交时间', '创建日期', '差评日期']);
   const tableNo = ext(['桌号', '台号']);
   const amount = ext(['消费金额', '消费', '金额', '人均消费', '总消费']);
   const guests = ext(['人数', '用餐人数', '就餐人数', '客人人数']);
@@ -959,6 +960,7 @@ export function buildTableVisitCard({ store, fields, dishes, monthCount }) {
   const hasRush = rushDish && rushDish !== '-' ? rushDish : '无';
 
   const body = `**门店**：${store}
+**差评日期**：${visitDate}
 **就餐时间**：${date}
 **桌号**：${tableNo}
 **消费金额**：${amount}元

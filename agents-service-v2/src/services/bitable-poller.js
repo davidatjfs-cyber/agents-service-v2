@@ -436,25 +436,43 @@ export async function pollBitableTable(configKey) {
       logger.error({ configKey, recordId, err: e?.message }, 'process record failed');
     }
 
-    // Send bad review card notification for newly detected bad reviews
-    if (configKey === 'bad_review' && !wasInDedupSet && !config.skipDedup) {
-      setImmediate(() => {
-        sendBadReviewNewCard(record.fields || {}, recordId).catch(e =>
-          logger.warn({ err: e?.message, recordId }, 'bad_review card send failed')
-        );
-      });
+    // Send bad review card notification for newly inserted records
+    if (configKey === 'bad_review' && !config.skipDedup) {
+      // Only send for records inserted within the last 10 min (truly new, not re-polled old data)
+      const ageR = await query(
+        `SELECT 1 FROM feishu_generic_records
+         WHERE app_token = $1 AND table_id = $2 AND record_id = $3
+         AND created_at >= NOW() - INTERVAL '10 minutes'`,
+        [config.appToken, config.tableId, recordId]
+      ).catch(() => ({ rows: [] }));
+      if (ageR.rows?.length) {
+        setImmediate(() => {
+          sendBadReviewNewCard(record.fields || {}, recordId).catch(e =>
+            logger.warn({ err: e?.message, recordId }, 'bad_review card send failed')
+          );
+        });
+      }
     }
 
     // Send table visit card notification for new records with dissatisfied dishes
-    if (configKey === 'table_visit' && !wasInDedupSet && !config.skipDedup) {
-      const rawFields = record.fields || {};
-      const dishField = extractText(rawFields['今天不满意的菜品'] || rawFields['今天不满意菜品'] || rawFields['今天 不满意的菜品'] || rawFields['今天 不满意菜品'] || rawFields['不满意菜品'] || rawFields['产品不满意项'] || '');
-      if (dishField) {
-        setImmediate(() => {
-          sendTableVisitProductIssueCard(rawFields, recordId).catch(e =>
-            logger.warn({ err: e?.message, recordId }, 'table_visit card send failed')
-          );
-        });
+    if (configKey === 'table_visit' && !config.skipDedup) {
+      // Only send for records inserted within the last 10 min (truly new)
+      const ageR = await query(
+        `SELECT 1 FROM feishu_generic_records
+         WHERE app_token = $1 AND table_id = $2 AND record_id = $3
+         AND created_at >= NOW() - INTERVAL '10 minutes'`,
+        [config.appToken, config.tableId, recordId]
+      ).catch(() => ({ rows: [] }));
+      if (ageR.rows?.length) {
+        const rawFields = record.fields || {};
+        const dishField = extractText(rawFields['今天不满意的菜品'] || rawFields['今天不满意菜品'] || rawFields['今天 不满意的菜品'] || rawFields['今天 不满意菜品'] || rawFields['不满意菜品'] || rawFields['产品不满意项'] || '');
+        if (dishField) {
+          setImmediate(() => {
+            sendTableVisitProductIssueCard(rawFields, recordId).catch(e =>
+              logger.warn({ err: e?.message, recordId }, 'table_visit card send failed')
+            );
+          });
+        }
       }
     }
 
@@ -948,22 +966,6 @@ export function getBitableStatus() {
 // ── Bad Review New Record Card Notification ──
 
 /**
- * Check if a record is fresh enough to send a card (within 3 days).
- * Prevents cards for old records re-synced from Bitable.
- */
-function isRecordFresh(fields) {
-  const dateStr = extractText(fields['创建日期'] || fields['日期'] || fields['差评日期'] || '');
-  if (!dateStr) return true; // can't determine, allow
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return true;
-    return (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24) <= 3;
-  } catch (e) {
-    return true;
-  }
-}
-
-/**
  * Persistent dedup: atomically acquire a send lock for a record+card type.
  * Uses hrms_state table. Returns true if lock acquired (first time), false if already existed.
  */
@@ -981,8 +983,8 @@ async function acquireCardSendLock(recordId, cardType) {
 
 /**
  * Send a Feishu card notification when a new bad review is detected by the poller.
- * Recipients: store manager + production manager + all admin + all hq_manager.
- * Dedup: wasInDedupSet + date freshness check + persistent DB lock.
+ * Only called for records DB-verified as newly inserted (created_at < 10 min).
+ * Dedup: loop-level created_at check + persistent DB lock.
  */
 async function sendBadReviewNewCard(fields, recordId) {
   // Persistent dedup: skip if already sent for this record
@@ -990,9 +992,6 @@ async function sendBadReviewNewCard(fields, recordId) {
 
   const store = extractText(fields['门店']);
   if (!store) return;
-
-  // Freshness guard: skip records older than 3 days
-  if (!isRecordFresh(fields)) return;
 
   const date = extractText(fields['创建日期'] || fields['日期'] || fields['差评日期'] || '');
   const platform = extractText(fields['平台'] || fields['来源'] || fields['差评平台'] || '');
@@ -1082,8 +1081,8 @@ async function resolveBadReviewRecipients(store) {
 
 /**
  * Send a Feishu card when a new table_visit record contains dissatisfied dishes.
- * Recipients: store manager + production manager + all admin + all hq_manager.
- * Dedup: wasInDedupSet + date freshness check + persistent DB lock.
+ * Only called for records DB-verified as newly inserted (created_at < 10 min).
+ * Dedup: loop-level created_at check + persistent DB lock.
  */
 async function sendTableVisitProductIssueCard(fields, recordId) {
   // Persistent dedup: skip if already sent for this record
@@ -1091,9 +1090,6 @@ async function sendTableVisitProductIssueCard(fields, recordId) {
 
   const store = extractText(fields['门店'] || fields['所属门店'] || fields['门店名称'] || '');
   if (!store) return;
-
-  // Freshness guard: skip records older than 3 days
-  if (!isRecordFresh(fields)) return;
 
   // Extract dish names for monthly count query
   const rawDish = fields['今天不满意的菜品'] || fields['今天不满意菜品'] || fields['今天 不满意的菜品'] || fields['今天 不满意菜品'] || fields['不满意菜品'] || fields['产品不满意项'] || '';
