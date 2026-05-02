@@ -948,12 +948,32 @@ export function getBitableStatus() {
 // ── Bad Review New Record Card Notification ──
 
 /**
+ * Check if a record is fresh enough to send a card (within 3 days).
+ * Prevents cards for old records re-synced from Bitable.
+ */
+function isRecordFresh(fields) {
+  const dateStr = extractText(fields['创建日期'] || fields['日期'] || fields['差评日期'] || '');
+  if (!dateStr) return true; // can't determine, allow
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return true;
+    return (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24) <= 3;
+  } catch (e) {
+    return true;
+  }
+}
+
+/**
  * Send a Feishu card notification when a new bad review is detected by the poller.
  * Recipients: store manager + production manager + all admin + all hq_manager.
+ * Dedup: wasInDedupSet + date freshness check prevent duplicate/old-record cards.
  */
 async function sendBadReviewNewCard(fields) {
   const store = extractText(fields['门店']);
   if (!store) return;
+
+  // Freshness guard: skip records older than 3 days
+  if (!isRecordFresh(fields)) return;
 
   const date = extractText(fields['创建日期'] || fields['日期'] || fields['差评日期'] || '');
   const platform = extractText(fields['平台'] || fields['来源'] || fields['差评平台'] || '');
@@ -985,16 +1005,34 @@ async function sendBadReviewNewCard(fields) {
     return;
   }
 
+  let sentCount = 0;
+  let failCount = 0;
   for (const { open_id, username } of recipients) {
     if (!open_id) continue;
     try {
       const result = await sendCard(open_id, card);
-      if (!result?.ok) {
+      if (result?.ok) {
+        sentCount++;
+      } else {
+        failCount++;
         logger.warn({ open_id, username, store, err: result?.error }, 'bad_review card send failed');
       }
     } catch (e) {
+      failCount++;
       logger.warn({ open_id, username, err: e?.message }, 'bad_review card exception');
     }
+  }
+
+  // Alert admin if all sends failed
+  if (failCount > 0 && sentCount === 0) {
+    notifyAdminsDataIssue({
+      alertType: 'bad_review_card_failed',
+      title: `差评卡片发送失败：${store}`,
+      lines: [`门店：${store}`, `应发数：${recipients.length}`, `失败数：${failCount}`],
+      dedupeKey: `bad_review_card_fail_${store}`,
+      priority: 'B',
+      dedupeHours: 2,
+    }).catch(() => {});
   }
 }
 
@@ -1026,10 +1064,14 @@ async function resolveBadReviewRecipients(store) {
 /**
  * Send a Feishu card when a new table_visit record contains dissatisfied dishes.
  * Recipients: store manager + production manager + all admin + all hq_manager.
+ * Dedup: wasInDedupSet + date freshness check prevent duplicate/old-record cards.
  */
 async function sendTableVisitProductIssueCard(fields) {
   const store = extractText(fields['门店'] || fields['所属门店'] || fields['门店名称'] || '');
   if (!store) return;
+
+  // Freshness guard: skip records older than 3 days
+  if (!isRecordFresh(fields)) return;
 
   // Extract dish names for monthly count query
   const rawDish = fields['今天不满意的菜品'] || fields['今天不满意菜品'] || fields['今天 不满意的菜品'] || fields['今天 不满意菜品'] || fields['不满意菜品'] || fields['产品不满意项'] || '';
@@ -1054,16 +1096,34 @@ async function sendTableVisitProductIssueCard(fields) {
     return;
   }
 
+  let sentCount = 0;
+  let failCount = 0;
   for (const { open_id, username } of recipients) {
     if (!open_id) continue;
     try {
       const result = await sendCard(open_id, card);
-      if (!result?.ok) {
+      if (result?.ok) {
+        sentCount++;
+      } else {
+        failCount++;
         logger.warn({ open_id, username, store, err: result?.error }, 'table_visit card send failed');
       }
     } catch (e) {
+      failCount++;
       logger.warn({ open_id, username, err: e?.message }, 'table_visit card exception');
     }
+  }
+
+  // Alert admin if all sends failed
+  if (failCount > 0 && sentCount === 0) {
+    notifyAdminsDataIssue({
+      alertType: 'table_visit_card_failed',
+      title: `不满意桌访卡片发送失败：${store}`,
+      lines: [`门店：${store}`, `不满意菜品：${dishNames.join('、')}`, `应发数：${recipients.length}`, `失败数：${failCount}`],
+      dedupeKey: `table_visit_card_fail_${store}`,
+      priority: 'B',
+      dedupeHours: 2,
+    }).catch(() => {});
   }
 }
 
