@@ -627,7 +627,7 @@ const ENV_KEYWORDS = ['环境', '逼仄', '空调', '闷热', '吵', '卫生', '
 const NON_PRODUCT_TAGS = /(^|、|,)\s*(服务|环境|态度|全品类菜品|全店菜品|就餐环境)\s*(?=(、|,|$))/g;
 const VAGUE_PRODUCT = /未展示|无法确定|无法生成|无法得知|不确定|暂无/i;
 
-function classifyBadReviewRecord(f) {
+export function classifyBadReviewRecord(f) {
   const product = String(f?.差评产品 || '').trim();
   const type = String(f?.差评类型 || '').trim();
   const keywords = String(f?.差评关键词 || '').trim();

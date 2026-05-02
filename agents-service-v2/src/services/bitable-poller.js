@@ -10,6 +10,8 @@ import { notifyAdminsDataIssue } from './admin-data-alert.js';
 import { getConfig } from './config-service.js';
 import { parseFeishuRatioOrPercentString } from '../utils/feishu-percent.js';
 import { applyPllmDecision } from './proactive-v2/pllm-workflow.js';
+import { classifyBadReviewRecord } from './anomaly-engine.js';
+import { buildBadReviewCard, sendCard } from './feishu-client.js';
 
 // ── Bitable Table Configurations ──
 const BITABLE_CONFIGS = {
@@ -432,6 +434,15 @@ export async function pollBitableTable(configKey) {
       await processRecord(configKey, config.type, record, config.brand);
     } catch (e) {
       logger.error({ configKey, recordId, err: e?.message }, 'process record failed');
+    }
+
+    // Send bad review card notification for newly detected bad reviews
+    if (configKey === 'bad_review' && !wasInDedupSet && !config.skipDedup) {
+      setImmediate(() => {
+        sendBadReviewNewCard(record.fields || {}).catch(e =>
+          logger.warn({ err: e?.message, recordId }, 'bad_review card send failed')
+        );
+      });
     }
 
     if (!config.skipDedup) {
@@ -919,4 +930,80 @@ export function getBitableStatus() {
     processedCount: _processedIds.size,
     polling: !!_pollInterval
   };
+}
+
+// ── Bad Review New Record Card Notification ──
+
+/**
+ * Send a Feishu card notification when a new bad review is detected by the poller.
+ * Recipients: store manager + production manager + all admin + all hq_manager.
+ */
+async function sendBadReviewNewCard(fields) {
+  const store = extractText(fields['门店']);
+  if (!store) return;
+
+  const date = extractText(fields['创建日期'] || fields['日期'] || fields['差评日期'] || '');
+  const platform = extractText(fields['平台'] || fields['来源'] || fields['差评平台'] || '');
+  const rating = extractText(fields['评分'] || fields['星级'] || '');
+  const content = extractText(fields['评价内容'] || fields['差评内容'] || fields['content'] || '');
+  if (!content) return;
+
+  let responsibility;
+  try {
+    responsibility = classifyBadReviewRecord(fields);
+  } catch (e) {
+    responsibility = { isProduct: false, isService: false };
+  }
+
+  const weekCount = await queryBadReviewCount(store, 'week').catch(() => 0);
+  const monthCount = await queryBadReviewCount(store, 'month').catch(() => 0);
+
+  let card;
+  try {
+    card = buildBadReviewCard({ store, date, platform, rating, responsibility, content, weekCount, monthCount });
+  } catch (e) {
+    logger.warn({ err: e?.message, store }, 'bad_review: build card failed');
+    return;
+  }
+
+  const recipients = await resolveBadReviewRecipients(store).catch(() => []);
+  if (!recipients.length) {
+    logger.warn({ store }, 'bad_review card: no recipients found');
+    return;
+  }
+
+  for (const { open_id, username } of recipients) {
+    if (!open_id) continue;
+    try {
+      const result = await sendCard(open_id, card);
+      if (!result?.ok) {
+        logger.warn({ open_id, username, store, err: result?.error }, 'bad_review card send failed');
+      }
+    } catch (e) {
+      logger.warn({ open_id, username, err: e?.message }, 'bad_review card exception');
+    }
+  }
+}
+
+async function queryBadReviewCount(store, period) {
+  const timeExpr = period === 'week'
+    ? "date_trunc('week', (created_at AT TIME ZONE 'Asia/Shanghai')::timestamp) = date_trunc('week', NOW() AT TIME ZONE 'Asia/Shanghai')"
+    : "date_trunc('month', (created_at AT TIME ZONE 'Asia/Shanghai')::timestamp) = date_trunc('month', NOW() AT TIME ZONE 'Asia/Shanghai')";
+  const r = await query(
+    `SELECT COUNT(*) AS cnt FROM feishu_generic_records
+     WHERE config_key = 'bad_review' AND fields->>'门店' ILIKE $1 AND ${timeExpr}`,
+    [`%${store}%`]
+  );
+  return Number(r.rows?.[0]?.cnt ?? 0);
+}
+
+async function resolveBadReviewRecipients(store) {
+  const r = await query(
+    `SELECT DISTINCT open_id, username, role FROM feishu_users
+     WHERE registered = true AND open_id IS NOT NULL AND open_id NOT LIKE '%probe%'
+       AND (role IN ('admin', 'hq_manager')
+            OR (role IN ('store_manager', 'store_production_manager') AND store ILIKE $1))`,
+    [`%${store}%`]
+  );
+  return r.rows || [];
 }
