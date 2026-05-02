@@ -37,7 +37,7 @@ const KEYWORD_RULES = [
   { route: 'internet_search', rx: /(搜索|查一下|查资料|网上搜|互联网搜索|最新|帮我搜|搜一下|网上查|网络搜索|小红书|抖音.*热|微博.*热|热门话题|热门|热搜|流行趋势|最近.*火|现在.*流行|网红|新闻|资讯|推特|twitter|X上|X现在|X上面)/i, score: 3.5 },
 ];
 
-const VALID_ROUTES = ['data_auditor', 'ops_supervisor', 'chief_evaluator', 'train_advisor', 'appeal', 'marketing_planner', 'marketing_executor', 'marketing', 'food_quality', 'master', 'accept_action_plan', 'internet_search'];
+const VALID_ROUTES = ['data_auditor', 'ops_supervisor', 'chief_evaluator', 'train_advisor', 'appeal', 'marketing_planner', 'marketing_executor', 'marketing', 'food_quality', 'master', 'accept_action_plan', 'internet_search', 'composite'];
 
 function inferRouteByRules(text, hasImage) {
   if (hasImage) return { route: 'ops_supervisor', confidence: 1, reason: 'image_input' };
@@ -70,7 +70,8 @@ const ROUTE_SYSTEM_PROMPT = `你是HRMS系统的主控路由Agent。根据用户
 - marketing_executor: 营销执行(活动进度跟踪/效果评估/ROI/预算消耗)
 - food_quality: 食品安全(食材/温度/卫生)
 - internet_search: 互联网搜索(查询新闻/搜索网络/查资料/查小红书/B站/Twitter)
-- master: 无法明确归类时由Master Agent综合处理`;
+- master: 无法明确归类时由Master Agent综合处理
+- composite: 需多个Agent联合回答(如绩效分析+改进建议、巡检+培训标准)`;
 async function routeByLLM(text, context) {
   try {
     const userMsg = context ? context + '\n当前输入: ' + text : '用户输入: ' + text;
@@ -96,10 +97,32 @@ async function routeByLLM(text, context) {
   }
 }
 
+// ─── Composite route patterns (多Agent联合回复) ───
+
+const COMPOSITE_PATTERNS = [
+  { routes: ['chief_evaluator', 'data_auditor'],
+    rx: /(绩效.*分析|扣分.*原因|评分.*改进|考核.*提升|绩效.*改进|扣分.*提升)/i,
+    label: '绩效分析+改进建议' },
+  { routes: ['ops_supervisor', 'train_advisor'],
+    rx: /(巡检.*培训|卫生.*标准|开档.*SOP|收档.*SOP|检查.*流程|巡检.*SOP)/i,
+    label: '巡检结果+标准对照' },
+  { routes: ['data_auditor', 'marketing_planner'],
+    rx: /(营收.*方案|下滑.*策略|下降.*营销|提升.*营销|方案.*数据)/i,
+    label: '数据分析+营销方案' },
+];
+
 // ─── Main Router ───
 
 export async function routeMessage(text, hasImage, senderUsername) {
   const t = String(text || '').trim();
+
+  // P0: Composite pattern detection (先于单Agent路由)
+  for (const cp of COMPOSITE_PATTERNS) {
+    if (cp.rx.test(t)) {
+      logger.info({ routes: cp.routes, label: cp.label }, 'Composite route hit');
+      return { route: 'composite', routes: cp.routes, confidence: 0.9, reason: `composite:${cp.label}` };
+    }
+  }
 
   // P1: Rule-based
   const ruleResult = inferRouteByRules(t, hasImage);
@@ -152,10 +175,10 @@ export async function routeMessage(text, hasImage, senderUsername) {
 const ROLE_PERMISSIONS = {
   admin: VALID_ROUTES,
   hq_manager: VALID_ROUTES,
-  store_manager: ['data_auditor', 'ops_supervisor', 'chief_evaluator', 'train_advisor', 'appeal', 'marketing_planner', 'marketing_executor', 'food_quality', 'master'],
-  store_production_manager: ['data_auditor', 'ops_supervisor', 'chief_evaluator', 'train_advisor', 'appeal', 'marketing_planner', 'marketing_executor', 'food_quality', 'master'],
-  front_manager: ['ops_supervisor', 'train_advisor', 'master'],
-  employee: ['train_advisor', 'appeal', 'master'],
+  store_manager: ['data_auditor', 'ops_supervisor', 'chief_evaluator', 'train_advisor', 'appeal', 'marketing_planner', 'marketing_executor', 'food_quality', 'master', 'composite'],
+  store_production_manager: ['data_auditor', 'ops_supervisor', 'chief_evaluator', 'train_advisor', 'appeal', 'marketing_planner', 'marketing_executor', 'food_quality', 'master', 'composite'],
+  front_manager: ['ops_supervisor', 'train_advisor', 'master', 'composite'],
+  employee: ['train_advisor', 'appeal', 'master', 'composite'],
 };
 
 export function checkPermission(role, route) {
@@ -164,4 +187,4 @@ export function checkPermission(role, route) {
   return { allowed: false, reason: `您的角色（${role}）暂无权限使用该功能` };
 }
 
-export { VALID_ROUTES, inferRouteByRules };
+export { VALID_ROUTES, inferRouteByRules, COMPOSITE_PATTERNS };

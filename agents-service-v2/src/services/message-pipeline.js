@@ -556,7 +556,7 @@ export async function processMessage(ev) {
     } else if (pipelineIntent === 'query') {
       ctx.llmContext = { ...ctx.llmContext, intent: 'query', complexity: 'low', mode: 'single' };
     }
-    const res = await dispatchToAgent(rt.route, ev.text, ctx);
+    const res = await dispatchToAgent(rt.route, ev.text, { ...ctx, routes: rt.routes });
     const ev_check = validateEvidence(res);
     if (!ev_check.valid) {
       res.response = '⚠️ 数据证据不足，无法生成可靠回复。请提供门店（如：洪潮、马己仙）或更具体的时间范围（如：昨天、上周）。';

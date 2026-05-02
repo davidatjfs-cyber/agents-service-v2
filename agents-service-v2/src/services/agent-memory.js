@@ -193,6 +193,39 @@ export async function getOutcomeStats(agentId, store) {
 }
 
 /**
+ * 构建统一的记忆上下文块（供所有 Agent handler 入口调用）
+ * 替代零散的手动 recall，确保风格和数量一致
+ *
+ * @param {string} agentId
+ * @param {string} store
+ * @param {string} query
+ * @param {number} [limit=3]
+ * @returns {Promise<string>} 拼好的文本块，空则返回 ''
+ */
+export async function buildMemoryContextBlock(agentId, store, query, limit = 3) {
+  const s = String(store || '').trim();
+  if (!s) return '';
+  try {
+    const [outcomes, memories] = await Promise.all([
+      getOutcomeStats(agentId, s).catch(() => ({ total: 0, avg_score: null, success_count: 0 })),
+      recallMemories(agentId, s, '', limit),
+    ]);
+    const parts = [];
+    if (outcomes.total > 0) {
+      const rate = outcomes.total > 0 ? ((outcomes.success_count / outcomes.total) * 100).toFixed(0) : 'N/A';
+      parts.push(`[历史执行统计] 共${outcomes.total}条建议，成功率${rate}%，平均分${outcomes.avg_score || 'N/A'}`);
+    }
+    if (memories.length) {
+      parts.push('[近期记录] ' + memories.map(m => String(m.content || '').slice(0, 100)).join(' | '));
+    }
+    return parts.length ? `\n${parts.join('\n')}\n` : '';
+  } catch (e) {
+    logger.warn({ err: e?.message, agentId, store }, 'buildMemoryContextBlock failed');
+    return '';
+  }
+}
+
+/**
  * 清理90天前的低价值记忆
  */
 export async function cleanupOldMemories() {
