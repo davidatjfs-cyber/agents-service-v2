@@ -206,9 +206,22 @@ export async function buildMemoryContextBlock(agentId, store, query, limit = 3) 
   const s = String(store || '').trim();
   if (!s) return '';
   try {
-    const [outcomes, memories] = await Promise.all([
+    const [outcomes, memories, errorPatterns] = await Promise.all([
       getOutcomeStats(agentId, s).catch(() => ({ total: 0, avg_score: null, success_count: 0 })),
       recallMemories(agentId, s, '', limit),
+      // 读取该Agent+门店的近期错误模式（限3条最新的），用于注入"需避免"预警
+      (async () => {
+        try {
+          const r = await query(
+            `SELECT content, created_at FROM agent_memory
+             WHERE agent_id = $1 AND (store = $2 OR store IS NULL)
+               AND memory_type = 'error_pattern'
+             ORDER BY created_at DESC LIMIT 3`,
+            [agentId, s]
+          );
+          return r.rows || [];
+        } catch { return []; }
+      })(),
     ]);
     const parts = [];
     if (outcomes.total > 0) {
@@ -217,6 +230,11 @@ export async function buildMemoryContextBlock(agentId, store, query, limit = 3) 
     }
     if (memories.length) {
       parts.push('[近期记录] ' + memories.map(m => String(m.content || '').slice(0, 100)).join(' | '));
+    }
+    if (errorPatterns.length) {
+      parts.push('[需避免的错误] ' + errorPatterns.map(m =>
+        String(m.content || '').replace(/^\[error-pattern\]\s*/i, '').slice(0, 80)
+      ).join(' | '));
     }
     return parts.length ? `\n${parts.join('\n')}\n` : '';
   } catch (e) {

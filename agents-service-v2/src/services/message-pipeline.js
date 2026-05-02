@@ -315,6 +315,21 @@ export async function processMessage(ev) {
   }
 
   const t0 = Date.now();
+
+  // ── 负反馈检测：用户对上次Agent回答不满时存档+提取错误模式，不经过Agent路由 ──
+  if (ev.userId) {
+    try {
+      const { handleFeedback } = await import('./feedback-handler.js');
+      const fbResult = await handleFeedback(ev.text, ev.userId);
+      if (fbResult.handled) {
+        if (fbResult.reply && ev.replyMsg) {
+          ev.replyMsg(fbResult.reply).catch(() => {});
+        }
+        return { ok: true, route: 'feedback' };
+      }
+    } catch (e) { /* fail-soft */ }
+  }
+
   const pipelineIntent = detectIntent(ev.text);
   logger.info({ traceId, text: ev.text?.slice(0, 50), userId: ev.userId, pipelineIntent }, 'pipeline start');
   try {
