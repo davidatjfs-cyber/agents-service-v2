@@ -19,11 +19,6 @@ jest.unstable_mockModule('../llm-provider.js', () => ({
   __esModule: true,
 }));
 
-jest.unstable_mockModule('../agent-memory.js', () => ({
-  saveMemory: jest.fn().mockResolvedValue(undefined),
-  __esModule: true,
-}));
-
 const { handleFeedback } = await import('../feedback-handler.js');
 
 describe('handleFeedback', () => {
@@ -61,6 +56,8 @@ describe('handleFeedback', () => {
         created_at: '2026-05-02 10:00:00',
       }]
     });
+    // Mock the INSERT for feedback save
+    mockQuery.mockResolvedValueOnce({ rowCount: 1 });
 
     const r = await handleFeedback('你说的完全不对', 'user1');
     expect(r.handled).toBe(true);

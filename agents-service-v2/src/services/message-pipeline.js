@@ -579,8 +579,11 @@ export async function processMessage(ev) {
       logger.warn({ agent: res.agent, reason: ev_check.reason }, 'blocked fabricated response');
     }
     const prefixedResponse = formatReplyV1(res, store, ev.text?.trim() || '');
-    logger.info({ route: rt.route, agent: res.agent, responsePreview: prefixedResponse?.slice(0, 100) }, 'sending reply');
-    const deliverNorm = await sendReplyWithFallback(ev, prefixedResponse, 'normal');
+    // Agent回答末尾追加反馈提示（仅对正常Agent路由，排除feedback/task_reply/planner自身）
+    const feedbackSuffix = ['feedback', 'task_reply'].includes(rt.route) ? '' : '\n\n---\n👍 有帮助  👎 没帮助';
+    const finalResponse = prefixedResponse + feedbackSuffix;
+    logger.info({ route: rt.route, agent: res.agent, responsePreview: finalResponse?.slice(0, 100) }, 'sending reply');
+    const deliverNorm = await sendReplyWithFallback(ev, finalResponse, 'normal');
     await logTaskResult(res, ctx, Date.now() - t0).catch(() => {});
     const result = {
       ok: deliverNorm.ok,

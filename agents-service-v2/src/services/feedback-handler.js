@@ -10,7 +10,6 @@
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { callDeepSeek } from './llm-provider.js';
-import { saveMemory } from './agent-memory.js';
 
 const FEEDBACK_KEYWORDS = [
   '不对', '错了', '错误', '不对吧', '完全不对',
@@ -71,11 +70,16 @@ export async function handleFeedback(text, userId) {
     `用户说: ${text.slice(0, 100)}`,
   ].filter(Boolean).join('\n');
 
-  await saveMemory(agentId, store, feedbackContent, {
-    feedback: text.slice(0, 200),
-    originalQuery: lastQuery,
-    memoryType: 'feedback_bad',
-  }).catch(() => {});
+  try {
+    await query(
+      `INSERT INTO agent_memory (agent_id, store, memory_type, content, context)
+       VALUES ($1, $2, 'feedback_bad', $3, $4)`,
+      [agentId, store || null, feedbackContent.slice(0, 2000),
+       JSON.stringify({ originalQuery: lastQuery.slice(0, 200) })]
+    );
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'feedback: save failed');
+  }
 
   // 异步提取错误模式（不阻塞反馈确认）
   extractAndSaveErrorPattern(agentId, store, lastQuery, lastAnswer, text).catch(e => {
@@ -107,9 +111,10 @@ AI回答：${(answer || '').slice(0, 300)}
     const pattern = String(res?.content || res || '').trim().replace(/^["']|["']$/g, '').slice(0, 100);
     if (!pattern) return;
 
-    await saveMemory(agentId, store,
-      `[error-pattern] ${pattern}`,
-      { memoryType: 'error_pattern', originalQuery: query.slice(0, 200) }
+    await query(
+      `INSERT INTO agent_memory (agent_id, store, memory_type, content)
+       VALUES ($1, $2, 'error_pattern', $3)`,
+      [agentId, store || null, `[error-pattern] ${pattern}`]
     );
     logger.info({ agentId, store, pattern: pattern.slice(0, 60) }, 'feedback: error pattern saved');
   } catch (e) {
