@@ -895,6 +895,16 @@ export function buildApprovalTaskCard(task) {
  * 在 Bitable 轮询检测到新差评时由 bitable-poller 调用
  */
 export function buildBadReviewCard({ store, date, platform, rating, responsibility, content, weekCount, monthCount }) {
+  const fmtDate = (v) => {
+    if (v == null || v === '-') return '-';
+    if (typeof v === 'number') {
+      if (v > 1e12) return new Date(v).toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
+      return new Date((v - 25569) * 86400000).toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
+    }
+    const s = String(v).slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    return s || '-';
+  };
   const starNum = Math.min(Math.max(parseInt(String(rating || '').replace(/[^0-9.]/g, ''), 10) || 0, 0), 5);
   const stars = '★'.repeat(starNum) + '☆'.repeat(5 - starNum);
   const respLabels = [];
@@ -904,7 +914,7 @@ export function buildBadReviewCard({ store, date, platform, rating, responsibili
   const respText = respLabels.join('、');
 
   const body = `**门店**：${store}
-**差评日期**：${date || '-'}
+**差评日期**：${fmtDate(date)}
 **平台**：${platform || '-'}
 **星级**：${stars || '-'}
 **责任归属**：${respText}
@@ -930,6 +940,20 @@ ${content || '-'}
  * 在 Bitable 轮询检测到新桌访含不满意菜品时由 bitable-poller 调用
  */
 export function buildTableVisitCard({ store, fields, dishes, monthCount }) {
+  // Format Bitable date (handles Unix timestamps, Excel serial, date strings)
+  const fmtDate = (v) => {
+    if (v == null) return '-';
+    if (typeof v === 'number') {
+      if (v > 1e12) { // milliseconds timestamp
+        return new Date(v).toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
+      }
+      return new Date((v - 25569) * 86400000).toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
+    }
+    const s = String(v).slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    return s || '-';
+  };
+
   // Helper: extract text from field with multiple name variations
   const ext = (variants) => {
     for (const v of variants) {
@@ -945,7 +969,7 @@ export function buildTableVisitCard({ store, fields, dishes, monthCount }) {
   };
 
   const date = ext(['就餐时间', '用餐时段', '餐段', '用餐时间']);
-  const visitDate = ext(['记录日期', '日期', '提交时间', '创建日期', '差评日期']);
+  const visitDate = fmtDate(fields['记录日期'] ?? fields['日期'] ?? fields['提交时间'] ?? fields['创建日期'] ?? fields['差评日期']);
   const tableNo = ext(['桌号', '台号']);
   const amount = ext(['消费金额', '消费', '金额', '人均消费', '总消费']);
   const guests = ext(['人数', '用餐人数', '就餐人数', '客人人数']);
