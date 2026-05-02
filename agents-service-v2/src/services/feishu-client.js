@@ -1732,7 +1732,8 @@ export async function handleWebhookEvent(body) {
         userId: openId,
         chatType,
         hasImage: msgType === 'image',
-        eventId: eventId || undefined
+        eventId: eventId || undefined,
+        replyMsg: msg?.message_id ? (t) => replyMsg(msg.message_id, t) : undefined,
       });
     } finally {
       clearTimeout(slowTimer);

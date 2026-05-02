@@ -95,12 +95,12 @@ export async function handleFeedback(text, userId) {
 /**
  * 调 DeepSeek 提取「错误模式」摘要，写入 agent_memory
  */
-async function extractAndSaveErrorPattern(agentId, store, query, answer, feedback) {
-  if (!query && !answer) return;
+async function extractAndSaveErrorPattern(agentId, store, originalQuery, answer, feedback) {
+  if (!originalQuery && !answer) return;
 
   const prompt = `你是一个AI回答质量分析器。分析以下记录，输出一句话的「错误模式」摘要（不超过50字），用于后续避免同类错误。
 
-用户问：${(query || '').slice(0, 300)}
+用户问：${(originalQuery || '').slice(0, 300)}
 AI回答：${(answer || '').slice(0, 300)}
 用户反馈：${(feedback || '').slice(0, 100)}
 
