@@ -20,6 +20,7 @@ import { getRhythmSchedule } from './config-service.js';
 import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
 import { sendWeeklyDishOptimizationReport, sendMonthlyDishOptimizationReport } from './dish-optimization-report.js';
 import { generateDissatisfiedProductDailyReport, generateDissatisfiedProductWeeklyReport, generateDissatisfiedProductMonthlyReport } from './dissatisfied-product-report.js';
+import { generateCookingTimeoutWeeklyReport, generateCookingTimeoutMonthlyReport } from './cooking-timeout-report.js';
 import { flushPendingNotifications } from './anomaly-notify-queue.js';
 
 // ─── 检查任务是否启用 ───
@@ -1363,7 +1364,29 @@ export function startRhythmScheduler() {
     }
   }, { timezone: 'Asia/Shanghai' });
 
+  // 每周一 11:00 — 出餐超时周报（上周一~上周日）
+  cron.schedule('0 11 * * 1', async () => {
+    try {
+      await runWithCronLog('cooking_timeout_weekly', async () => {
+        await generateCookingTimeoutWeeklyReport();
+      });
+    } catch (e) {
+      logger.error({ err: e }, 'Cron: cooking timeout weekly report failed');
+    }
+  }, { timezone: 'Asia/Shanghai' });
+
+  // 每月1日 11:00 — 出餐超时月报（上月）
+  cron.schedule('0 11 1 * *', async () => {
+    try {
+      await runWithCronLog('cooking_timeout_monthly', async () => {
+        await generateCookingTimeoutMonthlyReport();
+      });
+    } catch (e) {
+      logger.error({ err: e }, 'Cron: cooking timeout monthly report failed');
+    }
+  }, { timezone: 'Asia/Shanghai' });
+
   logger.info(
-    '✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+日频BI(每日05:08)+BI通知发送(每日09:05)+月收(每月1日08:12)+周报(周一10:06)+月评(每月1日10:18)+考勤(每日22:30+补跑23:10)+不满意产品日报(每日22:00)+不满意产品周报(周一09:00)+不满意产品月报(每月1日09:00)'
+    '✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+日频BI(每日05:08)+BI通知发送(每日09:05)+月收(每月1日08:12)+周报(周一10:06)+月评(每月1日10:18)+考勤(每日22:30+补跑23:10)+不满意产品日报(每日22:00)+不满意产品周报(周一09:00)+不满意产品月报(每月1日09:00)+出餐超时周报(周一11:00)+出餐超时月报(每月1日11:00)'
   );
 }

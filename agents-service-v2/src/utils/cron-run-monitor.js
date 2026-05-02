@@ -40,7 +40,10 @@ const CRON_JOB_LABEL_ZH = {
   dissatisfied_product_daily: '不满意产品日报',
   dissatisfied_product_weekly: '不满意产品周报',
   dissatisfied_product_monthly: '不满意产品月报',
-  morning_briefing_missed_guard: '每日晨报（仍未成功·仅告警）'
+  dissatisfied_product_monthly: '不满意产品月报',
+  morning_briefing_missed_guard: '每日晨报（仍未成功·仅告警）',
+  cooking_timeout_weekly: '出餐超时周报',
+  cooking_timeout_monthly: '出餐超时月报',
 };
 
 function cronJobLabelZh(jobKey) {

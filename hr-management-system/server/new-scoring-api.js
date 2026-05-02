@@ -343,7 +343,67 @@ export function registerNewScoringRoutes(app) {
         categories ? JSON.stringify(categories) : null, delivery_detail ? JSON.stringify(delivery_detail) : null,
         bad_reviews_dianping || 0, staff ? JSON.stringify(staff) : null, schedule_next_day ? JSON.stringify(schedule_next_day) : null,
         photos ? JSON.stringify(photos) : null, !!holiday_switch]);
-      
+
+      // Sync to hrms_state.dailyReports to prevent V1 self-healing from detecting lag
+      try {
+        const stateDate = String(date).slice(0, 10);
+        const dtDetail = delivery_detail || {};
+        const eleme = dtDetail.eleme || { revenue: 0, actual: 0, orders: 0, targetRevenue: 0 };
+        const meituan = dtDetail.meituan || { revenue: Number(delivery_pre_revenue) || 0, actual: Number(delivery_actual) || 0, orders: Math.floor(Number(delivery_orders) || 0), targetRevenue: 0 };
+        const stateItem = {
+          id: Date.now().toString(36) + Math.random().toString(36).slice(2, 10),
+          store,
+          date: stateDate,
+          data: {
+            brand: brand || '',
+            actual: Number(actual_revenue) || 0,
+            margin: actual_margin != null ? Number(actual_margin) : null,
+            dianping_rating: dianping_rating != null ? Number(dianping_rating) : null,
+            new_wechat_members: Math.floor(Number(new_wechat_members) || 0),
+            wechat_month_total: Math.floor(Number(wechat_month_total) || 0),
+            gross: Number(pre_discount_revenue) || 0,
+            weather: String(weather || '').trim() || undefined,
+            holiday_switch: !!holiday_switch,
+            discount: { total: Number(total_discount) || 0, dine: Number(discount_dine) || 0, delivery: Number(discount_delivery) || 0 },
+            dine: { orders: Math.floor(Number(dine_orders) || 0), revenue: Number(dine_revenue) || 0, traffic: Math.floor(Number(dine_traffic) || 0) },
+            segments: segments || {},
+            categories: categories || {},
+            delivery: { eleme, meituan },
+            badReviews: { dianping: Math.floor(Number(bad_reviews_dianping) || 0), meituan: Math.floor(Number(delivery_bad_reviews) || 0), eleme: 0 },
+            efficiency: Number(efficiency) || 0,
+            laborTotal: Number(labor_total) || 0,
+            private_room_uses: Math.floor(Number(private_room_uses) || 0),
+            operational_anomaly_note: String(operational_anomaly_note || '').trim(),
+            budget: Number(budget) || 0,
+            budgetRate: Number(budget_rate) || 0,
+            recharge: { count: Math.floor(Number(recharge_count) || 0), amount: Number(recharge_amount) || 0 },
+            staff: staff || null,
+            scheduleNextDay: schedule_next_day || null,
+            photos: photos || []
+          },
+          submitted: true,
+          submittedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          grossProfit: Number(gross_profit) || 0
+        };
+        await pool().query(`
+          UPDATE hrms_state SET data = CASE WHEN EXISTS (
+            SELECT 1 FROM jsonb_array_elements(COALESCE(data->'dailyReports', '[]'::jsonb)) elem
+            WHERE elem->>'store' = $1 AND elem->>'date' = $2
+          ) THEN
+            jsonb_set(data, '{dailyReports}', (
+              SELECT jsonb_agg(CASE WHEN elem->>'store' = $1 AND elem->>'date' = $2 THEN $3::jsonb ELSE elem END)
+              FROM jsonb_array_elements(data->'dailyReports') elem
+            ))
+          ELSE
+            jsonb_set(COALESCE(data, '{}'::jsonb), '{dailyReports}', COALESCE(data->'dailyReports', '[]'::jsonb) || $3::jsonb)
+          END, updated_at = NOW()
+          WHERE key = 'default'
+        `, [store, stateDate, JSON.stringify(stateItem)]);
+      } catch (e) {
+        console.error('[api] daily_reports state sync failed:', e?.message);
+      }
+
       res.json({
         success: true,
         message: '营业日报更新成功'
