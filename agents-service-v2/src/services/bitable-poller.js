@@ -439,7 +439,7 @@ export async function pollBitableTable(configKey) {
     // Send bad review card notification for newly detected bad reviews
     if (configKey === 'bad_review' && !wasInDedupSet && !config.skipDedup) {
       setImmediate(() => {
-        sendBadReviewNewCard(record.fields || {}).catch(e =>
+        sendBadReviewNewCard(record.fields || {}, recordId).catch(e =>
           logger.warn({ err: e?.message, recordId }, 'bad_review card send failed')
         );
       });
@@ -451,7 +451,7 @@ export async function pollBitableTable(configKey) {
       const dishField = extractText(rawFields['今天不满意的菜品'] || rawFields['今天不满意菜品'] || rawFields['今天 不满意的菜品'] || rawFields['今天 不满意菜品'] || rawFields['不满意菜品'] || rawFields['产品不满意项'] || '');
       if (dishField) {
         setImmediate(() => {
-          sendTableVisitProductIssueCard(rawFields).catch(e =>
+          sendTableVisitProductIssueCard(rawFields, recordId).catch(e =>
             logger.warn({ err: e?.message, recordId }, 'table_visit card send failed')
           );
         });
@@ -964,11 +964,30 @@ function isRecordFresh(fields) {
 }
 
 /**
+ * Persistent dedup: atomically acquire a send lock for a record+card type.
+ * Uses hrms_state table. Returns true if lock acquired (first time), false if already existed.
+ */
+async function acquireCardSendLock(recordId, cardType) {
+  const key = `card_sent_${cardType}_${recordId}`;
+  const r = await query(
+    `INSERT INTO hrms_state (key, data, updated_at)
+     SELECT $1, '{}'::jsonb, NOW()
+     WHERE NOT EXISTS (SELECT 1 FROM hrms_state WHERE key = $2)
+     RETURNING key`,
+    [key, key]
+  );
+  return !!r.rows?.length;
+}
+
+/**
  * Send a Feishu card notification when a new bad review is detected by the poller.
  * Recipients: store manager + production manager + all admin + all hq_manager.
- * Dedup: wasInDedupSet + date freshness check prevent duplicate/old-record cards.
+ * Dedup: wasInDedupSet + date freshness check + persistent DB lock.
  */
-async function sendBadReviewNewCard(fields) {
+async function sendBadReviewNewCard(fields, recordId) {
+  // Persistent dedup: skip if already sent for this record
+  if (!await acquireCardSendLock(recordId, 'bad_review')) return;
+
   const store = extractText(fields['门店']);
   if (!store) return;
 
@@ -1064,9 +1083,12 @@ async function resolveBadReviewRecipients(store) {
 /**
  * Send a Feishu card when a new table_visit record contains dissatisfied dishes.
  * Recipients: store manager + production manager + all admin + all hq_manager.
- * Dedup: wasInDedupSet + date freshness check prevent duplicate/old-record cards.
+ * Dedup: wasInDedupSet + date freshness check + persistent DB lock.
  */
-async function sendTableVisitProductIssueCard(fields) {
+async function sendTableVisitProductIssueCard(fields, recordId) {
+  // Persistent dedup: skip if already sent for this record
+  if (!await acquireCardSendLock(recordId, 'table_visit')) return;
+
   const store = extractText(fields['门店'] || fields['所属门店'] || fields['门店名称'] || '');
   if (!store) return;
 

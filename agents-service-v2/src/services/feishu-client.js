@@ -944,7 +944,7 @@ export function buildTableVisitCard({ store, fields, dishes, monthCount }) {
     return '-';
   };
 
-  const date = ext(['记录日期', '提交时间', '日期', '创建日期']);
+  const date = ext(['就餐时间', '用餐时段', '餐段', '用餐时间']);
   const tableNo = ext(['桌号', '台号']);
   const amount = ext(['消费金额', '消费', '金额', '人均消费', '总消费']);
   const guests = ext(['人数', '用餐人数', '就餐人数', '客人人数']);
