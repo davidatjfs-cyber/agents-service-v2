@@ -170,7 +170,7 @@ async function sendReport(typeLabel, dateStart, dateEnd, dishStats) {
       scope: STORE_NAME,
       sendFn: async () => {
         const res = await sendCard(row.open_id, card, 'open_id');
-        return { ok: true };
+        return { ok: !!res?.ok, error: res?.error || '' };
       }
     });
     if (result.ok) okCount++;
