@@ -1,10 +1,13 @@
 const CATEGORY_RULES = [
   { category: 'hygiene', pattern: /卫生|清洁|大扫除|脏|油污|消毒|后厨.*乱/ },
-  { category: 'food_quality', pattern: /出品|菜品|口味|食安|食品安全|异物|变质/ },
+  { category: 'food_quality', pattern: /出品|菜品|口味|食安|食品安全|异物|变质|食材.*不新鲜|不新鲜/ },
   { category: 'service', pattern: /服务|态度|投诉|差评|客诉|桌访/ },
   { category: 'training', pattern: /培训|考试|带教|学习|SOP|标准/ },
-  { category: 'marketing', pattern: /营销|活动|推广|引流|会员|充值/ },
-  { category: 'data_audit', pattern: /数据|报表|营收|毛利|人工|核对|异常/ }
+  { category: 'marketing_action', pattern: /推广.*效果|执行.*营销|营销方案|落地|投放|执行.*活动|活动执行|效果不好.*营销/ },
+  { category: 'marketing', pattern: /营销|活动|推广|引流|会员|充值|策划|促销/ },
+  { category: 'daily_ops', pattern: /巡检|日检|巡店|日常检查/ },
+  { category: 'rhythm_report', pattern: /晨检|日终|周报.*异常|月评|闭环率|运营周报|运营月报/ },
+  { category: 'data_audit', pattern: /数据|报表|营收|毛利|人工|核对|异常|周报|月报|日报|审计|周度|月度/ }
 ];
 
 function extractStore(text) {

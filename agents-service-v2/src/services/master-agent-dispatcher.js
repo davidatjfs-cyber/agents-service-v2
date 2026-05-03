@@ -8,7 +8,7 @@ const CAPABILITIES = [
   { agent: 'train_advisor', categories: ['training'] },
   { agent: 'marketing_planner', categories: ['marketing'] },
   { agent: 'marketing_executor', categories: ['marketing_action'] },
-  { agent: 'data_auditor', categories: ['data_audit'] }
+  { agent: 'data_auditor', categories: ['data_audit', 'weekly_report', 'monthly_evaluation', 'rhythm_report'] }
 ];
 
 export function dispatchTask(parsedTask = {}) {

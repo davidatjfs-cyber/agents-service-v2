@@ -48,6 +48,31 @@ export const TASK_TEMPLATES = [
       { title: '完成数据核对并提交报告', auto: false },
       { title: '管理员确认', auto: true }
     ]
+  },
+  {
+    id: 'marketing_action',
+    title: '营销活动执行',
+    category: 'marketing_action',
+    priority: 'medium',
+    acceptanceRules: ['提交活动执行方案', '活动结束后提交效果数据'],
+    evidenceRequirements: [{ type: 'text', required: true }],
+    subtasks: [
+      { title: '制定活动执行方案', auto: false },
+      { title: '落地执行并收集效果数据', auto: false },
+      { title: '管理员验收活动效果', auto: true }
+    ]
+  },
+  {
+    id: 'weekly_report_review',
+    title: '周报审查',
+    category: 'rhythm_report',
+    priority: 'low',
+    acceptanceRules: ['审核周报数据准确性', '标注问题门店'],
+    evidenceRequirements: [{ type: 'text', required: true }],
+    subtasks: [
+      { title: '审核周报数据', auto: true },
+      { title: '标注异常并通知相关门店', auto: true }
+    ]
   }
 ];
 
