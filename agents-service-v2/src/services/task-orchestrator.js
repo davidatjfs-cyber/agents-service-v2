@@ -102,6 +102,8 @@ export async function parseAndDispatchTask(taskId) {
       `UPDATE master_tasks SET current_agent = $2, assignee_agent = $2, last_activity_at = NOW(), updated_at = NOW() WHERE task_id = $1`,
       [taskId, decision.assigneeAgent]
     );
+    const { enqueueTaskExecution } = await import('./task-board-queue.js');
+    await enqueueTaskExecution(taskId, { agent: decision.assigneeAgent, source: 'parse_dispatch' });
     setImmediate(() => sendTaskCardToAssignee(taskId).catch(() => {}));
   }
   return dispatched;
@@ -514,6 +516,145 @@ export async function claimNextTask(agentKey) {
   ).catch(() => {});
   await logEvent(taskId, 'agent_auto_claimed', agentKey, agentKey, 'dispatched', 'in_progress', { agentKey });
   return { ok: true, claimed: true, task: candidate.rows[0] };
+}
+
+export async function executeBoardTask(taskId, { agent } = {}) {
+  const task = await getTask(taskId);
+  if (!task) return { ok: false, error: 'task_not_found' };
+  if (!taskId || !String(taskId).trim()) return { ok: false, error: 'task_id_required' };
+  if (['closed', 'settled', 'resolved', 'pending_review'].includes(task.status)) {
+    return { ok: true, skipped: true, taskId, status: task.status };
+  }
+  const agentKey = agent || task.assignee_agent || task.current_agent || 'general_agent';
+  if (task.status === 'dispatched') {
+    const moved = await transitionTask(taskId, 'in_progress', agentKey, { executionStarted: true });
+    if (!moved.ok) return moved;
+  } else if (task.status !== 'in_progress') {
+    return { ok: true, skipped: true, taskId, status: task.status, reason: `not_executable_from_${task.status}` };
+  }
+
+  const latest = await getTask(taskId);
+  const investigation = await buildAgentInvestigation(latest || task, agentKey);
+  await submitAgentFeedback(taskId, {
+    executionSummary: investigation.summary,
+    currentStatus: 'pending_review',
+    agentJudgment: agentKey,
+    riskPoints: investigation.riskPoints,
+    suggestedAction: investigation.suggestedAction,
+    evidenceSummary: investigation.evidenceSummary
+  });
+  await addTaskEvidence(taskId, {
+    evidenceType: 'agent_execution',
+    content: investigation.content,
+    submittedBy: agentKey,
+    submittedRole: 'agent',
+    metadata: investigation.metadata
+  });
+
+  const afterEvidence = await getTask(taskId);
+  if (afterEvidence?.status === 'in_progress') {
+    const responded = await transitionTask(taskId, 'pending_response', agentKey, { responseText: investigation.summary, agentExecution: true });
+    if (!responded.ok) return responded;
+  }
+  const afterResponse = await getTask(taskId);
+  if (afterResponse?.status === 'pending_response') {
+    const review = await transitionTask(taskId, 'pending_review', 'task_orchestrator', { agentExecution: true, evidenceSubmitted: true });
+    if (!review.ok) return review;
+  }
+  await logEvent(taskId, 'agent_execution_completed', agentKey, 'task_orchestrator', 'in_progress', 'pending_review', investigation.metadata);
+  return { ok: true, taskId, agent: agentKey, status: (await getTask(taskId))?.status, investigation: investigation.metadata };
+}
+
+async function buildAgentInvestigation(task, agentKey) {
+  const category = String(task?.category || 'general');
+  const store = String(task?.store || '').trim();
+  const title = String(task?.title || task?.detail || task?.task_id || '任务');
+  const findings = [];
+  const sources = [];
+
+  const anomalyRows = await query(
+    `SELECT anomaly_key, severity, trigger_date, trigger_value, status, created_at
+     FROM anomaly_triggers
+     WHERE ($1::text = '' OR store ILIKE '%' || $1 || '%')
+       AND created_at >= NOW() - INTERVAL '14 days'
+     ORDER BY created_at DESC LIMIT 10`,
+    [store]
+  ).catch(() => ({ rows: [] }));
+  if (anomalyRows.rows?.length) {
+    sources.push(`异常记录 ${anomalyRows.rows.length} 条`);
+    findings.push('近14天异常: ' + anomalyRows.rows.slice(0, 5).map(r => `${r.anomaly_key}/${r.severity || '-'}(${formatTaskDate(r.trigger_date || r.created_at)})`).join('；'));
+  }
+
+  if (category === 'food_quality' || agentKey === 'food_quality') {
+    const genericRows = await query(
+      `SELECT config_key, fields, created_at
+       FROM feishu_generic_records
+       WHERE config_key IN ('material_majixian','material_hongchao','bad_review')
+         AND ($1::text = '' OR fields::text ILIKE '%' || $1 || '%')
+         AND created_at >= NOW() - INTERVAL '14 days'
+       ORDER BY created_at DESC LIMIT 10`,
+      [store]
+    ).catch(() => ({ rows: [] }));
+    if (genericRows.rows?.length) {
+      sources.push(`飞书食安/差评记录 ${genericRows.rows.length} 条`);
+      findings.push('近14天飞书记录: ' + genericRows.rows.slice(0, 5).map(r => `${r.config_key}(${formatTaskDate(r.created_at)})`).join('；'));
+    }
+  }
+
+  const similarRows = await query(
+    `SELECT task_id, title, status, created_at
+     FROM master_tasks
+     WHERE task_id <> $1
+       AND ($2::text = '' OR store ILIKE '%' || $2 || '%')
+       AND ($3::text = '' OR category = $3)
+       AND created_at >= NOW() - INTERVAL '30 days'
+     ORDER BY created_at DESC LIMIT 5`,
+    [task.task_id, store, category]
+  ).catch(() => ({ rows: [] }));
+  if (similarRows.rows?.length) {
+    sources.push(`历史同类任务 ${similarRows.rows.length} 条`);
+    findings.push('近30天同类任务: ' + similarRows.rows.map(r => `${r.title || r.task_id}/${r.status}`).join('；'));
+  }
+
+  if (!findings.length) findings.push('未在近14天异常、飞书记录或近30天同类任务中检索到可直接关联的数据，需要门店补充现场照片/批次/菜品信息。');
+  const suggestedAction = category === 'food_quality'
+    ? '请门店补充具体菜品、批次、出品时间和现场照片；食安专员按批次/原料/操作流程复核。'
+    : '请责任人按任务要求补充执行说明和现场证据，管理员复核后关闭。';
+  const summary = `${agentNameZh(agentKey)}已完成自动核查：${findings.join(' ')} 当前建议进入管理员验收/追问。`;
+  return {
+    summary,
+    riskPoints: findings,
+    suggestedAction,
+    evidenceSummary: sources.length ? sources.join('；') : '无直接命中数据源',
+    content: [
+      `执行Agent：${agentNameZh(agentKey)}(${agentKey})`,
+      `核查任务：${title}`,
+      `核查门店：${store || '-'}`,
+      `核查类型：${category}`,
+      `实际动作：查询近14天异常记录、相关飞书业务记录、近30天同类任务。`,
+      `核查结果：${findings.join(' ')}`,
+      `下一步建议：${suggestedAction}`
+    ].join('\n'),
+    metadata: { agentKey, category, store, sources, findingCount: findings.length, executedAt: new Date().toISOString() }
+  };
+}
+
+function agentNameZh(agentKey) {
+  return ({
+    ops_supervisor: '运营督导',
+    food_quality: '食安专员',
+    train_advisor: '培训顾问',
+    marketing_planner: '营销策划',
+    marketing_executor: '营销执行',
+    data_auditor: '数据审计'
+  })[agentKey] || agentKey || 'Agent';
+}
+
+function formatTaskDate(value) {
+  if (!value) return '-';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value).slice(0, 10);
+  return d.toISOString().slice(0, 10);
 }
 
 // ─── Log Task Completion Experience ───

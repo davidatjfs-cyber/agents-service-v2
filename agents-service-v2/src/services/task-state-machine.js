@@ -89,7 +89,8 @@ export async function transitionTask(taskId, newStatus, agentName, payload = {})
     if (payload.scoreImpact !== undefined) { params.push(payload.scoreImpact); updates.push(`score_impact = $${idx++}`); }
 
     await query(`UPDATE master_tasks SET ${updates.join(', ')} WHERE task_id = $1`, params);
-    await logEvent(taskId, 'status_transition', agentName, STATUS_FLOW[newStatus]?.agent, current, newStatus, payload);
+    const targetAgent = payload.toAgent || task.assignee_agent || task.current_agent || STATUS_FLOW[newStatus]?.agent;
+    await logEvent(taskId, 'status_transition', agentName, targetAgent, current, newStatus, payload);
 
     // 进入审批等待：发送同意/驳回卡片（若能拿到审批人）
     if (newStatus === 'awaiting_approval') {

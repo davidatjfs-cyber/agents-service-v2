@@ -1,7 +1,8 @@
 import { Queue, Worker } from 'bullmq';
 import { getRedisConnection } from '../utils/queue.js';
 import { logger } from '../utils/logger.js';
-import { parseAndDispatchTask, sendTaskReminders, summarizeTaskOnClose } from './task-orchestrator.js';
+import { query } from '../utils/db.js';
+import { executeBoardTask, parseAndDispatchTask, sendTaskReminders, summarizeTaskOnClose } from './task-orchestrator.js';
 
 const QUEUES = {
   parse: { name: 'agent-task-parse', concurrency: 3 },
@@ -104,6 +105,22 @@ export async function enqueueTaskSummary(taskId) {
   }
 }
 
+export async function enqueuePendingBoardExecutions({ limit = 100 } = {}) {
+  const r = await query(
+    `SELECT task_id, assignee_agent
+     FROM master_tasks
+     WHERE source = 'hrms_task_board' AND status = 'dispatched'
+     ORDER BY created_at ASC LIMIT $1`,
+    [Math.max(1, Math.min(Number(limit) || 100, 500))]
+  ).catch(() => ({ rows: [] }));
+  let queued = 0;
+  for (const row of (r.rows || [])) {
+    const out = await enqueueTaskExecution(row.task_id, { agent: row.assignee_agent, source: 'startup_sweep' });
+    if (out.queued || out.inline) queued++;
+  }
+  return { ok: true, scanned: r.rows?.length || 0, queued };
+}
+
 function startWorker(key, processor) {
   if (workerRefs[key]) return workerRefs[key];
   const q = QUEUES[key];
@@ -131,7 +148,7 @@ export function startTaskBoardQueueWorker() {
   });
   startWorker('execution', async (job) => {
     if (job.name !== 'execute_task') throw new Error(`unknown execution job: ${job.name}`);
-    return { ok: true, taskId: job.data.taskId };
+    return executeBoardTask(job.data.taskId, { agent: job.data.agent });
   });
   startWorker('reminder', async (job) => {
     if (job.name !== 'send_reminder') throw new Error(`unknown reminder job: ${job.name}`);
@@ -148,6 +165,7 @@ export function startTaskBoardQueueWorker() {
     }
     return { ok: true, taskId: job.data.taskId };
   });
+  setImmediate(() => enqueuePendingBoardExecutions().then((r) => logger.info(r, 'queued pending board executions')).catch((e) => logger.warn({ err: e?.message }, 'pending execution sweep failed')));
   logger.info('task-board multi-queue workers started (7 queues: parse/dispatch/notify/review/execution/reminder/summary)');
 }
 
