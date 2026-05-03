@@ -99,7 +99,7 @@ const STATUS_FLOW = {
   pending_response:   { next: ['pending_review'],     agent: 'master' },
   pending_review:     { next: ['resolved', 'rejected'], agent: 'ops_supervisor' },
   resolved:           { next: ['pending_settlement'], agent: 'master' },
-  rejected:           { next: ['pending_dispatch'],   agent: 'master' },
+  rejected:           { next: ['closed'],   agent: 'master' },
   pending_settlement: { next: ['settled'],            agent: 'chief_evaluator' },
   settled:            { next: ['closed'],             agent: 'master' },
   closed:             { next: [],                     agent: null },

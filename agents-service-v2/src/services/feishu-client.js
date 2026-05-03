@@ -834,8 +834,8 @@ export function buildAnomalyCard(store, anomalyKey, severity, detail, taskId) {
   // 食安类需展示「来源表 + 日期 + 原文摘录」，字数显著多于其它异常
   const detailLimit = anomalyKey === 'food_safety' ? 3800 : 900;
   const elements = [
-    { tag: 'div', text: { tag: 'lark_md', content: `**门店**: ${store}\n**类型**: ${typeZh}\n**严重度**: ${sevEmoji} ${severity}` } },
-    { tag: 'div', text: { tag: 'lark_md', content: `**详情**: ${(detail || '').slice(0, detailLimit)}${taskHint}` } },
+    { tag: 'div', text: { tag: 'lark_md', content: `**门店**：${store}\n**类型**：${typeZh}\n**严重度**：${sevEmoji} ${severity}` } },
+    { tag: 'div', text: { tag: 'lark_md', content: `**详情**：${(detail || '').slice(0, detailLimit)}${taskHint}` } },
     { tag: 'hr' },
     { tag: 'note', elements: [{ tag: 'plain_text', content: '⏰ 催办规则：下发后每间隔1小时提醒，共3次；仍未有效闭环将提交HR记入绩效' }] }
   ];
@@ -847,19 +847,24 @@ export function buildAnomalyCard(store, anomalyKey, severity, detail, taskId) {
       ]
     });
   }
-  return { header: { title: { tag: 'plain_text', content: `${sevEmoji} 异常告警 — ${store}` }, template: sevColor }, elements };
+  return {
+    config: { wide_screen_mode: true },
+    header: { title: { tag: 'plain_text', content: `${sevEmoji} 异常告警 — ${store}` }, template: sevColor },
+    elements
+  };
 }
 
 export function buildTaskCard(title, detail, taskId, store) {
   return {
+    config: { wide_screen_mode: true },
     header: { title: { tag: 'plain_text', content: '📋 ' + title }, template: 'blue' },
     elements: [
-      { tag: 'div', text: { tag: 'lark_md', content: `**门店**: ${store || '-'}\n${detail || ''}` } },
+      { tag: 'div', text: { tag: 'lark_md', content: `**门店**：${store || '-'}\n${detail || ''}` } },
       { tag: 'action', actions: [
         { tag: 'button', text: { tag: 'plain_text', content: '✅ 开始处理' }, type: 'primary', value: JSON.stringify({ action: 'start_task', taskId }) },
         { tag: 'button', text: { tag: 'plain_text', content: '🔍 查看详情' }, type: 'default', value: JSON.stringify({ action: 'view_task', taskId }) }
       ] },
-      { tag: 'note', elements: [{ tag: 'plain_text', content: '任务ID: ' + (taskId || '-').slice(0, 8) }] }
+      { tag: 'note', elements: [{ tag: 'plain_text', content: '任务ID：' + (taskId || '-').slice(0, 8) }] }
     ]
   };
 }
@@ -888,7 +893,11 @@ export function buildApprovalTaskCard(task) {
     }
   ];
 
-  return { header: { title: { tag: 'plain_text', content: '🧾 需要审批' }, template: 'red' }, elements };
+  return {
+    config: { wide_screen_mode: true },
+    header: { title: { tag: 'plain_text', content: '🧾 需要审批' }, template: 'red' },
+    elements
+  };
 }
 
 /**

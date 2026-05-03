@@ -4,17 +4,25 @@ import { createTask, transitionTask, getTask, logEvent } from './task-state-mach
 import { parseTaskText, mapBoardStatus } from './task-parser.js';
 import { dispatchTaskAsync } from './master-agent-dispatcher.js';
 import { enrichFromTemplate } from './task-templates.js';
+import { resolveAgentCanonicalStore } from '../config/store-mapping.js';
+import { findRegisteredFeishuUsersForStoreManagers } from '../utils/feishu-assignee-resolve.js';
+
+/** 已在业务侧发过「定时/抽检/BI 告警」卡片的来源，不再由任务板派发重复「整改任务」卡 */
+const SOURCES_SKIP_DUPLICATE_RECTIFICATION_CARD = new Set(['scheduled_inspection', 'random_inspection', 'bi_anomaly']);
 
 export async function createBoardTask({ content, priority, store, deadline, createdBy, createdByRole }) {
   const text = String(content || '').trim();
   if (!text) return { ok: false, error: 'content_required' };
 
   const seed = parseTaskText(text, { priority, store });
+  const boardStore =
+    resolveAgentCanonicalStore(String(seed.store || '').trim()) || String(seed.store || '').trim();
+  const seedMeta = { ...seed, store: boardStore };
   const result = await createTask({
     source: 'hrms_task_board',
     category: seed.category,
     severity: priority || seed.priority || 'medium',
-    store: seed.store,
+    store: boardStore,
     title: seed.title,
     detail: text,
     sourceData: {
@@ -32,7 +40,7 @@ export async function createBoardTask({ content, priority, store, deadline, crea
     `UPDATE master_tasks
      SET created_from = 'hrms_task_board', priority = $2, task_intent = $3::jsonb, last_activity_at = NOW(), updated_at = NOW()
      WHERE task_id = $1`,
-    [result.taskId, priority || seed.priority || 'medium', JSON.stringify(seed)]
+    [result.taskId, priority || seed.priority || 'medium', JSON.stringify(seedMeta)]
   ).catch((e) => logger.warn({ err: e?.message, taskId: result.taskId }, 'board task metadata update failed'));
 
   const { enqueueTaskParse } = await import('./task-board-queue.js');
@@ -43,7 +51,26 @@ export async function createBoardTask({ content, priority, store, deadline, crea
 export async function parseAndDispatchTask(taskId) {
   const task = await getTask(taskId);
   if (!task) return { ok: false, error: 'task_not_found' };
-  if (task.status !== 'pending_audit') return { ok: true, skipped: true, status: task.status };
+  if (task.status === 'pending_dispatch') {
+    const decision = await dispatchTaskAsync({
+      category: task.category,
+      store: task.store,
+      priority: task.priority || task.severity,
+      title: task.title,
+      detail: task.detail
+    });
+    await query(
+      `UPDATE master_tasks SET assignee_agent = $2, current_agent = $2, last_activity_at = NOW(), updated_at = NOW() WHERE task_id = $1`,
+      [taskId, decision.assigneeAgent]
+    );
+    const dispatched = await transitionTask(taskId, 'dispatched', 'master', { dispatch: decision, reDispatch: true });
+    if (dispatched.ok) {
+      const { enqueueTaskExecution } = await import('./task-board-queue.js');
+      await enqueueTaskExecution(taskId, { agent: decision.assigneeAgent, source: 're_dispatch' });
+    }
+    return dispatched;
+  }
+  if (!['pending_audit', 'pending_dispatch'].includes(task.status)) return { ok: true, skipped: true, status: task.status };
 
   const parsed0 = parseTaskText(task.detail || task.title || '', {
     store: task.store,
@@ -127,12 +154,13 @@ export async function createUnifiedTask({
   targetStatus = 'dispatched',
   createdFrom
 } = {}) {
+  const storeNorm = resolveAgentCanonicalStore(String(store || '').trim()) || String(store || '').trim();
   const result = await createTask({
     taskId,
     source: source || 'system',
     category,
     severity,
-    store,
+    store: storeNorm,
     brand,
     title,
     detail,
@@ -379,8 +407,9 @@ export async function runTaskBoardWatchdog({ staleHours = 24 } = {}) {
   const r = await query(
     `SELECT task_id, status, assignee_agent, current_agent FROM master_tasks
      WHERE source = 'hrms_task_board'
-       AND status NOT IN ('closed','settled','resolved','escalated')
-       AND COALESCE(last_activity_at, updated_at, created_at) < NOW() - ($1::int || ' hours')::interval
+        AND status IN ('dispatched','pending_response','in_progress')
+        AND COALESCE(last_activity_at, updated_at, created_at) < NOW() - ($1::int || ' hours')::interval
+       AND (last_reminder_at IS NULL OR last_reminder_at < NOW() - INTERVAL '1 hour')
      ORDER BY COALESCE(last_activity_at, updated_at, created_at) ASC
      LIMIT 100`,
     [hours]
@@ -393,35 +422,48 @@ export async function runTaskBoardWatchdog({ staleHours = 24 } = {}) {
   return { ok: true, scanned: r.rows?.length || 0, remindedOrFiled: touched };
 }
 
+/** 将 master_tasks.store 归一为与 daily_reports / feishu_users 一致的规范店名 */
+async function normalizeTaskStoreInDb(taskId, task) {
+  if (!task?.store) return { canon: '', task };
+  const raw = String(task.store).trim();
+  const canon = resolveAgentCanonicalStore(raw) || raw;
+  if (canon && canon !== raw) {
+    await query(`UPDATE master_tasks SET store = $1, updated_at = NOW() WHERE task_id = $2`, [canon, taskId]).catch((e) =>
+      logger.warn({ err: e?.message, taskId }, 'canonicalize master_tasks.store failed')
+    );
+    return { canon, task: { ...task, store: canon } };
+  }
+  return { canon, task };
+}
+
 async function sendTaskCardToAssignee(taskId, { reminder = false, reminderCount = 0, trend = null } = {}) {
   try {
-    const task = await getTask(taskId);
-    if (!task?.store || !task?.assignee_agent) return;
-    const users = await query(
-      `SELECT open_id, role FROM feishu_users
-       WHERE (store = $1 OR store ILIKE '%' || $1 || '%' OR $1 ILIKE '%' || store || '%')
-         AND role IN ('store_manager','store_production_manager')
-         AND registered = TRUE
-         AND open_id IS NOT NULL
-         AND open_id NOT LIKE '%probe%'
-       LIMIT 8`,
-      [task.store]
-    ).catch(() => ({ rows: [] }));
+    const task0 = await getTask(taskId);
+    if (!task0?.store || !task0?.assignee_agent) return;
+    const { canon, task } = await normalizeTaskStoreInDb(taskId, task0);
+    if (!canon) return;
+
+    const { rows: mgrRows } = await findRegisteredFeishuUsersForStoreManagers(canon, { limit: 16 });
+    const users = { rows: mgrRows.map((r) => ({ open_id: r.open_id, role: r.role })) };
     if (!users.rows?.length) {
-      logger.info({ taskId, store: task.store }, 'sendTaskCard: no registered feishu users for store');
-      await notifyAdminsBoardIssue(`⚠️ Agent任务无法派发：门店未绑定飞书负责人\n门店：${task.store}\n任务：${task.title || taskId}\n任务ID：${taskId}`);
+      const raw = String(task0.store || '').trim();
+      logger.info({ taskId, rawStore: raw, canon }, 'sendTaskCard: no registered feishu users for store');
+      const aliasNote = raw && raw !== canon ? `（录入「${raw}」已归一为规范店名）` : '';
+      await notifyAdminsBoardIssue(
+        `⚠️ Agent任务无法派发：门店未绑定飞书负责人\n门店：${canon}${aliasNote}\n任务：${task.title || taskId}\n任务ID：${taskId}`
+      );
       return;
     }
     const { sendCard } = await import('./feishu-client.js');
     const priorityEmoji = { high: '🔴', medium: '🟡', low: '🟢' }[task.priority || task.severity || 'medium'] || '⚪';
     const trendText = trend
-      ? `\n\n**出品问题趋势**：近3天 ${trend.currentCount} 条，前3天 ${trend.previousCount} 条，判断：${trend.label}`
+      ? `\n\n**出品问题趋势**：近3天问题 ${trend.currentIssueCount} 条 / 总记录 ${trend.currentTotalCount} 条；前3天问题 ${trend.previousIssueCount} 条 / 总记录 ${trend.previousTotalCount} 条；判断：${trend.label}`
       : '';
     const required = `\n\n**请门店必须回复**：\n1. 具体整改方案\n2. 完成时间\n3. 责任人\n4. 现场照片/文件证据（可在飞书回复或管理端补充）`;
     const card = {
       config: { wide_screen_mode: true },
       header: {
-        title: { tag: 'plain_text', content: `${priorityEmoji} ${reminder ? `第${reminderCount}次催办` : '整改任务'} · ${task.store}` },
+        title: { tag: 'plain_text', content: `${priorityEmoji} ${reminder ? `第${reminderCount}次催办` : '整改任务'} · ${canon}` },
         template: reminder ? 'red' : (task.priority === 'high' ? 'red' : task.priority === 'low' ? 'green' : 'orange')
       },
       elements: [
@@ -430,9 +472,24 @@ async function sendTaskCardToAssignee(taskId, { reminder = false, reminderCount 
         {
           tag: 'action',
           actions: [
-            { tag: 'button', text: { tag: 'plain_text', content: '已收到' }, type: 'primary', value: { action: 'ack_anomaly', task_id: taskId } },
-            { tag: 'button', text: { tag: 'plain_text', content: '开始整改' }, type: 'primary', value: { action: 'start_task', task_id: taskId } },
-            { tag: 'button', text: { tag: 'plain_text', content: '提交整改方案' }, type: 'default', value: { action: 'reply_anomaly', task_id: taskId } }
+            {
+              tag: 'button',
+              text: { tag: 'plain_text', content: '已收到' },
+              type: 'primary',
+              value: JSON.stringify({ action: 'ack_anomaly', task_id: taskId })
+            },
+            {
+              tag: 'button',
+              text: { tag: 'plain_text', content: '开始整改' },
+              type: 'primary',
+              value: JSON.stringify({ action: 'start_task', task_id: taskId })
+            },
+            {
+              tag: 'button',
+              text: { tag: 'plain_text', content: '提交整改方案' },
+              type: 'default',
+              value: JSON.stringify({ action: 'reply_anomaly', task_id: taskId })
+            }
           ]
         },
         { tag: 'note', elements: [{ tag: 'plain_text', content: `任务ID：${taskId} · 来源：${task.source || '系统'} · 请及时处理` }] }
@@ -546,8 +603,15 @@ export async function executeBoardTask(taskId, { agent } = {}) {
   if (task.status !== 'dispatched' && task.status !== 'viewed') {
     return { ok: true, skipped: true, taskId, status: task.status, reason: `not_dispatchable_from_${task.status}` };
   }
-  const trend = await getProductionIssueTrend(task.store);
-  const sent = await sendTaskCardToAssignee(taskId, { reminder: false, trend });
+  const { canon } = await normalizeTaskStoreInDb(taskId, task);
+  const trend = await getProductionIssueTrend(canon || task.store);
+  let sent = { skipped: true, reason: 'noop', recipients: 0, sent: 0 };
+  if (SOURCES_SKIP_DUPLICATE_RECTIFICATION_CARD.has(String(task.source || '').trim())) {
+    sent = { skipped: true, reason: 'operational_feishu_card_already_sent', recipients: 0, sent: 0 };
+    logger.info({ taskId, source: task.source }, 'executeBoardTask: skip duplicate rectification card (source has primary operational card)');
+  } else {
+    sent = (await sendTaskCardToAssignee(taskId, { reminder: false, trend })) || sent;
+  }
   await query(
     `UPDATE master_tasks SET
        source_data = COALESCE(source_data, '{}'::jsonb) || $2::jsonb,
@@ -640,7 +704,7 @@ export async function evaluateBoardTaskAfterStoreFeedback(taskId) {
   const improved = trend.currentCount < trend.previousCount || (trend.previousCount > 0 && trend.currentCount === 0);
   const enoughData = trend.currentCount + trend.previousCount > 0;
   if (improved && enoughData) {
-    const summary = `${agentNameZh(task.assignee_agent || task.current_agent)}跟踪结果：${task.store || '-'}出品问题已有改善，近3天${trend.currentCount}条，前3天${trend.previousCount}条。已收到门店整改反馈，建议管理员验收。`;
+    const summary = `${agentNameZh(task.assignee_agent || task.current_agent)}跟踪结果：${task.store || '-'}出品问题已有改善，近3天问题${trend.currentIssueCount}条/总记录${trend.currentTotalCount}条，前3天问题${trend.previousIssueCount}条/总记录${trend.previousTotalCount}条。已收到门店整改反馈，建议管理员验收。`;
     await submitAgentFeedback(taskId, {
       executionSummary: summary,
       currentStatus: 'pending_review',
@@ -673,7 +737,6 @@ export async function evaluateBoardTaskAfterStoreFeedback(taskId) {
     `UPDATE master_tasks SET source_data = COALESCE(source_data, '{}'::jsonb) || $2::jsonb, updated_at = NOW() WHERE task_id = $1`,
     [taskId, JSON.stringify({ board_tracking: { lastTrend: trend, lastTrendCheckedAt: new Date().toISOString(), waitingForImprovement: true } })]
   );
-  await sendTaskCardToAssignee(taskId, { reminder: true, reminderCount: Number(task.remind_count || 0) + 1, trend });
   await logEvent(taskId, 'agent_trend_not_improved', task.assignee_agent || 'agent', task.store || 'store', task.status, task.status, { trend });
   return { ok: true, improved: false, trend };
 }
@@ -683,24 +746,32 @@ export async function getProductionIssueTrend(store) {
   const params = [s];
   const countSql = `
     SELECT
-      COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '3 days')::int AS current_count,
-      COUNT(*) FILTER (WHERE created_at < NOW() - INTERVAL '3 days' AND created_at >= NOW() - INTERVAL '6 days')::int AS previous_count
+      COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '3 days')::int AS current_total_count,
+      COUNT(*) FILTER (WHERE created_at < NOW() - INTERVAL '3 days' AND created_at >= NOW() - INTERVAL '6 days')::int AS previous_total_count,
+      COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '3 days' AND ${productionIssueWhereSql()})::int AS current_issue_count,
+      COUNT(*) FILTER (WHERE created_at < NOW() - INTERVAL '3 days' AND created_at >= NOW() - INTERVAL '6 days' AND ${productionIssueWhereSql()})::int AS previous_issue_count
     FROM feishu_generic_records
     WHERE config_key IN ('table_visit','bad_review','material_majixian','material_hongchao')
       AND ($1::text = '' OR fields::text ILIKE '%' || $1 || '%')
-      AND created_at >= NOW() - INTERVAL '6 days'
-      AND (
-        fields::text ILIKE '%出品%' OR fields::text ILIKE '%菜品%' OR fields::text ILIKE '%口味%' OR
-        fields::text ILIKE '%不满意%' OR fields::text ILIKE '%差评%' OR fields::text ILIKE '%不新鲜%'
-      )`;
+      AND created_at >= NOW() - INTERVAL '6 days'`;
   const r = await query(countSql, params).catch(() => ({ rows: [] }));
-  const currentCount = Number(r.rows?.[0]?.current_count || 0);
-  const previousCount = Number(r.rows?.[0]?.previous_count || 0);
+  const currentTotalCount = Number(r.rows?.[0]?.current_total_count || 0);
+  const previousTotalCount = Number(r.rows?.[0]?.previous_total_count || 0);
+  const currentIssueCount = Number(r.rows?.[0]?.current_issue_count || 0);
+  const previousIssueCount = Number(r.rows?.[0]?.previous_issue_count || 0);
   let direction = 'flat';
-  if (currentCount < previousCount) direction = 'down';
-  if (currentCount > previousCount) direction = 'up';
+  if (currentIssueCount < previousIssueCount) direction = 'down';
+  if (currentIssueCount > previousIssueCount) direction = 'up';
   const label = direction === 'down' ? '减少/改善' : direction === 'up' ? '增加/未改善' : '持平/需继续观察';
-  return { store: s, currentCount, previousCount, direction, label, summary: `近3天${currentCount}条，前3天${previousCount}条，${label}` };
+  return { store: s, currentTotalCount, previousTotalCount, currentIssueCount, previousIssueCount, direction, label, summary: `近3天问题${currentIssueCount}条/总记录${currentTotalCount}条，前3天问题${previousIssueCount}条/总记录${previousTotalCount}条，${label}` };
+}
+
+function productionIssueWhereSql() {
+  return `(
+    (config_key = 'table_visit' AND fields::text ILIKE '%"今天用餐是否满意": "不满意"%') OR
+    (config_key = 'bad_review') OR
+    (config_key IN ('material_majixian','material_hongchao') AND fields::text ILIKE '%"今天原料情况": "有异常情况"%')
+  )`;
 }
 
 async function notifyAdminsBoardIssue(content) {
@@ -764,10 +835,14 @@ export async function logTaskExperience(taskId) {
 // ─── Send Task Reminders (called by reminder queue) ───
 
 export async function sendTaskReminders(taskId, agent) {
-  const task = await getTask(taskId);
-  if (!task || ['closed', 'settled', 'resolved', 'rejected', 'hr_filed'].includes(task.status)) return { ok: true, skipped: true };
+  const task0 = await getTask(taskId);
+  if (!task0 || ['closed', 'settled', 'resolved', 'rejected', 'hr_filed'].includes(task0.status)) return { ok: true, skipped: true };
+  if (task0.last_reminder_at && new Date(task0.last_reminder_at) > new Date(Date.now() - 3600000)) {
+    return { ok: true, skipped: true, reason: 'last_reminder_within_1h' };
+  }
+  const { canon, task } = await normalizeTaskStoreInDb(taskId, task0);
   const currentReminders = Number(task.remind_count || 0);
-  const trend = await getProductionIssueTrend(task.store);
+  const trend = await getProductionIssueTrend(canon || task.store);
   if (currentReminders >= 3) {
     const filed = ['pending_response', 'pending_review'].includes(task.status)
       ? await transitionTask(taskId, 'hr_filed', 'task_watchdog', { noStoreReply: true, reminders: currentReminders, trend })
@@ -776,11 +851,11 @@ export async function sendTaskReminders(taskId, agent) {
       await query(`UPDATE master_tasks SET status = 'hr_filed', hr_performance_recorded = TRUE, updated_at = NOW() WHERE task_id = $1`, [taskId]);
       await logEvent(taskId, 'status_transition', 'task_watchdog', task.assignee_agent, task.status, 'hr_filed', { noStoreReply: true, reminders: currentReminders, trend, forced: true });
     }
-    await notifyAdminsBoardIssue(`🚨 门店未响应Agent任务，已三次催办并备案\n门店：${task.store || '-'}\n任务：${task.title || taskId}\n任务ID：${taskId}\n当前趋势：${trend.label}（近3天${trend.currentCount}条 / 前3天${trend.previousCount}条）`);
+    await notifyAdminsBoardIssue(`🚨 门店未响应Agent任务，已三次催办并备案\n门店：${canon || task.store || '-'}\n任务：${task.title || taskId}\n任务ID：${taskId}\n当前趋势：${trend.label}（近3天问题${trend.currentIssueCount}条/总记录${trend.currentTotalCount}条，前3天问题${trend.previousIssueCount}条/总记录${trend.previousTotalCount}条）`);
     const derived = await createBoardTask({
       content: `继续追踪：${task.title || task.detail || taskId}\n原因：门店三次催办未回复，需重新派发并升级关注。`,
       priority: task.priority || task.severity || 'high',
-      store: task.store,
+      store: canon || task.store,
       createdBy: 'task_watchdog',
       createdByRole: 'system'
     });

@@ -49,7 +49,7 @@ import { registerPerformanceInvalidationRoutes } from './performance-invalidatio
 import { handleMarginMessage } from './margin-message-handler.js';
 import { registerUploadStatusRoute } from './upload-status.js';
 import { ensureRAGSchema, ragQuery, ragMultiQuery, ragUpdateScope, ragStats } from './rag-tool.js';
-import { ensureTaskBoardSchema, checkTimeoutsAndEscalate, registerTaskBoardRoutes } from './task-board-api.js';
+import { ensureTaskBoardSchema } from './task-board-api.js';
 import { ensureHRMSApiSchema, registerHRMSApiRoutes } from './hrms-api-tools.js';
 import { ensureSOPDistributionSchema, registerSOPDistributionRoutes } from './sop-distribution.js';
 import { setDataExecutorPool, purgeExpiredCache, updateMetricVersion } from './data-executor.js';
@@ -16868,7 +16868,6 @@ registerAgentConfigRoutes(app, authRequired);
 registerMasterRoutes(app, authRequired);
 registerNewScoringRoutes(app, authRequired);
 registerPerformanceInvalidationRoutes(app, authRequired);
-registerTaskBoardRoutes(app, authRequired);
 registerHRMSApiRoutes(app, authRequired);
 registerSOPDistributionRoutes(app, authRequired);
 registerUploadStatusRoute(app, { pool, getSharedState, authRequired });
@@ -17959,8 +17958,6 @@ app.listen(PORT, HOST, async () => {
     await ensureSOPDistributionSchema();
     console.log('[modules] RAG + TaskBoard + HRMS-API + SOP-Distribution initialized');
 
-    // 定时检查任务超时 & 升级 (每5分钟)
-    setInterval(() => { checkTimeoutsAndEscalate().catch(e => console.error('[TaskBoard] timeout check error:', e?.message)); }, 5 * 60 * 1000);
 
     // 飞书表格→PG 与 sales_raw 目录入库：失败第一时间通知 admin（见 notifyAdminsDualWriteFailure 注释）
     setFeishuSyncFailureNotifier((label, err) => {

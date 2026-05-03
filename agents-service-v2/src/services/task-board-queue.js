@@ -107,16 +107,22 @@ export async function enqueueTaskSummary(taskId) {
 
 export async function enqueuePendingBoardExecutions({ limit = 100 } = {}) {
   const r = await query(
-    `SELECT task_id, assignee_agent
+    `SELECT task_id, assignee_agent, status
      FROM master_tasks
-     WHERE source = 'hrms_task_board' AND status = 'dispatched'
+     WHERE source = 'hrms_task_board' AND status IN ('dispatched', 'pending_dispatch')
      ORDER BY created_at ASC LIMIT $1`,
     [Math.max(1, Math.min(Number(limit) || 100, 500))]
   ).catch(() => ({ rows: [] }));
   let queued = 0;
   for (const row of (r.rows || [])) {
-    const out = await enqueueTaskExecution(row.task_id, { agent: row.assignee_agent, source: 'startup_sweep' });
-    if (out.queued || out.inline) queued++;
+    if (row.status === 'pending_dispatch') {
+      const { parseAndDispatchTask } = await import('./task-orchestrator.js');
+      const result = await parseAndDispatchTask(row.task_id).catch(() => ({ ok: false }));
+      if (result.ok) queued++;
+    } else {
+      const out = await enqueueTaskExecution(row.task_id, { agent: row.assignee_agent, source: 'startup_sweep' });
+      if (out.queued || out.inline) queued++;
+    }
   }
   return { ok: true, scanned: r.rows?.length || 0, queued };
 }

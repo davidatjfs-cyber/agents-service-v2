@@ -19,6 +19,7 @@
 // ─────────────────────────────────────────────────────────────────
 
 import { pool as getUnifiedPool } from './utils/database.js';
+import axios from 'axios';
 import {
   traceCausalChain,
   getStoreHealthOverview,
@@ -42,6 +43,31 @@ export function setHqPlannerLLM(fn) { _callLLM = fn; }
 function pool() {
   if (_pool) return _pool;
   return getUnifiedPool();
+}
+
+function getAgentsServiceBaseUrl() {
+  return String(process.env.AGENTS_SERVICE_BASE_URL || 'http://127.0.0.1:3101').trim().replace(/\/$/, '');
+}
+
+async function getAgentsServiceAdminToken() {
+  const url = getAgentsServiceBaseUrl() + '/api/login';
+  const username = String(process.env.AGENTS_ADMIN_USERNAME || 'admin').trim() || 'admin';
+  const password = String(process.env.AGENTS_ADMIN_PASSWORD || '').trim();
+  if (!password) throw new Error('AGENTS_ADMIN_PASSWORD not configured');
+  const r = await axios.post(url, { username, password }, { timeout: 8000, validateStatus: () => true, headers: { 'Content-Type': 'application/json' } });
+  if (r.status < 200 || r.status >= 300 || !r.data?.token) throw new Error(`agents_service_login_failed:${r.status}`);
+  return String(r.data.token);
+}
+
+async function createBoardTaskViaV2({ content, priority, store, createdBy, createdByRole }) {
+  try {
+    const token = await getAgentsServiceAdminToken();
+    const r = await axios.post(getAgentsServiceBaseUrl() + '/api/agent-task-board/tasks', { content, priority, store }, { timeout: 10000, validateStatus: () => true, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
+    if (r.status < 200 || r.status >= 300) return { ok: false, error: `v2_api_${r.status}` };
+    return r.data;
+  } catch (e) {
+    return { ok: false, error: e?.message };
+  }
 }
 
 function extractFirstJsonObject(text) {
@@ -483,20 +509,16 @@ export async function approvePlan(planId, approvedBy) {
 
     for (const action of actions) {
       try {
-        const taskId = `AP-TASK-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 4)}`;
-        await pool().query(
-          `INSERT INTO master_tasks (task_id, status, source, source_ref, current_agent, category, severity, store, brand, title, detail, source_data)
-           VALUES ($1, 'pending_dispatch', 'action_plan', $2, 'master', $3, 'medium', $4, $5, $6, $7, $8::jsonb)`,
-          [
-            taskId, planId,
-            '行动计划任务',
-            plan.store, plan.brand || '',
-            action.action || '待执行任务',
-            `来源计划: ${planId}\nKPI目标: ${action.kpiTarget || '无'}\n验收标准: ${action.verificationMethod || '无'}\n截止: ${action.deadline || '无'}`,
-            JSON.stringify({ planId, priority: action.priority, responsibleRole: action.responsibleRole })
-          ]
-        );
-        createdTasks++;
+        const content = `行动计划任务：${action.action || '待执行任务'}\n来源计划: ${planId}\nKPI目标: ${action.kpiTarget || '无'}\n验收标准: ${action.verificationMethod || '无'}\n截止: ${action.deadline || '无'}`;
+        const v2result = await createBoardTaskViaV2({
+          content,
+          priority: action.priority || 'medium',
+          store: plan.store,
+          createdBy: approvedBy,
+          createdByRole: 'hq_manager'
+        });
+        if (v2result.ok) createdTasks++;
+        else console.error(`[hq-planner] v2 createBoardTask failed for action:`, v2result.error);
       } catch (e) {
         console.error(`[hq-planner] Failed to create task from plan action:`, e?.message);
       }

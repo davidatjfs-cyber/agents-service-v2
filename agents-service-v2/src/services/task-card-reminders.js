@@ -23,6 +23,7 @@ import {
   getMonthlyAttitudeFilingCountForStore
 } from '../utils/performance-filing-counts.js';
 import { processPllmWorkflowTick, sendPllmMonthlyReportIfDue } from './proactive-v2/pllm-workflow.js';
+import { resolveAgentCanonicalStore } from '../config/store-mapping.js';
 import { transitionTask } from './task-state-machine.js';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -560,6 +561,7 @@ export async function processTaskCardReminders() {
           ? '🚨 **这是最后一次催办**，截止后仍无有效闭环将备案「工作态度未完成」，仅影响月度工作态度评级，不因催办扣绩效分。请立即回复本对话！'
           : '📸 请在截止时间前**回复本对话**并附上处理方案/照片，超时将备案工作态度（不计绩效分）。';
 
+    const storeLine = resolveAgentCanonicalStore(String(t.store || '').trim()) || String(t.store || '').trim();
     const reminderCard = {
       config: { wide_screen_mode: true },
       header: {
@@ -571,7 +573,7 @@ export async function processTaskCardReminders() {
           tag: 'div',
           text: {
             tag: 'lark_md',
-            content: `**门店**：${t.store}\n**任务ID**：${t.task_id}\n**来源**：${
+            content: `**门店**：${storeLine}\n**任务ID**：${t.task_id}\n**来源**：${
               t.source === 'bi_anomaly'
                 ? 'BI异常'
                 : t.source === 'random_inspection'
@@ -608,7 +610,7 @@ export async function processTaskCardReminders() {
     };
     const tail =
       k === 'bi' ? '超时备案工作态度；BI 扣分仅周度异常汇总。' : '超时备案工作态度（不因催办扣绩效分）。';
-    const fallbackText = `【任务催办 ${seq}/3】${t.title || '待办任务'}\n任务ID：${t.task_id}\n门店：${t.store}\n请在 ${deadlineStr} 前处理并回复，${tail}`;
+    const fallbackText = `【任务催办 ${seq}/3】${t.title || '待办任务'}\n任务ID：${t.task_id}\n门店：${storeLine}\n请在 ${deadlineStr} 前处理并回复，${tail}`;
 
     const newMsgIds = [];
     for (const oid of oids) {
