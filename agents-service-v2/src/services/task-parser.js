@@ -87,12 +87,12 @@ function buildSuggestedSubtasks(category, deadline) {
 
 export function mapBoardStatus(status) {
   if (['pending_audit', 'auditing'].includes(status)) return '待解析';
-  if (['pending_dispatch'].includes(status)) return '待分配';
-  if (['dispatched', 'viewed', 'in_progress'].includes(status)) return '执行中';
-  if (['waiting_evidence'].includes(status)) return '等证据';
-  if (['pending_response'].includes(status)) return '待回复';
+  if (['pending_dispatch'].includes(status)) return '已领取';
+  if (['dispatched', 'viewed'].includes(status)) return '已分配';
+  if (['in_progress', 'waiting_evidence'].includes(status)) return '已执行';
+  if (['pending_response'].includes(status)) return '已完成';
   if (['pending_review'].includes(status)) return '待验收';
-  if (['resolved', 'pending_settlement', 'settled', 'closed'].includes(status)) return '已完成';
+  if (['resolved', 'pending_settlement', 'settled', 'closed'].includes(status)) return '已结案';
   if (['rejected'].includes(status)) return '已打回';
   if (['escalated'].includes(status)) return '已升级';
   if (['hr_filed'].includes(status)) return '已备案';

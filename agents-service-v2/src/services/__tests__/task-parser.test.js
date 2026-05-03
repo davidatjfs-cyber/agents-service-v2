@@ -12,10 +12,13 @@ describe('task-parser', () => {
 
   test('maps internal statuses to board statuses', () => {
     expect(mapBoardStatus('pending_audit')).toBe('待解析');
-    expect(mapBoardStatus('pending_dispatch')).toBe('待分配');
-    expect(mapBoardStatus('dispatched')).toBe('执行中');
+    expect(mapBoardStatus('pending_dispatch')).toBe('已领取');
+    expect(mapBoardStatus('dispatched')).toBe('已分配');
+    expect(mapBoardStatus('in_progress')).toBe('已执行');
+    expect(mapBoardStatus('pending_response')).toBe('已完成');
     expect(mapBoardStatus('pending_review')).toBe('待验收');
-    expect(mapBoardStatus('closed')).toBe('已完成');
+    expect(mapBoardStatus('rejected')).toBe('已打回');
+    expect(mapBoardStatus('closed')).toBe('已结案');
   });
 
   test('does not include category word in extracted store name', () => {

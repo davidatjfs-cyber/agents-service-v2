@@ -194,8 +194,14 @@ export async function listBoardTasks({ status, limit = 50 } = {}) {
                     timeout_at, created_at, updated_at, last_activity_at, task_intent
              FROM master_tasks WHERE source = 'hrms_task_board'`;
   if (status) {
-    params.push(status);
-    sql += ` AND status = $${params.length}`;
+    const statuses = String(status).split(',').map((s) => s.trim()).filter(Boolean);
+    if (statuses.length === 1) {
+      params.push(statuses[0]);
+      sql += ` AND status = $${params.length}`;
+    } else if (statuses.length > 1) {
+      params.push(statuses);
+      sql += ` AND status = ANY($${params.length}::text[])`;
+    }
   }
   params.push(Math.min(Number(limit) || 50, 200));
   sql += ` ORDER BY COALESCE(last_activity_at, updated_at, created_at) DESC LIMIT $${params.length}`;
