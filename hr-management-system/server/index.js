@@ -9635,7 +9635,9 @@ app.get('/api/reports/business', authRequired, async (req, res) => {
       elemeOrders: 0, elemeRevenue: 0, elemeActual: 0, elemeTarget: 0,
       meituanOrders: 0, meituanRevenue: 0, meituanActual: 0, meituanTarget: 0,
       badDianping: 0, badMeituan: 0, badEleme: 0,
-      laborTotal: 0
+      laborTotal: 0,
+      dianpingRatingSum: 0,
+      dianpingRatingCount: 0
     });
 
     const byStore = new Map();
@@ -9680,6 +9682,12 @@ app.get('/api/reports/business', authRequired, async (req, res) => {
       prev.badMeituan += clampNum(data?.badReviews?.meituan, 0);
       prev.badEleme += clampNum(data?.badReviews?.eleme, 0);
       prev.laborTotal += clampNum(data?.laborTotal, 0);
+      const drStar = data?.dianping_rating;
+      const drN = drStar != null && drStar !== '' ? Number(drStar) : NaN;
+      if (Number.isFinite(drN)) {
+        prev.dianpingRatingSum += drN;
+        prev.dianpingRatingCount += 1;
+      }
       byStore.set(st, prev);
     });
 
@@ -9690,10 +9698,12 @@ app.get('/api/reports/business', authRequired, async (req, res) => {
       x.dineAvgTable = x.dineOrders > 0 ? (x.dineRevenue / x.dineOrders) : 0;
       x.dineAvgPerson = x.dineTraffic > 0 ? (x.dineRevenue / x.dineTraffic) : 0;
       x.discountRate = x.gross > 0 ? (x.discount / x.gross) : 0;
+      x.avgDianpingRating =
+        x.dianpingRatingCount > 0 ? (x.dianpingRatingSum / x.dianpingRatingCount) : null;
     };
     rows.forEach(computeDerived);
 
-    const sumKeys = ['days','budget','gross','actual','discount','discountDine','discountDelivery','rechargeCount','rechargeAmount','newWechatMembers','dineRevenue','dineOrders','dineTraffic','segNoon','segAfternoon','segNight','catWaterAmt','catWaterQty','catSoupAmt','catSoupQty','catRoastAmt','catRoastQty','catWokAmt','catWokQty','elemeOrders','elemeRevenue','elemeActual','elemeTarget','meituanOrders','meituanRevenue','meituanActual','meituanTarget','badDianping','badMeituan','badEleme','laborTotal'];
+    const sumKeys = ['days','budget','gross','actual','discount','discountDine','discountDelivery','rechargeCount','rechargeAmount','newWechatMembers','dineRevenue','dineOrders','dineTraffic','segNoon','segAfternoon','segNight','catWaterAmt','catWaterQty','catSoupAmt','catSoupQty','catRoastAmt','catRoastQty','catWokAmt','catWokQty','elemeOrders','elemeRevenue','elemeActual','elemeTarget','meituanOrders','meituanRevenue','meituanActual','meituanTarget','badDianping','badMeituan','badEleme','laborTotal','dianpingRatingSum','dianpingRatingCount'];
     const total = emptyAgg('合计');
     rows.forEach(x => { sumKeys.forEach(k => { total[k] += (x[k] || 0); }); });
     computeDerived(total);
@@ -14314,6 +14324,70 @@ app.post('/api/chairman/config', authRequired, async (req, res) => {
   } catch (e) {
     return res.status(502).json({ error: String(e?.message || e) });
   }
+});
+
+function canManageAgentTaskBoard(user) {
+  const role = String(user?.role || '').trim();
+  return role === 'admin' || role === 'hq_manager' || role === 'hr_manager';
+}
+
+async function proxyAgentTaskBoard(req, res, method, pathSuffix, body) {
+  if (!canManageAgentTaskBoard(req.user)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    const token = await getAgentsServiceAdminToken();
+    const url = getAgentsServiceBaseUrl() + '/api/agent-task-board' + pathSuffix;
+    const r = await axios({
+      method,
+      url,
+      data: body,
+      timeout: 15000,
+      validateStatus: () => true,
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+    });
+    if (r.status < 200 || r.status >= 300) return res.status(r.status || 502).json(r.data || { error: 'agent_task_board_proxy_failed' });
+    return res.json(r.data || { ok: true });
+  } catch (e) {
+    return res.status(502).json({ error: String(e?.message || e) });
+  }
+}
+
+app.get('/api/agent-task-board/summary', authRequired, (req, res) => {
+  return proxyAgentTaskBoard(req, res, 'GET', '/summary');
+});
+
+app.get('/api/agent-task-board/tasks', authRequired, (req, res) => {
+  const qs = new URLSearchParams();
+  if (req.query?.status) qs.set('status', String(req.query.status));
+  if (req.query?.limit) qs.set('limit', String(req.query.limit));
+  return proxyAgentTaskBoard(req, res, 'GET', '/tasks' + (qs.toString() ? `?${qs}` : ''));
+});
+
+app.post('/api/agent-task-board/tasks', authRequired, (req, res) => {
+  return proxyAgentTaskBoard(req, res, 'POST', '/tasks', req.body || {});
+});
+
+app.get('/api/agent-task-board/tasks/:taskId', authRequired, (req, res) => {
+  return proxyAgentTaskBoard(req, res, 'GET', `/tasks/${encodeURIComponent(req.params.taskId)}`);
+});
+
+app.post('/api/agent-task-board/tasks/:taskId/evidences', authRequired, (req, res) => {
+  return proxyAgentTaskBoard(req, res, 'POST', `/tasks/${encodeURIComponent(req.params.taskId)}/evidences`, req.body || {});
+});
+
+app.post('/api/agent-task-board/tasks/:taskId/review', authRequired, (req, res) => {
+  return proxyAgentTaskBoard(req, res, 'POST', `/tasks/${encodeURIComponent(req.params.taskId)}/review`, req.body || {});
+});
+
+app.post('/api/agent-task-board/tasks/:taskId/derive', authRequired, (req, res) => {
+  return proxyAgentTaskBoard(req, res, 'POST', `/tasks/${encodeURIComponent(req.params.taskId)}/derive`, req.body || {});
+});
+
+app.get('/api/agent-task-board/queue', authRequired, (req, res) => {
+  return proxyAgentTaskBoard(req, res, 'GET', '/queue');
+});
+
+app.post('/api/agent-task-board/watchdog/run', authRequired, (req, res) => {
+  return proxyAgentTaskBoard(req, res, 'POST', '/watchdog/run', req.body || {});
 });
 
 let __lastDiskLarkNoticeAt = 0;

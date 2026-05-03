@@ -15,6 +15,7 @@ import { getShanghaiYmdParts, shanghaiWeekMonSunContaining } from '../utils/anom
 import { anomalyRuleLabelZh } from '../utils/anomaly-labels.js';
 import { planAndExecute } from './master-planner.js';
 import { resolveSingleScoringUser, isMajixianPmObserverUsername } from '../utils/scoring-assignee.js';
+import { createUnifiedTask } from './task-orchestrator.js';
 
 function storeKey(v) {
   return String(v || '')
@@ -456,49 +457,27 @@ export async function runBiAnomalyNotifyPipeline({
       ? `${taskId}-${assignee.role === 'store_manager' ? 'SM' : 'PM'}`
       : taskId;
     try {
-      await query(
-        `INSERT INTO master_tasks (
-           task_id, status, source, category, severity, store, brand, assignee_username, assignee_role,
-           title, detail, source_data, feishu_msg_ids, dispatched_at, timeout_at, remind_count
-         ) VALUES (
-           $1, 'pending_response', 'bi_anomaly', $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, NOW(),
-           NOW() + INTERVAL '${timeoutHours} hours', 0
-         )`,
-        [
-          subTaskId,
-          ruleKey,
-          severity || 'medium',
-          store,
-          brand || null,
-          assignee.username,
-          assignee.role,
-          title,
-          initialDetail,
-          JSON.stringify(sourceDataBase),
-          JSON.stringify(msgIds)
-        ]
-      );
+      const created = await createUnifiedTask({
+        taskId: subTaskId,
+        source: 'bi_anomaly',
+        category: ruleKey,
+        severity: severity || 'medium',
+        store,
+        brand: brand || null,
+        assigneeUsername: assignee.username,
+        assigneeRole: assignee.role,
+        assigneeAgent: 'ops_supervisor',
+        title,
+        detail: initialDetail,
+        sourceData: sourceDataBase,
+        feishuMsgIds: msgIds,
+        timeoutHours,
+        targetStatus: 'pending_response',
+        createdFrom: 'anomaly_notify_pipeline'
+      });
+      if (!created.ok) throw new Error(created.error || 'create_unified_task_failed');
     } catch (e) {
-      logger.warn({ err: e?.message, taskId: subTaskId }, 'bi-anomaly: full insert failed, retry minimal columns');
-      try {
-        await query(
-          `INSERT INTO master_tasks (task_id, status, source, category, store, assignee_username, assignee_role, title, detail, source_data, feishu_msg_ids, dispatched_at, timeout_at, remind_count)
-           VALUES ($1, 'pending_response', 'bi_anomaly', $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, NOW(), NOW() + INTERVAL '${timeoutHours} hours', 0)`,
-          [
-            subTaskId,
-            ruleKey,
-            store,
-            assignee.username,
-            assignee.role,
-            title,
-            initialDetail,
-            JSON.stringify({ ...sourceDataBase, pipeline: 'v2_min' }),
-            JSON.stringify(msgIds)
-          ]
-        );
-      } catch (e2) {
-        logger.error({ err: e2?.message, taskId: subTaskId, store, ruleKey }, 'bi-anomaly: master_tasks insert failed');
-      }
+      logger.error({ err: e?.message, taskId: subTaskId, store, ruleKey }, 'bi-anomaly: unified task creation failed');
     }
   }
 

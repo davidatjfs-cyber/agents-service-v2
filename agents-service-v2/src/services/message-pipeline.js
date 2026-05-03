@@ -22,6 +22,7 @@ import {
 } from './feishu-client.js';
 import { extractStoreFromText } from '../utils/store-name-in-text.js';
 import { query } from '../utils/db.js';
+import { addTaskEvidence } from './task-orchestrator.js';
 import { checkIdempotency, saveIdempotency } from '../middleware/idempotency.js';
 import sessionMiddleware from './agent-session/session-middleware.js';
 const { checkAndRestoreSession: checkSession, enhancePromptWithSession } = sessionMiddleware.default || sessionMiddleware;
@@ -146,17 +147,24 @@ async function checkAndProcessPendingReply(openId, text, messageId) {
       await query(`DELETE FROM feishu_pending_replies WHERE open_id = $1`, [openId]).catch(() => {});
       return null;
     }
-    // 保存整改回复到 master_tasks
+    // 保存整改回复到统一任务证据链，并通过状态机推进到 Human Review
     const replyContent = String(text).trim();
-    await query(
-      `UPDATE master_tasks
-       SET status = 'pending_review',
-           response_text = $2,
-           response_at = NOW(),
-           updated_at = NOW()
-       WHERE task_id = $1`,
-      [taskId, replyContent]
-    ).catch(() => {});
+    await addTaskEvidence(taskId, {
+      evidenceType: 'text',
+      content: replyContent,
+      submittedBy: openId,
+      submittedRole: 'feishu_user',
+      metadata: { messageId, source: 'feishu_pending_reply' }
+    }).catch(async () => {
+      await query(
+        `UPDATE master_tasks
+         SET response_text = $2,
+             response_at = NOW(),
+             updated_at = NOW()
+         WHERE task_id = $1`,
+        [taskId, replyContent]
+      ).catch(() => {});
+    });
     // 清除 pending 状态
     await query(`DELETE FROM feishu_pending_replies WHERE open_id = $1`, [openId]).catch(() => {});
     logger.info({ openId, taskId, replyLen: replyContent.length }, 'pending reply processed → task pending_review');

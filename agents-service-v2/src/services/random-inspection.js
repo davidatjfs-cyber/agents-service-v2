@@ -10,6 +10,7 @@ import { getConfig } from './config-service.js';
 import { sendCard, sendText } from './feishu-client.js';
 import { formatTaskCardAuditSection } from './task-reply-audit-hint.js';
 import { resolveSingleScoringUser } from '../utils/scoring-assignee.js';
+import { createUnifiedTask } from './task-orchestrator.js';
 
 const _timers = new Map();
 const _status = new Map();
@@ -184,21 +185,23 @@ async function sendSafetyCheck(config) {
 
   // Create master_task
   try {
-      await query(
-        `INSERT INTO master_tasks (task_id, status, source, category, store, assignee_username, assignee_role, title, detail, source_data, feishu_msg_ids, dispatched_at, timeout_at, remind_count, last_reminder_at)
-         VALUES ($1, 'pending_response', 'random_inspection', $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, NOW(), NOW() + INTERVAL '${timeWindow} minutes', 0, NOW())`,
-        [
-          taskId,
-          taskType,
-          pickedStore,
-          assigneeUsername || usernames[0] || '',
-          assigneeRole,
-          `${pickedStore} · ${taskType}`,
-          `类型：${taskType}\n任务：${taskDesc}\n时限：${timeWindow}分钟`,
-          JSON.stringify({ taskType, taskDesc, assignee_open_ids: [...new Set(sentOpenIds)] }),
-          JSON.stringify(sentMessageIds)
-        ]
-      );
+    const created = await createUnifiedTask({
+      taskId,
+      source: 'random_inspection',
+      category: taskType,
+      store: pickedStore,
+      assigneeUsername: assigneeUsername || usernames[0] || '',
+      assigneeRole,
+      assigneeAgent: 'ops_supervisor',
+      title: `${pickedStore} · ${taskType}`,
+      detail: `类型：${taskType}\n任务：${taskDesc}\n时限：${timeWindow}分钟`,
+      sourceData: { taskType, taskDesc, assignee_open_ids: [...new Set(sentOpenIds)] },
+      feishuMsgIds: sentMessageIds,
+      timeoutHours: Math.max(1, Math.ceil(Number(timeWindow || 60) / 60)),
+      targetStatus: 'pending_response',
+      createdFrom: 'random_inspection'
+    });
+    if (!created.ok) throw new Error(created.error || 'create_unified_task_failed');
     logger.info({ taskId, store: pickedStore, type: taskType }, 'random-inspection: task created');
   } catch (e) {
     logger.warn({ err: e?.message }, 'random-inspection: failed to create master_task');

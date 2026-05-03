@@ -11,6 +11,7 @@ import { runAnomalyChecks } from './anomaly-engine.js';
 import { sendText, sendCard } from './feishu-client.js';
 import { resolveSingleScoringUser } from '../utils/scoring-assignee.js';
 import { formatTaskCardAuditSection } from './task-reply-audit-hint.js';
+import { createUnifiedTask } from './task-orchestrator.js';
 
 /** 定时任务多角色时：先店长、再出品经理，其余保持配置顺序 */
 const PRIMARY_ROLE_ORDER = ['store_manager', 'store_production_manager', 'front_manager'];
@@ -398,26 +399,23 @@ export async function executeDailyInspectionItem(item) {
 
       // 写入 master_tasks
       try {
-        await query(
-          `INSERT INTO master_tasks
-             (task_id, status, source, category, store, assignee_username, assignee_role,
-              title, detail, source_data, feishu_msg_ids, dispatched_at, timeout_at, remind_count)
-           VALUES
-             ($1, 'pending_response', 'scheduled_inspection', $2, $3, $4, $5,
-              $6, $7, $8::jsonb, $9::jsonb, NOW(), NOW() + INTERVAL '1 hour', 0)`,
-          [
-            taskId, type, store, assigneeUsername, assigneeRole,
-            `${store} · ${label}`,
-            `类型：${label}\nBI检测：${alertN ? `触发${alertN}条异常` : '无异常'}\n时间：${timeNow}`,
-            JSON.stringify({
-              taskType: type,
-              label,
-              alertN,
-              assignee_open_ids: pingedOpenIds
-            }),
-            JSON.stringify(sentMsgIds)
-          ]
-        );
+        const created = await createUnifiedTask({
+          taskId,
+          source: 'scheduled_inspection',
+          category: type,
+          store,
+          assigneeUsername,
+          assigneeRole,
+          assigneeAgent: 'ops_supervisor',
+          title: `${store} · ${label}`,
+          detail: `类型：${label}\nBI检测：${alertN ? `触发${alertN}条异常` : '无异常'}\n时间：${timeNow}`,
+          sourceData: { taskType: type, label, alertN, assignee_open_ids: pingedOpenIds },
+          feishuMsgIds: sentMsgIds,
+          timeoutHours: 1,
+          targetStatus: 'pending_response',
+          createdFrom: 'daily_inspection_scheduler'
+        });
+        if (!created.ok) throw new Error(created.error || 'create_unified_task_failed');
         logger.info({ taskId, store, type, alertN, msgIds: sentMsgIds.length }, 'daily-inspection: patrol task saved to master_tasks');
       } catch (e) {
         logger.warn({ err: e?.message, store, type }, 'daily-inspection: patrol master_tasks insert failed');
@@ -468,31 +466,23 @@ export async function executeDailyInspectionItem(item) {
     const primaryRole = staffRows[0]?.role || roleList[0] || 'store_manager';
 
     try {
-      await query(
-        `INSERT INTO master_tasks
-           (task_id, status, source, category, store, assignee_username, assignee_role,
-            title, detail, source_data, feishu_msg_ids, dispatched_at, timeout_at, remind_count)
-         VALUES
-           ($1, 'pending_response', 'scheduled_inspection', $2, $3, $4, $5,
-            $6, $7, $8::jsonb, $9::jsonb, NOW(), NOW() + INTERVAL '3 hours', 0)`,
-        [
-          taskId,
-          type,
-          store,
-          primaryUsername,
-          primaryRole,
-          `${store} · ${label}`,
-          `类型：${label}\n任务：${desc || '请按要求完成并反馈'}\n时间：${timeNow}`,
-          JSON.stringify({
-            taskType: type,
-            label,
-            desc,
-            assignee_open_ids: allPingedOpenIds,
-            assignee_usernames: assigneeUsernames
-          }),
-          JSON.stringify(allSentMsgIds)
-        ]
-      );
+      const created = await createUnifiedTask({
+        taskId,
+        source: 'scheduled_inspection',
+        category: type,
+        store,
+        assigneeUsername: primaryUsername,
+        assigneeRole: primaryRole,
+        assigneeAgent: 'ops_supervisor',
+        title: `${store} · ${label}`,
+        detail: `类型：${label}\n任务：${desc || '请按要求完成并反馈'}\n时间：${timeNow}`,
+        sourceData: { taskType: type, label, desc, assignee_open_ids: allPingedOpenIds, assignee_usernames: assigneeUsernames },
+        feishuMsgIds: allSentMsgIds,
+        timeoutHours: 3,
+        targetStatus: 'pending_response',
+        createdFrom: 'daily_inspection_scheduler'
+      });
+      if (!created.ok) throw new Error(created.error || 'create_unified_task_failed');
       logger.info(
         { taskId, store, primaryUsername, primaryRole, msgIds: allSentMsgIds.length, assigneeN: staffRows.length },
         'daily-inspection: task saved to master_tasks (merged assignees)'

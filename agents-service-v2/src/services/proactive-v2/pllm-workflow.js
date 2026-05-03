@@ -1,6 +1,7 @@
 import { query } from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { sendCard, sendText } from '../feishu-client.js';
+import { transitionTask } from '../task-state-machine.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -115,16 +116,22 @@ export async function applyPllmDecision(taskId, decision, operator, planText = '
   const d = String(decision || '').trim().toLowerCase();
 
   if (d === 'not_suitable') {
-    await query(
-      `UPDATE master_tasks
-       SET status = 'closed',
-           closed_at = NOW(),
-           updated_at = NOW(),
-           resolution_code = 'pllm_not_suitable',
-           response_text = COALESCE(NULLIF($2, ''), response_text)
-       WHERE task_id = $1`,
-      [taskId, String(planText || '').trim()]
-    );
+    const tr = await transitionTask(taskId, 'closed', 'pllm_workflow', {
+      resolutionCode: 'pllm_not_suitable',
+      responseText: String(planText || '').trim()
+    }).catch(() => null);
+    if (!tr?.ok) {
+      await query(
+        `UPDATE master_tasks
+         SET status = 'closed',
+             closed_at = NOW(),
+             updated_at = NOW(),
+             resolution_code = 'pllm_not_suitable',
+             response_text = COALESCE(NULLIF($2, ''), response_text)
+         WHERE task_id = $1`,
+        [taskId, String(planText || '').trim()]
+      );
+    }
     await patchTaskSourceData(taskId, {
       pllm_decision: 'not_suitable',
       pllm_tracking_enabled: false,
@@ -140,14 +147,19 @@ export async function applyPllmDecision(taskId, decision, operator, planText = '
   }
 
   if (d === 'execute') {
-    await query(
-      `UPDATE master_tasks
-       SET status = 'pending_response',
-           updated_at = NOW(),
-           response_text = COALESCE(NULLIF($2, ''), response_text)
-       WHERE task_id = $1`,
-      [taskId, String(planText || '').trim()]
-    );
+    const tr = await transitionTask(taskId, 'pending_response', 'pllm_workflow', {
+      responseText: String(planText || '').trim()
+    }).catch(() => null);
+    if (!tr?.ok) {
+      await query(
+        `UPDATE master_tasks
+         SET status = 'pending_response',
+             updated_at = NOW(),
+             response_text = COALESCE(NULLIF($2, ''), response_text)
+         WHERE task_id = $1`,
+        [taskId, String(planText || '').trim()]
+      );
+    }
     await patchTaskSourceData(taskId, {
       pllm_decision: 'execute',
       pllm_tracking_enabled: true,
@@ -171,15 +183,20 @@ export async function applyPllmDecision(taskId, decision, operator, planText = '
 async function finalizePllmTaskAsFailed(task, reason) {
   const sd = parseSourceData(task.source_data);
   const failCount = Number(sd?.pllm_fail_count_total || 0) + 1;
-  await query(
-    `UPDATE master_tasks
-     SET status = 'closed',
-         closed_at = NOW(),
-         updated_at = NOW(),
-         resolution_code = 'pllm_failed_no_plan'
-     WHERE task_id = $1`,
-    [task.task_id]
-  );
+  const tr = await transitionTask(task.task_id, 'closed', 'pllm_workflow', {
+    resolutionCode: 'pllm_failed_no_plan'
+  }).catch(() => null);
+  if (!tr?.ok) {
+    await query(
+      `UPDATE master_tasks
+       SET status = 'closed',
+           closed_at = NOW(),
+           updated_at = NOW(),
+           resolution_code = 'pllm_failed_no_plan'
+       WHERE task_id = $1`,
+      [task.task_id]
+    );
+  }
   await patchTaskSourceData(task.task_id, {
     pllm_tracking_enabled: false,
     pllm_failed_at: nowIso(),
@@ -215,15 +232,20 @@ export async function processPllmWorkflowTick() {
     if (decision !== 'execute') continue;
     const rt = String(task.response_text || '').trim();
     if (hasExplicitExecutionPlan(rt)) {
-      await query(
-        `UPDATE master_tasks
-         SET status = 'resolved',
-             resolved_at = NOW(),
-             updated_at = NOW(),
-             resolution_code = 'pllm_plan_submitted'
-         WHERE task_id = $1`,
-        [task.task_id]
-      );
+      const tr = await transitionTask(task.task_id, 'resolved', 'pllm_workflow', {
+        resolutionCode: 'pllm_plan_submitted'
+      }).catch(() => null);
+      if (!tr?.ok) {
+        await query(
+          `UPDATE master_tasks
+           SET status = 'resolved',
+               resolved_at = NOW(),
+               updated_at = NOW(),
+               resolution_code = 'pllm_plan_submitted'
+           WHERE task_id = $1`,
+          [task.task_id]
+        );
+      }
       await patchTaskSourceData(task.task_id, {
         pllm_tracking_enabled: false,
         pllm_plan_submitted_at: nowIso(),

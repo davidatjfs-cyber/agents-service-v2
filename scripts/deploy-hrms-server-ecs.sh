@@ -75,34 +75,35 @@ rsync -avz -e ssh \
 rsync -avz -e ssh "$HRMS_SW_TMP" "${ECS_HOST}:${REMOTE_WEB_ROOT}/sw.js"
 
 # Keep legacy mirror paths in sync if they exist on the host (best-effort).
+# 使用 RW/RWA 单行本地展开路径，其余变量一律 \$ 防止未引用 heredoc 在笔记本上误展开（set -u）
 ssh -o ConnectTimeout=60 "${ECS_HOST}" "bash -s" <<EOS2
 set -euo pipefail
-mkdir -p "${REMOTE_WEB_ROOT}/hr-management-system" || true
-cp -f "${REMOTE_WEB_ROOT}/working-fixed.html" "${REMOTE_WEB_ROOT}/hr-management-system/working-fixed.html" || true
-cp -f "${REMOTE_WEB_ROOT}/mobile-nav-production.html" "${REMOTE_WEB_ROOT}/hr-management-system/mobile-nav-production.html" || true
-if [[ -d "${REMOTE_WEB_ROOT_ALT}" ]]; then
-  cp -f "${REMOTE_WEB_ROOT}/working-fixed.html" "${REMOTE_WEB_ROOT_ALT}/working-fixed.html" || true
-  cp -f "${REMOTE_WEB_ROOT}/mobile-nav-production.html" "${REMOTE_WEB_ROOT_ALT}/mobile-nav-production.html" || true
+RW='${REMOTE_WEB_ROOT}'
+RWA='${REMOTE_WEB_ROOT_ALT}'
+mkdir -p "\$RW/hr-management-system" || true
+cp -f "\$RW/working-fixed.html" "\$RW/hr-management-system/working-fixed.html" || true
+cp -f "\$RW/mobile-nav-production.html" "\$RW/hr-management-system/mobile-nav-production.html" || true
+if [[ -d "\$RWA" ]]; then
+  cp -f "\$RW/working-fixed.html" "\$RWA/working-fixed.html" || true
+  cp -f "\$RW/mobile-nav-production.html" "\$RWA/mobile-nav-production.html" || true
 fi
 
 # nginx root=/opt/hrms 时，浏览器请求 /uploads/* 映射到磁盘 /opt/hrms/uploads/*；
 # Multer 与 Express.static 实际写入的是 /opt/hrms/server/uploads/*。
 # 若两者不一致，营业日报「日结单」等图片在域名下会 404（直连 :3000 却正常）——用符号链接对齐。
-# 注意：本段经未引用 heredoc 发往远端，\$ 勿用于 UP_*，应写全 \${REMOTE_WEB_ROOT} 以免本地 set -u 展开空变量。
-mkdir -p "${REMOTE_WEB_ROOT}/server/uploads"
-if [[ -L "${REMOTE_WEB_ROOT}/uploads" ]]; then
-  rm -f "${REMOTE_WEB_ROOT}/uploads"
-elif [[ -d "${REMOTE_WEB_ROOT}/uploads" ]]; then
-  # Check if uploads dir has files (capture to var to avoid pipefail+SIGPIPE)
-  UPLOADS_HAS_FILES=$(find "${REMOTE_WEB_ROOT}/uploads" -mindepth 1 -print -quit 2>/dev/null || true)
-  if [[ -n "$UPLOADS_HAS_FILES" ]]; then
-    mv "${REMOTE_WEB_ROOT}/uploads" "${REMOTE_WEB_ROOT}/uploads.bak.$(date +%s)"
+mkdir -p "\$RW/server/uploads"
+if [[ -L "\$RW/uploads" ]]; then
+  rm -f "\$RW/uploads"
+elif [[ -d "\$RW/uploads" ]]; then
+  UPLOADS_HAS_FILES=\$(find "\$RW/uploads" -mindepth 1 -print -quit 2>/dev/null || true)
+  if [[ -n "\${UPLOADS_HAS_FILES}" ]]; then
+    mv "\$RW/uploads" "\$RW/uploads.bak.\$(date +%s)"
   else
-    rmdir "${REMOTE_WEB_ROOT}/uploads" 2>/dev/null || mv "${REMOTE_WEB_ROOT}/uploads" "${REMOTE_WEB_ROOT}/uploads.bak.$(date +%s)"
+    rmdir "\$RW/uploads" 2>/dev/null || mv "\$RW/uploads" "\$RW/uploads.bak.\$(date +%s)"
   fi
 fi
-ln -sfn "${REMOTE_WEB_ROOT}/server/uploads" "${REMOTE_WEB_ROOT}/uploads"
-echo ">>> OK: Web 根 uploads 已指向真实目录: ${REMOTE_WEB_ROOT}/uploads -> ${REMOTE_WEB_ROOT}/server/uploads"
+ln -sfn "\$RW/server/uploads" "\$RW/uploads"
+echo ">>> OK: Web 根 uploads 已指向真实目录: \$RW/uploads -> \$RW/server/uploads"
 EOS2
 
 REMOTE_SCRIPT=$(cat <<'EOS'

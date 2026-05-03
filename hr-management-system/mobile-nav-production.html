@@ -23128,6 +23128,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             { key: 'badDianping',     label: '大众点评差评',  unit: '条', group: '差评' },
             { key: 'badMeituan',      label: '美团差评',      unit: '条', group: '差评' },
             { key: 'badEleme',        label: '饿了么差评',    unit: '条', group: '差评' },
+            { key: 'dianpingRating',  label: '大众点评星级', unit: '星', group: '口碑' },
         ];
         const MT_FIELD_MAP = {};
         MT_ALL_FIELDS.forEach(f => { MT_FIELD_MAP[f.key] = f; });
@@ -30898,6 +30899,11 @@ tr:nth-child(even) td { background: #fafafa; }
                         const targetDineOrders = Number(mt?.dineOrders || 0);
                         const targetRecharge = Number(mt?.recharge || 0);
                         const targetEfficiency = Number(mt?.efficiency || 1500);
+                        const targetDianpingRating = Number(mt?.dianpingRating || 0);
+                        const avgDianpingStars =
+                          s.avgDianpingRating != null && Number.isFinite(Number(s.avgDianpingRating))
+                            ? Number(s.avgDianpingRating)
+                            : null;
 
                         const catTotal = Number(s.catWaterAmt||0) + Number(s.catSoupAmt||0) + Number(s.catRoastAmt||0) + Number(s.catWokAmt||0);
                         const catQtyTotal = Number(s.catWaterQty||0) + Number(s.catSoupQty||0) + Number(s.catRoastQty||0) + Number(s.catWokQty||0);
@@ -31091,6 +31097,8 @@ tr:nth-child(even) td { background: #fafafa; }
                                     <div style="font-size:11px; color:rgba(200,215,230,0.7); font-weight:700;">总差评数</div>
                                     <div style="font-size:24px; font-weight:900; color:${red}; margin-top:2px;">${fmtInt(badTotal)}条</div>
                                 </div>
+                                ${kv('大众点评星级（有填报日期的均值）', avgDianpingStars != null ? avgDianpingStars.toFixed(2) + ' 星' : '—', blue)}
+                                ${kv('大众点评星级目标', targetDianpingRating > 0 ? targetDianpingRating.toFixed(2) + ' 星' : '未设置', targetDianpingRating > 0 && avgDianpingStars != null ? (avgDianpingStars >= targetDianpingRating ? green : red) : null)}
                                 ${kv('大众点评', fmtInt(s.badDianping) + '条', null)}
                                 ${kv('美团外卖', fmtInt(s.badMeituan) + '条', null)}
                                 ${kv('饿了么外卖', fmtInt(s.badEleme) + '条', null)}

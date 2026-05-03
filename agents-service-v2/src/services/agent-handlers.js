@@ -45,6 +45,7 @@ import { getSOPByScenario, detectScenario, formatSopPromptAppendix } from './sop
 import { requestAgent } from './agent-helper.js';
 import { getStrategy, formatStrategyPromptAppendix, buildStrategyContextFromQuestion } from './strategy-engine.js';
 import { detectMetricFromQuestion } from './analysis-intent.js';
+import { createUnifiedTask } from './task-orchestrator.js';
 
 const NOW_CN = () => new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
 // pg DATE 列返回 JS Date 对象，需用上海时区格式化避免年份丢失
@@ -3503,26 +3504,23 @@ async function handleAcceptActionPlan(text, ctx) {
       const userSlug = assigneeUsername.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24) || `u${staffSeq}`;
       const taskId = `ACT-${nowStr.replace(/-/g, '')}-${String(i + 1).padStart(2, '0')}-${userSlug}`;
 
-      await query(
-        `INSERT INTO master_tasks
-           (task_id, status, source, category, store, brand, assignee_username, assignee_role,
-            title, detail, source_data, feishu_msg_ids, dispatched_at, timeout_at, remind_count)
-         VALUES
-           ($1, 'pending_response', 'auto_collab', 'action_plan', $2, $3, $4, $5,
-            $6, $7, $8::jsonb, '[]'::jsonb, NOW(), $9, 0)
-         ON CONFLICT (task_id) DO NOTHING`,
-        [
-          taskId,
-          store,
-          brand,
-          assigneeUsername,
-          assigneeRoleValue,
-          title,
-          `来源：经营分析行动计划\n原始建议：${line}\n创建时间：${nowStr}`,
-          JSON.stringify({ source: 'action_plan', originalLine: line }),
-          timeoutAt.toISOString()
-        ]
-      ).catch((e) => { logger.debug({ err: e?.message }, 'saveMemory failed'); });
+      await createUnifiedTask({
+        taskId,
+        source: 'auto_collab',
+        category: 'action_plan',
+        store,
+        brand,
+        assigneeUsername,
+        assigneeRole: assigneeRoleValue,
+        assigneeAgent: 'ops_supervisor',
+        title,
+        detail: `来源：经营分析行动计划\n原始建议：${line}\n创建时间：${nowStr}`,
+        sourceData: { source: 'action_plan', originalLine: line },
+        feishuMsgIds: [],
+        timeoutAt: timeoutAt.toISOString(),
+        targetStatus: 'pending_response',
+        createdFrom: 'agent_handlers_action_plan'
+      }).catch((e) => { logger.debug({ err: e?.message }, 'createUnifiedTask failed'); });
 
       createdTasks.push({
         taskId,

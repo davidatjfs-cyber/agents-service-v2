@@ -9,6 +9,7 @@ import { getStoreProfileAsync } from '../../config/store-profile.js';
 import { saveOutcome } from '../agent-memory.js';
 import { getProactiveConfig } from './config.js';
 import { sendCard, sendText } from '../feishu-client.js';
+import { createUnifiedTask } from '../task-orchestrator.js';
 
 /** 与异常类型绑定的经营指标维度（内部存英文键，便于查询/记忆标签） */
 export function inferMetricFocus(anomalyType) {
@@ -430,27 +431,23 @@ export async function acceptProactiveLlmActionPlan(ctx) {
         '责任人策略：仅管理员（避免门店骚扰）'
       ];
 
-      await query(
-        `INSERT INTO master_tasks
-         (task_id, status, source, category, store, brand, assignee_username, assignee_role,
-          title, detail, source_data, feishu_msg_ids, dispatched_at, timeout_at, remind_count)
-       VALUES
-         ($1, 'pending_response', $2, 'action_plan', $3, $4, $5, $6,
-          $7, $8, $9::jsonb, '[]'::jsonb, NOW(), $10, 0)
-       ON CONFLICT (task_id) DO NOTHING`,
-        [
-          taskId,
-          'proactive_llm',
-          targetStore,
-          targetBrand,
-          assigneeUsername,
-          assigneeRoleValue,
-          title,
-          detailLines.join('\n'),
-          JSON.stringify(sourceData),
-          timeoutAt.toISOString()
-        ]
-      ).catch((e) => {
+      await createUnifiedTask({
+        taskId,
+        source: 'proactive_llm',
+        category: 'action_plan',
+        store: targetStore,
+        brand: targetBrand,
+        assigneeUsername,
+        assigneeRole: assigneeRoleValue,
+        assigneeAgent: 'ops_supervisor',
+        title,
+        detail: detailLines.join('\n'),
+        sourceData,
+        feishuMsgIds: [],
+        timeoutAt: timeoutAt.toISOString(),
+        targetStatus: 'pending_response',
+        createdFrom: 'proactive_llm_actions'
+      }).catch((e) => {
         logger.warn({ err: e?.message, taskId }, 'proactive-llm-actions: master_tasks insert failed');
       });
 

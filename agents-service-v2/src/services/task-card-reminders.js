@@ -23,6 +23,7 @@ import {
   getMonthlyAttitudeFilingCountForStore
 } from '../utils/performance-filing-counts.js';
 import { processPllmWorkflowTick, sendPllmMonthlyReportIfDue } from './proactive-v2/pllm-workflow.js';
+import { transitionTask } from './task-state-machine.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -233,6 +234,30 @@ async function recordStandardChaseAttitudeOnly(task) {
       [assignee, task.task_id, store, `%${store}%`, '%充值异常%', '%桌访产品异常%']
     ).catch(() => ({ rows: [] }));
     if (dup.rows?.length) {
+      const tr = await transitionTask(task.task_id, 'hr_filed', 'task_reminder', {
+        resolutionCode: 'hr_attitude_standard_chase_deduped'
+      }).catch(() => null);
+      if (!tr?.ok) {
+        await query(
+          `UPDATE master_tasks SET
+             hr_performance_recorded = TRUE,
+             status = 'hr_filed',
+             resolution_code = $2,
+             updated_at = NOW()
+           WHERE task_id = $1`,
+          [task.task_id, 'hr_attitude_standard_chase_deduped']
+        ).catch(() => {});
+      }
+      logger.info({ taskId: task.task_id, source: task.source, duplicateOf: dup.rows[0]?.task_id }, 'task-reminder: skip duplicate attitude filing for deprecated anomaly path');
+      return true;
+    }
+  }
+
+  try {
+    const tr = await transitionTask(task.task_id, 'hr_filed', 'task_reminder', {
+      resolutionCode: 'hr_attitude_standard_chase'
+    }).catch(() => null);
+    if (!tr?.ok) {
       await query(
         `UPDATE master_tasks SET
            hr_performance_recorded = TRUE,
@@ -240,23 +265,9 @@ async function recordStandardChaseAttitudeOnly(task) {
            resolution_code = $2,
            updated_at = NOW()
          WHERE task_id = $1`,
-        [task.task_id, 'hr_attitude_standard_chase_deduped']
-      ).catch(() => {});
-      logger.info({ taskId: task.task_id, source: task.source, duplicateOf: dup.rows[0]?.task_id }, 'task-reminder: skip duplicate attitude filing for deprecated anomaly path');
-      return true;
+        [task.task_id, 'hr_attitude_standard_chase']
+      );
     }
-  }
-
-  try {
-    await query(
-      `UPDATE master_tasks SET
-         hr_performance_recorded = TRUE,
-         status = 'hr_filed',
-         resolution_code = $2,
-         updated_at = NOW()
-       WHERE task_id = $1`,
-      [task.task_id, 'hr_attitude_standard_chase']
-    );
     logger.info({ taskId: task.task_id, source: task.source }, 'task-reminder: standard chase → attitude filed (DB updated)');
   } catch (e) {
     logger.error({ taskId: task.task_id, source: task.source, err: e?.message }, 'task-reminder: DB update FAILED, status not set to hr_filed');
@@ -344,6 +355,30 @@ async function recordBiChaseAttitudeOnly(task) {
       [assignee, task.task_id, store, `%${store}%`, '%充值异常%', '%桌访产品异常%']
     ).catch(() => ({ rows: [] }));
     if (dup.rows?.length) {
+      const tr = await transitionTask(task.task_id, 'hr_filed', 'task_reminder', {
+        resolutionCode: 'hr_attitude_bi_chase_deduped'
+      }).catch(() => null);
+      if (!tr?.ok) {
+        await query(
+          `UPDATE master_tasks SET
+             hr_performance_recorded = TRUE,
+             status = 'hr_filed',
+             resolution_code = $2,
+             updated_at = NOW()
+           WHERE task_id = $1`,
+          [task.task_id, 'hr_attitude_bi_chase_deduped']
+        ).catch(() => {});
+      }
+      logger.info({ taskId: task.task_id, source: task.source, duplicateOf: dup.rows[0]?.task_id }, 'task-reminder: skip duplicate BI attitude filing for same anomaly');
+      return true;
+    }
+  }
+
+  try {
+    const tr = await transitionTask(task.task_id, 'hr_filed', 'task_reminder', {
+      resolutionCode: 'hr_attitude_bi_chase'
+    }).catch(() => null);
+    if (!tr?.ok) {
       await query(
         `UPDATE master_tasks SET
            hr_performance_recorded = TRUE,
@@ -351,23 +386,9 @@ async function recordBiChaseAttitudeOnly(task) {
            resolution_code = $2,
            updated_at = NOW()
          WHERE task_id = $1`,
-        [task.task_id, 'hr_attitude_bi_chase_deduped']
-      ).catch(() => {});
-      logger.info({ taskId: task.task_id, source: task.source, duplicateOf: dup.rows[0]?.task_id }, 'task-reminder: skip duplicate BI attitude filing for same anomaly');
-      return true;
+        [task.task_id, 'hr_attitude_bi_chase']
+      );
     }
-  }
-
-  try {
-    await query(
-      `UPDATE master_tasks SET
-         hr_performance_recorded = TRUE,
-         status = 'hr_filed',
-         resolution_code = $2,
-         updated_at = NOW()
-       WHERE task_id = $1`,
-      [task.task_id, 'hr_attitude_bi_chase']
-    );
     logger.info({ taskId: task.task_id, source: task.source }, 'task-reminder: BI chase → attitude filed (DB updated)');
   } catch (e) {
     logger.error({ taskId: task.task_id, source: task.source, err: e?.message }, 'task-reminder: BI DB update FAILED, status not set to hr_filed');

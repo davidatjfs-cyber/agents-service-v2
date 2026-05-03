@@ -10180,6 +10180,51 @@
                 display: none !important;
             }
         }
+        .atb-shell { min-height: calc(100dvh - 40px); padding: 18px; color: rgba(248,250,252,0.96); }
+        .atb-hero { position: relative; overflow: hidden; border: 1px solid rgba(245,158,11,0.22); border-radius: 28px; padding: 22px; background: linear-gradient(145deg, rgba(26,20,12,0.96), rgba(9,9,11,0.98) 58%, rgba(20,54,48,0.9)); box-shadow: 0 24px 80px rgba(0,0,0,0.34); }
+        .atb-kicker { font-size: 11px; letter-spacing: .18em; color: rgba(251,191,36,0.78); font-weight: 800; text-transform: uppercase; }
+        .atb-title { margin-top: 4px; font-size: clamp(26px, 7vw, 44px); line-height: 1.02; font-weight: 900; letter-spacing: -0.05em; }
+        .atb-sub { margin-top: 10px; color: rgba(226,232,240,0.72); max-width: 760px; font-size: 14px; }
+        .atb-compose { margin-top: 18px; display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: stretch; }
+        .atb-input { width: 100%; min-height: 72px; resize: vertical; border: 1px solid rgba(255,255,255,0.12); border-radius: 18px; background: rgba(255,255,255,0.07); color: #fff; padding: 14px 16px; font: inherit; outline: none; }
+        .atb-primary { border: none; border-radius: 18px; padding: 0 22px; min-width: 120px; background: linear-gradient(135deg, #f59e0b, #f97316); color: #111827; font-weight: 900; cursor: pointer; box-shadow: 0 16px 32px rgba(249,115,22,0.24); }
+        .atb-toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+        .atb-chip { border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.055); color: rgba(226,232,240,0.82); border-radius: 999px; padding: 8px 12px; font-size: 13px; cursor: pointer; }
+        .atb-chip.active { background: rgba(245,158,11,0.18); border-color: rgba(245,158,11,0.36); color: #fbbf24; }
+        .atb-stats { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin: 16px 0; }
+        .atb-stat { border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 14px; background: rgba(255,255,255,0.045); }
+        .atb-stat b { display:block; font-size: 24px; line-height:1; }
+        .atb-stat span { display:block; margin-top:6px; color: rgba(226,232,240,0.62); font-size:12px; }
+        .atb-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+        .atb-card { position: relative; border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; padding: 16px; background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.035)); cursor: pointer; }
+        .atb-card-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+        .atb-badge { border-radius:999px; padding: 5px 9px; font-size: 12px; font-weight: 800; background: rgba(96,165,250,0.14); color: #93c5fd; white-space: nowrap; }
+        .atb-badge.pending { background: rgba(251,191,36,0.14); color:#fbbf24; }
+        .atb-badge.done { background: rgba(52,211,153,0.14); color:#86efac; }
+        .atb-badge.bad { background: rgba(251,113,133,0.14); color:#fda4af; }
+        .atb-card h3 { margin: 12px 0 8px; font-size: 17px; line-height: 1.25; }
+        .atb-card p { color: rgba(226,232,240,0.66); font-size: 13px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .atb-meta { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; color:rgba(226,232,240,0.62); font-size:12px; }
+        .atb-detail { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.58); backdrop-filter: blur(16px); display: none; align-items: flex-end; }
+        .atb-detail.open { display:flex; }
+        .atb-panel { width: min(760px, 100%); max-height: 88dvh; overflow:auto; margin: 0 auto; border-radius: 28px 28px 0 0; border: 1px solid rgba(255,255,255,0.1); background: #0b0b0d; padding: 18px; box-shadow: 0 -24px 90px rgba(0,0,0,0.55); }
+        .atb-panel-actions { position: sticky; bottom: -18px; display:grid; grid-template-columns: repeat(3,1fr); gap:8px; padding: 12px 0 0; background: linear-gradient(180deg, transparent, #0b0b0d 25%); }
+        .atb-action { border:1px solid rgba(255,255,255,0.1); border-radius:14px; background:rgba(255,255,255,0.06); color:#fff; padding:12px 8px; font-weight:800; cursor:pointer; }
+        .atb-action.good { background:rgba(52,211,153,0.16); color:#86efac; }
+        .atb-action.bad { background:rgba(251,113,133,0.16); color:#fda4af; }
+        .atb-section { margin-top: 16px; padding: 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); }
+        .atb-timeline { display:grid; gap:8px; margin-top:8px; }
+        .atb-line { font-size:12px; color:rgba(226,232,240,0.68); padding-left:12px; border-left:2px solid rgba(245,158,11,0.35); }
+        @media (max-width: 768px) {
+            .atb-shell { padding: 10px 10px calc(116px + env(safe-area-inset-bottom,0px)); }
+            .atb-hero { border-radius: 24px; padding: 18px; }
+            .atb-compose { grid-template-columns: 1fr; }
+            .atb-primary { min-height: 50px; width: 100%; }
+            .atb-stats { grid-template-columns: repeat(2, minmax(0,1fr)); }
+            .atb-grid { grid-template-columns: 1fr; }
+            .atb-panel { max-height: 92dvh; }
+            .atb-panel-actions { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
@@ -10291,6 +10336,11 @@
                         <i>📊</i> <span>数据中心</span>
                     </a>
                 </div>
+                <div class="nav-item" data-page="agent-tasks" style="display:none;">
+                    <a href="#" class="nav-link" onclick="showPage('agent-tasks')">
+                        <i>🧭</i> <span>Agent任务</span>
+                    </a>
+                </div>
                 <div class="nav-item" data-page="exam">
                     <a href="#" class="nav-link" onclick="showPage('exam')">
                         <i>📝</i> <span>考试测评</span>
@@ -10341,6 +10391,39 @@
                 <button type="button" onclick="toggleMobileSidebar()" style="width:36px;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.8);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;">☰</button>
                 <div style="font-weight:800;font-size:15px;color:rgba(255,255,255,0.92);" id="mobile-topbar-title">营业日报</div>
                 <div style="width:36px;"></div>
+            </div>
+
+            <div id="agent-tasks-page" class="hidden">
+                <div class="atb-shell">
+                    <section class="atb-hero">
+                        <div class="atb-kicker">AGENT TASK COMMAND CENTER</div>
+                        <h1 class="atb-title">把问题交给Agent，过程留在看板</h1>
+                        <p class="atb-sub">管理员专用。发布门店问题、自动分配Agent、跟踪执行、收证据、验收打回都在这里完成。</p>
+                        <div class="atb-compose">
+                            <textarea id="atb-create-content" class="atb-input" placeholder="例：洪潮的卫生太差了，请督促门店2周内整改完成，每次提交前厅、后厨、洗手间照片。"></textarea>
+                            <button class="atb-primary" onclick="createAgentBoardTask()">发布任务</button>
+                        </div>
+                    </section>
+                    <div class="atb-stats">
+                        <div class="atb-stat"><b id="atb-stat-total">-</b><span>总任务</span></div>
+                        <div class="atb-stat"><b id="atb-stat-running">-</b><span>执行中</span></div>
+                        <div class="atb-stat"><b id="atb-stat-review">-</b><span>待验收</span></div>
+                        <div class="atb-stat"><b id="atb-stat-overdue">-</b><span>超时</span></div>
+                        <div class="atb-stat"><b id="atb-stat-avgtime">-</b><span>平均闭环</span></div>
+                        <div class="atb-stat"><b id="atb-stat-evidence">-</b><span>证据覆盖</span></div>
+                    </div>
+                    <div class="atb-toolbar" id="atb-filters">
+                        <button class="atb-chip active" data-filter="" onclick="setAgentTaskFilter('', this)">全部</button>
+                        <button class="atb-chip" data-filter="dispatched" onclick="setAgentTaskFilter('dispatched', this)">执行中</button>
+                        <button class="atb-chip" data-filter="pending_review" onclick="setAgentTaskFilter('pending_review', this)">待验收</button>
+                        <button class="atb-chip" data-filter="rejected" onclick="setAgentTaskFilter('rejected', this)">已打回</button>
+                        <button class="atb-chip" onclick="loadAgentTaskBoard(true)">刷新</button>
+                    </div>
+                    <div class="atb-grid" id="atb-list"></div>
+                </div>
+                <div class="atb-detail" id="atb-detail" onclick="if(event.target===this)closeAgentTaskDetail()">
+                    <div class="atb-panel" id="atb-panel"></div>
+                </div>
             </div>
 
             <div id="daily-report-page" class="hidden">
@@ -18906,6 +18989,10 @@ th { background: #f5f5f5; font-weight: 700; }
             if (page === 'forecast' || page === 'agents') {
                 return hrmsCanAccessSmartAssistant(role == null ? currentUser?.role : role);
             }
+            if (page === 'agent-tasks') {
+                const r = String(role == null ? currentUser?.role : role || '').trim();
+                return r === ROLES.ADMIN || r === ROLES.HQ_MANAGER || r === ROLES.HR_MANAGER;
+            }
             const pages = getRoleModulePages(role == null ? currentUser?.role : role);
             if (pages === null) return true;
             return Array.isArray(pages) && pages.includes(page);
@@ -18913,7 +19000,7 @@ th { background: #f5f5f5; font-weight: 700; }
 
         function getRoleBottomNavPages(role) {
             const r = String(role || '').trim();
-            if (r === ROLES.ADMIN) return ['profile', 'daily-report', 'reports', 'agents'];
+            if (r === ROLES.ADMIN) return ['profile', 'agent-tasks', 'reports', 'agents'];
             if (r === ROLES.STORE_MANAGER) return ['profile', 'attendance', 'daily-report', 'payment'];
             if (r === ROLES.PRODUCTION_MANAGER) return ['profile', 'attendance', 'forecast', 'rewards'];
             if (r === ROLES.HQ_MANAGER) return ['profile', 'daily-report', 'approvals', 'reports'];
@@ -19210,7 +19297,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             const usersNav = document.querySelector('.nav-item[data-page="users"]');
             if (usersNav) usersNav.style.display = 'none';
 
-            ['employees', 'approvals', 'payment', 'rewards', 'points', 'attendance', 'daily-report', 'reports', 'agents', 'exam', 'profile', 'knowledge']
+            ['employees', 'approvals', 'payment', 'rewards', 'points', 'attendance', 'daily-report', 'reports', 'agents', 'agent-tasks', 'exam', 'profile', 'knowledge']
                 .forEach((page) => {
                     const nav = document.querySelector(`.nav-item[data-page="${page}"]`);
                     if (nav) nav.style.display = canAccessModulePage(page) ? '' : 'none';
@@ -19315,6 +19402,214 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             }, 45000);
         }
 
+        var __atbFilter = '';
+        var __atbCurrentTaskId = '';
+
+        function atbEscape(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+            });
+        }
+
+        function atbHeaders() {
+            return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (HRMS_API?.token ? HRMS_API.token() : (localStorage.getItem('hrms_token') || '')) };
+        }
+
+        async function atbFetch(url, options) {
+            const res = await fetch(url, Object.assign({ headers: atbHeaders() }, options || {}));
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.ok === false) throw new Error(data.error || ('HTTP ' + res.status));
+            return data;
+        }
+
+        async function loadAgentTaskBoard(force) {
+            if (!currentUser || !canAccessModulePage('agent-tasks')) return;
+            const list = document.getElementById('atb-list');
+            if (list && (force || !list.dataset.loaded)) list.innerHTML = '<div class="atb-card"><h3>正在加载任务...</h3><p>正在从Agent任务中枢同步状态。</p></div>';
+            try {
+                const qs = new URLSearchParams();
+                if (__atbFilter) qs.set('status', __atbFilter);
+                qs.set('limit', '80');
+                const [summary, tasks] = await Promise.all([
+                    atbFetch('/api/agent-task-board/summary'),
+                    atbFetch('/api/agent-task-board/tasks?' + qs.toString())
+                ]);
+                renderAgentTaskStats(summary.summary || {});
+                renderAgentTaskList(tasks.tasks || []);
+                loadAgentTaskMetrics();
+                if (list) list.dataset.loaded = '1';
+            } catch (e) {
+                if (list) list.innerHTML = '<div class="atb-card"><h3>加载失败</h3><p>' + atbEscape(e.message) + '</p></div>';
+                showNotification('Agent任务看板加载失败：' + e.message, 'error');
+            }
+        }
+
+        function renderAgentTaskStats(summary) {
+            const by = summary.byBoardStatus || {};
+            const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = String(v ?? 0); };
+            set('atb-stat-total', summary.total || 0);
+            set('atb-stat-running', by['执行中'] || 0);
+            set('atb-stat-review', by['待验收'] || 0);
+            set('atb-stat-overdue', summary.overdue || 0);
+        }
+
+        function atbBadgeClass(status) {
+            if (['已完成'].includes(status)) return 'done';
+            if (['已打回', '已升级'].includes(status)) return 'bad';
+            if (['待解析', '待分配', '待验收'].includes(status)) return 'pending';
+            return '';
+        }
+
+        function renderAgentTaskList(tasks) {
+            const list = document.getElementById('atb-list');
+            if (!list) return;
+            if (!tasks.length) {
+                list.innerHTML = '<div class="atb-card"><h3>暂无任务</h3><p>在上方输入问题并发布，Agent会自动进入认领和执行流程。</p></div>';
+                return;
+            }
+            list.innerHTML = tasks.map(function (t) {
+                const board = t.board_status || t.status || '-';
+                return '<article class="atb-card" onclick="openAgentTaskDetail(\'' + atbEscape(t.task_id) + '\')">'
+                    + '<div class="atb-card-head"><span class="atb-badge ' + atbBadgeClass(board) + '">' + atbEscape(board) + '</span><span class="atb-badge">' + atbEscape(t.assignee_agent || t.current_agent || '待分配') + '</span></div>'
+                    + '<h3>' + atbEscape(t.title || t.task_id) + '</h3>'
+                    + '<p>' + atbEscape(t.detail || '') + '</p>'
+                    + '<div class="atb-meta"><span>门店：' + atbEscape(t.store || '-') + '</span><span>类型：' + atbEscape(t.category || '-') + '</span><span>优先级：' + atbEscape(t.priority || t.severity || '-') + '</span></div>'
+                    + '</article>';
+            }).join('');
+        }
+
+        function setAgentTaskFilter(status, btn) {
+            __atbFilter = status || '';
+            document.querySelectorAll('#atb-filters .atb-chip').forEach(function (x) { x.classList.remove('active'); });
+            if (btn) btn.classList.add('active');
+            loadAgentTaskBoard(true);
+        }
+
+        async function createAgentBoardTask() {
+            const input = document.getElementById('atb-create-content');
+            const content = String(input?.value || '').trim();
+            if (!content) { showNotification('请先输入任务内容', 'warning'); return; }
+            try {
+                const data = await atbFetch('/api/agent-task-board/tasks', { method: 'POST', body: JSON.stringify({ content: content, priority: /紧急|严重|太差|很差/.test(content) ? 'high' : 'medium' }) });
+                if (input) input.value = '';
+                showNotification('任务已发布：' + data.taskId, 'success');
+                setTimeout(function () { loadAgentTaskBoard(true); }, 800);
+            } catch (e) {
+                showNotification('发布失败：' + e.message, 'error');
+            }
+        }
+
+        async function openAgentTaskDetail(taskId) {
+            __atbCurrentTaskId = taskId;
+            const detail = document.getElementById('atb-detail');
+            const panel = document.getElementById('atb-panel');
+            if (detail) detail.classList.add('open');
+            if (panel) panel.innerHTML = '<div class="atb-section">正在加载详情...</div>';
+            try {
+                const data = await atbFetch('/api/agent-task-board/tasks/' + encodeURIComponent(taskId));
+                renderAgentTaskDetail(data.task || {});
+            } catch (e) {
+                if (panel) panel.innerHTML = '<button class="atb-action" onclick="closeAgentTaskDetail()">关闭</button><div class="atb-section">加载失败：' + atbEscape(e.message) + '</div>';
+            }
+        }
+
+        function renderAgentTaskDetail(t) {
+            const panel = document.getElementById('atb-panel');
+            if (!panel) return;
+            const events = (t.events || []).slice(-20).reverse().map(function (e) {
+                return '<div class="atb-line"><b>' + atbEscape(e.event_type) + '</b> ' + atbEscape(e.status_before || '') + ' → ' + atbEscape(e.status_after || '') + '<br>' + atbEscape(e.created_at || '') + '</div>';
+            }).join('') || '<div class="atb-line">暂无事件</div>';
+            const evidences = (t.evidences || []).map(function (e) {
+                const link = e.file_url ? '<br><a href="' + atbEscape(e.file_url) + '" target="_blank" style="color:#fbbf24;">查看文件</a>' : '';
+                return '<div class="atb-line"><b>' + atbEscape(e.evidence_type) + '</b> ' + atbEscape(e.content || '') + link + '<br>' + atbEscape(e.created_at || '') + '</div>';
+            }).join('') || '<div class="atb-line">暂无证据</div>';
+            panel.innerHTML = '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;"><div><div class="atb-kicker">TASK DETAIL</div><h2 style="margin:6px 0 0;font-size:24px;line-height:1.15;">' + atbEscape(t.title || t.task_id) + '</h2></div><button class="atb-action" style="width:auto;padding:8px 12px;" onclick="closeAgentTaskDetail()">关闭</button></div>'
+                + '<div class="atb-meta" style="margin-top:12px;"><span>状态：' + atbEscape(t.board_status || t.status) + '</span><span>Agent：' + atbEscape(t.assignee_agent || t.current_agent || '-') + '</span><span>门店：' + atbEscape(t.store || '-') + '</span></div>'
+                + '<div class="atb-section"><b>任务内容</b><p style="margin-top:8px;color:rgba(226,232,240,.72);white-space:pre-wrap;">' + atbEscape(t.detail || '') + '</p></div>'
+                + '<div class="atb-section"><b>补充证据/反馈</b><textarea id="atb-evidence-text" class="atb-input" style="margin-top:10px;min-height:82px;" placeholder="输入门店反馈、检查说明或证据描述"></textarea><input id="atb-evidence-url" class="atb-input" style="margin-top:8px;min-height:48px;" placeholder="可选：照片/文件链接"><button class="atb-action" style="margin-top:8px;width:100%;" onclick="submitAgentTaskEvidence()">提交证据/反馈</button></div>'
+                + '<div class="atb-section"><b>证据</b><div class="atb-timeline">' + evidences + '</div></div>'
+                + '<div class="atb-section"><b>审计时间线</b><div class="atb-timeline">' + events + '</div></div>'
+                + '<div class="atb-section"><b>重分配Agent</b><select id="atb-reassign-agent" class="atb-input" style="margin-top:8px;width:100%;"><option value="">选择Agent...</option><option value="ops_supervisor">运营督导(ops_supervisor)</option><option value="food_quality">食安专员(food_quality)</option><option value="train_advisor">培训顾问(train_advisor)</option><option value="marketing_planner">营销策划(marketing_planner)</option><option value="marketing_executor">营销执行(marketing_executor)</option><option value="data_auditor">数据审计(data_auditor)</option></select><button class="atb-action" style="margin-top:8px;width:100%;" onclick="reassignAgentTask()">确认重分配</button></div>'
+                + '<div class="atb-section"><b>质量评分 (0-10)</b><input id="atb-quality-score" class="atb-input" type="number" min="0" max="10" step="0.5" style="margin-top:8px;width:100%;" placeholder="输入0-10的质量评分"><button class="atb-action" style="margin-top:8px;width:100%;" onclick="submitQualityScore()">提交评分</button></div>'
+                + '<div class="atb-panel-actions"><button class="atb-action good" onclick="reviewAgentTask(\'approved\')">通过并关闭</button><button class="atb-action bad" onclick="reviewAgentTask(\'rejected\')">打回并修订</button><button class="atb-action" onclick="deriveAgentTask()">创建衍生任务</button></div>';
+        }
+
+        function closeAgentTaskDetail() {
+            const detail = document.getElementById('atb-detail');
+            if (detail) detail.classList.remove('open');
+            __atbCurrentTaskId = '';
+        }
+
+        async function submitAgentTaskEvidence() {
+            const text = String(document.getElementById('atb-evidence-text')?.value || '').trim();
+            const fileUrl = String(document.getElementById('atb-evidence-url')?.value || '').trim();
+            if (!__atbCurrentTaskId || (!text && !fileUrl)) { showNotification('请输入证据/反馈内容或照片链接', 'warning'); return; }
+            try {
+                await atbFetch('/api/agent-task-board/tasks/' + encodeURIComponent(__atbCurrentTaskId) + '/evidences', { method: 'POST', body: JSON.stringify({ evidenceType: fileUrl ? 'photo' : 'text', content: text, fileUrl: fileUrl }) });
+                showNotification('证据已提交，任务进入待验收', 'success');
+                await openAgentTaskDetail(__atbCurrentTaskId);
+                loadAgentTaskBoard(true);
+            } catch (e) { showNotification('提交失败：' + e.message, 'error'); }
+        }
+
+        async function reviewAgentTask(decision) {
+            if (!__atbCurrentTaskId) return;
+            const isReject = decision === 'rejected';
+            const comment = prompt(isReject ? '请输入打回原因，将自动创建修订任务' : '请输入验收备注（可空）') || '';
+            try {
+                await atbFetch('/api/agent-task-board/tasks/' + encodeURIComponent(__atbCurrentTaskId) + '/review', { method: 'POST', body: JSON.stringify({ decision: decision, comment: comment, createRevisionTask: isReject }) });
+                showNotification(isReject ? '已打回并创建修订任务' : '已通过并关闭任务', 'success');
+                closeAgentTaskDetail();
+                loadAgentTaskBoard(true);
+            } catch (e) { showNotification('操作失败：' + e.message, 'error'); }
+        }
+
+        async function deriveAgentTask() {
+            if (!__atbCurrentTaskId) return;
+            const content = prompt('请输入衍生任务内容');
+            if (!content) return;
+            try {
+                await atbFetch('/api/agent-task-board/tasks/' + encodeURIComponent(__atbCurrentTaskId) + '/derive', { method: 'POST', body: JSON.stringify({ content: content }) });
+                showNotification('衍生任务已创建', 'success');
+                loadAgentTaskBoard(true);
+            } catch (e) { showNotification('创建失败：' + e.message, 'error'); }
+        }
+
+        async function reassignAgentTask() {
+            if (!__atbCurrentTaskId) return;
+            const select = document.getElementById('atb-reassign-agent');
+            const newAgent = select ? select.value : '';
+            if (!newAgent) { showNotification('请选择Agent', 'warning'); return; }
+            try {
+                await atbFetch('/api/agent-task-board/tasks/' + encodeURIComponent(__atbCurrentTaskId) + '/reassign', { method: 'POST', body: JSON.stringify({ newAgent: newAgent, reason: '管理员手动重分配' }) });
+                showNotification('已重分配给 ' + newAgent, 'success');
+                await openAgentTaskDetail(__atbCurrentTaskId);
+                loadAgentTaskBoard(true);
+            } catch (e) { showNotification('重分配失败：' + e.message, 'error'); }
+        }
+
+        async function submitQualityScore() {
+            if (!__atbCurrentTaskId) return;
+            const input = document.getElementById('atb-quality-score');
+            const score = parseFloat(input ? input.value : '');
+            if (isNaN(score) || score < 0 || score > 10) { showNotification('请输入0-10的评分', 'warning'); return; }
+            try {
+                await atbFetch('/api/agent-task-board/tasks/' + encodeURIComponent(__atbCurrentTaskId) + '/quality-score', { method: 'POST', body: JSON.stringify({ score: score }) });
+                showNotification('质量评分已保存：' + score, 'success');
+            } catch (e) { showNotification('评分失败：' + e.message, 'error'); }
+        }
+
+        let __atbMetricsData = null;
+        async function loadAgentTaskMetrics() {
+            try {
+                const data = await atbFetch('/api/agent-task-board/metrics?days=7');
+                __atbMetricsData = data.metrics || {};
+                const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = String(v ?? '-'); };
+                set('atb-stat-avgtime', __atbMetricsData.avgCloseTimeHours ? __atbMetricsData.avgCloseTimeHours + 'h' : '-');
+                set('atb-stat-evidence', __atbMetricsData.evidenceCoverage || '-');
+            } catch { __atbMetricsData = null; }
+        }
+
         // 显示页面
         function showPage(pageName) {
             stopDcDashboardAutoRefresh();
@@ -19334,7 +19629,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                 }
             }
 
-            if (['profile', 'attendance', 'daily-report', 'employees', 'approvals', 'payment', 'exam', 'rewards', 'points', 'reports', 'agents', 'knowledge'].includes(pageName)) {
+            if (['profile', 'attendance', 'daily-report', 'employees', 'approvals', 'payment', 'exam', 'rewards', 'points', 'reports', 'agents', 'agent-tasks', 'knowledge'].includes(pageName)) {
                 if (!canAccessModulePage(pageName)) {
                     showNotification('您没有该模块访问权限', 'warning');
                     pageName = getHomePageName();
@@ -19397,6 +19692,14 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                 } else if (String(currentUser?.role || '').trim() === ROLES.PRODUCTION_MANAGER) {
                     window.location.href = '/forecast.html';
                     return;
+                }
+            }
+
+            if (pageName === 'agent-tasks') {
+                const canAccess = currentUser && (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.HQ_MANAGER || currentUser.role === ROLES.HR_MANAGER);
+                if (!canAccess) {
+                    showNotification('仅管理员和总部角色可访问Agent任务看板', 'warning');
+                    pageName = getHomePageName();
                 }
             }
 
@@ -19465,6 +19768,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                         knowledge: '知识库',
                         files: '文件中心',
                         agents: '数据中心',
+                        'agent-tasks': 'Agent任务',
                         flashcards: '自我测验',
                         stores: '门店管理',
                         roles: '角色权限',
@@ -19571,6 +19875,9 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                     break;
                 case 'agents':
                     loadAgentsData();
+                    break;
+                case 'agent-tasks':
+                    loadAgentTaskBoard();
                     break;
                 case 'flashcards':
                     loadFlashcardsModule();
@@ -30021,6 +30328,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             { key: 'badDianping',     label: '大众点评差评',  unit: '条', group: '差评' },
             { key: 'badMeituan',      label: '美团差评',      unit: '条', group: '差评' },
             { key: 'badEleme',        label: '饿了么差评',    unit: '条', group: '差评' },
+            { key: 'dianpingRating',  label: '大众点评星级', unit: '星', group: '口碑' },
             { key: 'wechatMonthNew',  label: '本月企微新增数量', unit: '人', group: '企微' },
         ];
         const MT_FIELD_MAP = {};
@@ -39216,6 +39524,11 @@ tr:nth-child(even) td { background: #fafafa; }
                         const targetDineOrders = Number(mt?.dineOrders || 0);
                         const targetRecharge = Number(mt?.recharge || 0);
                         const targetEfficiency = Number(mt?.efficiency || 1500);
+                        const targetDianpingRating = Number(mt?.dianpingRating || 0);
+                        const avgDianpingStars =
+                          s.avgDianpingRating != null && Number.isFinite(Number(s.avgDianpingRating))
+                            ? Number(s.avgDianpingRating)
+                            : null;
 
                         const catTotal = Number(s.catWaterAmt||0) + Number(s.catSoupAmt||0) + Number(s.catRoastAmt||0) + Number(s.catWokAmt||0);
                         const catQtyTotal = Number(s.catWaterQty||0) + Number(s.catSoupQty||0) + Number(s.catRoastQty||0) + Number(s.catWokQty||0);
@@ -39409,6 +39722,8 @@ tr:nth-child(even) td { background: #fafafa; }
                                     <div style="font-size:11px; color:rgba(200,215,230,0.7); font-weight:700;">总差评数</div>
                                     <div style="font-size:24px; font-weight:900; color:${red}; margin-top:2px;">${fmtInt(badTotal)}条</div>
                                 </div>
+                                ${kv('大众点评星级（有填报日期的均值）', avgDianpingStars != null ? avgDianpingStars.toFixed(2) + ' 星' : '—', blue)}
+                                ${kv('大众点评星级目标', targetDianpingRating > 0 ? targetDianpingRating.toFixed(2) + ' 星' : '未设置', targetDianpingRating > 0 && avgDianpingStars != null ? (avgDianpingStars >= targetDianpingRating ? green : red) : null)}
                                 ${kv('大众点评', fmtInt(s.badDianping) + '条', null)}
                                 ${kv('美团外卖', fmtInt(s.badMeituan) + '条', null)}
                                 ${kv('饿了么外卖', fmtInt(s.badEleme) + '条', null)}
@@ -42293,6 +42608,7 @@ ${body}
                 { icon:'📚', label:'知识库', page:'knowledge' },
                 { icon:'📁', label:'文件中心', page:'files', roles:['admin'] },
                 { icon:'📊', label:'数据中心', page:'agents', roles:['admin'] },
+                { icon:'🧭', label:'Agent任务', page:'agent-tasks', roles:['admin','hq_manager','hr_manager'] },
                 { icon:'📝', label:'考试测评', page:'exam' },
                 // 奖惩管理：管理员/HR/总部营运/店长/出品经理 可见
                 { icon:'🏆', label:'奖惩管理', page:'rewards', roles:['admin','hr_manager','hq_manager','store_manager','store_production_manager'] },
@@ -42435,6 +42751,7 @@ ${body}
                 knowledge: { icon: '📚', label: '知识库' },
                 forecast: { icon: '📦', label: '智能助手' },
                 agents: { icon: '📦', label: '智能助手' },
+                'agent-tasks': { icon: '🧭', label: '任务' },
                 exam: { icon: '📝', label: '考试' },
                 'daily-report': { icon: '📒', label: '日报' },
                 payment: { icon: '💰', label: '请款' },
@@ -42488,6 +42805,7 @@ ${body}
                     'attendance': 'attendance',
                     'knowledge': 'knowledge',
                     'agents': 'agents',
+                    'agent-tasks': 'agent-tasks',
                     'exam': 'exam',
                     'approvals': 'approvals',
                     'payment': 'payment',

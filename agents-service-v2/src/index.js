@@ -16,6 +16,8 @@ import {
 import { checkDbHealth } from './utils/db.js';
 import { checkRedisHealth } from './utils/queue.js';
 import { startAnomalyQueueWorker, getAnomalyQueueStats } from './services/anomaly-queue.js';
+import { startTaskBoardQueueWorker } from './services/task-board-queue.js';
+import { createUnifiedTask, runTaskBoardWatchdog } from './services/task-orchestrator.js';
 import { authRequired, requireRole } from './middleware/auth.js';
 import { sendWeeklyReview } from './services/chairman/weekly-review.js';
 import { runTrendChecks } from './services/chairman/trend-rules.js';
@@ -59,6 +61,7 @@ import { runDailyAttitudeFilingReport } from './services/daily-attitude-filing-r
 import { runMonthlyComprehensiveRating } from './services/monthly-comprehensive-rating.js';
 import { getAIOperationsReport } from './services/ai-operations.js';
 import adminApi from './routes/admin-api.js';
+import agentTaskBoardApi from './routes/agent-task-board-api.js';
 import { registerChairmanConfigRoutes } from './routes/chairman-config-api.js';
 import {
   enforceRuntimeSafetyOrExit,
@@ -888,7 +891,7 @@ app.get('/api/router/routes', authRequired, (req, res) => {
 // ─── Task State Machine API ───
 
 app.post('/api/tasks', authRequired, async (req, res) => {
-  try { res.json(await createTask(req.body)); }
+  try { res.json(await createUnifiedTask({ ...(req.body || {}), createdFrom: 'api_tasks' })); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -921,6 +924,7 @@ app.post('/api/tasks/escalation-scan', authRequired, requireRole('admin', 'hq_ma
 });
 
 // ─── Agent Config API ───
+app.use('/api/agent-task-board', agentTaskBoardApi);
 app.use('/api', adminApi);
 
 // ─── Chairman Config API ───
@@ -1133,6 +1137,7 @@ async function start() {
   if (redis) {
     logger.info('✅ Redis connected');
     startAnomalyQueueWorker();
+    startTaskBoardQueueWorker();
   } else {
     logger.warn('⚠️ Redis not available, queues will not work');
   }
@@ -1287,6 +1292,11 @@ async function start() {
     startKpiScheduler();
     startEscalationScheduler();
     startBitablePolling(120000);
+    cron.schedule('*/30 * * * *', () => {
+      runWithCronLog('agent_task_board_watchdog', () => runTaskBoardWatchdog({ staleHours: 24 }))
+        .catch((e) => logger.warn({ err: e?.message }, 'agent task board watchdog cron error'));
+    }, { timezone: 'Asia/Shanghai' });
+    logger.info('Agent task-board watchdog scheduled every 30 minutes');
     // 实际毛利率表：每日 05:16（上海）拉取飞书表数据（非「毛利率异常」月检；与 05:00 周度BI、05:08 日频BI 错开）
     cron.schedule('16 5 * * *', async () => {
       try {

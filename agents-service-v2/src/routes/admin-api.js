@@ -7,6 +7,7 @@ import { logger } from '../utils/logger.js';
 import { getShanghaiYmdParts } from '../utils/anomaly-week-bounds.js';
 import { startRandomInspections } from '../services/random-inspection.js';
 import { scheduleProactiveOutcomeOnClose } from '../services/proactive-v2/proactive-task-outcome-on-close.js';
+import { transitionTask } from '../services/task-state-machine.js';
 
 import { sendUsageWeeklyReport } from '../services/usage-weekly-report.js';
 import { sendWeeklyDishOptimizationReport } from '../services/dish-optimization-report.js';
@@ -374,23 +375,33 @@ r.post('/admin/task/:taskId/close', authRequired, requireRole(...CLOSE_TASK_ROLE
     const reason = String(req.body?.reason || '管理员手动关闭').trim().slice(0, 500);
     const by = String(req.user?.username || 'admin').trim().slice(0, 120);
     const suffix = `\n\n【管理员关闭】${reason} — ${by}`;
-    const upd = await query(
-      `UPDATE master_tasks
-       SET status = 'closed',
-           closed_at = NOW(),
-           updated_at = NOW(),
-           resolution_code = COALESCE(resolution_code, 'admin_closed'),
-           detail = COALESCE(detail, '') || $2::text
-       WHERE task_id = $1
-         AND status NOT IN ('closed', 'settled')
-       RETURNING task_id`,
-      [taskId, suffix]
-    );
-    if (!upd.rows?.length) {
-      return res.status(404).json({ error: '任务不存在或已关闭' });
+    let closed = false;
+    const tr = await transitionTask(taskId, 'closed', 'admin_api', {
+      resolutionCode: 'admin_closed'
+    }).catch(() => null);
+    if (tr?.ok) {
+      await query(`UPDATE master_tasks SET detail = COALESCE(detail, '') || $2 WHERE task_id = $1`, [taskId, suffix]).catch(() => {});
+      closed = true;
     }
-    scheduleProactiveOutcomeOnClose(upd.rows[0].task_id, { newStatus: 'closed' });
-    return res.json({ ok: true, taskId: upd.rows[0].task_id });
+    if (!closed) {
+      const upd = await query(
+        `UPDATE master_tasks
+         SET status = 'closed',
+             closed_at = NOW(),
+             updated_at = NOW(),
+             resolution_code = COALESCE(resolution_code, 'admin_closed'),
+             detail = COALESCE(detail, '') || $2::text
+         WHERE task_id = $1
+           AND status NOT IN ('closed', 'settled')
+         RETURNING task_id`,
+        [taskId, suffix]
+      );
+      if (!upd.rows?.length) {
+        return res.status(404).json({ error: '任务不存在或已关闭' });
+      }
+    }
+    scheduleProactiveOutcomeOnClose(taskId, { newStatus: 'closed' });
+    return res.json({ ok: true, taskId });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }

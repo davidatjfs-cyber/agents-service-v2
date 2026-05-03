@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════════════
 import axios from 'axios';
 import { query } from '../utils/db.js';
+import { addTaskEvidence } from './task-orchestrator.js';
 import { logger } from '../utils/logger.js';
 import { notifyAdminsDataIssue } from './admin-data-alert.js';
 import { getConfig } from './config-service.js';
@@ -753,21 +754,13 @@ async function processTaskResponse(fields, recordId) {
     // Update master_tasks status if reply provided
     if (reply) {
       const st = String(status || '').trim();
-      await query(
-        `UPDATE master_tasks SET status = CASE WHEN $1 = '已处理' THEN 'closed' WHEN $1 = '已回复' THEN 'pending_response' ELSE status END,
-         closed_at = CASE WHEN $1 = '已处理' THEN NOW() ELSE closed_at END,
-         response_text = COALESCE(NULLIF($3, ''), response_text),
-         updated_at = NOW()
-         WHERE task_id = $2`,
-        [status, taskId, reply]
-      );
-      if (st === '已处理') {
-        setImmediate(() => {
-          import('./proactive-v2/proactive-task-outcome-on-close.js')
-            .then((m) => m.scheduleProactiveOutcomeOnClose(taskId, { newStatus: 'closed' }))
-            .catch(() => {});
-        });
-      }
+      await addTaskEvidence(taskId, {
+        evidenceType: 'text',
+        content: reply,
+        submittedBy: 'bitable_poller',
+        submittedRole: 'bitable',
+        metadata: { status: st, source: 'bitable_task_response' }
+      });
     }
     // Log the response
     await query(

@@ -65,35 +65,33 @@ export function getOllamaHealthStatus() {
 /**
  * 选择模型
  *
- * 优先级：
- * 1. 如果 OLLAMA_USE_LOCAL_ONLY=true 且 Ollama 健康 → 本地
- * 2. 如果 Ollama 不健康 → API（DeepSeek）
- * 3. 如果 OLLAMA_USE_LOCAL_ONLY=false → 按复杂度路由
+ * 策略（2026-05-03 更新）：
+ * - analysis/action: DeepSeek（分析/动作需要高质量推理）
+ * - query: 简单查数走 Ollama，复杂分析走 DeepSeek
+ * - workflow: DeepSeek
+ * - 默认兜底: Ollama
  */
 export function selectModel({ intent, complexity, mode }) {
   const m = String(mode || 'single');
 
-  // workflow 模式始终走 API（需要工具调用/复杂编排）
+  // workflow 模式始终走 API
   if (m === 'workflow') return DEEPSEEK_FALLBACK_MODEL;
 
-  // 本地优先模式
-  if (LOCAL_ONLY) {
-    if (isOllamaHealthy()) return LOCAL_MODEL;
-    if (LOCAL_FALLBACK) return DEEPSEEK_FALLBACK_MODEL;
-    return LOCAL_MODEL; // 即使不健康也尝试本地
+  // 分析类/动作类 → DeepSeek（需要高质量推理）
+  if (intent === 'analysis' || intent === 'action') {
+    return DEEPSEEK_FALLBACK_MODEL;
   }
 
-  // 按复杂度路由（旧策略，保留兼容）
-  const c = String(complexity || 'low').toLowerCase();
+  // 查询类：简单查询走 Ollama，复杂查询走 API
   if (intent === 'query') {
-    if (c === 'low') return LOCAL_MODEL;
-    return isOllamaHealthy() ? LOCAL_MODEL : DEEPSEEK_FALLBACK_MODEL;
+    const c = String(complexity || 'low').toLowerCase();
+    if (c === 'low' && isOllamaHealthy()) return LOCAL_MODEL;
+    // high/medium complexity or Ollama unhealthy → DeepSeek
+    if (isOllamaHealthy()) return DEEPSEEK_FALLBACK_MODEL;
+    return DEEPSEEK_FALLBACK_MODEL;
   }
-  if (intent === 'analysis') {
-    return isOllamaHealthy() ? LOCAL_MODEL : DEEPSEEK_FALLBACK_MODEL;
-  }
-  if (intent === 'action') {
-    return isOllamaHealthy() ? LOCAL_MODEL : DEEPSEEK_FALLBACK_MODEL;
-  }
-  return isOllamaHealthy() ? LOCAL_MODEL : DEEPSEEK_FALLBACK_MODEL;
+
+  // 兜底：简单对话走 Ollama
+  if (isOllamaHealthy()) return LOCAL_MODEL;
+  return DEEPSEEK_FALLBACK_MODEL;
 }

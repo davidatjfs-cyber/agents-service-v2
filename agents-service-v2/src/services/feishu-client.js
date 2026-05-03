@@ -9,6 +9,7 @@ import { isMarketingPlanningIntent } from '../utils/marketing-intent.js';
 import { isExternalEnabled } from '../utils/safety.js';
 import { isMajixianPmObserverUsername } from '../utils/scoring-assignee.js';
 import { callLLM, callVisionLLM } from './llm-provider.js';
+import { addTaskEvidence, reviewBoardTask } from './task-orchestrator.js';
 import {
   isOpenIdCrossAppFeishuError,
   normalizeMobileForFeishuBatchGet
@@ -1530,16 +1531,23 @@ export async function handleWebhookEvent(body) {
             logger.warn({ err: e?.message, taskId }, 'food_safety_hq_ruling branch failed');
           }
 
-          await query(
-            `UPDATE master_tasks
-             SET status = 'pending_review',
-                 responded_at = NOW(),
-                 updated_at = NOW(),
-                 response_text = COALESCE($2, response_text),
-                 response_images = COALESCE($3::jsonb, response_images)
-             WHERE task_id = $1`,
-            [taskId, responseText, responseImages]
-          ).catch(() => {});
+          await addTaskEvidence(taskId, {
+            evidenceType: responseImages?.length ? 'photo' : 'text',
+            content: responseText,
+            submittedBy: openId,
+            submittedRole: 'feishu_user',
+            metadata: { responseImages, source: 'feishu_direct_task_reply', messageId: msg?.message_id || null }
+          }).catch(async () => {
+            await query(
+              `UPDATE master_tasks
+               SET responded_at = NOW(),
+                   updated_at = NOW(),
+                   response_text = COALESCE($2, response_text),
+                   response_images = COALESCE($3::jsonb, response_images)
+                WHERE task_id = $1`,
+              [taskId, responseText, responseImages]
+            ).catch(() => {});
+          });
 
           // 兼容前端/审计链路：直接回复也要落到 agent_messages，供任务卡片与历史展示使用
           const recordId = matchedCardMessageId ? String(matchedCardMessageId) : (msg?.message_id ? String(msg.message_id) : '');
@@ -2183,7 +2191,6 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
           `UPDATE master_tasks SET
              review_passed = true, review_feedback = $2,
              review_count = COALESCE(review_count, 0) + 1,
-             status = 'pending_review',
              updated_at = NOW()
            WHERE task_id = $1`,
           [
@@ -2198,17 +2205,25 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
           ).catch(() => {});
         }
       } else {
-        // 审核通过须闭环：此前错误地仍为 pending_review，导致晨报/待办里永远「待处理」
-        await query(
-          `UPDATE master_tasks SET
-             review_passed = true, review_feedback = $2,
-             review_count = COALESCE(review_count, 0) + 1,
-             status = 'resolved',
-             resolved_at = COALESCE(resolved_at, NOW()),
-             updated_at = NOW()
-           WHERE task_id = $1`,
-          [taskId, reason]
-        ).catch(() => {});
+        // 审核通过须闭环
+        const { transitionTask: doTransition } = await import('./task-state-machine.js');
+        const tr = await doTransition(taskId, 'resolved', 'review_handler', {
+          reviewPassed: true,
+          reviewFeedback: reason,
+          reviewCount: true
+        }).catch(() => null);
+        if (!tr?.ok) {
+          await query(
+            `UPDATE master_tasks SET
+               review_passed = true, review_feedback = $2,
+               review_count = COALESCE(review_count, 0) + 1,
+               status = 'resolved',
+               resolved_at = COALESCE(resolved_at, NOW()),
+               updated_at = NOW()
+             WHERE task_id = $1`,
+            [taskId, reason]
+          ).catch(() => {});
+        }
         setImmediate(() => {
           import('./proactive-v2/proactive-task-outcome-on-close.js')
             .then((m) => m.scheduleProactiveOutcomeOnClose(taskId, { newStatus: 'resolved' }))
@@ -2220,14 +2235,22 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
       }
       // 合格：不发额外消息，之前的"已收到"已足够
     } else {
-      await query(
-        `UPDATE master_tasks SET
-           review_passed = false, review_feedback = $2,
-           review_count = COALESCE(review_count, 0) + 1,
-           status = 'pending_response', updated_at = NOW()
-         WHERE task_id = $1`,
-        [taskId, reason]
-      ).catch(() => {});
+      const { transitionTask: doTransition } = await import('./task-state-machine.js');
+      const tr = await doTransition(taskId, 'pending_response', 'review_handler', {
+        reviewPassed: false,
+        reviewFeedback: reason,
+        reviewCount: true
+      }).catch(() => null);
+      if (!tr?.ok) {
+        await query(
+          `UPDATE master_tasks SET
+             review_passed = false, review_feedback = $2,
+             review_count = COALESCE(review_count, 0) + 1,
+             status = 'pending_response', updated_at = NOW()
+           WHERE task_id = $1`,
+          [taskId, reason]
+        ).catch(() => {});
+      }
 
       // 发送不合格反馈给责任人
       const rejectCard = {
@@ -2292,15 +2315,21 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
       // 若已满3次不合格 → 工作态度备案（与任务卡审核说明一致：不计 agent_scores 绩效分）
       if (rc + 1 >= 3) {
         try {
-          await query(
-            `UPDATE master_tasks SET
-               hr_performance_recorded = true,
-               status = 'hr_filed',
-               resolution_code = 'hr_attitude_review_fail_3x',
-               updated_at = NOW()
-             WHERE task_id = $1`,
-            [taskId]
-          );
+          const { transitionTask: doTransition } = await import('./task-state-machine.js');
+          const tr = await doTransition(taskId, 'hr_filed', 'review_handler', {
+            resolutionCode: 'hr_attitude_review_fail_3x'
+          }).catch(() => null);
+          if (!tr?.ok) {
+            await query(
+              `UPDATE master_tasks SET
+                 hr_performance_recorded = true,
+                 status = 'hr_filed',
+                 resolution_code = 'hr_attitude_review_fail_3x',
+                 updated_at = NOW()
+               WHERE task_id = $1`,
+              [taskId]
+            );
+          }
           logger.info({ taskId, store: task.store }, 'Task reply review: 3x fail → attitude record (no score deduction)');
           let monthlyAtt = 0;
           try {

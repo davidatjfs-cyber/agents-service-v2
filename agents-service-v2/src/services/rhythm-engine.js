@@ -22,6 +22,7 @@ import { sendWeeklyDishOptimizationReport, sendMonthlyDishOptimizationReport } f
 import { generateDissatisfiedProductDailyReport, generateDissatisfiedProductWeeklyReport, generateDissatisfiedProductMonthlyReport } from './dissatisfied-product-report.js';
 import { generateCookingTimeoutWeeklyReport, generateCookingTimeoutMonthlyReport } from './cooking-timeout-report.js';
 import { flushPendingNotifications } from './anomaly-notify-queue.js';
+import { createUnifiedTask } from './task-orchestrator.js';
 
 // ─── 检查任务是否启用 ───
 async function isRhythmTaskEnabled(taskKey) {
@@ -115,6 +116,17 @@ export async function morningStandup() {
     await logRhythm('morning_standup', 'success', summary);
     logger.info({ pendingTasks: summary.pendingTasks, anomalies: summary.anomalies.length, blockers: summary.blockers.length }, '晨检完成');
 
+    if (summary.pendingTasks > 0 || summary.blockers.length > 0) {
+      createUnifiedTask({
+        source: 'rhythm_engine',
+        category: 'morning_standup',
+        severity: summary.blockers.length > 0 ? 'high' : 'medium',
+        title: `晨检报告：未闭环${summary.pendingTasks}项 / 阻塞${summary.blockers.length}项`,
+        detail: `昨日异常${summary.anomalies.length}条，未闭环${summary.pendingTasks}项，阻塞${summary.blockers.length}项`,
+        createdFrom: 'rhythm_engine'
+      }).catch(e => logger.warn({ err: e?.message }, 'rhythm morning_standup unified task failed'));
+    }
+
     // ── 主动推送晨检报告 ──
     const lines = ['🌅 晨检报告'];
     if (summary.anomalies.length) lines.push(`昨日新增异常 ${summary.anomalies.length} 条: ` + summary.anomalies.slice(0, 5).map(a => `${a.store}/${a.anomaly_key}(${a.severity})`).join(', '));
@@ -154,6 +166,17 @@ export async function patrol(waveLabel = 'am') {
 
     await logRhythm(`patrol_${waveLabel}`, 'success', summary);
     logger.info({ triggered: triggered.length, redChannel: redChannel.length }, `巡检(${waveLabel})完成`);
+
+    if (triggered.length > 0 || redChannel.length > 0) {
+      createUnifiedTask({
+        source: 'rhythm_engine',
+        category: 'patrol',
+        severity: redChannel.length > 0 ? 'high' : 'medium',
+        title: `巡检(${waveLabel})：触发${triggered.length}条异常 / 红色通道${redChannel.length}条`,
+        detail: `检查${dailyResults.length}项，触发异常${triggered.length}条，红色通道告警${redChannel.length}条`,
+        createdFrom: 'rhythm_engine'
+      }).catch(e => logger.warn({ err: e?.message }, 'rhythm patrol unified task failed'));
+    }
 
     // BI 异常已在 anomaly-engine 落库时立刻通知责任人，此处不再重复 push，避免重复卡片
 
@@ -270,6 +293,17 @@ export async function endOfDay() {
     await logRhythm('end_of_day', 'success', summary);
     logger.info(summary, '日终对账完成');
 
+    if (summary.overdueTasks > 0 || summary.noEvidenceTasks > 0 || parseFloat(closeRate) < 80) {
+      createUnifiedTask({
+        source: 'rhythm_engine',
+        category: 'end_of_day',
+        severity: parseFloat(closeRate) < 50 ? 'high' : 'medium',
+        title: `日终报告：闭环率${closeRate}% / 逾期${overdueCnt}项 / 证据缺失${summary.noEvidenceTasks}项`,
+        detail: `今日任务${totalCnt}个，闭环${closedCnt}个(${closeRate}%)，逾期${overdueCnt}个，证据缺失${summary.noEvidenceTasks}个`,
+        createdFrom: 'rhythm_engine'
+      }).catch(e => logger.warn({ err: e?.message }, 'rhythm end_of_day unified task failed'));
+    }
+
     // ── 检查营销活动进度 ──
     let campaignResults = [];
     try {
@@ -359,6 +393,15 @@ export async function weeklyReport() {
 
   await logRhythm('weekly_report', 'success', summary);
   logger.info({ triggered: triggered.length }, '周报生成完成');
+
+  createUnifiedTask({
+    source: 'rhythm_engine',
+    category: 'weekly_report',
+    severity: summary.top3ProblemStores?.length > 0 ? 'high' : 'low',
+    title: `本周运营周报：异常${triggered.length}项 / 问题门店${summary.top3ProblemStores?.length || 0}家`,
+    detail: `周度检测${summary.weeklyChecks}项，触发${triggered.length}项，问题门店Top3: ${(summary.top3ProblemStores || []).map(s => s.store).join('、')}`,
+    createdFrom: 'rhythm_engine'
+  }).catch(e => logger.warn({ err: e?.message }, 'rhythm weekly_report unified task failed'));
 
   // ── 运营数据汇总(来自daily_reports) ──
   let opsData = [];
@@ -542,6 +585,15 @@ export async function monthlyEvaluation() {
 
   await logRhythm('monthly_evaluation', 'success', summary);
   logger.info(summary, '本月运营月报完成');
+
+  createUnifiedTask({
+    source: 'rhythm_engine',
+    category: 'monthly_evaluation',
+    severity: 'low',
+    title: `本月运营月报：检测${summary.monthlyChecks}项 / 触发${summary.triggered}项`,
+    detail: `月度检测${summary.monthlyChecks}项，触发异常${summary.triggered}项，门店KPI ${kpiR.rows?.length || 0}店已汇总`,
+    createdFrom: 'rhythm_engine'
+  }).catch(e => logger.warn({ err: e?.message }, 'rhythm monthly_evaluation unified task failed'));
 
   const moEnd = shanghaiTodayYmd();
   const moStart = addCalendarDaysYmdShanghai(moEnd, -29);

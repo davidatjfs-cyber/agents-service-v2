@@ -18,6 +18,7 @@ import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { extractStoreFromText } from '../utils/store-name-in-text.js';
 import { getBrandForStore } from './config-service.js';
+import { transitionTask } from './task-state-machine.js';
 import {
   getShanghaiYmdParts,
   shanghaiWeekMonSunContaining,
@@ -467,19 +468,27 @@ export async function tryHandleFoodSafetyHqRuling({ taskId, responseText, openId
     const period = anomalyRollupPeriodKey(weekStart, today);
 
     if (parsed.kind === 'dismiss') {
-      await query(
-        `UPDATE master_tasks SET
-           status = 'resolved',
-           resolved_at = COALESCE(resolved_at, NOW()),
-           review_passed = true,
-           review_feedback = $2,
-           resolution_code = 'food_safety_hq_dismissed',
-           response_text = COALESCE($3, response_text),
-           response_at = COALESCE(response_at, NOW()),
-           updated_at = NOW()
-         WHERE task_id = $1`,
-        [taskId, '总部营运：不记录（核实不属实）', responseText]
-      ).catch(() => {});
+      const tr = await transitionTask(taskId, 'resolved', 'hq_manager', {
+        reviewPassed: true,
+        reviewFeedback: '总部营运：不记录（核实不属实）',
+        resolutionCode: 'food_safety_hq_dismissed',
+        responseText: responseText
+      }).catch(() => null);
+      if (!tr?.ok) {
+        await query(
+          `UPDATE master_tasks SET
+             status = 'resolved',
+             resolved_at = COALESCE(resolved_at, NOW()),
+             review_passed = true,
+             review_feedback = $2,
+             resolution_code = 'food_safety_hq_dismissed',
+             response_text = COALESCE($3, response_text),
+             response_at = COALESCE(response_at, NOW()),
+             updated_at = NOW()
+           WHERE task_id = $1`,
+          [taskId, '总部营运：不记录（核实不属实）', responseText]
+        ).catch(() => {});
+      }
       await closeLatestFoodSafetyTrigger(store);
       setImmediate(() => {
         import('./proactive-v2/proactive-task-outcome-on-close.js')
@@ -533,19 +542,28 @@ export async function tryHandleFoodSafetyHqRuling({ taskId, responseText, openId
       return { handled: true, outcome: 'record_failed' };
     }
 
-    await query(
-      `UPDATE master_tasks SET
-         status = 'resolved',
-         resolved_at = COALESCE(resolved_at, NOW()),
-         review_passed = true,
-         review_feedback = $2,
-         resolution_code = 'food_safety_hq_recorded',
-         response_text = COALESCE($3, response_text),
-         response_at = COALESCE(response_at, NOW()),
-         updated_at = NOW()
-       WHERE task_id = $1`,
-      [taskId, `总部营运：记录扣分（${applied.map((a) => `${a.role}:${a.username}`).join('; ')}）`, responseText]
-    ).catch(() => {});
+    const feedbackText = `总部营运：记录扣分（${applied.map((a) => `${a.role}:${a.username}`).join('; ')}）`;
+    const trRecord = await transitionTask(taskId, 'resolved', 'hq_manager', {
+      reviewPassed: true,
+      reviewFeedback: feedbackText,
+      resolutionCode: 'food_safety_hq_recorded',
+      responseText: responseText
+    }).catch(() => null);
+    if (!trRecord?.ok) {
+      await query(
+        `UPDATE master_tasks SET
+           status = 'resolved',
+           resolved_at = COALESCE(resolved_at, NOW()),
+           review_passed = true,
+           review_feedback = $2,
+           resolution_code = 'food_safety_hq_recorded',
+           response_text = COALESCE($3, response_text),
+           response_at = COALESCE(response_at, NOW()),
+           updated_at = NOW()
+         WHERE task_id = $1`,
+        [taskId, feedbackText, responseText]
+      ).catch(() => {});
+    }
 
     await closeLatestFoodSafetyTrigger(store);
 

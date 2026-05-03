@@ -13,14 +13,17 @@ const STATUS_FLOW = {
   pending_audit:      { next: ['auditing', 'pending_dispatch'], agent: 'data_auditor' },
   auditing:           { next: ['pending_dispatch', 'closed'], agent: 'data_auditor' },
   pending_dispatch:   { next: ['dispatched'], agent: 'master' },
-  dispatched:         { next: ['pending_response'], agent: 'ops_supervisor' },
-  pending_response:   { next: ['pending_review', 'escalated'], agent: 'master' },
-  pending_review:     { next: ['resolved', 'rejected'], agent: 'ops_supervisor' },
-  // 新增：当任务需要人审（例如高风险操作）时进入该状态
+  dispatched:         { next: ['viewed', 'in_progress', 'pending_response'], agent: 'ops_supervisor' },
+  viewed:             { next: ['in_progress', 'pending_response'], agent: 'ops_supervisor' },
+  in_progress:        { next: ['waiting_evidence', 'pending_response'], agent: 'ops_supervisor' },
+  waiting_evidence:   { next: ['pending_review', 'pending_response'], agent: 'ops_supervisor' },
+  pending_response:   { next: ['pending_review', 'escalated', 'hr_filed', 'closed', 'resolved'], agent: 'master' },
+  pending_review:     { next: ['resolved', 'rejected', 'pending_response', 'hr_filed'], agent: 'ops_supervisor' },
   awaiting_approval: { next: ['pending_dispatch', 'rejected'], agent: 'master' },
-  resolved:           { next: ['pending_settlement'], agent: 'master' },
+  resolved:           { next: ['pending_settlement', 'closed'], agent: 'master' },
   rejected:           { next: ['pending_dispatch'], agent: 'master' },
   escalated:          { next: ['pending_dispatch', 'closed'], agent: 'master' },
+  hr_filed:           { next: ['closed'], agent: 'master' },
   pending_settlement: { next: ['settled'], agent: 'chief_evaluator' },
   settled:            { next: ['closed'], agent: 'master' },
   closed:             { next: [], agent: null },
@@ -35,7 +38,7 @@ export async function createTask({ taskId, source, category, severity, store, br
       `INSERT INTO master_tasks (task_id, status, source, category, severity, store, brand, title, detail, source_data, assignee_username, assignee_role, current_agent)
        VALUES ($1, 'pending_audit', $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, 'data_auditor')
        ON CONFLICT (task_id) DO NOTHING RETURNING id, task_id`,
-      [id, source || 'anomaly_engine', category, severity || 'medium', store, brand, title, detail, JSON.stringify(sourceData || {}), assigneeUsername, assigneeRole]
+      [id, source || 'anomaly_engine', category, severity || 'medium', store, brand, title, detail, JSON.stringify({ ...(sourceData || {}), created_via: 'task_state_machine' }), assigneeUsername, assigneeRole]
     );
     if (r.rows?.[0]) {
       await logEvent(id, 'task_created', null, 'data_auditor', null, 'pending_audit', { source, category, severity });
@@ -67,13 +70,22 @@ export async function transitionTask(taskId, newStatus, agentName, payload = {})
     let idx = 3;
 
     if (newStatus === 'dispatched') { updates.push(`dispatched_at = NOW()`); updates.push(`current_agent = 'ops_supervisor'`); }
-    if (newStatus === 'pending_response') { updates.push(`responded_at = NOW()`); }
+    if (newStatus === 'pending_response') {
+      updates.push(`responded_at = NOW()`);
+      updates.push(`first_response_at = COALESCE(first_response_at, NOW())`);
+    }
     if (newStatus === 'resolved') { updates.push(`resolved_at = NOW()`); }
     if (newStatus === 'settled') { updates.push(`settled_at = NOW()`); }
     if (newStatus === 'closed') { updates.push(`closed_at = NOW()`); }
+    if (newStatus === 'hr_filed') { updates.push(`hr_performance_recorded = TRUE`); }
 
     if (payload.reviewResult) { params.push(JSON.stringify(payload.reviewResult)); updates.push(`review_result = $${idx++}::jsonb`); }
-    if (payload.responseText) { params.push(payload.responseText); updates.push(`response_text = $${idx++}`); }
+    if (payload.reviewPassed !== undefined) { params.push(payload.reviewPassed); updates.push(`review_passed = $${idx++}`); }
+    if (payload.reviewFeedback) { params.push(payload.reviewFeedback); updates.push(`review_feedback = $${idx++}`); }
+    if (payload.reviewCount !== undefined) { updates.push(`review_count = COALESCE(review_count, 0) + 1`); }
+    if (payload.responseText) { params.push(payload.responseText); updates.push(`response_text = COALESCE($${idx++}, response_text)`); }
+    if (payload.responseImages) { params.push(JSON.stringify(payload.responseImages)); updates.push(`response_images = COALESCE($${idx++}::jsonb, response_images)`); }
+    if (payload.resolutionCode) { params.push(payload.resolutionCode); updates.push(`resolution_code = $${idx++}`); }
     if (payload.scoreImpact !== undefined) { params.push(payload.scoreImpact); updates.push(`score_impact = $${idx++}`); }
 
     await query(`UPDATE master_tasks SET ${updates.join(', ')} WHERE task_id = $1`, params);
@@ -89,6 +101,14 @@ export async function transitionTask(taskId, newStatus, agentName, payload = {})
       import('./proactive-v2/proactive-task-outcome-on-close.js')
         .then((m) => m.scheduleProactiveOutcomeOnClose(taskId, { newStatus }))
         .catch(() => {});
+      if (newStatus === 'closed') {
+        import('./task-orchestrator.js')
+          .then((m) => m.logTaskExperience(taskId))
+          .catch(() => {});
+        import('./task-board-queue.js')
+          .then((m) => m.enqueueTaskSummary(taskId))
+          .catch(() => {});
+      }
     }
     return { ok: true, from: current, to: newStatus };
   } catch (e) {
@@ -144,29 +164,36 @@ export async function checkEscalation(taskId) {
     if (!escalationCfg) return { escalated: false };
 
     const category = task.category || 'default';
-    const chain = escalationCfg[category] || escalationCfg.default || {};
-    const levels = chain.levels || [];
-    if (!levels.length) return { escalated: false };
-
     const ageMinutes = (Date.now() - new Date(task.created_at).getTime()) / 60000;
-    const currentLevel = task.source_data?.escalation_level || 0;
+    const currentLevel = task.source_data?.escalation_level || task.escalation_level || 0;
+
+    let levels = [];
+    if (escalationCfg[category]?.levels) {
+      levels = escalationCfg[category].levels;
+    } else if (escalationCfg.default?.levels) {
+      levels = escalationCfg.default.levels;
+    } else if (Array.isArray(escalationCfg.chains?.[category])) {
+      levels = escalationCfg.chains[category].map((role, i) => ({ notify_role: role, after_minutes: 60 * (i + 1) }));
+    } else if (Array.isArray(escalationCfg.chains?.default)) {
+      levels = escalationCfg.chains.default.map((role, i) => ({ notify_role: role, after_minutes: 60 * (i + 1) }));
+    }
+    if (!levels.length) return { escalated: false };
 
     for (let i = currentLevel; i < levels.length; i++) {
       const level = levels[i];
       if (ageMinutes >= (level.after_minutes || 60)) {
-        // Escalate
+        const newLevel = i + 1;
         await query(
-          `UPDATE master_tasks SET source_data = jsonb_set(COALESCE(source_data,'{}'), '{escalation_level}', $2::jsonb), updated_at = NOW() WHERE task_id = $1`,
-          [taskId, JSON.stringify(i + 1)]
+          `UPDATE master_tasks SET source_data = jsonb_set(COALESCE(source_data,'{}'), '{escalation_level}', $2::jsonb), escalation_level = $3, updated_at = NOW() WHERE task_id = $1`,
+          [taskId, JSON.stringify(newLevel), newLevel]
         );
-        await logEvent(taskId, 'escalation', 'system', level.notify_role, task.status, task.status, { level: i + 1, role: level.notify_role, after_minutes: level.after_minutes });
+        await logEvent(taskId, 'escalation', 'system', level.notify_role, task.status, task.status, { level: newLevel, role: level.notify_role, after_minutes: level.after_minutes });
 
-        // Push alert
         const detail = `任务 ${taskId} 超时${Math.round(ageMinutes)}分钟，升级至 ${level.notify_role}`;
         await pushAnomalyAlert(task.store, task.category, 'high', detail);
 
-        logger.warn({ taskId, level: i + 1, role: level.notify_role, ageMinutes }, 'Task escalated');
-        return { escalated: true, level: i + 1, role: level.notify_role };
+        logger.warn({ taskId, level: newLevel, role: level.notify_role, ageMinutes }, 'Task escalated');
+        return { escalated: true, level: newLevel, role: level.notify_role };
       }
     }
     return { escalated: false };
@@ -218,7 +245,7 @@ export async function getTaskStats() {
   return r.rows || [];
 }
 
-async function logEvent(taskId, eventType, fromAgent, toAgent, statusBefore, statusAfter, payload) {
+export async function logEvent(taskId, eventType, fromAgent, toAgent, statusBefore, statusAfter, payload) {
   try {
     await query(
       `INSERT INTO master_events (task_id, event_type, from_agent, to_agent, status_before, status_after, payload) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)`,

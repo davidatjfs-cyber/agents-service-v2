@@ -11,6 +11,7 @@ import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { callLLM } from './llm-provider.js';
 import { pushAnomalyAlert, sendText, lookupUserByUsername } from './feishu-client.js';
+import { createUnifiedTask } from './task-orchestrator.js';
 
 // ─── 营收类异常 → 自动触发营销策划 ───
 const REVENUE_ANOMALIES = new Set([
@@ -162,18 +163,19 @@ async function createCampaign(store, anomalyKey, proposal) {
  * Step 3: 创建 master_task
  */
 async function createTask(store, anomalyKey, proposal, campaignId) {
-  const r = await query(
-    `INSERT INTO master_tasks (title, store, severity, status, source, evidence_refs)
-     VALUES ($1, $2, $3, 'pending_response', 'auto_collab', $4)
-     RETURNING task_id`,
-    [
-      `📢 ${proposal.title} (自动方案#${campaignId})`,
-      store,
-      'medium',
-      JSON.stringify({ anomaly: anomalyKey, campaign_id: campaignId, actions: proposal.actions })
-    ]
-  );
-  return r.rows[0]?.task_id;
+  const r = await createUnifiedTask({
+    source: 'auto_collab',
+    category: 'marketing_action',
+    severity: 'medium',
+    store,
+    assigneeAgent: 'marketing_executor',
+    title: `📢 ${proposal.title} (自动方案#${campaignId})`,
+    detail: proposal.description || `自动营销方案：${proposal.title}`,
+    sourceData: { anomaly: anomalyKey, campaign_id: campaignId, actions: proposal.actions },
+    targetStatus: 'pending_response',
+    createdFrom: 'agent_collaboration'
+  });
+  return r.taskId;
 }
 
 /**
