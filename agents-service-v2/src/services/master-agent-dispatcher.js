@@ -50,7 +50,7 @@ export async function dispatchTaskAsync(parsedTask = {}) {
         break;
       }
     }
-    if (!foundAlt) {
+    if (!foundAlt && category === 'general') {
       const allAgents = capabilities.map(c => c.agent);
       for (const c of allAgents) {
         if (!(await isAgentAtCapacity(c))) {
@@ -61,6 +61,8 @@ export async function dispatchTaskAsync(parsedTask = {}) {
       }
       if (!overflow) overflow = true;
       logger.warn({ category, originalAgent: matched.agent, assignedTo: finalAgent, overflow }, 'Agent overflow: primary agent at capacity, falling back');
+    } else if (!foundAlt) {
+      logger.warn({ category, assignedTo: finalAgent }, 'Agent at capacity but keeping specialized task with capable agent');
     }
   }
   return {

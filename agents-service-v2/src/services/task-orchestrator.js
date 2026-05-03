@@ -104,7 +104,6 @@ export async function parseAndDispatchTask(taskId) {
     );
     const { enqueueTaskExecution } = await import('./task-board-queue.js');
     await enqueueTaskExecution(taskId, { agent: decision.assigneeAgent, source: 'parse_dispatch' });
-    setImmediate(() => sendTaskCardToAssignee(taskId).catch(() => {}));
   }
   return dispatched;
 }
@@ -247,12 +246,26 @@ export async function addTaskEvidence(taskId, { evidenceType = 'text', content, 
   );
   await logEvent(taskId, 'evidence_submitted', submittedBy || 'unknown', task.current_agent || task.assignee_agent, task.status, task.status, { evidenceType, hasFile: !!fileUrl });
 
-  if (task.status === 'dispatched') {
-    await transitionTask(taskId, 'pending_response', submittedBy || 'task_board', { evidenceSubmitted: true });
-  }
-  const latest = await getTask(taskId);
-  if (latest?.status === 'pending_response') {
-    await transitionTask(taskId, 'pending_review', 'task_orchestrator', { evidenceSubmitted: true });
+  const source = String(task.source || '').trim();
+  const role = String(submittedRole || '').trim();
+  const isStoreReply = source === 'hrms_task_board' && ['feishu_user', 'store_manager', 'store_production_manager', 'store', 'bitable'].includes(role);
+  if (isStoreReply) {
+    if (task.status === 'dispatched' || task.status === 'viewed') {
+      await transitionTask(taskId, 'in_progress', submittedBy || 'store', { storeReplyReceived: true, evidenceSubmitted: true });
+    }
+    const latestStore = await getTask(taskId);
+    if (latestStore?.status === 'in_progress') {
+      await transitionTask(taskId, 'waiting_evidence', 'task_orchestrator', { storeReplyReceived: true, trackingRequired: true });
+    }
+    setImmediate(() => evaluateBoardTaskAfterStoreFeedback(taskId).catch((e) => logger.warn({ taskId, err: e?.message }, 'store feedback evaluation failed')));
+  } else {
+    if (task.status === 'dispatched') {
+      await transitionTask(taskId, 'pending_response', submittedBy || 'task_board', { evidenceSubmitted: true });
+    }
+    const latest = await getTask(taskId);
+    if (latest?.status === 'pending_response') {
+      await transitionTask(taskId, 'pending_review', 'task_orchestrator', { evidenceSubmitted: true });
+    }
   }
   return { ok: true };
 }
@@ -364,7 +377,7 @@ export async function deriveBoardTask(taskId, { content, priority, createdBy, cr
 export async function runTaskBoardWatchdog({ staleHours = 24 } = {}) {
   const hours = Math.max(1, Math.min(Number(staleHours) || 24, 168));
   const r = await query(
-    `SELECT task_id, status FROM master_tasks
+    `SELECT task_id, status, assignee_agent, current_agent FROM master_tasks
      WHERE source = 'hrms_task_board'
        AND status NOT IN ('closed','settled','resolved','escalated')
        AND COALESCE(last_activity_at, updated_at, created_at) < NOW() - ($1::int || ' hours')::interval
@@ -374,55 +387,52 @@ export async function runTaskBoardWatchdog({ staleHours = 24 } = {}) {
   );
   const touched = [];
   for (const row of (r.rows || [])) {
-    let current = row.status;
-    if (current === 'dispatched') {
-      const step = await transitionTask(row.task_id, 'pending_response', 'task_watchdog', { staleHours: hours, watchdogAdvance: true });
-      if (step.ok) current = 'pending_response';
-    }
-    if (current === 'pending_dispatch') {
-      const step1 = await transitionTask(row.task_id, 'dispatched', 'task_watchdog', { staleHours: hours, watchdogAdvance: true });
-      if (step1.ok) {
-        const step2 = await transitionTask(row.task_id, 'pending_response', 'task_watchdog', { staleHours: hours, watchdogAdvance: true });
-        if (step2.ok) current = 'pending_response';
-      }
-    }
-    const t = current === 'pending_response'
-      ? await transitionTask(row.task_id, 'escalated', 'task_watchdog', { staleHours: hours })
-      : { ok: false };
-    if (t.ok) touched.push(row.task_id);
+    const reminder = await sendTaskReminders(row.task_id, row.assignee_agent || row.current_agent || 'task_watchdog');
+    if (reminder.ok && !reminder.skipped) touched.push(row.task_id);
   }
-  return { ok: true, scanned: r.rows?.length || 0, escalated: touched };
+  return { ok: true, scanned: r.rows?.length || 0, remindedOrFiled: touched };
 }
 
-async function sendTaskCardToAssignee(taskId) {
+async function sendTaskCardToAssignee(taskId, { reminder = false, reminderCount = 0, trend = null } = {}) {
   try {
     const task = await getTask(taskId);
     if (!task?.store || !task?.assignee_agent) return;
     const users = await query(
-      `SELECT open_id FROM feishu_users WHERE store = $1 AND registered = TRUE AND open_id IS NOT NULL LIMIT 5`,
+      `SELECT open_id, role FROM feishu_users
+       WHERE (store = $1 OR store ILIKE '%' || $1 || '%' OR $1 ILIKE '%' || store || '%')
+         AND role IN ('store_manager','store_production_manager')
+         AND registered = TRUE
+         AND open_id IS NOT NULL
+         AND open_id NOT LIKE '%probe%'
+       LIMIT 8`,
       [task.store]
     ).catch(() => ({ rows: [] }));
     if (!users.rows?.length) {
       logger.info({ taskId, store: task.store }, 'sendTaskCard: no registered feishu users for store');
+      await notifyAdminsBoardIssue(`⚠️ Agent任务无法派发：门店未绑定飞书负责人\n门店：${task.store}\n任务：${task.title || taskId}\n任务ID：${taskId}`);
       return;
     }
     const { sendCard } = await import('./feishu-client.js');
     const priorityEmoji = { high: '🔴', medium: '🟡', low: '🟢' }[task.priority || task.severity || 'medium'] || '⚪';
+    const trendText = trend
+      ? `\n\n**出品问题趋势**：近3天 ${trend.currentCount} 条，前3天 ${trend.previousCount} 条，判断：${trend.label}`
+      : '';
+    const required = `\n\n**请门店必须回复**：\n1. 具体整改方案\n2. 完成时间\n3. 责任人\n4. 现场照片/文件证据（可在飞书回复或管理端补充）`;
     const card = {
       config: { wide_screen_mode: true },
       header: {
-        title: { tag: 'plain_text', content: `${priorityEmoji} 新任务 · ${task.store}` },
-        template: task.priority === 'high' ? 'red' : task.priority === 'low' ? 'green' : 'orange'
+        title: { tag: 'plain_text', content: `${priorityEmoji} ${reminder ? `第${reminderCount}次催办` : '整改任务'} · ${task.store}` },
+        template: reminder ? 'red' : (task.priority === 'high' ? 'red' : task.priority === 'low' ? 'green' : 'orange')
       },
       elements: [
-        { tag: 'div', text: { tag: 'lark_md', content: `**${task.title || '任务'}**\n${String(task.detail || '').slice(0, 500)}` } },
+        { tag: 'div', text: { tag: 'lark_md', content: `**${task.title || '任务'}**\n${String(task.detail || '').slice(0, 500)}${trendText}${required}` } },
         { tag: 'hr' },
         {
           tag: 'action',
           actions: [
-            { tag: 'button', text: { tag: 'plain_text', content: '已查看' }, type: 'primary', value: { action: 'ack_anomaly', task_id: taskId } },
-            { tag: 'button', text: { tag: 'plain_text', content: '开始处理' }, type: 'primary', value: { action: 'start_task', task_id: taskId } },
-            { tag: 'button', text: { tag: 'plain_text', content: '回复' }, type: 'default', value: { action: 'reply_anomaly', task_id: taskId } }
+            { tag: 'button', text: { tag: 'plain_text', content: '已收到' }, type: 'primary', value: { action: 'ack_anomaly', task_id: taskId } },
+            { tag: 'button', text: { tag: 'plain_text', content: '开始整改' }, type: 'primary', value: { action: 'start_task', task_id: taskId } },
+            { tag: 'button', text: { tag: 'plain_text', content: '提交整改方案' }, type: 'default', value: { action: 'reply_anomaly', task_id: taskId } }
           ]
         },
         { tag: 'note', elements: [{ tag: 'plain_text', content: `任务ID：${taskId} · 来源：${task.source || '系统'} · 请及时处理` }] }
@@ -437,7 +447,8 @@ async function sendTaskCardToAssignee(taskId) {
         logger.warn({ taskId, openId: u.open_id, err: e?.message }, 'sendTaskCard: failed to send card to user');
       }
     }
-    await logEvent(taskId, 'card_sent', 'task_orchestrator', task.assignee_agent, 'dispatched', 'dispatched', { recipients: users.rows.length, sent });
+    await logEvent(taskId, reminder ? 'reminder_card_sent' : 'card_sent', 'task_orchestrator', task.assignee_agent, task.status, task.status, { recipients: users.rows.length, sent, reminder, reminderCount, trend });
+    return { recipients: users.rows.length, sent };
   } catch (e) {
     logger.error({ taskId, err: e?.message }, 'sendTaskCardToAssignee failed');
   }
@@ -528,47 +539,24 @@ export async function executeBoardTask(taskId, { agent } = {}) {
   const task = await getTask(taskId);
   if (!task) return { ok: false, error: 'task_not_found' };
   if (!taskId || !String(taskId).trim()) return { ok: false, error: 'task_id_required' };
-  if (['closed', 'settled', 'resolved', 'pending_review'].includes(task.status)) {
+  if (['closed', 'settled', 'resolved', 'pending_review', 'rejected', 'hr_filed'].includes(task.status)) {
     return { ok: true, skipped: true, taskId, status: task.status };
   }
   const agentKey = agent || task.assignee_agent || task.current_agent || 'general_agent';
-  if (task.status === 'dispatched') {
-    const moved = await transitionTask(taskId, 'in_progress', agentKey, { executionStarted: true });
-    if (!moved.ok) return moved;
-  } else if (task.status !== 'in_progress') {
-    return { ok: true, skipped: true, taskId, status: task.status, reason: `not_executable_from_${task.status}` };
+  if (task.status !== 'dispatched' && task.status !== 'viewed') {
+    return { ok: true, skipped: true, taskId, status: task.status, reason: `not_dispatchable_from_${task.status}` };
   }
-
-  const latest = await getTask(taskId);
-  const investigation = await buildAgentInvestigation(latest || task, agentKey);
-  await submitAgentFeedback(taskId, {
-    executionSummary: investigation.summary,
-    currentStatus: 'pending_review',
-    agentJudgment: agentKey,
-    riskPoints: investigation.riskPoints,
-    suggestedAction: investigation.suggestedAction,
-    evidenceSummary: investigation.evidenceSummary
-  });
-  await addTaskEvidence(taskId, {
-    evidenceType: 'agent_execution',
-    content: investigation.content,
-    submittedBy: agentKey,
-    submittedRole: 'agent',
-    metadata: investigation.metadata
-  });
-
-  const afterEvidence = await getTask(taskId);
-  if (afterEvidence?.status === 'in_progress') {
-    const responded = await transitionTask(taskId, 'pending_response', agentKey, { responseText: investigation.summary, agentExecution: true });
-    if (!responded.ok) return responded;
-  }
-  const afterResponse = await getTask(taskId);
-  if (afterResponse?.status === 'pending_response') {
-    const review = await transitionTask(taskId, 'pending_review', 'task_orchestrator', { agentExecution: true, evidenceSubmitted: true });
-    if (!review.ok) return review;
-  }
-  await logEvent(taskId, 'agent_execution_completed', agentKey, 'task_orchestrator', 'in_progress', 'pending_review', investigation.metadata);
-  return { ok: true, taskId, agent: agentKey, status: (await getTask(taskId))?.status, investigation: investigation.metadata };
+  const trend = await getProductionIssueTrend(task.store);
+  const sent = await sendTaskCardToAssignee(taskId, { reminder: false, trend });
+  await query(
+    `UPDATE master_tasks SET
+       source_data = COALESCE(source_data, '{}'::jsonb) || $2::jsonb,
+       last_activity_at = NOW(), updated_at = NOW()
+     WHERE task_id = $1`,
+    [taskId, JSON.stringify({ board_tracking: { agentKey, trend, dispatchedToStoreAt: new Date().toISOString(), cardSent: sent } })]
+  );
+  await logEvent(taskId, 'store_task_card_dispatched', agentKey, task.store || 'store', task.status, task.status, { trend, sent });
+  return { ok: true, taskId, agent: agentKey, status: (await getTask(taskId))?.status, sent, trend };
 }
 
 async function buildAgentInvestigation(task, agentKey) {
@@ -645,6 +633,85 @@ async function buildAgentInvestigation(task, agentKey) {
   };
 }
 
+export async function evaluateBoardTaskAfterStoreFeedback(taskId) {
+  const task = await getTask(taskId);
+  if (!task || task.source !== 'hrms_task_board') return { ok: true, skipped: true };
+  const trend = await getProductionIssueTrend(task.store);
+  const improved = trend.currentCount < trend.previousCount || (trend.previousCount > 0 && trend.currentCount === 0);
+  const enoughData = trend.currentCount + trend.previousCount > 0;
+  if (improved && enoughData) {
+    const summary = `${agentNameZh(task.assignee_agent || task.current_agent)}跟踪结果：${task.store || '-'}出品问题已有改善，近3天${trend.currentCount}条，前3天${trend.previousCount}条。已收到门店整改反馈，建议管理员验收。`;
+    await submitAgentFeedback(taskId, {
+      executionSummary: summary,
+      currentStatus: 'pending_review',
+      agentJudgment: task.assignee_agent || task.current_agent || 'agent',
+      riskPoints: [`出品问题趋势：${trend.label}`],
+      suggestedAction: '管理员可结合门店整改方案和现场证据进行验收。',
+      evidenceSummary: trend.summary
+    });
+    await addTaskEvidence(taskId, {
+      evidenceType: 'agent_followup',
+      content: summary,
+      submittedBy: task.assignee_agent || 'agent',
+      submittedRole: 'agent',
+      metadata: { trend, improved: true }
+    });
+    const latest = await getTask(taskId);
+    if (latest?.status === 'waiting_evidence' || latest?.status === 'in_progress') {
+      const r1 = await transitionTask(taskId, 'pending_response', task.assignee_agent || 'agent', { agentFollowup: true, trend });
+      if (!r1.ok) return r1;
+    }
+    const after = await getTask(taskId);
+    if (after?.status === 'pending_response') {
+      const r2 = await transitionTask(taskId, 'pending_review', 'task_orchestrator', { agentFollowup: true, trend });
+      if (!r2.ok) return r2;
+    }
+    await logEvent(taskId, 'agent_trend_improved', task.assignee_agent || 'agent', 'admin', task.status, (await getTask(taskId))?.status, { trend });
+    return { ok: true, improved: true, trend };
+  }
+  await query(
+    `UPDATE master_tasks SET source_data = COALESCE(source_data, '{}'::jsonb) || $2::jsonb, updated_at = NOW() WHERE task_id = $1`,
+    [taskId, JSON.stringify({ board_tracking: { lastTrend: trend, lastTrendCheckedAt: new Date().toISOString(), waitingForImprovement: true } })]
+  );
+  await sendTaskCardToAssignee(taskId, { reminder: true, reminderCount: Number(task.remind_count || 0) + 1, trend });
+  await logEvent(taskId, 'agent_trend_not_improved', task.assignee_agent || 'agent', task.store || 'store', task.status, task.status, { trend });
+  return { ok: true, improved: false, trend };
+}
+
+export async function getProductionIssueTrend(store) {
+  const s = String(store || '').trim();
+  const params = [s];
+  const countSql = `
+    SELECT
+      COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '3 days')::int AS current_count,
+      COUNT(*) FILTER (WHERE created_at < NOW() - INTERVAL '3 days' AND created_at >= NOW() - INTERVAL '6 days')::int AS previous_count
+    FROM feishu_generic_records
+    WHERE config_key IN ('table_visit','bad_review','material_majixian','material_hongchao')
+      AND ($1::text = '' OR fields::text ILIKE '%' || $1 || '%')
+      AND created_at >= NOW() - INTERVAL '6 days'
+      AND (
+        fields::text ILIKE '%出品%' OR fields::text ILIKE '%菜品%' OR fields::text ILIKE '%口味%' OR
+        fields::text ILIKE '%不满意%' OR fields::text ILIKE '%差评%' OR fields::text ILIKE '%不新鲜%'
+      )`;
+  const r = await query(countSql, params).catch(() => ({ rows: [] }));
+  const currentCount = Number(r.rows?.[0]?.current_count || 0);
+  const previousCount = Number(r.rows?.[0]?.previous_count || 0);
+  let direction = 'flat';
+  if (currentCount < previousCount) direction = 'down';
+  if (currentCount > previousCount) direction = 'up';
+  const label = direction === 'down' ? '减少/改善' : direction === 'up' ? '增加/未改善' : '持平/需继续观察';
+  return { store: s, currentCount, previousCount, direction, label, summary: `近3天${currentCount}条，前3天${previousCount}条，${label}` };
+}
+
+async function notifyAdminsBoardIssue(content) {
+  try {
+    const { pushRhythmReport } = await import('./feishu-client.js');
+    await pushRhythmReport(content).catch(() => {});
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'notifyAdminsBoardIssue failed');
+  }
+}
+
 function agentNameZh(agentKey) {
   return ({
     ops_supervisor: '运营督导',
@@ -698,17 +765,36 @@ export async function logTaskExperience(taskId) {
 
 export async function sendTaskReminders(taskId, agent) {
   const task = await getTask(taskId);
-  if (!task || ['closed', 'settled', 'resolved'].includes(task.status)) return { ok: true, skipped: true };
-  const overdue = task.timeout_at && new Date(task.timeout_at) < new Date();
-  if (!overdue && task.status === 'in_progress') return { ok: true, skipped: true };
-  try {
-    const { pushRhythmReport } = await import('./feishu-client.js');
-    const label = overdue ? '逾期' : '待处理';
-    await pushRhythmReport(`⏰ 任务提醒：${task.store || ''} ${task.title || taskId} [${label}] 状态=${task.status} Agent=${task.assignee_agent || agent || '?'}`).catch(() => {});
-  } catch {}
-  await query(`UPDATE master_tasks SET remind_count = COALESCE(remind_count, 0) + 1, last_activity_at = NOW() WHERE task_id = $1`, [taskId]);
-  await logEvent(taskId, 'reminder_sent', 'reminder_queue', task.assignee_agent, task.status, task.status, { agent, overdue });
-  return { ok: true };
+  if (!task || ['closed', 'settled', 'resolved', 'rejected', 'hr_filed'].includes(task.status)) return { ok: true, skipped: true };
+  const currentReminders = Number(task.remind_count || 0);
+  const trend = await getProductionIssueTrend(task.store);
+  if (currentReminders >= 3) {
+    const filed = ['pending_response', 'pending_review'].includes(task.status)
+      ? await transitionTask(taskId, 'hr_filed', 'task_watchdog', { noStoreReply: true, reminders: currentReminders, trend })
+      : null;
+    if (!filed?.ok) {
+      await query(`UPDATE master_tasks SET status = 'hr_filed', hr_performance_recorded = TRUE, updated_at = NOW() WHERE task_id = $1`, [taskId]);
+      await logEvent(taskId, 'status_transition', 'task_watchdog', task.assignee_agent, task.status, 'hr_filed', { noStoreReply: true, reminders: currentReminders, trend, forced: true });
+    }
+    await notifyAdminsBoardIssue(`🚨 门店未响应Agent任务，已三次催办并备案\n门店：${task.store || '-'}\n任务：${task.title || taskId}\n任务ID：${taskId}\n当前趋势：${trend.label}（近3天${trend.currentCount}条 / 前3天${trend.previousCount}条）`);
+    const derived = await createBoardTask({
+      content: `继续追踪：${task.title || task.detail || taskId}\n原因：门店三次催办未回复，需重新派发并升级关注。`,
+      priority: task.priority || task.severity || 'high',
+      store: task.store,
+      createdBy: 'task_watchdog',
+      createdByRole: 'system'
+    });
+    if (derived.ok) {
+      await query(`UPDATE master_tasks SET parent_task_id = $2, related_task_ids = COALESCE(related_task_ids,'[]'::jsonb) || $3::jsonb WHERE task_id = $1`, [derived.taskId, taskId, JSON.stringify([taskId])]).catch(() => {});
+      await logEvent(taskId, 'no_reply_revision_task_created', 'task_watchdog', 'master', 'hr_filed', 'hr_filed', { revisionTaskId: derived.taskId });
+    }
+    return { ok: true, filed: true, revisionTask: derived };
+  }
+  const nextCount = currentReminders + 1;
+  const sent = await sendTaskCardToAssignee(taskId, { reminder: true, reminderCount: nextCount, trend });
+  await query(`UPDATE master_tasks SET remind_count = COALESCE(remind_count, 0) + 1, last_reminder_at = NOW(), updated_at = NOW() WHERE task_id = $1`, [taskId]);
+  await logEvent(taskId, 'reminder_sent', 'reminder_queue', task.assignee_agent, task.status, task.status, { agent, reminderCount: nextCount, trend, sent });
+  return { ok: true, reminderCount: nextCount, sent };
 }
 
 // ─── Summarize Task On Close (called by summary queue) ───

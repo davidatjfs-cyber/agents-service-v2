@@ -2184,8 +2184,24 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
     if (passed) {
       const cat = String(task.category || '').trim();
       const isFoodSafetyBi = src === 'bi_anomaly' && cat === 'food_safety';
+      const isHrmsBoard = src === 'hrms_task_board';
 
-      if (isFoodSafetyBi) {
+      if (isHrmsBoard) {
+        await query(
+          `UPDATE master_tasks SET
+             review_passed = true,
+             review_feedback = $2,
+             review_count = COALESCE(review_count, 0) + 1,
+             updated_at = NOW()
+           WHERE task_id = $1`,
+          [taskId, `${reason ? reason + '；' : ''}门店整改方案已收到，Agent将持续跟踪出品问题趋势，改善后再提交管理员验收。`]
+        ).catch(() => {});
+        const { evaluateBoardTaskAfterStoreFeedback } = await import('./task-orchestrator.js');
+        await evaluateBoardTaskAfterStoreFeedback(taskId).catch(() => {});
+        if (replyMessageId) {
+          replyMsg(replyMessageId, `✅ 已收到整改方案。Agent会继续跟踪桌访/差评/出品数据趋势，改善后提交管理员验收；未改善会继续催办。任务 ${taskId}`).catch(() => {});
+        }
+      } else if (isFoodSafetyBi) {
         /** 食安：店长/出品整改说明审核通过 ≠ 结案；须等 hq_manager「记录/不记录」才 resolved，否则会无扣分闭环 */
         await query(
           `UPDATE master_tasks SET
