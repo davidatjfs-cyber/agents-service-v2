@@ -12,14 +12,18 @@ const CATEGORY_RULES = [
 
 function extractStore(text) {
   const s = String(text || '').trim();
+  const knownStores = ['洪潮', '马己仙', '马己仙海鲜', '洪潮海鲜', '蜀香', '湘味', '御膳'];
+  for (const name of knownStores) {
+    if (s.includes(name)) return name;
+  }
   const clean = (v) => String(v || '')
     .replace(/^(关于|针对)/, '')
     .replace(/的$/, '')
-    .replace(/(卫生|清洁|服务|出品|菜品|数据|营销|培训|整改|情况)$/, '');
-  const direct = s.match(/(?:门店|店铺|店|关于|针对)?\s*([\u4e00-\u9fa5A-Za-z0-9]{2,12})(?:的)?(?:卫生|清洁|服务|出品|菜品|数据|营销|培训|整改|情况)/);
-  if (direct?.[1]) return clean(direct[1]);
-  const beforeToo = s.match(/([\u4e00-\u9fa5A-Za-z0-9]{2,12})(?:的)?.{0,6}(?:太差|很差|不好|异常|整改)/);
-  return beforeToo?.[1] ? clean(beforeToo[1]) : null;
+    .replace(/(卫生|清洁|服务|出品|菜品|数据|营销|培训|整改|情况|门店|店铺)$/, '');
+  const direct = s.match(/(?:关于|针对)?\s*([\u4e00-\u9fa5]{2,4})(?:门店|店铺|店|的)?(?:的)?(?:卫生|清洁|服务|出品|菜品|数据|营销|培训|整改|情况|太差|很差|不好|异常)/);
+  if (direct?.[1] && direct[1].length <= 4) return clean(direct[1]);
+  const beforeToo = s.match(/([\u4e00-\u9fa5]{2,4})(?:的)?.{0,4}(?:太差|很差|不好|异常|整改|不新鲜)/);
+  return beforeToo?.[1] && beforeToo[1].length <= 4 ? clean(beforeToo[1]) : null;
 }
 
 function extractDeadline(text) {
