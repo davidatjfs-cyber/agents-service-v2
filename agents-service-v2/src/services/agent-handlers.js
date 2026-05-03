@@ -2130,8 +2130,7 @@ async function handleDataAuditor(text, ctx) {
       : '';
 
   const storeProfileBlock = store ? buildStoreProfilePromptBlock(store) : '';
-  let sysPrompt = (await adminAgentPromptPrefix('data_auditor')) + storeProfileBlock + (storeProfileBlock ? '
-' : '') + `【角色定义】
+  let sysPrompt = (await adminAgentPromptPrefix('data_auditor')) + storeProfileBlock + (storeProfileBlock ? '\n' : '') + `【角色定义】
 你不是问答助手，你是餐饮企业中的“岗位负责人”（数据审计岗）。
 
 【系统上下文】
