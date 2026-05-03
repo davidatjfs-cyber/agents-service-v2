@@ -9530,6 +9530,19 @@ app.post('/api/ops/tasks/:id/read', authRequired, async (req, res) => {
   }
 });
 
+app.post('/api/uploads/agent-task-evidence', authRequired, upload.array('files', 9), async (req, res) => {
+  const role = String(req.user?.role || '').trim();
+  if (role !== 'admin') return res.status(403).json({ error: 'forbidden' });
+  try {
+    const files = Array.isArray(req.files) ? req.files : [];
+    if (!files.length) return res.status(400).json({ error: 'missing_file' });
+    const urls = files.map(f => (f && f.filename ? `/uploads/${f.filename}` : '')).filter(Boolean);
+    return res.json({ urls });
+  } catch (e) {
+    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+  }
+});
+
 app.post('/api/uploads/ops-task-evidence', authRequired, upload.array('files', 9), async (req, res) => {
   const username = String(req.user?.username || '').trim();
   if (!username) return res.status(400).json({ error: 'missing_user' });

@@ -10203,6 +10203,7 @@
         .atb-badge.done { background: rgba(52,211,153,0.14); color:#86efac; }
         .atb-badge.bad { background: rgba(251,113,133,0.14); color:#fda4af; }
         .atb-card h3 { margin: 12px 0 8px; font-size: 17px; line-height: 1.25; }
+        .atb-card.atb-card-stale { border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06); }
         .atb-card p { color: rgba(226,232,240,0.66); font-size: 13px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         .atb-meta { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; color:rgba(226,232,240,0.62); font-size:12px; }
         .atb-detail { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.58); backdrop-filter: blur(16px); display: none; align-items: flex-start; }
@@ -19403,6 +19404,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
         }
 
         var __atbFilter = '';
+        var __atbRefreshTimer = null;
         var __atbCurrentTaskId = '';
 
         function atbEscape(s) {
@@ -19438,6 +19440,9 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                 renderAgentTaskList(tasks.tasks || []);
                 loadAgentTaskMetrics();
                 if (list) list.dataset.loaded = '1';
+                if (!__atbRefreshTimer) __atbRefreshTimer = setInterval(function() { loadAgentTaskBoard(false); }, 120000);
+                const s = (summary.summary || summary);
+                if (s && s.stale > 0) showNotification(s.stale + ' 个任务超过4小时未响应，请及时处理', 'warning');
             } catch (e) {
                 if (list) list.innerHTML = '<div class="atb-card"><h3>加载失败</h3><p>' + atbEscape(e.message) + '</p></div>';
                 showNotification('Agent任务看板加载失败：' + e.message, 'error');
@@ -19451,6 +19456,21 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             set('atb-stat-running', by['执行中'] || 0);
             set('atb-stat-review', by['待验收'] || 0);
             set('atb-stat-overdue', summary.overdue || 0);
+            const stale = summary.stale || 0;
+            if (stale > 0) {
+                const existing = document.getElementById('atb-stale-alert');
+                if (!existing) {
+                    const alert = document.createElement('div');
+                    alert.id = 'atb-stale-alert';
+                    alert.style.cssText = 'background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);border-radius:14px;padding:12px 16px;margin-bottom:12px;color:#fca5a5;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;';
+                    alert.innerHTML = '<span style="font-size:18px;">\u26A0\uFE0F</span><span>' + stale + ' 个任务已超过4小时未响应，请及时处理！</span>';
+                    const stats = document.querySelector('.atb-stats');
+                    if (stats && stats.parentNode) stats.parentNode.insertBefore(alert, stats);
+                }
+            } else {
+                const existing = document.getElementById('atb-stale-alert');
+                if (existing) existing.remove();
+            }
         }
 
         function atbBadgeClass(status) {
@@ -19477,8 +19497,11 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             list.innerHTML = tasks.map(function (t) {
                 const board = t.board_status || t.status || '-';
                 const dt = String(t.created_at || '').slice(0, 16).replace('T', ' ');
-                return '<article class="atb-card" onclick="openAgentTaskDetail(\'' + atbEscape(t.task_id) + '\')">'
-                    + '<div class="atb-card-head"><span class="atb-badge ' + atbBadgeClass(board) + '">' + atbEscape(board) + '</span><span class="atb-badge">' + atbEscape(t.assignee_agent || t.current_agent || '待分配') + '</span></div>'
+                const lastAct = new Date(t.last_activity_at || t.updated_at || t.created_at);
+                const staleHours = (Date.now() - lastAct.getTime()) / 3600000;
+                const isStale = staleHours > 4 && !['已完成','已打回','已升级','已备案','closed','settled','resolved'].includes(board);
+                return '<article class="atb-card' + (isStale ? ' atb-card-stale' : '') + '" onclick="openAgentTaskDetail(\'' + atbEscape(t.task_id) + '\')">'
+                    + '<div class="atb-card-head"><span class="atb-badge ' + atbBadgeClass(board) + '">' + atbEscape(board) + '</span><span class="atb-badge">' + atbEscape(t.assignee_agent || t.current_agent || '待分配') + '</span>' + (isStale ? '<span class="atb-badge" style="background:rgba(239,68,68,0.25);color:#fca5a5;">超时</span>' : '') + '</div>'
                     + '<h3>' + atbEscape(t.title || t.task_id) + '</h3>'
                     + '<p>' + atbEscape(t.detail || '') + '</p>'
                     + '<div class="atb-meta"><span>门店：' + atbEscape(t.store || '-') + '</span><span>类型：' + atbEscape(atbCategoryZh(t.category)) + '</span><span>优先级：' + atbEscape(atbPriorityZh(t.priority || t.severity)) + '</span><span>提交时间：' + atbEscape(dt || '-') + '</span></div>'
@@ -19534,7 +19557,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             panel.innerHTML = '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;"><div><div class="atb-kicker">任务详情</div><h2 style="margin:6px 0 0;font-size:24px;line-height:1.15;">' + atbEscape(t.title || t.task_id) + '</h2></div><button class="atb-action" style="width:auto;padding:8px 12px;" onclick="closeAgentTaskDetail()">关闭</button></div>'
                 + '<div class="atb-meta" style="margin-top:12px;"><span>状态：' + atbEscape(t.board_status || t.status) + '</span><span>负责人：' + atbEscape({ops_supervisor:'运营督导',food_quality:'食安专员',train_advisor:'培训顾问',marketing_planner:'营销策划',marketing_executor:'营销执行',data_auditor:'数据审计'}[t.assignee_agent || t.current_agent] || t.assignee_agent || t.current_agent || '待分配') + '</span><span>门店：' + atbEscape(t.store || '-') + '</span><span>类型：' + atbEscape(atbCategoryZh(t.category)) + '</span><span>优先级：' + atbEscape(atbPriorityZh(t.priority || t.severity)) + '</span></div>'
                 + '<div class="atb-section"><b>任务内容</b><p style="margin-top:8px;color:rgba(226,232,240,.72);white-space:pre-wrap;">' + atbEscape(t.detail || '') + '</p></div>'
-                + '<div class="atb-section"><b>补充证据/反馈</b><textarea id="atb-evidence-text" class="atb-input" style="margin-top:10px;min-height:82px;" placeholder="输入门店反馈、检查说明或证据描述"></textarea><input id="atb-evidence-url" class="atb-input" style="margin-top:8px;min-height:48px;" placeholder="可选：照片/文件链接"><button class="atb-action" style="margin-top:8px;width:100%;" onclick="submitAgentTaskEvidence()">提交证据/反馈</button></div>'
+                + '<div class="atb-section"><b>补充证据/反馈</b><textarea id="atb-evidence-text" class="atb-input" style="margin-top:10px;min-height:82px;" placeholder="输入门店反馈、检查说明或证据描述"></textarea><div id="atb-evidence-files-wrap" style="margin-top:8px;"><label style="display:flex;align-items:center;gap:8px;padding:12px;border:2px dashed rgba(255,255,255,0.15);border-radius:12px;cursor:pointer;color:rgba(226,232,240,0.6);font-size:14px;transition:border-color .2s;"><span>点击或拖拽上传照片/文件</span><input id="atb-evidence-files" type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt" style="display:none;" onchange="atbPreviewFiles()"></label><div id="atb-evidence-preview" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div></div><button class="atb-action" style="margin-top:8px;width:100%;" onclick="submitAgentTaskEvidence()">提交证据/反馈</button></div>'
                 + '<div class="atb-section"><b>证据</b><div class="atb-timeline">' + evidences + '</div></div>'
                 + '<div class="atb-section"><b>审计时间线</b><div class="atb-timeline">' + events + '</div></div>'
                 + '<div class="atb-section"><b>重新分配负责人</b><select id="atb-reassign-agent" class="atb-input" style="margin-top:8px;width:100%;"><option value="">选择负责人...</option><option value="ops_supervisor">运营督导</option><option value="food_quality">食安专员</option><option value="train_advisor">培训顾问</option><option value="marketing_planner">营销策划</option><option value="marketing_executor">营销执行</option><option value="data_auditor">数据审计</option></select><button class="atb-action" style="margin-top:8px;width:100%;" onclick="reassignAgentTask()">确认重分配</button></div>'
@@ -19548,12 +19571,46 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             __atbCurrentTaskId = '';
         }
 
+        function atbPreviewFiles() {
+            var input = document.getElementById('atb-evidence-files');
+            var preview = document.getElementById('atb-evidence-preview');
+            if (!input || !preview) return;
+            preview.innerHTML = '';
+            var files = input.files || [];
+            for (var i = 0; i < files.length; i++) {
+                var f = files[i];
+                var el = document.createElement('div');
+                el.style.cssText = 'display:flex;align-items:center;gap:4px;padding:4px 8px;border-radius:8px;background:rgba(255,255,255,0.06);font-size:12px;color:rgba(226,232,240,0.8);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+                if (f.type && f.type.startsWith('image/')) {
+                    var img = document.createElement('img');
+                    img.src = URL.createObjectURL(f);
+                    img.style.cssText = 'width:28px;height:28px;border-radius:4px;object-fit:cover;';
+                    el.appendChild(img);
+                }
+                var span = document.createElement('span');
+                span.textContent = f.name;
+                el.appendChild(span);
+                preview.appendChild(el);
+            }
+        }
+
         async function submitAgentTaskEvidence() {
-            const text = String(document.getElementById('atb-evidence-text')?.value || '').trim();
-            const fileUrl = String(document.getElementById('atb-evidence-url')?.value || '').trim();
-            if (!__atbCurrentTaskId || (!text && !fileUrl)) { showNotification('请输入证据/反馈内容或照片链接', 'warning'); return; }
+            var text = String(document.getElementById('atb-evidence-text')?.value || '').trim();
+            var fileInput = document.getElementById('atb-evidence-files');
+            var files = fileInput ? Array.from(fileInput.files || []) : [];
+            if (!__atbCurrentTaskId || (!text && !files.length)) { showNotification('请输入证据/反馈内容或上传照片/文件', 'warning'); return; }
             try {
-                await atbFetch('/api/agent-task-board/tasks/' + encodeURIComponent(__atbCurrentTaskId) + '/evidences', { method: 'POST', body: JSON.stringify({ evidenceType: fileUrl ? 'photo' : 'text', content: text, fileUrl: fileUrl }) });
+                var uploadedUrls = [];
+                if (files.length) {
+                    var fd = new FormData();
+                    files.forEach(function(f) { fd.append('files', f); });
+                    var uploadRes = await fetch('/api/uploads/agent-task-evidence', { method: 'POST', headers: { 'Authorization': 'Bearer ' + (HRMS_API?.token ? HRMS_API.token() : (localStorage.getItem('hrms_token') || '')) }, body: fd });
+                    var uploadData = await uploadRes.json().catch(function() { return {}; });
+                    if (uploadData.urls && uploadData.urls.length) { uploadedUrls = uploadData.urls; }
+                    else { showNotification('文件上传失败：' + (uploadData.error || '未知错误'), 'error'); return; }
+                }
+                var fileUrl = uploadedUrls.join(',');
+                await atbFetch('/api/agent-task-board/tasks/' + encodeURIComponent(__atbCurrentTaskId) + '/evidences', { method: 'POST', body: JSON.stringify({ evidenceType: files.length ? 'photo' : 'text', content: text, fileUrl: fileUrl }) });
                 showNotification('证据已提交，任务进入待验收', 'success');
                 await openAgentTaskDetail(__atbCurrentTaskId);
                 loadAgentTaskBoard(true);
