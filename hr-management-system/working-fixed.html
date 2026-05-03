@@ -10205,9 +10205,9 @@
         .atb-card h3 { margin: 12px 0 8px; font-size: 17px; line-height: 1.25; }
         .atb-card p { color: rgba(226,232,240,0.66); font-size: 13px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         .atb-meta { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; color:rgba(226,232,240,0.62); font-size:12px; }
-        .atb-detail { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.58); backdrop-filter: blur(16px); display: none; align-items: flex-end; }
+        .atb-detail { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.58); backdrop-filter: blur(16px); display: none; align-items: flex-start; }
         .atb-detail.open { display:flex; }
-        .atb-panel { width: min(760px, 100%); max-height: 88dvh; overflow:auto; margin: 0 auto; border-radius: 28px 28px 0 0; border: 1px solid rgba(255,255,255,0.1); background: #0b0b0d; padding: 18px; box-shadow: 0 -24px 90px rgba(0,0,0,0.55); }
+        .atb-panel { width: min(760px, 100%); max-height: 88dvh; overflow:auto; margin: 0 auto; border-radius: 0 0 28px 28px; border: 1px solid rgba(255,255,255,0.1); background: #0b0b0d; padding: 18px; box-shadow: 0 24px 90px rgba(0,0,0,0.55); }
         .atb-panel-actions { position: sticky; bottom: -18px; display:grid; grid-template-columns: repeat(3,1fr); gap:8px; padding: 12px 0 0; background: linear-gradient(180deg, transparent, #0b0b0d 25%); }
         .atb-action { border:1px solid rgba(255,255,255,0.1); border-radius:14px; background:rgba(255,255,255,0.06); color:#fff; padding:12px 8px; font-weight:800; cursor:pointer; }
         .atb-action.good { background:rgba(52,211,153,0.16); color:#86efac; }
@@ -19460,6 +19460,13 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             return '';
         }
 
+        var ATB_CATEGORIES = { hygiene: '卫生', food_quality: '食品安全', service: '服务', training: '培训', marketing_action: '营销行动', marketing: '营销', data_audit: '数据审计', daily_ops: '日常运营', rhythm_report: '节奏报告', general: '综合' };
+        var ATB_PRIORITIES = { critical: '紧急', high: '高', medium: '中', low: '低' };
+        var ATB_EVENT_TYPES = { created: '创建', assigned: '分配', dispatched: '派发', claimed: '认领', in_progress: '开始执行', completed: '执行完成', evidence_submitted: '提交证据', review_requested: '请求验收', approved: '验收通过', rejected: '打回修订', escalated: '升级', reassigned: '重分配', closed: '关闭' };
+        function atbCategoryZh(c) { return ATB_CATEGORIES[c] || c || '-'; }
+        function atbPriorityZh(p) { return ATB_PRIORITIES[p] || p || '-'; }
+        function atbEventTypeZh(e) { return ATB_EVENT_TYPES[e] || e || e; }
+
         function renderAgentTaskList(tasks) {
             const list = document.getElementById('atb-list');
             if (!list) return;
@@ -19469,11 +19476,12 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             }
             list.innerHTML = tasks.map(function (t) {
                 const board = t.board_status || t.status || '-';
+                const dt = String(t.created_at || '').slice(0, 16).replace('T', ' ');
                 return '<article class="atb-card" onclick="openAgentTaskDetail(\'' + atbEscape(t.task_id) + '\')">'
                     + '<div class="atb-card-head"><span class="atb-badge ' + atbBadgeClass(board) + '">' + atbEscape(board) + '</span><span class="atb-badge">' + atbEscape(t.assignee_agent || t.current_agent || '待分配') + '</span></div>'
                     + '<h3>' + atbEscape(t.title || t.task_id) + '</h3>'
                     + '<p>' + atbEscape(t.detail || '') + '</p>'
-                    + '<div class="atb-meta"><span>门店：' + atbEscape(t.store || '-') + '</span><span>类型：' + atbEscape(t.category || '-') + '</span><span>优先级：' + atbEscape(t.priority || t.severity || '-') + '</span></div>'
+                    + '<div class="atb-meta"><span>门店：' + atbEscape(t.store || '-') + '</span><span>类型：' + atbEscape(atbCategoryZh(t.category)) + '</span><span>优先级：' + atbEscape(atbPriorityZh(t.priority || t.severity)) + '</span><span>提交时间：' + atbEscape(dt || '-') + '</span></div>'
                     + '</article>';
             }).join('');
         }
@@ -19517,19 +19525,19 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             const panel = document.getElementById('atb-panel');
             if (!panel) return;
             const events = (t.events || []).slice(-20).reverse().map(function (e) {
-                return '<div class="atb-line"><b>' + atbEscape(e.event_type) + '</b> ' + atbEscape(e.status_before || '') + ' → ' + atbEscape(e.status_after || '') + '<br>' + atbEscape(e.created_at || '') + '</div>';
+                return '<div class="atb-line"><b>' + atbEscape(atbEventTypeZh(e.event_type)) + '</b> ' + atbEscape(e.status_before || '') + ' → ' + atbEscape(e.status_after || '') + '<br>' + atbEscape(e.created_at || '') + '</div>';
             }).join('') || '<div class="atb-line">暂无事件</div>';
             const evidences = (t.evidences || []).map(function (e) {
                 const link = e.file_url ? '<br><a href="' + atbEscape(e.file_url) + '" target="_blank" style="color:#fbbf24;">查看文件</a>' : '';
-                return '<div class="atb-line"><b>' + atbEscape(e.evidence_type) + '</b> ' + atbEscape(e.content || '') + link + '<br>' + atbEscape(e.created_at || '') + '</div>';
+                return '<div class="atb-line"><b>' + atbEscape({photo:'照片',text:'文字',document:'文档',link:'链接'}[e.evidence_type] || e.evidence_type) + '</b> ' + atbEscape(e.content || '') + link + '<br>' + atbEscape(e.created_at || '') + '</div>';
             }).join('') || '<div class="atb-line">暂无证据</div>';
-            panel.innerHTML = '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;"><div><div class="atb-kicker">TASK DETAIL</div><h2 style="margin:6px 0 0;font-size:24px;line-height:1.15;">' + atbEscape(t.title || t.task_id) + '</h2></div><button class="atb-action" style="width:auto;padding:8px 12px;" onclick="closeAgentTaskDetail()">关闭</button></div>'
-                + '<div class="atb-meta" style="margin-top:12px;"><span>状态：' + atbEscape(t.board_status || t.status) + '</span><span>Agent：' + atbEscape(t.assignee_agent || t.current_agent || '-') + '</span><span>门店：' + atbEscape(t.store || '-') + '</span></div>'
+            panel.innerHTML = '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;"><div><div class="atb-kicker">任务详情</div><h2 style="margin:6px 0 0;font-size:24px;line-height:1.15;">' + atbEscape(t.title || t.task_id) + '</h2></div><button class="atb-action" style="width:auto;padding:8px 12px;" onclick="closeAgentTaskDetail()">关闭</button></div>'
+                + '<div class="atb-meta" style="margin-top:12px;"><span>状态：' + atbEscape(t.board_status || t.status) + '</span><span>负责人：' + atbEscape({ops_supervisor:'运营督导',food_quality:'食安专员',train_advisor:'培训顾问',marketing_planner:'营销策划',marketing_executor:'营销执行',data_auditor:'数据审计'}[t.assignee_agent || t.current_agent] || t.assignee_agent || t.current_agent || '待分配') + '</span><span>门店：' + atbEscape(t.store || '-') + '</span><span>类型：' + atbEscape(atbCategoryZh(t.category)) + '</span><span>优先级：' + atbEscape(atbPriorityZh(t.priority || t.severity)) + '</span></div>'
                 + '<div class="atb-section"><b>任务内容</b><p style="margin-top:8px;color:rgba(226,232,240,.72);white-space:pre-wrap;">' + atbEscape(t.detail || '') + '</p></div>'
                 + '<div class="atb-section"><b>补充证据/反馈</b><textarea id="atb-evidence-text" class="atb-input" style="margin-top:10px;min-height:82px;" placeholder="输入门店反馈、检查说明或证据描述"></textarea><input id="atb-evidence-url" class="atb-input" style="margin-top:8px;min-height:48px;" placeholder="可选：照片/文件链接"><button class="atb-action" style="margin-top:8px;width:100%;" onclick="submitAgentTaskEvidence()">提交证据/反馈</button></div>'
                 + '<div class="atb-section"><b>证据</b><div class="atb-timeline">' + evidences + '</div></div>'
                 + '<div class="atb-section"><b>审计时间线</b><div class="atb-timeline">' + events + '</div></div>'
-                + '<div class="atb-section"><b>重分配Agent</b><select id="atb-reassign-agent" class="atb-input" style="margin-top:8px;width:100%;"><option value="">选择Agent...</option><option value="ops_supervisor">运营督导(ops_supervisor)</option><option value="food_quality">食安专员(food_quality)</option><option value="train_advisor">培训顾问(train_advisor)</option><option value="marketing_planner">营销策划(marketing_planner)</option><option value="marketing_executor">营销执行(marketing_executor)</option><option value="data_auditor">数据审计(data_auditor)</option></select><button class="atb-action" style="margin-top:8px;width:100%;" onclick="reassignAgentTask()">确认重分配</button></div>'
+                + '<div class="atb-section"><b>重新分配负责人</b><select id="atb-reassign-agent" class="atb-input" style="margin-top:8px;width:100%;"><option value="">选择负责人...</option><option value="ops_supervisor">运营督导</option><option value="food_quality">食安专员</option><option value="train_advisor">培训顾问</option><option value="marketing_planner">营销策划</option><option value="marketing_executor">营销执行</option><option value="data_auditor">数据审计</option></select><button class="atb-action" style="margin-top:8px;width:100%;" onclick="reassignAgentTask()">确认重分配</button></div>'
                 + '<div class="atb-section"><b>质量评分 (0-10)</b><input id="atb-quality-score" class="atb-input" type="number" min="0" max="10" step="0.5" style="margin-top:8px;width:100%;" placeholder="输入0-10的质量评分"><button class="atb-action" style="margin-top:8px;width:100%;" onclick="submitQualityScore()">提交评分</button></div>'
                 + '<div class="atb-panel-actions"><button class="atb-action good" onclick="reviewAgentTask(\'approved\')">通过并关闭</button><button class="atb-action bad" onclick="reviewAgentTask(\'rejected\')">打回并修订</button><button class="atb-action" onclick="deriveAgentTask()">创建衍生任务</button></div>';
         }
