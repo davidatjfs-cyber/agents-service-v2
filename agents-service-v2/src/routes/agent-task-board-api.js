@@ -20,6 +20,23 @@ import { getAgentWorkloads } from '../services/agent-workloads.js';
 
 const router = express.Router();
 const adminOnly = [authRequired, requireRole('admin', 'hq_manager')];
+const CLAIM_AGENT_OVERRIDE_ROLES = new Set(['admin', 'hq_manager']);
+
+export function resolveClaimAgent(req) {
+  const requestedAgent = String(req.body?.agent || '').trim();
+  const username = String(req.user?.username || '').trim();
+  const role = String(req.user?.role || '').trim();
+  const canOverrideAgent = CLAIM_AGENT_OVERRIDE_ROLES.has(role);
+
+  if (requestedAgent && requestedAgent !== username && !canOverrideAgent) {
+    return { ok: false, status: 403, error: 'claim_agent_forbidden' };
+  }
+
+  const agentKey = canOverrideAgent ? (requestedAgent || username) : username;
+  if (!agentKey) return { ok: false, status: 400, error: 'agent_required' };
+
+  return { ok: true, agentKey };
+}
 
 router.post('/tasks', ...adminOnly, async (req, res) => {
   try {
@@ -156,7 +173,11 @@ router.post('/tasks/:taskId/quality-score', ...adminOnly, async (req, res) => {
 
 router.post('/claim', authRequired, async (req, res) => {
   try {
-    const result = await claimNextTask(req.body?.agent || req.user?.username);
+    const claimAgent = resolveClaimAgent(req);
+    if (!claimAgent.ok) {
+      return res.status(claimAgent.status).json({ ok: false, error: claimAgent.error });
+    }
+    const result = await claimNextTask(claimAgent.agentKey);
     res.json(result);
   } catch (e) {
     res.status(500).json({ ok: false, error: e?.message });
