@@ -678,7 +678,10 @@ function getResponsibleAgent(issueType) {
 async function masterDispatcher() {
   try {
     const r = await pool().query(
-      `SELECT * FROM master_tasks WHERE status = 'pending_dispatch' ORDER BY created_at ASC LIMIT 10`
+      `SELECT * FROM master_tasks
+       WHERE status = 'pending_dispatch'
+         AND COALESCE(source, '') <> 'hrms_task_board'
+       ORDER BY created_at ASC LIMIT 10`
     );
     if (!r.rows?.length) return 0;
 
@@ -961,7 +964,10 @@ async function masterPostResolution() {
 async function masterHandleRejected() {
   try {
     const r = await pool().query(
-      `SELECT * FROM master_tasks WHERE status = 'rejected' ORDER BY resolved_at ASC LIMIT 10`
+      `SELECT * FROM master_tasks
+       WHERE status = 'rejected'
+         AND COALESCE(source, '') <> 'hrms_task_board'
+       ORDER BY resolved_at ASC LIMIT 10`
     );
     if (!r.rows?.length) return 0;
 

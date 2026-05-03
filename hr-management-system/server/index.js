@@ -14395,8 +14395,30 @@ app.post('/api/agent-task-board/tasks/:taskId/derive', authRequired, (req, res) 
   return proxyAgentTaskBoard(req, res, 'POST', `/tasks/${encodeURIComponent(req.params.taskId)}/derive`, req.body || {});
 });
 
+app.post('/api/agent-task-board/tasks/:taskId/reassign', authRequired, (req, res) => {
+  return proxyAgentTaskBoard(req, res, 'POST', `/tasks/${encodeURIComponent(req.params.taskId)}/reassign`, req.body || {});
+});
+
+app.post('/api/agent-task-board/tasks/:taskId/comment', authRequired, (req, res) => {
+  return proxyAgentTaskBoard(req, res, 'POST', `/tasks/${encodeURIComponent(req.params.taskId)}/comment`, req.body || {});
+});
+
+app.post('/api/agent-task-board/tasks/:taskId/quality-score', authRequired, (req, res) => {
+  return proxyAgentTaskBoard(req, res, 'POST', `/tasks/${encodeURIComponent(req.params.taskId)}/quality-score`, req.body || {});
+});
+
 app.get('/api/agent-task-board/queue', authRequired, (req, res) => {
   return proxyAgentTaskBoard(req, res, 'GET', '/queue');
+});
+
+app.get('/api/agent-task-board/workloads', authRequired, (req, res) => {
+  return proxyAgentTaskBoard(req, res, 'GET', '/workloads');
+});
+
+app.get('/api/agent-task-board/metrics', authRequired, (req, res) => {
+  const qs = new URLSearchParams();
+  if (req.query?.days) qs.set('days', String(req.query.days));
+  return proxyAgentTaskBoard(req, res, 'GET', '/metrics' + (qs.toString() ? `?${qs}` : ''));
 });
 
 app.post('/api/agent-task-board/watchdog/run', authRequired, (req, res) => {

@@ -21,7 +21,7 @@ const STATUS_FLOW = {
   pending_review:     { next: ['resolved', 'rejected', 'pending_response', 'hr_filed'], agent: 'ops_supervisor' },
   awaiting_approval: { next: ['pending_dispatch', 'rejected'], agent: 'master' },
   resolved:           { next: ['pending_settlement', 'closed'], agent: 'master' },
-  rejected:           { next: ['pending_dispatch'], agent: 'master' },
+  rejected:           { next: ['closed'], agent: 'master' },
   escalated:          { next: ['pending_dispatch', 'closed'], agent: 'master' },
   hr_filed:           { next: ['closed'], agent: 'master' },
   pending_settlement: { next: ['settled'], agent: 'chief_evaluator' },

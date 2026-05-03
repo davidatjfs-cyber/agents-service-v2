@@ -19500,6 +19500,12 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
         function atbPriorityZh(p) { return ATB_PRIORITIES[p] || p || '-'; }
         function atbEventTypeZh(e) { return ATB_EVENT_TYPES[e] || e || e; }
         function atbStatusZh(s) { return ATB_STATUS_MAP[s] || s || '-'; }
+        function atbFmtTime(v) {
+            if (!v) return '-';
+            var d = new Date(v);
+            if (!Number.isFinite(d.getTime())) return String(v).slice(0, 19).replace('T', ' ');
+            return d.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(/\//g, '-');
+        }
         function atbRenderStatusPath(currentBoard, events) {
             var reached = {};
             (events || []).forEach(function(e) { reached[atbStatusZh(e.status_after)] = true; });
@@ -19520,7 +19526,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             }
             list.innerHTML = tasks.map(function (t) {
                 const board = t.board_status || t.status || '-';
-                const dt = String(t.created_at || '').slice(0, 16).replace('T', ' ');
+                const dt = atbFmtTime(t.created_at);
                 const lastAct = new Date(t.last_activity_at || t.updated_at || t.created_at);
                 const staleHours = (Date.now() - lastAct.getTime()) / 3600000;
                 const isStale = staleHours > 4 && !['已结案','已打回','已升级','已备案','closed','settled','resolved'].includes(board);
@@ -19574,11 +19580,11 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             const rawEvents = t.events || [];
             const board = t.board_status || atbStatusZh(t.status);
             const events = rawEvents.slice(-20).reverse().map(function (e) {
-                return '<div class="atb-line"><b>' + atbEscape(atbEventTypeZh(e.event_type)) + '</b> ' + atbEscape(atbStatusZh(e.status_before)) + ' → ' + atbEscape(atbStatusZh(e.status_after)) + '<br>' + atbEscape(e.created_at || '') + '</div>';
+                return '<div class="atb-line"><b>' + atbEscape(atbEventTypeZh(e.event_type)) + '</b> ' + atbEscape(atbStatusZh(e.status_before)) + ' → ' + atbEscape(atbStatusZh(e.status_after)) + '<br>' + atbEscape(atbFmtTime(e.created_at)) + '</div>';
             }).join('') || '<div class="atb-line">暂无事件</div>';
             const evidences = (t.evidences || []).map(function (e) {
                 const link = e.file_url ? '<br><a href="' + atbEscape(e.file_url) + '" target="_blank" style="color:#fbbf24;">查看文件</a>' : '';
-                return '<div class="atb-line"><b>' + atbEscape({photo:'照片',text:'文字',document:'文档',link:'链接'}[e.evidence_type] || e.evidence_type) + '</b> ' + atbEscape(e.content || '') + link + '<br>' + atbEscape(e.created_at || '') + '</div>';
+                return '<div class="atb-line"><b>' + atbEscape({photo:'照片',text:'文字',document:'文档',link:'链接'}[e.evidence_type] || e.evidence_type) + '</b> ' + atbEscape(e.content || '') + link + '<br>' + atbEscape(atbFmtTime(e.created_at)) + '</div>';
             }).join('') || '<div class="atb-line">暂无证据</div>';
             panel.innerHTML = '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;"><div><div class="atb-kicker">任务详情</div><h2 style="margin:6px 0 0;font-size:24px;line-height:1.15;">' + atbEscape(t.title || t.task_id) + '</h2></div><button class="atb-action" style="width:auto;padding:8px 12px;" onclick="closeAgentTaskDetail()">关闭</button></div>'
                 + '<div class="atb-meta" style="margin-top:12px;"><span>状态：' + atbEscape(board) + '</span><span>负责人：' + atbEscape({ops_supervisor:'运营督导',food_quality:'食安专员',train_advisor:'培训顾问',marketing_planner:'营销策划',marketing_executor:'营销执行',data_auditor:'数据审计'}[t.assignee_agent || t.current_agent] || t.assignee_agent || t.current_agent || '待分配') + '</span><span>门店：' + atbEscape(t.store || '-') + '</span><span>类型：' + atbEscape(atbCategoryZh(t.category)) + '</span><span>优先级：' + atbEscape(atbPriorityZh(t.priority || t.severity)) + '</span></div>'
