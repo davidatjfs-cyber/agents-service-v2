@@ -2,7 +2,7 @@ import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { createTask, transitionTask, getTask, logEvent } from './task-state-machine.js';
 import { parseTaskText, mapBoardStatus } from './task-parser.js';
-import { dispatchTask } from './master-agent-dispatcher.js';
+import { dispatchTaskAsync } from './master-agent-dispatcher.js';
 import { enrichFromTemplate } from './task-templates.js';
 
 export async function createBoardTask({ content, priority, store, deadline, createdBy, createdByRole }) {
@@ -53,7 +53,19 @@ export async function parseAndDispatchTask(taskId) {
   const parsed = preserveExistingShape
     ? { ...parsed0, category: task.category || parsed0.category, store: task.store || parsed0.store }
     : enrichFromTemplate(parsed0);
-  const decision = dispatchTask(parsed);
+
+  const similarExperiences = await findSimilarTasks({ category: parsed.category, store: parsed.store, limit: 3 });
+  if (similarExperiences.length > 0) {
+    const withScore = similarExperiences.filter(e => e.quality_score !== null && e.quality_score > 0);
+    const topExp = (withScore.length > 0 ? withScore : similarExperiences)
+      .sort((a, b) => (b.quality_score || 0) - (a.quality_score || 0))[0];
+    parsed.similarExperience = { id: topExp.id, qualityScore: topExp.quality_score, timeToClose: topExp.time_to_close_hours, titlePattern: topExp.title_pattern, totalSimilar: similarExperiences.length };
+    if (withScore.length > 0 && withScore[0].quality_score >= 7 && !parsed.acceptanceRules?.length) {
+      parsed.acceptanceRules = ['参考历史高质量任务执行'];
+    }
+  }
+
+  const decision = await dispatchTaskAsync(parsed);
 
   await query(
     `UPDATE master_tasks
@@ -263,6 +275,11 @@ export async function reviewBoardTask(taskId, { decision, comment, reviewer, rev
       await transitionTask(taskId, 'resolved', reviewer || 'reviewer', { reviewResult: { decision: normalized, comment } });
       await transitionTask(taskId, 'pending_settlement', 'task_orchestrator', { reviewResult: { decision: normalized } });
       await transitionTask(taskId, 'settled', 'chief_evaluator', { reviewResult: { decision: normalized } });
+      const evidenceR = await query('SELECT COUNT(*)::int AS cnt FROM task_evidences WHERE task_id = $1', [taskId]);
+      const evidenceCount = evidenceR.rows?.[0]?.cnt || 0;
+      const autoScore = evidenceCount >= 3 ? 8 : evidenceCount >= 1 ? 6 : 4;
+      await query('UPDATE master_tasks SET quality_score = $2, review_passed = TRUE, updated_at = NOW() WHERE task_id = $1', [taskId, autoScore]);
+      await logEvent(taskId, 'quality_score_auto', 'task_orchestrator', task.assignee_agent, 'pending_review', 'closed', { score: autoScore, reason: 'approved_with_evidence', evidenceCount });
       return transitionTask(taskId, 'closed', 'master', { reviewResult: { decision: normalized, comment } });
     }
     return { ok: false, error: `cannot_approve_from_${task.status}` };

@@ -36,23 +36,41 @@ export async function dispatchTaskAsync(parsedTask = {}) {
   const matched = capabilities.find((item) => item.categories.includes(category)) || capabilities[0];
   const candidates = capabilities.filter((c) => c.categories.includes(category)).map((c) => c.agent);
   let finalAgent = matched.agent;
+  let overflow = false;
   if (candidates.length > 1) {
     const best = await pickLeastLoadedAgent(candidates);
     if (best) finalAgent = best;
   }
   if (await isAgentAtCapacity(finalAgent)) {
+    let foundAlt = false;
     for (const c of candidates) {
       if (c !== finalAgent && !(await isAgentAtCapacity(c))) {
         finalAgent = c;
+        foundAlt = true;
         break;
       }
+    }
+    if (!foundAlt) {
+      const allAgents = capabilities.map(c => c.agent);
+      for (const c of allAgents) {
+        if (!(await isAgentAtCapacity(c))) {
+          finalAgent = c;
+          overflow = true;
+          break;
+        }
+      }
+      if (!overflow) overflow = true;
+      logger.warn({ category, originalAgent: matched.agent, assignedTo: finalAgent, overflow }, 'Agent overflow: primary agent at capacity, falling back');
     }
   }
   return {
     assigneeAgent: finalAgent,
-    confidence: category === 'general' ? 0.7 : 0.95,
-    reason: `任务类型 ${category} 匹配 ${finalAgent} 能力范围（负载均衡）`,
-    method: 'rules_first_with_load_balancing'
+    confidence: overflow ? 0.5 : (category === 'general' ? 0.7 : 0.95),
+    reason: overflow
+      ? `任务类型 ${category} 首选 ${matched.agent} 已达负载上限，降级分配给 ${finalAgent}`
+      : `任务类型 ${category} 匹配 ${finalAgent} 能力范围（负载均衡）`,
+    method: overflow ? 'overflow_fallback' : 'rules_first_with_load_balancing',
+    overflow
   };
 }
 
