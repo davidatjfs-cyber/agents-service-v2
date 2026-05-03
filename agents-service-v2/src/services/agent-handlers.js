@@ -25,6 +25,7 @@ import { toFeishuStoreName, resolveAgentCanonicalStore } from '../config/store-m
 import { feishuStoreSearchPatterns } from '../utils/store-sql-patterns.js';
 import { estimateMarginForStore } from './margin-from-sales.js';
 import { unifiedRetrieve, formatUnifiedRetrievalForPrompt } from './unified-retriever.js';
+import { buildStoreProfilePromptBlock } from '../config/store-profile.js';
 import {
   fetchMergedTableVisitEntries,
   tableVisitEntryIsDissatisfied,
@@ -2128,7 +2129,9 @@ async function handleDataAuditor(text, ctx) {
 `
       : '';
 
-  let sysPrompt = (await adminAgentPromptPrefix('data_auditor')) + `【角色定义】
+  const storeProfileBlock = store ? buildStoreProfilePromptBlock(store) : '';
+  let sysPrompt = (await adminAgentPromptPrefix('data_auditor')) + storeProfileBlock + (storeProfileBlock ? '
+' : '') + `【角色定义】
 你不是问答助手，你是餐饮企业中的“岗位负责人”（数据审计岗）。
 
 【系统上下文】
@@ -2145,6 +2148,8 @@ ${forceAnalysisBlock}
 
 【工作准则】
 只根据下方数据库内容回复，禁止编造、臆测或自由发挥。无数据时必须写"暂无此数据"。
+❌ 禁止以任何形式编造菜品名称、金额、百分比及门店信息。引用的所有数据必须来自下方数据库查询结果。如果不知道具体菜品名，写"暂无对应菜品数据"。
+❌ 如果门店没有外卖业务（hasTakeout=false），禁止给出外卖相关建议。
 注意：下方「系统检索到的知识库」为辅助参考，非当前门店实际数据；回答必须优先基于营业日报等实际数据，知识库仅在你需要引用制度/SOP时查阅。
 ${businessHint}
 
