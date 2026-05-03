@@ -1,7 +1,7 @@
 /**
  * Wiki / MemPalace 检索排序：优先 DeepSeek，失败或无 Key 时用本地 Ollama，再失败则回退由调用方本地启发式顺序。
  */
-import { callDeepSeek, callOllamaLLM } from '../llm-provider.js';
+import { callDeepSeek, callOllamaLLM, callLLM } from '../llm-provider.js';
 import { logger } from '../../utils/logger.js';
 
 /** 关闭显式 KNOWLEDGE_USE_DEEPSEEK=false 时不走任何 LLM 排序 */
@@ -99,6 +99,20 @@ export async function rankKnowledgeCandidatesWithLlm(p) {
     logger.warn({ err: ores?.error }, 'knowledge-rank: Ollama 未返回有效内容');
   } catch (e) {
     logger.warn({ err: e?.message }, 'knowledge-rank: Ollama 调用异常');
+  }
+
+  try {
+    const apiRes = await callLLM(buildRankMessages(sys, userBody), {
+      temperature: 0.1,
+      max_tokens: 512,
+      skipCache: true
+    });
+    if (apiRes?.ok && apiRes.content) {
+      const indices = normalizeIndices(apiRes.content, candidates.length, limit);
+      return { indices, provider: 'api' };
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'knowledge-rank: API fallback failed');
   }
 
   return { indices: [], provider: 'none' };

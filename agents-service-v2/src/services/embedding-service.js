@@ -110,12 +110,26 @@ export async function generateEmbedding(text) {
     const body = { model: EMBEDDING_MODEL, prompt: truncated };
     const url = `${ollamaUrl}/api/embeddings`;
 
-    const res = await axios.post(url, body, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 60000
-    });
+    let res = null;
+    let lastErr = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        res = await axios.post(url, body, {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 60000
+        });
+        if (res.status === 200 && Array.isArray(res.data?.embedding)) break;
+        res = null;
+      } catch (e) {
+        lastErr = e;
+        if (attempt === 0) {
+          logger.debug({ err: e?.message }, 'embedding-service: attempt 1 failed, retrying');
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+    }
 
-    if (res.status === 200 && Array.isArray(res.data?.embedding)) {
+    if (res?.status === 200 && Array.isArray(res.data?.embedding)) {
       const vec = res.data.embedding;
       if (!Array.isArray(vec) || vec.length !== EMBEDDING_DIM) {
         logger.warn(

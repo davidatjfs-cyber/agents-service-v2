@@ -21,8 +21,8 @@ const LOCAL_FALLBACK = process.env.OLLAMA_LOCAL_FALLBACK !== 'false'; // 默认 
 let _ollamaHealthy = true;
 let _ollamaFailCount = 0;
 let _ollamaLastFailTime = 0;
-const OLLAMA_FAIL_THRESHOLD = 3;
-const OLLAMA_COOLDOWN_MS = 60000; // 1 分钟后重试
+const OLLAMA_FAIL_THRESHOLD = 5;
+const OLLAMA_COOLDOWN_MS = 180000; // 3 分钟后重试
 
 export function markOllamaFail() {
   _ollamaFailCount++;

@@ -134,6 +134,15 @@ export async function callOllamaLLM(messages, options = {}) {
       provider: 'ollama'
     };
   } catch (e) {
+    const errMsg = String(e?.message || '').toLowerCase();
+    const isRetryable = errMsg.includes('abort') || errMsg.includes('timeout')
+      || errMsg.includes('econnreset') || errMsg.includes('econnrefused')
+      || errMsg.includes('socket hang up') || errMsg.includes('fetch failed');
+    if (isRetryable && !options._retried) {
+      logger.warn({ err: e?.message, model, attempt: 'retry-1' }, 'callOllamaLLM retryable error, retrying in 3s');
+      await sleep(3000);
+      return callOllamaLLM(messages, { ...options, _retried: true });
+    }
     markOllamaFail();
     logger.warn({ err: e?.message, base, model }, 'callOllamaLLM failed');
     return { ok: false, error: e?.message || 'ollama_failed', content: '' };

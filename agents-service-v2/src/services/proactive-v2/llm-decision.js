@@ -151,7 +151,7 @@ async function callOllamaProactiveJson(prompt, timeoutMs) {
   const out = await Promise.race([
     callOllamaLLM(messages, {
       temperature: 0.2,
-      max_tokens: 1200,
+      max_tokens: 800,
       purpose: 'proactive_anomaly_decision'
     }),
     new Promise((resolve) => setTimeout(() => resolve('timeout'), timeoutMs))

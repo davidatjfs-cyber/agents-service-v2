@@ -5,8 +5,8 @@
  */
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
+import { callOllamaLLM, callLLM } from './llm-provider.js';
 
-const OLLAMA_BASE = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_OPERATIONS_MODEL || 'gemma4:26b';
 
 /** 从 DB 读取指定日期的营业日报，组装为按门店的 daily_operation_summary 列表 */
@@ -210,34 +210,43 @@ ${payload}
 
 请输出“可执行决策”JSON。`;
 
+  let raw = '';
   try {
-    const res = await fetch(`${OLLAMA_BASE}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: OLLAMA_MODEL,
-        stream: false,
-        messages: [
+    const result = await callOllamaLLM(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      { temperature: 0.2, max_tokens: 1500, purpose: 'ai_operations_analysis' }
+    );
+    if (!result.ok || !result.content) {
+      throw new Error(result.error || 'ollama_empty');
+    }
+    raw = result.content.trim();
+  } catch (ollamaErr) {
+    logger.warn({ err: ollamaErr?.message }, 'ai-operations: Ollama failed, trying API fallback');
+    try {
+      const apiResult = await callLLM(
+        [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
-        ]
-      })
-    });
-    if (!res.ok) {
-      const t = await res.text();
-      throw new Error(`Ollama HTTP ${res.status}: ${t.slice(0, 200)}`);
+        ],
+        { temperature: 0.2, max_tokens: 1500, skipCache: true }
+      );
+      if (!apiResult.ok || !apiResult.content) {
+        throw new Error(apiResult.error || 'api_empty');
+      }
+      raw = apiResult.content.trim();
+    } catch (apiErr) {
+      logger.error({ err: apiErr?.message }, 'ai-operations: API fallback also failed');
+      const fallback = defaultDecisionReport();
+      fallback.warnings.push('AI暂时不可用');
+      fallback._error = apiErr.message;
+      return enforceDecisionRules(fallback, summaries);
     }
-    const data = await res.json();
-    const raw = (data.message && data.message.content) ? data.message.content.trim() : '';
-    const parsed = parseStrictReport(raw);
-    return enforceDecisionRules(parsed, summaries);
-  } catch (e) {
-    logger.error({ err: e?.message }, 'ai-operations: Ollama call failed');
-    const fallback = defaultDecisionReport();
-    fallback.warnings.push('AI暂时不可用');
-    fallback._error = e.message;
-    return enforceDecisionRules(fallback, summaries);
   }
+  const parsed = parseStrictReport(raw);
+  return enforceDecisionRules(parsed, summaries);
 }
 
 /** 从模型返回文本中解析出严格格式的 report，兼容被 markdown 包裹的情况 */
