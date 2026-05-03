@@ -331,11 +331,11 @@ export async function deriveBoardTask(taskId, { content, priority, createdBy, cr
   return derived;
 }
 
-export async function getBoardSummary() {
+ export async function getBoardSummary() {
   const r = await query(
     `SELECT status, COUNT(*)::int AS count FROM master_tasks WHERE source = 'hrms_task_board' GROUP BY status`
   );
-  const out = { total: 0, byStatus: {}, byBoardStatus: {}, overdue: 0 };
+  const out = { total: 0, byStatus: {}, byBoardStatus: {}, overdue: 0, stale: 0 };
   for (const row of (r.rows || [])) {
     out.total += row.count;
     out.byStatus[row.status] = row.count;
@@ -346,6 +346,10 @@ export async function getBoardSummary() {
     `SELECT COUNT(*)::int AS count FROM master_tasks WHERE source = 'hrms_task_board' AND timeout_at < NOW() AND status NOT IN ('closed','settled','resolved')`
   );
   out.overdue = overdue.rows?.[0]?.count || 0;
+  const stale = await query(
+    `SELECT COUNT(*)::int AS count FROM master_tasks WHERE source = 'hrms_task_board' AND status IN ('pending_dispatch','dispatched','pending_response') AND COALESCE(last_activity_at, updated_at, created_at) < NOW() - INTERVAL '4 hours'`
+  );
+  out.stale = stale.rows?.[0]?.count || 0;
   return out;
 }
 
