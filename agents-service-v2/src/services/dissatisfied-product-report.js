@@ -173,15 +173,20 @@ async function fetchDissatisfiedEntries(startYmd, endYmd) {
   function matchStore(rawStoreField) {
     const fl = String(rawStoreField || '').trim().toLowerCase().replace(/\s/g, '');
     if (!fl) return null;
+    // 近 30 天无营业日报 PG 行时 storeNames 为空，原逻辑会丢弃全部桌访 → 日报永空；回落到门店名归一
+    if (!storeNames.length) {
+      const rk = resolveStoreKey(rawStoreField);
+      return rk && String(rk).trim() ? String(rk).trim() : null;
+    }
     for (const s of storeNames) {
       const sl = s.toLowerCase().replace(/\s/g, '');
       if (fl === sl || fl.includes(sl) || sl.includes(fl)) return s;
     }
     if (fl.includes('洪潮') || fl.includes('久光')) {
-      return storeNames.find(s => s.includes('洪潮大宁久光')) || null;
+      return storeNames.find(s => s.includes('洪潮大宁久光')) || resolveStoreKey(rawStoreField);
     }
     if (fl.includes('马己仙') || fl.includes('马已仙') || fl.includes('大宁')) {
-      return storeNames.find(s => s.includes('马己仙上海音乐广场')) || null;
+      return storeNames.find(s => s.includes('马己仙上海音乐广场')) || resolveStoreKey(rawStoreField);
     }
     return null;
   }
@@ -207,9 +212,8 @@ async function fetchDissatisfiedEntries(startYmd, endYmd) {
 
     const reasonClean = reason.trim();
     const reasonMeaningful = reasonClean.length >= 2 && !/^(无|没有|暂无|不详|未知|-|—|你好|谢谢|ok|OK)$/i.test(reasonClean);
-    const satRaw = ext(f['今天用餐是否满意'] || f['满意度'] || '');
-    const isNegative = /不满意|很差|糟糕|差劲|^否$/i.test(satRaw);
-    if (!reasonMeaningful && !isNegative) continue;
+    // 原先要求满意度/原因双重门槛才保留，会丢弃只填「不满意菜品」的桌访。
+    // 已通过非空「不满意菜品」且过滤占位词，即视为有效产品差评条目。
 
     const stallField = ext(f['不满意产品负责的档口'] || '');
     const personField = ext(f['不满意产品负责人'] || f['马己仙产品责任人'] || f['洪潮产品责任人'] || '');
