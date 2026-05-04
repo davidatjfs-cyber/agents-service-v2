@@ -11,7 +11,7 @@
 import cron from 'node-cron';
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
-import { runWithCronLog, getShanghaiNowClock } from '../utils/cron-run-monitor.js';
+import { runWithCronLog, getShanghaiNowClock, notifyAdminsCronMissed } from '../utils/cron-run-monitor.js';
 import { runAnomalyChecks } from './anomaly-engine.js';
 import { pushRhythmReport, pushRhythmCard } from './feishu-client.js';
 import { buildTableVisitKpiMarkdownSection, getBadReviewRowsForStoreDateRange } from './deterministic-replies.js';
@@ -1509,6 +1509,28 @@ export function startRhythmScheduler() {
       );
     } catch (e) {
       logger.error({ err: e?.message }, 'dissatisfied product daily 22:40 catchup failed');
+    }
+  }, { timezone: 'Asia/Shanghai' });
+
+  // 23:15：不满意产品日报 missed guard（22:00+22:40 均未成功时仅告警 admin）
+  cron.schedule('15 23 * * *', async () => {
+    try {
+      const { ymd } = getShanghaiNowClock();
+      const sent = await query(
+        `SELECT 1 FROM agent_v2_scheduled_report_sends
+         WHERE job_key = 'dissatisfied_product_report'
+           AND run_ymd = $1
+           AND ok = true
+         LIMIT 1`,
+        [ymd]
+      );
+      if ((sent.rows || []).length > 0) return;
+      await notifyAdminsCronMissed(
+        'dissatisfied_product_daily_missed_guard',
+        `22:00+22:40 后 agent_v2_scheduled_report_sends 仍无 dissatisfied_product_report 成功投递记录；进 程可能错过整点未触发 cron，或桌访过滤后 0 条。请查 PM2 日志或手动触发补发。`
+      );
+    } catch (e) {
+      logger.warn({ err: e?.message }, 'dissatisfied product daily missed guard error');
     }
   }, { timezone: 'Asia/Shanghai' });
 

@@ -10412,8 +10412,10 @@
                     </section>
                     <div class="atb-stats">
                         <div class="atb-stat"><b id="atb-stat-total">-</b><span>总任务</span></div>
+                        <div class="atb-stat"><b id="atb-stat-claimed">-</b><span>已领取</span></div>
                         <div class="atb-stat"><b id="atb-stat-assigned">-</b><span>已分配</span></div>
                         <div class="atb-stat"><b id="atb-stat-executed">-</b><span>已执行</span></div>
+                        <div class="atb-stat"><b id="atb-stat-completed">-</b><span>已完成</span></div>
                         <div class="atb-stat"><b id="atb-stat-review">-</b><span>待验收</span></div>
                         <div class="atb-stat"><b id="atb-stat-overdue">-</b><span>超时</span></div>
                         <div class="atb-stat"><b id="atb-stat-avgtime">-</b><span>平均闭环</span></div>
@@ -10421,12 +10423,15 @@
                     </div>
                     <div class="atb-toolbar" id="atb-filters">
                         <button class="atb-chip active" data-filter="" onclick="setAgentTaskFilter('', this)">全部</button>
+                        <button class="atb-chip" data-filter="pending_audit,auditing" onclick="setAgentTaskFilter('pending_audit,auditing', this)">待解析</button>
                         <button class="atb-chip" data-filter="pending_dispatch" onclick="setAgentTaskFilter('pending_dispatch', this)">已领取</button>
                         <button class="atb-chip" data-filter="dispatched,viewed" onclick="setAgentTaskFilter('dispatched,viewed', this)">已分配</button>
                         <button class="atb-chip" data-filter="in_progress,waiting_evidence" onclick="setAgentTaskFilter('in_progress,waiting_evidence', this)">已执行</button>
                         <button class="atb-chip" data-filter="pending_response" onclick="setAgentTaskFilter('pending_response', this)">已完成</button>
                         <button class="atb-chip" data-filter="pending_review" onclick="setAgentTaskFilter('pending_review', this)">待验收</button>
                         <button class="atb-chip" data-filter="rejected" onclick="setAgentTaskFilter('rejected', this)">已打回</button>
+                        <button class="atb-chip" data-filter="escalated" onclick="setAgentTaskFilter('escalated', this)">已升级</button>
+                        <button class="atb-chip" data-filter="hr_filed" onclick="setAgentTaskFilter('hr_filed', this)">已备案</button>
                         <button class="atb-chip" data-filter="resolved,pending_settlement,settled,closed" onclick="setAgentTaskFilter('resolved,pending_settlement,settled,closed', this)">已结案</button>
                         <button class="atb-chip" onclick="loadAgentTaskBoard(true)">刷新</button>
                     </div>
@@ -19485,8 +19490,10 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             const by = summary.byBoardStatus || {};
             const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = String(v ?? 0); };
             set('atb-stat-total', summary.total || 0);
+            set('atb-stat-claimed', by['已领取'] || 0);
             set('atb-stat-assigned', by['已分配'] || 0);
             set('atb-stat-executed', by['已执行'] || 0);
+            set('atb-stat-completed', by['已完成'] || 0);
             set('atb-stat-review', by['待验收'] || 0);
             set('atb-stat-overdue', summary.overdue || 0);
             const stale = summary.stale || 0;
@@ -19508,7 +19515,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
 
         function atbBadgeClass(status) {
             if (['已结案'].includes(status)) return 'done';
-            if (['已打回', '已升级'].includes(status)) return 'bad';
+            if (['已打回', '已升级', '已备案'].includes(status)) return 'bad';
             if (['待解析', '已领取', '已分配', '已执行', '已完成', '待验收'].includes(status)) return 'pending';
             return '';
         }
@@ -19517,7 +19524,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
         var ATB_PRIORITIES = { critical: '紧急', high: '高', medium: '中', low: '低' };
         var ATB_EVENT_TYPES = { created: '创建', assigned: '分配', dispatched: '派发', claimed: '认领', in_progress: '开始执行', completed: '执行完成', evidence_submitted: '提交证据', review_requested: '请求验收', approved: '验收通过', rejected: '打回修订', escalated: '升级', reassigned: '重分配', closed: '关闭' };
         var ATB_STATUS_MAP = { pending_audit: '待解析', auditing: '待解析', pending_dispatch: '已领取', dispatched: '已分配', viewed: '已分配', in_progress: '已执行', waiting_evidence: '已执行', pending_response: '已完成', pending_review: '待验收', rejected: '已打回', resolved: '已结案', pending_settlement: '已结案', settled: '已结案', closed: '已结案', escalated: '已升级', hr_filed: '已备案' };
-        var ATB_STATUS_PATH = ['已领取', '已分配', '已执行', '已完成', '待验收', '已打回', '已结案'];
+        var ATB_STATUS_PATH = ['待解析', '已领取', '已分配', '已执行', '已完成', '待验收', '已打回', '已结案', '已升级', '已备案'];
         function atbCategoryZh(c) { return ATB_CATEGORIES[c] || c || '-'; }
         function atbPriorityZh(p) { return ATB_PRIORITIES[p] || p || '-'; }
         function atbEventTypeZh(e) { return ATB_EVENT_TYPES[e] || e || e; }
@@ -19530,11 +19537,12 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
         }
         function atbRenderStatusPath(currentBoard, events) {
             var reached = {};
+            var TERMINAL = ['已打回','已结案','已升级','已备案'];
             (events || []).forEach(function(e) { reached[atbStatusZh(e.status_after)] = true; });
             reached[currentBoard] = true;
             var currentIdx = ATB_STATUS_PATH.indexOf(currentBoard);
             return '<div class="atb-path">' + ATB_STATUS_PATH.map(function(label, idx) {
-                var cls = label === currentBoard ? ' current' : (reached[label] || (currentIdx >= 0 && idx < currentIdx && !['已打回','已结案'].includes(label)) ? ' done' : '');
+                var cls = label === currentBoard ? ' current' : (reached[label] || (currentIdx >= 0 && idx < currentIdx && !TERMINAL.includes(label)) ? ' done' : '');
                 return '<div class="atb-path-step' + cls + '">' + atbEscape(label) + '</div>';
             }).join('') + '</div>';
         }

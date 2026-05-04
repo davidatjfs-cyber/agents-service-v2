@@ -38,6 +38,7 @@ const CRON_JOB_LABEL_ZH = {
   daily_attitude_filing_report: '工作态度备案日报（昨日汇总）',
   bi_anomaly_notify_flush: 'BI异常任务卡片发送（09:05延迟队列刷新）',
   dissatisfied_product_daily: '不满意产品日报',
+  dissatisfied_product_daily_missed_guard: '不满意产品日报（仍未成功·仅告警）',
   dissatisfied_product_weekly: '不满意产品周报',
   dissatisfied_product_monthly: '不满意产品月报',
   dissatisfied_product_monthly: '不满意产品月报',

@@ -452,7 +452,8 @@ export async function generateDissatisfiedProductDailyReport(targetYmd, force = 
   const entries = await fetchDissatisfiedEntries(ymd, ymd);
   if (!entries.length) {
     // 核心说明：runWithCronLog 将此视为「成功」（不写失败、不发 notifyAdminsOnFailure），与「已发飞书」不等价。
-    // 仅晨报有 07:47 missed_guard；不满意日报无「未成功」告警 —— 过滤后 0 条时运营体感像「没触发」。
+    // 晨报有 07:47 missed_guard；不满意日报有 23:15 missed_guard ——
+    // 过滤后 0 条时不代表飞书已发，missed_guard 会查 scheduled_report_sends 表向 admin 告警提示。
     let recentTableVisit = null;
     try {
       const rc = await query(

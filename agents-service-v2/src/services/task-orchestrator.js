@@ -756,8 +756,8 @@ export async function evaluateBoardTaskAfterStoreFeedback(taskId) {
   const task = await getTask(taskId);
   if (!task || task.source !== 'hrms_task_board') return { ok: true, skipped: true };
   const trend = await getProductionIssueTrend(task.store);
-  const improved = trend.currentCount < trend.previousCount || (trend.previousCount > 0 && trend.currentCount === 0);
-  const enoughData = trend.currentCount + trend.previousCount > 0;
+  const improved = trend.currentIssueCount < trend.previousIssueCount || (trend.previousIssueCount > 0 && trend.currentIssueCount === 0);
+  const enoughData = trend.currentIssueCount + trend.previousIssueCount > 0;
   if (improved && enoughData) {
     const summary = `${agentNameZh(task.assignee_agent || task.current_agent)}跟踪结果：${task.store || '-'}出品问题已有改善，近3天问题${trend.currentIssueCount}条/总记录${trend.currentTotalCount}条，前3天问题${trend.previousIssueCount}条/总记录${trend.previousTotalCount}条。已收到门店整改反馈，建议管理员验收。`;
     await submitAgentFeedback(taskId, {
@@ -788,11 +788,38 @@ export async function evaluateBoardTaskAfterStoreFeedback(taskId) {
     await logEvent(taskId, 'agent_trend_improved', task.assignee_agent || 'agent', 'admin', task.status, (await getTask(taskId))?.status, { trend });
     return { ok: true, improved: true, trend };
   }
-  await query(
-    `UPDATE master_tasks SET source_data = COALESCE(source_data, '{}'::jsonb) || $2::jsonb, updated_at = NOW() WHERE task_id = $1`,
-    [taskId, JSON.stringify({ board_tracking: { lastTrend: trend, lastTrendCheckedAt: new Date().toISOString(), waitingForImprovement: true } })]
-  );
-  await logEvent(taskId, 'agent_trend_not_improved', task.assignee_agent || 'agent', task.store || 'store', task.status, task.status, { trend });
+
+  const current = await getTask(taskId);
+  const prevStatus = current?.status || task.status;
+
+  const notImprovedSummary = `${agentNameZh(task.assignee_agent || task.current_agent)}跟踪结果：${task.store || '-'}出品问题${enoughData ? '未明显改善' : '数据不足无法判断'}。近3天问题${trend.currentIssueCount}条/总记录${trend.currentTotalCount}条，前3天问题${trend.previousIssueCount}条/总记录${trend.previousTotalCount}条，${trend.label}。已要求门店重新提交整改方案。`;
+  await submitAgentFeedback(taskId, {
+    executionSummary: notImprovedSummary,
+    currentStatus: 'pending_response',
+    agentJudgment: task.assignee_agent || task.current_agent || 'agent',
+    riskPoints: [`出品问题趋势：${trend.label}`, enoughData ? '当前整改方案未达到预期效果' : '整改效果数据不足以判断'],
+    suggestedAction: '门店需重新提交整改方案，Agent继续跟踪趋势。',
+    evidenceSummary: trend.summary
+  });
+
+  if (['waiting_evidence', 'in_progress', 'pending_response'].includes(prevStatus)) {
+    await transitionTask(taskId, 'pending_response', task.assignee_agent || 'agent', { agentFollowup: true, trend, notImproved: true });
+  }
+
+  const msgBody = `【任务跟踪】${task.store || '-'}「${task.title || ''}」\n\n系统评估：您提交的执行计划经数据对比${enoughData ? '未达到预期效果' : '数据不足以判断效果'}。\n${trend.summary}\n\n请重新提交整改方案（须包含：具体措施、完成时间、责任人、现场照片）。`;
+  try {
+    const { sendCompanyNoticeToAssignees } = await import('./feishu-client.js');
+    await sendCompanyNoticeToAssignees(task, msgBody, {
+      title: `整改计划需重新提交 · ${task.store || ''}`,
+      type: 'task_plan_rejected'
+    }).catch(() => {});
+  } catch (e) {
+    logger.warn({ taskId, err: e?.message }, 'evaluateBoardTask: sendCompanyNotice failed');
+  }
+
+  await notifyAdminsBoardIssue(`📋 Agent评估：门店整改方案未达预期\n门店：${task.store || '-'}\n任务：${task.title || taskId}\n任务ID：${taskId}\n${trend.summary}\n已通知门店重新提交整改方案，Agent将继续跟踪。`);
+
+  await logEvent(taskId, 'agent_trend_not_improved', task.assignee_agent || 'agent', task.store || 'store', prevStatus, 'pending_response', { trend, adminNotified: true });
   return { ok: true, improved: false, trend };
 }
 
