@@ -451,6 +451,23 @@ export async function generateDissatisfiedProductDailyReport(targetYmd, force = 
 
   const entries = await fetchDissatisfiedEntries(ymd, ymd);
   if (!entries.length) {
+    // 核心说明：runWithCronLog 将此视为「成功」（不写失败、不发 notifyAdminsOnFailure），与「已发飞书」不等价。
+    // 仅晨报有 07:47 missed_guard；不满意日报无「未成功」告警 —— 过滤后 0 条时运营体感像「没触发」。
+    let recentTableVisit = null;
+    try {
+      const rc = await query(
+        `SELECT COUNT(*)::int AS c FROM feishu_generic_records
+         WHERE config_key = 'table_visit'
+           AND (updated_at >= NOW() - INTERVAL '40 hours' OR created_at >= NOW() - INTERVAL '40 hours')`
+      );
+      recentTableVisit = rc.rows?.[0]?.c ?? null;
+    } catch (_e) {
+      /* ignore */
+    }
+    logger.warn(
+      { ymd, recentTableVisitRowsApprox: recentTableVisit },
+      'dissatisfied product daily: 0 entries after filters (cron still records ok=true; no admin failure alert by design). Check 门店匹配 daily_reports、不满意菜品列、或历史过滤逻辑'
+    );
     logger.info({ ymd }, 'dissatisfied product daily report: no data');
     return { ok: true, ymd, count: 0 };
   }
