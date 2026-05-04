@@ -19,6 +19,7 @@ import { startAnomalyQueueWorker, getAnomalyQueueStats } from './services/anomal
 import { startTaskBoardQueueWorker } from './services/task-board-queue.js';
 import { createUnifiedTask, runTaskBoardWatchdog } from './services/task-orchestrator.js';
 import { authRequired, requireRole } from './middleware/auth.js';
+import { loginLimiter, apiLimiter } from './middleware/rate-limit.js';
 import { sendWeeklyReview } from './services/chairman/weekly-review.js';
 import { runTrendChecks } from './services/chairman/trend-rules.js';
 import { evaluateAllPendingOutcomes } from './services/chairman/decision-outcome-tracker.js';
@@ -100,6 +101,7 @@ app.use(helmet({
   }
 }));
 app.use(cors());
+app.use('/api/', apiLimiter);
 
 /** 飞书 webhook 必须用 raw 再 JSON.parse（加密包、charset 变体等）；且须始终 HTTP 200，否则客户端报 200671
  * 注意：express.raw 默认只处理 application/octet-stream，会导致 application/json 请求体变成 {}。
@@ -272,7 +274,7 @@ app.get('/health', async (req, res) => {
 import jwt from 'jsonwebtoken';
 import { query } from './utils/db.js';
 
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', loginLimiter, async (req, res) => {
   if (!isLoginEnabled()) return res.status(403).json({ error: 'login_disabled' });
   const { username, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'Missing credentials' });

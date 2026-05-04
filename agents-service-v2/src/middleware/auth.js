@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import { logger } from '../utils/logger.js';
 
 export function authRequired(req, res, next) {
-  const token = req.headers.authorization?.replace('Bearer ', '') || req.query?.token;
+  const token = req.headers.authorization?.replace('Bearer ', '');
   if (!token) return res.status(401).json({ error: 'No token' });
 
   try {

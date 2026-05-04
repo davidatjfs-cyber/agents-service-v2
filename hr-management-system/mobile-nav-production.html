@@ -10353,12 +10353,17 @@
                                 <label for="rep-month">薪资月份</label>
                                 <input id="rep-month" type="month" class="dr-date-input" onchange="loadReportsData()" />
                             </div>
+                            <div class="rep-filters__full rep-field">
+                                <label for="rep-dar-employee">出勤表 · 员工姓名</label>
+                                <input id="rep-dar-employee" type="search" enterkeyhint="search" placeholder="可选：筛选并汇总出勤/休息天数" class="dr-date-input" style="width:100%;" onchange="loadReportsData()" />
+                            </div>
                         </div>
                     </section>
 
                     <nav class="rep-tabs" role="tablist" aria-label="报表类型">
                         <button id="rep-tab-business" class="rep-tab rep-tab--active" type="button" role="tab" aria-selected="true" onclick="showReportsTab('business'); loadReportsData();">业务</button>
                         <button id="rep-tab-attendance" class="rep-tab" type="button" role="tab" aria-selected="false" onclick="showReportsTab('attendance'); loadReportsData();">考勤</button>
+                        <button id="rep-tab-daily-attendance-register" class="rep-tab" type="button" role="tab" aria-selected="false" onclick="showReportsTab('daily-attendance-register'); loadReportsData();" style="display:none;">出勤表</button>
                         <button id="rep-tab-payroll" class="rep-tab" type="button" role="tab" aria-selected="false" onclick="showReportsTab('payroll'); loadReportsData();">薪资</button>
                         <button id="rep-tab-turnover" class="rep-tab" type="button" role="tab" aria-selected="false" onclick="showReportsTab('turnover'); loadReportsData();">离职</button>
                     </nav>
@@ -10374,6 +10379,10 @@
 
                     <div id="rep-attendance" class="hidden" style="margin-bottom:18px;">
                         <div id="rep-attendance-box" style="color:rgba(200,215,230,0.6);">加载中...</div>
+                    </div>
+
+                    <div id="rep-daily-attendance-register" class="hidden" style="margin-bottom:18px;">
+                        <div id="rep-daily-attendance-register-box" style="color:rgba(200,215,230,0.6);">加载中...</div>
                     </div>
 
                     <div id="rep-payroll" class="hidden" style="margin-bottom:18px;">
@@ -14086,6 +14095,17 @@
                 return this.request('/api/reports/attendance' + (qs ? ('?' + qs) : ''), { method: 'GET' });
             },
 
+            async getDailyAttendanceRegisterReport(params) {
+                const p = params && typeof params === 'object' ? params : {};
+                const q = new URLSearchParams();
+                if (p.start) q.set('start', String(p.start));
+                if (p.end) q.set('end', String(p.end));
+                if (p.store) q.set('store', String(p.store));
+                if (p.employee) q.set('employee', String(p.employee));
+                const qs = q.toString();
+                return this.request('/api/reports/daily-attendance-register' + (qs ? ('?' + qs) : ''), { method: 'GET' });
+            },
+
             async getPayrollReport(params) {
                 const p = params && typeof params === 'object' ? params : {};
                 const q = new URLSearchParams();
@@ -16545,6 +16565,10 @@ th { background: #f5f5f5; font-weight: 700; }
                     break;
                 case 'attendance':
                     loadAttendanceData();
+                    break;
+                case 'reports':
+                    // 与桌面端一致：进入分析报表即刷新 Tab 显隐（含「出勤表」仅总部人事/营运/管理员）
+                    loadReportsData();
                     break;
                 case 'agents':
                     loadMobilePerformanceAuditRecords();
@@ -30296,6 +30320,15 @@ tr:nth-child(even) td { background: #fafafa; }
             return r === ROLES.HR_MANAGER;
         }
 
+        function repRoleCanViewDailyAttendanceRegister() {
+            if (!currentUser) return false;
+            const nr =
+                typeof hrmsNormalizeRoleCode === 'function'
+                    ? hrmsNormalizeRoleCode(currentUser.role)
+                    : String(currentUser.role || '').trim();
+            return nr === ROLES.ADMIN || nr === ROLES.HQ_MANAGER || nr === ROLES.HR_MANAGER;
+        }
+
         let __REP_STORE_POPULATED = false;
         function repEnsureSelectStores(forceRebuild) {
             const sel = document.getElementById('rep-store');
@@ -30342,7 +30375,7 @@ tr:nth-child(even) td { background: #fafafa; }
         function showReportsTab(tab) {
             const t = String(tab || '').trim() || 'business';
             __REP_TAB = t;
-            const ids = ['business', 'attendance', 'payroll', 'turnover'];
+            const ids = ['business', 'attendance', 'daily-attendance-register', 'payroll', 'turnover'];
             ids.forEach(x => {
                 const box = document.getElementById('rep-' + x);
                 if (box) box.classList.toggle('hidden', x !== t);
@@ -30792,6 +30825,13 @@ tr:nth-child(even) td { background: #fafafa; }
                 showReportsTab('attendance');
             }
 
+            const dailyRegTab = document.getElementById('rep-tab-daily-attendance-register');
+            const canViewDailyReg = repRoleCanViewDailyAttendanceRegister();
+            if (dailyRegTab) dailyRegTab.style.display = canViewDailyReg ? '' : 'none';
+            if (!canViewDailyReg && __REP_TAB === 'daily-attendance-register') {
+                showReportsTab(repRoleIsHrManager() ? 'attendance' : 'business');
+            }
+
             // HR manager can see all stores
             const repStoreEl = document.getElementById('rep-store');
             if (repStoreEl && repRoleIsHrManager()) {
@@ -30810,6 +30850,7 @@ tr:nth-child(even) td { background: #fafafa; }
             const start = String(document.getElementById('rep-start')?.value || '').trim();
             const end = String(document.getElementById('rep-end')?.value || '').trim();
             const month = String(document.getElementById('rep-month')?.value || '').trim();
+            const darEmp = String(document.getElementById('rep-dar-employee')?.value || '').trim();
 
             if (__REP_TAB === 'business') {
                 const box = document.getElementById('rep-business-box');
@@ -31276,6 +31317,98 @@ tr:nth-child(even) td { background: #fafafa; }
                             </div>` : ''}
                             ${!rows.length && !checkinDetails.length ? '<div style="color:rgba(200,215,230,0.5); padding:20px; text-align:center;">暂无考勤数据</div>' : ''}
                         `;
+                        if (box) box.innerHTML = html;
+                    })
+                    .catch(e => {
+                        if (box) box.innerHTML = escapeHtml('加载失败：' + String(e?.message || e));
+                    });
+                return;
+            }
+
+            if (__REP_TAB === 'daily-attendance-register') {
+                const box = document.getElementById('rep-daily-attendance-register-box');
+                if (box) box.innerHTML = '加载中...';
+                HRMS_API.getDailyAttendanceRegisterReport({ store, start, end, employee: darEmp })
+                    .then(resp => {
+                        const rows = Array.isArray(resp?.rows) ? resp.rows : [];
+                        const es = resp?.employee_summary || null;
+                        const normDarLines = (row) => {
+                            let ld = row?.line_details;
+                            if (typeof ld === 'string') {
+                                try { ld = JSON.parse(ld); } catch (e) { ld = []; }
+                            }
+                            return Array.isArray(ld) ? ld : [];
+                        };
+                        const segZh = (s) => ({ front: '前厅在职', kitchen: '后厨在职', rest: '休息', roster: '名册核对' }[s] || String(s || '—'));
+                        const kindZh = (k) => {
+                            if (k === 'rest') return '休息';
+                            if (k === 'absent') return '缺勤';
+                            if (k === 'leave_only') return '休假未列日报';
+                            return k === 'work' ? '在职' : String(k || '—');
+                        };
+                        let html = `
+                            <div class="rep-hero" style="background: linear-gradient(135deg, #1d4ed8, #6366f1);">
+                                <div style="font-weight: 900; font-size: 16px;">出勤表（营业日报核对）</div>
+                                <div class="meta" style="margin-top: 8px;">数据来源：<strong>正式提交</strong>营业日报。在职人员与打卡、已通过休假比对；<strong>休息</strong>以日报为准。名册未列入出勤/休息且无已通过休假者标为<strong>缺勤</strong>。</div>
+                                <div class="meta" style="margin-top: 6px;">统计周期：${escapeHtml(start)} - ${escapeHtml(end)} · 点击标题展开明细</div>`;
+                        if (darEmp && es) {
+                            html += `
+                                <div style="margin-top:14px;padding:12px 14px;border-radius:12px;background:rgba(15,23,42,0.55);border:1px solid rgba(129,140,248,0.45);text-align:left;">
+                                    <div style="font-weight:900;font-size:14px;color:#e0e7ff;">员工筛选「${escapeHtml(es.employee_query || darEmp)}」· 区间内汇总</div>
+                                    <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:14px 22px;font-size:13px;color:rgba(226,232,240,0.95);">
+                                        <span><strong style="color:#86efac;">出勤天数</strong>（有在职记录的自然日）　<strong style="font-size:15px;">${escapeHtml(String(es.attendance_days ?? 0))}</strong></span>
+                                        <span><strong style="color:#fde047;">休息天数</strong>（有休息记录的自然日）　<strong style="font-size:15px;">${escapeHtml(String(es.rest_days ?? 0))}</strong></span>
+                                        <span>出勤人日累计　<strong>${escapeHtml(String(es.attendance_person_days ?? 0))}</strong></span>
+                                        <span>休息人日累计　<strong>${escapeHtml(String(es.rest_person_days ?? 0))}</strong></span>
+                                    </div>
+                                    <div style="margin-top:8px;font-size:11px;color:rgba(199,210,254,0.75);">姓名支持模糊匹配显示名或账号；天数按自然日去重；人日为明细申报人日之和。</div>
+                                </div>`;
+                        }
+                        html += '</div>';
+                        if (!rows.length) {
+                            html += darEmp
+                                ? '<div style="color:rgba(200,215,230,0.55); padding:20px; text-align:center;">所选区间<strong>无匹配该姓名</strong>的出勤表明细；请尝试更换关键词、扩大日期或确认门店范围。</div>'
+                                : '<div style="color:rgba(200,215,230,0.5); padding:20px; text-align:center;">暂无台账：仅统计<strong>已正式提交</strong>营业日报；历史数据依赖系统自动补缺。请拉大日期范围或选「所有门店」。</div>';
+                            if (box) box.innerHTML = html;
+                            return;
+                        }
+                        html += '<style>.rep-dar-day summary::-webkit-details-marker{display:none}.rep-dar-day summary{list-style:none}.rep-dar-day[open] summary .rep-dar-chev{transform:rotate(90deg)}</style>';
+                        html += '<div style="margin-top:14px;display:flex;flex-direction:column;gap:10px;">';
+                        for (const row of rows) {
+                            const lines = normDarLines(row);
+                            const subAnomaly = lines.filter((l) => String(l.status || '') !== 'verified').length;
+                            const ok = subAnomaly === 0;
+                            const badge = ok ? '<span style="color:#22c55e;font-weight:800;">核实</span>' : '<span style="color:#f97316;font-weight:800;">异常</span>';
+                            const dateStr = String(row.report_date || '').slice(0, 10);
+                            html += `<details class="rep-dar-day" style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:10px;background:rgba(15,23,42,0.35);">
+<summary style="cursor:pointer;font-weight:800;font-size:13px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;color:rgba(226,232,240,0.96);user-select:none;">
+<span class="rep-dar-chev" style="display:inline-block;transition:transform .15s;color:rgba(148,163,184,0.95);">▸</span>
+<span>${escapeHtml(dateStr)}</span>
+<span style="opacity:0.85;">${escapeHtml(String(row.store || ''))}</span>
+${badge}
+<span style="font-size:11px;color:rgba(148,163,184,0.95);">${darEmp ? '本日异常 ' : '异常 '}${escapeHtml(String(darEmp ? subAnomaly : (row.anomaly_count ?? 0)))}</span>
+</summary>
+<div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.06);">
+<div style="font-size:11px;color:rgba(148,163,184,0.9);margin-bottom:8px;display:flex;flex-wrap:wrap;gap:8px;">
+<span>前厅<strong style="color:#e5e7eb">${escapeHtml(String(row.front_person_days ?? ''))}</strong></span>
+<span>后厨<strong style="color:#e5e7eb">${escapeHtml(String(row.kitchen_person_days ?? ''))}</strong></span>
+<span>休<strong style="color:#e5e7eb">${escapeHtml(String(row.rest_person_days ?? ''))}</strong></span>
+<span>工时<strong style="color:#e5e7eb">${escapeHtml(String(row.labor_total ?? ''))}</strong></span>
+</div>`;
+                            if (lines.length) {
+                                html += `<div style="overflow-x:auto;"><table style="width:100%;font-size:11px;border-collapse:collapse;"><thead><tr style="background:rgba(255,255,255,0.04);"><th style="text-align:left;padding:4px;">名</th><th style="text-align:left;padding:4px;">类</th><th style="text-align:left;padding:4px;">段</th><th style="text-align:right;padding:4px;">日</th><th style="text-align:center;padding:4px;">卡</th><th style="text-align:center;padding:4px;">假</th><th style="text-align:left;padding:4px;">态</th><th style="text-align:left;padding:4px;">注</th></tr></thead><tbody>`;
+                                for (const ln of lines) {
+                                    const lOk = String(ln.status || '') === 'verified';
+                                    const stCell = lOk ? '<span style="color:#86efac;">核</span>' : '<span style="color:#fdba74;">异</span>';
+                                    const clk = ln.has_clock_in ? '有' : '无';
+                                    const rs = Array.isArray(ln.reasons) && ln.reasons.length ? ln.reasons.join('；') : '—';
+                                    html += `<tr><td style="padding:4px;">${escapeHtml(String(ln.display_name || ln.username || '—'))}</td><td style="padding:4px;">${escapeHtml(kindZh(ln.kind))}</td><td style="padding:4px;">${escapeHtml(segZh(ln.role_segment))}</td><td style="padding:4px;text-align:right;">${escapeHtml(String(ln.declared_days ?? ''))}</td><td style="padding:4px;text-align:center;">${escapeHtml(clk)}</td><td style="padding:4px;text-align:center;">${escapeHtml(String(ln.approved_leave_hits ?? 0))}</td><td style="padding:4px;">${stCell}</td><td style="padding:4px;">${escapeHtml(rs)}</td></tr>`;
+                                }
+                                html += '</tbody></table></div>';
+                            }
+                            html += '</div></details>';
+                        }
+                        html += '</div>';
                         if (box) box.innerHTML = html;
                     })
                     .catch(e => {

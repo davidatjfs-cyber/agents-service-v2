@@ -1,6 +1,15 @@
 /**
  * Agent Handlers - 9 sub-agents + dispatcher
  * V2 aligned with V1 data sources & reply templates (2026-03-08)
+ *
+ * 拆分说明：本文件为 barrel/facade，从以下子模块导入并 re-export：
+ *   - agent-handlers/decision-utils.js  — 决策模式检测、执行输出强制、决策日志
+ *   - agent-handlers/bitable-utils.js   — Bitable 字段提取、门店名匹配
+ *   - agent-handlers/knowledge-base.js  — KB 知识库搜索（train_advisor）
+ *   - agent-handlers/text-utils.js      — 时间格式化、JSON 清洗、中英判断
+ *
+ * 主 handler 函数（handleDataAuditor 等 9 个 Agent + dispatchToAgent）保留在此文件。
+ * 外部导入路径不变：import { dispatchToAgent } from './services/agent-handlers.js'
  */
 import { callLLM } from './llm-provider.js';
 import { sanitizeUserFacingLlmText } from '../utils/llm-output-sanitize.js';
@@ -47,186 +56,52 @@ import { getStrategy, formatStrategyPromptAppendix, buildStrategyContextFromQues
 import { detectMetricFromQuestion } from './analysis-intent.js';
 import { createUnifiedTask } from './task-orchestrator.js';
 
-const NOW_CN = () => new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-// pg DATE 列返回 JS Date 对象，需用上海时区格式化避免年份丢失
-const FMT_DATE = (d) => {
-  if (!d) return '';
-  if (d instanceof Date) return d.toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
-  return String(d).slice(0, 10);
-};
+// ── Re-export sub-modules ──────────────────────────────────────
+export * from './agent-handlers/decision-utils.js';
+export * from './agent-handlers/bitable-utils.js';
+export * from './agent-handlers/knowledge-base.js';
+export * from './agent-handlers/text-utils.js';
+
+// ── Import from sub-modules ────────────────────────────────────
+import {
+  detectDecisionMode,
+  stripReportStyleEnding,
+  trimMultiSuggestions,
+  coerceDecisionExecutionOutput,
+  extractDataAuditorOutcomeFields,
+  buildWikiComplianceFallback,
+  zhOnlyDataAuditorNarrative,
+  containsSignificantEnglish,
+  coerceMonthComparisonAdviceToZh,
+  logDecision,
+  recallDecisions,
+  formatDecisionHistory,
+  MERGE_DECISION_ALWAYS_FOR_MARKETING_REPORT
+} from './agent-handlers/decision-utils.js';
+
+import {
+  extractBitableFieldText,
+  extractBitableFieldTextFromFields,
+  getStoreFromBitableFields,
+  normalizeBitableDateFromFields,
+  normalizeStoreKey,
+  sameStore,
+  resolveDbStoreName
+} from './agent-handlers/bitable-utils.js';
+
+import {
+  getKbScopesForTrainAdvisor,
+  expandKbSearchPatterns,
+  buildKbTrgmNeedle,
+  filterKbRowsByBrandStore,
+  fetchKnowledgeSnippetsForTrainAdvisor
+} from './agent-handlers/knowledge-base.js';
+
+import {
+  NOW_CN, FMT_DATE, stripJsonFromResponse
+} from './agent-handlers/text-utils.js';
+
 const FACTUAL_BLOCKED = '抱歉，我当前无法从数据库中获取相关凭证/数据，请您登录系统手动核查。';
-
-/** 与 hr-management-system/server/rag-tool.js getAllowedScopes 对齐（train_advisor 无 sensitive） */
-function getKbScopesForTrainAdvisor(userRole) {
-  const agentScopes = ['public', 'business'];
-  const ROLE_SCOPE = {
-    admin: ['public', 'business', 'sensitive'],
-    hq_manager: ['public', 'business', 'sensitive'],
-    hr_manager: ['public', 'business', 'sensitive'],
-    store_manager: ['public', 'business'],
-    store_production_manager: ['public', 'business'],
-    front_manager: ['public', 'business'],
-    employee: ['public'],
-    store_staff: ['public']
-  };
-  const r = ROLE_SCOPE[String(userRole || '').trim().toLowerCase()] || ['public'];
-  const x = agentScopes.filter((s) => r.includes(s));
-  return x.length ? x : ['public'];
-}
-
-/** 生成 ILIKE 关键词：用户只说「菜单内容」时 PDF 往往不含该四字，需拆成「菜单/菜谱/价格」等 */
-function expandKbSearchPatterns(userText) {
-  const t = String(userText || '').trim();
-  const out = new Set();
-  if (t.length >= 2 && t.length <= 120) out.add(`%${t}%`);
-  const isMenu = /菜单|菜谱|餐牌|菜品|价格|菜名|出品|价目|点菜|酒水|主食|小吃/.test(t);
-  const isStall = /开档|开市|备餐|炒锅|烧腊|档口|水吧|砧板|岗位|工作|清单|检查|闭市|收档/.test(t);
-  const isMember = /会员|会员卡|积分|储值|充值|等级|权益|忠诚|复购|留存|拉新/.test(t);
-  if (isMenu) {
-    ['%菜单%', '%菜谱%', '%菜品%', '%价格%', '%餐牌%', '%价目%', '%价目表%', '%点菜%', '%酒水单%'].forEach((x) => out.add(x));
-  }
-  if (isStall) {
-    ['%炒锅%', '%开档%', '%档口%', '%备餐%', '%开市%', '%岗位%', '%开档工作%', '%备餐检查%', '%开市前%'].forEach((x) => out.add(x));
-  }
-  if (isMember) {
-    ['%会员%', '%会员卡%', '%积分%', '%储值%', '%充值%', '%会员等级%', '%会员权益%', '%忠诚度%', '%复购%', '%留存%'].forEach((x) => out.add(x));
-  }
-  if (out.size === 0) out.add(`%${t.slice(0, 60) || '培训'}%`);
-  return [...out].slice(0, 14);
-}
-
-/** B1: 供 pg_trgm word_similarity 使用的复合检索串（中文词 + 用户原句） */
-function buildKbTrgmNeedle(userText) {
-  const t = String(userText || '').trim().slice(0, 200);
-  const parts = [t];
-  if (/菜单|菜谱|餐牌|菜品|价格|菜名|出品|价目|点菜|酒水|主食|小吃/.test(t)) {
-    parts.push('菜单 菜谱 价格 菜品');
-  }
-  if (/开档|开市|备餐|炒锅|烧腊|档口|水吧|砧板|岗位|工作|清单|检查|闭市|收档/.test(t)) {
-    parts.push('开档 炒锅 档口 备餐 岗位 开市');
-  }
-  if (/会员|会员卡|积分|储值|充值|等级|权益|忠诚|复购|留存|拉新/.test(t)) {
-    parts.push('会员 会员卡 积分 储值 充值 复购 留存 拉新');
-  }
-  return parts.join(' ').trim().slice(0, 400);
-}
-
-let kbTrgmProbeCache = null;
-/** 数据库是否已启用 pg_trgm（与 migrations/011 一致） */
-async function isKbTrgmAvailable() {
-  if (kbTrgmProbeCache !== null) return kbTrgmProbeCache;
-  try {
-    const r = await query(`SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm' LIMIT 1`);
-    kbTrgmProbeCache = (r.rows || []).length > 0;
-  } catch {
-    kbTrgmProbeCache = false;
-  }
-  return kbTrgmProbeCache;
-}
-
-/** 门店所属品牌优先：标题/正文含品牌名，或 tags 含 brand:all */
-function filterKbRowsByBrandStore(rows, brand, store) {
-  const b = String(brand || '').trim();
-  const st = String(store || '').trim().replace(/店$/, '');
-  if (!b && !st) return rows;
-  const filtered = rows.filter((row) => {
-    const tags = row.tags;
-    const tagStr = Array.isArray(tags) ? tags.join(' ') : String(tags || '');
-    if (/brand:all/i.test(tagStr)) return true;
-    const blob = `${row.title || ''}\n${row.content || ''}\n${tagStr}`;
-    if (b && (blob.includes(b) || blob.includes(b.slice(0, 2)))) return true;
-    if (st && st.length >= 2 && blob.includes(st)) return true;
-    return false;
-  });
-  return filtered.length ? filtered : rows;
-}
-
-/**
- * 从 knowledge_base 拉取 HRMS 上传 PDF 提取文本。
- * B1: ILIKE 多关键词 OR + pg_trgm word_similarity 混合（需 DB 已执行 011 迁移）
- */
-async function fetchKnowledgeSnippetsForTrainAdvisor(text, ctx) {
-  const scopes = getKbScopesForTrainAdvisor(ctx.role);
-  const patterns = expandKbSearchPatterns(text);
-  const needle = buildKbTrgmNeedle(text);
-  const orClauses = patterns.map((_, i) => `(title ILIKE $${i + 2} OR content ILIKE $${i + 2})`).join(' OR ');
-  const useTrgm = (await isKbTrgmAvailable()) && needle.length >= 2;
-  const needleIdx = 2 + patterns.length;
-  let rows = [];
-  try {
-    if (useTrgm) {
-      const r = await query(
-        `SELECT id::text AS id, title, content, tags,
-          GREATEST(
-            COALESCE(word_similarity($${needleIdx}::text, title), 0::real),
-            COALESCE(word_similarity($${needleIdx}::text, COALESCE(content, '')), 0::real)
-          ) AS kb_trgm
-         FROM knowledge_base
-         WHERE (scope = ANY($1::text[]) OR scope IS NULL)
-         AND (enabled IS NULL OR enabled = true)
-         AND (
-           (${orClauses})
-           OR (
-             char_length(trim($${needleIdx}::text)) >= 2
-             AND (
-               word_similarity($${needleIdx}::text, title) > 0.17
-               OR word_similarity($${needleIdx}::text, COALESCE(content, '')) > 0.17
-             )
-           )
-         )
-         ORDER BY kb_trgm DESC NULLS LAST, updated_at DESC NULLS LAST, created_at DESC NULLS LAST
-         LIMIT 40`,
-        [scopes, ...patterns, needle]
-      );
-      rows = r.rows || [];
-    } else {
-      const r = await query(
-        `SELECT id::text AS id, title, content, tags
-         FROM knowledge_base
-         WHERE (scope = ANY($1::text[]) OR scope IS NULL)
-         AND (enabled IS NULL OR enabled = true)
-         AND (${orClauses})
-         ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
-         LIMIT 40`,
-        [scopes, ...patterns]
-      );
-      rows = r.rows || [];
-    }
-  } catch (e) {
-    logger.warn({ err: e?.message, useTrgm }, 'fetchKnowledgeSnippetsForTrainAdvisor primary failed');
-  }
-  if (!rows.length) {
-    try {
-      const orClauses2 = patterns.map((_, i) => `(title ILIKE $${i + 1} OR content ILIKE $${i + 1})`).join(' OR ');
-      const r2 = await query(
-        `SELECT id::text AS id, title, content, tags
-         FROM knowledge_base
-         WHERE (enabled IS NULL OR enabled = true)
-         AND (${orClauses2})
-         ORDER BY created_at DESC NULLS LAST
-         LIMIT 40`,
-        patterns
-      );
-      rows = r2.rows || [];
-    } catch (e2) {
-      logger.warn({ err: e2?.message }, 'fetchKnowledgeSnippetsForTrainAdvisor fallback failed');
-    }
-  }
-  const brand = await getBrandForStore(String(ctx.store || '').trim()).catch(() => null);
-  rows = filterKbRowsByBrandStore(rows, brand, ctx.store);
-  const maxTotalChars = 72000;
-  let used = 0;
-  const parts = [];
-  const maxPerDoc = 22000;
-  for (const row of rows.slice(0, 12)) {
-    if (used >= maxTotalChars) break;
-    const raw = String(row.content || '');
-    const take = raw.slice(0, Math.min(maxPerDoc, maxTotalChars - used));
-    used += take.length;
-    parts.push({ title: String(row.title || '未命名文档'), body: take, id: row.id });
-  }
-  return { parts, brand, hadRows: rows.length > 0 };
-}
 
 /** 管理面板写入的 agent_config_${agentId}.prompt，拼在代码内置 system 提示之前（空则忽略） */
 async function adminAgentPromptPrefix(agentId) {
@@ -239,224 +114,7 @@ async function adminAgentPromptPrefix(agentId) {
   }
 }
 
-/** data_auditor：去掉模型偶发的英文思维链/元信息，只保留中文分析正文 */
-function zhOnlyDataAuditorNarrative(raw) {
-  const s = String(raw || '').trim();
-  if (!s) return s;
-  const wikiCut = s.search(/【引用经验】/);
-  if (wikiCut >= 0) return s.slice(wikiCut).trim();
-  const cut = s.search(
-    /【问题分析】|^\s*\*?\*?问题分析\*?\*?\s*[:：]?/m
-  );
-  if (cut >= 0) return s.slice(cut).trim();
-  const cutEn = s.search(
-    /(?:^|\n)\s*\*?\*?(?:Problem\s+Analysis|Key\s+Issues)\*?\*?\s*[:\s]*/i
-  );
-  if (cutEn >= 0) return s.slice(cutEn).trim();
-  const cut2 = s.search(/【行动建议】|^\s*\*?\*?行动建议\*?\*?\s*[:：]?/m);
-  if (cut2 >= 0) return s.slice(cut2).trim();
-  const cutEn2 = s.search(
-    /(?:^|\n)\s*\*?\*?(?:Actionable\s+Advice|Recommended\s+Actions|Action\s+Plan)\*?\*?\s*[:\s]*/i
-  );
-  if (cutEn2 >= 0) return s.slice(cutEn2).trim();
-  const lines = s.split(/\r?\n/);
-  const out = [];
-  let keep = false;
-  for (const line of lines) {
-    const t = line.trim();
-    if (!keep) {
-      if (!t) continue;
-      if (/^(role|input data|constraints|user question|logic|analysis)\s*:/i.test(t)) continue;
-      if (/^#{1,6}\s*(role|input|constraint|user question)/i.test(t)) continue;
-      if (/[\u4e00-\u9fff]/.test(t) || /^【/.test(t)) keep = true;
-      if (keep) out.push(line);
-    } else {
-      out.push(line);
-    }
-  }
-  const joined = out.join('\n').trim();
-  return joined || s;
-}
 
-/** 检测输出是否含英文（任一条件满足即认为需要重写） */
-function containsSignificantEnglish(s) {
-  const body = String(s || '');
-  if (/Problem\s+Analysis|Actionable\s+Advice|No empty words like|responsible person|Delivery Ratio|Dine-in.*Revenue|User Role|Next Steps/i.test(body)) return true;
-  const totalChars = body.replace(/\s/g, '').length;
-  if (totalChars < 10) return false;
-  const latinChars = (body.match(/[a-zA-Z]/g) || []).length;
-  return latinChars / totalChars > 0.08;
-}
-
-async function coerceMonthComparisonAdviceToZh(text, llmContext) {
-  const cleaned = zhOnlyDataAuditorNarrative(text);
-  if (!containsSignificantEnglish(cleaned)) return cleaned;
-  try {
-    const tr = await callLLM(
-      [
-        {
-          role: 'system',
-          content:
-            '你是简体中文编辑。将下面的分析文本**全部改写为简体中文**，保留所有金额数字和百分比。\n' +
-            '输出只能包含两段，标题格式固定为：\n【问题分析】\n【行动建议】\n' +
-            '每段下面用 1. 2. 3. 编号列出对应内容。\n' +
-            '严禁输出任何英文单词、英文标题或元信息说明。'
-        },
-        { role: 'user', content: cleaned.slice(0, 5000) }
-      ],
-      {
-        temperature: 0.1,
-        max_tokens: 800,
-        purpose: 'data_auditor',
-        ...(llmContext ? { context: llmContext } : {})
-      }
-    );
-    const o = String(tr.content || '').trim();
-    return o ? zhOnlyDataAuditorNarrative(o) : cleaned;
-  } catch (e) {
-    logger.warn({ err: e?.message }, 'coerceMonthComparisonAdviceToZh rewrite failed');
-    return cleaned;
-  }
-}
-
-// ── 决策日志工具（永久存档 + 主动引用）────────────────────────────
-async function logDecision({ store, brand = '', decisionType = 'action_plan', title, content, agent = '', sourceTaskId = '', createdBy = '' }) {
-  try {
-    await query(
-      `INSERT INTO decision_log (store, brand, decision_type, title, content, agent, source_task_id, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [store, brand || '', decisionType, title, content, agent, sourceTaskId || '', createdBy || '']
-    );
-  } catch (e) {
-    logger.warn({ err: e?.message }, 'logDecision failed');
-  }
-}
-
-async function recallDecisions(store, limit = 5) {
-  try {
-    const r = await query(
-      `SELECT decision_type, title, content, agent, created_at
-       FROM decision_log WHERE store = $1 AND status = 'active'
-       ORDER BY created_at DESC LIMIT $2`,
-      [store, limit]
-    );
-    return r.rows || [];
-  } catch (e) { return []; }
-}
-
-function formatDecisionHistory(decisions) {
-  if (!decisions?.length) return '';
-  const TYPE_LABEL = { action_plan: '行动计划', marketing: '营销决策', operation: '运营决策', review: '评估记录' };
-  return decisions.map(d => {
-    const label = TYPE_LABEL[d.decision_type] || d.decision_type;
-    const date = String(d.created_at || '').slice(0, 10);
-    return `· [${date}][${label}] ${d.title}：${d.content.slice(0, 120)}${d.content.length > 120 ? '…' : ''}`;
-  }).join('\n');
-}
-
-// ── Bitable fields 解析（feishu_generic_records.fields 为 jsonb，值可能为 string/number/array） ──
-function extractBitableFieldText(val) {
-  if (val == null) return '';
-  if (typeof val === 'string') return val.trim();
-  if (typeof val === 'number') return String(val);
-  if (Array.isArray(val)) {
-    const parts = [];
-    for (const item of val) {
-      if (typeof item === 'string') { parts.push(item.trim()); continue; }
-      if (item && typeof item === 'object') {
-        if (item.text != null) parts.push(String(item.text).trim());
-        else if (Array.isArray(item.text_arr)) parts.push(...item.text_arr.map(t => String(t || '').trim()).filter(Boolean));
-        else if (item.date) parts.push(String(item.date).trim());
-      }
-    }
-    return parts.filter(Boolean).join(' ');
-  }
-  if (typeof val === 'object' && val !== null && (val.text != null || val.date != null)) return String(val.text || val.date || '').trim();
-  return '';
-}
-
-function extractBitableFieldTextFromFields(fields, key) {
-  if (!fields || typeof fields !== 'object') return '';
-  const raw = fields[key] ?? fields[key.replace(/[^\u4e00-\u9fa5a-zA-Z0-9_]/g, '')];
-  return extractBitableFieldText(raw);
-}
-
-/** 从 Bitable 记录中取门店名（兼容多种字段名） */
-function getStoreFromBitableFields(fields) {
-  const keys = ['门店', '所属门店', '门店名称', '店名', '店铺'];
-  for (const k of keys) {
-    const v = extractBitableFieldTextFromFields(fields, k);
-    if (v) return v;
-  }
-  return '';
-}
-
-/** 从 Bitable 字段解析出 YYYY-MM-DD，支持时间戳(ms/s)、日期字符串、{date: "YYYY-MM-DD"} */
-function normalizeBitableDateFromFields(fields, dateKey = '日期') {
-  const raw = fields && (fields[dateKey] ?? fields['提交时间'] ?? fields['记录日期']);
-  if (raw == null) return null;
-  if (typeof raw === 'number' && Number.isFinite(raw)) {
-    const ms = raw > 1e12 ? raw : raw * 1000;
-    // 返回“本地时区日期”，避免 UTC 切片导致昨日/今天错位
-    const d0 = new Date(ms);
-    if (isNaN(d0.getTime())) return null;
-    const y = d0.getFullYear();
-    const m = String(d0.getMonth() + 1).padStart(2, '0');
-    const day = String(d0.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  }
-  if (typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
-  if (Array.isArray(raw) && raw[0]?.date) return String(raw[0].date).slice(0, 10);
-  if (typeof raw === 'object' && raw?.date) return String(raw.date).slice(0, 10);
-  return null;
-}
-
-/** 门店模糊匹配（与 V1 isLikelySameStore 一致） */
-function isLikelySameStore(a, b) {
-  const n = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, '');
-  const x = n(a), y = n(b);
-  if (!x || !y) return false;
-  if (x === y || x.includes(y) || y.includes(x)) return true;
-  return false;
-}
-
-function normalizeStoreKey(v) {
-  return String(v || '').trim().toLowerCase().replace(/\s+/g, '');
-}
-
-function normalizeStoreAliasKey(v) {
-  return normalizeStoreKey(v).replace(/(上海|北京|深圳|广州|大宁|门店|店铺|店|商场|广场|购物中心)/g, '');
-}
-
-function sameStore(a, b) {
-  const x = normalizeStoreKey(a);
-  const y = normalizeStoreKey(b);
-  if (!x || !y) return false;
-  if (x === y || x.includes(y) || y.includes(x)) return true;
-  const ax = normalizeStoreAliasKey(a);
-  const by = normalizeStoreAliasKey(b);
-  return !!(ax && by && (ax === by || ax.includes(by) || by.includes(ax)));
-}
-
-const ALLOWED_RESOLVE_TABLES = new Set(['sales_raw', 'daily_reports']);
-
-async function resolveDbStoreName(tableName, storeInput) {
-  const s = String(storeInput || '').trim();
-  if (!s) return '';
-  if (!ALLOWED_RESOLVE_TABLES.has(tableName)) {
-    logger.warn({ tableName }, 'resolveDbStoreName: blocked disallowed tableName');
-    return s;
-  }
-  try {
-    const r = await query(`SELECT DISTINCT store FROM ${tableName} WHERE store IS NOT NULL LIMIT 200`);
-    const stores = (r.rows || []).map(x => x.store).filter(Boolean);
-    const exact = stores.find(x => normalizeStoreKey(x) === normalizeStoreKey(s));
-    if (exact) return exact;
-    const likely = stores.find(x => sameStore(x, s));
-    if (likely) return likely;
-  } catch(_e) {}
-  return s;
-}
 
 // 与 V1/HRMS 一致：用 table_id 兼容 config_key，确保无论谁写入都能查到
 const OPENING_TABLE_ID = process.env.BITABLE_OPENING_TABLE_ID || 'tbl32E6d0CyvLvfi';
@@ -1461,132 +1119,6 @@ async function buildDeterministicRevenueReply(store, start, end, periodLabel) {
 }
 
 /** Data：偏查询与事实；Decision：偏归因、策略与闭环 */
-export function detectDecisionMode(text = '') {
-  const t = String(text || '');
-  const decisionKeywords = [
-    '为什么',
-    '原因',
-    '怎么办',
-    '如何',
-    '策略',
-    '优化',
-    '提升',
-    '问题',
-    '下降',
-    '增长'
-  ];
-  const dataKeywords = ['多少', '数据', '营业额', '明细', '报表', '昨天', '今天', '本周'];
-
-  if (decisionKeywords.some((k) => t.includes(k))) {
-    return 'decision';
-  }
-  if (dataKeywords.some((k) => t.includes(k))) {
-    return 'data';
-  }
-  return 'decision';
-}
-
-/** 从注入的 ds 中解析「当前最优策略」及首条统计行的 weightedScore / 成功率 / 趋势 */
-function parseStrategyHeadFromDs(ds) {
-  const s = String(ds || '');
-  const opt = s.match(/当前最优策略：\s*([^\n]+)/);
-  const action = opt ? opt[1].trim() : '';
-  const wsM = s.match(/weightedScore\s+([0-9.]+)/);
-  const pctM = s.match(/成功率\s+(\d+)%/);
-  const trM = s.match(/趋势\s+([^\s｜）\n]+)/);
-  return {
-    action: action || '先完成营业数据补录与凭据核对',
-    ws: wsM ? wsM[1] : '0.50',
-    sr: pctM ? pctM[1] : '0',
-    tr: trM ? trM[1] : 'stable'
-  };
-}
-
-function stripReportStyleEnding(response) {
-  let s = String(response || '').trim();
-  s = s.replace(/(需要持续观察|建议关注|可以进一步分析)[。．…\s]*$/g, '').trim();
-  return s;
-}
-
-function trimMultiSuggestions(response) {
-  const keywords = ['另外', '此外', '同时', '也可以'];
-  let earliest = -1;
-  const str = String(response);
-  for (const k of keywords) {
-    const i = str.indexOf(k);
-    if (i !== -1 && (earliest === -1 || i < earliest)) earliest = i;
-  }
-  if (earliest === -1) return str;
-  return str.slice(0, earliest).trim();
-}
-
-/** decision 模式：单一可执行动作 + 去多建议连接词 + 去报表式结尾；缺「今日重点动作」时用策略统计兜底 */
-async function coerceDecisionExecutionOutput(response, mode, store, text) {
-  if (mode !== 'decision') return stripReportStyleEnding(String(response || '').trim());
-  let out = stripReportStyleEnding(String(response || '').trim());
-  if (!out.includes('今日重点动作')) {
-    let stats = [];
-    if (store) {
-      try {
-        stats = await getStrategyStats({ store, problem: String(text || '').slice(0, 120) });
-      } catch (_) {}
-    }
-    const best = stats[0];
-    const ws =
-      best?.weightedScore != null && !Number.isNaN(Number(best.weightedScore))
-        ? Number(best.weightedScore).toFixed(2)
-        : '0.50';
-    const pct = Math.round((best?.successRate ?? 0) * 100);
-    const trend = best?.trend != null ? String(best.trend) : 'stable';
-    const act = best?.action != null ? String(best.action).trim() : '先完成营业数据补录与凭据核对';
-    const why = best
-      ? '引用经验：本条为策略统计中 policyScore／weightedScore 与趋势综合排序首位。'
-      : '引用经验：暂无足够策略样本；优先补齐数据与地面动作，再量化比较。';
-    out = `【核心问题】\n当前存在关键运营问题\n\n【今日重点动作】\n${act}\n（weightedScore ${ws}｜成功率 ${pct}%｜趋势 ${trend}）\n\n【为什么是这个动作】\n${why}\n\n【执行要求】\n店长今日内必须完成执行并记录结果，便于系统更新 outcome。`;
-  }
-  out = trimMultiSuggestions(out);
-  out = stripReportStyleEnding(out);
-  return out;
-}
-
-function extractDataAuditorOutcomeFields(response, mode) {
-  const r = String(response || '');
-  if (mode === 'decision' && /【今日重点动作】/.test(r)) {
-    const probM = r.match(/【核心问题】\s*([\s\S]*?)(?=\n【今日重点动作】|$)/);
-    const actM = r.match(/【今日重点动作】\s*([\s\S]*?)(?=\n【为什么是这个动作】|$)/);
-    const causeM = r.match(/【为什么是这个动作】\s*([\s\S]*?)(?=\n【执行要求】|$)/);
-    const problem = probM ? probM[1].trim().slice(0, 500) : '';
-    const action = actM ? actM[1].trim().slice(0, 500) : '';
-    const cause = causeM ? causeM[1].trim().slice(0, 500) : '';
-    return {
-      problem: problem || r.slice(0, 200).slice(0, 500),
-      cause,
-      action: action || cause.slice(0, 500)
-    };
-  }
-  return extractStructuredData(r);
-}
-
-/** 已注入 Wiki 但模型未输出执行化结构时，用历史经验 + 策略统计生成合规回答（不编造数字） */
-function buildWikiComplianceFallback(ds, text, store) {
-  const m = String(ds || '').match(/- 结论：[^\n]+/);
-  const quote = m ? m[0].replace(/^- 结论：/, '').trim().slice(0, 200) : '系统提供的历史经验摘要。';
-  const core = /下降|下滑|变差/.test(String(text || ''))
-    ? '营业额下滑的主因在当前会话中无法仅凭数据库确认（缺凭证）'
-    : '核心问题需结合门店数据进一步确认（当前缺凭证）';
-  const st = parseStrategyHeadFromDs(ds);
-  const hasStats = String(ds).includes('【策略效果统计】');
-  const whyStats = hasStats
-    ? `引用经验：${quote}。策略统计上「${st.action}」的 weightedScore 为 ${st.ws}、成功率 ${st.sr}%、趋势 ${st.tr}，policyScore 排序为首，故作为唯一执行项。`
-    : `引用经验：${quote}。当前策略样本不足，优先完成凭据与日报补录，再据实迭代。`;
-
-  return (
-    `【核心问题】\n${core}\n\n` +
-    `【今日重点动作】\n${st.action}\n（weightedScore ${st.ws}｜成功率 ${st.sr}%｜趋势 ${st.tr}）\n\n` +
-    `【为什么是这个动作】\n${whyStats}\n\n` +
-    `【执行要求】\n店长须于今日营业结束前落实上述动作，并在系统记录执行结果；门店「${store || '门店'}」负责人对验收留痕负责。`
-  );
-}
 
 // ── 1. Data Auditor (对标V1: BI工具+营收汇总+销售排行+差评排行) ──
 async function handleDataAuditor(text, ctx) {
@@ -3379,63 +2911,6 @@ ${unifiedKnowledgeBlock_master}${masterMemoryBlock || ''}
   return { agent: 'master', response: r.content || '您好，请描述您的需求。', store };
 }
 /** 从文本中提取第一个花括号平衡的 JSON 对象（忽略字符串内的括号）。 */
-function extractFirstBalancedJsonObject(s) {
-  const str = String(s || '');
-  const start = str.indexOf('{');
-  if (start < 0) return null;
-  let depth = 0;
-  let inString = false;
-  let escape = false;
-  for (let i = start; i < str.length; i++) {
-    const ch = str[i];
-    if (escape) {
-      escape = false;
-      continue;
-    }
-    if (inString) {
-      if (ch === '\\') escape = true;
-      else if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') {
-      inString = true;
-      continue;
-    }
-    if (ch === '{') depth += 1;
-    else if (ch === '}') {
-      depth -= 1;
-      if (depth === 0) return str.slice(start, i + 1);
-    }
-  }
-  return null;
-}
-
-/** 模型偶发把 JSON 转义序列当字面量输出到字符串里，飞书上会显示成 \\n；解析后做一次还原。 */
-function decodeJsonStringEscapesForFeishu(s) {
-  if (s == null || typeof s !== 'string') return s;
-  return s
-    .replace(/\\r\\n/g, '\n')
-    .replace(/\\n/g, '\n')
-    .replace(/\\t/g, '\t')
-    .replace(/\\"/g, '"')
-    .replace(/\\\\/g, '\\');
-}
-
-/**
- * 从 LLM 响应中清除意外输出的 JSON 块，确保飞书消息只含自然语言。
- * 与 master-planner.js 的同名函数保持一致。
- */
-function stripJsonFromResponse(text) {
-  if (!text) return text;
-  const marker = '\u300c\u7ed9\u7528\u6237\u7684\u7ed3\u8bba\u300d'; // noop, use direct string
-  const mIdx = text.indexOf('【给用户的结论】');
-  if (mIdx !== -1) return text.slice(mIdx + 8).trim();
-  // 去除独立的 JSON 对象块（含关键字段名）
-  let cleaned = text.replace(/\{[\s\S]*?"(?:summary|problems|actions|needs_task|needs_approval)"[\s\S]*?\}/g, '').trim();
-  // 去除【结构化输出/决策】之后的所有内容
-  cleaned = cleaned.replace(/【结构化(?:输出|决策)】[\s\S]*$/g, '').trim();
-  return cleaned || text;
-}
 
 // ── 10. Accept Action Plan（接受行动计划 → 转化为追踪任务）──
 async function handleAcceptActionPlan(text, ctx) {
@@ -3894,8 +3369,6 @@ export async function dispatchToAgent(route,text,ctx={}) {
  * @param {string} text
  * @param {Record<string, unknown>} ctx
  */
-/** 验证完成后改为 false，仅当用户句中含 执行|效果|策略|报告 时合并 data_auditor */
-const MERGE_DECISION_ALWAYS_FOR_MARKETING_REPORT = true;
 
 async function mergeReportWithDataAuditorDecision(originalReturn, text, ctx) {
   console.log('🔥 [MERGE ENTER]', {

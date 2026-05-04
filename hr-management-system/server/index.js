@@ -56,6 +56,12 @@ import { setDataExecutorPool, purgeExpiredCache, updateMetricVersion } from './d
 import fileRoutes from './file-routes.js';
 import { enforceRuntimeSafetyOrExit, configureDbSessionSafety, isSchemaChangeAllowed, getAppEnv, isWebhookEnabled, isExternalEnabled } from './safety.js';
 import { expandAgentStoreLabels, resolveAgentCanonicalStore } from './v2-store-alignment.js';
+import {
+  reconcileDailyReportAttendanceRegister,
+  backfillDailyAttendanceRegisterMissing,
+  summarizeDailyRegisterForEmployee,
+  filterDailyRegisterRowsByEmployee
+} from './daily-attendance-register.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = String(process.env.HOST || '0.0.0.0');
@@ -77,6 +83,15 @@ app.use(cors(CORS_WHITELIST.length > 0 ? {
   credentials: true
 } : undefined));
 app.use(express.json({ limit: '5mb' }));
+
+// ── Security headers ─────────────────────────────────
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' *.feishu.cn *.bytedance.net; style-src 'self' 'unsafe-inline' *.feishu.cn; img-src 'self' data: *.feishu.cn; connect-src 'self' *.feishu.cn *.feishuopen.com");
+  next();
+});
 
 const OSS_REGION = process.env.OSS_REGION;
 const OSS_BUCKET = process.env.OSS_BUCKET;
@@ -138,7 +153,7 @@ function ensureUploadsDir() {
     fs.mkdirSync(uploadsDir, { recursive: true });
   } catch (e) {
     console.error('[ensureUploadsDir] mkdirSync failed:', e?.message || e);
-    return { ok: false, error: String(e?.message || e) };
+    return { ok: false, error: 'internal_error' };
   }
 
   try {
@@ -146,7 +161,7 @@ function ensureUploadsDir() {
     return { ok: true };
   } catch (e) {
     console.error('[ensureUploadsDir] accessSync failed:', e?.message || e);
-    return { ok: false, error: String(e?.message || e) };
+    return { ok: false, error: 'internal_error' };
   }
 }
 
@@ -2035,7 +2050,7 @@ app.get('/api/approvals', authRequired, async (req, res) => {
     const items = await Promise.all((r.rows || []).map(decorate));
     return res.json({ items });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -2097,7 +2112,7 @@ app.get('/api/approvals/:id', authRequired, async (req, res) => {
       }
     });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -2109,7 +2124,7 @@ app.post('/api/reports/bi/trigger-weekly', authRequired, async (req, res) => {
     await sendWeeklyReports();
     return res.json({ ok: true, triggered: 'weekly' });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -2120,7 +2135,7 @@ app.post('/api/reports/bi/trigger-monthly', authRequired, async (req, res) => {
     await sendMonthlyReports();
     return res.json({ ok: true, triggered: 'monthly' });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -2133,7 +2148,7 @@ app.post('/api/reports/bi/test-send', authRequired, async (req, res) => {
     const result = await sendTestReportsToUser(targetUsername);
     return res.json(result);
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -2160,7 +2175,7 @@ app.post('/api/admin/perf/dish-weekly/resend', authRequired, async (req, res) =>
     await sendWeeklyDishOptimizationReport(weekStart, weekEnd);
     return res.json({ ok: true, weekStart, weekEnd, message: '已尝试向 admin/hq_manager 发送菜品优化周报卡片' });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -2176,7 +2191,7 @@ app.get('/api/bitable/stats', authRequired, async (req, res) => {
     res.json({ ok: true, data: stats });
   } catch (e) {
     console.error('[api] bitable stats error:', e?.message);
-    res.status(500).json({ error: 'internal_error', message: e?.message });
+    res.status(500).json({ error: 'internal_error', message: 'internal_error' });
   }
 });
 
@@ -2191,7 +2206,7 @@ app.post('/api/bitable/archive', authRequired, async (req, res) => {
     res.json({ ok: true, data: result });
   } catch (e) {
     console.error('[api] bitable archive error:', e?.message);
-    res.status(500).json({ error: 'internal_error', message: e?.message });
+    res.status(500).json({ error: 'internal_error', message: 'internal_error' });
   }
 });
 
@@ -2241,7 +2256,7 @@ app.get('/api/agent/feishu-table-data', authRequired, async (req, res) => {
     });
   } catch (e) {
     console.error('[Agent Feishu Table Data] Error:', e);
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -2294,7 +2309,7 @@ app.post('/api/ai/chat-completions', authRequired, async (req, res) => {
     if (data && typeof data === 'object') return res.json(data);
     return res.json({ raw: text });
   } catch (e) {
-    return res.status(502).json({ error: 'upstream_unreachable', message: String(e?.message || e) });
+    return res.status(502).json({ error: 'upstream_unreachable', message: 'internal_error' });
   } finally {
     clearTimeout(timer);
   }
@@ -2459,7 +2474,7 @@ app.get('/api/points/records', authRequired, async (req, res) => {
       }
     });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -2528,7 +2543,7 @@ app.get('/api/points/ranking', authRequired, async (req, res) => {
     const myEntry = ranking.find(x => x.username === username.toLowerCase());
     return res.json({ month, ranking, myRank: myEntry?.rank || null, myPoints: myEntry?.totalPoints || 0, total: ranking.length });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -2618,7 +2633,7 @@ app.get('/api/payments/budget-summary', authRequired, async (req, res) => {
       remaining
     });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -3097,7 +3112,7 @@ app.post('/api/approvals', authRequired, async (req, res) => {
 
     return res.json({ item, label: approvalTypeLabel(type) });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -3115,7 +3130,7 @@ app.post('/api/approvals/:id/read', authRequired, async (req, res) => {
     );
     return res.json({ ok: true });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -3130,7 +3145,7 @@ app.delete('/api/approvals/:id', authRequired, async (req, res) => {
     if (!r.rows?.length) return res.status(404).json({ error: 'not_found' });
     return res.json({ ok: true, deleted: r.rows[0] });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -4092,7 +4107,7 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
     return res.json(Object.keys(decideExtras).length ? { item: updated, decideMs: __decideMs, ...decideExtras } : { item: updated, decideMs: __decideMs });
   } catch (e) {
     console.log('[approval-decide] error', { id, ms: Date.now() - __decideStartedAt, err: String(e?.message || e) });
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -4131,7 +4146,7 @@ app.post('/api/admin/repair-onboarding-employee/:id', authRequired, async (req, 
     });
   } catch (e) {
     console.error('[admin/repair-onboarding-employee]', e);
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -4213,7 +4228,7 @@ app.post('/api/approvals/:id/return', authRequired, async (req, res) => {
 
     return res.json({ item: updated });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -4330,7 +4345,7 @@ app.post('/api/approvals/:id/resubmit', authRequired, async (req, res) => {
 
     return res.json({ item: updated });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -4370,7 +4385,7 @@ app.post('/api/payments/:id/pay', authRequired, async (req, res) => {
     );
     return res.json({ item: r1.rows?.[0] || null });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -4425,7 +4440,7 @@ app.get('/api/payments/export', authRequired, async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="payments_${start}_${end}.csv"`);
     return res.send('\ufeff' + lines.join('\n'));
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -4523,7 +4538,7 @@ app.post('/api/checkin', authRequired, async (req, res) => {
     });
     return res.json({ ok: true, record: inserted });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -4560,7 +4575,7 @@ app.post('/api/reads/batch', authRequired, async (req, res) => {
     );
     return res.json({ ok: true, inserted: sliced.length });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -4726,7 +4741,7 @@ app.get('/api/unread-counts', authRequired, async (req, res) => {
 
     return res.json({ approvals, training, exam, dashboard, rewards, payment, opsTasks });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 app.use('/uploads', express.static(uploadsDir));
@@ -4756,7 +4771,7 @@ app.get('/api/role-modules', authRequired, async (req, res) => {
     const state = (await getSharedState()) || {};
     return res.json({ config: state.roleModules || null });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -4771,7 +4786,7 @@ app.put('/api/role-modules', authRequired, async (req, res) => {
     await saveSharedState(state);
     return res.json({ ok: true });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -4798,7 +4813,7 @@ app.get('/api/dedup/stats', authRequired, async (req, res) => {
     tables.table_visit_records = Number(tv.rows[0]?.cnt || 0);
     return res.json({ ok: true, tables });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -4814,7 +4829,7 @@ app.post('/api/dedup/cleanup', authRequired, async (req, res) => {
         AND (a.created_at < b.created_at OR (a.created_at = b.created_at AND a.id < b.id))`);
     return res.json({ ok: true, deleted: del.rowCount || 0 });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -4839,7 +4854,7 @@ app.get('/api/me', authRequired, async (req, res) => {
       }
     });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -4853,6 +4868,11 @@ app.get('/', (req, res) => {
   return res.sendFile(target);
 });
 
+const UPLOAD_ALLOWED_EXTS = new Set([
+  '.pdf','.doc','.docx','.xls','.xlsx','.ppt','.pptx',
+  '.jpg','.jpeg','.png','.gif','.webp','.bmp',
+  '.txt','.csv','.zip','.rar',
+]);
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
@@ -4862,11 +4882,14 @@ const upload = multer({
     },
     filename: (req, file, cb) => {
       const orig = String(file?.originalname || 'file');
-      const ext = path.extname(orig).slice(0, 16);
+      const ext = path.extname(orig).toLowerCase().slice(0, 16);
+      if (!UPLOAD_ALLOWED_EXTS.has(ext)) {
+        return cb(new Error(`blocked_file_type: ${ext || 'unknown'}`));
+      }
       cb(null, `${randomUUID()}${ext}`);
     }
   }),
-  limits: { fileSize: 1024 * 1024 * 1024 }
+  limits: { fileSize: 100 * 1024 * 1024 }
 });
 
 const knowledgeUpload = multer({
@@ -4898,7 +4921,7 @@ app.post('/api/uploads/daily-report', authRequired, upload.array('files', 9), as
       .filter(Boolean);
     return res.json({ urls });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -4917,7 +4940,7 @@ app.post('/api/uploads/employee-idcard', authRequired, upload.fields([{ name: 'f
     const backUrl = back?.filename ? `/uploads/${back.filename}` : '';
     return res.json({ frontUrl, backUrl });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -4932,7 +4955,7 @@ app.post('/api/uploads/points-evidence', authRequired, upload.array('files', 6),
       .filter(Boolean);
     return res.json({ urls });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -4947,7 +4970,7 @@ app.post('/api/uploads/promotion-evidence', authRequired, upload.array('files', 
       .filter(Boolean);
     return res.json({ urls });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -4985,7 +5008,7 @@ app.get('/api/employees/:empId/attachments', authRequired, async (req, res) => {
     const r = await pool.query('select * from employee_attachments where employee_id=$1 order by created_at desc', [empId]);
     return res.json(r.rows);
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -5009,7 +5032,7 @@ app.post('/api/employees/:empId/attachments', authRequired, upload.single('file'
     );
     return res.json(r.rows[0]);
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -5032,7 +5055,7 @@ app.delete('/api/employees/:empId/attachments/:attachId', authRequired, async (r
     } catch (e2) {}
     return res.json({ ok: true });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -5547,34 +5570,38 @@ async function captureHrmsStateSnapshotToDb(opts = {}) {
 }
 
 /**
- * 双写失败时仅通知飞书 admin（不推送给总部营运；与 agents 失败告警口径一致）。
- * 当前已接入告警的范围（遗漏新增双写时请同步调用本函数）：
- * - dualWriteStateToDB 全量块（employees / leave / reward_punishment / notifications）
- * - hrms_payroll_domain（异步薪资域、PUT /api/state）
- * - hrms_leave_records / hrms_reward_punishment_records / point_records（审批流双写）
- * - employee_attendance_records（打卡写入、打卡确认同步镜像）
- * - employees（PUT /api/state 单条与批处理）
- * - daily_reports（营业日报：hrms_state 与 PostgreSQL 表同步失败时告警，避免 BI/绩效读库缺数）
- * - sales_raw（Excel 上传 / 目录 SALES_RAW_IMPORT_DIR 自动入库失败或抛错）
- * - 飞书表格→PG（feishu-sync 定时按表失败；Webhook bitable 异步处理失败；手动多维表同步失败）
- * - hrms_state 定时快照写入 hrms_state_snapshots（captureHrmsStateSnapshotToDb）
+ * 双写失败告警（系统底线）：任何 hrms_state ↔ PostgreSQL 不同步风险必须调用本函数。
+ * - 先入运维日志（console.error，便于采集/巡检），再尽最大努力发飞书。
+ * - 飞书接收人：feishu_users 中 admin / hq_manager（及常见中文管理员别名），避免仅有英文 admin 导致漏告。
+ *
+ * 已接入范围见仓库内对此函数的引用（遗漏新增双写时请同步调用）。
  */
 async function notifyAdminsDualWriteFailure(scopeLabel, err) {
+  const reason = String(err?.message || err || 'unknown').slice(0, 500);
+  const timeStr = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' }).replace('T', ' ');
+  console.error('[dual-write][CRITICAL]', scopeLabel, '|', reason, '|', timeStr, 'Asia/Shanghai');
+
   try {
     const r = await pool.query(
-      `SELECT open_id FROM feishu_users
-       WHERE registered = true AND open_id IS NOT NULL
-         AND role = 'admin'
+      `SELECT DISTINCT open_id
+       FROM feishu_users
+       WHERE registered = true
+         AND open_id IS NOT NULL
          AND open_id NOT LIKE '%probe%'
-       LIMIT 20`
+         AND (
+           TRIM(LOWER(role)) IN ('admin', 'hq_manager')
+           OR TRIM(role) IN ('管理员', '系统管理员', '总部经理', '总部营运')
+         )
+       LIMIT 35`
     );
     const rows = r.rows || [];
     if (!rows.length) {
-      console.warn('[dual-write] no admin open_id for Feishu alert:', scopeLabel);
+      console.error(
+        '[dual-write][CRITICAL] 双写失败但无可投递飞书账号（请检查 feishu_users.registered / role / open_id）。范围:',
+        scopeLabel
+      );
       return;
     }
-    const reason = String(err?.message || err || 'unknown').slice(0, 500);
-    const timeStr = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' }).replace('T', ' ');
     const msg =
       `【HRMS 双写失败告警】\n范围：${scopeLabel}\n原因：${reason}\n时间：${timeStr}（上海）\n` +
       `说明：营业日报若 PG 失败，接口会返回 **502（pg_sync_failed）** 且 **不会** 写入 hrms_state，避免「前端已提交、库表无行」。\n` +
@@ -5586,10 +5613,10 @@ async function notifyAdminsDualWriteFailure(scopeLabel, err) {
     const settled = await Promise.all(sends);
     const failed = settled.filter((x) => x && x.err);
     if (failed.length) {
-      console.error('[dual-write] some Feishu admin alerts failed:', failed.length, failed[0]?.err);
+      console.error('[dual-write][CRITICAL] 部分飞书告警发送失败:', failed.length, failed[0]?.err);
     }
   } catch (e) {
-    console.error('[dual-write] notify admins failed:', e?.message);
+    console.error('[dual-write][CRITICAL] notifyAdminsDualWriteFailure 自身异常:', scopeLabel, e?.message);
   }
 }
 
@@ -7019,7 +7046,7 @@ app.post('/api/gm-mailbox', authRequired, async (req, res) => {
     await saveSharedState(state);
     return res.json({ ok: true, id: item.id });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -7050,6 +7077,12 @@ function isHq(role) {
 function canAccessAnalyticsReports(role) {
   const r = String(role || '').trim();
   return r === 'admin' || r === 'hq_manager' || r === 'store_manager' || r === 'hr_manager' || r === 'store_production_manager';
+}
+
+/** 出勤表台账：仅管理员 / 总部营运 / 总部人事（与 JWT 中文/别名角色映射一致） */
+function canAccessDailyAttendanceRegister(role) {
+  const r = normalizeRoleForJwt(role);
+  return r === 'admin' || r === 'hq_manager' || r === 'hr_manager';
 }
 
 function canAccessBusinessReports(role) {
@@ -7400,6 +7433,17 @@ async function upsertDailyReportPgFromStateReport(dr) {
     ]
   );
   await recalcWechatMonthTotalsForStoreMonth(pool, store, date);
+  try {
+    await reconcileDailyReportAttendanceRegister(pool, {
+      store,
+      brand,
+      reportDate: date,
+      staffPayload: payload?.staff || {},
+      laborTotal: laborTotalVal
+    });
+  } catch (re) {
+    console.warn('[daily_report_attendance_register]', store, date, re?.message);
+  }
 }
 
 // 本月包房累计（仅洪潮品牌）
@@ -7561,8 +7605,18 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
     const stSettings = state0.settings && typeof state0.settings === 'object' ? state0.settings : {};
     const monthlyTargets = Array.isArray(stSettings.monthlyTargets) ? stSettings.monthlyTargets : [];
     
-    // 从数据库获取点评星级（必须用参数化查询：state 中 date 可能是 Date/ISO 字符串，拼进 SQL 会导致 invalid input syntax for type date；门店名含 ' 也会打断 IN 子句）
+    // 从数据库获取点评星级（参数化查询，防 SQL 注入）
     if (items.length > 0) {
+      const stores = items.map(item => item.store);
+      const dates = items.map(item => item.date);
+      const dbResult = await pool.query(`
+        SELECT store, date, dianping_rating, new_wechat_members, wechat_month_total, operational_anomaly_note
+        FROM daily_reports
+        WHERE (store, date) IN (
+          SELECT unnest($1::text[]), unnest($2::text[])
+        )
+      `, [stores, dates]);
+
       const dbMap = new Map();
       try {
         const pairStores = [];
@@ -7647,8 +7701,7 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
     }
     return res.json({ items, wechat_month_base });
   } catch (e) {
-    console.error('[daily-reports GET] fatal:', e?.stack || e?.message || e);
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -7824,9 +7877,21 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
           holidaySwitch
         ]);
         await recalcWechatMonthTotalsForStoreMonth(pool, store, date);
+        try {
+          await reconcileDailyReportAttendanceRegister(pool, {
+            store,
+            brand,
+            reportDate: date,
+            staffPayload: payload?.staff || {},
+            laborTotal: laborTotalVal
+          });
+        } catch (re) {
+          console.warn('[daily_report_attendance_register]', store, date, re?.message);
+        }
       } catch (e) {
         lastPgDualWriteError = lastPgDualWriteError || e;
         console.error('[daily_report_update]', e.message);
+        // 底线：PG 双写失败必须通知管理员（飞书 + CRITICAL 日志），与返回 502 并行
         void notifyAdminsDualWriteFailure(`daily_reports（营业日报 PG 同步·更新 ${store} ${date}）`, e);
       }
       }
@@ -7964,18 +8029,23 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
           weather, segments, discountDine, discountDelivery, categories, deliveryDetail, badReviewsDianping, staff, scheduleNextDay, photos,
           holidaySwitch
         ]);
+        await recalcWechatMonthTotalsForStoreMonth(pool, store, date);
+        try {
+          await reconcileDailyReportAttendanceRegister(pool, {
+            store,
+            brand: String(payload?.brand || '').trim(),
+            reportDate: date,
+            staffPayload: payload?.staff || {},
+            laborTotal: laborTotalVal
+          });
+        } catch (re) {
+          console.warn('[daily_report_attendance_register]', store, date, re?.message);
+        }
       } catch (e) {
         lastPgDualWriteError = lastPgDualWriteError || e;
         console.error('[daily_report_insert]', e.message);
+        // 底线：PG 双写失败必须通知管理员（飞书 + CRITICAL 日志），与返回 502 并行
         void notifyAdminsDualWriteFailure(`daily_reports（营业日报 PG 同步·新建 ${store} ${date}）`, e);
-      }
-
-      try {
-        await recalcWechatMonthTotalsForStoreMonth(pool, store, date);
-      } catch (e) {
-        lastPgDualWriteError = lastPgDualWriteError || e;
-        console.error('[daily_report_insert_month]', e.message);
-        void notifyAdminsDualWriteFailure(`daily_reports（企微月累计重算 ${store} ${date}）`, e);
       }
       }
 
@@ -8061,7 +8131,7 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
     }
     return res.json({ item });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -8092,7 +8162,7 @@ app.delete('/api/daily-reports', authRequired, async (req, res) => {
     }
     return res.json({ ok: true });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -8135,7 +8205,7 @@ app.post('/api/admin/sync-submitted-daily-reports-pg', authRequired, async (req,
       results
     });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -9536,7 +9606,7 @@ app.get('/api/ops/tasks', authRequired, async (req, res) => {
     );
     return res.json({ items: r.rows || [] });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -9555,7 +9625,7 @@ app.post('/api/ops/tasks/:id/read', authRequired, async (req, res) => {
     );
     return res.json({ ok: true });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -9568,7 +9638,7 @@ app.post('/api/uploads/agent-task-evidence', authRequired, upload.array('files',
     const urls = files.map(f => (f && f.filename ? `/uploads/${f.filename}` : '')).filter(Boolean);
     return res.json({ urls });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -9581,7 +9651,7 @@ app.post('/api/uploads/ops-task-evidence', authRequired, upload.array('files', 9
     const urls = files.map(f => (f && f.filename ? `/uploads/${f.filename}` : '')).filter(Boolean);
     return res.json({ urls });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -9642,7 +9712,7 @@ app.post('/api/ops/tasks/:id/complete', authRequired, async (req, res) => {
 
     return res.json({ item: r.rows?.[0] || null });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -9812,7 +9882,7 @@ app.get('/api/reports/business', authRequired, async (req, res) => {
 
     return res.json({ start, end, store: store || '', rows, total, monthlyTargets, budgetInfo, budgetExecution });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -10202,7 +10272,7 @@ app.get('/api/reports/turnover', authRequired, async (req, res) => {
       storeBreakdown
     });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -10330,7 +10400,7 @@ app.get('/api/reports/leave-owed', authRequired, async (req, res) => {
       adjustments: monthAdjustments
     });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -10394,7 +10464,79 @@ app.get('/api/reports/attendance', authRequired, async (req, res) => {
 
     return res.json({ start, end, store: store || '', rows, checkinDetails });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
+  }
+});
+
+app.get('/api/reports/daily-attendance-register', authRequired, async (req, res) => {
+  const username = String(req.user?.username || '').trim();
+  const role = String(req.user?.role || '').trim();
+  if (!username) return res.status(400).json({ error: 'missing_user' });
+  if (!canAccessDailyAttendanceRegister(role)) return res.status(403).json({ error: 'forbidden' });
+
+  const start = safeDateOnly(req.query?.start);
+  const end = safeDateOnly(req.query?.end);
+  if (!start || !end) return res.status(400).json({ error: 'missing_range' });
+  const storeQ = String(req.query?.store || '').trim();
+  const employeeQ = String(req.query?.employee || '').trim();
+
+  try {
+    const args = [start, end];
+    let sql = `
+      SELECT store, brand, report_date, labor_total,
+             front_person_days, kitchen_person_days, rest_person_days,
+             staff_snapshot, line_details, overall_status, anomaly_count,
+             created_at, updated_at
+      FROM daily_report_attendance_register
+      WHERE report_date >= $1::date AND report_date <= $2::date`;
+    if (storeQ) {
+      sql += ` AND TRIM(store) = TRIM($3::text)`;
+      args.push(storeQ);
+    }
+    sql += ` ORDER BY report_date DESC, store ASC`;
+    const r = await pool.query(sql, args);
+    let rows = r.rows || [];
+    let employeeSummary = null;
+    if (employeeQ) {
+      employeeSummary = summarizeDailyRegisterForEmployee(rows, employeeQ);
+      rows = filterDailyRegisterRowsByEmployee(rows, employeeQ);
+    }
+    return res.json({
+      start,
+      end,
+      store: storeQ || '',
+      employee: employeeQ,
+      employee_summary: employeeSummary,
+      rows
+    });
+  } catch (e) {
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
+  }
+});
+
+/** 管理端：从 daily_reports 补缺或重算出勤台账（body.refreshExisting=true 时覆盖已有台账行） */
+app.post('/api/admin/reconcile-daily-attendance-register-from-pg', authRequired, async (req, res) => {
+  const role = String(req.user?.role || '').trim();
+  if (!canAccessDailyAttendanceRegister(role)) return res.status(403).json({ error: 'forbidden' });
+  if (!pool) return res.status(503).json({ error: 'database_unavailable' });
+
+  const maxRows = Math.min(5000, Math.max(1, Number(req.body?.maxRows) || 1500));
+  const start = safeDateOnly(req.body?.start);
+  const end = safeDateOnly(req.body?.end);
+  const store = String(req.body?.store || '').trim();
+
+  try {
+    const refreshExisting = !!req.body?.refreshExisting;
+    const out = await backfillDailyAttendanceRegisterMissing(pool, {
+      maxRows,
+      start,
+      end,
+      store,
+      refreshExisting
+    });
+    return res.json({ ok: true, refreshExisting, ...out });
+  } catch (e) {
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -10684,7 +10826,7 @@ app.get('/api/reports/payroll', authRequired, async (req, res) => {
     const totalAmount = rows.reduce((s, x) => s + clampNum(x.amount, 0), 0);
     return res.json({ month, store: store || '', monthDays, workDaysPerMonth, audit, rows, totalAmount });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -10713,7 +10855,7 @@ app.post('/api/reports/payroll/audit', authRequired, async (req, res) => {
     await mergeSharedStateFields({ payrollAudits: auditMap });
     return res.json({ ok: true, audit: auditMap[auditKey] });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -10753,7 +10895,7 @@ app.post('/api/reports/payroll/adjustment', authRequired, async (req, res) => {
     await mergeSharedStateFields({ payrollAdjustments: { [key]: item } });
     return res.json({ ok: true, item });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -10851,7 +10993,7 @@ app.get('/api/reports/salary-changes', authRequired, async (req, res) => {
     rows = rows.slice(0, limit);
     return res.json({ items: rows });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -10923,7 +11065,7 @@ app.get('/api/reports/promotion-records', authRequired, async (req, res) => {
     items.sort((a, b) => String(b?.approvedAt || '').localeCompare(String(a?.approvedAt || '')));
     return res.json({ items });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -10963,7 +11105,7 @@ app.get('/api/reports/inventory-forecast/history', authRequired, async (req, res
       items
     });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -10988,7 +11130,7 @@ app.delete('/api/reports/inventory-forecast/history/clear', authRequired, async 
     // 严禁在此删除 sales_raw：无 store 参数时曾误执行 DELETE FROM sales_raw 全表，导致生产数据被清空。
     return res.json({ ok: true, cleared: prevCount - afterCount, remaining: afterCount, store: qStore || '(all)' });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -11026,7 +11168,7 @@ app.post('/api/reports/inventory-forecast/history/batch', authRequired, async (r
       evaluated: ret.evaluated
     });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -11266,7 +11408,7 @@ app.post('/api/reports/inventory-forecast/history/upload-file', authRequired, up
       evaluated
     });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   } finally {
     try {
       const p = String(req.file?.path || '').trim();
@@ -11410,7 +11552,7 @@ app.post('/api/reports/sales-raw/upload', authRequired, upload.single('file'), a
       `sales_raw（Excel 上传入库异常·${String(req.body?.store || '').trim() || '?'}）`,
       e
     );
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e).slice(0, 300) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error'.slice(0, 300) });
   } finally {
     try { if (req.file?.path) fs.unlinkSync(req.file.path); } catch (e) {}
   }
@@ -11425,7 +11567,7 @@ app.post('/api/admin/sales-raw/run-folder-import', authRequired, async (req, res
     return res.json(r);
   } catch (e) {
     void notifyAdminsDualWriteFailure('sales_raw（管理员触发目录导入抛错）', e);
-    return res.status(500).json({ error: String(e?.message || e) });
+    return res.status(500).json({ error: 'internal_error' });
   }
 });
 
@@ -11458,7 +11600,7 @@ app.get('/api/reports/sales-raw/dish-aliases', authRequired, async (req, res) =>
     );
     return res.json({ items: r.rows || [] });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -11483,7 +11625,7 @@ app.post('/api/reports/sales-raw/dish-aliases', authRequired, async (req, res) =
     );
     return res.json({ ok: true, item: r.rows?.[0] || null });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -11530,7 +11672,7 @@ app.put('/api/reports/sales-raw/dish-aliases/:id', authRequired, async (req, res
     if (!r.rows?.length) return res.status(404).json({ error: 'not_found' });
     return res.json({ ok: true, item: r.rows[0] });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -11552,7 +11694,7 @@ app.delete('/api/reports/sales-raw/dish-aliases/:id', authRequired, async (req, 
     if (!r.rows?.length) return res.status(404).json({ error: 'not_found' });
     return res.json({ ok: true });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -11574,7 +11716,7 @@ app.get('/api/reports/inventory-forecast/core-products', authRequired, async (re
     const items = all.filter(x => String(x?.store || '').trim() === store);
     return res.json({ store, items });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -11617,7 +11759,7 @@ app.post('/api/reports/inventory-forecast/core-products', authRequired, async (r
     await saveSharedState({ ...state0, forecastCoreProducts: all.slice(0, 2000) });
     return res.json({ ok: true, item });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -11639,7 +11781,7 @@ app.delete('/api/reports/inventory-forecast/core-products/:id', authRequired, as
     await saveSharedState({ ...state0, forecastCoreProducts: all });
     return res.json({ ok: true });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -11661,7 +11803,7 @@ app.get('/api/reports/inventory-forecast/product-aliases', authRequired, async (
     items.sort((a, b) => String(a?.canonical || '').localeCompare(String(b?.canonical || ''), 'zh-Hans-CN'));
     return res.json({ brandId: scope.brandId, brandName: scope.brandName, items });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -11719,7 +11861,7 @@ app.post('/api/reports/inventory-forecast/product-aliases', authRequired, async 
     await saveSharedState({ ...state0, forecastProductAliasRules: all.slice(0, 4000) });
     return res.json({ ok: true, item });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -11778,7 +11920,7 @@ app.put('/api/reports/inventory-forecast/product-aliases/:id', authRequired, asy
     await saveSharedState({ ...state0, forecastProductAliasRules: all });
     return res.json({ ok: true, item: all[idx] });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -11798,7 +11940,7 @@ app.delete('/api/reports/inventory-forecast/product-aliases/:id', authRequired, 
     await saveSharedState({ ...state0, forecastProductAliasRules: all });
     return res.json({ ok: true });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -11882,7 +12024,7 @@ app.get('/api/reports/inventory-forecast/core-products/sales', authRequired, asy
     items.sort((a, b) => b.achievementRate - a.achievementRate);
     return res.json({ store, startDate, endDate, dayCount, items });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -11981,7 +12123,7 @@ app.get('/api/reports/inventory-forecast/analytics', authRequired, async (req, r
       coreTargetStats
     });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -12041,7 +12183,7 @@ app.post('/api/reports/inventory-forecast/revenue-estimate', authRequired, async
     const estimate = estimateRevenueByHistory(historyRows, target, store);
     return res.json({ store, target, estimate });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -12109,7 +12251,7 @@ app.get('/api/reports/inventory-forecast/gross-profit-profiles', authRequired, a
     });
     return res.json({ store: scope.store || '', brandId: scope.brandId, brandName: scope.brandName, bizType: qBizType || '', items: enriched });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -12196,7 +12338,7 @@ app.post('/api/reports/inventory-forecast/gross-profit-profiles', authRequired, 
     await saveSharedState({ ...state0, forecastGrossProfitProfiles: nextItems });
     return res.json({ ok: true, brandId: scope.brandId, brandName: scope.brandName, count: normalizedItems.length, total: nextItems.filter((x) => normalizeBrandId(x?.brandId || resolveStoreBrandContext(state0, String(x?.store || '').trim()).brandId) === scope.brandId).length });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -12259,7 +12401,7 @@ app.put('/api/reports/inventory-forecast/gross-profit-profiles/:id', authRequire
     await saveSharedState({ ...state0, forecastGrossProfitProfiles: all });
     return res.json({ ok: true, item: all[idx] });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -12281,7 +12423,7 @@ app.delete('/api/reports/inventory-forecast/gross-profit-profiles/:id', authRequ
     await saveSharedState({ ...state0, forecastGrossProfitProfiles: all });
     return res.json({ ok: true });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -12345,7 +12487,7 @@ app.post('/api/reports/inventory-forecast/gross-margin-estimate', authRequired, 
       estimate
     });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -12380,7 +12522,7 @@ app.get('/api/reports/inventory-forecast/accuracy', authRequired, async (req, re
     const summary = summarizeForecastAccuracyRows(items);
     return res.json({ store, bizType: bizType || '', slot: slot || '', summary, items });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -12581,7 +12723,7 @@ app.post('/api/reports/inventory-forecast/predict', authRequired, async (req, re
       generatedAt: now
     });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -12604,7 +12746,7 @@ app.get('/api/points/rules', authRequired, async (req, res) => {
     items = dedupePointRulesApiItems(items);
     return res.json({ store: store || '', items });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -12647,7 +12789,7 @@ app.post('/api/points/rules', authRequired, async (req, res) => {
     await saveSharedState({ ...state0, pointRules: list });
     return res.json({ ok: true, item });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -12694,7 +12836,7 @@ app.put('/api/points/rules/:id', authRequired, async (req, res) => {
     await saveSharedState({ ...state0, pointRules: list });
     return res.json({ ok: true, item: merged });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -12712,7 +12854,7 @@ app.get('/api/points/my', authRequired, async (req, res) => {
     const monthAmount = Number((monthPoints * 0.5).toFixed(2));
     return res.json({ month, monthPoints, monthAmount, items: mine });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -13158,7 +13300,7 @@ async function runLeaveCumulativeCloseSnapshotForClosedMonth(closedMonth) {
     // 必须用字段级原子合并：saveSharedState 全量写回会与 mergeSharedStateFields（如人工累计假期）并发竞态，导致覆盖丢失
     await mergeSharedStateFields({ leaveCumulativeCloseSnapshots: snaps });
   } catch (e) {
-    return { ok: false, error: String(e?.message || e), closedMonth: m };
+    return { ok: false, error: 'internal_error', closedMonth: m };
   }
   return { ok: true, closedMonth: m, nextMonth: nextM, employees: n };
 }
@@ -13826,7 +13968,7 @@ app.get('/api/state', authRequired, async (req, res) => {
     payload = await applyStatePeopleVisibilityForRole(payload, role, uname, repaired);
     return res.json({ data: payload });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -13846,7 +13988,7 @@ app.get('/api/admin/employee-password/:username', authRequired, async (req, res)
     const password = String(emp?.password ?? usr?.password ?? '').trim();
     return res.json({ username: String(req.params.username || '').trim(), password });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -14099,7 +14241,7 @@ app.put('/api/state', authRequired, async (req, res) => {
     });
     return res.json({ ok: true });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -14127,7 +14269,7 @@ app.get('/api/promotion/tracks', authRequired, async (req, res) => {
     items.sort((a, b) => String(b?.updatedAt || '').localeCompare(String(a?.updatedAt || '')));
     return res.json({ items });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -14180,7 +14322,7 @@ app.post('/api/promotion/tracks/:id/sessions/:sessionId/complete', authRequired,
     await saveSharedState(nextState);
     return res.json({ ok: true, track: tracks[idx] });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -14236,7 +14378,7 @@ app.post('/api/promotion/tracks/:id/assessment', authRequired, async (req, res) 
     await saveSharedState(nextState);
     return res.json({ ok: true, track: tracks[idx] });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -14280,7 +14422,7 @@ app.get('/api/agents/bitable-sync', authRequired, async (req, res) => {
     }));
     return res.json({ items });
   } catch (e) {
-    return res.status(500).json({ error: String(e?.message || e) });
+    return res.status(500).json({ error: 'internal_error' });
   }
 });
 
@@ -14295,7 +14437,7 @@ async function fetchAgentsServiceHealthSnapshot() {
     }
     return r.data;
   } catch (e) {
-    return { ok: false, error: String(e?.message || e) };
+    return { ok: false, error: 'internal_error' };
   }
 }
 
@@ -14342,7 +14484,7 @@ app.get('/api/chairman/config', authRequired, async (req, res) => {
     }
     return res.json(r.data || { ok: true, config: {} });
   } catch (e) {
-    return res.status(502).json({ error: String(e?.message || e) });
+    return res.status(502).json({ error: 'internal_error' });
   }
 });
 
@@ -14364,7 +14506,7 @@ app.post('/api/chairman/config', authRequired, async (req, res) => {
     }
     return res.json(r.data || { ok: true });
   } catch (e) {
-    return res.status(502).json({ error: String(e?.message || e) });
+    return res.status(502).json({ error: 'internal_error' });
   }
 });
 
@@ -14389,7 +14531,7 @@ async function proxyAgentTaskBoard(req, res, method, pathSuffix, body) {
     if (r.status < 200 || r.status >= 300) return res.status(r.status || 502).json(r.data || { error: 'agent_task_board_proxy_failed' });
     return res.json(r.data || { ok: true });
   } catch (e) {
-    return res.status(502).json({ error: String(e?.message || e) });
+    return res.status(502).json({ error: 'internal_error' });
   }
 }
 
@@ -14492,7 +14634,7 @@ async function buildRootDiskHealthInfo() {
       message
     };
   } catch (e) {
-    return { path: '/', error: String(e?.message || e) };
+    return { path: '/', error: 'internal_error' };
   }
 }
 
@@ -14538,7 +14680,7 @@ app.get('/api/health', async (req, res) => {
     try {
       agentsService = await fetchAgentsServiceHealthSnapshot();
     } catch (e) {
-      agentsService = { ok: false, error: String(e?.message || e) };
+      agentsService = { ok: false, error: 'internal_error' };
     }
     const diskInfo = await buildRootDiskHealthInfo();
     maybeNotifyDiskPressureByLark(diskInfo).catch(() => {});
@@ -14570,7 +14712,7 @@ app.get('/api/health', async (req, res) => {
     if (agentsService != null) payload.agentsService = agentsService;
     return res.json(payload);
   } catch (e) {
-    return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    return res.status(500).json({ ok: false, error: 'internal_error' });
   }
 });
 
@@ -14621,7 +14763,7 @@ app.get('/api/version', async (req, res) => {
 
     return res.json(out);
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -14652,7 +14794,7 @@ app.get('/api/exam-results', authRequired, async (req, res) => {
     );
     return res.json({ items: r.rows || [] });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -14695,7 +14837,7 @@ app.post('/api/exam-results', authRequired, async (req, res) => {
     );
     return res.json({ item: r.rows?.[0] || null });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -14795,7 +14937,7 @@ app.get('/api/knowledge/:id/file', authRequiredOrQueryToken, async (req, res) =>
     });
     return nodeStream.pipe(res);
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -14846,7 +14988,7 @@ app.put('/api/stores/:id', authRequired, async (req, res) => {
     await saveSharedState(nextState);
     return res.json({ item: stores[idx] });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -15073,7 +15215,7 @@ app.post('/api/auth/change-password', authRequired, async (req, res) => {
     await saveSharedState(state);
     return res.json({ ok: true, mode: 'state' });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -15112,7 +15254,7 @@ app.get('/api/stores', authRequired, async (req, res) => {
     return res.json({ items });
   } catch (e) {
     console.error('[/api/stores] Error:', e?.message || e);
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -15156,7 +15298,7 @@ app.post('/api/stores', authRequired, async (req, res) => {
     await saveSharedState(nextState);
     return res.json({ item });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -15166,7 +15308,7 @@ app.get('/api/brands', authRequired, async (req, res) => {
     const items = getBrandsFromState(state0);
     return res.json({ items });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -15186,7 +15328,7 @@ app.post('/api/brands', authRequired, async (req, res) => {
     await saveSharedState({ ...state0, brands });
     return res.json({ ok: true, item });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -15228,7 +15370,7 @@ app.put('/api/brands/:id', authRequired, async (req, res) => {
     await saveSharedState({ ...state0, brands, stores: nextStores });
     return res.json({ ok: true, item: brands[idx] });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -15340,7 +15482,7 @@ app.get('/api/knowledge', authRequired, async (req, res) => {
     );
     return res.json({ items: rows });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -15400,7 +15542,7 @@ app.delete('/api/knowledge/:id', authRequired, async (req, res) => {
     return res.json({ ok: true });
   } catch (e) {
     console.error('DELETE /api/knowledge/:id error:', e);
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -15456,7 +15598,7 @@ app.put('/api/knowledge/:id', authRequired, async (req, res) => {
     return res.json({ item: row });
   } catch (e) {
     console.error('PUT /api/knowledge/:id error:', e);
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -15542,7 +15684,7 @@ app.post('/api/knowledge/batch', authRequired, knowledgeUpload.array('files', 10
         }
       })(r.rows?.[0]?.id, String(f.path || ''), String(normalizedOriginalName || ''), String(f.mimetype || ''));
     } catch (e) {
-      errors.push({ file: normalizedOriginalName || String(f.originalname || ''), error: String(e?.message || e) });
+      errors.push({ file: normalizedOriginalName || String(f.originalname || ''), error: 'internal_error' });
     }
   }
 
@@ -15639,7 +15781,7 @@ app.post('/api/knowledge/presign', authRequired, async (req, res) => {
       size
     });
   } catch (e) {
-    return res.status(500).json({ error: 'presign_failed', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'presign_failed', message: 'internal_error' });
   }
 });
 
@@ -15674,7 +15816,7 @@ app.post('/api/knowledge/direct', authRequired, async (req, res) => {
     );
     return res.json({ item: r.rows?.[0] || null });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -15712,7 +15854,7 @@ app.post('/api/knowledge', authRequired, knowledgeUpload.single('file'), async (
     );
     inserted = r.rows?.[0] || null;
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 
   // Return immediately so frontend can show success.
@@ -17091,7 +17233,7 @@ app.listen(PORT, HOST, async () => {
     }
 
     // 020-024: HRMS 全量字段 + 独立表迁移
-    for (const name of ['020_daily_reports_all_fields', '021_hrms_leave_records', '022_hrms_reward_punishment_records', '023_approval_requests_migration', '024_employees_table_migration', '025_daily_reports_holiday_switch', '027_backfill_hrms_leave_from_approvals']) {
+    for (const name of ['020_daily_reports_all_fields', '021_hrms_leave_records', '022_hrms_reward_punishment_records', '023_approval_requests_migration', '024_employees_table_migration', '025_daily_reports_holiday_switch', '027_backfill_hrms_leave_from_approvals', '030_daily_report_attendance_register']) {
       try {
         const mig = await import('fs').then(f => f.promises.readFile(new URL(`./migrations/${name}.sql`, import.meta.url), 'utf8'));
         await pool.query(mig);
@@ -17626,6 +17768,16 @@ app.listen(PORT, HOST, async () => {
       }
     } catch (e) {
       console.error('[startup] 营业日报明细回填失败（非致命）:', e?.message);
+    }
+
+    // 补缺：daily_reports 已有但 daily_report_attendance_register 缺失（功能上线前提交的双写）
+    try {
+      const bf = await backfillDailyAttendanceRegisterMissing(pool, { maxRows: 2500 });
+      if (bf.reconciled > 0) {
+        console.log(`[startup] 出勤台账补缺：扫描 ${bf.scanned} 条，写入 ${bf.reconciled} 条`);
+      }
+    } catch (e) {
+      console.error('[startup] 出勤台账补缺失败（非致命）:', e?.message);
     }
 
     await dedupeGlobalSocialMediaPointRules();
@@ -18199,7 +18351,7 @@ app.get('/api/checkin/today', authRequired, async (req, res) => {
     );
     return res.json({ records: r.rows || [] });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -18276,7 +18428,7 @@ app.get('/api/checkin/records', authRequired, async (req, res) => {
     }));
     return res.json({ records: rows });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -18302,7 +18454,7 @@ app.post('/api/checkin/:id/confirm', authRequired, async (req, res) => {
     });
     return res.json({ record: updated });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -18377,7 +18529,7 @@ app.get('/api/checkin/summary', authRequired, async (req, res) => {
 
     return res.json({ records: rows, leaveBalances });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -18602,7 +18754,7 @@ app.get('/api/profile/attendance-overview', authRequired, async (req, res) => {
       } : null
     });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -18703,7 +18855,7 @@ app.post('/api/checkin/leave-balance', authRequired, async (req, res) => {
     await mergeSharedStateFields(nextPatches, { leaveBalanceAdjustments: 'id' });
     return res.json({ ok: true, key, value: Number(value), adjustment: rec });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -18793,7 +18945,7 @@ app.post('/api/checkin/monthly-confirm', authRequired, async (req, res) => {
 
     return res.json({ ok: true, confirmation });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -18805,7 +18957,7 @@ app.get('/api/checkin/monthly-confirm', authRequired, async (req, res) => {
     const filtered = month ? confirmations.filter(c => c.month === month) : confirmations;
     return res.json({ confirmations: filtered });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -18827,7 +18979,7 @@ app.post('/api/stores/:name/location', authRequired, async (req, res) => {
     await saveSharedState({ ...state, stores });
     return res.json({ store: stores[idx] });
   } catch (e) {
-    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -19337,7 +19489,7 @@ app.post('/api/birthday/check', authRequired, async (req, res) => {
     res.json({ ok: true, date: todayStr, isEndOfMonth: isEndOfMonth(now), results });
   } catch (e) {
     console.error('POST /api/birthday/check error:', e);
-    res.status(500).json({ error: String(e?.message || e) });
+    res.status(500).json({ error: 'internal_error' });
   }
 });
 
@@ -19399,7 +19551,7 @@ app.get('/api/birthday/upcoming', authRequired, async (req, res) => {
     res.json({ ok: true, upcoming: results });
   } catch (e) {
     console.error('GET /api/birthday/upcoming error:', e);
-    res.status(500).json({ error: String(e?.message || e) });
+    res.status(500).json({ error: 'internal_error' });
   }
 });
 
@@ -19469,7 +19621,7 @@ app.post('/api/attention-scores', authRequired, async (req, res) => {
     res.json({ ok: true, id, score });
   } catch (e) {
     console.error('POST /api/attention-scores error:', e);
-    res.status(500).json({ error: String(e?.message || e) });
+    res.status(500).json({ error: 'internal_error' });
   }
 });
 
@@ -19508,7 +19660,7 @@ app.get('/api/attention-scores', authRequired, async (req, res) => {
     res.json({ scores: r.rows || [] });
   } catch (e) {
     console.error('GET /api/attention-scores error:', e);
-    res.status(500).json({ error: String(e?.message || e) });
+    res.status(500).json({ error: 'internal_error' });
   }
 });
 
@@ -19532,7 +19684,7 @@ app.get('/api/attention-scores/summary', authRequired, async (req, res) => {
     res.json({ summary: r.rows || [] });
   } catch (e) {
     console.error('GET /api/attention-scores/summary error:', e);
-    res.status(500).json({ error: String(e?.message || e) });
+    res.status(500).json({ error: 'internal_error' });
   }
 });
 
@@ -19624,7 +19776,7 @@ app.get('/api/admin/usage-weekly', authRequired, async (req, res) => {
     res.json({ periodStart, periodEnd, data: result.rows });
   } catch (e) {
     console.error('GET /api/admin/usage-weekly error:', e);
-    res.status(500).json({ error: String(e?.message || e) });
+    res.status(500).json({ error: 'internal_error' });
   }
 });
 

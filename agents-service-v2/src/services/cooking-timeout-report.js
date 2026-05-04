@@ -91,46 +91,158 @@ function calcDishStats(records) {
     for (const d of data.timeoutDays) {
       dowSet.add(WEEKDAY_ZH[new Date(d + 'T12:00:00+08:00').getDay()]);
     }
-    const dows = [...dowSet].join('、');
+    const dows = [...dowSet].join('、') || '—';
 
-    results.push({ name, timeoutRatio, freq, dows });
+    results.push({ name, timeoutRatio, freq, dows, totalProd, totalTimeout });
   }
 
   results.sort((a, b) => Number(b.timeoutRatio) - Number(a.timeoutRatio));
   return results;
 }
 
+/** lark_md 表格单元格：去掉换行并替换 | 避免表格错位 */
+function escapeMdCell(s) {
+  return String(s || '').trim().replace(/\|/g, '｜').replace(/[\r\n]+/g, ' ');
+}
+
+/** 按超时占比做醒目分级（飞书内一眼区分轻重） */
+function riskBadge(ratioStr) {
+  const n = Number(ratioStr);
+  if (!Number.isFinite(n)) return '⚪';
+  if (n >= 80) return '🔴';
+  if (n >= 40) return '🟠';
+  return '🟡';
+}
+
 function buildTimeoutCard(title, periodLabel, dateStart, dateEnd, dishStats) {
   const headerContent = title + ' · ' + STORE_NAME;
-  const periodLine = '📅 ' + periodLabel + '：' + dateStart + ' ~ ' + dateEnd;
 
-  let bodyLines;
   if (!dishStats.length) {
-    bodyLines = ['✅ 所有菜品出餐正常，无超时情况'];
-  } else {
-    bodyLines = dishStats.map(d =>
-      d.name + '  超时占比' + d.timeoutRatio + '%  超时频率' + d.freq + '%  集中在：' + d.dows
-    );
+    const content =
+      '### 📅 ' +
+      periodLabel +
+      '\n**' +
+      dateStart +
+      '** ~ **' +
+      dateEnd +
+      '**\n\n✅ **所有菜品出餐正常**，统计周期内多维表无制作超时记录。';
+    return {
+      config: { wide_screen_mode: true },
+      header: {
+        title: { tag: 'plain_text', content: headerContent },
+        template: 'green'
+      },
+      elements: [
+        { tag: 'div', text: { tag: 'lark_md', content } },
+        { tag: 'hr' },
+        {
+          tag: 'note',
+          elements: [{ tag: 'plain_text', content: '出品质量很重要，出餐效率不能掉！' }]
+        }
+      ]
+    };
   }
 
-  const content = periodLine + '\n\n' + bodyLines.join('\n');
+  const top = dishStats[0];
+  const worstLine =
+    '**' +
+    escapeMdCell(top.name) +
+    '** · 超时占比 **' +
+    top.timeoutRatio +
+    '%** · **' +
+    top.totalTimeout +
+    '** 次超时 / **' +
+    top.totalProd +
+    '** 次出品';
+
+  const summary =
+    '### 📅 ' +
+    periodLabel +
+    '\n**' +
+    dateStart +
+    '** ~ **' +
+    dateEnd +
+    '**\n\n' +
+    '### 📌 摘要\n' +
+    '- 异常菜品：**' +
+    dishStats.length +
+    '** 道（存在制作超时次数）\n' +
+    '- 最重一项：' +
+    worstLine +
+    '\n\n' +
+    '> 💡 **读表：** **超时占比** = 超时次数÷出品次数（合计）；**超时频率** = 有超时发生的营业日÷本菜品出现在表内的营业日。**占比超过100%** 多为同日多条记录口径叠加，请以「超时/出品」次数为准。';
+
+  const tableHeader =
+    '| ' +
+    ['分级', '菜品名称', '超时占比', '超时/出品', '超时频率', '集中星期'].join(' | ') +
+    ' |\n' +
+    '| :---: | :--- | :---: | :---: | :---: | :--- |\n';
+
+  const legend =
+    '\n\n**图例：** 🔴 超时占比≥80%　🟠 40%～79%　🟡 低于40%';
+
+  const rowLines = (chunk) =>
+    chunk.map((d) => {
+      const badge = riskBadge(d.timeoutRatio);
+      const ratioShow = '**' + escapeMdCell(d.timeoutRatio) + '%**';
+      const cnt = '**' + d.totalTimeout + '**/**' + d.totalProd + '**';
+      const freqShow = '**' + escapeMdCell(d.freq) + '%**';
+      return (
+        '| ' +
+        [badge, escapeMdCell(d.name), ratioShow, cnt, freqShow, escapeMdCell(d.dows)].join(' | ') +
+        ' |'
+      );
+    });
+
+  const MAX_ROWS = 32;
+  const elements = [
+    { tag: 'div', text: { tag: 'lark_md', content: summary } },
+    { tag: 'hr' }
+  ];
+
+  if (dishStats.length <= MAX_ROWS) {
+    const detailMd =
+      '### 📋 明细（按超时占比降序）\n\n' + tableHeader + rowLines(dishStats).join('\n') + legend;
+    elements.push({ tag: 'div', text: { tag: 'lark_md', content: detailMd } });
+  } else {
+    let offset = 0;
+    let part = 1;
+    while (offset < dishStats.length) {
+      const chunk = dishStats.slice(offset, offset + MAX_ROWS);
+      const title =
+        '### 📋 明细（第 **' +
+        part +
+        '** / **' +
+        Math.ceil(dishStats.length / MAX_ROWS) +
+        '** 部分 · 按超时占比降序）\n\n';
+      const md = title + tableHeader + rowLines(chunk).join('\n') + (offset + chunk.length >= dishStats.length ? legend : '');
+      elements.push({ tag: 'div', text: { tag: 'lark_md', content: md } });
+      if (offset + chunk.length < dishStats.length) elements.push({ tag: 'hr' });
+      offset += chunk.length;
+      part++;
+    }
+  }
+
+  elements.push(
+    { tag: 'hr' },
+    {
+      tag: 'note',
+      elements: [
+        {
+          tag: 'plain_text',
+          content: '出品质量很重要，出餐效率不能掉！峰值时段建议按表内「集中星期」加强预制与工位巡检。'
+        }
+      ]
+    }
+  );
 
   return {
+    config: { wide_screen_mode: true },
     header: {
       title: { tag: 'plain_text', content: headerContent },
       template: 'red'
     },
-    elements: [
-      {
-        tag: 'div',
-        text: { tag: 'lark_md', content }
-      },
-      { tag: 'hr' },
-      {
-        tag: 'note',
-        elements: [{ tag: 'plain_text', content: '出品质量很重要，出餐效率不能掉！' }]
-      }
-    ]
+    elements
   };
 }
 
