@@ -89,7 +89,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' *.feishu.cn *.bytedance.net; style-src 'self' 'unsafe-inline' *.feishu.cn; img-src 'self' data: *.feishu.cn; connect-src 'self' *.feishu.cn *.feishuopen.com");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' *.feishu.cn *.bytedance.net cdn.jsdelivr.net cdnjs.cloudflare.com unpkg.com cdn.sheetjs.com; style-src 'self' 'unsafe-inline' *.feishu.cn fonts.googleapis.com; font-src 'self' fonts.gstatic.com; img-src 'self' data: *.feishu.cn *.aliyuncs.com; connect-src 'self' *.feishu.cn *.feishuopen.com dashscope.aliyuncs.com api.deepseek.com");
   next();
 });
 
@@ -4901,7 +4901,10 @@ const knowledgeUpload = multer({
     },
     filename: (req, file, cb) => {
       const orig = String(file?.originalname || 'file');
-      const ext = path.extname(orig).slice(0, 16);
+      const ext = path.extname(orig).toLowerCase().slice(0, 16);
+      if (!UPLOAD_ALLOWED_EXTS.has(ext) && !['.json', '.md', '.yaml', '.yml'].includes(ext)) {
+        return cb(new Error(`blocked_file_type: ${ext || 'unknown'}`));
+      }
       cb(null, `${randomUUID()}${ext}`);
     }
   }),
@@ -18989,7 +18992,10 @@ app.use((err, req, res, next) => {
   if (/uploads_dir_not_writable/i.test(msg)) {
     return res.status(500).json({ error: 'uploads_dir_not_writable', message: msg });
   }
-  return res.status(500).json({ error: 'server_error', message: msg });
+  if (/blocked_file_type/i.test(msg)) {
+    return res.status(400).json({ error: 'blocked_file_type', message: msg });
+  }
+  return res.status(500).json({ error: 'server_error', message: 'internal_error' });
 });
 
 if (__ALLOW_SCHEMA_CHANGES__) {
