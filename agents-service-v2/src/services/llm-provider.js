@@ -74,6 +74,30 @@ function isAbortLikeError(msg){
 }
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 
+/**
+ * OpenAI 兼容响应：assistant message.content 可能是 string，也可能是 multimodal 数组。
+ * 禁止直接 String(content)，否则会显示成 "[object Object]"（晨报经营诊断曾出现）。
+ */
+export function normalizeAssistantMessageContent(content) {
+  if (content == null || content === '') return '';
+  if (typeof content === 'string') return content.trim();
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part;
+        if (part && typeof part === 'object') {
+          if (typeof part.text === 'string') return part.text;
+          if (part.type === 'text' && part.text != null) return String(part.text);
+        }
+        return '';
+      })
+      .join('')
+      .trim();
+  }
+  if (typeof content === 'object' && typeof content.text === 'string') return content.text.trim();
+  return '';
+}
+
 function normalizeRouterContext(ctx) {
   if (!ctx || typeof ctx !== 'object') return null;
   return {
@@ -116,9 +140,9 @@ export async function callOllamaLLM(messages, options = {}) {
     }
     const data = await res.json();
     // 仅使用正式回复字段：thinking 为内部推理，禁止当作用户可见内容
-    let content = stripEmbeddedReasoningTags(String(data?.message?.content || '').trim());
+    let content = stripEmbeddedReasoningTags(normalizeAssistantMessageContent(data?.message?.content));
     if (!content && data?.response) {
-      content = stripEmbeddedReasoningTags(String(data.response).trim());
+      content = stripEmbeddedReasoningTags(normalizeAssistantMessageContent(data.response));
     }
     const rt = Date.now() - start;
     _metrics.totalCalls++;
@@ -195,7 +219,9 @@ export async function callDeepSeek(prompt, options = {}) {
       const msg = json?.error?.message || res.statusText || String(res.status);
       throw new Error(msg);
     }
-    const text = stripEmbeddedReasoningTags(String(json?.choices?.[0]?.message?.content || '').trim());
+    const text = stripEmbeddedReasoningTags(
+      normalizeAssistantMessageContent(json?.choices?.[0]?.message?.content)
+    );
     if (!text) {
       throw new Error('deepseek_empty_content');
     }
@@ -256,7 +282,7 @@ async function callOpenAICompatibleChain(messages, options, primaryModel) {
     if (resp) {
       markOk(cand.provider);
       const msg = resp.data?.choices?.[0]?.message || {};
-      const content = stripEmbeddedReasoningTags(String(msg.content || '').trim());
+      const content = stripEmbeddedReasoningTags(normalizeAssistantMessageContent(msg.content));
       const rt = Date.now() - start;
       _metrics.avgResponseTime = (_metrics.avgResponseTime * (_metrics.totalCalls - 1) + rt) / _metrics.totalCalls;
       trackCost(cand.provider, cfg.model, Number(resp.data?.usage?.total_tokens || 0));
@@ -367,9 +393,9 @@ async function callOllamaVision(messages, options = {}) {
       throw new Error(`Ollama HTTP ${res.status}: ${t.slice(0, 200)}`);
     }
     const data = await res.json();
-    let content = stripEmbeddedReasoningTags(String(data?.message?.content || '').trim());
+    let content = stripEmbeddedReasoningTags(normalizeAssistantMessageContent(data?.message?.content));
     if (!content && data?.response) {
-      content = stripEmbeddedReasoningTags(String(data.response).trim());
+      content = stripEmbeddedReasoningTags(normalizeAssistantMessageContent(data.response));
     }
     const rt = Date.now() - start;
     _metrics.totalCalls++;
@@ -466,7 +492,8 @@ export async function callVisionLLM(imageUrl, prompt) {
       timeout: 90000
     });
     trackCost(cfg.provider, cfg.model, Number(resp.data?.usage?.total_tokens || 0));
-    return { ok: true, content: resp.data?.choices?.[0]?.message?.content || '', raw: resp.data };
+    const vc = normalizeAssistantMessageContent(resp.data?.choices?.[0]?.message?.content);
+    return { ok: true, content: vc, raw: resp.data };
   } catch (e) {
     logger.error({ err: e?.message }, 'Vision LLM error');
     return { ok: false, error: e?.message || 'vision_failed', content: '' };
@@ -501,7 +528,12 @@ export async function verifyLLMHealth() {
     if(!cfg.apiKey){results.push({name,ok:false,error:'API_KEY未配置'});continue;}
     try{
       const r=await axios.post(`${cfg.baseUrl}/chat/completions`,{model:cfg.defaultModel,messages:[{role:'user',content:'回复OK'}],max_tokens:5,temperature:0},{headers:{Authorization:`Bearer ${cfg.apiKey}`,'Content-Type':'application/json'},timeout:15000});
-      results.push({name,model:cfg.defaultModel,ok:true,reply:(r.data?.choices?.[0]?.message?.content||'').slice(0,20)});
+      results.push({
+        name,
+        model: cfg.defaultModel,
+        ok: true,
+        reply: normalizeAssistantMessageContent(r.data?.choices?.[0]?.message?.content).slice(0, 20)
+      });
       markOk(name);
     }catch(e){
       results.push({name,model:cfg.defaultModel,ok:false,error:`${e?.response?.status||'timeout'}: ${(e?.response?.data?.error?.message||e?.message||'').slice(0,100)}`});

@@ -7,7 +7,7 @@
  */
 import { query } from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
-import { callLLM } from '../llm-provider.js';
+import { callLLM, normalizeAssistantMessageContent } from '../llm-provider.js';
 import { buildStoreProfilePromptBlock } from '../../config/store-profile.js';
 import { expandAgentStoreLabels } from '../../config/store-mapping.js';
 import { anomalyRuleLabelZh } from '../../utils/anomaly-labels.js';
@@ -201,7 +201,12 @@ ${anomalySection}
   try {
     const _raw = await callLLM(prompt, { purpose: 'chairman_diagnosis', temperature: 0.2, maxTokens: 400 });
     if (!_raw) return null;
-    const llmResult = typeof _raw === 'string' ? _raw : (_raw.content || String(_raw));
+    const llmResult = normalizeAssistantMessageContent(
+      typeof _raw === 'string' ? _raw : (_raw?.content ?? _raw?.message?.content)
+    );
+    const safeSummary =
+      llmResult.trim() ||
+      (typeof _raw === 'object' && _raw.ok === false ? '（模型暂不可用，以下为处置参考模板。）' : '（暂无模型文字摘要，以下为处置参考模板。）');
 
     const scenarios = [...new Set(anomalies.map(a => anomalyToScenario(a.anomaly_key)).filter(Boolean))];
     let templateText = '';
@@ -212,7 +217,7 @@ ${anomalySection}
       if (formatted) templateText += '\n' + formatted;
     }
 
-    let result = `**🧠 经营诊断**\n\n${llmResult.slice(0, 500)}`;
+    let result = `**🧠 经营诊断**\n\n${safeSummary.slice(0, 500)}`;
     if (templateText) result += '\n\n' + templateText.trim();
     result += '\n\n_说明：请勿与上文「近3天异常提醒」逐条对抄；以关联分析与可执行动作为主。_';
     return result;
