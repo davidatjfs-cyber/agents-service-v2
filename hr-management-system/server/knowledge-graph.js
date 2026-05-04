@@ -151,28 +151,17 @@ async function upsertRelation({ sourceType, sourceId, sourceLabel, targetType, t
       `INSERT INTO business_entity_relations
          (source_type, source_id, source_label, target_type, target_id, target_label, relation, weight, metadata, date)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10)
-       ON CONFLICT ON CONSTRAINT business_entity_relations_pkey DO NOTHING`,
+       ON CONFLICT ON CONSTRAINT uq_ber_composite DO UPDATE SET
+         weight = EXCLUDED.weight,
+         metadata = EXCLUDED.metadata,
+         updated_at = NOW()`,
       [sourceType, sourceId, sourceLabel || sourceId, targetType, targetId, targetLabel || targetId,
        relation, weight || 1.0, JSON.stringify(metadata || {}), date || new Date().toISOString().slice(0, 10)]
     );
   } catch (e) {
-    // 尝试去重 insert (composite uniqueness via date+relation+source+target)
-    try {
-      const exists = await pool().query(
-        `SELECT id FROM business_entity_relations
-         WHERE source_type=$1 AND source_id=$2 AND target_type=$3 AND target_id=$4 AND relation=$5 AND date=$6 LIMIT 1`,
-        [sourceType, sourceId, targetType, targetId, relation, date || new Date().toISOString().slice(0, 10)]
-      );
-      if (exists.rows?.length) {
-        await pool().query(
-          `UPDATE business_entity_relations SET weight=$1, metadata=$2::jsonb, updated_at=NOW() WHERE id=$3`,
-          [weight || 1.0, JSON.stringify(metadata || {}), exists.rows[0].id]
-        );
-      } else {
-        throw e;
-      }
-    } catch (e2) {
-      console.error('[knowledge-graph] upsertRelation failed:', e2?.message);
+    // 极低概率并发冲突（约束创建后几乎不会触发），静默跳过
+    if (!String(e?.message || '').includes('duplicate')) {
+      console.error('[knowledge-graph] upsertRelation error:', e?.message);
     }
   }
 }
