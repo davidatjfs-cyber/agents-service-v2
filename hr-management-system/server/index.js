@@ -12905,6 +12905,42 @@ function calcOverlapDaysWithinMonth(startDate, endDate, month) {
   return Math.floor((overlapEnd - overlapStart) / 86400000) + 1;
 }
 
+function dailyReportRestStaffForLeaveCalc(staffObj) {
+  const so = staffObj && typeof staffObj === 'object' && !Array.isArray(staffObj) ? staffObj : {};
+  const lists = [
+    Array.isArray(so.restStaff) ? so.restStaff : [],
+    Array.isArray(so.frontRestStaff) ? so.frontRestStaff : [],
+    Array.isArray(so.kitchenRestStaff) ? so.kitchenRestStaff : []
+  ];
+  const seen = new Set();
+  const out = [];
+  for (const arr of lists) {
+    for (const it of arr) {
+      const u = String(it?.user || it?.username || '').trim().toLowerCase();
+      const n = String(it?.name || '').trim();
+      const key = u || n.toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(it);
+    }
+  }
+  return out;
+}
+
+function dailyReportHasRestForEmployee(staffObj, unameLower, nameRaw) {
+  const uname = String(unameLower || '').trim().toLowerCase();
+  const name = String(nameRaw || '').trim();
+  if (!uname && !name) return false;
+  const restStaff = dailyReportRestStaffForLeaveCalc(staffObj);
+  return restStaff.some((it) => {
+    const u = String(it?.user || it?.username || '').trim().toLowerCase();
+    const n = String(it?.name || '').trim();
+    if (u && uname && u === uname) return true;
+    if (!u && name && n && n === name) return true;
+    return false;
+  });
+}
+
 function calcEmployeeMonthlyActualRestFromDailyReports(state, employee, month) {
   const m = safeMonthOnly(month);
   const emp = employee && typeof employee === 'object' ? employee : null;
@@ -12925,24 +12961,10 @@ function calcEmployeeMonthlyActualRestFromDailyReports(state, employee, month) {
     if (!repDate || !repDate.startsWith(m + '-')) return;
     const data = rep?.data && typeof rep.data === 'object' ? rep.data : {};
 
-    const frontRestStaff = Array.isArray(data?.staff?.frontRestStaff) ? data.staff.frontRestStaff : [];
-    const kitchenRestStaff = Array.isArray(data?.staff?.kitchenRestStaff) ? data.staff.kitchenRestStaff : [];
-    const allRestStaff = frontRestStaff.concat(kitchenRestStaff);
-
-    let restDays = 0;
-    allRestStaff.forEach((it) => {
-      const u = String(it?.user || it?.username || '').trim().toLowerCase();
-      const n = String(it?.name || '').trim();
-      if (u && uname && u !== uname) return;
-      if (!u && name && n && n !== name) return;
-      if (!u && !name) return;
-      const days = Number(it?.days || 1);
-      const val = Number.isFinite(days) && days > 0 ? days : 1;
-      restDays += val;
-    });
+    let rested = dailyReportHasRestForEmployee(data?.staff, uname, name);
 
     // legacy fallback: comma-separated text names
-    if (restDays <= 0) {
+    if (!rested) {
       const frontRest = String(data?.staff?.frontRest || '').trim();
       const kitchenRest = String(data?.staff?.kitchenRest || '').trim();
       const tokens = splitNameTokens(frontRest).concat(splitNameTokens(kitchenRest));
@@ -12950,11 +12972,11 @@ function calcEmployeeMonthlyActualRestFromDailyReports(state, employee, month) {
       const hitByToken = (uname && tokenSet.has(uname)) || (!!name && tokenSet.has(name.toLowerCase()));
       const hitByRaw = (!!name && (frontRest.includes(name) || kitchenRest.includes(name)))
         || (uname && (frontRest.toLowerCase().includes(uname) || kitchenRest.toLowerCase().includes(uname)));
-      if (hitByToken || hitByRaw) restDays = 1;
+      if (hitByToken || hitByRaw) rested = true;
     }
 
-    if (restDays > 0) {
-      byDay[repDate] = Number((Number(byDay[repDate] || 0) + restDays).toFixed(2));
+    if (rested) {
+      byDay[repDate] = 1;
     }
   });
 
@@ -13029,16 +13051,7 @@ function resolveEmployeeLeaveCalcStartMonth(state, employee, fallbackMonth) {
     const store = String(rep?.store || '').trim();
     if (!store) return;
     const data = rep?.data && typeof rep.data === 'object' ? rep.data : {};
-    const allRestStaff = []
-      .concat(Array.isArray(data?.staff?.frontRestStaff) ? data.staff.frontRestStaff : [])
-      .concat(Array.isArray(data?.staff?.kitchenRestStaff) ? data.staff.kitchenRestStaff : []);
-    const hit = allRestStaff.some((it) => {
-      const recUser = String(it?.user || it?.username || '').trim().toLowerCase();
-      const recName = String(it?.name || '').trim();
-      if (recUser && recUser === uname) return true;
-      if (!recUser && name && recName && recName === name) return true;
-      return false;
-    });
+    const hit = dailyReportHasRestForEmployee(data?.staff, uname, name);
     if (hit) months.push(repDate.slice(0, 7));
   });
 
@@ -13120,52 +13133,6 @@ function calcEmployeeMonthlyApprovedLeaveDays(state, employee, month) {
 }
 
 /**
- * 满勤口径下用累计假抵扣考勤缺勤的天数（与薪资表 leaveOffsetDays 一致，按门店拆分后依次扣池）
- * poolCap：当月可用于抵扣的剩余假池上限（通常为 月初累计 + 4 - 已用休息/休假）
- */
-function calcMonthlyAttendanceLeaveBankOffsetDays(state, employee, month, poolCap) {
-  const m = safeMonthOnly(month);
-  const emp = employee && typeof employee === 'object' ? employee : null;
-  const uname = String(emp?.username || '').trim();
-  const uLower = uname.toLowerCase();
-  if (!m || !uLower) return 0;
-  let pool = Number(Math.max(0, Number(poolCap || 0)).toFixed(2));
-  if (!(pool > 0)) return 0;
-
-  const [yearNum, monthNum] = m.split('-').map(Number);
-  const monthDays = new Date(yearNum, monthNum, 0).getDate();
-  const workDaysPerMonth = Math.max(1, monthDays - 4);
-  const start = `${m}-01`;
-  const end = `${m}-31`;
-  let items = Array.isArray(state?.dailyReports) ? state.dailyReports : [];
-  items = items.filter(r => inDateRange(String(r?.date || '').trim(), start, end));
-  const attendanceRows = buildAttendanceFromReports(items);
-  const byStore = new Map();
-  for (const r of attendanceRows) {
-    const st = String(r?.store || '').trim();
-    const u = String(r?.username || '').trim().toLowerCase();
-    if (u !== uLower) continue;
-    const key = st || '_';
-    byStore.set(key, (byStore.get(key) || 0) + clampNum(r?.days, 0));
-  }
-  if (!byStore.size) {
-    const missing = Number(Math.max(0, workDaysPerMonth - 0).toFixed(2));
-    return Number(Math.min(missing, pool).toFixed(2));
-  }
-  let totalOffset = 0;
-  const stores = Array.from(byStore.entries()).sort((a, b) => String(a[0]).localeCompare(String(b[0])));
-  for (const [, attDays] of stores) {
-    if (!(pool > 0)) break;
-    const attendanceDays = clampNum(attDays, 0);
-    const missing = Number(Math.max(0, Number((workDaysPerMonth - attendanceDays).toFixed(2))));
-    const off = Number(Math.min(missing, pool).toFixed(2));
-    totalOffset += off;
-    pool = Number(Math.max(0, pool - off).toFixed(2));
-  }
-  return Number(totalOffset.toFixed(2));
-}
-
-/**
  * 滚动计算「目标月」月初累计池（不含目标月当月额度与消耗）。
  * @param {{ ignoreEndCarryoverOverride?: boolean }} opts 为 true 时忽略目标月 carryover 人工覆盖（用于次月1日快照，避免把尚未审的覆盖写入上月闭合值）
  */
@@ -13187,10 +13154,7 @@ function calcEmployeeMonthlyCarryover(state, employee, month, opts) {
     const usedLeave = calcEmployeeMonthlyApprovedLeaveDays(state, emp, cur);
     const usedLike = Number((usedRest + usedLeave).toFixed(2));
     const startCarry = ov && ov.mode === 'carryover' ? ov.value : carry;
-    const preClose = Number((startCarry + monthQuota - usedLike).toFixed(2));
-    const poolForAtt = Math.max(0, preClose);
-    const attOff = calcMonthlyAttendanceLeaveBankOffsetDays(state, emp, cur, poolForAtt);
-    carry = Number((preClose - attOff).toFixed(2));
+    carry = Number((startCarry + monthQuota - usedLike).toFixed(2));
     cur = shiftMonth(cur, 1);
   }
   // 当月月初累计池：若本月已手动设置「截止上月累计假期」(mode=carryover)，以手动值为准；否则以系统滚动计算为准
@@ -18619,23 +18583,10 @@ app.get('/api/profile/attendance-overview', authRequired, async (req, res) => {
 
       // 休息统计：按当天日报记录（优先结构化 staff list，兼容旧文本）
       if (repDate >= monthStart && repDate <= monthEnd) {
-        const frontRestStaff = Array.isArray(data?.staff?.frontRestStaff) ? data.staff.frontRestStaff : [];
-        const kitchenRestStaff = Array.isArray(data?.staff?.kitchenRestStaff) ? data.staff.kitchenRestStaff : [];
-        const allRestStaff = frontRestStaff.concat(kitchenRestStaff);
-
-        let restDays = 0;
-        allRestStaff.forEach((it) => {
-          const u = String(it?.user || it?.username || '').trim().toLowerCase();
-          const n = String(it?.name || '').trim();
-          if (u && u !== meLower) return;
-          if (!u && myName && n && n !== myName) return;
-          const days = Number(it?.days || 1);
-          const val = Number.isFinite(days) && days > 0 ? days : 1;
-          restDays += val;
-        });
+        let rested = dailyReportHasRestForEmployee(data?.staff, meLower, myName);
 
         // legacy fallback: comma-separated text names
-        if (restDays <= 0) {
+        if (!rested) {
           const frontRest = String(data?.staff?.frontRest || '').trim();
           const kitchenRest = String(data?.staff?.kitchenRest || '').trim();
           const tokens = splitNameTokens(frontRest).concat(splitNameTokens(kitchenRest));
@@ -18644,12 +18595,11 @@ app.get('/api/profile/attendance-overview', authRequired, async (req, res) => {
           const hitByRaw = (!!myName && (frontRest.includes(myName) || kitchenRest.includes(myName)))
             || frontRest.toLowerCase().includes(meLower)
             || kitchenRest.toLowerCase().includes(meLower);
-          if (hitByToken || hitByRaw) restDays = 1;
+          if (hitByToken || hitByRaw) rested = true;
         }
 
-        if (restDays > 0) {
-          const prev = Number(restByDay.get(repDate) || 0) || 0;
-          restByDay.set(repDate, Number((prev + restDays).toFixed(2)));
+        if (rested) {
+          restByDay.set(repDate, 1);
         }
       }
 
