@@ -81,6 +81,9 @@ import { REPLY_ENGINE_BUILD } from './reply-engine-version.js';
 let randomInspectionStartRetried = false;
 
 const app = express();
+// 信任反向代理（nginx/ALB）的 X-Forwarded-* 标头。
+// 不设置时 express-rate-limit 会在每次代理请求时抛出 ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+app.set('trust proxy', true);
 let httpServer = null;
 /** 生产与 ecosystem.config.cjs 固定 3101；勿改为 3000（HRMS）或 3100（历史易与文档/旧进程混淆） */
 const PORT = parseInt(process.env.PORT || '3101', 10);
@@ -1126,6 +1129,14 @@ async function start() {
     process.exit(1);
   }
   logger.info('✅ Database connected');
+
+  // 确保 agent_sessions 表存在（生产环境迁移脚本跳过该表，此处兜底）
+  try {
+    const { default: sessionService } = await import('./services/agent-session/session-service.js');
+    await sessionService.ensureTable();
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'Agent sessions table ensure failed (non-fatal)');
+  }
 
   const _bootEnv = getAppEnv();
   if ((_bootEnv === 'production' || _bootEnv === 'staging') && !isWebhookEnabled()) {

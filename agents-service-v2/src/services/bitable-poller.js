@@ -4,6 +4,8 @@
 // Polls Feishu Bitable tables and syncs records to DB
 // ═══════════════════════════════════════════════════════
 import axios from 'axios';
+import http from 'http';
+import https from 'https';
 import { query } from '../utils/db.js';
 import { addTaskEvidence } from './task-orchestrator.js';
 import { logger } from '../utils/logger.js';
@@ -146,6 +148,10 @@ const BITABLE_CONFIGS = {
 const _tokenCache = new Map();
 const BASE_URL = 'https://open.feishu.cn/open-apis';
 
+// HTTP(S) keep-alive Agent：避免 bitable 轮询中反复建立 TCP 连接
+const KEEPALIVE_AGENT = new http.Agent({ keepAlive: true, maxSockets: 20, keepAliveMsecs: 30000 });
+const KEEPALIVE_AGENT_HTTPS = new https.Agent({ keepAlive: true, maxSockets: 20, keepAliveMsecs: 30000 });
+
 /** 单次 HTTP 超时（大表 15s 极易误报；可用环境变量覆盖） */
 const BITABLE_HTTP_TIMEOUT_MS = (() => {
   const n = Number(process.env.BITABLE_HTTP_TIMEOUT_MS);
@@ -221,7 +227,7 @@ async function getBitableTenantToken(configKey = 'ops_checklist', forceRefresh =
   try {
     const resp = await axios.post(BASE_URL + '/auth/v3/tenant_access_token/internal', {
       app_id: config.appId, app_secret: config.appSecret
-    }, { timeout: 10000 });
+    }, { timeout: 10000, httpAgent: KEEPALIVE_AGENT, httpsAgent: KEEPALIVE_AGENT_HTTPS });
     const token = resp.data?.tenant_access_token || '';
     const ttlSec = resp.data?.expire || 7000;
     const expires = Date.now() + ttlSec * 1000;
@@ -268,7 +274,7 @@ async function getBitableRecords(configKey, options = {}) {
     try {
       const resp = await axios.get(
         `${BASE_URL}/bitable/v1/apps/${config.appToken}/tables/${config.tableId}/records`,
-        { headers: { Authorization: `Bearer ${token}` }, params, timeout: BITABLE_HTTP_TIMEOUT_MS }
+        { headers: { Authorization: `Bearer ${token}` }, params, timeout: BITABLE_HTTP_TIMEOUT_MS, httpAgent: KEEPALIVE_AGENT, httpsAgent: KEEPALIVE_AGENT_HTTPS }
       );
       const bizCode = resp.data?.code;
       if (bizCode != null && Number(bizCode) !== 0) {
@@ -480,8 +486,13 @@ export async function pollBitableTable(configKey) {
     if (!config.skipDedup) {
       _processedIds.add(dedupKey);
       if (_processedIds.size > DEDUP_MAX) {
-        const oldest = Array.from(_processedIds).slice(0, DEDUP_CLEAN);
-        oldest.forEach(id => _processedIds.delete(id));
+        // 迭代删除旧条目，避免 Array.from() 创建 50K 临时数组
+        let removed = 0;
+        for (const id of _processedIds) {
+          if (removed >= DEDUP_CLEAN) break;
+          _processedIds.delete(id);
+          removed++;
+        }
       }
     }
     }

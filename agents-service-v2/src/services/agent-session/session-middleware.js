@@ -221,12 +221,15 @@ function enhancePromptWithSession(session, basePrompt) {
   return enhanced;
 }
 
+let _cleanupInterval = null;
+
 /**
  * 定期清理过期会话
  * @param {number} intervalMinutes - 清理间隔（分钟）
  */
 function startCleanupScheduler(intervalMinutes = 30) {
-  setInterval(async () => {
+  if (_cleanupInterval) return;
+  _cleanupInterval = setInterval(async () => {
     try {
       const count = await sessionService.cleanupExpiredSessions();
       if (config.log && count > 0) {
@@ -242,6 +245,13 @@ function startCleanupScheduler(intervalMinutes = 30) {
   }
 }
 
+function stopCleanupScheduler() {
+  if (_cleanupInterval) {
+    clearInterval(_cleanupInterval);
+    _cleanupInterval = null;
+  }
+}
+
 export default {
   checkAndRestoreSession,
   createNewSession,
@@ -250,4 +260,5 @@ export default {
   handleAgentFinalResponse,
   enhancePromptWithSession,
   startCleanupScheduler,
+  stopCleanupScheduler,
 };
