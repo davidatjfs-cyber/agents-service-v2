@@ -14402,7 +14402,14 @@ function getAgentsServiceBaseUrl() {
   return String(process.env.AGENTS_SERVICE_BASE_URL || 'http://127.0.0.1:3101').trim().replace(/\/$/, '');
 }
 
+/** 避免同一页面并发 summary+tasks 各打一次 agents /api/login 触发竞态或短时过载 */
+let __agentsAdminJwCache = { token: '', expiresAt: 0 };
+
 async function getAgentsServiceAdminToken() {
+  const now = Date.now();
+  if (__agentsAdminJwCache.token && __agentsAdminJwCache.expiresAt > now) {
+    return __agentsAdminJwCache.token;
+  }
   const url = getAgentsServiceBaseUrl() + '/api/login';
   const username = String(process.env.AGENTS_ADMIN_USERNAME || 'admin').trim() || 'admin';
   const password = String(process.env.AGENTS_ADMIN_PASSWORD || '').trim();
@@ -14418,7 +14425,9 @@ async function getAgentsServiceAdminToken() {
     const detail = typeof r.data === 'object' ? JSON.stringify(r.data) : String(r.data || '');
     throw new Error(`agents_service_login_failed:${r.status}:${detail}`);
   }
-  return String(r.data.token);
+  const token = String(r.data.token);
+  __agentsAdminJwCache = { token, expiresAt: now + 45000 };
+  return token;
 }
 
 function canManageChairmanConfig(user) {

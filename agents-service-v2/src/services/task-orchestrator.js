@@ -298,43 +298,6 @@ export async function addTaskEvidence(taskId, { evidenceType = 'text', content, 
   return { ok: true };
 }
 
-/** 沿状态机合法边将任务推进到 pending_review，避免卡在 waiting_evidence / in_progress 等中间态导致无法验收 */
-async function advanceBoardTaskToPendingReview(taskId, reviewer) {
-  const agentLabel = reviewer || 'admin';
-  for (let step = 0; step < 24; step++) {
-    const t = await getTask(taskId);
-    if (!t) return { ok: false, error: 'task_not_found' };
-    if (t.status === 'pending_review') return { ok: true };
-    const cur = t.status;
-    let next = null;
-    if (cur === 'pending_audit' || cur === 'auditing' || cur === 'awaiting_approval' || cur === 'escalated') next = 'pending_dispatch';
-    else if (cur === 'pending_dispatch') next = 'dispatched';
-    else if (cur === 'dispatched' || cur === 'viewed' || cur === 'in_progress') next = 'pending_response';
-    else if (cur === 'waiting_evidence') next = 'pending_review';
-    else if (cur === 'pending_response') next = 'pending_review';
-    else break;
-    const tr = await transitionTask(taskId, next, agentLabel, { adminForceApprove: true });
-    if (!tr.ok) return tr;
-  }
-  const t = await getTask(taskId);
-  if (t?.status !== 'pending_review') return { ok: false, error: `cannot_normalize_to_pending_review_from_${t?.status || 'unknown'}` };
-  return { ok: true };
-}
-
-async function finalizeApprovedBoardClosure(taskId, reviewer, normalized, comment) {
-  const t0 = await getTask(taskId);
-  const assigneeForLog = t0?.assignee_agent || t0?.current_agent;
-  await transitionTask(taskId, 'resolved', reviewer || 'reviewer', { reviewResult: { decision: normalized, comment } });
-  await transitionTask(taskId, 'pending_settlement', 'task_orchestrator', { reviewResult: { decision: normalized } });
-  await transitionTask(taskId, 'settled', 'chief_evaluator', { reviewResult: { decision: normalized } });
-  const evidenceR = await query('SELECT COUNT(*)::int AS cnt FROM task_evidences WHERE task_id = $1', [taskId]);
-  const evidenceCount = evidenceR.rows?.[0]?.cnt || 0;
-  const autoScore = evidenceCount >= 3 ? 8 : evidenceCount >= 1 ? 6 : 4;
-  await query('UPDATE master_tasks SET quality_score = $2, review_passed = TRUE, updated_at = NOW() WHERE task_id = $1', [taskId, autoScore]);
-  await logEvent(taskId, 'quality_score_auto', 'task_orchestrator', assigneeForLog, 'pending_review', 'closed', { score: autoScore, reason: 'approved_with_evidence', evidenceCount });
-  return transitionTask(taskId, 'closed', 'master', { reviewResult: { decision: normalized, comment } });
-}
-
 export async function reviewBoardTask(taskId, { decision, comment, reviewer, reviewerRole, createRevisionTask = false } = {}) {
   const task = await getTask(taskId);
   if (!task) return { ok: false, error: 'task_not_found' };
@@ -353,55 +316,49 @@ export async function reviewBoardTask(taskId, { decision, comment, reviewer, rev
 
   if (normalized === 'approved') {
     let current = (await getTask(taskId)).status;
-
-    if (['hr_filed', 'rejected'].includes(current)) {
-      await query(
-        `UPDATE master_tasks SET quality_score = COALESCE(quality_score, 4), review_passed = TRUE, updated_at = NOW() WHERE task_id = $1`,
-        [taskId]
-      );
-      return transitionTask(taskId, 'closed', reviewer || 'admin', { reviewResult: { decision: normalized, comment }, adminForceClose: true });
+    // 仅补齐状态机缺口：waiting_evidence 允许进入待验收，再走原有 dispatched→pending_response→pending_review→结案 链
+    if (current === 'waiting_evidence') {
+      const bridged = await transitionTask(taskId, 'pending_review', reviewer || 'task_orchestrator', { bridgeFromWaitingEvidence: true });
+      if (!bridged.ok) return bridged;
+      current = 'pending_review';
     }
-
-    if (current === 'resolved') {
+    if (current === 'dispatched') {
+      await transitionTask(taskId, 'pending_response', reviewer || 'reviewer', { autoAdvanceForReview: true });
+      current = 'pending_response';
+    }
+    if (current === 'pending_response') {
+      await transitionTask(taskId, 'pending_review', 'task_orchestrator', { autoAdvanceForReview: true });
+      current = 'pending_review';
+    }
+    if (current === 'pending_review') {
+      await transitionTask(taskId, 'resolved', reviewer || 'reviewer', { reviewResult: { decision: normalized, comment } });
       await transitionTask(taskId, 'pending_settlement', 'task_orchestrator', { reviewResult: { decision: normalized } });
       await transitionTask(taskId, 'settled', 'chief_evaluator', { reviewResult: { decision: normalized } });
       const evidenceR = await query('SELECT COUNT(*)::int AS cnt FROM task_evidences WHERE task_id = $1', [taskId]);
       const evidenceCount = evidenceR.rows?.[0]?.cnt || 0;
       const autoScore = evidenceCount >= 3 ? 8 : evidenceCount >= 1 ? 6 : 4;
       await query('UPDATE master_tasks SET quality_score = $2, review_passed = TRUE, updated_at = NOW() WHERE task_id = $1', [taskId, autoScore]);
-      await logEvent(taskId, 'quality_score_auto', 'task_orchestrator', task.assignee_agent, 'resolved', 'closed', { score: autoScore, reason: 'admin_approve_from_resolved', evidenceCount });
+      await logEvent(taskId, 'quality_score_auto', 'task_orchestrator', task.assignee_agent, 'pending_review', 'closed', { score: autoScore, reason: 'approved_with_evidence', evidenceCount });
       return transitionTask(taskId, 'closed', 'master', { reviewResult: { decision: normalized, comment } });
     }
-
-    if (current === 'pending_settlement') {
-      await transitionTask(taskId, 'settled', 'chief_evaluator', { reviewResult: { decision: normalized } });
-      const evidenceR = await query('SELECT COUNT(*)::int AS cnt FROM task_evidences WHERE task_id = $1', [taskId]);
-      const evidenceCount = evidenceR.rows?.[0]?.cnt || 0;
-      const autoScore = evidenceCount >= 3 ? 8 : evidenceCount >= 1 ? 6 : 4;
-      await query('UPDATE master_tasks SET quality_score = COALESCE(quality_score, $2), review_passed = TRUE, updated_at = NOW() WHERE task_id = $1', [taskId, autoScore]);
-      return transitionTask(taskId, 'closed', 'master', { reviewResult: { decision: normalized, comment } });
-    }
-
-    if (current === 'settled') {
-      const evidenceR = await query('SELECT COUNT(*)::int AS cnt FROM task_evidences WHERE task_id = $1', [taskId]);
-      const evidenceCount = evidenceR.rows?.[0]?.cnt || 0;
-      const autoScore = evidenceCount >= 3 ? 8 : evidenceCount >= 1 ? 6 : 4;
-      await query('UPDATE master_tasks SET quality_score = COALESCE(quality_score, $2), review_passed = TRUE, updated_at = NOW() WHERE task_id = $1', [taskId, autoScore]);
-      return transitionTask(taskId, 'closed', 'master', { reviewResult: { decision: normalized, comment } });
-    }
-
-    const adv = await advanceBoardTaskToPendingReview(taskId, reviewer);
-    if (!adv.ok) return adv;
-
-    return finalizeApprovedBoardClosure(taskId, reviewer, normalized, comment);
+    return { ok: false, error: `cannot_approve_from_${current}` };
   }
 
-  const advReject = await advanceBoardTaskToPendingReview(taskId, reviewer);
-  if (!advReject.ok) return advReject;
-
-  const fresh = await getTask(taskId);
-  if (fresh?.status !== 'pending_review') return { ok: false, error: `cannot_reject_from_${fresh?.status}` };
-
+  let current = (await getTask(taskId)).status;
+  if (current === 'waiting_evidence') {
+    const bridged = await transitionTask(taskId, 'pending_review', reviewer || 'task_orchestrator', { bridgeFromWaitingEvidenceReject: true });
+    if (!bridged.ok) return bridged;
+    current = 'pending_review';
+  }
+  if (current === 'dispatched') {
+    await transitionTask(taskId, 'pending_response', reviewer || 'reviewer', { autoAdvanceForReject: true });
+    current = 'pending_response';
+  }
+  if (current === 'pending_response') {
+    await transitionTask(taskId, 'pending_review', 'task_orchestrator', { autoAdvanceForReject: true });
+    current = 'pending_review';
+  }
+  if (current !== 'pending_review') return { ok: false, error: `cannot_reject_from_${current}` };
   const rejected = await transitionTask(taskId, 'rejected', reviewer || 'reviewer', { reviewResult: { decision: normalized, comment } });
   if (!rejected.ok) return rejected;
   if (createRevisionTask) {
@@ -421,30 +378,34 @@ export async function reviewBoardTask(taskId, { decision, comment, reviewer, rev
   return { ok: true, rejected: true };
 }
 
-/** 仅 hrms_task_board：批量「通过并关闭」未结案任务（须显式 confirm 防误触） */
+/** 仅清理测试/历史：直接结案，不走验收闭环（避免改变正常任务的 settle/score 业务流程） */
 export async function bulkCloseOpenHrmsBoardTasks({ reviewer = 'admin', comment = '管理员批量关闭（测试任务清理）', confirm } = {}) {
   if (confirm !== 'bulk_close_hrms_board_open') {
     return { ok: false, error: 'confirmation_required', hint: 'Set confirm to bulk_close_hrms_board_open' };
   }
-  const r = await query(
-    `SELECT task_id FROM master_tasks WHERE source = 'hrms_task_board' AND status <> 'closed' ORDER BY created_at ASC LIMIT 500`,
+  const sel = await query(
+    `SELECT task_id, status FROM master_tasks WHERE source = 'hrms_task_board' AND status <> 'closed' ORDER BY created_at ASC LIMIT 500`,
     []
   );
-  const ids = (r.rows || []).map((row) => row.task_id);
-  const results = [];
-  for (const id of ids) {
-    const out = await reviewBoardTask(id, { decision: 'approved', comment, reviewer, reviewerRole: 'admin' });
-    results.push({ taskId: id, ...out });
+  const rows = sel.rows || [];
+  if (!rows.length) return { ok: true, closed: 0, note: 'no_open_tasks' };
+
+  const upd = await query(
+    `UPDATE master_tasks
+     SET status = 'closed',
+         closed_at = COALESCE(closed_at, NOW()),
+         updated_at = NOW(),
+         review_passed = COALESCE(review_passed, TRUE),
+         quality_score = COALESCE(quality_score, 4)
+     WHERE source = 'hrms_task_board' AND status <> 'closed'`,
+    []
+  );
+
+  const closed = Number(upd.rowCount ?? rows.length) || rows.length;
+  for (const row of rows) {
+    await logEvent(row.task_id, 'admin_bulk_closed', reviewer || 'admin', null, row.status, 'closed', { comment, sqlCleanup: true }).catch(() => {});
   }
-  const failed = results.filter((x) => !x.ok && !x.skipped);
-  const succeeded = results.filter((x) => x.ok);
-  return {
-    ok: failed.length === 0,
-    total: ids.length,
-    succeeded: succeeded.length,
-    failed: failed.length,
-    failures: failed.slice(0, 30)
-  };
+  return { ok: true, closed, note: 'sql_cleanup_only_not_review_flow', sampleTaskIds: rows.slice(0, 25).map((r) => r.task_id) };
 }
 
 export async function deriveBoardTask(taskId, { content, priority, createdBy, createdByRole } = {}) {
@@ -920,12 +881,7 @@ export async function logTaskExperience(taskId) {
 
 export async function sendTaskReminders(taskId, agent) {
   const task0 = await getTask(taskId);
-  // 待验收 / 证据跟进：球已在总部或编排侧，不向门店重复飞书催办（watchdog 若不筛状态时亦可防御）
-  if (
-    !task0 ||
-    ['closed', 'settled', 'resolved', 'rejected', 'hr_filed', 'pending_review', 'waiting_evidence'].includes(task0.status)
-  )
-    return { ok: true, skipped: true };
+  if (!task0 || ['closed', 'settled', 'resolved', 'rejected', 'hr_filed'].includes(task0.status)) return { ok: true, skipped: true };
   if (task0.last_reminder_at && new Date(task0.last_reminder_at) > new Date(Date.now() - 3600000)) {
     return { ok: true, skipped: true, reason: 'last_reminder_within_1h' };
   }
