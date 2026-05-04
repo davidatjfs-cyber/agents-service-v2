@@ -26,6 +26,49 @@ export function collectStoreLookupVariants(storeRaw) {
   return [...set];
 }
 
+/**
+ * 查找门店绑定的店长/出品经理等飞书用户（与 resolveAssigneeOpenIdsForTask 同源，但返回完整行用于任务卡派发）。
+ * @param {string} store 门店名（原始写法，内部会用 collectStoreLookupVariants 归一）
+ * @param {object} opts 选项，{ limit?: number, roles?: string[] }
+ * @returns {Promise<{ rows: { open_id: string, role: string }[] }>}
+ */
+export async function findRegisteredFeishuUsersForStoreManagers(store, opts = {}) {
+  const limit = Number(opts?.limit) || 32;
+  const roles = opts?.roles || ['store_manager', 'store_production_manager'];
+  const variants = collectStoreLookupVariants(store);
+  if (!variants.length) return { rows: [] };
+  const r = await query(
+    `SELECT open_id, role FROM feishu_users
+     WHERE registered = true AND open_id IS NOT NULL AND trim(open_id) <> ''
+       AND role = ANY($3::text[])
+       AND trim(store) = ANY($2::text[])
+       AND open_id NOT LIKE '%probe%'
+     LIMIT $1`,
+    [limit, variants, roles]
+  );
+  if (r.rows?.length) return { rows: r.rows.map(x => ({ open_id: x.open_id, role: x.role })) };
+
+  // 后缀模糊兜底：variants 可能含「洪潮大宁久光店」而用户 store 是「久光店」等
+  const r2 = await query(
+    `SELECT open_id, role FROM feishu_users
+     WHERE registered = true AND open_id IS NOT NULL AND trim(open_id) <> ''
+       AND role = ANY($3::text[])
+       AND open_id NOT LIKE '%probe%'`,
+    [limit, variants, roles]
+  );
+  const out = [];
+  for (const row of r2.rows || []) {
+    const rowSet = new Set(collectStoreLookupVariants(row.store));
+    for (const v of variants) {
+      if (rowSet.has(v)) {
+        out.push({ open_id: row.open_id, role: row.role });
+        break;
+      }
+    }
+  }
+  return { rows: out.slice(0, limit) };
+}
+
 function uniq(ids) {
   return [...new Set((ids || []).filter(Boolean))];
 }
