@@ -23,7 +23,6 @@ import { sendWeeklyReview } from './services/chairman/weekly-review.js';
 import { runTrendChecks } from './services/chairman/trend-rules.js';
 import { evaluateAllPendingOutcomes } from './services/chairman/decision-outcome-tracker.js';
 import { startRhythmScheduler, morningStandup, patrol, endOfDay, weeklyReport, monthlyEvaluation, dailyAttendanceReport } from './services/rhythm-engine.js';
-import { sendUsageWeeklyReport } from './services/usage-weekly-report.js';
 import { sendFarewellNotifications } from './services/farewell-notification.js';
 import { runAnomalyChecks, checkFoodSafetyFromMessage, runFoodSafetyDailyScan } from './services/anomaly-engine.js';
 import { calculateAllStoresKPI } from './services/kpi-calculator.js';
@@ -1217,13 +1216,7 @@ async function start() {
     { timezone: 'Asia/Shanghai' }
   );
 
-  // 员工系统使用周报：每周一 07:00 Asia/Shanghai
-  cron.schedule('0 7 * * 1', () => {
-    runWithCronLog('usage_weekly_report', () => sendUsageWeeklyReport()).catch((e) =>
-      logger.warn({ err: e?.message }, 'usage weekly report cron error')
-    );
-  }, { timezone: 'Asia/Shanghai' });
-  logger.info('Usage weekly report cron scheduled at Mon 07:00 Asia/Shanghai');
+  // 员工系统使用周报：已取消定时推送（2026-05）；仍需时可 POST admin `/trigger-usage-weekly-report`
 
   // Chairman: 每周决策复盘 — 周一 08:00 Asia/Shanghai
   cron.schedule('0 8 * * 1', () => {
