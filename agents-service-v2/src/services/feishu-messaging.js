@@ -10,7 +10,22 @@ function feishuSkipOpenIdResolve() {
   return v === '1' || v === 'true' || v === 'yes';
 }
 
+const _notifyWhitelist = (() => {
+  const raw = String(process.env.FEISHU_NOTIFY_WHITELIST || '').trim();
+  if (!raw) return null;
+  return new Set(raw.split(',').map(s => s.trim()).filter(Boolean));
+})();
+
+function isBlockedByWhitelist(receiveId, idType) {
+  if (!_notifyWhitelist || idType !== 'open_id') return false;
+  return !_notifyWhitelist.has(String(receiveId).trim());
+}
+
 export async function sendText(receiveId, text, idType = 'open_id') {
+  if (isBlockedByWhitelist(receiveId, idType)) {
+    logger.info({ receiveId, idType }, 'sendText blocked by FEISHU_NOTIFY_WHITELIST');
+    return { ok: true, blocked: true };
+  }
   if (!isExternalEnabled()) return { ok: false, error: 'external_disabled' };
   const t = await getTenantToken(); if (!t) return { ok: false, error: 'no_token' };
   const post = async (rid) => {
@@ -36,6 +51,10 @@ export async function sendText(receiveId, text, idType = 'open_id') {
 }
 
 export async function sendCard(receiveId, card, idType = 'open_id') {
+  if (isBlockedByWhitelist(receiveId, idType)) {
+    logger.info({ receiveId, idType }, 'sendCard blocked by FEISHU_NOTIFY_WHITELIST');
+    return { ok: true, blocked: true };
+  }
   if (!isExternalEnabled()) return { ok: false, error: 'external_disabled' };
   const t = await getTenantToken(); if (!t) return { ok: false, error: 'no_token' };
   const post = async (rid) => {
