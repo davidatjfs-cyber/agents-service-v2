@@ -19729,3 +19729,18 @@ app.get('/api/admin/usage-weekly', authRequired, async (req, res) => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('[HRMS] Unhandled rejection:', reason instanceof Error ? reason.stack : String(reason));
 });
+
+// ── Scheduled cleanup: retain 2 months of notifications ────
+async function cleanupOldNotifications() {
+  let deleted = 0;
+  try {
+    const r = await pool.query(`DELETE FROM hrms_user_notifications WHERE created_at < now() - interval '2 months'`);
+    deleted = r.rowCount ?? 0;
+  } catch (e) {
+    console.error('[cleanup] hrms_user_notifications error:', e?.message);
+  }
+  if (deleted > 0) console.log('[cleanup] hrms_user_notifications deleted:', deleted);
+}
+// Run every 6 hours; first run deferred 1 min after startup
+setTimeout(() => { cleanupOldNotifications(); }, 60000);
+setInterval(cleanupOldNotifications, 6 * 3600 * 1000);
