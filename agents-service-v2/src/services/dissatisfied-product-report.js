@@ -237,35 +237,47 @@ async function buildStoreReport(entries, store, label, dateLabel, periodStart, p
     byPerson.get(k).items.push(e);
   }
 
-  const monthlyCounts = new Map();
+  // 本月累计：按「人||档口||菜名」分别计数
+  const monthlyDishCounts = new Map();
   try {
     const allMonth = await fetchDissatisfiedEntries(periodStart, periodEnd);
     const storeEntries = allMonth.filter(e => e.store === store);
     for (const e of storeEntries) {
-      const k = `${e.person}||${e.stall}`;
-      monthlyCounts.set(k, (monthlyCounts.get(k) || 0) + e.dishes.length);
+      for (const d of e.dishes) {
+        const pk = `${e.person}||${e.stall}||${d}`;
+        monthlyDishCounts.set(pk, (monthlyDishCounts.get(pk) || 0) + 1);
+      }
     }
   } catch (_e) { /* ignore */ }
 
   let totalProducts = 0;
   const sections = [];
-  for (const [k, { person, stall, items }] of byPerson) {
+  let personSeq = 0;
+  for (const [, { person, stall, items }] of byPerson) {
+    personSeq++;
     const stallName = stall || '未知';
     const dishLines = [];
     let personCount = 0;
+    let dishSeq = 0;
     for (const item of items) {
       for (const d of item.dishes) {
         totalProducts++;
         personCount++;
+        dishSeq++;
+        const pk = `${person}||${stall}||${d}`;
+        const monthCnt = monthlyDishCounts.has(pk) ? monthlyDishCounts.get(pk) : personCount;
+        const monthTag = `[本月累计：${monthCnt}次]`;
         if (item.reason) {
-          dishLines.push(`  - ${d}（${item.reason}）`);
+          dishLines.push(`  ${personSeq}-${dishSeq}. ${d}（${item.reason}）${monthTag}`);
         } else {
-          dishLines.push(`  - ${d}`);
+          dishLines.push(`  ${personSeq}-${dishSeq}. ${d}${monthTag}`);
         }
       }
     }
-    const monthTotal = monthlyCounts.has(k) ? monthlyCounts.get(k) : personCount;
-    sections.push(`**${person}**（${stallName}）\n  当期：**${personCount}**个 ｜ 本月累计：**${monthTotal}**个\n${dishLines.join('\n')}`);
+    const monthTotal = monthlyDishCounts.has(`${person}||${stall}||__total__`)
+      ? monthlyDishCounts.get(`${person}||${stall}||__total__`)
+      : personCount;
+    sections.push(`**${personSeq}. ${person}**（${stallName}）\n  当期：**${personCount}**个 ｜ 本月累计：**${monthTotal}**个\n${dishLines.join('\n')}`);
   }
 
   const content = `**${label}（${dateLabel}）— ${store}**\n不满意产品总计：**${totalProducts}**个\n\n${sections.join('\n\n')}`;
@@ -276,22 +288,27 @@ async function buildAllStoresReport(allData, label, dateLabel, periodStart, peri
   const stores = [...new Set(allData.map(e => e.store))].sort();
   if (!stores.length) return null;
 
-  // 获取本月累计数据（与单门店报告保持一致）
-  const monthlyCounts = new Map();
+  // 本月累计：按「门店||人||档口||菜名」分别计数
+  const monthlyDishCounts = new Map();
+  const monthlyPersonCounts = new Map();
   try {
     const allMonth = await fetchDissatisfiedEntries(periodStart, periodEnd);
     for (const e of allMonth) {
-      const sk = e.store;
-      const pk = `${e.person}||${e.stall}`;
-      if (!monthlyCounts.has(sk)) monthlyCounts.set(sk, new Map());
-      monthlyCounts.get(sk).set(pk, (monthlyCounts.get(sk).get(pk) || 0) + e.dishes.length);
+      for (const d of e.dishes) {
+        const dpk = `${e.store}||${e.person}||${e.stall}||${d}`;
+        monthlyDishCounts.set(dpk, (monthlyDishCounts.get(dpk) || 0) + 1);
+      }
+      const ppk = `${e.store}||${e.person}||${e.stall}`;
+      monthlyPersonCounts.set(ppk, (monthlyPersonCounts.get(ppk) || 0) + e.dishes.length);
     }
   } catch (_e) { /* ignore */ }
 
   let totalAll = 0;
   let monthlyAll = 0;
   const storeSections = [];
+  let storeSeq = 0;
   for (const store of stores) {
+    storeSeq++;
     const entries = allData.filter(e => e.store === store);
     const byPerson = new Map();
     for (const e of entries) {
@@ -302,23 +319,31 @@ async function buildAllStoresReport(allData, label, dateLabel, periodStart, peri
     const personSections = [];
     let storeTotal = 0;
     let storeMonthly = 0;
-    for (const [k, { person, stall, items }] of byPerson) {
+    let personSeq = 0;
+    for (const [, { person, stall, items }] of byPerson) {
+      personSeq++;
       const dishLines = [];
       let personCount = 0;
+      let dishSeq = 0;
       for (const item of items) {
         for (const d of item.dishes) {
           personCount++;
+          dishSeq++;
+          const dpk = `${store}||${person}||${stall}||${d}`;
+          const monthCnt = monthlyDishCounts.has(dpk) ? monthlyDishCounts.get(dpk) : personCount;
+          const monthTag = `[本月累计：${monthCnt}次]`;
           if (item.reason) {
-            dishLines.push(`    - ${d}（${item.reason}）`);
+            dishLines.push(`    ${personSeq}-${dishSeq}. ${d}（${item.reason}）${monthTag}`);
           } else {
-            dishLines.push(`    - ${d}`);
+            dishLines.push(`    ${personSeq}-${dishSeq}. ${d}${monthTag}`);
           }
         }
       }
+      const ppk = `${store}||${person}||${stall}`;
+      const monthTotal = monthlyPersonCounts.has(ppk) ? monthlyPersonCounts.get(ppk) : personCount;
       storeTotal += personCount;
-      const monthTotal = monthlyCounts.get(store)?.get(k) || personCount;
       storeMonthly += monthTotal;
-      personSections.push(`**${person}**（${stall}）\n  当期：**${personCount}**个 ｜ 本月累计：**${monthTotal}**个\n不满意产品：\n${dishLines.join('\n')}`);
+      personSections.push(`**${personSeq}. ${person}**（${stall}）\n  当期：**${personCount}**个 ｜ 本月累计：**${monthTotal}**个\n不满意产品：\n${dishLines.join('\n')}`);
     }
     totalAll += storeTotal;
     monthlyAll += storeMonthly;

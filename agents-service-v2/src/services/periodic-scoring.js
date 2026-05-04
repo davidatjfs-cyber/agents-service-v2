@@ -743,51 +743,79 @@ export async function sendWeeklyPerformanceFeishu(periodMonday, options = {}) {
       return `- **${row.store}** · ${who}（${rzh}）${bindTag}：**${row.total_score}** 分${crossTag}`;
     });
     if (!onlyAdmin) {
+      // 跨月合并：同一人同一店同岗位可能有 week_周一 和 week_周一__YYYYMM 两条
+      const personGroups = new Map(); // key: username||store||role
       for (const row of list) {
         if (!row.username || String(row.username).startsWith('__periodic')) continue;
+        const gk = `${row.username}||${row.store}||${row.role}`;
+        if (!personGroups.has(gk)) personGroups.set(gk, []);
+        personGroups.get(gk).push(row);
+      }
+      for (const rows of personGroups.values()) {
+        // 按 period 排序，确保主线（不含__）在前
+        rows.sort((a, b) => String(a.period || '').localeCompare(String(b.period || '')));
+        const mainRow = rows[0];
         const fu = await query(
           `SELECT open_id FROM feishu_users WHERE username = $1 AND registered = true AND open_id IS NOT NULL LIMIT 1`,
-          [row.username]
+          [mainRow.username]
         );
         const oid = fu.rows?.[0]?.open_id;
-        let ded = row.deductions;
-        if (typeof ded === 'string') {
-          try {
-            ded = JSON.parse(ded);
-          } catch {
-            ded = [];
-          }
-        }
-        ded = Array.isArray(ded) ? ded : [];
-        const detailMd =
-          ded.length > 0
-            ? ded
-                .map((d) => {
-                  const cat = CAT_ZH[d.category] || '异常扣分';
-                  const kz = ANOMALY_KEY_ZH[d.anomaly_key] || '';
-                  const tail = kz ? `（${kz}）` : '';
-                  return `• ${cat}${tail}：**-${d.points}** 分`;
-                })
-                .join('\n')
-            : '本周无异常扣分项。';
-
         const shanghaiYmd = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+
+        function buildDeductionMd(row) {
+          let ded = row.deductions;
+          if (typeof ded === 'string') {
+            try { ded = JSON.parse(ded); } catch { ded = []; }
+          }
+          ded = Array.isArray(ded) ? ded : [];
+          return ded.length > 0
+            ? ded.map((d) => {
+                const cat = CAT_ZH[d.category] || '异常扣分';
+                const kz = ANOMALY_KEY_ZH[d.anomaly_key] || '';
+                const tail = kz ? `（${kz}）` : '';
+                return `• ${cat}${tail}：**-${d.points}** 分`;
+              }).join('\n')
+            : '本周无异常扣分项。';
+        }
+
+        function buildMonthLabel(row) {
+          const p = String(row.period || '');
+          const ymKey = p.includes('__') ? p.split('__').pop() : null;
+          if (!ymKey) return null;
+          return `${ymKey.slice(0, 4)}年${Number(ymKey.slice(4, 6))}月段`;
+        }
+
+        let combinedDetailMd;
+        let combinedPeriodLabel = periodLabel;
+        if (rows.length > 1) {
+          // 跨月：合并多段
+          const parts = rows.map(r => {
+            const ml = buildMonthLabel(r);
+            const header = ml ? `▸ ${ml}（得分：**${r.total_score}**分）` : '';
+            const ded = buildDeductionMd(r);
+            return [header, ded].filter(Boolean).join('\n');
+          });
+          combinedDetailMd = parts.join('\n\n---\n\n');
+          const segLabels = rows.filter(r => buildMonthLabel(r)).map(r => buildMonthLabel(r)).filter(Boolean);
+          combinedPeriodLabel = `${periodLabel}（跨月${segLabels.length ? '：' + segLabels.join('、') : ''}）`;
+        } else {
+          combinedDetailMd = buildDeductionMd(mainRow);
+        }
+
         let executionFiling = 0;
         let attitudeFiling = 0;
         try {
-          executionFiling = await getMonthlyExecutionFilingCount(row.username, row.store, shanghaiYmd);
-          attitudeFiling = await getMonthlyAttitudeFilingCount(row.username, shanghaiYmd);
-        } catch (_e) {
-          /* ignore */
-        }
+          executionFiling = await getMonthlyExecutionFilingCount(mainRow.username, mainRow.store, shanghaiYmd);
+          attitudeFiling = await getMonthlyAttitudeFilingCount(mainRow.username, shanghaiYmd);
+        } catch (_e) { /* ignore */ }
 
         const card = buildPerformanceSummaryCard({
           title: '📊 绩效考核周报',
-          store: row.store,
-          periodLabel,
-          totalScore: row.total_score,
-          role: roleLabelZh(row.role),
-          detailMd,
+          store: mainRow.store,
+          periodLabel: combinedPeriodLabel,
+          totalScore: mainRow.total_score,
+          role: roleLabelZh(mainRow.role),
+          detailMd: combinedDetailMd,
           dimensionRatings: null,
           monthlyFilingSummary: { executionCount: executionFiling, attitudeCount: attitudeFiling }
         });
@@ -796,14 +824,14 @@ export async function sendWeeklyPerformanceFeishu(periodMonday, options = {}) {
           if (!r?.ok) {
             r = await sendText(
               oid,
-              `【上周绩效】${row.store} ${periodLabel}\n得分：${row.total_score}\n${row.summary || ''}`.slice(0, 3500),
+              `【上周绩效】${mainRow.store} ${combinedPeriodLabel}\n得分：${mainRow.total_score}\n${mainRow.summary || ''}`.slice(0, 3500),
               'open_id'
             );
           }
-          if (!r?.ok) logger.warn({ u: row.username }, 'weekly perf feishu user failed');
+          if (!r?.ok) logger.warn({ u: mainRow.username }, 'weekly perf feishu user failed');
         }
 
-        if (isMajixianStore(row.store) && row.role === 'store_production_manager' && !isMajixianPmObserverUsername(row.username)) {
+        if (isMajixianStore(mainRow.store) && mainRow.role === 'store_production_manager' && !isMajixianPmObserverUsername(mainRow.username)) {
           try {
             const obsU = await query(
               `SELECT open_id FROM feishu_users WHERE LOWER(username) = LOWER($1) AND registered = true AND open_id IS NOT NULL LIMIT 1`,
@@ -815,7 +843,7 @@ export async function sendWeeklyPerformanceFeishu(periodMonday, options = {}) {
               if (!obsR?.ok) {
                 obsR = await sendText(
                   obsOid,
-                  `【上周绩效】${row.store} ${periodLabel}\n得分：${row.total_score}\n${row.summary || ''}`.slice(0, 3500),
+                  `【上周绩效】${mainRow.store} ${combinedPeriodLabel}\n得分：${mainRow.total_score}\n${mainRow.summary || ''}`.slice(0, 3500),
                   'open_id'
                 );
               }
@@ -824,12 +852,11 @@ export async function sendWeeklyPerformanceFeishu(periodMonday, options = {}) {
           } catch (_e) { /* ignore */ }
         }
 
-        try {
-          await query(
-            `UPDATE agent_scores SET feishu_notified = TRUE WHERE id = $1`,
-            [row.id]
-          );
-        } catch (_e) { /* ignore */ }
+        for (const r of rows) {
+          try {
+            await query(`UPDATE agent_scores SET feishu_notified = TRUE WHERE id = $1`, [r.id]);
+          } catch (_e) { /* ignore */ }
+        }
       }
     }
     const digestMd = `**全员上周异常汇总得分（${periodLabel}）**（周度异常汇总口径）\n\n${

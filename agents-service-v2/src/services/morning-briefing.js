@@ -61,6 +61,8 @@ const ANOMALY_LABEL_ZH = {
   bad_review_service: '差评（服务）',
   product_review: '产品差评异常',
   service_review: '服务差评异常',
+  private_room_anomaly: '包房使用异常',
+  hongchao_jiuguang_private_room: '洪潮久光包房使用异常',
   food_safety: '食品安全'
 };
 

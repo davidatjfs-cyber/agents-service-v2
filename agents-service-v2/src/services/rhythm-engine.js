@@ -58,6 +58,28 @@ function addCalendarDaysYmdShanghai(ymd, deltaDays) {
   return t.toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
 }
 
+/** 返回 YYYY-MM 对应月份的最后一天 */
+function lastDayYmdForYm(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  const last = new Date(y, m, 0).getDate();
+  return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
+}
+
+/** 将日期区间按自然月切成若干段（与 periodic-scoring splitWeekByCalendarMonths 同逻辑） */
+function splitRangeByCalendarMonths(startYmd, endYmd) {
+  const segments = [];
+  let cur = String(startYmd).slice(0, 10);
+  const wkEnd = String(endYmd).slice(0, 10);
+  while (cur <= wkEnd) {
+    const ymMonth = cur.slice(0, 7);
+    const monthEnd = wkEnd < lastDayYmdForYm(ymMonth) ? wkEnd : lastDayYmdForYm(ymMonth);
+    segments.push({ start: cur, end: monthEnd, ymMonth, ymLabel: `${ymMonth.slice(0, 4)}年${Number(ymMonth.slice(5, 7))}月` });
+    if (monthEnd >= wkEnd) break;
+    cur = addCalendarDaysYmdShanghai(monthEnd, 1);
+  }
+  return segments;
+}
+
 // ─── 记录节奏执行日志 ───
 async function logRhythm(type, status, summary, error = null) {
   try {
@@ -336,6 +358,58 @@ export async function endOfDay() {
   }
 }
 
+// ─── 周报分段输出辅助函数 ───
+function aggregateOpsByStore(rows) {
+  const map = new Map();
+  for (const r of rows || []) {
+    const k = r.store;
+    if (!map.has(k)) map.set(k, { store: k, report_days: 0, total_revenue: 0, avg_revenue: 0, avg_tables: 0, avg_guests: 0 });
+    const cur = map.get(k);
+    cur.report_days += Number(r.report_days || 0);
+    cur.total_revenue += Number(r.total_revenue || 0);
+    cur.avg_revenue = cur.report_days > 0 ? Math.round(cur.total_revenue / cur.report_days) : 0;
+    cur.avg_tables = Math.round((Number(cur.avg_tables) + Number(r.avg_tables || 0)) / 2);  // rough
+    cur.avg_guests = Math.round((Number(cur.avg_guests) + Number(r.avg_guests || 0)) / 2); // rough
+  }
+  return [...map.values()];
+}
+
+function buildOpsSectionForSegment(data) {
+  if (!data || !data.length) return null;
+  const lines = [];
+  lines.push('📈 门店运营数据:');
+  for (const s of data) {
+    lines.push(`  ${s.store}: 总营收¥${s.total_revenue || 0} | 日均¥${s.avg_revenue || 0} | 日均桌数${s.avg_tables || 0} | 日均客数${s.avg_guests || 0} (${s.report_days}天数据)`);
+  }
+  return lines;
+}
+
+function buildPrivateRoomSectionForSegment(data) {
+  if (!data || !data.length) return null;
+  const lines = [];
+  lines.push('🏠 包房使用:');
+  let total = 0;
+  for (const s of data) {
+    total += Number(s.total) || 0;
+    lines.push(`  ${s.store}: ${s.total}次`);
+  }
+  lines.push(`  **合计: ${total}次**`);
+  return lines;
+}
+
+function buildBadReviewsSectionForSegment(dataMap) {
+  if (!dataMap || !dataMap.size) return null;
+  const lines = [];
+  lines.push('💬 差评数:');
+  let total = 0;
+  for (const [s, cnt] of dataMap) {
+    total += cnt;
+    lines.push(`  ${s}: ${cnt}条`);
+  }
+  lines.push(`  **合计: ${total}条**`);
+  return lines;
+}
+
 // ─── 周报生成 ───
 export async function weeklyReport() {
   logger.info('📊 Generating weekly report');
@@ -403,34 +477,107 @@ export async function weeklyReport() {
     createdFrom: 'rhythm_engine'
   }).catch(e => logger.warn({ err: e?.message }, 'rhythm weekly_report unified task failed'));
 
-  // ── 运营数据汇总(来自daily_reports) ──
-  let opsData = [];
-  try {
-    const opsR = await query(
-      `SELECT store,
-              COUNT(*) AS report_days,
-              ROUND(AVG(actual_revenue)::numeric, 0) AS avg_revenue,
-              ROUND(SUM(actual_revenue)::numeric, 0) AS total_revenue,
-              ROUND(AVG(dine_orders)::numeric, 0) AS avg_tables,
-              ROUND(AVG(dine_traffic)::numeric, 0) AS avg_guests
-       FROM daily_reports
-       WHERE date >= CURRENT_DATE - 7
-       GROUP BY store`
-    );
-    opsData = opsR.rows;
-    summary.opsDataByStore = opsData;
-  } catch (e) { logger.warn({ err: e?.message }, 'weekly ops data query failed'); }
+  // ── 跨月/单月分段数据查询 ──
+  const segments = splitRangeByCalendarMonths(weekStart, weekEnd);
 
-  // ── 主动推送周报 ──
-  const wkLines = ['📊 本周运营周报'];
-  wkLines.push(`异常检测: ${summary.weeklyChecks}项 | 触发异常: ${summary.triggered}项`);
-  if (opsData.length) {
-    wkLines.push('');
-    wkLines.push('📈 门店运营数据(本周):');
-    for (const s of opsData) {
-      wkLines.push(`  ${s.store}: 总营收¥${s.total_revenue || 0} | 日均¥${s.avg_revenue || 0} | 日均桌数${s.avg_tables || 0} | 日均客数${s.avg_guests || 0} (${s.report_days}天数据)`);
+  async function queryOpsDataForSegment(seg) {
+    try {
+      const r = await query(
+        `SELECT store, COUNT(*) AS report_days,
+                ROUND(AVG(actual_revenue)::numeric, 0) AS avg_revenue,
+                ROUND(SUM(actual_revenue)::numeric, 0) AS total_revenue,
+                ROUND(AVG(dine_orders)::numeric, 0) AS avg_tables,
+                ROUND(AVG(dine_traffic)::numeric, 0) AS avg_guests
+         FROM daily_reports
+         WHERE date >= $1::date AND date <= $2::date
+         GROUP BY store`,
+        [seg.start, seg.end]
+      );
+      return { storeData: r.rows, segLabel: seg.ymLabel };
+    } catch (_e) {
+      return { storeData: [], segLabel: seg.ymLabel };
     }
   }
+
+  async function queryPrivateRoomForSegment(seg) {
+    try {
+      const r = await query(
+        `SELECT store, SUM(COALESCE(private_room_uses, 0))::int AS total
+         FROM daily_reports
+         WHERE date >= $1::date AND date <= $2::date AND private_room_uses IS NOT NULL
+         GROUP BY store`,
+        [seg.start, seg.end]
+      );
+      return r.rows || [];
+    } catch (_e) {
+      return [];
+    }
+  }
+
+  async function queryBadReviewsForSegment(seg) {
+    try {
+      const allBr = await query(
+        `SELECT fields, created_at FROM feishu_generic_records WHERE config_key='bad_review' ORDER BY updated_at DESC LIMIT 3000`
+      );
+      const brByStore = new Map();
+      for (const row of allBr.rows || []) {
+        const f = row.fields && typeof row.fields === 'object' ? row.fields : {};
+        const storeField = String(f['差评门店'] || f['门店'] || f['所属门店'] || '').trim();
+        const dField = f['创建日期'] || f['日期'] || f['提交时间'] || f['评价日期'];
+        let d = '';
+        if (dField) {
+          if (typeof dField === 'number') {
+            const dt = new Date((dField - 25569) * 86400000);
+            d = dt.toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
+          } else {
+            d = String(dField).slice(0, 10);
+          }
+        }
+        if (!d) d = row.created_at ? new Date(row.created_at).toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10) : '';
+        if (!d || d < seg.start || d > seg.end) continue;
+        for (const s of stores) {
+          if (storeField.includes(s) || s.includes(storeField)) {
+            brByStore.set(s, (brByStore.get(s) || 0) + 1);
+          }
+        }
+      }
+      return brByStore;
+    } catch (_e) {
+      return new Map();
+    }
+  }
+
+  const segResults = await Promise.all(
+    segments.map(async (seg) => {
+      const ops = await queryOpsDataForSegment(seg);
+      const pr = await queryPrivateRoomForSegment(seg);
+      const br = await queryBadReviewsForSegment(seg);
+      return { seg, storeData: ops.storeData, privateRoom: pr, badReviews: br };
+    })
+  );
+
+  // ── 填充 summary（向后兼容） ──
+  const allSegOps = segResults.flatMap(sr => sr.storeData);
+  summary.opsDataByStore = aggregateOpsByStore(allSegOps);
+
+  // ── 构建周报卡片正文 ──
+  const wkLines = ['📊 本周运营周报'];
+  wkLines.push(`异常检测: ${summary.weeklyChecks}项 | 触发异常: ${summary.triggered}项`);
+
+  for (const sr of segResults) {
+    const isFirst = sr === segResults[0];
+    if (segments.length > 1) {
+      wkLines.push('');
+      wkLines.push(`▸ ${sr.seg.ymLabel}（${sr.seg.start}～${sr.seg.end}）`);
+    }
+    const opsMd = buildOpsSectionForSegment(sr.storeData);
+    if (opsMd) wkLines.push(...opsMd);
+    const prMd = buildPrivateRoomSectionForSegment(sr.privateRoom);
+    if (prMd) wkLines.push(...prMd);
+    const brMd = buildBadReviewsSectionForSegment(sr.badReviews);
+    if (brMd) wkLines.push(...brMd);
+  }
+
   if (summary.kpiByStore?.length) {
     wkLines.push('');
     wkLines.push('📋 KPI汇总:');
@@ -442,73 +589,6 @@ export async function weeklyReport() {
   if (summary.top3ProblemStores?.length) {
     wkLines.push('');
     wkLines.push('⚠️ 问题门店Top3: ' + summary.top3ProblemStores.map(s => `${s.store}(${s.anomaly_count}次异常)`).join(', '));
-  }
-  // ── 包房使用数(本周) ──
-  try {
-    const prR = await query(
-      `SELECT store, SUM(COALESCE(private_room_uses, 0))::int AS total
-       FROM daily_reports
-       WHERE date >= $1::date AND date <= $2::date AND private_room_uses IS NOT NULL
-       GROUP BY store`,
-      [addCalendarDaysYmdShanghai(shanghaiTodayYmd(), -6), shanghaiTodayYmd()]
-    );
-    if (prR.rows?.length) {
-      wkLines.push('');
-      wkLines.push('🏠 包房使用(本周):');
-      let prTotal = 0;
-      for (const s of prR.rows) {
-        prTotal += Number(s.total) || 0;
-        wkLines.push(`  ${s.store}: ${s.total}次`);
-      }
-      wkLines.push(`  **合计: ${prTotal}次**`);
-      summary.privateRoomUses = prR.rows;
-    }
-  } catch (e) { logger.warn({ err: e?.message }, 'weekly private_room_uses query failed'); }
-
-  // ── 差评数(本周) ──
-  try {
-    const brEnd = shanghaiTodayYmd();
-    const brStart = addCalendarDaysYmdShanghai(brEnd, -6);
-    const allBr = await query(
-      `SELECT fields, created_at FROM feishu_generic_records WHERE config_key='bad_review' ORDER BY updated_at DESC LIMIT 3000`
-    );
-    const brByStore = new Map();
-    for (const row of allBr.rows || []) {
-      const f = row.fields && typeof row.fields === 'object' ? row.fields : {};
-      const storeField = String(f['差评门店'] || f['门店'] || f['所属门店'] || '').trim();
-      const dField = f['创建日期'] || f['日期'] || f['提交时间'] || f['评价日期'];
-      let d = '';
-      if (dField) {
-        if (typeof dField === 'number') {
-          const dt = new Date((dField - 25569) * 86400000);
-          d = dt.toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
-        } else {
-          d = String(dField).slice(0, 10);
-        }
-      }
-      if (!d) d = row.created_at ? new Date(row.created_at).toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10) : '';
-      if (!d || d < brStart || d > brEnd) continue;
-      for (const s of stores) {
-        if (storeField.includes(s) || s.includes(storeField)) {
-          brByStore.set(s, (brByStore.get(s) || 0) + 1);
-        }
-      }
-    }
-    let brTotal = 0;
-    if (brByStore.size) {
-      wkLines.push('');
-      wkLines.push('💬 差评数(本周):');
-      for (const [s, cnt] of brByStore) {
-        brTotal += cnt;
-        wkLines.push(`  ${s}: ${cnt}条`);
-      }
-      wkLines.push(`  **合计: ${brTotal}条**`);
-      summary.badReviews = brByStore;
-    }
-  } catch (e) { logger.warn({ err: e?.message }, 'weekly bad_review query failed'); }
-
-  if (!opsData.length && !summary.kpiByStore?.length && !summary.top3ProblemStores?.length && !summary.privateRoomUses && !summary.badReviews) {
-    wkLines.push('暂无本周运营数据');
   }
 
   const wkEnd = shanghaiTodayYmd();
