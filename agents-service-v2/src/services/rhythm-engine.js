@@ -11,7 +11,7 @@
 import cron from 'node-cron';
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
-import { runWithCronLog, hasSuccessToday, getShanghaiNowClock } from '../utils/cron-run-monitor.js';
+import { runWithCronLog, getShanghaiNowClock } from '../utils/cron-run-monitor.js';
 import { runAnomalyChecks } from './anomaly-engine.js';
 import { pushRhythmReport, pushRhythmCard } from './feishu-client.js';
 import { buildTableVisitKpiMarkdownSection, getBadReviewRowsForStoreDateRange } from './deterministic-replies.js';
@@ -1474,12 +1474,32 @@ export function startRhythmScheduler() {
     }
   }, { timezone: 'Asia/Shanghai' });
 
-  // 每日 22:40 — 不满意产品日报补跑（仅当当日尚无 dissatisfied_product_daily 成功记录）
-  // 典型场景：PM2/内存重启落在 22:00～22:30 之间 → 22:00 整点任务被跳过，但 22:30 考勤日报仍能执行，表现即「考勤有、不满意无」。
+  // 每日 22:40 — 不满意产品日报补跑
+  // 禁止用 hasSuccessToday(dissatisfied_product_daily)：22:00 只要「正常 return」就会写入 cron ok=true，
+  // 含「过滤后 0 条、未发任何飞书」也会记成功 → 补跑被误跳过（与用户 22:40 仍收不到一致）。
+  // 以 agent_v2_scheduled_report_sends 是否出现过当日成功投递为准（与真实触达对齐）。
   cron.schedule('40 22 * * *', async () => {
     try {
       const { ymd } = getShanghaiNowClock();
-      if (await hasSuccessToday('dissatisfied_product_daily', ymd)) return;
+      let alreadyDelivered = false;
+      try {
+        const sent = await query(
+          `SELECT 1 FROM agent_v2_scheduled_report_sends
+           WHERE job_key = 'dissatisfied_product_report'
+             AND run_ymd = $1
+             AND ok = true
+           LIMIT 1`,
+          [ymd]
+        );
+        alreadyDelivered = (sent.rows || []).length > 0;
+      } catch (e) {
+        logger.warn({ err: e?.message, ymd }, 'dissatisfied product 22:40 catchup: scheduled_report_sends query failed, will run catchup');
+      }
+      if (alreadyDelivered) {
+        logger.info({ ymd }, 'dissatisfied product daily 22:40 catchup skipped: already delivered today');
+        return;
+      }
+      logger.info({ ymd }, 'dissatisfied product daily 22:40 catchup: running (no successful send row for today)');
       await runWithCronLog(
         'dissatisfied_product_daily',
         async () => {
