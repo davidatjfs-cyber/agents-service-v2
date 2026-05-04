@@ -7605,18 +7605,8 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
     const stSettings = state0.settings && typeof state0.settings === 'object' ? state0.settings : {};
     const monthlyTargets = Array.isArray(stSettings.monthlyTargets) ? stSettings.monthlyTargets : [];
     
-    // 从数据库获取点评星级（参数化查询，防 SQL 注入）
+    // 从数据库补全点评/企微等（与下方 items.map 合并；勿再单独跑未规范化日期的 unnest 查询，易 PG 报错→整接口 500）
     if (items.length > 0) {
-      const stores = items.map(item => item.store);
-      const dates = items.map(item => item.date);
-      const dbResult = await pool.query(`
-        SELECT store, date, dianping_rating, new_wechat_members, wechat_month_total, operational_anomaly_note
-        FROM daily_reports
-        WHERE (store, date) IN (
-          SELECT unnest($1::text[]), unnest($2::text[])
-        )
-      `, [stores, dates]);
-
       const dbMap = new Map();
       try {
         const pairStores = [];
