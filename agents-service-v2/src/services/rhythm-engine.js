@@ -11,7 +11,7 @@
 import cron from 'node-cron';
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
-import { runWithCronLog } from '../utils/cron-run-monitor.js';
+import { runWithCronLog, hasSuccessToday, getShanghaiNowClock } from '../utils/cron-run-monitor.js';
 import { runAnomalyChecks } from './anomaly-engine.js';
 import { pushRhythmReport, pushRhythmCard } from './feishu-client.js';
 import { buildTableVisitKpiMarkdownSection, getBadReviewRowsForStoreDateRange } from './deterministic-replies.js';
@@ -1474,6 +1474,24 @@ export function startRhythmScheduler() {
     }
   }, { timezone: 'Asia/Shanghai' });
 
+  // 每日 22:40 — 不满意产品日报补跑（仅当当日尚无 dissatisfied_product_daily 成功记录）
+  // 典型场景：PM2/内存重启落在 22:00～22:30 之间 → 22:00 整点任务被跳过，但 22:30 考勤日报仍能执行，表现即「考勤有、不满意无」。
+  cron.schedule('40 22 * * *', async () => {
+    try {
+      const { ymd } = getShanghaiNowClock();
+      if (await hasSuccessToday('dissatisfied_product_daily', ymd)) return;
+      await runWithCronLog(
+        'dissatisfied_product_daily',
+        async () => {
+          await generateDissatisfiedProductDailyReport();
+        },
+        { source: 'catchup_2240' }
+      );
+    } catch (e) {
+      logger.error({ err: e?.message }, 'dissatisfied product daily 22:40 catchup failed');
+    }
+  }, { timezone: 'Asia/Shanghai' });
+
   // 周一 09:00 — 不满意产品周报（上周一~上周日）
   cron.schedule('0 9 * * 1', async () => {
     try {
@@ -1519,6 +1537,6 @@ export function startRhythmScheduler() {
   }, { timezone: 'Asia/Shanghai' });
 
   logger.info(
-    '✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+日频BI(每日05:08)+BI通知发送(每日09:05)+月收(每月1日08:12)+周报(周一10:06)+月评(每月1日10:18)+考勤(每日22:30+补跑23:10)+不满意产品日报(每日22:00)+不满意产品周报(周一09:00)+不满意产品月报(每月1日09:00)+出餐超时周报(周一11:00)+出餐超时月报(每月1日11:00)'
+    '✅ HQ Rhythm Scheduler started — 周度BI(周一05:00)+日频BI(每日05:08)+BI通知发送(每日09:05)+月收(每月1日08:12)+周报(周一10:06)+月评(每月1日10:18)+考勤(每日22:30+补跑23:10)+不满意产品日报(每日22:00+补跑22:40)+不满意产品周报(周一09:00)+不满意产品月报(每月1日09:00)+出餐超时周报(周一11:00)+出餐超时月报(每月1日11:00)'
   );
 }
