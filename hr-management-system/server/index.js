@@ -19749,7 +19749,7 @@ process.on('unhandledRejection', (reason, promise) => {
 async function cleanupOldNotifications() {
   let deleted = 0;
   try {
-    const r = await pool.query(`DELETE FROM hrms_user_notifications WHERE created_at < now() - interval '2 months'`);
+    const r = await pool.query(`DELETE FROM hrms_user_notifications WHERE created_at < now() - interval '15 days'`);
     deleted = r.rowCount ?? 0;
   } catch (e) {
     console.error('[cleanup] hrms_user_notifications error:', e?.message);
