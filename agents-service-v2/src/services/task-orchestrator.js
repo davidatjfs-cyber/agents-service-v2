@@ -218,7 +218,7 @@ export async function createUnifiedTask({
 export async function listBoardTasks({ status, limit = 50 } = {}) {
   const params = [];
   let sql = `SELECT task_id, title, detail, status, source, category, severity, store, current_agent, assignee_agent,
-                    timeout_at, created_at, updated_at, last_activity_at, task_intent
+                    timeout_at, created_at, updated_at, last_activity_at
              FROM master_tasks WHERE source = 'hrms_task_board'`;
   if (status) {
     const statuses = String(status).split(',').map((s) => s.trim()).filter(Boolean);

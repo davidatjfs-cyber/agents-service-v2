@@ -14488,7 +14488,9 @@ async function proxyAgentTaskBoard(req, res, method, pathSuffix, body) {
     if (r.status < 200 || r.status >= 300) return res.status(r.status || 502).json(r.data || { error: 'agent_task_board_proxy_failed' });
     return res.json(r.data || { ok: true });
   } catch (e) {
-    return res.status(502).json({ error: 'internal_error' });
+    const msg = String(e?.message || e || '');
+    console.error('[proxyAgentTaskBoard]', method, pathSuffix, msg.slice(0, 500));
+    return res.status(502).json({ error: 'internal_error', detail: msg.slice(0, 240) });
   }
 }
 
