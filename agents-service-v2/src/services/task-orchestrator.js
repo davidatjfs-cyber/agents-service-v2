@@ -450,8 +450,8 @@ export async function deriveBoardTask(taskId, { content, priority, createdBy, cr
 export async function runTaskBoardWatchdog({ staleHours = 24 } = {}) {
   const hours = Math.max(1, Math.min(Number(staleHours) || 24, 168));
   const r = await query(
-    `SELECT task_id, status, assignee_agent, current_agent FROM master_tasks
-     WHERE source = 'hrms_task_board'
+    `SELECT task_id, status, assignee_agent, current_agent, source FROM master_tasks
+     WHERE source IN ('hrms_task_board', 'proactive_llm')
         AND status IN ('dispatched','pending_response','in_progress')
         AND COALESCE(last_activity_at, updated_at, created_at) < NOW() - ($1::int || ' hours')::interval
        AND (last_reminder_at IS NULL OR last_reminder_at < NOW() - INTERVAL '1 hour')
@@ -461,6 +461,16 @@ export async function runTaskBoardWatchdog({ staleHours = 24 } = {}) {
   );
   const touched = [];
   for (const row of (r.rows || [])) {
+    if (row.source === 'proactive_llm') {
+      const task = await getTask(row.task_id);
+      const timeoutAt = task?.timeout_at || task?.source_data?.timeout_at;
+      if (timeoutAt && new Date(timeoutAt) < new Date()) {
+        await query(`UPDATE master_tasks SET status = 'closed', updated_at = NOW(), last_activity_at = NOW() WHERE task_id = $1`, [row.task_id]);
+        await logEvent(row.task_id, 'auto_closed', 'task_watchdog', 'system', row.status, 'closed', { reason: 'proactive_llm expired timeout' });
+        touched.push(row.task_id);
+        continue;
+      }
+    }
     const reminder = await sendTaskReminders(row.task_id, row.assignee_agent || row.current_agent || 'task_watchdog');
     if (reminder.ok && !reminder.skipped) touched.push(row.task_id);
   }
