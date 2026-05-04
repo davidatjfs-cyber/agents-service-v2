@@ -7189,6 +7189,9 @@ function mergeDailyReportDetailArrays(prevArr, nextArr) {
  * 避免 state 中缺 staff/scheduleNextDay/photos 时盖住 PG 完整数据。
  */
 function mergeDailyReportItemWithPgRow(existingItem, pgRow) {
+  if (!existingItem || typeof existingItem !== 'object') {
+    return dailyReportItemFromPgRow(pgRow);
+  }
   const pgItem = dailyReportItemFromPgRow(pgRow);
   const ed = existingItem?.data && typeof existingItem.data === 'object' ? existingItem.data : {};
   const pd = pgItem?.data && typeof pgItem.data === 'object' ? pgItem.data : {};
@@ -7467,6 +7470,9 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
       items = items.filter(r => inDateRange(String(r?.date || '').trim(), start, end));
     }
 
+    // state.dailyReports 若含 null/非对象，后面 findIndex(i => dailyReportMergeKey(i.store,...)) 会读 i.store 抛 TypeError → 整接口 500
+    items = items.filter(r => r && typeof r === 'object');
+
     // 合并 PostgreSQL daily_reports：默认列表场景也要补并最近已落库数据。
     // 否则一旦 hrms_state.dailyReports 断档，前端会从某一天开始整段“消失”。
     let pgMergeStart = '';
@@ -7512,7 +7518,7 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
         const pgR = await pool.query(sql, args);
         for (const row of pgR.rows) {
           const k = dailyReportMergeKey(row.store, row.date);
-          const idx = items.findIndex(i => dailyReportMergeKey(i.store, i.date) === k);
+          const idx = items.findIndex(i => i && dailyReportMergeKey(i.store, i.date) === k);
           if (idx < 0) items.push(dailyReportItemFromPgRow(row));
           else items[idx] = mergeDailyReportItemWithPgRow(items[idx], row);
         }
@@ -7542,7 +7548,7 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
         const pgR = await pool.query(sql, args);
         for (const row of pgR.rows) {
           const k = dailyReportMergeKey(row.store, row.date);
-          const idx = items.findIndex(i => dailyReportMergeKey(i.store, i.date) === k);
+          const idx = items.findIndex(i => i && dailyReportMergeKey(i.store, i.date) === k);
           if (idx < 0) items.push(dailyReportItemFromPgRow(row));
           else items[idx] = mergeDailyReportItemWithPgRow(items[idx], row);
         }
@@ -7555,29 +7561,51 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
     const stSettings = state0.settings && typeof state0.settings === 'object' ? state0.settings : {};
     const monthlyTargets = Array.isArray(stSettings.monthlyTargets) ? stSettings.monthlyTargets : [];
     
-    // 从数据库获取点评星级
+    // 从数据库获取点评星级（必须用参数化查询：state 中 date 可能是 Date/ISO 字符串，拼进 SQL 会导致 invalid input syntax for type date；门店名含 ' 也会打断 IN 子句）
     if (items.length > 0) {
-      const storeDatePairs = items.map(item => `('${item.store}','${item.date}')`).join(',');
-      const dbResult = await pool.query(`
-        SELECT store, date, dianping_rating, new_wechat_members, wechat_month_total, operational_anomaly_note
-        FROM daily_reports
-        WHERE (store, date) IN (${storeDatePairs})
-      `);
-      
       const dbMap = new Map();
-      for (const row of dbResult.rows) {
-        dbMap.set(dailyReportMergeKey(row.store, row.date), row);
+      try {
+        const pairStores = [];
+        const pairDates = [];
+        const seenPair = new Set();
+        for (const item of items) {
+          if (!item || typeof item !== 'object') continue;
+          const s = String(item.store || '').trim();
+          const d = formatPgDateOnly(item.date);
+          // 仅 YYYY-MM-DD 进 unnest::date，避免脏数据导致 PG 报错（错误已 try 包住，但可少一次无效查询）
+          if (!s || !d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+          const pk = `${s}|${d}`;
+          if (seenPair.has(pk)) continue;
+          seenPair.add(pk);
+          pairStores.push(s);
+          pairDates.push(d);
+        }
+        if (pairStores.length > 0) {
+          const dbResult = await pool.query(
+            `SELECT dr.store, dr.date, dr.dianping_rating, dr.new_wechat_members, dr.wechat_month_total, dr.operational_anomaly_note
+             FROM daily_reports dr
+             INNER JOIN (SELECT * FROM unnest($1::text[], $2::text[]) AS pairs(store, ymd))
+               ON TRIM(dr.store) = TRIM(pairs.store) AND dr.date = pairs.ymd::date`,
+            [pairStores, pairDates]
+          );
+          for (const row of dbResult.rows) {
+            dbMap.set(dailyReportMergeKey(row.store, row.date), row);
+          }
+        }
+      } catch (e) {
+        console.error('[daily-reports db enrichment]', e?.message || e);
       }
-      
+
       items = items.map(item => {
+        if (!item || typeof item !== 'object') return item;
         const key = dailyReportMergeKey(item.store, item.date);
         const dbData = dbMap.get(key);
-        
-        // 从monthlyTargets查找当月目标
-        const ym = String(item.date || '').slice(0, 7);
-        const targetConfig = monthlyTargets.find(t => 
-          String(t?.ym || t?.month || '').trim() === ym && 
-          String(t?.store || '').trim() === String(item.store || '').trim()
+
+        // 从monthlyTargets查找当月目标（与 key 一致用规范 YYYY-MM）
+        const ym = formatPgDateOnly(item.date).slice(0, 7);
+        const targetConfig = monthlyTargets.find(t =>
+          String(t?.ym || t?.month || '').trim() === ym &&
+          String(t?.store || '').trim() === String(item?.store || '').trim()
         );
         
         return {
@@ -7619,6 +7647,7 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
     }
     return res.json({ items, wechat_month_base });
   } catch (e) {
+    console.error('[daily-reports GET] fatal:', e?.stack || e?.message || e);
     return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
   }
 });
