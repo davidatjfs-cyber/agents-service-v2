@@ -10415,7 +10415,7 @@
                         <div class="atb-stat"><b id="atb-stat-assigned">-</b><span>已分配</span></div>
                         <div class="atb-stat"><b id="atb-stat-executed">-</b><span>已执行</span></div>
                         <div class="atb-stat"><b id="atb-stat-review">-</b><span>待验收</span></div>
-                        <div class="atb-stat"><b id="atb-stat-overdue">-</b><span>超时</span></div>
+                        <div class="atb-stat" title="已超过任务截止时点（timeout_at）且未结案的数量；与卡片上的「超4h无动态」不同"><b id="atb-stat-overdue">-</b><span>超时</span></div>
                         <div class="atb-stat"><b id="atb-stat-avgtime">-</b><span>平均闭环</span></div>
                         <div class="atb-stat"><b id="atb-stat-evidence">-</b><span>证据覆盖</span></div>
                     </div>
@@ -19549,9 +19549,11 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                 const dt = atbFmtTime(t.created_at);
                 const lastAct = new Date(t.last_activity_at || t.updated_at || t.created_at);
                 const staleHours = (Date.now() - lastAct.getTime()) / 3600000;
-                const isStale = staleHours > 4 && !['已结案','已打回','已升级','已备案','closed','settled','resolved'].includes(board);
+                const isStale =
+                    staleHours > 4 &&
+                    !['已结案','已打回','已升级','已备案','待验收','closed','settled','resolved'].includes(board);
                 return '<article class="atb-card' + (isStale ? ' atb-card-stale' : '') + '" onclick="openAgentTaskDetail(\'' + atbEscape(t.task_id) + '\')">'
-                    + '<div class="atb-card-head"><span class="atb-badge ' + atbBadgeClass(board) + '">' + atbEscape(board) + '</span><span class="atb-badge">' + atbEscape(t.assignee_agent || t.current_agent || '待分配') + '</span>' + (isStale ? '<span class="atb-badge" style="background:rgba(239,68,68,0.25);color:#fca5a5;">超时</span>' : '') + '</div>'
+                    + '<div class="atb-card-head"><span class="atb-badge ' + atbBadgeClass(board) + '">' + atbEscape(board) + '</span><span class="atb-badge">' + atbEscape(t.assignee_agent || t.current_agent || '待分配') + '</span>' + (isStale ? '<span class="atb-badge" style="background:rgba(239,68,68,0.25);color:#fca5a5;" title="超过4小时无记录更新（last_activity），非截止时点超时">超4h无动态</span>' : '') + '</div>'
                     + '<h3>' + atbEscape(t.title || t.task_id) + '</h3>'
                     + '<p>' + atbEscape(t.detail || '') + '</p>'
                     + '<div class="atb-meta"><span>门店：' + atbEscape(t.store || '-') + '</span><span>类型：' + atbEscape(atbCategoryZh(t.category)) + '</span><span>优先级：' + atbEscape(atbPriorityZh(t.priority || t.severity)) + '</span><span>提交时间：' + atbEscape(dt || '-') + '</span></div>'

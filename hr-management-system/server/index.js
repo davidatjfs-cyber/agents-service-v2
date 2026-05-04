@@ -14507,6 +14507,10 @@ app.post('/api/agent-task-board/tasks', authRequired, (req, res) => {
   return proxyAgentTaskBoard(req, res, 'POST', '/tasks', req.body || {});
 });
 
+app.post('/api/agent-task-board/tasks/bulk-close-open', authRequired, (req, res) => {
+  return proxyAgentTaskBoard(req, res, 'POST', '/tasks/bulk-close-open', req.body || {});
+});
+
 app.get('/api/agent-task-board/tasks/:taskId', authRequired, (req, res) => {
   return proxyAgentTaskBoard(req, res, 'GET', `/tasks/${encodeURIComponent(req.params.taskId)}`);
 });

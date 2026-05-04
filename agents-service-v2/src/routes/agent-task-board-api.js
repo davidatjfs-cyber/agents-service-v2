@@ -10,6 +10,7 @@ import {
   listBoardTasks,
   reassignTask,
   reviewBoardTask,
+  bulkCloseOpenHrmsBoardTasks,
   runTaskBoardWatchdog,
   setTaskQualityScore,
   claimNextTask,
@@ -32,6 +33,20 @@ router.post('/tasks', ...adminOnly, async (req, res) => {
       createdByRole: req.user?.role
     });
     if (!result.ok) return res.status(400).json(result);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message });
+  }
+});
+
+router.post('/tasks/bulk-close-open', ...adminOnly, async (req, res) => {
+  try {
+    const result = await bulkCloseOpenHrmsBoardTasks({
+      reviewer: req.user?.username || 'admin',
+      comment: req.body?.comment || '管理员批量关闭（测试任务清理）',
+      confirm: req.body?.confirm
+    });
+    if (result.error === 'confirmation_required') return res.status(400).json(result);
     res.json(result);
   } catch (e) {
     res.status(500).json({ ok: false, error: e?.message });
