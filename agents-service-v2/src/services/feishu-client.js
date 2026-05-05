@@ -1298,12 +1298,6 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
     let reason = '';
     let feedback = '';
 
-    // 巡检/试味类任务：回复非占位词且满 20 字即自动通过，无需 LLM 评判，立即停止催办
-    if (isScheduledOrInspectionOrBi && !isPlaceholder && textMeetsMin) {
-      passed = true;
-      reason = '巡检回复已收到，内容满足基本要求，自动通过。';
-    }
-
     let imageRelevant = true;
     let imageVisionReason = '';
     if (hasImages) {
@@ -1365,6 +1359,10 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
       passed = false;
       reason = `回复未满 ${MIN_TEXT} 字`;
       feedback = `请至少回复 **${MIN_TEXT} 字**，且内容与任务卡片要求一致；有附图时附图也须与任务一致。`;
+    } else if (isScheduledOrInspectionOrBi) {
+      // 巡检/试味类：非占位词+满20字即自动通过，无需 LLM 评判三要素，立即停止催办
+      passed = true;
+      reason = '巡检回复已收到，内容满足基本要求，自动通过。';
     } else {
       try {
         const imgNote = hasImages
