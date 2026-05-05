@@ -663,7 +663,8 @@ async function getStoreMeetingReports(store, period) {
  * master_tasks 中 assignee 命中、来源含抽检/定时/BI 任务卡/数据审计/协作，且已打标 hr_performance_recorded
  *（满 3 次催办仍未闭环、或审核 3 次不通过等；催办路径不向 agent_scores 扣分，仅态度统计）。
  */
-async function getIncompleteTaskCount(username, period) {
+/** 当月工作态度备案次数（与 agents 统计一致；已 performance_invalidation 的 task_id 不计入） */
+export async function getIncompleteTaskCount(username, period) {
   const un = String(username || '').trim();
   if (!un) return 0;
   const { startDate, endDate } = periodDateRange(period);

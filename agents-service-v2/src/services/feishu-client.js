@@ -740,7 +740,7 @@ export async function handleWebhookEvent(body) {
               hasTaskImage,
               msg?.message_id || null,
               hasTaskImage ? String(imageKey).trim() : null
-            ).catch(() => {});
+            ).catch((e) => logger.warn({ err: e?.message, stack: e?.stack, taskId }, 'reviewTaskReply async failed'));
           });
 
           return { ok: true, eventType, mode: 'task_reply_captured', taskId };

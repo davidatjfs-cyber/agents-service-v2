@@ -1,9 +1,18 @@
 import { pool } from './utils/database.js';
-import { calculateEmployeeScore } from './new-scoring-model.js';
-import { sendLarkCard } from './agents.js';
+import { calculateEmployeeScore, getIncompleteTaskCount } from './new-scoring-model.js';
+import { sendLarkCard, sendLarkMessage } from './agents.js';
 
 function getShanghaiYmd() {
   return new Date().toLocaleString('en-CA', { timeZone: 'Asia/Shanghai' }).slice(0, 10);
+}
+
+/** @param {string|Date} isoOrDate */
+function formatShanghaiYmdChinese(isoOrDate) {
+  const d = new Date(isoOrDate);
+  const y = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric' }).format(d);
+  const m = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', month: 'numeric' }).format(d);
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', day: 'numeric' }).format(d);
+  return `${y}年${Number(m)}月${Number(day)}日`;
 }
 
 function getShanghaiPrevYm() {
@@ -222,6 +231,8 @@ export function registerPerformanceInvalidationRoutes(app, authRequired) {
       let beforeData = {};
       let empStore = store || '';
       let empRole = '';
+      /** @type {Date|string|null} */
+      let filingDispatchedAt = null;
 
       await p.query('BEGIN');
 
@@ -250,6 +261,7 @@ export function registerPerformanceInvalidationRoutes(app, authRequired) {
           await p.query('ROLLBACK');
           return res.status(404).json({ error: 'record_not_found' });
         }
+        filingDispatchedAt = chk.rows[0].dispatched_at;
         createdAt = chk.rows[0].dispatched_at;
         if (!isWithin3DaysAndSameMonth(createdAt)) {
           await p.query('ROLLBACK');
@@ -328,6 +340,51 @@ export function registerPerformanceInvalidationRoutes(app, authRequired) {
         || beforeData.attitude_rating !== safeAfter.attitude_rating
         || beforeData.ability_rating !== safeAfter.ability_rating
       );
+
+      // 备案任务失效：固定话术（与绩效分是否变动无关），避免用户只看到笼统「绩效变更」
+      if (source_type === 'master_tasks_filing' && filingDispatchedAt) {
+        const ymdZh = formatShanghaiYmdChinese(filingDispatchedAt);
+        let monthlyAttitude = 0;
+        try {
+          monthlyAttitude = await getIncompleteTaskCount(username, period);
+        } catch (e) {
+          console.warn('[performance-invalidate] getIncompleteTaskCount:', e?.message);
+        }
+        const taskIdStr = String(source_id);
+        const filingMsg =
+          `您的${ymdZh}的工作态度备案任务：${taskIdStr}，已经被取消，本月最新的工作态度备案次数是${monthlyAttitude}次，有任务疑问可以咨询总部营运！`;
+        try {
+          await p.query(
+            `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
+             VALUES ($1, $2, $3, $4, $5::jsonb)`,
+            [
+              username,
+              `工作态度备案已取消｜${taskIdStr}`,
+              filingMsg,
+              'master_tasks_filing_invalidation',
+              JSON.stringify({
+                period,
+                source_id: taskIdStr,
+                monthly_attitude_filing_count: monthlyAttitude,
+                dispatched_date_zh: ymdZh
+              })
+            ]
+          );
+        } catch (e) {
+          console.warn('[performance-invalidate] filing notification insert failed:', e?.message);
+        }
+        const openFiling = await p.query(
+          `SELECT open_id FROM feishu_users
+           WHERE LOWER(TRIM(username)) = LOWER(TRIM($1)) AND registered = TRUE AND open_id IS NOT NULL AND open_id <> ''
+           LIMIT 1`,
+          [username]
+        );
+        if (openFiling.rows?.[0]?.open_id) {
+          sendLarkMessage(openFiling.rows[0].open_id, filingMsg, { skipDedup: true }).catch((e) =>
+            console.warn('[performance-invalidate] filing cancel Lark failed:', e?.message)
+          );
+        }
+      }
 
       // ── Phase 3: Notifications (only if score actually changed) ──
       if (hasChange) {

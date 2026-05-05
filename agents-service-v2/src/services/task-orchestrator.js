@@ -293,6 +293,14 @@ export async function addTaskEvidence(taskId, { evidenceType = 'text', content, 
     const latest = await getTask(taskId);
     if (latest?.status === 'pending_response') {
       await transitionTask(taskId, 'pending_review', 'task_orchestrator', { evidenceSubmitted: true });
+      // 门店已回复进入待审核：清零催办计数，避免「pending_review 期间或未显示审核结果」时仍按满 3 次催办直接打态度备案
+      const src = String((await getTask(taskId))?.source || '').trim();
+      if (['scheduled_inspection', 'random_inspection', 'bi_anomaly', 'auto_collab', 'data_auditor'].includes(src)) {
+        await query(
+          `UPDATE master_tasks SET remind_count = 0, last_reminder_at = NULL, updated_at = NOW() WHERE task_id = $1`,
+          [taskId]
+        ).catch((e) => logger.warn({ err: e?.message, taskId }, 'reset remind_count on pending_review skipped'));
+      }
     }
   }
   return { ok: true };
