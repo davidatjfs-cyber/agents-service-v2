@@ -8,7 +8,7 @@ import { logger } from '../utils/logger.js';
 import { query } from '../utils/db.js';
 import { getConfig } from './config-service.js';
 import { runAnomalyChecks } from './anomaly-engine.js';
-import { sendText, sendCard } from './feishu-client.js';
+import { sendText, sendCard, feishuOutboundMessageId } from './feishu-client.js';
 import { resolveSingleScoringUser } from '../utils/scoring-assignee.js';
 import { formatTaskCardAuditSection } from './task-reply-audit-hint.js';
 import { createUnifiedTask } from './task-orchestrator.js';
@@ -306,11 +306,17 @@ async function pingUsersForStores(stores, roles, cardOrText, assigneeUsername) {
       if (!sameStore(row.store, store)) continue;
       if (isCard) {
         const res = await sendCard(row.open_id, cardOrText).catch(() => ({ ok: false }));
-        const mid = res?.data?.message_id || res?.data?.data?.message_id;
+        const mid = feishuOutboundMessageId(res);
         if (mid) sentMsgIds.push(mid);
-        if (!res.ok) await sendText(row.open_id, String(cardOrText._fallback || '定时任务提醒'), 'open_id').catch(() => {});
+        if (!res.ok) {
+          const tRes = await sendText(row.open_id, String(cardOrText._fallback || '定时任务提醒'), 'open_id').catch(() => ({ ok: false }));
+          const tmid = feishuOutboundMessageId(tRes);
+          if (tmid) sentMsgIds.push(tmid);
+        }
       } else {
-        await sendText(row.open_id, cardOrText, 'open_id').catch(() => {});
+        const tRes = await sendText(row.open_id, cardOrText, 'open_id').catch(() => ({ ok: false }));
+        const tmid = feishuOutboundMessageId(tRes);
+        if (tmid) sentMsgIds.push(tmid);
       }
       pingedOpenIds.push(row.open_id);
       n++;
@@ -388,11 +394,17 @@ export async function executeDailyInspectionItem(item) {
         const isCard = card && typeof card === 'object';
         if (isCard) {
           const res = await sendCard(assigneeOpenId, card).catch(() => ({ ok: false }));
-          const mid = res?.data?.message_id || res?.data?.data?.message_id;
+          const mid = feishuOutboundMessageId(res);
           if (mid) sentMsgIds.push(mid);
-          if (!res.ok) await sendText(assigneeOpenId, String(card._fallback || '定时任务提醒'), 'open_id').catch(() => {});
+          if (!res.ok) {
+            const tRes = await sendText(assigneeOpenId, String(card._fallback || '定时任务提醒'), 'open_id').catch(() => ({ ok: false }));
+            const tmid = feishuOutboundMessageId(tRes);
+            if (tmid) sentMsgIds.push(tmid);
+          }
         } else {
-          await sendText(assigneeOpenId, card, 'open_id').catch(() => {});
+          const tRes = await sendText(assigneeOpenId, card, 'open_id').catch(() => ({ ok: false }));
+          const tmid = feishuOutboundMessageId(tRes);
+          if (tmid) sentMsgIds.push(tmid);
         }
         pingedOpenIds.push(assigneeOpenId);
       }
@@ -453,11 +465,17 @@ export async function executeDailyInspectionItem(item) {
       const isCard = card && typeof card === 'object';
       if (isCard) {
         const res = await sendCard(assigneeOpenId, card).catch(() => ({ ok: false }));
-        const mid = res?.data?.message_id || res?.data?.data?.message_id;
+        const mid = feishuOutboundMessageId(res);
         if (mid) allSentMsgIds.push(mid);
-        if (!res.ok) await sendText(assigneeOpenId, String(card._fallback || '定时任务提醒'), 'open_id').catch(() => {});
+        if (!res.ok) {
+          const tRes = await sendText(assigneeOpenId, String(card._fallback || '定时任务提醒'), 'open_id').catch(() => ({ ok: false }));
+          const tmid = feishuOutboundMessageId(tRes);
+          if (tmid) allSentMsgIds.push(tmid);
+        }
       } else {
-        await sendText(assigneeOpenId, card, 'open_id').catch(() => {});
+        const tRes = await sendText(assigneeOpenId, card, 'open_id').catch(() => ({ ok: false }));
+        const tmid = feishuOutboundMessageId(tRes);
+        if (tmid) allSentMsgIds.push(tmid);
       }
       allPingedOpenIds.push(assigneeOpenId);
     }

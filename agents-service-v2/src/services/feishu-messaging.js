@@ -21,6 +21,16 @@ function isBlockedByWhitelist(receiveId, idType) {
   return !_notifyWhitelist.has(String(receiveId).trim());
 }
 
+/** sendText/sendCard 返回体中解析下发消息的 message_id，便于并入 master_tasks.feishu_msg_ids（纯文本降级送达时尤其重要） */
+export function feishuOutboundMessageId(result) {
+  const root = result?.data;
+  if (!root || typeof root !== 'object') return '';
+  const inner = root.data;
+  if (inner && typeof inner === 'object' && inner.message_id) return String(inner.message_id).trim();
+  if (root.message_id) return String(root.message_id).trim();
+  return '';
+}
+
 export async function sendText(receiveId, text, idType = 'open_id') {
   if (isBlockedByWhitelist(receiveId, idType)) {
     logger.info({ receiveId, idType }, 'sendText blocked by FEISHU_NOTIFY_WHITELIST');

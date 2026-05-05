@@ -16,7 +16,7 @@ import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { runWithCronLog } from '../utils/cron-run-monitor.js';
 import { resolveAssigneeOpenIdsForTask } from '../utils/feishu-assignee-resolve.js';
-import { sendText, sendCard, sendGroup, sendGroupCard, sendCompanyNoticeToAssignees } from './feishu-client.js';
+import { sendText, sendCard, sendGroup, sendGroupCard, sendCompanyNoticeToAssignees, feishuOutboundMessageId } from './feishu-client.js';
 import { getShanghaiYmd } from './report-delivery.js';
 import {
   getMonthlyAttitudeFilingCount,
@@ -615,11 +615,13 @@ export async function processTaskCardReminders() {
     const newMsgIds = [];
     for (const oid of oids) {
       const res = await sendCard(oid, reminderCard).catch(() => ({ ok: false }));
-      if (res.ok) {
-        const msgId = res.data?.data?.message_id;
-        if (msgId) newMsgIds.push(msgId);
+      const msgId = feishuOutboundMessageId(res);
+      if (res.ok && msgId) {
+        newMsgIds.push(msgId);
       } else {
-        await sendText(oid, fallbackText, 'open_id').catch(() => {});
+        const tRes = await sendText(oid, fallbackText, 'open_id').catch(() => ({ ok: false }));
+        const tmid = feishuOutboundMessageId(tRes);
+        if (tmid) newMsgIds.push(tmid);
       }
     }
 

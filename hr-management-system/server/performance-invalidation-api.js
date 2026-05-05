@@ -384,6 +384,35 @@ export function registerPerformanceInvalidationRoutes(app, authRequired) {
             console.warn('[performance-invalidate] filing cancel Lark failed:', e?.message)
           );
         }
+
+        const adminCopy = `【抄送·备案失效已生效】操作人：${adminUser}；责任人：${username}（${empStore || '—'}）；${filingMsg}`;
+        try {
+          await p.query(
+            `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
+             VALUES ($1, $2, $3, $4, $5::jsonb)`,
+            [
+              adminUser,
+              `抄送·工作态度备案已取消｜${taskIdStr}→${username}`,
+              adminCopy,
+              'master_tasks_filing_invalidation_admin_cc',
+              JSON.stringify({ period, source_id: taskIdStr, assignee_username: username })
+            ]
+          );
+        } catch (e) {
+          console.warn('[performance-invalidate] admin in-app copy failed:', e?.message);
+        }
+        const admOpen = await p.query(
+          `SELECT open_id FROM feishu_users
+           WHERE LOWER(TRIM(username)) = LOWER(TRIM($1)) AND registered = TRUE AND open_id IS NOT NULL AND open_id <> ''
+             AND open_id NOT LIKE '%probe%'
+           ORDER BY updated_at DESC LIMIT 1`,
+          [adminUser]
+        );
+        if (admOpen.rows?.[0]?.open_id) {
+          sendLarkMessage(admOpen.rows[0].open_id, adminCopy, { skipDedup: true }).catch((e) =>
+            console.warn('[performance-invalidate] admin Lark copy failed:', e?.message)
+          );
+        }
       }
 
       // ── Phase 3: Notifications (only if score actually changed) ──

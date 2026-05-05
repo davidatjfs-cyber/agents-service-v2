@@ -33,7 +33,8 @@ export {
   sendGroup,
   sendGroupCard,
   replyMsg,
-  downloadImage
+  downloadImage,
+  feishuOutboundMessageId
 } from './feishu-messaging.js';
 
 export {
@@ -64,7 +65,7 @@ export {
 } from './feishu-cards.js';
 
 // ── Re-imports needed by remaining functions ──
-import { sendText, sendCard, sendGroup, sendGroupCard, replyMsg, downloadImage } from './feishu-messaging.js';
+import { sendText, sendCard, sendGroup, sendGroupCard, replyMsg, downloadImage, feishuOutboundMessageId } from './feishu-messaging.js';
 import { getTenantToken, BASE } from './feishu-auth.js';
 import { refreshFeishuUserOpenIdForImDelivery, lookupUser, getHrmsEmployeeByFeishuOpenId, feishuOpenIdIsMajixianPmObserver } from './feishu-users.js';
 import { buildAnomalyCard } from './feishu-cards.js';
@@ -546,7 +547,7 @@ export async function handleWebhookEvent(body) {
           `SELECT task_id
            FROM master_tasks
            WHERE status IN ('pending_response','pending_review')
-             AND source IN ('random_inspection','scheduled_inspection','bi_anomaly')
+             AND source IN ('random_inspection','scheduled_inspection','bi_anomaly','auto_collab','data_auditor')
              AND EXISTS (
                SELECT 1 FROM jsonb_array_elements_text(COALESCE(feishu_msg_ids, '[]'::jsonb)) AS mid
                WHERE mid = ANY($1::text[])
@@ -571,7 +572,7 @@ export async function handleWebhookEvent(body) {
              LEFT JOIN feishu_users fu ON fu.open_id = $2 AND fu.registered = TRUE
              WHERE mt.task_id = $1
                AND mt.status IN ('pending_response','pending_review')
-               AND mt.source IN ('random_inspection','scheduled_inspection','bi_anomaly')
+               AND mt.source IN ('random_inspection','scheduled_inspection','bi_anomaly','auto_collab','data_auditor')
                AND (
                   fu.role IN ('admin','hq_manager')
                   AND fu.open_id NOT LIKE '%probe%'
@@ -1453,6 +1454,15 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
            WHERE task_id = $1`,
           [taskId, reason]
         ).catch(() => {});
+      }
+
+      // 审核驳回：任务回到 pending_response。若此前催办已将 remind_count 拉到 3，不清零则会在下一次催办 cron 中立刻满足「满 3 次 + 1 小时」→ hr_attitude_standard_chase，与「门店已回复正改」并存。
+      const chaseAlignedSources = ['scheduled_inspection', 'random_inspection', 'bi_anomaly', 'auto_collab', 'data_auditor'];
+      if (chaseAlignedSources.includes(String(task.source || '').trim())) {
+        await query(
+          `UPDATE master_tasks SET remind_count = 0, last_reminder_at = NULL, updated_at = NOW() WHERE task_id = $1`,
+          [taskId]
+        ).catch((e) => logger.warn({ err: e?.message, taskId }, 'reset remind_count after review reject skipped'));
       }
 
       const rejectCard = {
