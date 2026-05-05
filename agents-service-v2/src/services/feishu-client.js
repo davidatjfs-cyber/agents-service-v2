@@ -678,13 +678,16 @@ export async function handleWebhookEvent(body) {
           }
 
           const { addTaskEvidence } = await import('./task-orchestrator.js');
-          await addTaskEvidence(taskId, {
-            evidenceType: responseImages?.length ? 'photo' : 'text',
-            content: responseText,
-            submittedBy: openId,
-            submittedRole: 'feishu_user',
-            metadata: { responseImages, source: 'feishu_direct_task_reply', messageId: msg?.message_id || null }
-          }).catch(async () => {
+          try {
+            await addTaskEvidence(taskId, {
+              evidenceType: responseImages?.length ? 'photo' : 'text',
+              content: responseText,
+              submittedBy: openId,
+              submittedRole: 'feishu_user',
+              metadata: { responseImages, source: 'feishu_direct_task_reply', messageId: msg?.message_id || null }
+            });
+          } catch (evErr) {
+            logger.warn({ err: evErr?.message, taskId }, 'addTaskEvidence threw; attempting chase-task pending_review fallback');
             await query(
               `UPDATE master_tasks
                SET responded_at = NOW(),
@@ -694,7 +697,22 @@ export async function handleWebhookEvent(body) {
                 WHERE task_id = $1`,
               [taskId, responseText, responseImages]
             ).catch(() => {});
-          });
+            await query(
+              `UPDATE master_tasks SET
+                 status = 'pending_review',
+                 responded_at = COALESCE(responded_at, NOW()),
+                 remind_count = 0,
+                 last_reminder_at = NULL,
+                 updated_at = NOW()
+               WHERE task_id = $1
+                 AND source = ANY($2::text[])
+                 AND status IN ('pending_response', 'dispatched')`,
+              [
+                taskId,
+                ['scheduled_inspection', 'random_inspection', 'bi_anomaly', 'auto_collab', 'data_auditor']
+              ]
+            ).catch(() => {});
+          }
 
           const recordId = matchedCardMessageId ? String(matchedCardMessageId) : (msg?.message_id ? String(msg.message_id) : '');
           if (recordId) {
@@ -716,11 +734,21 @@ export async function handleWebhookEvent(body) {
             ).catch(() => {});
           }
 
+          const stRow = await query(`SELECT status FROM master_tasks WHERE task_id = $1 LIMIT 1`, [taskId]).catch(() => ({ rows: [] }));
+          const curSt = String(stRow.rows?.[0]?.status || '').trim();
+
           if (msg?.message_id) {
-            await replyMsg(
-              msg.message_id,
-              `✅ 已收到你的回复，系统正在审核内容质量，任务：${taskId}。`
-            ).catch(() => {});
+            if (curSt === 'pending_review') {
+              await replyMsg(
+                msg.message_id,
+                `✅ 已收到你的回复，系统正在审核内容质量，任务：${taskId}。`
+              ).catch(() => {});
+            } else {
+              await replyMsg(
+                msg.message_id,
+                `⚠️ 已记录回复，但任务未进入待审核（当前状态：${curSt || '未知'}），任务：${taskId}。若仍收到催办，请截图联系总部营运。`
+              ).catch(() => {});
+            }
           }
           logger.info(
             {

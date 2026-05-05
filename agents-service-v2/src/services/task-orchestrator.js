@@ -287,20 +287,55 @@ export async function addTaskEvidence(taskId, { evidenceType = 'text', content, 
     }
     setImmediate(() => evaluateBoardTaskAfterStoreFeedback(taskId).catch((e) => logger.warn({ taskId, err: e?.message }, 'store feedback evaluation failed')));
   } else {
+    const chaseSources = new Set(['scheduled_inspection', 'random_inspection', 'bi_anomaly', 'auto_collab', 'data_auditor']);
     if (task.status === 'dispatched') {
-      await transitionTask(taskId, 'pending_response', submittedBy || 'task_board', { evidenceSubmitted: true });
-    }
-    const latest = await getTask(taskId);
-    if (latest?.status === 'pending_response') {
-      await transitionTask(taskId, 'pending_review', 'task_orchestrator', { evidenceSubmitted: true });
-      // 门店已回复进入待审核：清零催办计数，避免「pending_review 期间或未显示审核结果」时仍按满 3 次催办直接打态度备案
-      const src = String((await getTask(taskId))?.source || '').trim();
-      if (['scheduled_inspection', 'random_inspection', 'bi_anomaly', 'auto_collab', 'data_auditor'].includes(src)) {
-        await query(
-          `UPDATE master_tasks SET remind_count = 0, last_reminder_at = NULL, updated_at = NOW() WHERE task_id = $1`,
-          [taskId]
-        ).catch((e) => logger.warn({ err: e?.message, taskId }, 'reset remind_count on pending_review skipped'));
+      const trDisp = await transitionTask(taskId, 'pending_response', submittedBy || 'task_board', { evidenceSubmitted: true });
+      if (!trDisp?.ok) {
+        logger.error({ taskId, err: trDisp?.error }, 'addTaskEvidence: dispatched→pending_response failed');
       }
+    }
+    let latest = await getTask(taskId);
+    if (latest?.status === 'pending_response') {
+      const trRev = await transitionTask(taskId, 'pending_review', 'task_orchestrator', { evidenceSubmitted: true });
+      if (!trRev?.ok) {
+        logger.error({ taskId, err: trRev?.error }, 'addTaskEvidence: pending_response→pending_review failed (state machine returned ok:false)');
+      }
+    }
+    latest = await getTask(taskId);
+    const src = String(latest?.source || '').trim();
+    // 状态机偶发不推进时，任务会一直停在 pending_response → 催办 cron 仍扫到并继续 1/2/3 催办，与用户已收「正在审核」矛盾
+    if (chaseSources.has(src) && latest && !['pending_review', 'resolved', 'closed', 'hr_filed', 'settled'].includes(String(latest.status || '').trim())) {
+      const forced = await query(
+        `UPDATE master_tasks SET
+           status = 'pending_review',
+           responded_at = COALESCE(responded_at, NOW()),
+           remind_count = 0,
+           last_reminder_at = NULL,
+           updated_at = NOW()
+         WHERE task_id = $1
+           AND status IN ('pending_response', 'dispatched')
+         RETURNING task_id`,
+        [taskId]
+      ).catch(() => ({ rows: [] }));
+      if (forced.rows?.length) {
+        logger.warn({ taskId, wasStatus: latest.status }, 'addTaskEvidence: forced pending_review after Feishu evidence (state machine gap)');
+        await logEvent(
+          taskId,
+          'status_transition',
+          'task_orchestrator',
+          latest.assignee_agent || latest.current_agent || 'master',
+          latest.status,
+          'pending_review',
+          { forced: true, reason: 'feishu_task_card_reply' }
+        );
+      }
+    }
+    latest = await getTask(taskId);
+    if (chaseSources.has(src) && latest?.status === 'pending_review') {
+      await query(
+        `UPDATE master_tasks SET remind_count = 0, last_reminder_at = NULL, updated_at = NOW() WHERE task_id = $1`,
+        [taskId]
+      ).catch((e) => logger.warn({ err: e?.message, taskId }, 'reset remind_count on pending_review skipped'));
     }
   }
   return { ok: true };

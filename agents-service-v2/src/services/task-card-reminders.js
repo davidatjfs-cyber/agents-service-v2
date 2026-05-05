@@ -486,6 +486,12 @@ export async function processTaskCardReminders() {
   const now = Date.now();
 
   for (const t of tasks) {
+    const liveSt = await query(`SELECT status FROM master_tasks WHERE task_id = $1 LIMIT 1`, [t.task_id]).catch(() => ({ rows: [] }));
+    if (String(liveSt.rows?.[0]?.status || '').trim() !== 'pending_response') {
+      logger.debug({ taskId: t.task_id, actual: liveSt.rows?.[0]?.status }, 'task-card-reminder: skip (list stale, not pending_response)');
+      continue;
+    }
+
     const dispatchTime = new Date(t.dispatched_at || t.created_at).getTime();
     if (!dispatchTime) continue;
 
