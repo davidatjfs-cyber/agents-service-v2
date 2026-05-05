@@ -385,17 +385,17 @@ export function registerPerformanceInvalidationRoutes(app, authRequired) {
           );
         }
 
-        const adminCopy = `【抄送·备案失效已生效】操作人：${adminUser}；责任人：${username}（${empStore || '—'}）；${filingMsg}`;
+        // 管理员：与责任人完全同一段话术抄送（勿再发「绩效数据变更」卡片，易与未终评级混淆）
         try {
           await p.query(
             `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
              VALUES ($1, $2, $3, $4, $5::jsonb)`,
             [
               adminUser,
-              `抄送·工作态度备案已取消｜${taskIdStr}→${username}`,
-              adminCopy,
+              `抄送｜工作态度备案已取消｜${taskIdStr}→${username}`,
+              filingMsg,
               'master_tasks_filing_invalidation_admin_cc',
-              JSON.stringify({ period, source_id: taskIdStr, assignee_username: username })
+              JSON.stringify({ period, source_id: taskIdStr, assignee_username: username, operator: adminUser })
             ]
           );
         } catch (e) {
@@ -409,14 +409,14 @@ export function registerPerformanceInvalidationRoutes(app, authRequired) {
           [adminUser]
         );
         if (admOpen.rows?.[0]?.open_id) {
-          sendLarkMessage(admOpen.rows[0].open_id, adminCopy, { skipDedup: true }).catch((e) =>
+          sendLarkMessage(admOpen.rows[0].open_id, filingMsg, { skipDedup: true }).catch((e) =>
             console.warn('[performance-invalidate] admin Lark copy failed:', e?.message)
           );
         }
       }
 
-      // ── Phase 3: Notifications (only if score actually changed) ──
-      if (hasChange) {
+      // ── Phase 3: 「绩效数据变更」通知 + 卡片（周度 agent_scores 等；排除 master_tasks_filing 以免误导）
+      if (hasChange && source_type !== 'master_tasks_filing') {
         const nameRow = await p.query(
           `SELECT COALESCE(NULLIF(TRIM(name), ''), username) AS name FROM feishu_users
            WHERE LOWER(TRIM(username)) = LOWER(TRIM($1)) AND registered = TRUE LIMIT 1`,
