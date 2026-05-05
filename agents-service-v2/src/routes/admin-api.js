@@ -781,12 +781,25 @@ r.post('/knowledge-base', ...admin, async (req, res) => {
   const { title, content, category } = req.body;
   if (!title || !content) return res.status(400).json({ error: 'title and content required' });
   const result = await query('INSERT INTO knowledge_base (title, content, category, enabled) VALUES ($1,$2,$3,true) RETURNING id', [title, content, category || 'sop']);
-  res.json({ ok: true, id: result.rows[0]?.id });
+  const newId = result.rows[0]?.id;
+  // 异步生成 embedding，不阻塞响应
+  if (newId && content) {
+    import('../services/embedding-service.js').then(({ ensureKnowledgeEmbedding }) => {
+      ensureKnowledgeEmbedding(newId, content).catch(() => {});
+    }).catch(() => {});
+  }
+  res.json({ ok: true, id: newId });
 });
 r.put('/knowledge-base/:id', ...admin, async (req, res) => {
   const { title, content, category, enabled } = req.body;
   await query('UPDATE knowledge_base SET title=COALESCE($1,title), content=COALESCE($2,content), category=COALESCE($3,category), enabled=COALESCE($4,enabled), updated_at=NOW() WHERE id=$5',
     [title, content, category, enabled, req.params.id]);
+  // 内容变更时重新生成 embedding
+  if (content !== undefined && req.params.id) {
+    import('../services/embedding-service.js').then(({ ensureKnowledgeEmbedding }) => {
+      ensureKnowledgeEmbedding(req.params.id, content).catch(() => {});
+    }).catch(() => {});
+  }
   res.json({ ok: true });
 });
 r.delete('/knowledge-base/:id', ...admin, async (req, res) => {

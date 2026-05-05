@@ -172,7 +172,6 @@ export async function backfillEmbeddings(batchSize = 5) {
   }
   const apiKey = String(process.env.DEEPSEEK_API_KEY || '').trim();
   if (!apiKey) {
-    // 无 DeepSeek Key 则使用本地 Ollama 生成 embedding（按 EMBEDDING_MODEL 配置）
     logger.info('embedding-service: no DEEPSEEK_API_KEY, using Ollama for embeddings');
   }
 
@@ -180,7 +179,6 @@ export async function backfillEmbeddings(batchSize = 5) {
   let failed = 0;
 
   try {
-    // 每次取一批待处理条目
     const r = await query(
       `SELECT id, content FROM knowledge_base
        WHERE content IS NOT NULL AND content != '' AND embedding IS NULL
@@ -212,6 +210,119 @@ export async function backfillEmbeddings(batchSize = 5) {
   }
 
   return { processed, failed };
+}
+
+/**
+ * 循环回填所有缺失 embedding，直到全部补完、超时或连续失败过多
+ *
+ * 与 backfillEmbeddings 的「一批」不同，此函数持续查询 pending 行并逐批处理，
+ * 适合启动时/定时任务自动调用。
+ *
+ * @param {number} [batchSize=20] - 每批取多少行
+ * @param {number} [maxRuntimeMs=300000] - 总运行时间上限（默认 5 分钟）
+ * @returns {Promise<{processed: number, failed: number, remaining: number, stopped: string}>}
+ */
+export async function backfillAllMissingEmbeddings(batchSize = 20, maxRuntimeMs = 300000) {
+  if (!(await isEmbeddingAvailable())) {
+    await ensureEmbeddingSchema();
+    if (!(await isEmbeddingAvailable())) {
+      return { processed: 0, failed: 0, remaining: -1, stopped: 'pgvector not available' };
+    }
+  }
+
+  const deadline = Date.now() + maxRuntimeMs;
+  let processed = 0;
+  let failed = 0;
+  let consecutiveFailures = 0;
+  const CONSECUTIVE_FAIL_LIMIT = 3;
+
+  try {
+    while (Date.now() < deadline) {
+      const r = await query(
+        `SELECT id, content FROM knowledge_base
+         WHERE content IS NOT NULL AND content != '' AND embedding IS NULL
+         LIMIT $1`,
+        [batchSize]
+      );
+      const rows = r.rows || [];
+      if (!rows.length) {
+        logger.info(`embedding-service: backfill complete (${processed} processed, ${failed} failed, 0 remaining)`);
+        return { processed, failed, remaining: 0, stopped: 'all_done' };
+      }
+
+      let batchOk = 0;
+      let batchFail = 0;
+      for (const row of rows) {
+        if (Date.now() >= deadline) break;
+        try {
+          const text = String(row.content || '').slice(0, 8000);
+          if (!text) { batchFail++; consecutiveFailures++; continue; }
+          const vec = await generateEmbedding(text);
+          if (vec && vec.length) {
+            await query(
+              `UPDATE knowledge_base SET embedding = $1::vector WHERE id = $2`,
+              [`[${vec.join(',')}]`, row.id]
+            );
+            batchOk++;
+            consecutiveFailures = 0;
+          } else {
+            batchFail++;
+            consecutiveFailures++;
+          }
+        } catch {
+          batchFail++;
+          consecutiveFailures++;
+        }
+        if (consecutiveFailures >= CONSECUTIVE_FAIL_LIMIT) {
+          logger.warn(
+            { consecutiveFailures, processed: processed + batchOk, failed: failed + batchFail },
+            'embedding-service: too many consecutive failures, aborting backfill'
+          );
+          processed += batchOk;
+          failed += batchFail;
+          return { processed, failed, remaining: rows.length - batchOk - batchFail, stopped: 'consecutive_failures' };
+        }
+      }
+
+      processed += batchOk;
+      failed += batchFail;
+
+      // 批间短暂延迟，避免持续轮询数据库
+      if (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 200));
+      }
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'embedding-service: backfillAllMissingEmbeddings failed');
+  }
+
+  logger.info(
+    `embedding-service: backfill paused (${processed} processed, ${failed} failed, time limit reached)`
+  );
+  return { processed, failed, remaining: -1, stopped: 'time_limit' };
+}
+
+/**
+ * 为单条知识库条目生成并存储 embedding（管理端 INSERT/UPDATE 钩子）
+ * @param {string|number} id - knowledge_base.id
+ * @param {string} content - 知识内容
+ * @returns {Promise<boolean>} embedding 是否成功写入
+ */
+export async function ensureKnowledgeEmbedding(id, content) {
+  if (!id || !content) return false;
+  try {
+    const vec = await generateEmbedding(String(content).slice(0, 8000));
+    if (vec && vec.length) {
+      await query(
+        `UPDATE knowledge_base SET embedding = $1::vector WHERE id = $2`,
+        [`[${vec.join(',')}]`, id]
+      );
+      return true;
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message, id }, 'embedding-service: ensureKnowledgeEmbedding failed');
+  }
+  return false;
 }
 
 /**

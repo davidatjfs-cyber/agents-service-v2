@@ -81,9 +81,10 @@ import { REPLY_ENGINE_BUILD } from './reply-engine-version.js';
 let randomInspectionStartRetried = false;
 
 const app = express();
-// 信任反向代理（nginx/ALB）的 X-Forwarded-* 标头。
-// 不设置时 express-rate-limit 会在每次代理请求时抛出 ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
-app.set('trust proxy', true);
+// 信任第一层反向代理（nginx/ALB）的 X-Forwarded-* 标头。
+// 设为 true 会过于宽松（任何 X-Forwarded-For 均可伪造），
+// express-rate-limit 会抛出 ERR_ERL_PERMISSIVE_TRUST_PROXY 警告。
+app.set('trust proxy', 1);
 let httpServer = null;
 /** 生产与 ecosystem.config.cjs 固定 3101；勿改为 3000（HRMS）或 3100（历史易与文档/旧进程混淆） */
 const PORT = parseInt(process.env.PORT || '3101', 10);
@@ -1137,6 +1138,24 @@ async function start() {
   } catch (e) {
     logger.warn({ err: e?.message }, 'Agent sessions table ensure failed (non-fatal)');
   }
+
+  // 确保 pgvector schema + 启动时异步补全缺失 embedding
+  try {
+    const { ensureEmbeddingSchema, backfillAllMissingEmbeddings } = await import('./services/embedding-service.js');
+    await ensureEmbeddingSchema();
+    backfillAllMissingEmbeddings(20, 300000).catch(e =>
+      logger.warn({ err: e?.message }, 'startup embedding backfill failed (non-fatal)')
+    );
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'embedding service init failed (non-fatal)');
+  }
+
+  // 每小时检查并补全缺失 embedding
+  setInterval(() => {
+    import('./services/embedding-service.js').then(({ backfillAllMissingEmbeddings }) => {
+      backfillAllMissingEmbeddings(20, 60000).catch(() => {});
+    }).catch(() => {});
+  }, 3600000);
 
   const _bootEnv = getAppEnv();
   if ((_bootEnv === 'production' || _bootEnv === 'staging') && !isWebhookEnabled()) {
