@@ -1,8 +1,17 @@
-# HRMS 本地备份（含 hrms_state 全量 + 积分 pointRecords JSONL）
-# 安装：sudo crontab -e，把下面两行（及 CRON_TZ）合并进 root 或运行备份的用户
+# HRMS 数据库备份（2026-05 起：ECS 上 PITR + 周逻辑全量 + 日本地 hrms_state）
+# 安装：在 ECS 上以 root: crontab -e，或执行 scripts/pg-pitr/install-pitr-on-ecs.sh
 #
-# 上海时区：每天 12:00、每天 0:00 各一次 → 同一天内积分会随整库备份落盘 2 份（文件名带不同时间戳）
-
-CRON_TZ=Asia/Shanghai
-0 12 * * * /bin/bash /opt/hrms/server/backup.sh
-0 0 * * * /bin/bash /opt/hrms/server/backup.sh
+# 服务端（ECS root crontab 示例，时区上海）：
+# CRON_TZ=Asia/Shanghai
+# 15 4 * * * /opt/pg_pitr/scripts/pg-pitr-backup-health.sh
+# 30 3 * * * /opt/pg_pitr/scripts/pg-pitr-prune-wal.sh
+# 30 2 * * 0 /opt/pg_pitr/scripts/pg-pitr-weekly-base.sh
+# 0 3 * * 0 /opt/pg_pitr/scripts/pg-pitr-weekly-logical-export.sh
+# 0 12 * * * /bin/bash /opt/hrms/server/backup-state-only.sh
+#
+# Mac 本机拉取周备（示例，路径含空格请保留引号）：
+# HRMS_MAC_BACKUP_DIR="/Users/magainze/hrms backup" bash /path/to/HRMS/scripts/pull-hrms-weekly-backup.sh
+#
+# 失败告警：在 ECS 编辑 /opt/pg_pitr/alert.env，设置 BACKUP_ALERT_WEBHOOK=飞书机器人 Webhook；参见 /opt/pg_pitr/alert.env.example
+#
+# 旧版：每天两次 backup.sh 大表逻辑全量 — 已停用，详见 /opt/pg_pitr/README_PITR.txt

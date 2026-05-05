@@ -1,6 +1,7 @@
 #!/bin/bash
-# HRMS PostgreSQL 本地备份（含 hrms_state、积分 pointRecords JSONL 等）
-# 调度由 crontab 决定；仓库示例见 backup-schedule.crontab（建议上海 12:00 + 0:00 各一次）
+# HRMS PostgreSQL 本地备份 — 历史大表逻辑全量脚本（cron 已停用，勿重新挂频繁任务）
+# 当前生产备份：PITR（WAL + 周 pg_basebackup）+ 周 pg_dump 到 /opt/pg_pitr/weekly_export；轻量日备见 backup-state-only.sh
+# 仓库调度说明见 backup-schedule.crontab
 # 防积分等丢失：服务端 PUT /api/state 已对 pointRecords 等与 DB 合并；勿用陈旧 localStorage 整包覆盖；
 # 极端恢复：server/scripts/merge-point-records-from-backup.mjs（只补缺失 id）
 # Keeps 30 days of local backups on ECS；OSS 上传已关闭时仅本地保留
