@@ -98,7 +98,7 @@ function buildFilingInvalidationAdminCard(p) {
 **责任人本月工作态度备案次数（有效口径）**
 由 **${countBefore}** 次更新为 **${countAfter}** 次
 
-> 本条撤销已写入系统；责任人将收到同款说明卡片。请妥善留存以备核对。`;
+> 本条撤销已写入系统；责任人侧已推送**备案撤销通知**卡片。请留存本条备查。`;
 
   return {
     config: { wide_screen_mode: true },
