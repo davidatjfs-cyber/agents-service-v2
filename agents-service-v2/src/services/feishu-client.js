@@ -1107,7 +1107,92 @@ export async function handleCardAction(body) {
     }
   }
 
-  const pllmFormKeys = ['pllm_execute_plan', 'pllm_not_suitable_reason'];
+  // ── SOP 考试：提交答案 ──
+  if (actionType === 'sop_submit_exam') {
+    try {
+      const { scoreExam, saveTrainingRecord, pickExamQuestions } = await import('./sop-engine.js');
+      const { buildExamResultCard } = await import('./exam-engine.js');
+      const answers = value.answers || [];
+      const questions = value.questions || [];
+      const sopId = value.sopId || '';
+      const sopTitle = value.sopTitle || '';
+      const attempts = parseInt(value.attempts || '1');
+      const employeeName = value.employeeName || openId;
+      const store = value.store || '';
+      const problemDesc = value.problemDesc || '';
+
+      if (!answers.length || !questions.length) {
+        return { toast: { type: 'error', content: '答题数据异常，请重新考试' } };
+      }
+
+      const result = scoreExam(questions, answers);
+      const passed = result.score >= 95;
+
+      const record = await saveTrainingRecord({
+        employeeId: openId,
+        employeeName,
+        store,
+        trainingType: 'sop_remediation',
+        sopId,
+        sopTitle,
+        triggerSource: 'table_visit',
+        problemDescription: problemDesc,
+        examScore: result.score,
+        totalQuestions: result.total,
+        correctCount: result.correct,
+        attempts,
+        passed,
+        deadline: new Date().toISOString().slice(0, 10)
+      });
+
+      if (openId) {
+        const card = buildExamResultCard(
+          { title: sopTitle, problem: problemDesc },
+          result,
+          record?.id || ''
+        );
+        await sendCard(openId, card, 'open_id').catch(() => {});
+      }
+
+      return { toast: { type: passed ? 'success' : 'warning', content: passed ? '✅ 考试通过！' : `得分 ${result.score}分，未达 95 分` } };
+    } catch (e) {
+      logger.warn({ err: e?.message }, 'sop_submit_exam handler failed');
+      return { toast: { type: 'error', content: '考试提交失败: ' + (e?.message || '') } };
+    }
+  }
+
+  // ── SOP 考试：重考 ──
+  if (actionType === 'sop_retry_exam') {
+    try {
+      const { buildSopExamCard } = await import('./exam-engine.js');
+      const { pickExamQuestions } = await import('./sop-engine.js');
+      const sopId = value.sopId || '';
+      const sopTitle = value.sopTitle || '';
+      const employeeName = value.employeeName || openId;
+      const store = value.store || '';
+      const problemDesc = value.problemDesc || '';
+      const attempts = parseInt(value.attempts || '1') + 1;
+
+      const questions = await pickExamQuestions(sopId, 20);
+      if (!questions?.length) {
+        return { toast: { type: 'error', content: '该 SOP 暂无可用的考试题目，请联系管理员' } };
+      }
+
+      if (openId) {
+        const card = buildSopExamCard(
+          { id: sopId, title: sopTitle, problem: problemDesc, store },
+          questions,
+          { openId, employeeName, store, attempts, problemDesc }
+        );
+        await sendCard(openId, card, 'open_id').catch(() => {});
+      }
+
+      return { toast: { type: 'info', content: '新题目已发送，请查看飞书消息' } };
+    } catch (e) {
+      logger.warn({ err: e?.message }, 'sop_retry_exam handler failed');
+      return { toast: { type: 'error', content: '重考失败: ' + (e?.message || '') } };
+    }
+  }
   const hasPllmForm = pllmFormKeys.some(k => Object.prototype.hasOwnProperty.call(formValue, k));
   if ((taskId || callbackMessageId || hasPllmForm) && openId) {
     try {

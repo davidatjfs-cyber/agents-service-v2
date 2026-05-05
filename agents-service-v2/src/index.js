@@ -1158,6 +1158,65 @@ async function start() {
     logger.warn({ err: e?.message }, 'sop engine init failed (non-fatal)');
   }
 
+  // 确保培训计划表存在
+  try {
+    const { ensureTrainingTables } = await import('./services/training-service.js');
+    await ensureTrainingTables();
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'training service init failed (non-fatal)');
+  }
+
+  // 每天 00:05 — SOP 考试超时升级检查
+  cron.schedule('5 0 * * *', async () => {
+    try {
+      const { query } = await import('./utils/db.js');
+      const overdue = await query(
+        `UPDATE employee_training_records
+         SET escalated = true, escalated_at = NOW()
+         WHERE deadline = CURRENT_DATE - 1
+           AND passed = false
+           AND escalated = false
+         RETURNING id, employee_name, store`
+      );
+      for (const row of overdue.rows || []) {
+        logger.info({ id: row.id, employee: row.employee_name, store: row.store }, 'sop exam timeout escalated');
+      }
+    } catch (e) {
+      logger.warn({ err: e?.message }, 'sop exam timeout escalation cron failed');
+    }
+  }, { timezone: 'Asia/Shanghai' });
+
+  // 每天 08:30 — 推送当日培训任务
+  cron.schedule('30 8 * * *', async () => {
+    try {
+      const { getTodayLearningTasks, getTrainingProgress } = await import('./services/training-service.js');
+      const tasks = await getTodayLearningTasks();
+      for (const t of tasks) {
+        logger.info({ employee: t.employee_name, week: t.current_week, sopCount: t.sops?.length }, 'daily training task');
+      }
+    } catch (e) {
+      logger.warn({ err: e?.message }, 'daily training push cron failed');
+    }
+  }, { timezone: 'Asia/Shanghai' });
+
+  // 每周日 20:00 — 培训进度周报
+  cron.schedule('0 20 * * 0', async () => {
+    try {
+      const { getWeeklyProgress } = await import('./services/training-service.js');
+      const { query } = await import('./utils/db.js');
+      const stores = await query(
+        `SELECT DISTINCT store FROM training_plans WHERE status = 'active'`
+      );
+      for (const row of (stores.rows || [])) {
+        if (!row.store) continue;
+        const report = await getWeeklyProgress(row.store);
+        logger.info({ store: row.store, stats: report }, 'weekly training report');
+      }
+    } catch (e) {
+      logger.warn({ err: e?.message }, 'weekly training report cron failed');
+    }
+  }, { timezone: 'Asia/Shanghai' });
+
   // 每小时检查并补全缺失 embedding
   setInterval(() => {
     import('./services/embedding-service.js').then(({ backfillAllMissingEmbeddings }) => {

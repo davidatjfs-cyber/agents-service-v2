@@ -1147,6 +1147,36 @@ async function sendTableVisitProductIssueCard(fields, recordId) {
       dedupeHours: 2,
     }).catch(() => {});
   }
+
+  // SOP 考核触发：不满意菜品尝试匹配操作 SOP 并推送考试
+  try {
+    const firstDish = dishNames[0];
+    if (firstDish && store) {
+      const problem = extractText(fields['不满意的主要原因是什么'] || fields['不满意的主要原因'] || '') || dishNames.join('、');
+      const { resolveProblemToSteps, pickExamQuestions } = await import('./sop-engine.js');
+      const matches = await resolveProblemToSteps(firstDish, problem, store);
+      if (matches?.length && matches[0]?.sop) {
+        const sop = matches[0].sop;
+        const questions = await pickExamQuestions(sop.id, 20);
+        if (questions?.length) {
+          const { buildSopExamCard } = await import('./exam-engine.js');
+          for (const r of recipients) {
+            if (!r.open_id) continue;
+            try {
+              const card = buildSopExamCard(
+                { id: sop.id, title: sop.title, problem: `${firstDish}：${problem}`, store },
+                questions,
+                { openId: r.open_id, attempts: 1 }
+              );
+              await sendCard(r.open_id, card, 'open_id').catch(() => {});
+            } catch (_e) { /*单个推送失败不影响其他*/ }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    logger.debug({ err: e?.message }, 'sop trigger: exam push skipped (sop-engine not ready or no match)');
+  }
 }
 
 /**

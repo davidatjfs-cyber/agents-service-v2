@@ -891,6 +891,49 @@ r.get('/sop/training-records', ...admin, async (req, res) => {
   const r2 = await query(sql, params);
   res.json(r2.rows || []);
 });
+// ─── 培养计划管理 ───
+import {
+  createTrainingPlan, listTrainingPlans, getTrainingPlan,
+  updateTrainingPlanStatus, getTrainingProgress, getWeeklyProgress
+} from '../services/training-service.js';
+
+r.post('/training/plans', ...admin, async (req, res) => {
+  const { employeeId, employeeName, store, startDate } = req.body;
+  if (!employeeId || !employeeName || !startDate) return res.status(400).json({ error: 'employeeId, employeeName, startDate required' });
+  const plan = await createTrainingPlan({ employeeId, employeeName, store, startDate, createdBy: req.user?.username });
+  res.json(plan);
+});
+
+r.get('/training/plans', ...admin, async (req, res) => {
+  const result = await listTrainingPlans({ status: req.query.status, store: req.query.store });
+  res.json(result);
+});
+
+r.get('/training/plans/:id', ...admin, async (req, res) => {
+  const plan = await getTrainingPlan(req.params.id);
+  if (!plan) return res.status(404).json({ error: 'not found' });
+  res.json(plan);
+});
+
+r.put('/training/plans/:id/status', ...admin, async (req, res) => {
+  const { status } = req.body;
+  if (!status) return res.status(400).json({ error: 'status required' });
+  const plan = await updateTrainingPlanStatus(req.params.id, status);
+  res.json(plan);
+});
+
+r.get('/training/progress', ...admin, async (req, res) => {
+  const { employeeId, store } = req.query;
+  if (employeeId) {
+    const progress = await getTrainingProgress(employeeId);
+    return res.json(progress);
+  }
+  if (store) {
+    const weekly = await getWeeklyProgress(store);
+    return res.json(weekly);
+  }
+  res.status(400).json({ error: 'query by employeeId or store' });
+});
 r.get('/feature-flags', ...admin, async (req, res) => {
   const flags = await getConfig('feature_flags') || {};
   res.json({ flags });
