@@ -9,7 +9,9 @@
 # 0 3 * * 0 /opt/pg_pitr/scripts/pg-pitr-weekly-logical-export.sh
 # 0 12 * * * /bin/bash /opt/hrms/server/backup-state-only.sh
 #
-# Mac 本机拉取周备（示例，路径含空格请保留引号）：
+# Mac 本机自动拉取周备（推荐：每周一 23:00，无需手跑命令）
+#   bash scripts/mac-launchd/install-weekly-pull-launchagent.sh
+# 或手动（测试）：
 # HRMS_MAC_BACKUP_DIR="/Users/magainze/hrms backup" bash /path/to/HRMS/scripts/pull-hrms-weekly-backup.sh
 #
 # 失败告警：在 ECS 编辑 /opt/pg_pitr/alert.env，设置 BACKUP_ALERT_WEBHOOK=飞书机器人 Webhook；参见 /opt/pg_pitr/alert.env.example
