@@ -36,8 +36,146 @@ function isWithin3DaysAndSameMonth(createdAt) {
   return true;
 }
 
+function getRoleLabelZh(role) {
+  const r = String(role || '').trim();
+  if (r === 'store_manager') return '店长';
+  if (r === 'store_production_manager') return '出品经理';
+  if (r === 'front_manager') return '前厅经理';
+  return r || '—';
+}
+
+/**
+ * 工作态度备案失效 — 责任人卡片
+ * @param {object} p
+ */
+function buildFilingInvalidationAssigneeCard(p) {
+  const {
+    empName, username, empStore, empRole, period, ymdZh, taskIdStr, countBefore, countAfter
+  } = p;
+  const roleLabel = getRoleLabelZh(empRole);
+  const content = `**责任人**：${empName}（${username}）
+**门店**：${empStore || '—'}
+**岗位**：${roleLabel}
+**统计月**：${period}
+**备案任务日**：${ymdZh}
+**任务编号**：\`${taskIdStr}\`
+
+**本月工作态度备案次数（系统有效口径）**
+由 **${countBefore}** 次更新为 **${countAfter}** 次
+
+> 管理员已撤销上述备案条目，统计与档案将按最新口径展示。**如有疑问请咨询总部营运。**`;
+
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: `\u2705 工作态度备案撤销通知 \xb7 ${period}` },
+      template: 'green'
+    },
+    elements: [
+      { tag: 'div', text: { tag: 'lark_md', content } },
+      { tag: 'note', elements: [{ tag: 'plain_text', content: 'HRMS 数据中心 · 备案失效已生效' }] }
+    ]
+  };
+}
+
+/**
+ * 工作态度备案失效 — 管理员抄送卡片
+ * @param {object} p
+ */
+function buildFilingInvalidationAdminCard(p) {
+  const {
+    adminUser, empName, username, empStore, empRole, period, ymdZh, taskIdStr, countBefore, countAfter
+  } = p;
+  const roleLabel = getRoleLabelZh(empRole);
+  const content = `**操作管理员**：${adminUser}
+**责任人**：${empName}（${username}）
+**门店**：${empStore || '—'}
+**岗位**：${roleLabel}
+**统计月**：${period}
+**备案任务日**：${ymdZh}
+**任务编号**：\`${taskIdStr}\`
+
+**责任人本月工作态度备案次数（有效口径）**
+由 **${countBefore}** 次更新为 **${countAfter}** 次
+
+> 本条撤销已写入系统；责任人将收到同款说明卡片。请妥善留存以备核对。`;
+
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: `\u2709 抄送 \xb7 备案撤销已生效 \xb7 ${taskIdStr}` },
+      template: 'blue'
+    },
+    elements: [
+      { tag: 'div', text: { tag: 'lark_md', content } },
+      { tag: 'note', elements: [{ tag: 'plain_text', content: '非月度评级定稿通知，请勿对外解释为最终绩效等级' }] }
+    ]
+  };
+}
+
+/**
+ * 周度扣分记录失效 — 责任人 + 管理员（结构统一、专业展示）
+ */
+function buildWeeklyScoreInvalidationCard(p, audience) {
+  const {
+    empName, username, empStore, empRole, period, sourceId, recordSummary, before, after, adminUser
+  } = p;
+  const roleLabel = getRoleLabelZh(empRole);
+  const scoreLine =
+    typeof before?.total_score !== 'undefined' || typeof after?.total_score !== 'undefined'
+      ? `**关联月度演算得分（仅供参考）**：${before?.total_score ?? '—'} → ${after?.total_score ?? '—'}`
+      : '';
+  const contentAssignee = `**责任人**：${empName}（${username}）
+**门店**：${empStore || '—'}
+**岗位**：${roleLabel}
+**统计月**：${period}
+**失效记录 ID**：\`${sourceId}\`
+${recordSummary ? `**失效记录摘要**：${recordSummary}\n` : ''}${scoreLine ? `${scoreLine}\n` : ''}
+> 对应周度异常扣分条目已由管理员标记失效，月度汇总将按最新有效记录重算。**如有疑问请咨询总部营运。**`;
+
+  const contentAdmin = `**操作管理员**：${adminUser}
+**责任人**：${empName}（${username}）
+**门店**：${empStore || '—'}
+**岗位**：${roleLabel}
+**统计月**：${period}
+**失效记录 ID**：\`${sourceId}\`
+${recordSummary ? `**失效记录摘要**：${recordSummary}\n` : ''}${scoreLine ? `${scoreLine}\n` : ''}
+> 已同步通知责任人；请留存本条备查。`;
+
+  const isAdmin = audience === 'admin';
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      title: {
+        tag: 'plain_text',
+        content: isAdmin
+          ? `\u2709 抄送 \xb7 周度扣分记录已失效 \xb7 ${sourceId}`
+          : `\u2705 周度绩效扣分记录已失效 \xb7 ${period}`
+      },
+      template: isAdmin ? 'blue' : 'green'
+    },
+    elements: [
+      {
+        tag: 'div',
+        text: { tag: 'lark_md', content: isAdmin ? contentAdmin : contentAssignee }
+      },
+      {
+        tag: 'note',
+        elements: [
+          {
+            tag: 'plain_text',
+            content: isAdmin
+              ? 'HRMS 数据中心 · 供管理员核对'
+              : 'HRMS · 周度 agent_scores 失效重算说明'
+          }
+        ]
+      }
+    ]
+  };
+}
+
 function buildChangeCard(before, after, username, name, store, role, period) {
-  const roleLabel = role === 'store_manager' ? '店长' : role === 'store_production_manager' ? '出品经理' : role;
+  const roleLabel = getRoleLabelZh(role);
   const lines = [];
 
   const scoreBefore = before.total_score ?? '—';
@@ -283,6 +421,16 @@ export function registerPerformanceInvalidationRoutes(app, authRequired) {
         return res.status(409).json({ error: 'already_invalidated' });
       }
 
+      /** 备案失效前当月态度备案次数（本条仍计入；COMMIT 后重算为 after） */
+      let filingMonthlyCountBefore = null;
+      if (source_type === 'master_tasks_filing') {
+        try {
+          filingMonthlyCountBefore = await getIncompleteTaskCount(username, period);
+        } catch (e) {
+          console.warn('[performance-invalidate] filingMonthlyCountBefore:', e?.message);
+        }
+      }
+
       // Capture before state
       const empBefore = await p.query(
         `SELECT total_score, execution_rating, attitude_rating, ability_rating
@@ -308,9 +456,11 @@ export function registerPerformanceInvalidationRoutes(app, authRequired) {
         [source_type, String(source_id), username, store || null, period, adminUser]
       );
 
-      // Resolve employee store/role
+      // Resolve employee store / role / 展示姓名
       const fuRow = await p.query(
-        `SELECT store, role FROM feishu_users
+        `SELECT store, role,
+                COALESCE(NULLIF(TRIM(name), ''), username) AS display_name
+         FROM feishu_users
          WHERE LOWER(TRIM(username)) = LOWER(TRIM($1)) AND registered = TRUE LIMIT 1`,
         [username]
       );
@@ -341,18 +491,53 @@ export function registerPerformanceInvalidationRoutes(app, authRequired) {
         || beforeData.ability_rating !== safeAfter.ability_rating
       );
 
-      // 备案任务失效：固定话术（与绩效分是否变动无关），避免用户只看到笼统「绩效变更」
+      // 备案任务失效：专业飞书卡片 + 档案通知（不写「绩效数据变更」）
       if (source_type === 'master_tasks_filing' && filingDispatchedAt) {
         const ymdZh = formatShanghaiYmdChinese(filingDispatchedAt);
-        let monthlyAttitude = 0;
+        let countAfter = 0;
         try {
-          monthlyAttitude = await getIncompleteTaskCount(username, period);
+          countAfter = await getIncompleteTaskCount(username, period);
         } catch (e) {
-          console.warn('[performance-invalidate] getIncompleteTaskCount:', e?.message);
+          console.warn('[performance-invalidate] getIncompleteTaskCount after:', e?.message);
         }
+        const countBefore =
+          typeof filingMonthlyCountBefore === 'number' && !Number.isNaN(filingMonthlyCountBefore)
+            ? filingMonthlyCountBefore
+            : countAfter;
         const taskIdStr = String(source_id);
-        const filingMsg =
-          `您的${ymdZh}的工作态度备案任务：${taskIdStr}，已经被取消，本月最新的工作态度备案次数是${monthlyAttitude}次，有任务疑问可以咨询总部营运！`;
+        const empName = String(fuRow.rows?.[0]?.display_name || username).trim() || username;
+
+        const cardAssignee = buildFilingInvalidationAssigneeCard({
+          empName,
+          username,
+          empStore,
+          empRole,
+          period,
+          ymdZh,
+          taskIdStr,
+          countBefore,
+          countAfter
+        });
+        const cardAdmin = buildFilingInvalidationAdminCard({
+          adminUser,
+          empName,
+          username,
+          empStore,
+          empRole,
+          period,
+          ymdZh,
+          taskIdStr,
+          countBefore,
+          countAfter
+        });
+
+        const inAppMsgAssignee =
+          `【工作态度备案已撤销】${empName}（${username}）· ${empStore || '—'} · 任务 ${taskIdStr} · ${ymdZh}。` +
+          `本月工作态度备案次数：${countBefore}次 → ${countAfter}次。疑问请咨询总部营运。`;
+        const inAppMsgAdmin =
+          `【抄送·备案撤销】操作人 ${adminUser} · 责任人 ${empName}（${username}）· ${empStore || '—'} · ${taskIdStr}。` +
+          `备案次数：${countBefore}次 → ${countAfter}次。`;
+
         try {
           await p.query(
             `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
@@ -360,19 +545,23 @@ export function registerPerformanceInvalidationRoutes(app, authRequired) {
             [
               username,
               `工作态度备案已取消｜${taskIdStr}`,
-              filingMsg,
+              inAppMsgAssignee,
               'master_tasks_filing_invalidation',
               JSON.stringify({
                 period,
                 source_id: taskIdStr,
-                monthly_attitude_filing_count: monthlyAttitude,
-                dispatched_date_zh: ymdZh
+                attitude_filing_count_before: countBefore,
+                attitude_filing_count_after: countAfter,
+                dispatched_date_zh: ymdZh,
+                display_name: empName,
+                store: empStore
               })
             ]
           );
         } catch (e) {
           console.warn('[performance-invalidate] filing notification insert failed:', e?.message);
         }
+
         const openFiling = await p.query(
           `SELECT open_id FROM feishu_users
            WHERE LOWER(TRIM(username)) = LOWER(TRIM($1)) AND registered = TRUE AND open_id IS NOT NULL AND open_id <> ''
@@ -380,12 +569,18 @@ export function registerPerformanceInvalidationRoutes(app, authRequired) {
           [username]
         );
         if (openFiling.rows?.[0]?.open_id) {
-          sendLarkMessage(openFiling.rows[0].open_id, filingMsg, { skipDedup: true }).catch((e) =>
-            console.warn('[performance-invalidate] filing cancel Lark failed:', e?.message)
-          );
+          const oid = openFiling.rows[0].open_id;
+          sendLarkCard(oid, cardAssignee)
+            .then((r) => {
+              if (!r?.ok) {
+                return sendLarkMessage(oid, inAppMsgAssignee, { skipDedup: true });
+              }
+              return r;
+            })
+            .catch(() => sendLarkMessage(oid, inAppMsgAssignee, { skipDedup: true }))
+            .catch((e) => console.warn('[performance-invalidate] filing assignee lark failed:', e?.message));
         }
 
-        // 管理员：与责任人完全同一段话术抄送（勿再发「绩效数据变更」卡片，易与未终评级混淆）
         try {
           await p.query(
             `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
@@ -393,9 +588,18 @@ export function registerPerformanceInvalidationRoutes(app, authRequired) {
             [
               adminUser,
               `抄送｜工作态度备案已取消｜${taskIdStr}→${username}`,
-              filingMsg,
+              inAppMsgAdmin,
               'master_tasks_filing_invalidation_admin_cc',
-              JSON.stringify({ period, source_id: taskIdStr, assignee_username: username, operator: adminUser })
+              JSON.stringify({
+                period,
+                source_id: taskIdStr,
+                assignee_username: username,
+                operator: adminUser,
+                attitude_filing_count_before: countBefore,
+                attitude_filing_count_after: countAfter,
+                display_name: empName,
+                store: empStore
+              })
             ]
           );
         } catch (e) {
@@ -409,14 +613,145 @@ export function registerPerformanceInvalidationRoutes(app, authRequired) {
           [adminUser]
         );
         if (admOpen.rows?.[0]?.open_id) {
-          sendLarkMessage(admOpen.rows[0].open_id, filingMsg, { skipDedup: true }).catch((e) =>
-            console.warn('[performance-invalidate] admin Lark copy failed:', e?.message)
-          );
+          const oidA = admOpen.rows[0].open_id;
+          sendLarkCard(oidA, cardAdmin)
+            .then((r) => {
+              if (!r?.ok) {
+                return sendLarkMessage(oidA, inAppMsgAdmin, { skipDedup: true });
+              }
+              return r;
+            })
+            .catch(() => sendLarkMessage(oidA, inAppMsgAdmin, { skipDedup: true }))
+            .catch((e) => console.warn('[performance-invalidate] admin lark failed:', e?.message));
         }
       }
 
-      // ── Phase 3: 「绩效数据变更」通知 + 卡片（周度 agent_scores 等；排除 master_tasks_filing 以免误导）
-      if (hasChange && source_type !== 'master_tasks_filing') {
+      // ── Phase 3: 周度 agent_scores 失效 — 专业卡片（替代橙色「绩效数据变更」主展示）
+      if (source_type === 'agent_scores_weekly') {
+        const nameRow = await p.query(
+          `SELECT COALESCE(NULLIF(TRIM(name), ''), username) AS name FROM feishu_users
+           WHERE LOWER(TRIM(username)) = LOWER(TRIM($1)) AND registered = TRUE LIMIT 1`,
+          [username]
+        );
+        const empNameW = nameRow.rows?.[0]?.name || username;
+        let recordSummary = '';
+        try {
+          const wk = await p.query(
+            `SELECT summary, deductions FROM agent_scores WHERE id::text = $1 LIMIT 1`,
+            [String(source_id)]
+          );
+          const wr = wk.rows?.[0];
+          if (wr) {
+            const s = String(wr.summary || '').trim();
+            let d = '';
+            try {
+              d = wr.deductions != null ? JSON.stringify(wr.deductions) : '';
+            } catch {
+              d = String(wr.deductions || '');
+            }
+            recordSummary = (s || d).replace(/\s+/g, ' ').slice(0, 280);
+          }
+        } catch (e) {
+          console.warn('[performance-invalidate] weekly record summary:', e?.message);
+        }
+
+        const weeklyPayload = {
+          empName: empNameW,
+          username,
+          empStore,
+          empRole,
+          period,
+          sourceId: String(source_id),
+          recordSummary,
+          before: beforeData,
+          after: safeAfter,
+          adminUser
+        };
+        const wCardA = buildWeeklyScoreInvalidationCard(weeklyPayload, 'assignee');
+        const wCardAd = buildWeeklyScoreInvalidationCard(weeklyPayload, 'admin');
+        const wPlainA = `【周度扣分已失效】${empNameW}（${username}）· ${empStore || '—'} · 记录 ${source_id}。` +
+          `月度演算参考：得分 ${beforeData.total_score ?? '—'} → ${safeAfter.total_score ?? '—'}。`;
+        const wPlainAd = `【抄送·周度扣分已失效】${adminUser} · 责任人 ${empNameW}（${username}）· ${empStore || '—'} · 记录 ${source_id}。`;
+
+        if (hasChange) {
+          try {
+            await p.query(
+              `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
+               VALUES ($1, $2, $3, $4, $5::jsonb)`,
+              [
+                username,
+                `周度扣分记录已失效｜${period}`,
+                wPlainA,
+                'performance_invalidation_change',
+                JSON.stringify({ period, source_type, source_id: String(source_id), before: beforeData, after: safeAfter })
+              ]
+            );
+          } catch (e) {
+            console.warn('[performance-invalidate] weekly assignee notification:', e?.message);
+          }
+        }
+
+        const openIdRowW = await p.query(
+          `SELECT open_id FROM feishu_users
+           WHERE LOWER(TRIM(username)) = LOWER(TRIM($1)) AND registered = TRUE AND open_id IS NOT NULL AND open_id <> ''
+           LIMIT 1`,
+          [username]
+        );
+        if (openIdRowW.rows?.[0]?.open_id) {
+          const oidW = openIdRowW.rows[0].open_id;
+          sendLarkCard(oidW, wCardA)
+            .then((r) => {
+              if (!r?.ok) {
+                return sendLarkMessage(oidW, hasChange ? wPlainA : `【周度扣分已失效】${empNameW} · 记录 ${source_id} 已由管理员标记失效。`, { skipDedup: true });
+              }
+              return r;
+            })
+            .catch(() =>
+              sendLarkMessage(
+                oidW,
+                hasChange ? wPlainA : `【周度扣分已失效】${empNameW} · 记录 ${source_id} 已由管理员标记失效。`,
+                { skipDedup: true }
+              )
+            )
+            .catch((e) => console.warn('[performance-invalidate] weekly card assignee failed:', e?.message));
+        }
+
+        try {
+          await p.query(
+            `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta)
+             VALUES ($1, $2, $3, $4, $5::jsonb)`,
+            [
+              adminUser,
+              `抄送｜周度扣分已失效｜${source_id}→${username}`,
+              wPlainAd,
+              'agent_scores_weekly_invalidation_admin_cc',
+              JSON.stringify({ period, source_id: String(source_id), assignee_username: username, operator: adminUser })
+            ]
+          );
+        } catch (e) {
+          console.warn('[performance-invalidate] weekly admin in-app:', e?.message);
+        }
+
+        const adminOpenIdW = await p.query(
+          `SELECT open_id FROM feishu_users
+           WHERE LOWER(TRIM(username)) = LOWER(TRIM($1)) AND registered = TRUE AND open_id IS NOT NULL AND open_id <> ''
+             AND open_id NOT LIKE '%probe%'
+           ORDER BY updated_at DESC LIMIT 1`,
+          [adminUser]
+        );
+        if (adminOpenIdW.rows?.[0]?.open_id) {
+          const oidAd = adminOpenIdW.rows[0].open_id;
+          sendLarkCard(oidAd, wCardAd)
+            .then((r) => {
+              if (!r?.ok) {
+                return sendLarkMessage(oidAd, wPlainAd, { skipDedup: true });
+              }
+              return r;
+            })
+            .catch(() => sendLarkMessage(oidAd, wPlainAd, { skipDedup: true }))
+            .catch((e) => console.warn('[performance-invalidate] weekly card admin failed:', e?.message));
+        }
+      } else if (hasChange && source_type !== 'master_tasks_filing') {
         const nameRow = await p.query(
           `SELECT COALESCE(NULLIF(TRIM(name), ''), username) AS name FROM feishu_users
            WHERE LOWER(TRIM(username)) = LOWER(TRIM($1)) AND registered = TRUE LIMIT 1`,
