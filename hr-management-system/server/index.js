@@ -17892,7 +17892,19 @@ app.listen(PORT, HOST, async () => {
             ORDER BY date DESC
           `);
           const dbItems = pgAll.rows.map(row => dailyReportItemFromPgRow(row));
-          await mergeSharedStateFields({ dailyReports: dbItems }, { dailyReports: ['store', 'date'] });
+          // 保留 state 中的草稿（DB 没有的行），避免直接覆写丢失
+          const existingArr = Array.isArray(stateNow.dailyReports) ? stateNow.dailyReports : [];
+          const dbKeySet = new Set(dbItems.map(x => `${x.date}|${x.store}`));
+          const stateOnlyItems = existingArr.filter(r => {
+            const k = `${String(r?.date || '').slice(0, 10)}|${String(r?.store || '').trim()}`;
+            return !dbKeySet.has(k);
+          });
+          const finalItems = [...dbItems, ...stateOnlyItems];
+          // 直接 UPDATE hrms_state 的 dailyReports 字段，不经过 mergeSharedStateFields（避免与用户提交抢乐观锁）
+          await pool.query(
+            `UPDATE hrms_state SET data = jsonb_set(COALESCE(data, '{}'), '{dailyReports}', $1::jsonb), updated_at = NOW() WHERE key = 'default'`,
+            [JSON.stringify(finalItems)]
+          );
           await sendSystemAlert(`⚠️ [HRMS] 核心数据自愈：营业日报 state 最新日期 ${stateDrLatest || '无'} 落后于表 ${drLatest}，已自动回灌。`);
         }
 
