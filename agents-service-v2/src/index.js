@@ -1150,6 +1150,14 @@ async function start() {
     logger.warn({ err: e?.message }, 'embedding service init failed (non-fatal)');
   }
 
+  // 确保 SOP 系统表存在
+  try {
+    const { ensureSopTables } = await import('./services/sop-engine.js');
+    await ensureSopTables();
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'sop engine init failed (non-fatal)');
+  }
+
   // 每小时检查并补全缺失 embedding
   setInterval(() => {
     import('./services/embedding-service.js').then(({ backfillAllMissingEmbeddings }) => {

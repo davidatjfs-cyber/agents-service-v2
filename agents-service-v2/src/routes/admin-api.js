@@ -807,7 +807,90 @@ r.delete('/knowledge-base/:id', ...admin, async (req, res) => {
   res.json({ ok: true });
 });
 
-// ─── Feature Flags ───
+// ─── SOP 执行保障系统 ───
+import {
+  listSopDefinitions, getSopDefinition, createSopDefinition,
+  updateSopDefinition, deleteSopDefinition, upsertSopSteps,
+  resolveProblemToSteps, generateQuestionsForSop,
+  pickExamQuestions, scoreExam, saveTrainingRecord,
+  ensureSopTables
+} from '../services/sop-engine.js';
+
+r.get('/sop/tables', ...admin, async (req, res) => {
+  await ensureSopTables();
+  res.json({ ok: true });
+});
+
+r.get('/sop/definitions', ...admin, async (req, res) => {
+  const result = await listSopDefinitions(req.query);
+  res.json(result);
+});
+
+r.get('/sop/definitions/:id', ...admin, async (req, res) => {
+  const sop = await getSopDefinition(req.params.id);
+  if (!sop) return res.status(404).json({ error: 'not found' });
+  res.json(sop);
+});
+
+r.post('/sop/definitions', ...admin, async (req, res) => {
+  const { dishName, station, store, title, category } = req.body;
+  if (!dishName || !station || !title) return res.status(400).json({ error: 'dishName, station, title required' });
+  const sop = await createSopDefinition({ dishName, station, store, title, category });
+  res.json(sop);
+});
+
+r.put('/sop/definitions/:id', ...admin, async (req, res) => {
+  const sop = await updateSopDefinition(req.params.id, req.body);
+  if (!sop) return res.status(404).json({ error: 'not found' });
+  res.json(sop);
+});
+
+r.delete('/sop/definitions/:id', ...admin, async (req, res) => {
+  await deleteSopDefinition(req.params.id);
+  res.json({ ok: true });
+});
+
+r.post('/sop/definitions/:id/steps', ...admin, async (req, res) => {
+  const { steps } = req.body;
+  if (!Array.isArray(steps)) return res.status(400).json({ error: 'steps array required' });
+  const result = await upsertSopSteps(req.params.id, steps);
+  res.json(result);
+});
+
+r.post('/sop/definitions/:id/generate-questions', ...admin, async (req, res) => {
+  const { count } = req.body;
+  try {
+    const result = await generateQuestionsForSop(req.params.id, count || 20);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'generate failed' });
+  }
+});
+
+r.get('/sop/questions', ...admin, async (req, res) => {
+  const { sopId, limit } = req.query;
+  if (!sopId) return res.status(400).json({ error: 'sopId required' });
+  const questions = await pickExamQuestions(sopId, parseInt(limit) || 20);
+  res.json(questions);
+});
+
+r.post('/sop/resolve-problem', ...admin, async (req, res) => {
+  const { dishName, problem, store } = req.body;
+  if (!dishName || !problem) return res.status(400).json({ error: 'dishName and problem required' });
+  const matches = await resolveProblemToSteps(dishName, problem, store);
+  res.json(matches);
+});
+
+r.get('/sop/training-records', ...admin, async (req, res) => {
+  const { employeeId, limit } = req.query;
+  let sql = 'SELECT * FROM employee_training_records';
+  const params = [];
+  if (employeeId) { sql += ' WHERE employee_id = $1'; params.push(employeeId); }
+  sql += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1);
+  params.push(parseInt(limit) || 50);
+  const r2 = await query(sql, params);
+  res.json(r2.rows || []);
+});
 r.get('/feature-flags', ...admin, async (req, res) => {
   const flags = await getConfig('feature_flags') || {};
   res.json({ flags });
