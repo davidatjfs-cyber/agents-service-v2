@@ -241,12 +241,15 @@ async function buildStoreReport(entries, store, label, dateLabel, periodStart, p
     byPerson.get(k).items.push(e);
   }
 
-  // 本月累计：按「人||档口||菜名」分别计数
+  // 本月累计：按「人||档口||菜名」计数 + 按「人||档口」汇总条数（与 buildAllStoresReport 口径一致，勿用不存在的 __total__ key）
   const monthlyDishCounts = new Map();
+  const monthlyPersonCounts = new Map();
   try {
     const allMonth = await fetchDissatisfiedEntries(periodStart, periodEnd);
     const storeEntries = allMonth.filter(e => e.store === store);
     for (const e of storeEntries) {
+      const ppk = `${e.person}||${e.stall}`;
+      monthlyPersonCounts.set(ppk, (monthlyPersonCounts.get(ppk) || 0) + e.dishes.length);
       for (const d of e.dishes) {
         const pk = `${e.person}||${e.stall}||${d}`;
         monthlyDishCounts.set(pk, (monthlyDishCounts.get(pk) || 0) + 1);
@@ -255,6 +258,7 @@ async function buildStoreReport(entries, store, label, dateLabel, periodStart, p
   } catch (_e) { /* ignore */ }
 
   let totalProducts = 0;
+  let storeMonthly = 0;
   const sections = [];
   let personSeq = 0;
   for (const [, { person, stall, items }] of byPerson) {
@@ -269,7 +273,7 @@ async function buildStoreReport(entries, store, label, dateLabel, periodStart, p
         personCount++;
         dishSeq++;
         const pk = `${person}||${stall}||${d}`;
-        const monthCnt = monthlyDishCounts.has(pk) ? monthlyDishCounts.get(pk) : personCount;
+        const monthCnt = monthlyDishCounts.has(pk) ? monthlyDishCounts.get(pk) : 1;
         const monthTag = `[本月累计：${monthCnt}次]`;
         if (item.reason) {
           dishLines.push(`  ${personSeq}-${dishSeq}. ${d}（${item.reason}）${monthTag}`);
@@ -278,13 +282,13 @@ async function buildStoreReport(entries, store, label, dateLabel, periodStart, p
         }
       }
     }
-    const monthTotal = monthlyDishCounts.has(`${person}||${stall}||__total__`)
-      ? monthlyDishCounts.get(`${person}||${stall}||__total__`)
-      : personCount;
+    const ppk = `${person}||${stall}`;
+    const monthTotal = monthlyPersonCounts.has(ppk) ? monthlyPersonCounts.get(ppk) : personCount;
+    storeMonthly += monthTotal;
     sections.push(`**${personSeq}. ${person}**（${stallName}）\n  当期：**${personCount}**个 ｜ 本月累计：**${monthTotal}**个\n${dishLines.join('\n')}`);
   }
 
-  const content = `**${label}（${dateLabel}）— ${store}**\n不满意产品总计：**${totalProducts}**个\n\n${sections.join('\n\n')}`;
+  const content = `**${label}（${dateLabel}）— ${store}**\n不满意产品当期：**${totalProducts}**个 ｜ 本月累计：**${storeMonthly}**个\n\n${sections.join('\n\n')}`;
   return content;
 }
 
@@ -334,7 +338,7 @@ async function buildAllStoresReport(allData, label, dateLabel, periodStart, peri
           personCount++;
           dishSeq++;
           const dpk = `${store}||${person}||${stall}||${d}`;
-          const monthCnt = monthlyDishCounts.has(dpk) ? monthlyDishCounts.get(dpk) : personCount;
+          const monthCnt = monthlyDishCounts.has(dpk) ? monthlyDishCounts.get(dpk) : 1;
           const monthTag = `[本月累计：${monthCnt}次]`;
           if (item.reason) {
             dishLines.push(`    ${personSeq}-${dishSeq}. ${d}（${item.reason}）${monthTag}`);
