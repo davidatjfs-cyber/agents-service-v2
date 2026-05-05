@@ -1298,8 +1298,8 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
     let reason = '';
     let feedback = '';
 
-    // 巡检/试味类任务：回复非占位词即自动通过，无需 LLM 评判字数与三要素，立即停止催办
-    if (isScheduledOrInspectionOrBi && !isPlaceholder) {
+    // 巡检/试味类任务：回复非占位词且满 20 字即自动通过，无需 LLM 评判，立即停止催办
+    if (isScheduledOrInspectionOrBi && !isPlaceholder && textMeetsMin) {
       passed = true;
       reason = '巡检回复已收到，内容满足基本要求，自动通过。';
     }
