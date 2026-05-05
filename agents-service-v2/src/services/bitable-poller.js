@@ -1056,6 +1056,32 @@ async function sendBadReviewNewCard(fields, recordId) {
       dedupeHours: 2,
     }).catch(() => {});
   }
+
+  // SOP 考核触发：产品类差评尝试匹配 SOP
+  if (responsibility?.isProduct && content && store) {
+    try {
+      const { resolveProblemToSteps, pickExamQuestions } = await import('./sop-engine.js');
+      const { buildSopExamCard } = await import('./exam-engine.js');
+      const steps = await resolveProblemToSteps('', content.slice(0, 200), store);
+      const sop = steps?.[0]?.sop;
+      const questions = sop ? await pickExamQuestions(sop.id, 20) : null;
+      if (questions?.length) {
+        for (const r of recipients) {
+          if (!r.open_id) continue;
+          try {
+            const card = buildSopExamCard(
+              { id: sop.id, title: `${sop.title}（差评触发）`, problem: `差评：${content.slice(0, 100)}`, store },
+              questions,
+              { openId: r.open_id, attempts: 1 }
+            );
+            await sendCard(r.open_id, card, 'open_id').catch(() => {});
+          } catch (_e) { /* ignore per-user failure */ }
+        }
+      }
+    } catch (e) {
+      logger.debug({ err: e?.message }, 'bad_review sop trigger skipped');
+    }
+  }
 }
 
 async function queryBadReviewCount(store, period) {
