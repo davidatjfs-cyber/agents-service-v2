@@ -224,20 +224,31 @@ async function getBitableTenantToken(configKey = 'ops_checklist', forceRefresh =
     // Use buffer: refresh 5 min before actual expiry to avoid edge-case 99991663
     if (cached && Date.now() < cached.expires - TOKEN_TTL_BUFFER_MS) return cached.token;
   }
-  try {
-    const resp = await axios.post(BASE_URL + '/auth/v3/tenant_access_token/internal', {
-      app_id: config.appId, app_secret: config.appSecret
-    }, { timeout: 10000, httpAgent: KEEPALIVE_AGENT, httpsAgent: KEEPALIVE_AGENT_HTTPS });
-    const token = resp.data?.tenant_access_token || '';
-    const ttlSec = resp.data?.expire || 7000;
-    const expires = Date.now() + ttlSec * 1000;
-    _tokenCache.set(configKey, { token, expires });
-    logger.info({ configKey, forceRefresh, ttlSec }, 'bitable token refreshed');
-    return token;
-  } catch (e) {
-    logger.error({ configKey, err: e?.message }, 'bitable token failed');
-    return '';
+  // Retry up to 3 times with 1s backoff for transient Feishu API errors
+  let lastErr = '';
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const resp = await axios.post(BASE_URL + '/auth/v3/tenant_access_token/internal', {
+        app_id: config.appId, app_secret: config.appSecret
+      }, { timeout: 10000, httpAgent: KEEPALIVE_AGENT, httpsAgent: KEEPALIVE_AGENT_HTTPS });
+      const token = resp.data?.tenant_access_token || '';
+      if (!token) { lastErr = 'empty_token'; continue; }
+      const ttlSec = resp.data?.expire || 7000;
+      const expires = Date.now() + ttlSec * 1000;
+      _tokenCache.set(configKey, { token, expires });
+      if (attempt > 1) logger.info({ configKey, attempt }, 'bitable token refreshed after retry');
+      else logger.info({ configKey, forceRefresh, ttlSec }, 'bitable token refreshed');
+      return token;
+    } catch (e) {
+      lastErr = e?.response?.data?.msg || e?.message || 'unknown';
+      if (attempt < 3) {
+        logger.warn({ configKey, attempt, err: lastErr }, 'bitable token refresh failed, retrying');
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
   }
+  logger.error({ configKey, err: lastErr }, 'bitable token failed after 3 retries');
+  return '';
 }
 
 function evictTokenCache(configKey) {
