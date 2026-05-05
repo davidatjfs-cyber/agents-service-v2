@@ -18,6 +18,7 @@ import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { isMarketingPlanningIntent } from '../utils/marketing-intent.js';
 import { isExternalEnabled } from '../utils/safety.js';
+import axios from 'axios';
 
 // ── Sub-module imports for remaining functions ──
 export {
@@ -1296,6 +1297,12 @@ export async function reviewTaskReply(taskId, responseText, hasImages, replyMess
     let passed = false;
     let reason = '';
     let feedback = '';
+
+    // 巡检/试味类任务：回复非占位词且满 20 字即自动通过，无需 LLM 评判，立即停止催办
+    if (isScheduledOrInspectionOrBi && !isPlaceholder && textMeetsMin) {
+      passed = true;
+      reason = '巡检回复已收到，内容满足基本要求，自动通过。';
+    }
 
     let imageRelevant = true;
     let imageVisionReason = '';
