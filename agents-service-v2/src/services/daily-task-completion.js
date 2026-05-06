@@ -153,6 +153,11 @@ async function fetchYesterdayTasks(yesterdayYmd) {
     WHERE (mt.created_at AT TIME ZONE 'Asia/Shanghai')::date = $1::date
       AND mt.assignee_username IS NOT NULL
       AND trim(mt.assignee_username) <> ''
+      AND NOT EXISTS (
+        SELECT 1 FROM performance_invalidation_records pir
+        WHERE pir.source_type = 'master_tasks_filing'
+          AND pir.source_id = mt.task_id
+      )
     ORDER BY mt.store, mt.assignee_role, mt.assignee_username, mt.created_at
   `;
   const result = await query(sql, [yesterdayYmd]);

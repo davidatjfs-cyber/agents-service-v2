@@ -948,6 +948,8 @@ export async function handleCardAction(body) {
     action?.form_value && typeof action.form_value === 'object'
       ? action.form_value
       : {};
+  /** PLLM 决策卡 input 字段名；遗漏会导致 ReferenceError → 飞书「服务异常」 */
+  const pllmFormKeys = ['pllm_execute_plan', 'pllm_not_suitable_reason'];
   const pickFormText = (keys = []) => {
     for (const k of keys) {
       const v = formValue?.[k];

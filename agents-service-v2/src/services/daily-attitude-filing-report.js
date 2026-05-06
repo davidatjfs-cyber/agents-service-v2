@@ -230,6 +230,11 @@ async function fetchYesterdayFilings(bizYmd) {
      FROM master_tasks
      WHERE COALESCE(hr_performance_recorded, false) = true
        AND source = ANY($1::text[])
+       AND NOT EXISTS (
+         SELECT 1 FROM performance_invalidation_records pir
+         WHERE pir.source_type = 'master_tasks_filing'
+           AND pir.source_id = master_tasks.task_id
+       )
        AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date >= $2::date
        AND (dispatched_at AT TIME ZONE 'Asia/Shanghai')::date < $3::date
      ORDER BY store NULLS LAST, dispatched_at`,
