@@ -463,6 +463,20 @@ function normalizeTaskSourceData(sourceData) {
   return sourceData;
 }
 
+/** 数据审计 → master_tasks：厨房/出品类只派出品经理；服务/前厅类只派店长（禁止缺岗时交叉顶替，避免发错任务卡） */
+const MASTER_TASK_PM_EXCLUSIVE_CATEGORIES = new Set([
+  '桌访产品异常',
+  '产品差评异常',
+  '总实收毛利率异常'
+]);
+const MASTER_TASK_SM_EXCLUSIVE_CATEGORIES = new Set([
+  '服务差评异常',
+  '桌访占比异常',
+  '充值异常',
+  '实收营收异常',
+  '洪潮久光包房使用异常'
+]);
+
 // 根据异常类型和门店找到责任人
 async function resolveAssignee(category, store, existingAssignee, sourceData) {
   const state = await getSharedState();
@@ -505,14 +519,19 @@ async function resolveAssignee(category, store, existingAssignee, sourceData) {
   // 先按目标角色找
   let assignee = storeMembers.find(u => String(u?.role || '').trim() === targetRole);
 
-  // 降级顺序: store_production_manager → store_manager → 任何门店成员
-  if (!assignee && targetRole === 'store_production_manager') {
+  const cat = String(category || '').trim();
+  const pmExclusive = MASTER_TASK_PM_EXCLUSIVE_CATEGORIES.has(cat);
+  const smExclusive = MASTER_TASK_SM_EXCLUSIVE_CATEGORIES.has(cat);
+  const allowCrossRoleFallback = !pmExclusive && !smExclusive;
+
+  // 降级：仅对非「岗位锁定」类目允许跨岗（避免桌访产品/产品差评派给出品经理失败时误发给店长）
+  if (!assignee && targetRole === 'store_production_manager' && allowCrossRoleFallback) {
     assignee = storeMembers.find(u => String(u?.role || '').trim() === 'store_manager');
   }
-  if (!assignee && targetRole === 'store_manager') {
+  if (!assignee && targetRole === 'store_manager' && allowCrossRoleFallback) {
     assignee = storeMembers.find(u => String(u?.role || '').trim() === 'store_production_manager');
   }
-  if (!assignee) {
+  if (!assignee && allowCrossRoleFallback) {
     assignee = storeMembers.find(u => ['store_manager', 'store_production_manager'].includes(String(u?.role || '').trim()));
   }
 

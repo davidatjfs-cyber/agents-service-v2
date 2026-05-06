@@ -37,6 +37,32 @@ export function mapNotifyRoleToDbRole(role) {
   return r;
 }
 
+/**
+ * BI 告警/任务卡飞书收件人：强制岗位隔离（与业务约定一致）。
+ * 避免 agent_v2_configs.anomaly_rules 中 notify_target_role 误配成双岗导致店长与出品经理都收到桌访产品卡等。
+ * 注：labor_efficiency / food_safety 等多岗规则不在此表，沿用 getNotifyDbRoles 结果。
+ */
+export function clampNotifyRolesForRule(ruleKey, rolesFromConfig) {
+  const k = String(ruleKey || '').trim();
+  const pmOnly = new Set([
+    'table_visit_product',
+    'bad_review_product',
+    'gross_margin'
+  ]);
+  const smOnly = new Set([
+    'bad_review_service',
+    'table_visit_ratio',
+    'recharge_zero',
+    'revenue_achievement',
+    'revenue_achievement_monthly',
+    'hongchao_jiuguang_private_room',
+    'traffic_decline'
+  ]);
+  if (pmOnly.has(k)) return ['store_production_manager'];
+  if (smOnly.has(k)) return ['store_manager'];
+  return rolesFromConfig;
+}
+
 /** 若某类异常仅需通知门店、不要求营运督导跟发长文，可在此加入 ruleKey（当前 V2 引擎无单独「原料收货」异常键） */
 const SKIP_OP_SUPERVISOR_FOLLOWUP = new Set([
   // 例: 'material_receipt_weekly'
@@ -278,7 +304,8 @@ export async function runBiAnomalyNotifyPipeline({
   value
 }) {
   const brand = brandIn || (await getBrandForStore(store).catch(() => null)) || '';
-  const roles = await getNotifyDbRoles(ruleKey);
+  const rolesRaw = await getNotifyDbRoles(ruleKey);
+  const roles = clampNotifyRolesForRule(ruleKey, rolesRaw);
   let users =
     ruleKey === 'food_safety' ? await pickUsersForFoodSafety(store, roles) : await pickUsersForStoreAndRoles(store, roles);
   users = await collapseProductionManagerNotifyRecipients(store, users);
