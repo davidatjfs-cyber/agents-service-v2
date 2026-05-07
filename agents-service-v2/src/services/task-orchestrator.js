@@ -511,8 +511,8 @@ export async function runTaskBoardWatchdog({ staleHours = 24 } = {}) {
         await query(`UPDATE master_tasks SET status = 'closed', updated_at = NOW(), last_activity_at = NOW() WHERE task_id = $1`, [row.task_id]);
         await logEvent(row.task_id, 'auto_closed', 'task_watchdog', 'system', row.status, 'closed', { reason: 'proactive_llm expired timeout' });
         touched.push(row.task_id);
-        continue;
       }
+      continue;
     }
     const reminder = await sendTaskReminders(row.task_id, row.assignee_agent || row.current_agent || 'task_watchdog');
     if (reminder.ok && !reminder.skipped) touched.push(row.task_id);
