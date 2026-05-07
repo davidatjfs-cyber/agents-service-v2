@@ -112,6 +112,10 @@ export async function applyPllmDecision(taskId, decision, operator, planText = '
   if (!task) return { ok: false, error: 'task_not_found' };
   if (String(task.source || '') !== 'proactive_llm') return { ok: false, error: 'not_pllm_task' };
   if (['closed', 'settled'].includes(String(task.status || ''))) return { ok: false, error: 'task_already_closed' };
+  const existingDecision = String(parseSourceData(task.source_data)?.pllm_decision || '').trim();
+  if (existingDecision === 'execute' || existingDecision === 'not_suitable') {
+    return { ok: false, error: 'task_already_decided', decision: existingDecision };
+  }
   const op = String(operator || '').trim() || 'unknown';
   const d = String(decision || '').trim().toLowerCase();
 

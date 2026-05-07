@@ -865,6 +865,10 @@ export async function handleWebhookEvent(body) {
             await replyMsg(msg.message_id, okText).catch(() => {});
             return { ok: true, eventType, mode: 'pllm_pending_decision_committed', taskId: pendingPllm.taskId };
           }
+          if (r?.error === 'task_already_decided') {
+            await replyMsg(msg.message_id, `⚠️ 任务 ${pendingPllm.taskId} 已提交过决策（${r.decision === 'execute' ? '执行' : '不适合'}），请勿重复操作。`).catch(() => {});
+            return { ok: true, eventType, mode: 'pllm_pending_decision_duplicate', taskId: pendingPllm.taskId };
+          }
           await replyMsg(msg.message_id, `⚠️ PLLM 提交失败：${String(r?.error || 'unknown')}`).catch(() => {});
           return { ok: true, eventType, mode: 'pllm_pending_decision_failed' };
         }
@@ -1094,6 +1098,15 @@ export async function handleCardAction(body) {
       const role = String(u?.role || '').trim();
       if (!u || !['admin', 'hq_manager'].includes(role)) {
         return { toast: { type: 'error', content: '仅管理员或总部营运可操作 PLLM 决策' } };
+      }
+      const existingTask = await query(`SELECT task_id, status, source_data FROM master_tasks WHERE task_id = $1 LIMIT 1`, [taskId]).catch(() => ({ rows: [] }));
+      const existingSd = existingTask.rows?.[0]?.source_data;
+      const existingDecision = existingSd ? String((typeof existingSd === 'object' && existingSd !== null ? existingSd : JSON.parse(String(existingSd || '{}")))?.pllm_decision || '').trim()) : '';
+      if (existingDecision === 'execute' || existingDecision === 'not_suitable') {
+        if (openId) {
+          sendText(openId, `⚠️ 任务 ${taskId} 已提交过决策（${existingDecision === 'execute' ? '执行' : '不适合'}），请勿重复操作。`, 'open_id').catch(() => {});
+        }
+        return { toast: { type: 'info', content: '该任务已提交过决策，不可重复操作' } };
       }
       const op = String(u.username || '').trim() || 'unknown';
       const { applyPllmDecision } = await import('./proactive-v2/pllm-workflow.js');
