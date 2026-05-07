@@ -1100,8 +1100,12 @@ export async function handleCardAction(body) {
         return { toast: { type: 'error', content: '仅管理员或总部营运可操作 PLLM 决策' } };
       }
       const existingTask = await query(`SELECT task_id, status, source_data FROM master_tasks WHERE task_id = $1 LIMIT 1`, [taskId]).catch(() => ({ rows: [] }));
-      const existingSd = existingTask.rows?.[0]?.source_data;
-      const existingDecision = existingSd ? String((typeof existingSd === 'object' && existingSd !== null ? existingSd : JSON.parse(String(existingSd || '{}")))?.pllm_decision || '').trim()) : '';
+      let existingDecision = '';
+      try {
+        const rawSd = existingTask.rows?.[0]?.source_data;
+        const sd = rawSd ? (typeof rawSd === 'object' ? rawSd : JSON.parse(String(rawSd))) : {};
+        existingDecision = String(sd?.pllm_decision || '').trim();
+      } catch (_e) { /* ignore parse */ }
       if (existingDecision === 'execute' || existingDecision === 'not_suitable') {
         if (openId) {
           sendText(openId, `⚠️ 任务 ${taskId} 已提交过决策（${existingDecision === 'execute' ? '执行' : '不适合'}），请勿重复操作。`, 'open_id').catch(() => {});
