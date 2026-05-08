@@ -330,6 +330,27 @@ app.post('/api/login', loginLimiter, async (req, res) => {
     ).catch(() => ({ rows: [] }));
     if (r.rows?.[0]) {
       const u = r.rows[0];
+      // Check hrms_state employee status (block 离职)
+      try {
+        const stR = await query(`SELECT data FROM hrms_state WHERE key = $1 LIMIT 1`, ['default']);
+        const stData = stR.rows?.[0]?.data;
+        if (stData && typeof stData === 'object') {
+          const emps = Array.isArray(stData.employees) ? stData.employees : [];
+          const emp = emps.find(e => String(e?.username || '').trim().toLowerCase() === normUser);
+          const inactiveList = ['离职', 'inactive', 'resigned', 'deleted', 'terminated', '已离职', '已删除', '禁用', '停用'];
+          if (emp && inactiveList.includes(String(emp.status || '').trim().toLowerCase())) {
+            await writeLoginLog(false);
+            return res.status(403).json({ error: '账号已停用或已离职' });
+          }
+          if (emp) {
+            const approved = emp.offboardingApproved === true || emp.offboardingApproved === 'true' || emp.offboardingApproved === 1;
+            if (approved && String(emp.offboardingDate || '').trim()) {
+              await writeLoginLog(false);
+              return res.status(403).json({ error: '账号已停用或已离职' });
+            }
+          }
+        }
+      } catch (_) { /* hrms_state 查不到不阻塞登录 */ }
       // For DB users, password is their username (simple) or can be extended
       if (weakAllowed && (password === username || password === adminPass)) {
         await writeLoginLog(true);

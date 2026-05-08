@@ -18,16 +18,14 @@
   </dict>
   <key>StartCalendarInterval</key>
   <dict>
-    <key>Weekday</key>
-    <integer>1</integer>
     <key>Hour</key>
-    <integer>23</integer>
+    <integer>7</integer>
     <key>Minute</key>
     <integer>0</integer>
   </dict>
   <key>StandardOutPath</key>
-  <string>/Users/magainze/hrms backup/_meta/launchd-weekly-pull.log</string>
+  <string>/Users/magainze/hrms backup/_meta/launchd-daily-pull.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/magainze/hrms backup/_meta/launchd-weekly-pull.err.log</string>
+  <string>/Users/magainze/hrms backup/_meta/launchd-daily-pull.err.log</string>
 </dict>
 </plist>

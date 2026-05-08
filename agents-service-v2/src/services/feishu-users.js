@@ -237,12 +237,15 @@ export async function getHrmsEmployeeByUsername(username) {
   }
 }
 
-/** 检查 HRMS 员工是否在职（排除 离职/inactive） */
+/** 检查 HRMS 员工是否在职（排除 离职/inactive / 已审批离职） */
 export function isHrmsEmployeeActive(emp) {
   if (!emp) return false;
   const status = String(emp.status || '').trim().toLowerCase();
   const inactiveList = ['离职', 'inactive', 'resigned', 'deleted', 'terminated', '已离职', '已删除', '禁用', '停用'];
-  return !inactiveList.includes(status);
+  if (inactiveList.includes(status)) return false;
+  const approved = emp.offboardingApproved === true || emp.offboardingApproved === 'true' || emp.offboardingApproved === 1;
+  if (approved && String(emp.offboardingDate || '').trim()) return false;
+  return true;
 }
 
 /** 通过 Feishu open_id 查找已绑定的 HRMS 员工信息（含状态校验） */
@@ -309,6 +312,7 @@ export async function bindFeishuUserToEmployee(openId, username) {
       e => String(e?.username || '').trim().toLowerCase() === String(username).trim().toLowerCase()
     );
     if (!emp) return { ok: false, error: 'employee_not_found' };
+    if (!isHrmsEmployeeActive(emp)) return { ok: false, error: 'employee_inactive' };
 
     const name = String(emp.name || '').trim();
     const store = String(emp.store || '').trim();

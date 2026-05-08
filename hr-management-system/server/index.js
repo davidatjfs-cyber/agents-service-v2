@@ -5969,6 +5969,7 @@ async function dbListEmployeesForReports({ store, includeInactive }) {
     const sql = `select username, name, role, store, department, position, status,
                         join_date as "joinDate", created_at as "createdAt",
                         extra_json->>'offboardingDate' as "offboardingDate",
+                        extra_json->>'offboardingApproved' as "offboardingApproved",
                         extra_json->>'resignedAt' as "resignedAt",
                         coalesce(extra_json->>'coreTalent', 'false')::boolean as "coreTalent",
                         nullif(trim(coalesce(extra_json->>'level', extra_json->>'jobLevel', '')), '') as level
@@ -9908,19 +9909,27 @@ function employeeStoreMatchesTurnoverReportFilter(empStore, reportStore) {
   return resolveAgentCanonicalStore(es) === resolveAgentCanonicalStore(rs);
 }
 
-/** 视为已离职：含 inactive/disabled 且已有离职日期（与账号停用口径一致） */
+/** 视为已离职：含 inactive/disabled 且已有离职日期（与账号停用口径一致）；或离职已审批（offboardingApproved）且有离职日期 */
 function isEmployeeDepartedForTurnoverReport(emp) {
   const st = String(emp?.status || '').trim().toLowerCase();
   if (['离职', 'resigned', 'terminated', 'offboarded', 'left', 'departed'].includes(st)) return true;
   if (st === 'inactive' || st === 'disabled') {
     return !!normalizeEmployeeDepartureDateForTurnover(emp);
   }
+  const approved = emp?.offboardingApproved === true || emp?.offboardingApproved === 'true' || emp?.offboardingApproved === 1;
+  if (approved && normalizeEmployeeDepartureDateForTurnover(emp)) return true;
   return false;
 }
 
+/** 视为在职：active/onboard/probation，且未通过离职审批 */
 function isEmployeeActiveLikeForTurnoverReport(emp) {
   const st = String(emp?.status || '').trim().toLowerCase();
-  return !st || st === 'active' || st === 'onboard' || st === 'probation';
+  if (!st || st === 'active' || st === 'onboard' || st === 'probation') {
+    const approved = emp?.offboardingApproved === true || emp?.offboardingApproved === 'true' || emp?.offboardingApproved === 1;
+    if (approved && normalizeEmployeeDepartureDateForTurnover(emp)) return false;
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -9990,7 +9999,9 @@ app.get('/api/reports/turnover', authRequired, async (req, res) => {
             ...stateEmp,
             status: String(stateEmp?.status || dbEmp?.status || ''),
             offboardingDate: stateEmp?.offboardingDate || dbEmp?.offboardingDate || '',
+            offboardingApproved: stateEmp?.offboardingApproved ?? dbEmp?.offboardingApproved ?? dbEmp?.extra_json?.offboardingApproved ?? undefined,
             resignedAt: stateEmp?.resignedAt || dbEmp?.resignedAt || '',
+            coreTalent: stateEmp?.coreTalent ?? dbEmp?.coreTalent ?? dbEmp?.extra_json?.coreTalent ?? false,
             level: lv
           });
         } else {
