@@ -74,6 +74,7 @@ function taskTypeLabel(type) {
 function taskStatusZh(status) {
   switch (status) {
     case 'completed': return '已完成';
+    case 'resolved': return '已通过';
     case 'closed': return '已闭环';
     case 'hr_filed': return '已备案';
     case 'overdue': return '已逾期';
@@ -111,7 +112,7 @@ function roleLabelZh(role) {
 
 /** 判断是否已完成 */
 function isCompleted(status) {
-  return ['closed'].includes(status);
+  return ['closed', 'resolved', 'hr_filed'].includes(status);
 }
 
 function canonicalTaskIdentity(task) {
