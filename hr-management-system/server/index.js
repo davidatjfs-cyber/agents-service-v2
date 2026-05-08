@@ -13702,7 +13702,7 @@ function shanghaiTodayDateOnly() {
 }
 
 /**
- * 是否应对该员工关闭 HRMS 登录与飞书侧绑定（含：档案为离职类 / 离职审批已过生效日）
+ * 是否应对该员工关闭 HRMS 登录与飞书侧绑定（含：档案为离职类 / 离职审批已通过）
  */
 function employeeAccountShouldDisable(emp) {
   if (!emp || typeof emp !== 'object') return false;
@@ -13711,11 +13711,7 @@ function employeeAccountShouldDisable(emp) {
     emp.offboardingApproved === true
     || String(emp.offboardingApproved || '').trim().toLowerCase() === 'true'
     || String(emp.offboardingApproved || '').trim() === '1';
-  const d = safeDateOnly(emp.offboardingDate);
-  if (ob && d) {
-    const today = shanghaiTodayDateOnly();
-    if (today && d && String(today) >= String(d)) return true;
-  }
+  if (ob) return true;
   return false;
 }
 
