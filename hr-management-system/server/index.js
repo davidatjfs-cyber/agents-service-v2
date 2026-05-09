@@ -3167,6 +3167,8 @@ app.delete('/api/approvals/:id', authRequired, async (req, res) => {
           }
         }
       } catch (e3) { console.error('[delete approval] cascade state.leaveRecords:', e3?.message); }
+
+      try { scheduleLeaveDomainSync(); } catch (_) {}
     }
 
     return res.json({ ok: true, deleted });
