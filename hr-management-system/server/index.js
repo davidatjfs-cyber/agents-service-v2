@@ -3134,16 +3134,42 @@ app.post('/api/approvals/:id/read', authRequired, async (req, res) => {
   }
 });
 
-// Admin delete approval record
+// Admin delete approval record（级联清理休假记录，避免重新申请产生重复）
 app.delete('/api/approvals/:id', authRequired, async (req, res) => {
   const role = String(req.user?.role || '').trim();
   if (role !== 'admin') return res.status(403).json({ error: 'admin_only' });
   const id = String(req.params?.id || '').trim();
   if (!id) return res.status(400).json({ error: 'missing_id' });
   try {
-    const r = await pool.query('delete from approval_requests where id = $1 returning id, type', [id]);
+    const r = await pool.query('delete from approval_requests where id = $1 returning id, type, applicant_username', [id]);
     if (!r.rows?.length) return res.status(404).json({ error: 'not_found' });
-    return res.json({ ok: true, deleted: r.rows[0] });
+    const deleted = r.rows[0];
+
+    if (String(deleted.type || '').trim().toLowerCase() === 'leave') {
+      let deletedLeaveRecordIds = [];
+      try {
+        const dlr = await pool.query('delete from hrms_leave_records where approval_id = $1 returning id', [id]);
+        deletedLeaveRecordIds = (dlr.rows || []).map(r => String(r.id));
+      } catch (e2) { console.error('[delete approval] cascade hrms_leave_records:', e2?.message); }
+
+      try {
+        const sr = await pool.query("select data from hrms_state where key = 'default' limit 1");
+        const sd = sr.rows?.[0]?.data;
+        if (sd && Array.isArray(sd.leaveRecords)) {
+          const before = sd.leaveRecords.length;
+          sd.leaveRecords = sd.leaveRecords.filter(lr => {
+            if (String(lr.approvalId || '') === id) return false;
+            if (deletedLeaveRecordIds.includes(String(lr.id || ''))) return false;
+            return true;
+          });
+          if (sd.leaveRecords.length < before) {
+            await pool.query("update hrms_state set data = $1 where key = 'default'", [sd]);
+          }
+        }
+      } catch (e3) { console.error('[delete approval] cascade state.leaveRecords:', e3?.message); }
+    }
+
+    return res.json({ ok: true, deleted });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
