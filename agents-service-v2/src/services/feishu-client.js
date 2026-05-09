@@ -69,7 +69,7 @@ export {
 import { sendText, sendCard, sendGroup, sendGroupCard, replyMsg, downloadImage, feishuOutboundMessageId } from './feishu-messaging.js';
 import { getTenantToken, BASE } from './feishu-auth.js';
 import { refreshFeishuUserOpenIdForImDelivery, lookupUser, getHrmsEmployeeByFeishuOpenId, feishuOpenIdIsMajixianPmObserver } from './feishu-users.js';
-import { buildAnomalyCard } from './feishu-cards.js';
+import { buildAnomalyCard, buildGrowthAlertCard } from './feishu-cards.js';
 
 // ═══════════════════════════════════════════════════════════
 // REMAINING FUNCTIONS (not extracted to sub-modules)
@@ -239,6 +239,25 @@ export async function pushAnomalyAlert(store, anomalyKey, severity, detail, task
         u.open_id,
         emoji + ' 【异常告警】' + store + '\n类型: ' + typeZh + '\n严重度: ' + severity + '\n详情: ' + detail
       );
+    }
+    results.push(r);
+  }
+  return { ok: true, sent: results.length };
+}
+
+export async function pushGrowthAlert(alert) {
+  const users = await query(
+    `SELECT open_id FROM feishu_users
+     WHERE registered = TRUE AND open_id NOT LIKE '%probe%'
+       AND (store = $1 OR role IN ('admin','hq_manager'))`,
+    [alert.storeId || alert.store || '']
+  );
+  const results = [];
+  for (const u of (users.rows || [])) {
+    const card = buildGrowthAlertCard(alert);
+    let r = await sendCard(u.open_id, card);
+    if (!r.ok) {
+      r = await sendText(u.open_id, `🚨 ${alert.title}\n${alert.message}\n建议：${alert.suggestedAction || ''}`);
     }
     results.push(r);
   }

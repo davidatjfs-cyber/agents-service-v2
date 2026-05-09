@@ -8,6 +8,7 @@ import { getShanghaiYmdParts } from '../utils/anomaly-week-bounds.js';
 import { startRandomInspections } from '../services/random-inspection.js';
 import { scheduleProactiveOutcomeOnClose } from '../services/proactive-v2/proactive-task-outcome-on-close.js';
 import { transitionTask } from '../services/task-state-machine.js';
+import { runGrowthMonitor } from '../services/growth-monitor.js';
 
 import { sendUsageWeeklyReport } from '../services/usage-weekly-report.js';
 import { sendWeeklyDishOptimizationReport } from '../services/dish-optimization-report.js';
@@ -29,6 +30,16 @@ import {
 
 const r = Router();
 const admin = [authRequired, requireRole('admin','hq_manager')];
+
+r.post('/admin/growth-monitor/run', ...admin, async (req, res) => {
+  try {
+    const result = await runGrowthMonitor({ createTasks: req.body?.createTasks !== false });
+    res.json(result);
+  } catch (e) {
+    logger.error({ err: e?.message }, 'manual growth monitor failed');
+    res.status(500).json({ ok: false, error: e?.message || 'growth_monitor_failed' });
+  }
+});
 
 /** 与 canViewAllStores 对齐：可手动关闭任务的角色（JWT / feishu_users.role） */
 const CLOSE_TASK_ROLES = ['admin', 'hq_manager', 'hr_manager'];

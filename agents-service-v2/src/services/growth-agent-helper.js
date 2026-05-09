@@ -1,0 +1,133 @@
+import { query } from '../utils/db.js';
+
+export async function buildGrowthMetricsContext(storeId) {
+  const storeClause = storeId ? 'AND store_id = $2' : '';
+  const params = [7];
+  if (storeId) params.push(storeId);
+
+  const r = await query(
+    `SELECT store_id, campaign_id, channel,
+            SUM(scan_count)::int AS scan_count,
+            SUM(authorized_count)::int AS authorized_count,
+            SUM(coupon_issued_count)::int AS issued_count,
+            SUM(coupon_redeemed_count)::int AS redeemed_count,
+            SUM(payment_count)::int AS payment_count,
+            SUM(revenue_fen)::int AS revenue_fen
+     FROM growth_daily_metrics
+     WHERE metric_date >= CURRENT_DATE - ($1::int || ' days')::interval
+       ${storeClause}
+     GROUP BY store_id, campaign_id, channel
+     ORDER BY scan_count DESC
+     LIMIT 20`,
+    params
+  );
+
+  if (!r.rows.length) return '暂无增长数据。';
+
+  const lines = r.rows.map((row, i) => {
+    const scan = Number(row.scan_count) || 0;
+    const auth = Number(row.authorized_count) || 0;
+    const issued = Number(row.issued_count) || 0;
+    const redeem = Number(row.redeemed_count) || 0;
+    const revenue = Number(row.revenue_fen) || 0;
+    const authRate = scan > 0 ? `${Math.round(auth / scan * 100)}%` : '-';
+    const redeemRate = issued > 0 ? `${Math.round(redeem / issued * 100)}%` : '-';
+    return `${i + 1}. 门店${row.store_id || '-'} 活动${row.campaign_id || '-'} | 扫码${scan} | 授权${auth}(${authRate}) | 发券${issued} | 核销${redeem}(${redeemRate}) | 支付${row.payment_count || 0} | 收入¥${(revenue / 100).toFixed(2)}`;
+  });
+
+  return `【近7天增长数据概览】\n${lines.join('\n')}`;
+}
+
+export async function buildGrowthAlertContext(storeId) {
+  const storeClause = storeId ? 'AND store_id = $2' : '';
+  const params = [];
+  if (storeId) params.push(storeId);
+
+  const r = await query(
+    `SELECT alert_type, severity, title, message, suggested_action, created_at
+     FROM growth_alerts
+     WHERE status = 'open'
+       ${storeClause}
+     ORDER BY created_at DESC
+     LIMIT 10`,
+    params
+  );
+
+  if (!r.rows.length) return '暂无待处理增长告警。';
+
+  const lines = r.rows.map((a, i) => {
+    const emoji = a.severity === 'high' ? '🚨' : a.severity === 'medium' ? '⚠️' : 'ℹ️';
+    return `${i + 1}. ${emoji}[${a.severity}] ${a.title}：${(a.message || '').slice(0, 80)}`;
+  });
+
+  return `【待处理增长告警】\n${lines.join('\n')}`;
+}
+
+export async function buildGrowthCaseContext(storeId) {
+  const storeClause = storeId ? 'WHERE store_id = $1' : '';
+  const params = storeId ? [storeId] : [];
+
+  const r = await query(
+    `SELECT title, objective, channel, offer, score, conclusion, reusable
+     FROM marketing_case_library
+     ${storeClause}
+     ORDER BY score DESC, created_at DESC
+     LIMIT 15`,
+    params
+  );
+
+  if (!r.rows.length) return '暂无营销案例。';
+
+  const lines = r.rows.map((c, i) => {
+    return `${i + 1}. [评分${c.score || 0}] ${c.title} | 渠道:${c.channel || '-'} | offer:${c.offer || '-'} | ${c.reusable ? '可复用' : '参考'}`;
+  });
+
+  return `【营销案例库参考】\n${lines.join('\n')}`;
+}
+
+export async function buildStoreProfileContext(storeId) {
+  if (!storeId) return '';
+  const r = await query(
+    `SELECT brand, avg_ticket_fen, primary_audience, signature_dishes, peak_hours,
+            gross_margin_floor, suitable_offers, unsuitable_offers, best_campaigns, worst_campaigns
+     FROM store_marketing_profiles WHERE store_id = $1 LIMIT 1`,
+    [storeId]
+  );
+  if (!r.rows.length) return '';
+  const p = r.rows[0];
+  const lines = [];
+  if (p.brand) lines.push(`品牌：${p.brand}`);
+  if (p.avg_ticket_fen) lines.push(`客单价：¥${(p.avg_ticket_fen / 100).toFixed(2)}`);
+  if (p.primary_audience) lines.push(`主力客群：${p.primary_audience}`);
+  if (p.gross_margin_floor != null) lines.push(`毛利底线：${p.gross_margin_floor}%`);
+  if (p.suitable_offers?.length) lines.push(`适合券类型：${p.suitable_offers.join('、')}`);
+  if (p.unsuitable_offers?.length) lines.push(`不适合活动：${p.unsuitable_offers.join('、')}`);
+  if (p.best_campaigns?.length) lines.push(`历史最佳：${p.best_campaigns.slice(0, 3).join('、')}`);
+  if (p.worst_campaigns?.length) lines.push(`历史最差：${p.worst_campaigns.slice(0, 3).join('、')}`);
+  return `【门店画像】\n${lines.join('\n')}`;
+}
+
+export function evaluateStrategyByProfile(strategy, profile) {
+  if (!profile || !strategy) return { score: 70, issues: [] };
+  const issues = [];
+  let score = 70;
+  if (profile.gross_margin_floor != null && strategy.estimated_margin != null) {
+    if (strategy.estimated_margin < profile.gross_margin_floor) {
+      score -= 20;
+      issues.push(`预估毛利(${strategy.estimated_margin}%)低于门店毛利底线(${profile.gross_margin_floor}%)`);
+    }
+  }
+  if (profile.unsuitable_offers?.length && strategy.offer_type) {
+    if (profile.unsuitable_offers.includes(strategy.offer_type)) {
+      score -= 15;
+      issues.push(`券类型"${strategy.offer_type}"在门店不适合活动列表中`);
+    }
+  }
+  if (profile.avg_ticket_fen > 0 && strategy.amount_fen > 0) {
+    if (strategy.amount_fen > profile.avg_ticket_fen * 0.5) {
+      score -= 10;
+      issues.push(`券面值(${Math.round(strategy.amount_fen / 100)}元)超过客单价50%`);
+    }
+  }
+  return { score: Math.max(0, score), issues };
+}

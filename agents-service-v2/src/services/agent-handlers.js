@@ -34,7 +34,6 @@ import { toFeishuStoreName, resolveAgentCanonicalStore } from '../config/store-m
 import { feishuStoreSearchPatterns } from '../utils/store-sql-patterns.js';
 import { estimateMarginForStore } from './margin-from-sales.js';
 import { unifiedRetrieve, formatUnifiedRetrievalForPrompt } from './unified-retriever.js';
-import { buildStoreProfilePromptBlock } from '../config/store-profile.js';
 import {
   fetchMergedTableVisitEntries,
   tableVisitEntryIsDissatisfied,
@@ -48,6 +47,7 @@ import {
   resolveMonthlyRevenueTargetYuan,
   buildMaterialReportReplyForDateRange
 } from './deterministic-replies.js';
+import { buildGrowthMetricsContext, buildGrowthAlertContext, buildGrowthCaseContext, buildStoreProfileContext, evaluateStrategyByProfile } from './growth-agent-helper.js';
 import { analyzeMetricTree, formatMetricAnalysisForPrompt } from './analysis-engine.js';
 import { getBestStrategy, formatExperiencePromptBlock } from './agent-experience.js';
 import { getSOPByScenario, detectScenario, formatSopPromptAppendix } from './sop-service.js';
@@ -2480,6 +2480,31 @@ async function handleMarketingPlanner(text, ctx) {
     console.warn('[DB_ERROR]', err.message);
     logger.warn({ err: err.message }, 'marketing_planner campaigns');
     mktData += '\n\n【近期营销活动】读取失败，略过';
+  }
+
+  try {
+    const growthMetrics = await buildGrowthMetricsContext(store);
+    mktData += '\n\n' + growthMetrics;
+    const growthAlerts = await buildGrowthAlertContext(store);
+    mktData += '\n\n' + growthAlerts;
+  } catch (err) {
+    console.warn('[DB_ERROR]', err.message);
+    mktData += '\n\n【增长数据】读取失败';
+  }
+
+  try {
+    const growthCases = await buildGrowthCaseContext(store);
+    mktData += '\n\n' + growthCases;
+  } catch (err) {
+    console.warn('[DB_ERROR]', err.message);
+    mktData += '\n\n【营销案例】读取失败';
+  }
+
+  try {
+    const profileCtx = await buildStoreProfileContext(store);
+    if (profileCtx) mktData += '\n\n' + profileCtx;
+  } catch (err) {
+    console.warn('[DB_ERROR]', err.message);
   }
 
   try {

@@ -371,3 +371,27 @@ export function buildPerformanceSummaryCard({
     ]
   };
 }
+
+export function buildGrowthAlertCard(alert) {
+  const sevColor = alert.severity === 'high' ? 'red' : alert.severity === 'medium' ? 'orange' : 'blue';
+  const sevEmoji = alert.severity === 'high' ? '🚨' : alert.severity === 'medium' ? '⚠️' : 'ℹ️';
+  const storeText = alert.storeId || alert.store || '全部门店';
+  const campaignText = alert.campaignId || '';
+  const metrics = alert.metrics || {};
+  const metricLines = [];
+  if (metrics.scanCount != null) metricLines.push(`扫码：${metrics.scanCount}`);
+  if (metrics.authorizedCount != null) metricLines.push(`授权：${metrics.authorizedCount}`);
+  if (metrics.redeemedCount != null) metricLines.push(`核销：${metrics.redeemedCount}`);
+  if (metrics.revenueFen != null && metrics.revenueFen > 0) metricLines.push(`收入：¥${(metrics.revenueFen / 100).toFixed(2)}`);
+  const metricStr = metricLines.length ? `\n**指标**：${metricLines.join(' / ')}` : '';
+  return {
+    config: { wide_screen_mode: true },
+    header: { title: { tag: 'plain_text', content: `${sevEmoji} 增长告警 — ${storeText}` }, template: sevColor },
+    elements: [
+      { tag: 'div', text: { tag: 'lark_md', content: `**门店**：${storeText}\n**活动**：${campaignText || '-'}\n**严重度**：${sevEmoji} ${alert.severity}\n**消息**：${alert.message || ''}${metricStr}` } },
+      { tag: 'div', text: { tag: 'lark_md', content: `**建议动作**：${alert.suggestedAction || ''}` } },
+      { tag: 'hr' },
+      { tag: 'note', elements: [{ tag: 'plain_text', content: '🔄 增长监控自动生成，每小时刷新一次。请及时处理。' }] }
+    ]
+  };
+}

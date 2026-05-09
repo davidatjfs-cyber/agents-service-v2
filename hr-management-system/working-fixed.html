@@ -10342,6 +10342,11 @@
                         <i>📊</i> <span>数据中心</span>
                     </a>
                 </div>
+                <div class="nav-item" data-page="growth">
+                    <a href="#" class="nav-link" onclick="showPage('growth')">
+                        <i>📈</i> <span>增长看板</span>
+                    </a>
+                </div>
                 <div class="nav-item" data-page="agent-tasks" style="display:none;">
                     <a href="#" class="nav-link" onclick="showPage('agent-tasks')">
                         <i>🧭</i> <span>Agent任务</span>
@@ -13450,6 +13455,38 @@
                 <button class="btn" id="btn-agents-config-card" style="display:none;" onclick="openAgentConfigModal()">打开配置中心</button>
             </div>
 
+            <div id="growth-page" class="hidden">
+                <div style="max-width:1200px;margin:0 auto;padding:20px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                        <h2 style="font-size:22px;font-weight:800;">增长看板</h2>
+                        <div style="display:flex;gap:8px;">
+                            <select id="growth-store-filter" style="padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
+                                <option value="">全部门店</option>
+                            </select>
+                            <button onclick="refreshGrowthDashboard()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:600;">刷新</button>
+                        </div>
+                    </div>
+                    <div id="growth-metrics-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;"></div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
+                            <div style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">活动漏斗</div>
+                            <div id="growth-funnel" style="min-height:200px;"></div>
+                        </div>
+                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
+                            <div style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">告警列表</div>
+                            <div id="growth-alerts" style="min-height:200px;"></div>
+                        </div>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;margin-top:16px;">
+                        <div style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">近期指标趋势</div>
+                        <div id="growth-trends" style="min-height:200px;"></div>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;margin-top:16px;">
+                        <div style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">行动建议</div>
+                        <div id="growth-actions" style="min-height:200px;"></div>
+                    </div>
+                </div>
+            </div>
             <div id="exam-page" class="hidden">
                 <div class="exam-shell">
                     <div class="exam-header">
@@ -19823,6 +19860,14 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                 }
             }
 
+            if (pageName === 'growth') {
+                const canAccess = currentUser && (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.HQ_MANAGER || currentUser.role === ROLES.STORE_MANAGER || currentUser.role === ROLES.FRONT_MANAGER);
+                if (!canAccess) {
+                    showNotification('仅管理员、总部和店长可访问增长看板', 'warning');
+                    pageName = getHomePageName();
+                }
+            }
+
             if (pageName === 'agent-tasks') {
                 const canAccess = currentUser && (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.HQ_MANAGER || currentUser.role === ROLES.HR_MANAGER);
                 if (!canAccess) {
@@ -19896,6 +19941,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                         knowledge: '知识库',
                         files: '文件中心',
                         agents: '数据中心',
+                        growth: '增长看板',
                         'agent-tasks': 'Agent任务',
                         flashcards: '自我测验',
                         stores: '门店管理',
@@ -20003,6 +20049,9 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                     break;
                 case 'agents':
                     loadAgentsData();
+                    break;
+                case 'growth':
+                    refreshGrowthDashboard();
                     break;
                 case 'agent-tasks':
                     loadAgentTaskBoard();
@@ -44074,9 +44123,165 @@ ${body}
                 closeUploadFileDialog();
                 loadFilesList(currentFilesPage);
             } catch (e) {
-                console.error('[files] upload error:', e);
-                showNotification('上传失败: ' + e.message, 'error');
+                console.error('文件上传失败:', e);
+                showNotification('文件上传失败: ' + (e?.message || '未知错误'), 'error');
             }
+        }
+
+        async function refreshGrowthDashboard() {
+            const storeFilter = document.getElementById('growth-store-filter')?.value || '';
+            try {
+                var gh = { 'Authorization': 'Bearer ' + (HRMS_API.token() || '') };
+                const metricsRes = await fetch('/api/growth/metrics?days=7&store_id=' + encodeURIComponent(storeFilter), { headers: gh });
+                const metricsData = await metricsRes.json();
+                const metrics = metricsData?.rows || [];
+                const alertsRes = await fetch('/api/growth/alerts?status=open', { headers: gh });
+                const alertsData = await alertsRes.json();
+                const alerts = alertsData?.alerts || [];
+                const actionsRes = await fetch('/api/growth/actions', { headers: gh });
+                const actionsData = await actionsRes.json();
+                const actions = actionsData?.actions || [];
+
+                renderGrowthMetricsCards(metrics);
+                renderGrowthFunnel(metrics);
+                renderGrowthAlerts(alerts);
+                renderGrowthTrends(metrics);
+                renderGrowthActions(actions);
+
+                document.querySelectorAll('#growth-page .hidden').forEach(function(e) { e.classList.remove('hidden'); });
+            } catch (e) {
+                console.error('growth dashboard error:', e);
+                document.getElementById('growth-metrics-cards').innerHTML = '<div style="color:red;padding:20px;">加载失败</div>';
+            }
+        }
+
+        function renderGrowthMetricsCards(metrics) {
+            var total = { scan: 0, auth: 0, issued: 0, redeem: 0, payment: 0, revenue: 0 };
+            metrics.forEach(function(m) {
+                total.scan += Number(m.scan_count) || 0;
+                total.auth += Number(m.authorized_count) || 0;
+                total.issued += Number(m.coupon_issued_count) || 0;
+                total.redeem += Number(m.coupon_redeemed_count) || 0;
+                total.payment += Number(m.payment_count) || 0;
+                total.revenue += Number(m.revenue_fen) || 0;
+            });
+            var cards = [
+                { label: '扫码', value: total.scan, icon: '📱' },
+                { label: '授权', value: total.auth, icon: '✅' },
+                { label: '发券', value: total.issued, icon: '🎫' },
+                { label: '核销', value: total.redeem, icon: '✔️' },
+                { label: '支付', value: total.payment, icon: '💰' },
+                { label: '收入(元)', value: (total.revenue / 100).toFixed(2), icon: '💵' }
+            ];
+            document.getElementById('growth-metrics-cards').innerHTML = cards.map(function(c) {
+                return '<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;text-align:center;">'
+                    + '<div style="font-size:24px;margin-bottom:6px;">' + c.icon + '</div>'
+                    + '<div style="font-size:28px;font-weight:800;color:#fff;">' + c.value + '</div>'
+                    + '<div style="font-size:12px;color:rgba(226,232,240,0.5);">' + c.label + '</div>'
+                    + '</div>';
+            }).join('');
+        }
+
+        function renderGrowthFunnel(metrics) {
+            var total = { scan: 0, auth: 0, issued: 0, redeem: 0, payment: 0 };
+            metrics.forEach(function(m) {
+                total.scan += Number(m.scan_count) || 0;
+                total.auth += Number(m.authorized_count) || 0;
+                total.issued += Number(m.coupon_issued_count) || 0;
+                total.redeem += Number(m.coupon_redeemed_count) || 0;
+                total.payment += Number(m.payment_count) || 0;
+            });
+            var steps = [
+                { name: '扫码', count: total.scan, pct: 100 },
+                { name: '授权', count: total.auth, pct: total.scan > 0 ? Math.round(total.auth / total.scan * 100) : 0 },
+                { name: '领券', count: total.issued, pct: total.auth > 0 ? Math.round(total.issued / total.auth * 100) : 0 },
+                { name: '核销', count: total.redeem, pct: total.issued > 0 ? Math.round(total.redeem / total.issued * 100) : 0 },
+                { name: '支付', count: total.payment, pct: total.redeem > 0 ? Math.round(total.payment / total.redeem * 100) : 0 }
+            ];
+            document.getElementById('growth-funnel').innerHTML = steps.map(function(s, i) {
+                var barColor = s.pct < 10 ? '#ef4444' : s.pct < 30 ? '#f59e0b' : '#22c55e';
+                return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
+                    + '<div style="width:40px;font-size:13px;font-weight:600;color:rgba(226,232,240,0.8);">' + s.name + '</div>'
+                    + '<div style="flex:1;height:24px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden;">'
+                    + '<div style="height:100%;width:' + s.pct + '%;background:' + barColor + ';border-radius:6px;display:flex;align-items:center;padding-left:6px;min-width:40px;">'
+                    + '<span style="font-size:11px;font-weight:700;color:#fff;">' + s.count + ' (' + s.pct + '%)</span>'
+                    + '</div></div></div>';
+            }).join('');
+            if (!total.scan && !total.auth) {
+                document.getElementById('growth-funnel').innerHTML = '<div style="color:rgba(226,232,240,0.4);padding:20px;">暂无数据</div>';
+            }
+        }
+
+        function renderGrowthAlerts(alerts) {
+            if (!alerts.length) {
+                document.getElementById('growth-alerts').innerHTML = '<div style="color:rgba(226,232,240,0.4);padding:20px;">暂无告警</div>';
+                return;
+            }
+            document.getElementById('growth-alerts').innerHTML = alerts.slice(0, 10).map(function(a) {
+                var sevColor = a.severity === 'high' ? '#ef4444' : a.severity === 'medium' ? '#f59e0b' : '#22c55e';
+                var sevEmoji = a.severity === 'high' ? '🚨' : a.severity === 'medium' ? '⚠️' : 'ℹ️';
+                return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
+                    + '<div style="display:flex;justify-content:space-between;align-items:center;">'
+                    + '<span style="font-size:13px;font-weight:600;color:#fff;">' + sevEmoji + ' ' + (a.title || '').slice(0, 40) + '</span>'
+                    + '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:' + sevColor + ';color:#fff;">' + a.severity + '</span>'
+                    + '</div>'
+                    + '<div style="font-size:12px;color:rgba(226,232,240,0.6);margin-top:4px;">' + (a.message || '').slice(0, 80) + '</div>'
+                    + '</div>';
+            }).join('');
+        }
+
+        function renderGrowthTrends(metrics) {
+            var byDate = {};
+            metrics.forEach(function(m) {
+                var d = m.metric_date;
+                if (!byDate[d]) byDate[d] = { scan: 0, auth: 0, redeem: 0 };
+                byDate[d].scan += Number(m.scan_count) || 0;
+                byDate[d].auth += Number(m.authorized_count) || 0;
+                byDate[d].redeem += Number(m.coupon_redeemed_count) || 0;
+            });
+            var dates = Object.keys(byDate).sort();
+            if (!dates.length) {
+                document.getElementById('growth-trends').innerHTML = '<div style="color:rgba(226,232,240,0.4);padding:20px;">暂无数据</div>';
+                return;
+            }
+            var maxVal = 0;
+            dates.forEach(function(d) { maxVal = Math.max(maxVal, byDate[d].scan, byDate[d].auth, byDate[d].redeem); });
+            var barHeight = 120;
+            var colWidth = Math.max(40, Math.min(80, 600 / dates.length));
+            document.getElementById('growth-trends').innerHTML = '<div style="display:flex;align-items:flex-end;gap:' + (colWidth * 0.25) + 'px;min-height:' + (barHeight + 30) + 'px;padding-top:10px;overflow-x:auto;">'
+                + dates.map(function(d) {
+                    var s = byDate[d];
+                    var hScan = maxVal > 0 ? Math.round(s.scan / maxVal * barHeight) : 0;
+                    var hAuth = maxVal > 0 ? Math.round(s.auth / maxVal * barHeight) : 0;
+                    var hRedeem = maxVal > 0 ? Math.round(s.redeem / maxVal * barHeight) : 0;
+                    return '<div style="display:flex;flex-direction:column;align-items:center;width:' + colWidth + 'px;">'
+                        + '<div style="display:flex;gap:2px;align-items:flex-end;height:' + barHeight + 'px;">'
+                        + '<div style="width:8px;background:#3b82f6;border-radius:3px 3px 0 0;height:' + hScan + 'px;" title="扫码:' + s.scan + '"></div>'
+                        + '<div style="width:8px;background:#22c55e;border-radius:3px 3px 0 0;height:' + hAuth + 'px;" title="授权:' + s.auth + '"></div>'
+                        + '<div style="width:8px;background:#f59e0b;border-radius:3px 3px 0 0;height:' + hRedeem + 'px;" title="核销:' + s.redeem + '"></div>'
+                        + '</div>'
+                        + '<div style="font-size:10px;color:rgba(226,232,240,0.5);margin-top:4px;white-space:nowrap;">' + d.slice(5) + '</div>'
+                        + '</div>';
+                }).join('')
+                + '<div style="display:flex;gap:6px;align-items:center;padding-left:8px;font-size:10px;color:rgba(226,232,240,0.4);">'
+                + '<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#3b82f6;"></span>扫码'
+                + '<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#22c55e;"></span>授权'
+                + '<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#f59e0b;"></span>核销'
+                + '</div></div>';
+        }
+
+        function renderGrowthActions(actions) {
+            if (!actions.length) {
+                document.getElementById('growth-actions').innerHTML = '<div style="color:rgba(226,232,240,0.4);padding:20px;">暂无行动建议</div>';
+                return;
+            }
+            document.getElementById('growth-actions').innerHTML = actions.slice(0, 10).map(function(a) {
+                return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
+                    + '<div style="font-size:13px;font-weight:600;color:#fff;">💡 ' + (a.title || '').slice(0, 50) + '</div>'
+                    + '<div style="font-size:12px;color:rgba(226,232,240,0.6);margin-top:4px;">' + (a.detail || '').slice(0, 120) + '</div>'
+                    + '<div style="font-size:11px;color:rgba(226,232,240,0.35);margin-top:2px;">状态: ' + (a.status || '-') + '</div>'
+                    + '</div>';
+            }).join('');
         }
     </script>
 

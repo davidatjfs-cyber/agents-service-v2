@@ -60,6 +60,7 @@ import { runDailyExecutionRating } from './services/daily-execution-rating.js';
 import { runDailyAttitudeFilingReport } from './services/daily-attitude-filing-report.js';
 import { runMonthlyComprehensiveRating } from './services/monthly-comprehensive-rating.js';
 import { getAIOperationsReport } from './services/ai-operations.js';
+import { runGrowthMonitor } from './services/growth-monitor.js';
 import adminApi from './routes/admin-api.js';
 import agentTaskBoardApi from './routes/agent-task-board-api.js';
 import { registerChairmanConfigRoutes } from './routes/chairman-config-api.js';
@@ -1410,6 +1411,11 @@ async function start() {
         .catch((e) => logger.warn({ err: e?.message }, 'agent task board watchdog cron error'));
     }, { timezone: 'Asia/Shanghai' });
     logger.info('Agent task-board watchdog scheduled every 30 minutes');
+    cron.schedule('10 * * * *', () => {
+      runWithCronLog('growth_monitor', () => runGrowthMonitor())
+        .catch((e) => logger.warn({ err: e?.message }, 'growth monitor cron error'));
+    }, { timezone: 'Asia/Shanghai' });
+    logger.info('Growth monitor scheduled hourly at :10 Asia/Shanghai');
     // 实际毛利率表：每日 05:16（上海）拉取飞书表数据（非「毛利率异常」月检；与 05:00 周度BI、05:08 日频BI 错开）
     cron.schedule('16 5 * * *', async () => {
       try {

@@ -56,6 +56,8 @@ import { setDataExecutorPool, purgeExpiredCache, updateMetricVersion } from './d
 import fileRoutes from './file-routes.js';
 import { enforceRuntimeSafetyOrExit, configureDbSessionSafety, isSchemaChangeAllowed, getAppEnv, isWebhookEnabled, isExternalEnabled } from './safety.js';
 import { expandAgentStoreLabels, resolveAgentCanonicalStore } from './v2-store-alignment.js';
+import { ensureGrowthTables, registerGrowthRoutes } from './growth-api.js';
+import { ensurePhaseTables, registerPhaseRoutes } from './growth-phases.js';
 import {
   reconcileDailyReportAttendanceRegister,
   backfillDailyAttendanceRegisterMissing,
@@ -5009,6 +5011,8 @@ const pool = new Pool({ connectionString: DATABASE_URL });
 setAgentPool(pool);
 configureDbSessionSafety(pool, { serviceName: 'hrms-server' });
 const __ALLOW_SCHEMA_CHANGES__ = isSchemaChangeAllowed();
+registerGrowthRoutes(app, pool);
+registerPhaseRoutes(app, pool);
 
 async function ensureEmployeeAttachmentsTable() {
   try {
@@ -17079,6 +17083,8 @@ app.listen(PORT, HOST, async () => {
   try {
     // 登录会话表：必须在 ALLOW_SCHEMA_CHANGES 之外也能创建，否则 INSERT 失败 + 仍签发 JWT → 全站 session 校验失败
     await ensureUserSessionsTable();
+    await ensureGrowthTables(pool).catch(e => console.warn('[growth] ensure tables:', e?.message));
+    await ensurePhaseTables(pool).catch(e => console.warn('[growth-phases] ensure tables:', e?.message));
     // Runtime migration: 企微会员新增字段（避免旧库缺字段导致评分数据源为空）
     await pool.query(`ALTER TABLE daily_reports ADD COLUMN IF NOT EXISTS new_wechat_members INTEGER DEFAULT 0`);
     // Runtime migration: 知识库文件版本号
@@ -17240,7 +17246,7 @@ app.listen(PORT, HOST, async () => {
     }
 
     // 020-024: HRMS 全量字段 + 独立表迁移
-    for (const name of ['020_daily_reports_all_fields', '021_hrms_leave_records', '022_hrms_reward_punishment_records', '023_approval_requests_migration', '024_employees_table_migration', '025_daily_reports_holiday_switch', '027_backfill_hrms_leave_from_approvals', '030_daily_report_attendance_register']) {
+    for (const name of ['020_daily_reports_all_fields', '021_hrms_leave_records', '022_hrms_reward_punishment_records', '023_approval_requests_migration', '024_employees_table_migration', '025_daily_reports_holiday_switch', '027_backfill_hrms_leave_from_approvals', '030_daily_report_attendance_register', '031_growth_miniprogram_events']) {
       try {
         const mig = await import('fs').then(f => f.promises.readFile(new URL(`./migrations/${name}.sql`, import.meta.url), 'utf8'));
         await pool.query(mig);
