@@ -154,6 +154,7 @@ async function fetchStoreActiveEmployeesUsernames(pool, store) {
            status IS NULL OR BTRIM(status) = ''
            OR LOWER(BTRIM(status)) NOT IN ('inactive', 'disabled', '离职', '禁用', '停用', 'left', 'resigned')
          )
+         AND NOT COALESCE((extra_json->>'offboardingApproved')::boolean, false)
        ORDER BY LOWER(TRIM(username))`,
       [st]
     );

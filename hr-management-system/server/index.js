@@ -10351,7 +10351,7 @@ app.get('/api/reports/leave-owed', authRequired, async (req, res) => {
           where.push(`store = $${params.length}`);
         }
         if (!includeInactive) {
-          where.push(`coalesce(status, '') not in ('inactive', '离职')`);
+          where.push(`(coalesce(status, '') not in ('inactive', '离职') AND NOT COALESCE((extra_json->>'offboardingApproved')::boolean, false))`);
         }
         const sql = `select username, name, role, store, department, position, status,
                             join_date as "joinDate", created_at as "createdAt"
@@ -10366,7 +10366,10 @@ app.get('/api/reports/leave-owed', authRequired, async (req, res) => {
     if (!includeInactive) {
       people = people.filter(p => {
         const st = String(p?.status || '').trim().toLowerCase();
-        return st !== 'inactive' && st !== '离职';
+        if (st === 'inactive' || st === '离职') return false;
+        const ob = p?.offboardingApproved === true || String(p?.offboardingApproved || '').trim().toLowerCase() === 'true';
+        if (ob) return false;
+        return true;
       });
     }
 
@@ -19204,7 +19207,7 @@ setInterval(() => {
 
       let state = (await getSharedState()) || {};
       const employees = Array.isArray(state.employees) ? state.employees : [];
-      const activeEmployees = employees.filter(e => String(e?.status || '').trim() !== '离职' && String(e?.status || '').trim() !== 'inactive');
+      const activeEmployees = employees.filter(e => !isInactiveStatus(String(e?.status || '').trim()) && !employeeAccountShouldDisable(e));
 
       // 记录已发送的生日祝福，避免重复
       const birthdayGreetingsSent = state.birthdayGreetingsSent || {};
@@ -19363,7 +19366,7 @@ app.post('/api/birthday/check', authRequired, async (req, res) => {
 
     let state = (await getSharedState()) || {};
     const employees = Array.isArray(state.employees) ? state.employees : [];
-    const activeEmployees = employees.filter(e => String(e?.status || '').trim() !== '离职' && String(e?.status || '').trim() !== 'inactive');
+    const activeEmployees = employees.filter(e => !isInactiveStatus(String(e?.status || '').trim()) && !employeeAccountShouldDisable(e));
 
     const birthdayGreetingsSent = state.birthdayGreetingsSent || {};
     const birthdayRemindersSent = state.birthdayRemindersSent || {};
@@ -19516,7 +19519,7 @@ app.get('/api/birthday/upcoming', authRequired, async (req, res) => {
 
     const state = (await getSharedState()) || {};
     const employees = Array.isArray(state.employees) ? state.employees : [];
-    const activeEmployees = employees.filter(e => String(e?.status || '').trim() !== '离职' && String(e?.status || '').trim() !== 'inactive');
+     const activeEmployees = employees.filter(e => !isInactiveStatus(String(e?.status || '').trim()) && !employeeAccountShouldDisable(e));
 
     let myStore = '';
     if (role === 'store_manager') {
