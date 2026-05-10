@@ -91,7 +91,7 @@ async function suggestCampaignDrafts() {
        AND revenue_fen > 5000
      GROUP BY campaign_id, store_id, channel
      HAVING SUM(scan_count) < 200
-     ORDER BY roi DESC
+     ORDER BY MAX(roi) DESC
      LIMIT 10`
   );
 
