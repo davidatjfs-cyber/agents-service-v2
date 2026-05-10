@@ -2849,10 +2849,12 @@ ${marginConstraintNote}`;
     let explainExpectedResult = '目标是提升转化、复购或执行效率。';
     let explainHistoricalRef = '已参考增长案例库、历史方案记录与门店经营数据摘要。';
     let explainWhyAction = '动作来自系统策略引擎，并在门店约束和毛利限制内扩写。';
+    let explainRiskNotes = '注意执行节奏、预算和门店承接能力。';
     try {
       const mr = await query(
         `SELECT SUM(scan_count)::int AS total_scan, SUM(authorized_count)::int AS total_auth,
-                SUM(coupon_redeemed_count)::int AS total_redeem, SUM(revenue_fen)::int AS total_rev
+                SUM(coupon_redeemed_count)::int AS total_redeem, SUM(coupon_issued_count)::int AS total_issued,
+                SUM(revenue_fen)::int AS total_rev
          FROM growth_daily_metrics WHERE store_id = $1 AND metric_date >= CURRENT_DATE - 7`,
         [store]
       );
@@ -2863,9 +2865,43 @@ ${marginConstraintNote}`;
         const authRate = scan > 0 ? `${Math.round(auth/scan*100)}%` : '-';
         const rev = Number(m.total_rev) || 0;
         const redeem = Number(m.total_redeem) || 0;
-        if (scan > 0) explainWhyAudience = `近7天门店增长数据：扫码${scan}次，授权${auth}(${authRate})，核销${redeem}张，收入¥${(rev/100).toFixed(2)}。基于此筛选适配客群。`;
-        if (scan > 0) explainWhyNow = `当前扫码${scan}次，根据近期转化效率判断营销时机。`;
-        if (rev > 0) explainExpectedResult = `预计提升转化${redeem > 0 ? `，参考历史核销率${Math.round(redeem/scan*100)}%` : ''}，方案以衡量指标为准。`;
+        const issued = Number(m.total_issued) || 0;
+        const claimRate = issued > 0 ? `${Math.round(redeem/issued*100)}%` : '-';
+        if (scan > 0) explainWhyAudience = `近7天门店增长数据：扫码${scan}次，授权${auth}(${authRate})，核销${redeem}张(${claimRate})，收入¥${(rev/100).toFixed(2)}。基于此筛选适配客群。`;
+        if (scan > 0) explainWhyNow = `当前扫码${scan}次，授权${auth}次，转化率${authRate}，根据近期转化效率判断营销时机。`;
+        if (redeem > 0 || rev > 0) explainExpectedResult = `预计提升转化，参考历史核销${redeem}张、收入¥${(rev/100).toFixed(2)}，${claimRate !== '-' ? `核销率${claimRate}` : ''}`;
+      }
+      // Add constraint context to explain
+      const cc = await query(
+        `SELECT min_discount_rate, max_coupon_value_fen, monthly_budget_fen, brand_voice_style
+         FROM store_marketing_constraints WHERE store_id=$1 AND active=TRUE LIMIT 1`,
+        [store || '']
+      );
+      if (cc.rows?.[0]) {
+        const c = cc.rows[0];
+        const parts = [];
+        if (c.min_discount_rate != null) parts.push(`最低折扣${Math.round(Number(c.min_discount_rate)*100)}%`);
+        if (c.max_coupon_value_fen != null) parts.push(`券面值不超¥${(Number(c.max_coupon_value_fen)/100).toFixed(2)}`);
+        if (c.brand_voice_style) parts.push(`风格:${c.brand_voice_style}`);
+        if (parts.length) explainWhyAction += `（${parts.join('，')}）`;
+      }
+      // Add repurchase risk signal to explain
+      const risk = await query(
+        `SELECT COUNT(*)::int AS at_risk_count FROM growth_customer_profiles
+         WHERE store_id=$1 AND lifecycle_stage IN ('at_risk','churned')`,
+        [store || '']
+      );
+      if (risk.rows?.[0]?.at_risk_count > 0) {
+        explainWhyNow += ` 当前${risk.rows[0].at_risk_count}位客户处于复购临界期，需优先触达。`;
+      }
+      // Add case reference count to historical
+      const cases = await query(
+        `SELECT COUNT(*)::int AS c, AVG(score)::int AS avg_score FROM marketing_case_library
+         WHERE store_id=$1 AND score>=60`,
+        [store || '']
+      );
+      if (cases.rows?.[0]?.c > 0) {
+        explainHistoricalRef = `已参考门店${cases.rows[0].c}个优质案例（平均评分${cases.rows[0].avg_score}），历史方案记录与门店经营数据摘要。`;
       }
     } catch (_) {}
     try {
@@ -2884,7 +2920,7 @@ ${marginConstraintNote}`;
           explainWhyAction,
           explainExpectedResult,
           explainHistoricalRef,
-          strategyEval && strategyEval.issues.length ? strategyEval.issues.join('；') : '注意执行节奏、预算和门店承接能力。',
+          strategyEval && strategyEval.issues.length ? strategyEval.issues.join('；') : (explainRiskNotes || '注意执行节奏、预算和门店承接能力。'),
           JSON.stringify({
             score: textOutScore,
             strategy_eval_score: strategyEval ? strategyEval.score : null,

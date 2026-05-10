@@ -1689,31 +1689,131 @@ export function registerGrowthRoutes(app, pool) {
     return res.json({ ok: true, new_status: status });
   });
 
-  // ── Phase 4: Weight adjust based on execution patterns ──
+  // ── Phase 4: Weight adjust with ROI evaluation ──
   app.post('/api/growth/weight-adjust', async (req, res) => {
     if (!requireGrowthAuth(req, res)) return;
     const days = Math.min(Math.max(Number(req.query.days) || 14, 1), 90);
     const lowThreshold = Number(req.query.ignore_threshold) || 3;
     const highThreshold = Number(req.query.execute_threshold) || 2;
+    const roiMin = Number(req.query.roi_min) || 0.5;
     const ignored = await pool.query(
-      `SELECT store_id, action_type, COUNT(*)::int as ignore_count
-       FROM growth_execution_logs
-       WHERE decision = 'ignored' AND created_at >= CURRENT_DATE - ($1::int || ' days')::interval
+      `SELECT store_id, action_type, COUNT(*)::int as ignore_count FROM growth_execution_logs
+       WHERE decision='ignored' AND created_at>=CURRENT_DATE-($1::int||' days')::interval
        GROUP BY store_id, action_type HAVING COUNT(*) >= $2 ORDER BY ignore_count DESC`,
       [days, lowThreshold]
     );
     const executed = await pool.query(
-      `SELECT store_id, action_type, COUNT(*)::int as exec_count
-       FROM growth_execution_logs
-       WHERE decision IN ('executed','edited_then_executed') AND created_at >= CURRENT_DATE - ($1::int || ' days')::interval
-       GROUP BY store_id, action_type HAVING COUNT(*) >= $2 ORDER BY exec_count DESC`,
+      `SELECT e.store_id, e.action_type, COUNT(*)::int as exec_count,
+              COALESCE(SUM(g.revenue_fen)::int,0) as total_revenue
+       FROM growth_execution_logs e
+       LEFT JOIN growth_daily_metrics g ON g.store_id=e.store_id AND g.metric_date>=CURRENT_DATE-($1::int||' days')::interval
+       WHERE e.decision IN ('executed','edited_then_executed') AND e.created_at>=CURRENT_DATE-($1::int||' days')::interval
+       GROUP BY e.store_id, e.action_type HAVING COUNT(*) >= $2 ORDER BY exec_count DESC`,
       [days, highThreshold]
     );
+    const highRoi = executed.rows.filter(r => Number(r.total_revenue) > 0 && (Number(r.total_revenue)/Math.max(1,Number(r.exec_count))) >= roiMin * 100);
     return res.json({
       ok: true, days,
-      ignored_suggestions: ignored.rows.map(r => `门店${r.store_id || '-'}的${r.action_type}类动作被忽略${r.ignore_count}次，建议降低优先级`),
-      executed_suggestions: executed.rows.map(r => `门店${r.store_id || '-'}的${r.action_type}类动作被执行${r.exec_count}次，建议提高优先级`),
-      ignored_actions: ignored.rows, executed_actions: executed.rows
+      ignored_suggestions: ignored.rows.map(r => `门店${r.store_id||'-'}的${r.action_type}类动作被忽略${r.ignore_count}次，建议降低优先级`),
+      executed_suggestions: executed.rows.map(r => `门店${r.store_id||'-'}的${r.action_type}类动作被执行${r.exec_count}次，收入¥${(Number(r.total_revenue)/100).toFixed(2)}，${highRoi.includes(r)?'✅ROI良好建议升权':'收入数据不足需观察'}`),
+      ignored_actions: ignored.rows, executed_actions: executed.rows, high_roi_actions: highRoi
+    });
+  });
+
+  // ── Phase 5: Brand voice samples ──
+  const brandVoiceSamples = {};
+  app.post('/api/growth/brand-voice-samples', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const b = req.body || {};
+    const brand = cleanText(b.brand, 128);
+    if (!brand) return res.status(400).json({ ok: false, error: 'missing_brand' });
+    const samples = Array.isArray(b.samples) ? b.samples.slice(0, 20) : [];
+    if (!samples.length) return res.status(400).json({ ok: false, error: 'missing_samples' });
+    brandVoiceSamples[brand] = { samples, updated_at: new Date().toISOString() };
+    const style = [];
+    if (/优惠|折扣|减|省/.test(samples.join(''))) style.push('价格导向');
+    if (/好吃|美味|鲜|食材/.test(samples.join(''))) style.push('品质导向');
+    if (/情怀|记忆|老|传统/.test(samples.join(''))) style.push('情感导向');
+    if (/潮|新|网红|打卡/.test(samples.join(''))) style.push('潮流导向');
+    if (!style.length) style.push('综合');
+    return res.json({ ok: true, brand, sample_count: samples.length, detected_style: style, samples });
+  });
+  app.get('/api/growth/brand-voice-samples', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const brand = cleanText(req.query.brand || '', 128);
+    return res.json({ ok: true, brand, data: brand ? brandVoiceSamples[brand] || null : brandVoiceSamples });
+  });
+
+  // ── Phase 5: Semantic write-back to profiles ──
+  app.post('/api/growth/semantic-writeback', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const b = req.body || {};
+    const customerId = Number(b.customer_id) || 0;
+    if (!customerId) return res.status(400).json({ ok: false, error: 'missing_customer_id' });
+    const tags = Array.isArray(b.tags) ? b.tags.map(t => cleanText(String(t), 80)).filter(Boolean) : [];
+    const tasteTags = Array.isArray(b.taste_tags) ? b.taste_tags.map(t => cleanText(String(t), 80)).filter(Boolean) : [];
+    const priceHint = b.price_sensitivity_hint == null ? null : Number(b.price_sensitivity_hint);
+    const returnIntent = !!b.return_intent;
+    await pool.query(
+      `UPDATE growth_customer_profiles
+       SET semantic_tags = COALESCE(semantic_tags,'[]'::jsonb) || $2::jsonb,
+           favorite_dishes = CASE WHEN $3::jsonb <> '[]'::jsonb THEN COALESCE(favorite_dishes,'[]'::jsonb) || $3::jsonb ELSE favorite_dishes END,
+           price_sensitivity = COALESCE($4, price_sensitivity),
+           updated_at = NOW()
+       WHERE customer_id = $1`,
+      [customerId, JSON.stringify(tags), JSON.stringify(tasteTags), priceHint]
+    );
+    await pool.query(
+      `INSERT INTO growth_profile_signals (customer_id, signal_type, signal_key, signal_value, signal_score, source)
+       VALUES ($1,'semantic_tag','semantic_parse',NULLIF($2,''),NULL,$3)`,
+      [customerId, tags.slice(0, 5).join(','), 'agent_parse']
+    );
+    return res.json({ ok: true, customer_id: customerId, tags_written: tags.concat(tasteTags), return_intent: returnIntent });
+  });
+
+  // ── Phase 6: Weather context + active time window ──
+  app.get('/api/growth/weather-context', async (req, res) => {
+    const city = cleanText(req.query.city || '上海', 80);
+    let weatherData = { city, temperature: null, condition: null, error: null };
+    try {
+      const resp = await fetch('https://wttr.in/' + encodeURIComponent(city) + '?format=%t|%C|%h', { timeout: 5000 });
+      if (resp.ok) {
+        const text = await resp.text();
+        const parts = text.split('|').map(s => s.trim());
+        weatherData.temperature = parts[0] || null;
+        weatherData.condition = parts[1] || null;
+        weatherData.humidity = parts[2] || null;
+      }
+    } catch (e) { weatherData.error = e?.message || 'weather_unavailable'; }
+    return res.json({ ok: !weatherData.error, ...weatherData });
+  });
+
+  // ── Phase 6: Active time window prediction ──
+  app.get('/api/growth/active-window', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const storeId = cleanText(req.query.store_id || '', 128);
+    const r = await pool.query(
+      `SELECT lifecycle_stage, COUNT(*)::int as cnt,
+              MODE() WITHIN GROUP (ORDER BY best_contact_window) AS top_window,
+              ROUND(AVG(price_sensitivity)::numeric, 2) AS avg_price_sens,
+              ROUND(AVG(response_to_discount)::numeric, 2) AS avg_discount_resp
+       FROM growth_customer_profiles
+       WHERE ($1='' OR store_id=$1)
+       GROUP BY lifecycle_stage ORDER BY cnt DESC`,
+      [storeId]
+    );
+    const repurchaseRisk = await pool.query(
+      `SELECT COUNT(*)::int as at_risk_count, store_id
+       FROM growth_customer_profiles WHERE lifecycle_stage IN ('at_risk','churned')
+       AND ($1='' OR store_id=$1) GROUP BY store_id`,
+      [storeId]
+    );
+    return res.json({
+      ok: true, segments: r.rows, repurchase_risk: repurchaseRisk.rows,
+      recommendations: [
+        repurchaseRisk.rows.length ? `⏰ ${repurchaseRisk.rows[0].at_risk_count || 0}位客户处于复购临界期，建议尽快触达` : '',
+        ...r.rows.filter(r => r.top_window).map(r => `📅 ${r.lifecycle_stage}客群最佳触达: ${r.top_window}，敏感度:${r.avg_price_sens||'N/A'}`)
+      ].filter(Boolean)
     });
   });
 }

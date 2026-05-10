@@ -13559,19 +13559,53 @@
                     <div id="growth-constraints-content" style="display:none;">
                         <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
                             <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">门店营销约束</div>
+                            <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
+                                <select id="constraint-brand-template" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.8);font-size:13px;" onchange="applyBrandTemplate()">
+                                    <option value="">品牌默认模板</option>
+                                    <option value="majixian">马己仙广东小馆</option>
+                                    <option value="hongchao">洪潮</option>
+                                    <option value="custom">自定义品牌</option>
+                                </select>
+                            </div>
                             <div style="display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:12px;">
-                                <input id="constraint-store-id" placeholder="门店ID" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
+                                <input id="constraint-store-id" placeholder="门店ID *" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
                                 <input id="constraint-brand" placeholder="品牌" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
-                                <input id="constraint-min-discount" placeholder="最低折扣(0.9)" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
+                                <input id="constraint-min-discount" placeholder="最低折扣 如 0.9" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
                                 <input id="constraint-max-coupon" placeholder="最大券面值(分)" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
                                 <input id="constraint-budget" placeholder="月预算(分)" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
                                 <input id="constraint-touch" placeholder="72小时最大触达次数" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
                                 <input id="constraint-cooldown" placeholder="支付后冷静期(小时)" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
-                                <input id="constraint-voice" placeholder="品牌语气，如 接地气/年轻" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
+                                <select id="constraint-voice" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.8);">
+                                    <option value="">选择品牌语气</option>
+                                    <option value="接地气">接地气</option>
+                                    <option value="精致">精致</option>
+                                    <option value="年轻潮流">年轻潮流</option>
+                                    <option value="豪迈">豪迈</option>
+                                    <option value="商务专业">商务专业</option>
+                                </select>
                             </div>
-                            <textarea id="constraint-disallowed-campaign-types" placeholder="禁用活动类型，逗号分隔" style="margin-top:12px;width:100%;height:70px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;"></textarea>
+                            <div style="margin-top:12px;">
+                                <label style="font-size:12px;color:rgba(226,232,240,0.5);display:block;margin-bottom:6px;">允许渠道（可多选）</label>
+                                <div style="display:flex;gap:10px;flex-wrap:wrap;" id="constraint-channels-checkboxes">
+                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="wecom"> 企微</label>
+                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="miniprogram"> 小程序</label>
+                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="xiaohongshu"> 小红书</label>
+                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="douyin"> 抖音</label>
+                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="dianping"> 大众点评</label>
+                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="sms"> 短信</label>
+                                </div>
+                            </div>
+                            <div style="margin-top:12px;">
+                                <label style="font-size:12px;color:rgba(226,232,240,0.5);display:block;margin-bottom:6px;">禁用活动类型（可多选）</label>
+                                <div style="display:flex;gap:10px;flex-wrap:wrap;" id="constraint-campaign-checkboxes">
+                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="大额折扣"> 大额折扣</label>
+                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="满减"> 满减</label>
+                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="赠品"> 赠品</label>
+                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="套餐"> 套餐</label>
+                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="充值"> 充值</label>
+                                </div>
+                            </div>
                             <textarea id="constraint-disallowed-dishes" placeholder="禁用菜品，逗号分隔" style="margin-top:12px;width:100%;height:70px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;"></textarea>
-                            <textarea id="constraint-allowed-channels" placeholder="允许渠道，逗号分隔" style="margin-top:12px;width:100%;height:70px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;"></textarea>
                             <textarea id="constraint-notes" placeholder="执行备注" style="margin-top:12px;width:100%;height:80px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;"></textarea>
                             <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
                                 <button onclick="saveGrowthConstraint()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">保存约束</button>
@@ -44540,6 +44574,43 @@ ${body}
             }
         }
 
+        function getCheckedBoxes(containerId) {
+            var el = document.getElementById(containerId);
+            if (!el) return [];
+            var result = [];
+            var inputs = el.querySelectorAll('input[type=checkbox]:checked');
+            for (var i = 0; i < inputs.length; i++) result.push(inputs[i].value);
+            return result;
+        }
+
+        function applyBrandTemplate() {
+            var v = document.getElementById('constraint-brand-template')?.value || '';
+            var TEMPLATES = {
+                majixian: { brand:'马己仙广东小馆', voice:'精致', min_discount:0.85, max_coupon:2000, budget:80000, touch:2, cooldown:48, channels:['wecom','xiaohongshu','miniprogram'], disallowed:['大额折扣'] },
+                hongchao: { brand:'洪潮', voice:'豪迈', min_discount:0.8, max_coupon:3000, budget:50000, touch:1, cooldown:24, channels:['wecom','dianping','miniprogram'], disallowed:['赠品'] },
+                custom: { brand:'自定义', voice:'', min_discount:0.9, max_coupon:1000, budget:30000, touch:1, cooldown:24, channels:[], disallowed:[] }
+            };
+            var t = TEMPLATES[v] || TEMPLATES.custom;
+            var si = document.getElementById('constraint-store-id');
+            if (si && !si.value && v !== 'custom' && v) si.value = 'store_' + v;
+            setVal('constraint-brand', t.brand);
+            setVal('constraint-min-discount', t.min_discount);
+            setVal('constraint-max-coupon', t.max_coupon);
+            setVal('constraint-budget', t.budget);
+            setVal('constraint-touch', t.touch);
+            setVal('constraint-cooldown', t.cooldown);
+            if (document.getElementById('constraint-voice')) document.getElementById('constraint-voice').value = t.voice;
+            setCheckboxes('constraint-channels-checkboxes', t.channels);
+            setCheckboxes('constraint-campaign-checkboxes', t.disallowed);
+        }
+        function setVal(id, v) { var e = document.getElementById(id); if (e) e.value = v == null ? '' : v; }
+        function setCheckboxes(containerId, values) {
+            var el = document.getElementById(containerId);
+            if (!el) return;
+            var cbs = el.querySelectorAll('input[type=checkbox]');
+            for (var i = 0; i < cbs.length; i++) cbs[i].checked = values.indexOf(cbs[i].value) >= 0;
+        }
+
         async function saveGrowthConstraint() {
             try {
                 const payload = {
@@ -44551,9 +44622,9 @@ ${body}
                     max_touch_per_72h: document.getElementById('constraint-touch')?.value || 1,
                     cooldown_hours_after_payment: document.getElementById('constraint-cooldown')?.value || 24,
                     brand_voice_style: document.getElementById('constraint-voice')?.value || '',
-                    disallowed_campaign_types: growthCsvList('constraint-disallowed-campaign-types'),
+                    disallowed_campaign_types: getCheckedBoxes('constraint-campaign-checkboxes'),
                     disallowed_dishes: growthCsvList('constraint-disallowed-dishes'),
-                    allowed_channels: growthCsvList('constraint-allowed-channels'),
+                    allowed_channels: getCheckedBoxes('constraint-channels-checkboxes'),
                     execution_notes: document.getElementById('constraint-notes')?.value || ''
                 };
                 const r = await fetch('/api/growth/store-constraints', {
