@@ -13520,11 +13520,15 @@
                     </div>
                     <div id="growth-feedback-content" style="display:none;">
                         <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
-                            <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">策略评价 & 反馈</div>
+                            <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">策略评价 & 案例库</div>
                             <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-                                <button onclick="loadStrategyEvaluations()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新列表</button>
+                                <button onclick="loadStrategyEvaluations()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新策略</button>
+                                <button onclick="loadCaseSearch()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:13px;">搜索案例</button>
+                                <button onclick="runWeightAdjust()" style="padding:6px 14px;border-radius:8px;background:rgba(245,158,11,0.2);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);cursor:pointer;font-size:13px;">权重分析</button>
                             </div>
                             <div id="strategy-evaluations-list" style="max-height:500px;overflow-y:auto;"></div>
+                            <div id="case-search-results" style="max-height:400px;overflow-y:auto;margin-top:16px;"></div>
+                            <div id="weight-adjust-results" style="max-height:300px;overflow-y:auto;margin-top:16px;"></div>
                         </div>
                     </div>
                     <div id="growth-profiles-content" style="display:none;">
@@ -44237,6 +44241,8 @@ ${body}
                 loadCampaignPlans();
             } else if (tab === 'feedback') {
                 loadStrategyEvaluations();
+                document.getElementById('case-search-results').innerHTML = '';
+                document.getElementById('weight-adjust-results').innerHTML = '';
             } else if (tab === 'profiles') {
                 loadGrowthProfiles();
             } else if (tab === 'constraints') {
@@ -44534,6 +44540,17 @@ ${body}
                     const key = x.action_key || '';
                     var stratKey = (x.payload && x.payload.strategy_key) || x.action_key;
                     var exp = explainByStrategy[stratKey];
+                    var payload = x.payload || {};
+                    var draftPreview = '<div style="margin-top:8px;padding:10px;background:rgba(14,165,233,0.06);border:1px solid rgba(14,165,233,0.2);border-radius:8px;font-size:12px;">'
+                        + '<div style="color:#38bdf8;font-weight:700;margin-bottom:6px;">📋 执行草稿</div>'
+                        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;color:rgba(226,232,240,0.75);">'
+                        + '<div><span style="color:rgba(226,232,240,0.5);">标的门店</span>：' + (x.store_id || '-') + '</div>'
+                        + '<div><span style="color:rgba(226,232,240,0.5);">渠道</span>：' + (payload.channel || payload.channel_from_explain || '-') + '</div>'
+                        + '<div style="grid-column:span 2;"><span style="color:rgba(226,232,240,0.5);">目标人群</span>：' + (payload.audience || (exp ? exp.customer_segment : '') || '门店活跃客群') + '</div>'
+                        + '<div style="grid-column:span 2;"><span style="color:rgba(226,232,240,0.5);">文案摘要</span>：' + (x.detail || '').slice(0, 120) + '</div>'
+                        + (payload.budget_fen ? '<div><span style="color:rgba(226,232,240,0.5);">预算</span>：¥' + Math.round(Number(payload.budget_fen) / 100) + '</div>' : '')
+                        + (x.created_at ? '<div><span style="color:rgba(226,232,240,0.5);">生成时间</span>：' + String(x.created_at).slice(0, 10) : '')
+                        + '</div></div>';
                     var expHtml = exp ? '<div style="margin-top:6px;padding:8px;background:rgba(14,165,233,0.08);border-radius:6px;font-size:12px;color:rgba(226,232,240,0.7);">'
                         + '<div>🎯 ' + (exp.why_this_audience || '') + '</div>'
                         + '<div style="margin-top:4px;">⏰ ' + (exp.why_now || '') + '</div>'
@@ -44548,6 +44565,7 @@ ${body}
                         + '</div>'
                         + '<div style="color:rgba(226,232,240,0.6);margin-top:4px;">' + (x.detail || '-') + '</div>'
                         + expHtml
+                        + draftPreview
                         + '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">'
                         + '<button onclick="executeGrowthAction(\'' + key + '\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(34,197,94,0.2);color:#22c55e;cursor:pointer;">执行</button>'
                         + '<button onclick="editExecuteGrowthAction(\'' + key + '\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(14,165,233,0.2);color:#38bdf8;cursor:pointer;">修改后执行</button>'
@@ -44648,6 +44666,56 @@ ${body}
                 }
             } catch (e) {
                 showNotification('存入案例库失败：' + (e?.message || e), 'error');
+            }
+        }
+
+        async function loadCaseSearch() {
+            try {
+                const store = document.getElementById('growth-store-filter')?.value || '';
+                const channel = prompt('按渠道筛选（留空查全部）', '') || '';
+                const url = '/api/growth/cases/search?store_id=' + encodeURIComponent(store) + '&channel=' + encodeURIComponent(channel) + '&min_score=0';
+                const r = await fetch(url, { headers: growthAuthHeaders() });
+                const data = await r.json();
+                const rows = data?.cases || [];
+                const host = document.getElementById('case-search-results');
+                host.innerHTML = rows.length ? rows.map(function(c) {
+                    return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">'
+                        + '<div style="display:flex;justify-content:space-between;gap:10px;">'
+                        + '<div style="color:#fff;font-weight:600;">' + (c.title || '-') + '</div>'
+                        + '<div style="color:' + (Number(c.score) >= 70 ? '#22c55e' : '#f59e0b') + ';font-weight:700;">' + (c.score || 0) + '分</div>'
+                        + '</div>'
+                        + '<div style="color:rgba(226,232,240,0.6);margin-top:4px;">门店: ' + (c.store_id || '-') + ' · 渠道: ' + (c.channel || '-') + ' · offer: ' + (c.offer || '-')
+                        + (c.reusable ? ' · ♻️可复用' : '') + '</div>'
+                        + '<div style="color:rgba(226,232,240,0.45);margin-top:4px;">' + (c.conclusion || '').slice(0, 200) + '</div>'
+                        + '</div>';
+                }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无匹配案例</div>';
+            } catch (e) {
+                document.getElementById('case-search-results').innerHTML = '<div style="color:#ef4444;">搜索失败</div>';
+            }
+        }
+
+        async function runWeightAdjust() {
+            try {
+                const days = parseInt(prompt('分析天数（默认14天）', '14') || '14', 10);
+                const r = await fetch('/api/growth/weight-adjust?days=' + days + '&ignore_threshold=3&execute_threshold=2', {
+                    method: 'POST', headers: growthAuthHeaders()
+                });
+                const data = await r.json();
+                if (!data.ok) throw new Error(data.error || 'weight_adjust_failed');
+                var html = '';
+                if (data.executed_suggestions?.length) {
+                    html += '<div style="color:#22c55e;font-weight:700;margin-top:12px;">✅ 建议提高优先级</div>';
+                    html += data.executed_suggestions.map(function(s) { return '<div style="padding:6px 0;font-size:13px;color:rgba(226,232,240,0.7);">⬆️ ' + s + '</div>'; }).join('');
+                }
+                if (data.ignored_suggestions?.length) {
+                    html += '<div style="color:#ef4444;font-weight:700;margin-top:12px;">⛔ 建议降低优先级</div>';
+                    html += data.ignored_suggestions.map(function(s) { return '<div style="padding:6px 0;font-size:13px;color:rgba(226,232,240,0.7);">⬇️ ' + s + '</div>'; }).join('');
+                }
+                if (!html) html = '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">近' + days + '天执行数据不足，无法生成权重建议</div>';
+                document.getElementById('weight-adjust-results').innerHTML = html;
+                showNotification('权重分析完成', 'success');
+            } catch (e) {
+                document.getElementById('weight-adjust-results').innerHTML = '<div style="color:#ef4444;">分析失败</div>';
             }
         }
 

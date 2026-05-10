@@ -63,25 +63,22 @@ export async function buildGrowthAlertContext(storeId) {
   return `【待处理增长告警】\n${lines.join('\n')}`;
 }
 
-export async function buildGrowthCaseContext(storeId) {
-  const storeClause = storeId ? 'WHERE store_id = $1' : '';
-  const params = storeId ? [storeId] : [];
-
+export async function buildGrowthCaseContext(storeId, channel) {
+  const storeClause = storeId ? 'AND (store_id = $1 OR $1 = \'\')' : '';
+  const channelClause = channel ? 'AND (channel ILIKE $2 OR $2 = \'\')' : '';
+  const params = [storeId || '', channel || ''];
   const r = await query(
-    `SELECT title, objective, channel, offer, score, conclusion, reusable
+    `SELECT title, objective, channel, offer, score, conclusion, reusable, audience
      FROM marketing_case_library
-     ${storeClause}
+     WHERE 1=1 ${storeClause} ${channelClause}
      ORDER BY score DESC, created_at DESC
      LIMIT 15`,
     params
   );
-
   if (!r.rows.length) return '暂无营销案例。';
-
   const lines = r.rows.map((c, i) => {
-    return `${i + 1}. [评分${c.score || 0}] ${c.title} | 渠道:${c.channel || '-'} | offer:${c.offer || '-'} | ${c.reusable ? '可复用' : '参考'}`;
+    return `${i + 1}. [评分${c.score || 0}] ${c.title} | 渠道:${c.channel || '-'} | offer:${c.offer || '-'} | 客群:${c.audience || '-'} | ${c.reusable ? '可复用' : '参考'}`;
   });
-
   return `【营销案例库参考】\n${lines.join('\n')}`;
 }
 

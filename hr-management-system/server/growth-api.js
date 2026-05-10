@@ -1523,4 +1523,53 @@ export function registerGrowthRoutes(app, pool) {
       return res.json({ ok: true, simple_tags: [], taste_tags: [], error: e?.message || 'parse_error' });
     }
   });
+
+  // ── Phase 4: Enhanced case search (multi-dimension) ──
+  app.get('/api/growth/cases/search', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const storeId = cleanText(req.query.store_id || '', 128);
+    const channel = cleanText(req.query.channel || '', 80);
+    const audience = cleanText(req.query.audience || '', 200);
+    const offer = cleanText(req.query.offer || '', 200);
+    const minScore = Math.max(0, Math.min(100, Number(req.query.min_score) || 0));
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+    if (storeId) { conditions.push(`store_id = $${idx++}`); params.push(storeId); }
+    if (channel) { conditions.push(`channel ILIKE $${idx++}`); params.push(`%${channel}%`); }
+    if (audience) { conditions.push(`audience ILIKE $${idx++}`); params.push(`%${audience}%`); }
+    if (offer) { conditions.push(`offer ILIKE $${idx++}`); params.push(`%${offer}%`); }
+    if (minScore > 0) { conditions.push(`score >= $${idx++}`); params.push(minScore); }
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+    const r = await pool.query(`SELECT * FROM marketing_case_library ${where} ORDER BY score DESC, created_at DESC LIMIT 100`, params);
+    return res.json({ ok: true, cases: r.rows });
+  });
+
+  // ── Phase 4: Weight adjust based on execution patterns ──
+  app.post('/api/growth/weight-adjust', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const days = Math.min(Math.max(Number(req.query.days) || 14, 1), 90);
+    const lowThreshold = Number(req.query.ignore_threshold) || 3;
+    const highThreshold = Number(req.query.execute_threshold) || 2;
+    const ignored = await pool.query(
+      `SELECT store_id, action_type, COUNT(*)::int as ignore_count
+       FROM growth_execution_logs
+       WHERE decision = 'ignored' AND created_at >= CURRENT_DATE - ($1::int || ' days')::interval
+       GROUP BY store_id, action_type HAVING COUNT(*) >= $2 ORDER BY ignore_count DESC`,
+      [days, lowThreshold]
+    );
+    const executed = await pool.query(
+      `SELECT store_id, action_type, COUNT(*)::int as exec_count
+       FROM growth_execution_logs
+       WHERE decision IN ('executed','edited_then_executed') AND created_at >= CURRENT_DATE - ($1::int || ' days')::interval
+       GROUP BY store_id, action_type HAVING COUNT(*) >= $2 ORDER BY exec_count DESC`,
+      [days, highThreshold]
+    );
+    return res.json({
+      ok: true, days,
+      ignored_suggestions: ignored.rows.map(r => `门店${r.store_id || '-'}的${r.action_type}类动作被忽略${r.ignore_count}次，建议降低优先级`),
+      executed_suggestions: executed.rows.map(r => `门店${r.store_id || '-'}的${r.action_type}类动作被执行${r.exec_count}次，建议提高优先级`),
+      ignored_actions: ignored.rows, executed_actions: executed.rows
+    });
+  });
 }
