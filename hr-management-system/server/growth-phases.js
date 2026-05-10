@@ -620,6 +620,120 @@ export function registerPhaseRoutes(app, pool) {
     res.json({ok:true, customers_linked: linked});
   });
 
+  // ── POS consumption stats ──
+  app.get('/api/growth/pos-stats', async (req, res) => {
+    if (!rqa(req, res)) return;
+    const sid = cleanText(req.query.store_id || '', 128);
+    const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
+    const storeCond = sid ? `AND store_id = '${sid.replace(/'/g, "''")}'` : '';
+    const dateCond = `AND biz_date >= CURRENT_DATE - (${days} || ' days')::interval`;
+
+    const [
+      summaryR, storeR, hourR, payR, dishR, repeatR
+    ] = await Promise.all([
+      pool.query(`SELECT COUNT(*)::int AS total_orders,
+        COALESCE(SUM(amount_after_discount),0)::numeric AS total_revenue,
+        ROUND(AVG(amount_after_discount),2) AS avg_check,
+        COUNT(DISTINCT phone) AS distinct_phones,
+        COUNT(*) FILTER (WHERE phone IS NOT NULL AND phone <> '')::int AS identified_orders
+        FROM pos_orders WHERE 1=1 ${storeCond} ${dateCond}`),
+      pool.query(`SELECT store_name, COUNT(*)::int AS orders,
+        ROUND(AVG(amount_after_discount),2) AS avg_check,
+        COALESCE(SUM(amount_after_discount),0)::numeric AS total_revenue
+        FROM pos_orders WHERE 1=1 ${storeCond} ${dateCond}
+        GROUP BY store_name ORDER BY total_revenue DESC`),
+      pool.query(`SELECT EXTRACT(HOUR FROM order_time)::int AS hour, COUNT(*)::int AS orders,
+        COALESCE(SUM(amount_after_discount),0)::numeric AS revenue
+        FROM pos_orders WHERE order_time IS NOT NULL ${storeCond} ${dateCond}
+        GROUP BY 1 ORDER BY 1`),
+      pool.query(`SELECT
+        CASE
+          WHEN payment_method LIKE '%微信%' THEN '微信'
+          WHEN payment_method LIKE '%支付宝%' THEN '支付宝'
+          WHEN payment_method LIKE '%会员卡%' THEN '会员卡'
+          WHEN payment_method LIKE '%现金%' THEN '现金'
+          WHEN payment_method LIKE '%套餐%' THEN '套餐'
+          WHEN payment_method LIKE '%代金券%' THEN '代金券'
+          ELSE '其他'
+        END AS pay_group,
+        COUNT(*)::int AS orders,
+        COALESCE(SUM(amount_after_discount),0)::numeric AS revenue
+        FROM pos_orders WHERE 1=1 ${storeCond} ${dateCond}
+        GROUP BY 1 ORDER BY orders DESC`),
+      pool.query(`SELECT category, dish_name,
+        SUM(qty)::int AS total_qty,
+        COALESCE(SUM(amount_after_discount),0)::numeric AS revenue
+        FROM pos_order_items WHERE order_no IN (
+          SELECT order_no FROM pos_orders WHERE 1=1 ${storeCond} ${dateCond}
+        ) AND category IS NOT NULL AND category <> '-'
+        GROUP BY category, dish_name
+        ORDER BY revenue DESC LIMIT 15`),
+      pool.query(`SELECT
+        COUNT(*) FILTER (WHERE order_cnt = 1)::int AS one_timer,
+        COUNT(*) FILTER (WHERE order_cnt = 2)::int AS two_timer,
+        COUNT(*) FILTER (WHERE order_cnt >= 3)::int AS repeat_3plus,
+        COUNT(*)::int AS total_customers
+        FROM (
+          SELECT phone, COUNT(*)::int AS order_cnt
+          FROM pos_orders
+          WHERE phone IS NOT NULL AND phone <> '' ${storeCond} ${dateCond}
+          GROUP BY phone
+        ) sub`)
+    ]);
+
+    const [lifecycleR, spendDistR, visitR, dishCatR, highValueR] = await Promise.all([
+      pool.query(`SELECT COALESCE(cp.lifecycle_stage,
+          CASE WHEN sub.order_cnt <= 1 THEN 'new'
+               WHEN sub.order_cnt BETWEEN 2 AND 3 THEN 'active'
+               ELSE 'loyal' END) AS lifecycle_stage, COUNT(*)::int AS cnt
+        FROM (SELECT phone, COUNT(*)::int AS order_cnt FROM pos_orders WHERE phone IS NOT NULL AND phone <> '' ${storeCond} ${dateCond} GROUP BY phone) sub
+        LEFT JOIN growth_customer_profiles cp ON cp.phone = sub.phone
+        GROUP BY 1 ORDER BY cnt DESC`),
+      pool.query(`SELECT CASE
+          WHEN avg_check < 200 THEN '0-200'
+          WHEN avg_check < 400 THEN '200-400'
+          WHEN avg_check < 600 THEN '400-600'
+          WHEN avg_check < 800 THEN '600-800'
+          ELSE '800+' END AS spend_tier, COUNT(*)::int AS cnt
+        FROM (SELECT phone, AVG(amount_after_discount) AS avg_check FROM pos_orders WHERE phone IS NOT NULL AND phone <> '' ${storeCond} ${dateCond} GROUP BY phone) sub
+        GROUP BY 1 ORDER BY 1`),
+      pool.query(`SELECT CASE
+          WHEN EXTRACT(HOUR FROM order_time) BETWEEN 10 AND 14 THEN '午市(10-14点)'
+          WHEN EXTRACT(HOUR FROM order_time) BETWEEN 17 AND 21 THEN '晚市(17-21点)'
+          ELSE '其他时段' END AS visit_time, COUNT(*)::int AS cnt
+        FROM pos_orders WHERE phone IS NOT NULL AND phone <> '' ${storeCond} ${dateCond} AND order_time IS NOT NULL
+        GROUP BY 1 ORDER BY cnt DESC`),
+      pool.query(`SELECT category, SUM(qty)::int AS total_qty FROM pos_order_items WHERE order_no IN (
+          SELECT order_no FROM pos_orders WHERE phone IS NOT NULL AND phone <> '' ${storeCond} ${dateCond}
+        ) AND category IS NOT NULL AND category <> '-' GROUP BY category ORDER BY total_qty DESC LIMIT 5`),
+      pool.query(`SELECT COUNT(*)::int AS count, ROUND(AVG(pos_total_spend)::numeric, 2) AS avg_spending, ROUND(AVG(pos_order_count)::numeric, 1) AS avg_orders
+        FROM growth_customer_profiles WHERE pos_total_spend > 0 ${sid ? "AND store_id = '"+sid.replace(/'/g,"''")+"'" : ''}`)
+    ]);
+
+    const profileInsights = {
+      lifecycle: Object.fromEntries(lifecycleR.rows.map(r => [r.lifecycle_stage, r.cnt])),
+      avg_spend_dist: Object.fromEntries(spendDistR.rows.map(r => [r.spend_tier, r.cnt])),
+      top_visit_times: Object.fromEntries(visitR.rows.map(r => [r.visit_time, r.cnt])),
+      top_dish_categories: Object.fromEntries(dishCatR.rows.map(r => [r.category, r.total_qty])),
+      high_value_customers: highValueR.rows[0] || {},
+      new_vs_returning: {
+        new_pct: repeatR.rows[0] ? Math.round((repeatR.rows[0].one_timer / (repeatR.rows[0].total_customers || 1)) * 1000) / 10 : 0,
+        returning_pct: repeatR.rows[0] ? Math.round(((repeatR.rows[0].two_timer + repeatR.rows[0].repeat_3plus) / (repeatR.rows[0].total_customers || 1)) * 1000) / 10 : 0
+      }
+    };
+
+    res.json({
+      ok: true,
+      summary: summaryR.rows[0] || {},
+      byStore: storeR.rows,
+      hourDist: hourR.rows,
+      payDist: payR.rows,
+      topDishes: dishR.rows,
+      repeatStats: repeatR.rows[0] || {},
+      profileInsights
+    });
+  });
+
   // ── Phase 9: Feishu bitable sync config for POS orders ──
   app.get('/api/growth/pos-feishu-config', async (req, res) => {
     if (!rqa(req, res)) return;

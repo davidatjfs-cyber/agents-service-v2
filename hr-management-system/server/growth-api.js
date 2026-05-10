@@ -545,37 +545,51 @@ async function recomputeCustomerProfiles(pool, days = 90) {
          COUNT(*) FILTER (WHERE s.signal_key = 'occasion' AND s.signal_value = 'friends')::numeric AS occasion_friends_score,
          ARRAY_REMOVE(ARRAY_AGG(DISTINCT s.signal_value) FILTER (WHERE s.signal_key = 'favorite_dish' AND COALESCE(s.signal_value,'') <> ''), NULL) AS favorite_dishes,
          ARRAY_REMOVE(ARRAY_AGG(DISTINCT s.signal_value) FILTER (WHERE s.signal_type = 'semantic_tag' AND COALESCE(s.signal_value,'') <> ''), NULL) AS semantic_tags
-       FROM growth_profile_signals s
-       WHERE s.occurred_at >= CURRENT_DATE - ($1::int || ' days')::interval
-       GROUP BY s.customer_id
-     )
-     INSERT INTO growth_customer_profiles (
-       customer_id, phone, openid, store_id, lifecycle_stage,
-       next_visit_probability, best_contact_window, preferred_visit_time,
-       avg_party_size, response_to_discount, price_sensitivity,
-       adventurous_score, health_conscious_score, spicy_level,
-       occasion_date_score, occasion_family_score, occasion_business_score,
-       occasion_solo_score, occasion_friends_score,
-       favorite_dishes, semantic_tags, source_signals, last_profiled_at, updated_at
-     )
+        FROM growth_profile_signals s
+        WHERE s.occurred_at >= CURRENT_DATE - ($1::int || ' days')::interval
+        GROUP BY s.customer_id
+      ), pos_base AS (
+        SELECT
+          gc.id AS customer_id,
+          COUNT(po.order_no)::int AS pos_order_count,
+          COALESCE(SUM(po.amount_after_discount), 0) AS pos_total_spend,
+          ROUND(AVG(po.amount_after_discount), 2) AS avg_check,
+          COUNT(*) FILTER (WHERE po.order_type = '堂食')::numeric / NULLIF(COUNT(*)::numeric, 0) AS pos_dine_in_ratio,
+          MAX(po.biz_date) AS pos_last_order_at,
+          ARRAY_REMOVE(ARRAY_AGG(DISTINCT poi.dish_name) FILTER (WHERE poi.dish_name IS NOT NULL AND poi.dish_name <> '-' AND poi.category <> '-'), NULL) AS pos_favorite_dishes
+        FROM growth_customers gc
+        INNER JOIN pos_orders po ON gc.phone = po.phone AND po.phone <> ''
+        LEFT JOIN pos_order_items poi ON poi.order_no = po.order_no AND poi.category IS NOT NULL AND poi.category <> '-'
+        GROUP BY gc.id
+      )
+      INSERT INTO growth_customer_profiles (
+        customer_id, phone, openid, store_id, lifecycle_stage,
+        next_visit_probability, best_contact_window, preferred_visit_time,
+        avg_party_size, response_to_discount, price_sensitivity,
+        adventurous_score, health_conscious_score, spicy_level,
+        occasion_date_score, occasion_family_score, occasion_business_score,
+        occasion_solo_score, occasion_friends_score,
+        favorite_dishes, semantic_tags, source_signals, last_profiled_at, updated_at,
+        pos_order_count, pos_total_spend, avg_check, pos_dine_in_ratio, pos_last_order_at
+      )
      SELECT
        e.customer_id,
        e.phone,
        e.openid,
        NULLIF(e.store_id, ''),
-       CASE
-         WHEN e.payment_count <= 1 THEN 'new'
-         WHEN e.last_event_at IS NULL THEN 'new'
-         WHEN e.last_event_at >= NOW() - INTERVAL '14 days' THEN 'active'
-         WHEN e.last_event_at >= NOW() - INTERVAL '30 days' THEN 'at_risk'
-         ELSE 'churned'
-       END,
-       CASE
-         WHEN e.last_event_at >= NOW() - INTERVAL '7 days' THEN 0.85
-         WHEN e.last_event_at >= NOW() - INTERVAL '14 days' THEN 0.65
-         WHEN e.last_event_at >= NOW() - INTERVAL '30 days' THEN 0.35
-         ELSE 0.1
-       END,
+        CASE
+          WHEN GREATEST(e.payment_count, COALESCE(p.pos_order_count, 0)) <= 1 THEN 'new'
+          WHEN GREATEST(e.last_event_at, p.pos_last_order_at) IS NULL THEN 'new'
+          WHEN GREATEST(e.last_event_at, p.pos_last_order_at) >= NOW() - INTERVAL '14 days' THEN 'active'
+          WHEN GREATEST(e.last_event_at, p.pos_last_order_at) >= NOW() - INTERVAL '30 days' THEN 'at_risk'
+          ELSE 'churned'
+        END,
+        CASE
+          WHEN GREATEST(e.last_event_at, p.pos_last_order_at) >= NOW() - INTERVAL '7 days' THEN 0.85
+          WHEN GREATEST(e.last_event_at, p.pos_last_order_at) >= NOW() - INTERVAL '14 days' THEN 0.65
+          WHEN GREATEST(e.last_event_at, p.pos_last_order_at) >= NOW() - INTERVAL '30 days' THEN 0.35
+          ELSE 0.1
+        END,
        CASE COALESCE(e.preferred_visit_time, '晚市')
          WHEN '午市' THEN '周四 11:00-13:00'
          WHEN '夜间' THEN '周五 20:00-22:00'
@@ -595,41 +609,54 @@ async function recomputeCustomerProfiles(pool, days = 90) {
        COALESCE(s.occasion_business_score, 0),
        COALESCE(s.occasion_solo_score, 0),
        COALESCE(s.occasion_friends_score, 0),
-       COALESCE(to_jsonb(s.favorite_dishes), '[]'::jsonb),
-       COALESCE(to_jsonb(s.semantic_tags), '[]'::jsonb),
-       jsonb_build_object(
-         'payment_count', e.payment_count,
-         'discount_touch_count', e.discount_touch_count,
-         'discount_convert_count', e.discount_convert_count,
-         'source_days', $1
-       ),
-       NOW(), NOW()
-     FROM event_base e
-     LEFT JOIN signal_base s ON s.customer_id = e.customer_id
-     ON CONFLICT (customer_id) DO UPDATE SET
-       phone = EXCLUDED.phone,
-       openid = EXCLUDED.openid,
-       store_id = EXCLUDED.store_id,
-       lifecycle_stage = EXCLUDED.lifecycle_stage,
-       next_visit_probability = EXCLUDED.next_visit_probability,
-       best_contact_window = EXCLUDED.best_contact_window,
-       preferred_visit_time = EXCLUDED.preferred_visit_time,
-       avg_party_size = EXCLUDED.avg_party_size,
-       response_to_discount = EXCLUDED.response_to_discount,
-       price_sensitivity = EXCLUDED.price_sensitivity,
-       adventurous_score = EXCLUDED.adventurous_score,
-       health_conscious_score = EXCLUDED.health_conscious_score,
-       spicy_level = EXCLUDED.spicy_level,
-       occasion_date_score = EXCLUDED.occasion_date_score,
-       occasion_family_score = EXCLUDED.occasion_family_score,
-       occasion_business_score = EXCLUDED.occasion_business_score,
-       occasion_solo_score = EXCLUDED.occasion_solo_score,
-       occasion_friends_score = EXCLUDED.occasion_friends_score,
-       favorite_dishes = EXCLUDED.favorite_dishes,
-       semantic_tags = EXCLUDED.semantic_tags,
-       source_signals = EXCLUDED.source_signals,
-       last_profiled_at = NOW(),
-       updated_at = NOW()`,
+        COALESCE(to_jsonb(ARRAY(SELECT DISTINCT unnest(COALESCE(s.favorite_dishes, '{}') || COALESCE(p.pos_favorite_dishes, '{}')))), '[]'::jsonb),
+        COALESCE(to_jsonb(s.semantic_tags), '[]'::jsonb),
+        jsonb_build_object(
+          'payment_count', e.payment_count,
+          'discount_touch_count', e.discount_touch_count,
+          'discount_convert_count', e.discount_convert_count,
+          'pos_order_count', COALESCE(p.pos_order_count, 0),
+          'pos_total_spend', COALESCE(p.pos_total_spend, 0),
+          'source_days', $1
+        ),
+        NOW(), NOW(),
+        COALESCE(p.pos_order_count, 0),
+        COALESCE(p.pos_total_spend, 0),
+        COALESCE(p.avg_check, ROUND(e.avg_party_size, 2)),
+        p.pos_dine_in_ratio,
+        p.pos_last_order_at
+      FROM event_base e
+      LEFT JOIN signal_base s ON s.customer_id = e.customer_id
+      LEFT JOIN pos_base p ON p.customer_id = e.customer_id
+      ON CONFLICT (customer_id) DO UPDATE SET
+        phone = EXCLUDED.phone,
+        openid = EXCLUDED.openid,
+        store_id = EXCLUDED.store_id,
+        lifecycle_stage = EXCLUDED.lifecycle_stage,
+        next_visit_probability = EXCLUDED.next_visit_probability,
+        best_contact_window = EXCLUDED.best_contact_window,
+        preferred_visit_time = EXCLUDED.preferred_visit_time,
+        avg_party_size = EXCLUDED.avg_party_size,
+        response_to_discount = EXCLUDED.response_to_discount,
+        price_sensitivity = EXCLUDED.price_sensitivity,
+        adventurous_score = EXCLUDED.adventurous_score,
+        health_conscious_score = EXCLUDED.health_conscious_score,
+        spicy_level = EXCLUDED.spicy_level,
+        occasion_date_score = EXCLUDED.occasion_date_score,
+        occasion_family_score = EXCLUDED.occasion_family_score,
+        occasion_business_score = EXCLUDED.occasion_business_score,
+        occasion_solo_score = EXCLUDED.occasion_solo_score,
+        occasion_friends_score = EXCLUDED.occasion_friends_score,
+        favorite_dishes = EXCLUDED.favorite_dishes,
+        semantic_tags = EXCLUDED.semantic_tags,
+        source_signals = EXCLUDED.source_signals,
+        pos_order_count = EXCLUDED.pos_order_count,
+        pos_total_spend = EXCLUDED.pos_total_spend,
+        avg_check = EXCLUDED.avg_check,
+        pos_dine_in_ratio = EXCLUDED.pos_dine_in_ratio,
+        pos_last_order_at = EXCLUDED.pos_last_order_at,
+        last_profiled_at = NOW(),
+        updated_at = NOW()`,
     [safeDays]
   );
   return safeDays;
