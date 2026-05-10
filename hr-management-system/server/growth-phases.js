@@ -111,6 +111,113 @@ export async function ensurePhaseTables(pool) {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_calendar_date ON growth_content_calendar (publish_date, store_id, channel)`);
+
+  // Phase 9: POS orders (from KeruYun via Feishu bitable)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pos_orders (
+      id BIGSERIAL PRIMARY KEY,
+      order_no TEXT NOT NULL,
+      order_source TEXT,
+      biz_date DATE,
+      order_time TIMESTAMPTZ,
+      checkout_time TIMESTAMPTZ,
+      order_status TEXT,
+      total_amount NUMERIC DEFAULT 0,
+      total_discount NUMERIC DEFAULT 0,
+      revenue NUMERIC DEFAULT 0,
+      payment_method TEXT,
+      payment_count INTEGER DEFAULT 0,
+      cross_day_payment TEXT,
+      received_amount NUMERIC DEFAULT 0,
+      refund_amount NUMERIC DEFAULT 0,
+      member_name TEXT,
+      phone TEXT,
+      order_type TEXT,
+      table_no TEXT,
+      take_no TEXT,
+      diners INTEGER,
+      duration TEXT,
+      cashier TEXT,
+      order_remark TEXT,
+      is_test TEXT,
+      third_party_take_code TEXT,
+      store_id TEXT,
+      store_name TEXT,
+      store_code TEXT,
+      customer_id BIGINT,
+      synced_at TIMESTAMPTZ DEFAULT NOW(),
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_pos_orders_no ON pos_orders (order_no)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_pos_orders_phone ON pos_orders (phone) WHERE phone IS NOT NULL AND phone <> ''`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_pos_orders_date ON pos_orders (biz_date DESC, store_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_pos_orders_customer ON pos_orders (customer_id) WHERE customer_id IS NOT NULL`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pos_order_items (
+      id BIGSERIAL PRIMARY KEY,
+      order_no TEXT NOT NULL,
+      store_name TEXT,
+      store_code TEXT,
+      biz_date DATE,
+      sku TEXT,
+      dish_name TEXT,
+      spec TEXT,
+      sale_type TEXT,
+      tags TEXT,
+      unit_price NUMERIC DEFAULT 0,
+      qty NUMERIC DEFAULT 0,
+      unit TEXT,
+      subtotal NUMERIC DEFAULT 0,
+      service_fee NUMERIC DEFAULT 0,
+      discount NUMERIC DEFAULT 0,
+      item_revenue NUMERIC DEFAULT 0,
+      refund_qty NUMERIC DEFAULT 0,
+      refund_amount NUMERIC DEFAULT 0,
+      gift_qty NUMERIC DEFAULT 0,
+      gift_amount NUMERIC DEFAULT 0,
+      category_mid TEXT,
+      category TEXT,
+      operator TEXT,
+      synced_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_pos_items_order ON pos_order_items (order_no)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_pos_items_dish ON pos_order_items (dish_name)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_pos_items_cat ON pos_order_items (category) WHERE category IS NOT NULL`);
+}
+
+// ── Phase 9 helpers: parse KeruYun order data ──
+
+function parseKeruyunDateTime(val) {
+  if (!val) return null;
+  const s = String(val).trim().replace(/：/g, ':');
+  const m = s.match(/(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})[日]?\s*(\d{1,2})?[：:]?(\d{1,2})?/);
+  if (!m) return null;
+  const d = `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}T${(m[4]||'0').padStart(2,'0')}:${(m[5]||'0').padStart(2,'0')}:00`;
+  const parsed = new Date(d);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function parseKeruyunPhone(val) {
+  if (!val || val === '-') return '';
+  return String(val).replace(/[^0-9+]/g, '').slice(0, 32);
+}
+
+function parseNum(val) {
+  const n = Number(String(val || '').replace(/[,，\s¥￥]/g, ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
+async function linkPosOrdersToCustomers(pool) {
+  const r = await pool.query(`
+    UPDATE pos_orders o
+    SET customer_id = gc.id
+    FROM growth_customers gc
+    WHERE o.phone <> '' AND o.phone = gc.phone AND o.customer_id IS NULL
+  `);
+  return r.rowCount;
 }
 
 const SCORE_WEIGHTS = { feasibility: 20, fit: 20, cost_risk: 15, case_similarity: 15, clarity: 10, channel: 10, reviewable: 10 };
@@ -364,5 +471,139 @@ export function registerPhaseRoutes(app, pool) {
        FROM growth_content_calendar gc WHERE gc.publish_date>=CURRENT_DATE-($1::int||' days')::interval
        GROUP BY gc.channel ORDER BY total_revenue_fen DESC`,[days]);
     res.json({ok:true,effects:r.rows});
+  });
+
+  // ── Phase 9: POS Orders (KeruYun via Feishu bitable or direct upload) ──
+
+  app.post('/api/growth/pos-orders', async (req, res) => {
+    if (!rqa(req, res)) return;
+    const b = req.body || {};
+    const { orders = [], items = [] } = b;
+    if (!orders.length && !items.length) return res.status(400).json({ok:false,error:'missing orders or items'});
+
+    const storeId = cleanText(b.store_id || '', 128);
+    let ordersUpserted = 0, itemsUpserted = 0;
+
+    if (orders.length) {
+      for (const o of orders) {
+        const phone = parseKeruyunPhone(o.member_phone || o.phone || '');
+        await pool.query(`
+          INSERT INTO pos_orders(order_no,order_source,biz_date,order_time,checkout_time,order_status,total_amount,total_discount,revenue,payment_method,payment_count,cross_day_payment,received_amount,refund_amount,member_name,phone,order_type,table_no,take_no,diners,duration,cashier,order_remark,is_test,third_party_take_code,store_id,store_name,store_code)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
+          ON CONFLICT(order_no) DO UPDATE SET
+            order_source=EXCLUDED.order_source,checkout_time=COALESCE(EXCLUDED.checkout_time,pos_orders.checkout_time),
+            order_status=COALESCE(EXCLUDED.order_status,pos_orders.order_status),
+            total_amount=EXCLUDED.total_amount,total_discount=EXCLUDED.total_discount,revenue=EXCLUDED.revenue,
+            payment_method=COALESCE(EXCLUDED.payment_method,pos_orders.payment_method),
+            phone=COALESCE(NULLIF(EXCLUDED.phone,''),pos_orders.phone),
+            member_name=COALESCE(NULLIF(EXCLUDED.member_name,''),pos_orders.member_name),
+            table_no=COALESCE(NULLIF(EXCLUDED.table_no,''),pos_orders.table_no),
+            diners=COALESCE(EXCLUDED.diners,pos_orders.diners),
+            duration=COALESCE(NULLIF(EXCLUDED.duration,''),pos_orders.duration),
+            synced_at=NOW()
+        `, [
+          cleanText(o.order_no || '', 64), cleanText(o.order_source || '', 80),
+          o.biz_date || null, parseKeruyunDateTime(o.order_time), parseKeruyunDateTime(o.checkout_time),
+          cleanText(o.order_status || '', 40), parseNum(o.total_amount), parseNum(o.total_discount),
+          parseNum(o.revenue), cleanText(o.payment_method || '', 80), Number(o.payment_count) || 0,
+          cleanText(o.cross_day_payment || '', 20), parseNum(o.received_amount), parseNum(o.refund_amount),
+          cleanText(o.member_name || '', 100), phone, cleanText(o.order_type || '', 40),
+          cleanText(o.table_no || '', 40), cleanText(o.take_no || '', 40), Number(o.diners) || null,
+          cleanText(o.duration || '', 40), cleanText(o.cashier || '', 100), cleanText(o.order_remark || '', 500),
+          cleanText(o.is_test || '', 20), cleanText(o.third_party_take_code || '', 40),
+          storeId || cleanText(o.store_id || '', 128), cleanText(o.store_name || '', 200), cleanText(o.store_code || '', 64)
+        ]);
+        ordersUpserted++;
+      }
+    }
+
+    if (items.length) {
+      for (const it of items) {
+        await pool.query(`
+          INSERT INTO pos_order_items(order_no,store_name,store_code,biz_date,sku,dish_name,spec,sale_type,tags,unit_price,qty,unit,subtotal,service_fee,discount,item_revenue,refund_qty,refund_amount,gift_qty,gift_amount,category_mid,category,operator)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+          ON CONFLICT DO NOTHING
+        `, [
+          cleanText(it.order_no || '', 64), cleanText(it.store_name || '', 200), cleanText(it.store_code || '', 64),
+          it.biz_date || null, cleanText(it.sku || '', 64), cleanText(it.dish_name || '', 300),
+          cleanText(it.spec || '', 100), cleanText(it.sale_type || '', 40), cleanText(it.tags || '', 500),
+          parseNum(it.unit_price), parseNum(it.qty), cleanText(it.unit || '', 20),
+          parseNum(it.subtotal), parseNum(it.service_fee), parseNum(it.discount), parseNum(it.item_revenue),
+          parseNum(it.refund_qty), parseNum(it.refund_amount), parseNum(it.gift_qty), parseNum(it.gift_amount),
+          cleanText(it.category_mid || '', 100), cleanText(it.category || '', 100), cleanText(it.operator || '', 100)
+        ]);
+        itemsUpserted++;
+      }
+    }
+
+    const linked = await linkPosOrdersToCustomers(pool);
+    res.json({ok:true, orders_upserted: ordersUpserted, items_upserted: itemsUpserted, customers_linked: linked});
+  });
+
+  app.get('/api/growth/pos-orders', async (req, res) => {
+    if (!rqa(req, res)) return;
+    const sid = cleanText(req.query.store_id || '', 128);
+    const phone = cleanText(req.query.phone || '', 32);
+    const from = req.query.from || '';
+    const to = req.query.to || '';
+    const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 1000);
+    const conds = ['1=1'];
+    const params = [];
+    let pi = 1;
+    if (sid) { conds.push(`store_id=$${pi++}`); params.push(sid); }
+    if (phone) { conds.push(`phone=$${pi++}`); params.push(phone); }
+    if (from) { conds.push(`biz_date>=$${pi++}`); params.push(from); }
+    if (to) { conds.push(`biz_date<=$${pi++}`); params.push(to); }
+    params.push(limit);
+    const r = await pool.query(`SELECT * FROM pos_orders WHERE ${conds.join(' AND ')} ORDER BY biz_date DESC, order_time DESC LIMIT $${pi}`, params);
+    res.json({ok:true, orders: r.rows});
+  });
+
+  app.get('/api/growth/pos-order-items', async (req, res) => {
+    if (!rqa(req, res)) return;
+    const orderNo = cleanText(req.query.order_no || '', 64);
+    if (!orderNo) return res.status(400).json({ok:false,error:'missing order_no'});
+    const r = await pool.query('SELECT * FROM pos_order_items WHERE order_no=$1 ORDER BY id', [orderNo]);
+    res.json({ok:true, items: r.rows});
+  });
+
+  app.get('/api/growth/customer-orders', async (req, res) => {
+    if (!rqa(req, res)) return;
+    const phone = cleanText(req.query.phone || '', 32);
+    const cid = req.query.customer_id ? Number(req.query.customer_id) : null;
+    if (!phone && !cid) return res.status(400).json({ok:false,error:'missing phone or customer_id'});
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+    let r;
+    if (phone) {
+      r = await pool.query('SELECT * FROM pos_orders WHERE phone=$1 ORDER BY biz_date DESC LIMIT $2', [phone, limit]);
+    } else {
+      r = await pool.query('SELECT * FROM pos_orders WHERE customer_id=$1 ORDER BY biz_date DESC LIMIT $2', [cid, limit]);
+    }
+    res.json({ok:true, orders: r.rows});
+  });
+
+  app.get('/api/growth/pos-linked-customers', async (req, res) => {
+    if (!rqa(req, res)) return;
+    const sid = cleanText(req.query.store_id || '', 128);
+    const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
+    const r = await pool.query(`
+      SELECT po.phone, gc.id AS customer_id, gc.openid, gcp.lifecycle_stage, gcp.price_sensitivity,
+             COUNT(*)::int AS order_count, SUM(po.revenue) AS total_revenue,
+             MIN(po.biz_date) AS first_order, MAX(po.biz_date) AS last_order
+      FROM pos_orders po
+      LEFT JOIN growth_customers gc ON po.phone = gc.phone
+      LEFT JOIN growth_customer_profiles gcp ON gc.id = gcp.customer_id
+      WHERE po.phone <> '' AND po.biz_date >= CURRENT_DATE - ($1::int || ' days')::interval
+        AND ($2='' OR po.store_id=$2)
+      GROUP BY po.phone, gc.id, gc.openid, gcp.lifecycle_stage, gcp.price_sensitivity
+      ORDER BY total_revenue DESC NULLS LAST LIMIT 200
+    `, [days, sid]);
+    res.json({ok:true, linked: r.rows});
+  });
+
+  app.post('/api/growth/pos-link-customers', async (req, res) => {
+    if (!rqa(req, res)) return;
+    const linked = await linkPosOrdersToCustomers(pool);
+    res.json({ok:true, customers_linked: linked});
   });
 }
