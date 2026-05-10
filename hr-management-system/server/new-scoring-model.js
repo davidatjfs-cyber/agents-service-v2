@@ -847,16 +847,9 @@ async function calculateExceptionBonus(username, period) {
 }
 
 // 异常扣分规则：按类别+严重度+频率计算
-// frequency: daily=每天最多扣1次, weekly=每周最多扣1次, monthly=每月最多扣1次
+// 只有毛利率异常不在周度anomaly_rollups中，需要额外扣分；其余已在周度扣分中体现
 const DEDUCTION_RULES = {
-  '实收营收异常':     { high: 40, medium: 20, low: 0, frequency: 'monthly' },
-  '人效值异常':       { high: 20, medium: 10, low: 0, frequency: 'monthly' },
-  '充值异常':         { high: 2,  medium: 1,  low: 0, frequency: 'daily' },
-  '桌访异常':         { high: 10, medium: 5,  low: 0, frequency: 'weekly' },
-  '桌访占比异常':     { high: 20, medium: 10, low: 0, frequency: 'monthly' },
   '总实收毛利率异常': { high: 40, medium: 20, low: 0, frequency: 'monthly' },
-  '产品差评异常':     { high: 10, medium: 5,  low: 0, frequency: 'weekly' },
-  '服务差评异常':     { high: 10, medium: 5,  low: 0, frequency: 'weekly' },
 };
 
 // 根据频率计算一个月内最多触发次数

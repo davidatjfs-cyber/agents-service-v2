@@ -158,14 +158,7 @@ async function getMonthlyPerformanceScore(username, period) {
 }
 
 const EXCEPTION_DEDUCTION_RULES = {
-  '实收营收异常':     { high: 40, medium: 20, low: 0, frequency: 'monthly' },
-  '人效值异常':       { high: 20, medium: 10, low: 0, frequency: 'monthly' },
-  '充值异常':         { high: 2,  medium: 1,  low: 0, frequency: 'daily' },
-  '桌访异常':         { high: 10, medium: 5,  low: 0, frequency: 'weekly' },
-  '桌访占比异常':     { high: 20, medium: 10, low: 0, frequency: 'monthly' },
   '总实收毛利率异常': { high: 40, medium: 20, low: 0, frequency: 'monthly' },
-  '产品差评异常':     { high: 10, medium: 5,  low: 0, frequency: 'weekly' },
-  '服务差评异常':     { high: 10, medium: 5,  low: 0, frequency: 'weekly' },
 };
 
 async function getExceptionDeduction(username, period) {
