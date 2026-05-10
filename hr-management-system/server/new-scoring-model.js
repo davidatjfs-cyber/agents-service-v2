@@ -277,8 +277,7 @@ export async function getMonthlyAnomalyRollupAverageScore(username, period) {
   const endDate = `${year}-${month}-${String(getDaysInPeriod(period)).padStart(2, '0')}`;
   const monthKey = `${year}${String(month).padStart(2, '0')}`;
   const r = await pool().query(
-    `SELECT COALESCE(SUM(total_score), 0)::numeric AS total,
-             COUNT(*)::int AS week_count
+    `SELECT total_score
      FROM agent_scores
      WHERE LOWER(TRIM(username)) = LOWER(TRIM($1))
        AND score_model = 'anomaly_rollups_v2'
@@ -290,12 +289,15 @@ export async function getMonthlyAnomalyRollupAverageScore(username, period) {
            AND substring(period from 6 for 10)::date <= $3::date)
          OR
          (POSITION('__' IN period) > 0 AND split_part(period, '__', 2) = $4)
-       )`,
+       )
+     ORDER BY updated_at DESC NULLS LAST, created_at DESC
+     LIMIT 1`,
     [username, startDate, endDate, monthKey]
   );
-  const total = Number(r.rows[0]?.total || 0);
-  const weekCount = Number(r.rows[0]?.week_count || 0);
-  return weekCount > 0 ? Math.round(total / weekCount) : 100;
+  if (r.rows.length > 0) {
+    return Number(r.rows[0].total_score);
+  }
+  return 100;
 }
 
 export async function calculateEmployeeScore(store, username, role, period) {
@@ -304,7 +306,7 @@ export async function calculateEmployeeScore(store, username, role, period) {
     const exceptionBonus = await calculateExceptionBonus(username, period);
     const exceptionDeduction = await calculateExceptionDeduction(username, period);
     const biMonthlyAvg = await getMonthlyAnomalyRollupAverageScore(username, period);
-    const totalScore = Math.min(100, Math.max(0, biMonthlyAvg));
+    const totalScore = biMonthlyAvg;
 
     // 2～4：缺数据或无法判断 → 待定（禁止再用 C/D 当默认值误导）
     let executionRating = EMPLOYEE_RATING_PENDING;
