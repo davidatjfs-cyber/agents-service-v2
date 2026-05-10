@@ -13706,6 +13706,7 @@
                         <button onclick="showGrowthTab('feedback')" id="growth-tab-feedback" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">方案反馈</button>
                         <button onclick="showGrowthTab('profiles')" id="growth-tab-profiles" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">用户画像</button>
                         <button onclick="showGrowthTab('constraints')" id="growth-tab-constraints" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">营销约束</button>
+                        <button onclick="showGrowthTab('posters')" id="growth-tab-posters" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">海报</button>
                         <button onclick="showGrowthTab('actions')" id="growth-tab-actions" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">AI建议执行</button>
                     </div>
                     <div id="growth-dashboard-content">
@@ -13865,7 +13866,40 @@
                             </div>
                         </div>
                     </div>
-                    <div id="growth-actions-content" style="display:none;">
+                    <div id="growth-posters-content" style="display:none;">
+                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
+                            <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">海报制作</div>
+                            <div style="display:flex;gap:16px;flex-wrap:wrap;">
+                                <div style="flex:1;min-width:300px;">
+                                    <div style="margin-bottom:12px;">
+                                        <label style="font-size:12px;color:rgba(226,232,240,0.6);display:block;margin-bottom:4px;">选择模板</label>
+                                        <div id="poster-template-selector" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+                                    </div>
+                                    <div id="poster-editor-form" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">标题</label><input id="poster-title" placeholder="主标题" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
+                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">副标题</label><input id="poster-subtitle" placeholder="副标题" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
+                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">利益点/优惠</label><input id="poster-offer" placeholder="如: 满100减30" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
+                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">CTA按钮文案</label><input id="poster-cta" placeholder="如: 点击领取" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
+                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">门店名称</label><input id="poster-store" placeholder="店名" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
+                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">活动ID(归因)</label><input id="poster-campaign" placeholder="campaign_id" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
+                                    </div>
+                                    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+                                        <button onclick="generatePosterCopy()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:12px;">🤖 AI 生成文案</button>
+                                        <button onclick="renderPosterPreview()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:12px;">预览</button>
+                                        <button onclick="saveGeneratedPoster()" style="padding:6px 14px;border-radius:8px;background:#f59e0b;color:#fff;border:none;cursor:pointer;font-size:12px;">💾 生成海报</button>
+                                        <a id="poster-download-link" style="display:none;"></a>
+                                    </div>
+                                </div>
+                                <div style="flex:0 0 auto;">
+                                    <canvas id="poster-canvas" width="360" height="480" style="border-radius:8px;border:1px solid rgba(255,255,255,0.12);width:360px;height:480px;"></canvas>
+                                </div>
+                            </div>
+                            <div id="poster-history" style="margin-top:16px;">
+                                <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.8);margin-bottom:8px;">已生成海报</div>
+                                <div id="poster-history-list" style="max-height:300px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;"></div>
+                            </div>
+                        </div>
+                    </div>
                         <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
                             <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">AI建议执行</div>
                             <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
@@ -44574,6 +44608,9 @@ ${body}
                 loadGrowthConstraints();
             } else if (tab === 'actions') {
                 loadGrowthActionBoard();
+            } else if (tab === 'posters') {
+                loadPosterTemplates();
+                loadPosterHistory();
             } else {
                 refreshGrowthDashboard();
             }
@@ -45603,6 +45640,229 @@ ${body}
                     + '</div>';
             }).join('');
         }
+    // ════════════════════════════════════════════════
+    // Phase 6: 海报模板 + 渲染系统
+    // ════════════════════════════════════════════════
+
+    var POSTER_TEMPLATES = [
+      {
+        key: 'new_welcome', name: '新客福利', desc: '暖色喜庆，适合拉新入会',
+        colors: { bg1: '#FF6B35', bg2: '#E63E1A', text: '#FFFFFF', accent: '#FFD700' },
+        draw: function(ctx, w, h, d) {
+          var g = ctx.createLinearGradient(0,0,w,h); g.addColorStop(0,'#FF6B35'); g.addColorStop(1,'#E63E1A');
+          ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+          ctx.fillStyle='rgba(255,255,255,0.06)'; ctx.beginPath(); ctx.arc(w*0.8,h*0.2,220,0,Math.PI*2); ctx.fill();
+          ctx.fillStyle='rgba(255,255,255,0.04)'; ctx.beginPath(); ctx.arc(w*0.2,h*0.7,180,0,Math.PI*2); ctx.fill();
+          ctx.textAlign='center';
+          ctx.fillStyle='rgba(255,255,255,0.15)'; ctx.font='bold 72px sans-serif'; ctx.fillText('🎉', w/2, 160);
+          ctx.fillStyle='#FFFFFF'; ctx.font='bold 58px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillText(d.title||'欢迎新客', w/2, 280);
+          ctx.font='28px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillStyle='rgba(255,255,255,0.85)'; ctx.fillText(d.subtitle||'首次到店享专属优惠', w/2, 350);
+          ctx.fillStyle='rgba(255,215,0,0.15)'; roundRect(ctx, w/2-160,420,320,160,20); ctx.fill();
+          ctx.fillStyle='#FFD700'; ctx.font='bold 44px sans-serif'; ctx.fillText(d.offer||'满100减30', w/2, 540);
+          ctx.fillStyle='#FFFFFF'; ctx.font='22px "PingFang SC",sans-serif'; ctx.fillText(d.cta||'立即领取', w/2, 620);
+          ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.font='18px sans-serif'; ctx.fillText(d.store||'', w/2, h-100);
+          if (d.qrDataURL) { ctx.drawImage(d.qrDataURL, w/2-50, h-230, 100, 100); }
+        }
+      },
+      {
+        key: 'recall', name: '老客召回', desc: '温暖怀旧，唤醒复购',
+        colors: { bg1: '#2D3436', bg2: '#636E72', text: '#FFFFFF', accent: '#FDCB6E' },
+        draw: function(ctx, w, h, d) {
+          var g = ctx.createLinearGradient(0,0,w,0); g.addColorStop(0,'#2D3436'); g.addColorStop(1,'#636E72');
+          ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+          ctx.fillStyle='rgba(253,203,110,0.08)'; ctx.beginPath(); ctx.arc(w/2,h/2,300,0,Math.PI*2); ctx.fill();
+          ctx.textAlign='center';
+          ctx.fillStyle='rgba(253,203,110,0.2)'; ctx.font='bold 60px sans-serif'; ctx.fillText('💝', w/2, 160);
+          ctx.fillStyle='#FDCB6E'; ctx.font='bold 50px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillText(d.title||'好久不见', w/2, 290);
+          ctx.fillStyle='rgba(255,255,255,0.8)'; ctx.font='24px "PingFang SC",sans-serif'; ctx.fillText(d.subtitle||'我们想你了，来坐坐吧', w/2, 360);
+          ctx.fillStyle='rgba(253,203,110,0.12)'; roundRect(ctx, w/2-170,410,340,140,16); ctx.fill();
+          ctx.fillStyle='#FDCB6E'; ctx.font='bold 40px sans-serif'; ctx.fillText(d.offer||'老客专享8折', w/2, 520);
+          ctx.fillStyle='#FFFFFF'; ctx.font='22px "PingFang SC",sans-serif'; ctx.fillText(d.cta||'点击领取', w/2, 600);
+          ctx.fillStyle='rgba(255,255,255,0.4)'; ctx.font='16px sans-serif'; ctx.fillText(d.store||'', w/2, h-90);
+          if (d.qrDataURL) { ctx.drawImage(d.qrDataURL, w/2-45, h-210, 90, 90); }
+        }
+      },
+      {
+        key: 'vip', name: 'VIP专享', desc: '高端黑金，高价值客户',
+        colors: { bg1: '#0A0A0A', bg2: '#1A1A2E', text: '#FFD700', accent: '#C5A55A' },
+        draw: function(ctx, w, h, d) {
+          var g = ctx.createLinearGradient(0,0,0,h); g.addColorStop(0,'#0A0A0A'); g.addColorStop(1,'#1A1A2E');
+          ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+          ctx.fillStyle='rgba(197,165,90,0.06)'; ctx.beginPath(); ctx.arc(w/2,h*0.4,260,0,Math.PI*2); ctx.fill();
+          ctx.strokeStyle='rgba(197,165,90,0.2)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(w/2,h*0.4,280,0,Math.PI*2); ctx.stroke();
+          ctx.textAlign='center';
+          ctx.fillStyle='#C5A55A'; ctx.font='bold 40px sans-serif'; ctx.fillText('👑 VIP', w/2, 150);
+          ctx.fillStyle='#FFD700'; ctx.font='bold 44px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillText(d.title||'专属礼遇', w/2, 260);
+          ctx.fillStyle='rgba(255,255,255,0.7)'; ctx.font='22px "PingFang SC",sans-serif'; ctx.fillText(d.subtitle||'仅限VIP会员', w/2, 330);
+          ctx.fillStyle='rgba(197,165,90,0.15)'; roundRect(ctx, w/2-180,380,360,150,20); ctx.fill();
+          ctx.fillStyle='#FFD700'; ctx.font='bold 38px sans-serif'; ctx.fillText(d.offer||'VIP专享价', w/2, 490);
+          ctx.fillStyle='#FFFFFF'; ctx.font='20px "PingFang SC",sans-serif'; ctx.fillText(d.cta||'立即查看', w/2, 570);
+          ctx.fillStyle='rgba(255,255,255,0.35)'; ctx.font='16px sans-serif'; ctx.fillText(d.store||'', w/2, h-90);
+          if (d.qrDataURL) { ctx.drawImage(d.qrDataURL, w/2-45, h-210, 90, 90); }
+        }
+      },
+      {
+        key: 'festival', name: '节日活动', desc: '喜庆节日风格',
+        colors: { bg1: '#C0392B', bg2: '#8E1B1B', text: '#FFFFFF', accent: '#FFD700' },
+        draw: function(ctx, w, h, d) {
+          var g = ctx.createLinearGradient(0,0,0,h); g.addColorStop(0,'#C0392B'); g.addColorStop(1,'#8E1B1B');
+          ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+          ctx.fillStyle='rgba(255,215,0,0.07)'; ctx.beginPath(); ctx.arc(100,100,150,0,Math.PI*2); ctx.fill();
+          ctx.fillStyle='rgba(255,215,0,0.07)'; ctx.beginPath(); ctx.arc(w-100,h-200,180,0,Math.PI*2); ctx.fill();
+          ctx.textAlign='center';
+          ctx.fillStyle='rgba(255,215,0,0.15)'; ctx.font='bold 56px sans-serif'; ctx.fillText('🎊', w/2, 140);
+          ctx.fillStyle='#FFD700'; ctx.font='bold 52px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillText(d.title||'节日快乐', w/2, 270);
+          ctx.fillStyle='rgba(255,255,255,0.85)'; ctx.font='26px "PingFang SC",sans-serif'; ctx.fillText(d.subtitle||'节日限定 美味共享', w/2, 340);
+          ctx.fillStyle='rgba(255,255,255,0.12)'; roundRect(ctx, w/2-180,390,360,145,18); ctx.fill();
+          ctx.fillStyle='#FFFFFF'; ctx.font='bold 36px sans-serif'; ctx.fillText(d.offer||'节日特惠', w/2, 495);
+          ctx.fillStyle='#FFD700'; ctx.font='22px "PingFang SC",sans-serif'; ctx.fillText(d.cta||'了解详情', w/2, 570);
+          ctx.fillStyle='rgba(255,255,255,0.45)'; ctx.font='18px sans-serif'; ctx.fillText(d.store||'', w/2, h-90);
+          if (d.qrDataURL) { ctx.drawImage(d.qrDataURL, w/2-45, h-210, 90, 90); }
+        }
+      },
+      {
+        key: 'new_dish', name: '新品推荐', desc: '清新简洁，突出菜品',
+        colors: { bg1: '#0F766E', bg2: '#065F46', text: '#FFFFFF', accent: '#34D399' },
+        draw: function(ctx, w, h, d) {
+          var g = ctx.createLinearGradient(0,0,w,h); g.addColorStop(0,'#0F766E'); g.addColorStop(1,'#065F46');
+          ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+          ctx.fillStyle='rgba(52,211,153,0.05)'; ctx.beginPath(); ctx.arc(w*0.25,h*0.3,200,0,Math.PI*2); ctx.fill();
+          ctx.textAlign='center';
+          ctx.fillStyle='rgba(52,211,153,0.2)'; ctx.font='bold 50px sans-serif'; ctx.fillText('✨', w/2, 130);
+          ctx.fillStyle='#34D399'; ctx.font='bold 48px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillText(d.title||'新品上市', w/2, 260);
+          ctx.fillStyle='rgba(255,255,255,0.8)'; ctx.font='24px "PingFang SC",sans-serif'; ctx.fillText(d.subtitle||'用心做好每一道菜', w/2, 330);
+          ctx.fillStyle='rgba(52,211,153,0.12)'; roundRect(ctx, w/2-170,380,340,140,18); ctx.fill();
+          ctx.fillStyle='#FFFFFF'; ctx.font='bold 34px sans-serif'; ctx.fillText(d.offer||'尝鲜价', w/2, 490);
+          ctx.fillStyle='#34D399'; ctx.font='20px "PingFang SC",sans-serif'; ctx.fillText(d.cta||'立即品尝', w/2, 570);
+          ctx.fillStyle='rgba(255,255,255,0.4)'; ctx.font='16px sans-serif'; ctx.fillText(d.store||'', w/2, h-90);
+          if (d.qrDataURL) { ctx.drawImage(d.qrDataURL, w/2-45, h-210, 90, 90); }
+        }
+      }
+    ];
+
+    var _selectedPosterTemplate = 'new_welcome';
+    var _posterCanvasW = 540, _posterCanvasH = 720;
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath(); ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+      ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+      ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+      ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
+    }
+
+    function loadPosterTemplates() {
+      var host = document.getElementById('poster-template-selector');
+      if (!host) return;
+      host.innerHTML = POSTER_TEMPLATES.map(function(t) {
+        var sel = t.key === _selectedPosterTemplate;
+        return '<button onclick="selectPosterTemplate(\''+t.key+'\')" style="padding:8px 14px;border-radius:8px;'
+          + (sel ? 'background:'+t.colors.bg1+';color:#fff;border:2px solid '+t.colors.accent+';' : 'background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:1px solid rgba(255,255,255,0.12);')
+          + 'cursor:pointer;font-size:12px;font-weight:'+(sel?'700':'400')+';">'
+          + '<span style="font-size:16px;">' + (sel?'◉':'○') + '</span> ' + t.name
+          + '<br><span style="font-size:10px;opacity:0.6;">' + t.desc + '</span></button>';
+      }).join('');
+    }
+
+    function selectPosterTemplate(key) {
+      _selectedPosterTemplate = key;
+      loadPosterTemplates();
+      renderPosterPreview();
+    }
+
+    function renderPosterPreview() {
+      var canvas = document.getElementById('poster-canvas');
+      if (!canvas) return;
+      var W = _posterCanvasW, H = _posterCanvasH;
+      canvas.width = W; canvas.height = H;
+      var ctx = canvas.getContext('2d');
+      var tpl = POSTER_TEMPLATES.find(function(t) { return t.key === _selectedPosterTemplate; });
+      if (!tpl) return;
+      var data = {
+        title: document.getElementById('poster-title')?.value || '',
+        subtitle: document.getElementById('poster-subtitle')?.value || '',
+        offer: document.getElementById('poster-offer')?.value || '',
+        cta: document.getElementById('poster-cta')?.value || '',
+        store: document.getElementById('poster-store')?.value || '',
+        qrDataURL: null
+      };
+      tpl.draw(ctx, W, H, data);
+    }
+
+    async function generatePosterCopy() {
+      var campaignId = document.getElementById('poster-campaign')?.value || '';
+      if (!campaignId) { showNotification('请先填写活动ID', 'warning'); return; }
+      try {
+        var r = await fetch('/api/growth/strategy-explanations?strategy_key=' + encodeURIComponent(campaignId), {
+          headers: growthAuthHeaders()
+        });
+        var d = await r.json();
+        var context = '';
+        if (d?.explanations?.length) {
+          context = d.explanations[0].why_this_action || '';
+        }
+        var tpl = POSTER_TEMPLATES.find(function(t) { return t.key === _selectedPosterTemplate; });
+        var titles = { new_welcome: '新客专享', recall: '好久不见', vip: 'VIP尊享', festival: '节日快乐', new_dish: '新品上市' };
+        var offers = { new_welcome: '首次到店立减', recall: '老客回馈', vip: 'VIP专属优惠', festival: '节日特惠', new_dish: '尝鲜特价' };
+        var ctas = { new_welcome: '立即领取', recall: '回来坐坐', vip: '查看权益', festival: '了解详情', new_dish: '立即品尝' };
+        var key = _selectedPosterTemplate;
+        document.getElementById('poster-title').value = titles[key] || '欢迎光临';
+        document.getElementById('poster-subtitle').value = '用心为您准备了一份惊喜';
+        document.getElementById('poster-offer').value = offers[key] || '到店享优惠';
+        document.getElementById('poster-cta').value = ctas[key] || '立即前往';
+        renderPosterPreview();
+        showNotification('文案已生成，可手动调整', 'success');
+      } catch (e) {
+        showNotification('生成失败：' + (e?.message || e), 'error');
+      }
+    }
+
+    async function saveGeneratedPoster() {
+      var canvas = document.getElementById('poster-canvas');
+      if (!canvas) return;
+      var title = document.getElementById('poster-title')?.value || '';
+      var campaignId = document.getElementById('poster-campaign')?.value || '';
+      var dataURL = canvas.toDataURL('image/png');
+      try {
+        var r = await fetch('/api/growth/generated-posters', {
+          method: 'POST',
+          headers: growthAuthHeaders(),
+          body: JSON.stringify({
+            poster_key: 'poster_' + Date.now(),
+            campaign_id: campaignId || undefined,
+            title: title || '海报',
+            status: 'generated',
+            output_url: dataURL,
+            meta: { template: _selectedPosterTemplate }
+          })
+        });
+        var d = await r.json();
+        if (!d.ok) throw new Error(d.error || 'save_failed');
+        showNotification('海报已保存', 'success');
+        var link = document.getElementById('poster-download-link');
+        if (link) { link.href = dataURL; link.download = (title || 'poster') + '.png'; link.click(); }
+        loadPosterHistory();
+      } catch (e) {
+        showNotification('保存失败：' + (e?.message || e), 'error');
+      }
+    }
+
+    async function loadPosterHistory() {
+      try {
+        var r = await fetch('/api/growth/generated-posters?status=generated', { headers: growthAuthHeaders() });
+        var d = await r.json();
+        var posters = d?.posters || [];
+        var host = document.getElementById('poster-history-list');
+        if (!host) return;
+        host.innerHTML = posters.length ? posters.slice(0, 12).map(function(p) {
+          return '<div style="border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;cursor:pointer;" onclick="window.open(\'' + (p.output_url || '#') + '\')">'
+            + '<div style="height:120px;background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center;overflow:hidden;">'
+            + (p.output_url ? '<img src="' + p.output_url + '" style="max-width:100%;max-height:100%;object-fit:contain;">' : '<span style="color:rgba(226,232,240,0.3);font-size:11px;">无预览</span>')
+            + '</div><div style="padding:6px;font-size:11px;color:rgba(226,232,240,0.6);text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">'
+            + (p.title || '-') + '</div></div>';
+        }).join('') : '<div style="color:rgba(226,232,240,0.4);grid-column:1/-1;padding:20px;">暂无已生成海报</div>';
+      } catch (e) { /* ignore */ }
+    }
+
     </script>
 
     <!-- Mobile Bottom Navigation -->
