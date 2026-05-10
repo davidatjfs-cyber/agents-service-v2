@@ -1559,85 +1559,35 @@ export function registerGrowthRoutes(app, pool) {
     return res.json({ ok: true, new_status: newStatus });
   });
 
-  // ── Phase 5: LLM semantic parsing with real LLM ──
+  // ── Phase 5: LLM semantic parsing via agents direct LLM endpoint ──
   app.post('/api/growth/semantic-parse', async (req, res) => {
     if (!requireGrowthAuth(req, res)) return;
     const text = cleanText(req.body.text, 4000);
     if (!text) return res.status(400).json({ ok: false, error: 'missing_text' });
-    const simpleTags = [];
-    if (/辣|麻辣/.test(text)) simpleTags.push('嗜辣');
-    if (/清淡|少油|少盐/.test(text)) simpleTags.push('清淡偏好');
-    if (/甜|甜品/.test(text)) simpleTags.push('甜品偏好');
-    if (/再来|还会|下次/.test(text)) simpleTags.push('复购意向');
-    if (/差|不好|失望|太差/.test(text)) simpleTags.push('负面情绪');
-    if (/好|好吃|满意|推荐/.test(text)) simpleTags.push('正面情绪');
-    let llmResult = {};
     try {
       const { default: jwt } = await import('jsonwebtoken');
       const admToken = jwt.sign({ username: 'growth_semantic', role: 'admin' }, process.env.JWT_SECRET || 'dev', { expiresIn: '30s' });
-      const systemPrompt = `你是一个餐饮顾客反馈分析专家。分析以下顾客评价，输出严格JSON格式（不要markdown包裹，不要其他文字）：
-{"taste_tags":["口味标签例如 麻辣/清淡/甜品/鲜/咸/酸"],"price_sensitivity":0-1之间数字,"emotion":"正面","return_intent":true,"key_insight":"一句话核心洞察"}
-顾客评价：${text}`;
-      const agentResp = await fetch((process.env.AGENTS_SERVICE_URL || 'http://127.0.0.1:3101') + '/api/agent/chat', {
+      const agentResp = await fetch((process.env.AGENTS_SERVICE_URL || 'http://127.0.0.1:3101') + '/api/growth/semantic-parse', {
         method: 'POST', headers: { 'Authorization': 'Bearer ' + admToken, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ route: 'master', text: systemPrompt, store: req.body.store_id || '' })
+        body: JSON.stringify({ text })
       });
-      if (agentResp.ok) {
-        const chatBody = await agentResp.json();
-        const raw = String(chatBody?.text || chatBody?.response || '');
-        // Try multiple JSON extraction strategies
-        let parsed = null;
-        // Strategy 1: direct parse
-        try { parsed = JSON.parse(raw); } catch (e) {}
-        // Strategy 2: extract from markdown code block
-        if (!parsed) {
-          const mdMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-          if (mdMatch) { try { parsed = JSON.parse(mdMatch[1]); } catch (e) {} }
-        }
-        // Strategy 3: find first JSON object
-        if (!parsed) {
-          const objMatch = raw.match(/\{[\s\S]*?"taste_tags"[\s\S]*?\}/);
-          if (objMatch) { try { parsed = JSON.parse(objMatch[0]); } catch (e) {} }
-        }
-        // Strategy 4: last resort - extract anything between braces
-        if (!parsed) {
-          const braceMatch = raw.match(/\{(?:[^{}]|(?:\{[^{}]*\}))*\}/);
-          if (braceMatch) { try { parsed = JSON.parse(braceMatch[0]); } catch (e) {} }
-        }
-        if (parsed && typeof parsed === 'object') {
-          llmResult = parsed;
-          // Validate and fix fields
-          if (Array.isArray(llmResult.taste_tags)) {
-            llmResult.taste_tags = llmResult.taste_tags.filter(Boolean).slice(0, 10);
-          }
-          if (llmResult.price_sensitivity != null) {
-            llmResult.price_sensitivity = Math.max(0, Math.min(1, Number(llmResult.price_sensitivity)));
-          }
-        }
+      const result = agentResp.ok ? await agentResp.json() : { ok: false };
+      if (result.ok && result.taste_tags) {
+        return res.json(result);
       }
-    } catch (e) { llmResult = { error: e?.message }; }
-    // Fallback: if LLM failed, use keyword analysis for basic tags
-    if (!llmResult.taste_tags || !llmResult.taste_tags.length) {
-      const keywordTags = [];
-      if (/辣|麻辣|麻/.test(text)) keywordTags.push('麻辣');
-      if (/淡|清|鲜/.test(text)) keywordTags.push('清淡');
-      if (/甜|甜品|糖/.test(text)) keywordTags.push('甜品');
-      if (/肉|牛|羊|猪|鸡/.test(text)) keywordTags.push('肉食');
-      if (/汤|煲|炖/.test(text)) keywordTags.push('汤品');
-      if (/脆|酥|炸/.test(text)) keywordTags.push('香脆');
-      llmResult.taste_tags = keywordTags;
-    }
-    if (llmResult.emotion == null) {
-      llmResult.emotion = simpleTags.includes('负面情绪') ? '负面' : simpleTags.includes('正面情绪') ? '正面' : '中性';
-    }
+    } catch (e) { /* fallback below */ }
+    // Fallback keyword parsing
+    const tags = [];
+    if (/辣|麻辣/.test(text)) tags.push('麻辣');
+    if (/清淡|少油/.test(text)) tags.push('清淡');
+    if (/甜|甜品/.test(text)) tags.push('甜品');
+    if (/肉|牛|羊|猪/.test(text)) tags.push('肉食');
+    if (/汤|煲/.test(text)) tags.push('汤品');
     return res.json({
-      ok: true, simple_tags: simpleTags,
-      taste_tags: llmResult.taste_tags || [],
-      price_sensitivity: llmResult.price_sensitivity != null ? Number(llmResult.price_sensitivity) : null,
-      emotion: llmResult.emotion || '中性',
-      return_intent: llmResult.return_intent === true || simpleTags.includes('复购意向'),
-      key_insight: llmResult.key_insight || '无',
-      llm_parsed: llmResult.taste_tags?.length > 0
+      ok: true, taste_tags: tags, price_sensitivity: null,
+      emotion: /差|不好|失望/.test(text) ? '负面' : /好|好吃|满意/.test(text) ? '正面' : '中性',
+      return_intent: /再来|下次|还会/.test(text),
+      key_insight: '关键词解析（LLM不可用）', source: 'keyword_fallback'
     });
   });
 

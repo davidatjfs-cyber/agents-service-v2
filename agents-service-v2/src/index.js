@@ -33,7 +33,7 @@ import {
   getAllKpiTargets, upsertKpiTarget, deleteKpiTarget, getKpiTarget,
   calculateKpiAchievement, getConfigAuditLog
 } from './services/config-service.js';
-import { verifyLLMHealth, getProviderHealthStatus, getCostStats, getPerformanceMetrics } from './services/llm-provider.js';
+import { verifyLLMHealth, getProviderHealthStatus, getCostStats, getPerformanceMetrics, callLLM } from './services/llm-provider.js';
 import { handleWebhookEvent, handleCardAction, getFeishuStatus, sendText as feishuSendText } from './services/feishu-client.js';
 import { routeMessage, checkPermission, VALID_ROUTES } from './services/message-router.js';
 import { createTask, transitionTask, getTask, getTasksByStore, getTaskStats, scanEscalations, STATUS_FLOW } from './services/task-state-machine.js';
@@ -972,9 +972,50 @@ app.post('/api/agent/chat', authRequired, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/agent/process', authRequired, async (req, res) => {
-  try { res.json(await processMessage(req.body)); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+ app.post('/api/agent/process', authRequired, async (req, res) => {
+   try { res.json(await processMessage(req.body)); }
+   catch (e) { res.status(500).json({ error: e.message }); }
+ });
+
+// ─── Growth Semantic Parse API (LLM direct, not chat routing) ───
+app.post('/api/growth/semantic-parse', async (req, res) => {
+  try {
+    const text = String(req.body?.text || '').trim().slice(0, 4000);
+    if (!text) return res.status(400).json({ ok: false, error: 'missing_text' });
+    const sysPrompt = `你是一个餐饮顾客反馈分析专家。分析以下顾客评价，只输出JSON，不要任何其他文字。JSON schema:
+{"taste_tags":["最多3个口味标签，例如 麻辣/清淡/甜品/鲜/咸/酸/肉食/汤品/香脆"],"price_sensitivity":0-1数字,"emotion":"正面或负面或中性","return_intent":true或false,"key_insight":"一句话核心洞察"}`;
+    const llmResp = await callLLM([
+      { role: 'system', content: sysPrompt },
+      { role: 'user', content: text }
+    ], { temperature: 0.1, max_tokens: 500, purpose: 'semantic_parse' });
+    const rawContent = String(llmResp?.content || llmResp?.text || '{}').trim();
+    // Robust JSON extraction
+    let parsed = null;
+    try { parsed = JSON.parse(rawContent); } catch (e) {}
+    if (!parsed) { try { const m = rawContent.match(/\{(?:[^{}]|(?:\{[^{}]*\}))*\}/); if (m) parsed = JSON.parse(m[0]); } catch (e) {} }
+    if (!parsed) { try { const m = rawContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/); if (m) parsed = JSON.parse(m[1]); } catch (e) {} }
+    if (!parsed || typeof parsed !== 'object') {
+      // Absolute fallback: keyword-based
+      const tags = [];
+      if (/辣|麻辣/.test(text)) tags.push('麻辣');
+      if (/清淡|少油/.test(text)) tags.push('清淡');
+      if (/甜|甜品/.test(text)) tags.push('甜品');
+      if (/肉|牛|羊|猪/.test(text)) tags.push('肉食');
+      if (/汤|煲/.test(text)) tags.push('汤品');
+      return res.json({ ok: true, taste_tags: tags, price_sensitivity: 0.5, emotion: '中性', return_intent: /再来|下次|还会/.test(text), key_insight: '关键词解析', source: 'fallback' });
+    }
+    return res.json({
+      ok: true,
+      taste_tags: Array.isArray(parsed.taste_tags) ? parsed.taste_tags.filter(Boolean).slice(0, 5) : [],
+      price_sensitivity: parsed.price_sensitivity != null ? Math.max(0, Math.min(1, Number(parsed.price_sensitivity))) : null,
+      emotion: ['正面','负面','中性'].includes(parsed.emotion) ? parsed.emotion : '中性',
+      return_intent: parsed.return_intent === true,
+      key_insight: String(parsed.key_insight || '').slice(0, 200),
+      source: 'llm_direct'
+    });
+  } catch (e) {
+    return res.json({ ok: false, error: e?.message || 'parse_error' });
+  }
 });
 
 // ─── Knowledge Base API ───
