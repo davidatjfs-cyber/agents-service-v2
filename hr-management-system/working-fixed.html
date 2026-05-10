@@ -11011,12 +11011,27 @@
                             <div class="acm-card">
                                 <div class="acm-card-hd">
                                     <div class="acm-card-title">🤖 OP 模型配置</div>
-                                </div>
-                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                                    <div>
-                                        <label class="acm-lbl">推理模型（文本判断）</label>
-                                        <select id="op-llm-reasoning" class="acm-inp acm-inp-sm"></select>
-                                    </div>
+                    </div>
+                    <div id="growth-actions-content" style="display:none;"><!-- already added above --></div>
+                 </div>
+             </div>
+            <!-- 营销草稿执行页 - 全屏模态 -->
+            <div id="growth-action-detail-modal" class="modal hidden">
+                <div class="modal-backdrop" onclick="closeActionDetailModal()"></div>
+                <div style="position:fixed;top:5%;left:5%;right:5%;bottom:5%;background:rgba(18,22,28,0.98);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:24px;z-index:2200;overflow-y:auto;max-width:800px;margin:0 auto;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                        <h3 id="growth-action-detail-title" style="font-size:18px;font-weight:800;color:#fff;margin:0;">执行草稿</h3>
+                        <button onclick="closeActionDetailModal()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:24px;cursor:pointer;">×</button>
+                    </div>
+                    <div id="growth-action-detail-body" style="min-height:200px;"></div>
+                    <div style="display:flex;gap:12px;margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.08);">
+                        <button id="growth-action-detail-execute" style="padding:10px 20px;border:none;border-radius:10px;background:rgba(34,197,94,0.2);color:#22c55e;font-weight:700;cursor:pointer;">✅ 执行该方案</button>
+                        <button id="growth-action-detail-edit" style="padding:10px 20px;border:none;border-radius:10px;background:rgba(14,165,233,0.2);color:#38bdf8;font-weight:700;cursor:pointer;">✏️ 修改后执行</button>
+                        <button id="growth-action-detail-ignore" style="padding:10px 20px;border:none;border-radius:10px;background:rgba(239,68,68,0.2);color:#ef4444;font-weight:700;cursor:pointer;">⛔ 忽略</button>
+                        <button onclick="closeActionDetailModal()" style="padding:10px 20px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;background:transparent;color:rgba(255,255,255,0.5);cursor:pointer;">关闭</button>
+                    </div>
+                </div>
+            </div>
                                     <div>
                                         <label class="acm-lbl">视觉审核模型（仅 Doubao）</label>
                                         <select id="op-llm-vision" class="acm-inp acm-inp-sm"></select>
@@ -13572,6 +13587,7 @@
                                 <button onclick="loadGrowthActionBoard()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新建议</button>
                             </div>
                             <div id="growth-action-board" style="max-height:520px;overflow-y:auto;"></div>
+                            <pre id="__growth_actions_cache" style="display:none;"></pre>
                         </div>
                     </div>
                  </div>
@@ -44406,6 +44422,7 @@ ${body}
                         + '<div style="color:rgba(226,232,240,0.6);margin-top:4px;">门店: ' + (x.store_id || '-') + ' · 状态: ' + (x.status || '-') + ' · 反馈: ' + (x.feedback || '-') + ' · 评分: ' + (x.feedback_rating || '-') + '</div>'
                         + '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">'
                         + '<button onclick="submitStrategyFeedback(\'' + key + '\',4,\'采纳\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(34,197,94,0.2);color:#22c55e;cursor:pointer;">采纳</button>'
+                        + '<button onclick="submitStrategyFeedback(\'' + key + '\',3,\'已执行\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(14,165,233,0.2);color:#38bdf8;cursor:pointer;">已执行</button>'
                         + '<button onclick="submitStrategyFeedback(\'' + key + '\',2,\'不适合\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(245,158,11,0.2);color:#f59e0b;cursor:pointer;">不适合</button>'
                         + '<button onclick="submitStrategyFeedback(\'' + key + '\',5,\'效果好\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(14,165,233,0.2);color:#38bdf8;cursor:pointer;">效果好</button>'
                         + '<button onclick="submitStrategyFeedback(\'' + key + '\',1,\'效果差\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(239,68,68,0.2);color:#ef4444;cursor:pointer;">效果差</button>'
@@ -44565,6 +44582,8 @@ ${body}
                 const explanations = explanationsData?.explanations || [];
                 const explainByStrategy = {};
                 explanations.forEach(function(e) { if (e.strategy_key) explainByStrategy[e.strategy_key] = e; });
+                // cache for detail modal
+                try { document.getElementById('__growth_actions_cache').textContent = JSON.stringify(rows); } catch (e) {}
                 const host = document.getElementById('growth-action-board');
                 host.innerHTML = rows.length ? rows.map(function(x) {
                     const key = x.action_key || '';
@@ -44590,7 +44609,7 @@ ${body}
                         + '</div>' : '';
                     return '<div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">'
                         + '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">'
-                        + '<div style="color:#fff;font-weight:600;">' + (x.title || '-') + '</div>'
+                        + '<div style="color:#fff;font-weight:600;cursor:pointer;" onclick="openActionDetailModal(\'' + key + '\')">📄 ' + (x.title || '-') + '</div>'
                         + '<div style="color:' + (x.status === 'executed' ? '#22c55e' : x.status === 'ignored' ? '#ef4444' : '#f59e0b') + ';">' + (x.status || '-') + '</div>'
                         + '</div>'
                         + '<div style="color:rgba(226,232,240,0.6);margin-top:4px;">' + (x.detail || '-') + '</div>'
@@ -44620,9 +44639,53 @@ ${body}
                 if (!data.ok) throw new Error(data.error || 'execute_failed');
                 showNotification('动作已执行', 'success');
                 loadGrowthActionBoard();
+                // Auto-trigger feedback request
+                setTimeout(function() { requestActionFeedback(actionKey); }, 500);
             } catch (e) {
                 showNotification('执行失败：' + (e?.message || e), 'error');
             }
+        }
+
+        async function requestActionFeedback(actionKey) {
+            const rating = parseInt(prompt('执行效果如何？\n1=效果差  2=不适合  3=一般  4=效果好  5=非常好（输入数字，留空跳过）', ''), 10);
+            if (isNaN(rating) || rating < 1 || rating > 5) return;
+            const note = prompt('补充说明（可选）', '');
+            try {
+                await fetch('/api/growth/strategy-feedback-v2', {
+                    method: 'POST', headers: growthAuthHeaders(),
+                    body: JSON.stringify({ strategy_key: 'action:' + actionKey, rating: rating, feedback: note || '', reason_code: '' })
+                });
+                showNotification('执行反馈已记录', 'success');
+            } catch (e) {}
+        }
+
+        /** 独立营销草稿执行页：全屏模态 */
+        function openActionDetailModal(actionKey) {
+            var actions = JSON.parse(document.getElementById('__growth_actions_cache')?.textContent || '[]');
+            var x = actions.find(function(a) { return a.action_key === actionKey; });
+            if (!x) { showNotification('动作数据未缓存', 'warning'); return; }
+            var payload = x.payload || {};
+            var key = x.action_key || '';
+            document.getElementById('growth-action-detail-modal').classList.remove('hidden');
+            document.getElementById('growth-action-detail-title').textContent = x.title || '执行草稿';
+            var explainHtml = '';
+            var host = document.getElementById('growth-action-detail-body');
+            host.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">'
+                + '<div><span style="color:rgba(226,232,240,0.5);font-size:12px;">门店</span><div style="color:#fff;font-weight:600;margin-top:4px;">' + (x.store_id || '-') + '</div></div>'
+                + '<div><span style="color:rgba(226,232,240,0.5);font-size:12px;">状态</span><div style="color:' + (x.status === 'executed' ? '#22c55e' : x.status === 'ignored' ? '#ef4444' : '#f59e0b') + ';font-weight:600;margin-top:4px;">' + (x.status || '-') + '</div></div>'
+                + '<div><span style="color:rgba(226,232,240,0.5);font-size:12px;">渠道</span><div style="color:#fff;margin-top:4px;">' + (payload.channel || '-') + '</div></div>'
+                + '<div><span style="color:rgba(226,232,240,0.5);font-size:12px;">预算</span><div style="color:#fff;margin-top:4px;">' + (payload.budget_fen ? '¥' + Math.round(Number(payload.budget_fen) / 100) : '-') + '</div></div>'
+                + '<div style="grid-column:span 2;"><span style="color:rgba(226,232,240,0.5);font-size:12px;">目标人群</span><div style="color:#fff;margin-top:4px;">' + (payload.audience || '门店活跃客群') + '</div></div>'
+                + '<div style="grid-column:span 2;"><span style="color:rgba(226,232,240,0.5);font-size:12px;">执行内容</span><div style="color:rgba(226,232,240,0.8);margin-top:4px;font-size:14px;line-height:1.6;">' + (x.detail || '-') + '</div></div>'
+                + '<div style="grid-column:span 2;"><span style="color:rgba(226,232,240,0.5);font-size:12px;">生成时间</span><div style="color:rgba(226,232,240,0.6);margin-top:4px;">' + (x.created_at ? String(x.created_at).slice(0, 19) : '-') + '</div></div>'
+                + '<div style="grid-column:span 2;padding:12px;background:rgba(14,165,233,0.08);border-radius:8px;"><div style="color:rgba(226,232,240,0.5);font-size:12px;margin-bottom:8px;">📊 说明</div><div style="color:rgba(226,232,240,0.7);font-size:13px;line-height:1.5;">' + (payload.explain_note || '基于门店增长数据与营销约束生成。') + '</div></div>'
+                + '</div>';
+            document.getElementById('growth-action-detail-execute').setAttribute('onclick', "closeActionDetailModal();executeGrowthAction('" + key + "')");
+            document.getElementById('growth-action-detail-edit').setAttribute('onclick', "closeActionDetailModal();editExecuteGrowthAction('" + key + "')");
+            document.getElementById('growth-action-detail-ignore').setAttribute('onclick', "closeActionDetailModal();ignoreGrowthAction('" + key + "')");
+        }
+        function closeActionDetailModal() {
+            document.getElementById('growth-action-detail-modal').classList.add('hidden');
         }
 
         async function editExecuteGrowthAction(actionKey) {

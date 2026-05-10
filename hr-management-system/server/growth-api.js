@@ -1590,7 +1590,7 @@ export function registerGrowthRoutes(app, pool) {
     const feedback = cleanText(b.feedback, 2000);
     const reasonCode = cleanText(b.reason_code || '', 80);
     const validReasonCodes = ['discount_too_deep', 'store_cant_execute', 'wrong_timing', 'wrong_audience', 'content_mismatch_brand', 'other'];
-    const status = rating >= 4 ? 'accepted' : rating <= 2 ? 'rejected' : 'proposed';
+    const status = rating >= 4 ? 'accepted' : rating === 3 ? 'executed' : rating <= 2 ? 'rejected' : 'proposed';
     await pool.query(
       `UPDATE growth_strategy_evaluations
        SET feedback=$2, feedback_rating=$3, status=$4,
