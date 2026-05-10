@@ -902,6 +902,24 @@ r.get('/sop/training-records', ...admin, async (req, res) => {
   const r2 = await query(sql, params);
   res.json(r2.rows || []);
 });
+// ─── PLLM 开关 ───
+r.get('/pllm/status', ...admin, async (req, res) => {
+  const r = await query(`SELECT data->'proactive_rules'->'enabled' AS enabled FROM hrms_state WHERE key = 'chairman_config'`);
+  const enabled = r.rows?.[0]?.enabled;
+  res.json({ enabled: enabled === true });
+});
+r.post('/pllm/toggle', ...admin, async (req, res) => {
+  const { enabled } = req.body;
+  if (enabled === undefined) return res.status(400).json({ error: 'enabled (true/false) required' });
+  await query(
+    `UPDATE hrms_state SET data = jsonb_set(data, '{proactive_rules}',
+      COALESCE(data->'proactive_rules', '{}'::jsonb) || $1::jsonb, true) WHERE key = 'chairman_config'`,
+    [JSON.stringify({ enabled: !!enabled })]
+  );
+  // 使配置缓存失效
+  try { const { invalidateProactiveConfigCache } = await import('../services/proactive-v2/config.js'); invalidateProactiveConfigCache(); } catch (_) {}
+  res.json({ ok: true, enabled: !!enabled });
+});
 // ─── 培养计划管理 ───
 import {
   createTrainingPlan, listTrainingPlans, getTrainingPlan,
