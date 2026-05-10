@@ -889,7 +889,75 @@ export function registerGrowthRoutes(app, pool) {
     const current = await pool.query(`SELECT * FROM growth_actions WHERE action_key = $1 LIMIT 1`, [actionKey]);
     if (!current.rows.length) return res.status(404).json({ ok: false, error: 'action_not_found' });
     const before = current.rows[0];
-    const payloadPatch = req.body?.payload && typeof req.body.payload === 'object' ? req.body.payload : null;
+    const payload = before.payload || {};
+    const storeId = cleanText(before.store_id, 128);
+    const campaignId = cleanText(before.campaign_id || payload.campaign_id, 128);
+    const actionType = cleanText(before.action_type, 80);
+    let executionResults = { action_type: actionType, real_executions: [] };
+
+    // Real execution based on action type
+    try {
+      if (actionType === 'send_voucher' || actionType === 'campaign_activate') {
+        const title = cleanText(before.title, 500);
+        const planId = `exec_plan_${Date.now()}`;
+        const channel = cleanText(payload.channel || 'miniprogram', 80);
+        const planResult = await pool.query(
+          `INSERT INTO growth_campaign_plans (plan_id, store_id, campaign_id, title, channel, status, planned_start, created_by)
+           VALUES ($1,$2,$3,$4,$5,'active',NOW(),$6)
+           ON CONFLICT (plan_id) DO UPDATE SET status='active', updated_at=NOW()
+           RETURNING plan_id, status`,
+          [planId, storeId, campaignId || `camp_${Date.now()}`, title, channel, operator.username]
+        );
+        executionResults.real_executions.push({ type: 'campaign_plan', plan_id: planResult.rows[0]?.plan_id, status: 'active' });
+        // Also create/update growth_campaigns
+        if (campaignId) {
+          await pool.query(
+            `INSERT INTO growth_campaigns (campaign_id, name, channel, store_id, status)
+             VALUES ($1,$2,$3,$4,'active')
+             ON CONFLICT (campaign_id) DO UPDATE SET status='active', updated_at=NOW()`,
+            [campaignId, title, channel, storeId]
+          );
+          executionResults.real_executions.push({ type: 'campaign', campaign_id: campaignId, status: 'active' });
+        }
+        // If voucher_template_id in payload, create a coupon record
+        const vtid = cleanText(payload.voucher_template_id || payload.template_id, 128);
+        if (vtid) {
+          const couponId = `exec_coupon_${Date.now()}`;
+          await pool.query(
+            `INSERT INTO growth_coupons (coupon_id, name, type, value_fen, store_id, is_active)
+             VALUES ($1,$2,$3,$4,$5,TRUE)
+             ON CONFLICT (coupon_id) DO NOTHING`,
+            [couponId, cleanText(before.title, 300), 'cash', Math.floor(Number(payload.value_fen) || 1000), storeId]
+          );
+          executionResults.real_executions.push({ type: 'coupon', coupon_id: couponId });
+        }
+      } else if (actionType === 'create_content' || actionType === 'promo_task') {
+        const itemId = `exec_content_${Date.now()}`;
+        const channel = cleanText(payload.channel || 'miniprogram', 80);
+        const contentResult = await pool.query(
+          `INSERT INTO growth_content_calendar (item_id, store_id, channel, publish_date, title, content_brief, copy_text, status)
+           VALUES ($1,$2,$3,CURRENT_DATE,$4,$5,$6,'planned')
+           RETURNING item_id`,
+          [itemId, storeId, channel, cleanText(before.title, 500), cleanText(payload.content_brief || payload.detail, 2000), cleanText(before.detail, 4000)]
+        );
+        executionResults.real_executions.push({ type: 'content_calendar', item_id: contentResult.rows[0]?.item_id });
+      } else if (actionType === 'generate_poster') {
+        const posterKey = `exec_poster_${Date.now()}`;
+        const posterResult = await pool.query(
+          `INSERT INTO generated_posters (poster_key, campaign_id, store_id, title, status)
+           VALUES ($1,$2,$3,$4,'generated')
+           RETURNING poster_key`,
+          [posterKey, campaignId, storeId, cleanText(before.title, 500)]
+        );
+        executionResults.real_executions.push({ type: 'poster', poster_key: posterResult.rows[0]?.poster_key });
+      } else {
+        // Default: monitor-type action, just mark as executed
+        executionResults.real_executions.push({ type: 'marked_executed', note: '监控类动作-标记已执行' });
+      }
+    } catch (execErr) {
+      executionResults.error = execErr?.message;
+    }
+
     const result = await pool.query(
       `UPDATE growth_actions
        SET status = 'executed',
@@ -898,22 +966,22 @@ export function registerGrowthRoutes(app, pool) {
            executed_at = NOW()
        WHERE action_key = $1
        RETURNING *`,
-      [actionKey, JSON.stringify(payloadPatch || {})]
+      [actionKey, JSON.stringify(Object.assign({}, executionResults, req.body?.payload || {}))]
     );
     await appendExecutionLog(pool, {
       action_key: actionKey,
       strategy_key: cleanText(before.payload?.strategy_key || '', 255),
-      store_id: before.store_id,
-      action_type: before.action_type,
+      store_id: storeId,
+      action_type: actionType,
       decision: 'executed',
       operator_username: operator.username,
       operator_role: operator.role,
       before_payload: before.payload || {},
-      after_payload: result.rows[0].payload || {},
+      after_payload: result.rows[0]?.payload || {},
       decision_reason: cleanText(req.body?.reason || '', 2000),
-      result_summary: '动作已执行'
+      result_summary: `真实执行: ${executionResults.real_executions.map(e => `${e.type}=${Object.values(e).slice(1).join(',')}`).join('; ')}`
     });
-    return res.json({ ok: true, action: result.rows[0] });
+    return res.json({ ok: true, action: result.rows[0], execution: executionResults });
   });
 
   app.post('/api/growth/actions/:actionKey/ignore', async (req, res) => {
