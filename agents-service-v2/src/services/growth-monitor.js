@@ -2,6 +2,7 @@ import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { createUnifiedTask } from './task-orchestrator.js';
 import { pushGrowthAlert, pushGrowthTaskCard, pushDailyReport } from './feishu-client.js';
+import { buildReportCard } from './feishu-cards.js';
 
 function rate(numerator, denominator) {
   const n = Number(numerator) || 0;
@@ -470,8 +471,13 @@ export async function runGrowthMonitor({ createTasks = true } = {}) {
       const reportLines = storeMetrics.rows.map(r =>
         `📊 ${r.store_id}: 扫码${r.scans} 授权${r.auths} 核销${r.redeems} 收入¥${(Number(r.revenue)/100).toFixed(0)}`
       ).join('\n');
-      const report = `📈 门店私域日报 (${reportDate})\n${reportLines}`;
-      pushDailyReport(report).catch(e => logger.warn({ err: e?.message }, 'daily report push failed'));
+      try {
+        const { buildReportCard } = await import('./feishu-cards.js');
+        const card = buildReportCard('📈 门店私域日报', reportLines, '自动生成 · 数据范围近7天');
+        pushDailyReport(card).catch(e => logger.warn({ err: e?.message }, 'daily report card push failed'));
+      } catch (_e) {
+        pushDailyReport(report).catch(e => logger.warn({ err: e?.message }, 'daily report push failed'));
+      }
     }
   } catch (e) {
     logger.warn({ err: e?.message }, 'daily report failed');

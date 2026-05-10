@@ -172,8 +172,13 @@ export async function runCampaignReview() {
     const lines = reports.map(r =>
       `📋 ${r.title.slice(0, 30)}: 扫码${r.metrics.scan_count} 核销${r.metrics.redeemed_count} 收入¥${(r.metrics.revenue_fen/100).toFixed(0)} ROI${r.metrics.roi_ratio.toFixed(2)} → ${r.conclusion}`
     );
-    const report = `📊 活动复盘报告 (${new Date().toISOString().slice(0, 10)})\n${lines.join('\n')}`;
-    pushDailyReport(report).catch(e => logger.warn({ err: e?.message }, 'campaign review report push failed'));
+    try {
+      const { buildReportCard } = await import('./feishu-cards.js');
+      const card = buildReportCard('📊 活动复盘报告', lines.join('\n'), '活动结束自动生成');
+      pushDailyReport(card).catch(e => logger.warn({ err: e?.message }, 'campaign review card push failed'));
+    } catch (_e) {
+      pushDailyReport(report).catch(e => logger.warn({ err: e?.message }, 'campaign review report push failed'));
+    }
   }
 
   logger.info({ reviewed, total: ended.rows.length }, 'campaign review completed');

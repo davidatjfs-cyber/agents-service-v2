@@ -123,7 +123,7 @@ export function buildAnomalyCard(store, anomalyKey, severity, detail, taskId) {
   // 食安类需展示「来源表 + 日期 + 原文摘录」，字数显著多于其它异常
   const detailLimit = anomalyKey === 'food_safety' ? 3800 : 900;
   const elements = [
-    { tag: 'div', text: { tag: 'lark_md', content: `**门店**：${store}\n**类型**：${typeZh}\n**严重度**：${sevEmoji} ${alertSevZh}` } },
+    { tag: 'div', text: { tag: 'lark_md', content: `**门店**：${store}\n**类型**：${typeZh}\n**严重度**：${sevEmoji} ${sevZh}` } },
     { tag: 'div', text: { tag: 'lark_md', content: `**详情**：${(detail || '').slice(0, detailLimit)}${taskHint}` } },
     { tag: 'hr' },
     { tag: 'note', elements: [{ tag: 'plain_text', content: '⏰ 催办规则：下发后每间隔1小时提醒，共3次；仍未有效闭环将提交HR记入绩效' }] }
@@ -441,7 +441,7 @@ export function buildGrowthAlertCard(alert) {
       url: `${callbackBase}?action_key=${encodeURIComponent(actionKey)}&decision=ignore&secret=${encodeURIComponent(callbackSecret)}`
     });
   }
-  const alertSevZh = alert.severity === 'high' ? '严重' : alert.severity === 'medium' ? '中等' : '低';
+  const sevZh = alert.severity === 'high' ? '严重' : alert.severity === 'medium' ? '中等' : '低';
   const elements = [
     { tag: 'div', text: { tag: 'lark_md', content: `**门店**：${storeText}\n**活动**：${campaignText || '-'}\n**严重度**：${sevEmoji} ${sevZh}\n**消息**：${alert.message || ''}${metricStr}` } },
     { tag: 'div', text: { tag: 'lark_md', content: `**建议动作**：${alert.suggestedAction || ''}` } },
@@ -450,4 +450,23 @@ export function buildGrowthAlertCard(alert) {
     { tag: 'note', elements: [{ tag: 'plain_text', content: '🔄 增长监控自动生成，每小时刷新一次。点击「立即处理」一键执行，点击「忽略」关闭告警。' }] }
   ];
   return { config: { wide_screen_mode: true }, header: { title: { tag: 'plain_text', content: `${sevEmoji} 增长告警 — ${storeText}` }, template: sevColor }, elements };
+}
+
+/**
+ * 报告卡片 — 用于私域日报、品宣复盘等运营报告
+ * @param {string} title 标题
+ * @param {string} body 内容（markdown）
+ * @param {string} footer 底部备注
+ */
+export function buildReportCard(title, body, footer) {
+  const elements = [
+    { tag: 'div', text: { tag: 'lark_md', content: body } },
+    { tag: 'hr' },
+    { tag: 'note', elements: [{ tag: 'plain_text', content: footer || '📊 系统自动生成' }] }
+  ];
+  return {
+    config: { wide_screen_mode: true },
+    header: { title: { tag: 'plain_text', content: title }, template: 'blue' },
+    elements
+  };
 }

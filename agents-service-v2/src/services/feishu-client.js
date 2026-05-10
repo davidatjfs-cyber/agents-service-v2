@@ -304,7 +304,7 @@ export async function pushRhythmReport(content) {
   return { ok: false, reason: 'no_hq_chat_id_and_no_admins' };
 }
 
-/** 推送门店私域日报（仅管理员） */
+/** 推送报告卡片（仅管理员）— 支持卡片和纯文本降级 */
 export async function pushDailyReport(content) {
   try {
     const r = await query(
@@ -314,10 +314,20 @@ export async function pushDailyReport(content) {
          AND open_id NOT LIKE '%probe%'`
     );
     let sent = 0;
+    const isCard = typeof content === 'object' && content.header;
     for (const u of (r.rows || [])) {
       if (!u.open_id) continue;
-      const res = await sendText(u.open_id, content, 'open_id');
-      if (res?.ok) sent++;
+      if (isCard) {
+        const res = await sendCard(u.open_id, content, 'open_id');
+        if (res?.ok) sent++;
+        else {
+          const text = content.header?.title?.content || '报告';
+          await sendText(u.open_id, text, 'open_id').catch(() => {});
+        }
+      } else {
+        const res = await sendText(u.open_id, content, 'open_id');
+        if (res?.ok) sent++;
+      }
     }
     return { ok: true, sent };
   } catch (_e) {
