@@ -115,7 +115,7 @@ export async function ensurePhaseTables(pool) {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_calendar_date ON growth_content_calendar (publish_date, store_id, channel)`);
 
   // Phase 9: POS orders (from KeruYun via Feishu bitable)
-  // Column order matches KeruYun export exactly: 编号,订单号,订单来源,营业日,下单时间,结账时间,订单状态,订单金额,总优惠金额,支付方式,支付笔数,订单收入,会员姓名,会员手机号,订单类型,桌台,就餐人数,就餐时长
+  // Column order matches KeruYun export: 编号,订单号,订单来源,营业日,下单时间,结账时间,订单状态,订单金额,总优惠金额,支付方式,支付笔数,订单收入,会员姓名,会员手机号,订单类型,桌台,就餐人数,就餐时长,+门店名称
   await pool.query(`
     CREATE TABLE IF NOT EXISTS pos_orders (
       id BIGSERIAL PRIMARY KEY,
@@ -137,6 +137,7 @@ export async function ensurePhaseTables(pool) {
       table_no TEXT,
       diners INTEGER,
       duration TEXT,
+      store_name TEXT,
       customer_id BIGINT,
       store_id TEXT,
       synced_at TIMESTAMPTZ DEFAULT NOW(),
@@ -478,8 +479,8 @@ export function registerPhaseRoutes(app, pool) {
         const phone = parseKeruyunPhone(o.phone || o.member_phone || '');
         const bizDate = (o.biz_date || '').toString().trim().replace(/[\/年]/g, '-').replace(/月/g, '-').replace(/日/g, '');
         await pool.query(`
-          INSERT INTO pos_orders(seq_no,order_no,order_source,biz_date,order_time,checkout_time,order_status,total_amount,total_discount,payment_method,payment_count,revenue,member_name,phone,order_type,table_no,diners,duration,store_id)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+          INSERT INTO pos_orders(seq_no,order_no,order_source,biz_date,order_time,checkout_time,order_status,total_amount,total_discount,payment_method,payment_count,revenue,member_name,phone,order_type,table_no,diners,duration,store_name,store_id)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
           ON CONFLICT(order_no) DO UPDATE SET
             order_source=EXCLUDED.order_source,
             checkout_time=COALESCE(EXCLUDED.checkout_time,pos_orders.checkout_time),
@@ -493,6 +494,7 @@ export function registerPhaseRoutes(app, pool) {
             table_no=COALESCE(NULLIF(EXCLUDED.table_no,''),pos_orders.table_no),
             diners=COALESCE(EXCLUDED.diners,pos_orders.diners),
             duration=COALESCE(NULLIF(EXCLUDED.duration,''),pos_orders.duration),
+            store_name=COALESCE(NULLIF(EXCLUDED.store_name,''),pos_orders.store_name),
             seq_no=COALESCE(NULLIF(EXCLUDED.seq_no,''),pos_orders.seq_no),
             synced_at=NOW()
         `, [
@@ -505,7 +507,7 @@ export function registerPhaseRoutes(app, pool) {
           cleanText(o.member_name || '', 100), phone,
           cleanText(o.order_type || '', 40), cleanText(o.table_no || '', 40),
           Number(o.diners) || null, cleanText(o.duration || '', 40),
-          storeId || cleanText(o.store_id || '', 128)
+          cleanText(o.store_name || '', 200), storeId || cleanText(o.store_id || '', 128)
         ]);
         ordersUpserted++;
       }
@@ -663,13 +665,13 @@ export function registerPhaseRoutes(app, pool) {
 
     // ── Sync orders table ──
     if (config.orders_app_token && config.orders_table_id) {
-      const ORDERS_FIELD_MAP = {
+        const ORDERS_FIELD_MAP = {
         '编号': 'seq_no', '订单号': 'order_no', '订单来源': 'order_source',
         '营业日': 'biz_date', '下单时间': 'order_time', '结账时间': 'checkout_time',
         '订单状态': 'order_status', '订单金额': 'total_amount', '总优惠金额': 'total_discount',
         '支付方式': 'payment_method', '支付笔数': 'payment_count', '订单收入': 'revenue',
         '会员姓名': 'member_name', '会员手机号': 'phone', '订单类型': 'order_type',
-        '桌台': 'table_no', '就餐人数': 'diners', '就餐时长': 'duration'
+        '桌台': 'table_no', '就餐人数': 'diners', '就餐时长': 'duration', '门店名称': 'store_name'
       };
       let pageToken = '';
       let ordersBatch = [];
