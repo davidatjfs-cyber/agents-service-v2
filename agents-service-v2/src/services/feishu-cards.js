@@ -157,6 +157,42 @@ export function buildTaskCard(title, detail, taskId, store) {
   };
 }
 
+/** 增长监控交互任务卡：含一键执行/忽略按钮 */
+export function buildGrowthTaskCard(task, alert) {
+  const sevEmoji = alert.severity === 'high' ? '🚨' : alert.severity === 'medium' ? '⚠️' : 'ℹ️';
+  const baseUrl = (process.env.HRMS_BASE_URL || 'https://nnyx.cc').replace(/\/$/, '');
+  const dashboardUrl = baseUrl + '/working-fixed.html?page=growth&focus=' + encodeURIComponent(alert.key || '');
+  const callbackUrl = baseUrl + '/api/growth/feishu-callback';
+  const callbackSecret = process.env.MINIPROGRAM_SYNC_SECRET || '';
+  const actionKey = alert.action_key || `action:${alert.key}`;
+  const storeText = alert.storeId || alert.store || '全部门店';
+  const taskId = task?.taskId || task?.task_id || '';
+  const metrics = alert.metrics || {};
+  const metricLines = [];
+  if (metrics.scanCount != null) metricLines.push(`扫码：${metrics.scanCount}`);
+  if (metrics.authorizedCount != null) metricLines.push(`授权：${metrics.authorizedCount}`);
+  if (metrics.redeemedCount != null) metricLines.push(`核销：${metrics.redeemedCount}`);
+  const metricStr = metricLines.length ? `\n**指标**：${metricLines.join(' / ')}` : '';
+  const actions = [];
+  if (actionKey && callbackSecret) {
+    actions.push({ tag: 'button', text: { tag: 'plain_text', content: '✅ 立即执行' }, type: 'primary', url: `${callbackUrl}?action_key=${encodeURIComponent(actionKey)}&decision=execute&secret=${encodeURIComponent(callbackSecret)}` });
+    actions.push({ tag: 'button', text: { tag: 'plain_text', content: '✏️ 修改方案' }, type: 'default', url: dashboardUrl });
+    actions.push({ tag: 'button', text: { tag: 'plain_text', content: '⛔ 忽略' }, type: 'danger', url: `${callbackUrl}?action_key=${encodeURIComponent(actionKey)}&decision=ignore&secret=${encodeURIComponent(callbackSecret)}` });
+  }
+  actions.push({ tag: 'button', text: { tag: 'plain_text', content: '📊 看板' }, type: 'default', url: dashboardUrl });
+  return {
+    config: { wide_screen_mode: true },
+    header: { title: { tag: 'plain_text', content: `${sevEmoji} 增长任务 — ${storeText}` }, template: alert.severity === 'high' ? 'red' : 'orange' },
+    elements: [
+      { tag: 'div', text: { tag: 'lark_md', content: `**门店**：${storeText}\n**告警**：${alert.title || ''}\n**内容**：${alert.message || ''}${metricStr}` } },
+      { tag: 'div', text: { tag: 'lark_md', content: `**建议动作**：${alert.suggestedAction || ''}` } },
+      ...(taskId ? [{ tag: 'div', text: { tag: 'lark_md', content: `**任务ID**：${String(taskId).slice(0, 8)}` } }] : []),
+      { tag: 'action', actions },
+      { tag: 'note', elements: [{ tag: 'plain_text', content: '🔄 增长监控自动生成。点击「立即执行」一键执行，点击「修改方案」进入看板调整，点击「忽略」关闭任务。' }] }
+    ]
+  };
+}
+
 export function buildApprovalTaskCard(task) {
   const taskId = task?.task_id || task?.taskId || '';
   const store = task?.store || '-';

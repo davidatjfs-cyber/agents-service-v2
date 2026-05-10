@@ -44397,12 +44397,13 @@ ${body}
                         + '<div style="color:#fff;font-weight:600;">' + (x.title || '-') + '</div>'
                         + '<div style="color:' + (Number(x.total_score) >= 70 ? '#22c55e' : '#f59e0b') + ';font-weight:700;">' + (x.total_score || 0) + '分</div>'
                         + '</div>'
-                        + '<div style="color:rgba(226,232,240,0.6);margin-top:4px;">门店: ' + (x.store_id || '-') + ' · 状态: ' + (x.status || '-') + ' · 反馈: ' + (x.feedback || '-') + '</div>'
+                        + '<div style="color:rgba(226,232,240,0.6);margin-top:4px;">门店: ' + (x.store_id || '-') + ' · 状态: ' + (x.status || '-') + ' · 反馈: ' + (x.feedback || '-') + ' · 评分: ' + (x.feedback_rating || '-') + '</div>'
                         + '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">'
                         + '<button onclick="submitStrategyFeedback(\'' + key + '\',4,\'采纳\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(34,197,94,0.2);color:#22c55e;cursor:pointer;">采纳</button>'
                         + '<button onclick="submitStrategyFeedback(\'' + key + '\',2,\'不适合\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(245,158,11,0.2);color:#f59e0b;cursor:pointer;">不适合</button>'
                         + '<button onclick="submitStrategyFeedback(\'' + key + '\',5,\'效果好\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(14,165,233,0.2);color:#38bdf8;cursor:pointer;">效果好</button>'
                         + '<button onclick="submitStrategyFeedback(\'' + key + '\',1,\'效果差\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(239,68,68,0.2);color:#ef4444;cursor:pointer;">效果差</button>'
+                        + '<button onclick="promoteFeedbackToCase(\'' + key + '\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(14,165,233,0.15);color:#0ea5e9;border:1px solid rgba(14,165,233,0.3);cursor:pointer;">存入案例库</button>'
                         + '</div>'
                         + '</div>';
                 }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无策略评价</div>';
@@ -44550,6 +44551,7 @@ ${body}
                         + '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">'
                         + '<button onclick="executeGrowthAction(\'' + key + '\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(34,197,94,0.2);color:#22c55e;cursor:pointer;">执行</button>'
                         + '<button onclick="editExecuteGrowthAction(\'' + key + '\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(14,165,233,0.2);color:#38bdf8;cursor:pointer;">修改后执行</button>'
+                        + '<button onclick="feedbackGrowthAction(\'' + key + '\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.3);cursor:pointer;">回填结果</button>'
                         + '<button onclick="ignoreGrowthAction(\'' + key + '\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(239,68,68,0.2);color:#ef4444;cursor:pointer;">忽略</button>'
                         + '</div>'
                         + '</div>';
@@ -44607,6 +44609,45 @@ ${body}
                 loadGrowthActionBoard();
             } catch (e) {
                 showNotification('忽略失败：' + (e?.message || e), 'error');
+            }
+        }
+
+        async function feedbackGrowthAction(actionKey) {
+            const note = prompt('执行结果描述', '已执行，效果良好');
+            if (note == null) return;
+            const screenshotUrl = prompt('截图链接（可选）', '');
+            if (screenshotUrl === null) return;
+            const resultUrl = prompt('结果链接（可选）', '');
+            if (resultUrl === null) return;
+            try {
+                const r = await fetch('/api/growth/actions/' + encodeURIComponent(actionKey) + '/feedback', {
+                    method: 'POST', headers: growthAuthHeaders(),
+                    body: JSON.stringify({ status: 'executed', note: note || '', screenshot_url: screenshotUrl || '', result_url: resultUrl || '' })
+                });
+                const data = await r.json();
+                if (!data.ok) throw new Error(data.error || 'feedback_failed');
+                showNotification('回填成功', 'success');
+                loadGrowthActionBoard();
+            } catch (e) {
+                showNotification('回填失败：' + (e?.message || e), 'error');
+            }
+        }
+
+        async function promoteFeedbackToCase(strategyKey) {
+            try {
+                const r = await fetch('/api/growth/promote-feedback-to-case', {
+                    method: 'POST', headers: growthAuthHeaders(), body: JSON.stringify({ strategy_key: strategyKey })
+                });
+                const data = await r.json();
+                if (!data.ok && data.reason === 'rating_too_low') {
+                    showNotification('评分过低，不纳入案例库', 'warning');
+                } else if (!data.ok) {
+                    throw new Error(data.error || 'promote_failed');
+                } else {
+                    showNotification('已存入案例库', 'success');
+                }
+            } catch (e) {
+                showNotification('存入案例库失败：' + (e?.message || e), 'error');
             }
         }
 

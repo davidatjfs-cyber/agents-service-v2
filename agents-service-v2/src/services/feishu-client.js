@@ -69,7 +69,7 @@ export {
 import { sendText, sendCard, sendGroup, sendGroupCard, replyMsg, downloadImage, feishuOutboundMessageId } from './feishu-messaging.js';
 import { getTenantToken, BASE } from './feishu-auth.js';
 import { refreshFeishuUserOpenIdForImDelivery, lookupUser, getHrmsEmployeeByFeishuOpenId, feishuOpenIdIsMajixianPmObserver } from './feishu-users.js';
-import { buildAnomalyCard, buildGrowthAlertCard } from './feishu-cards.js';
+import { buildAnomalyCard, buildGrowthAlertCard, buildGrowthTaskCard } from './feishu-cards.js';
 
 // ═══════════════════════════════════════════════════════════
 // REMAINING FUNCTIONS (not extracted to sub-modules)
@@ -258,6 +258,27 @@ export async function pushGrowthAlert(alert) {
     let r = await sendCard(u.open_id, card);
     if (!r.ok) {
       r = await sendText(u.open_id, `🚨 ${alert.title}\n${alert.message}\n建议：${alert.suggestedAction || ''}`);
+    }
+    results.push(r);
+  }
+  return { ok: true, sent: results.length };
+}
+
+/** 推送增长交互任务卡（alert + task），含一键执行/修改/忽略按钮 */
+export async function pushGrowthTaskCard(task, alert) {
+  if (!alert) return { ok: false, reason: 'no_alert' };
+  const users = await query(
+    `SELECT open_id FROM feishu_users
+     WHERE registered = TRUE AND open_id NOT LIKE '%probe%'
+       AND (store = $1 OR role IN ('admin','hq_manager'))`,
+    [alert.storeId || alert.store || '']
+  );
+  const results = [];
+  for (const u of (users.rows || [])) {
+    const card = buildGrowthTaskCard(task, alert);
+    let r = await sendCard(u.open_id, card);
+    if (!r.ok) {
+      r = await sendText(u.open_id, `📋 ${alert.title}\n${alert.message}\n建议：${alert.suggestedAction || ''}`);
     }
     results.push(r);
   }

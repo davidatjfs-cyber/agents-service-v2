@@ -1,7 +1,7 @@
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { createUnifiedTask } from './task-orchestrator.js';
-import { pushGrowthAlert } from './feishu-client.js';
+import { pushGrowthAlert, pushGrowthTaskCard } from './feishu-client.js';
 
 function rate(numerator, denominator) {
   const n = Number(numerator) || 0;
@@ -338,6 +338,10 @@ export async function runGrowthMonitor({ createTasks = true } = {}) {
       if (alert.severity === 'high' || alert.severity === 'medium') {
         pushGrowthAlert(Object.assign({}, alert, { action_key: action?.action_key || `action:${alert.key}` }))
           .catch((e) => logger.warn({ err: e?.message, alertKey: alert.key }, 'growth alert push failed'));
+      }
+      if (task && task.ok !== false && alert.severity === 'high') {
+        pushGrowthTaskCard(task, Object.assign({}, alert, { action_key: action?.action_key || `action:${alert.key}` }))
+          .catch((e) => logger.warn({ err: e?.message, alertKey: alert.key }, 'growth task card push failed'));
       }
       results.push({ alert: savedAlert, action, task });
     } catch (e) {

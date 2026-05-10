@@ -1464,6 +1464,33 @@ export function registerGrowthRoutes(app, pool) {
     return res.json({ ok: true });
   });
 
+  // ── Phase 4: Feedback back-propagation ──
+  app.post('/api/growth/feedback-backpropagate', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const b = req.body || {};
+    const strategyKey = cleanText(b.strategy_key, 255);
+    if (!strategyKey) return res.status(400).json({ ok: false, error: 'missing_strategy_key' });
+    const ev = await pool.query(`SELECT * FROM growth_strategy_evaluations WHERE strategy_key=$1 LIMIT 1`, [strategyKey]);
+    if (!ev.rows.length) return res.status(404).json({ ok: false, error: 'evaluation_not_found' });
+    const e = ev.rows[0];
+    if (!e.feedback_rating) return res.json({ ok: false, reason: 'no_feedback_yet' });
+    const storeId = cleanText(e.store_id, 128);
+    const rating = Math.max(1, Math.min(5, Number(e.feedback_rating)));
+    // Update the strategy_evaluation status based on rating
+    const newStatus = rating >= 4 ? 'accepted' : rating <= 2 ? 'rejected' : 'proposed';
+    await pool.query(`UPDATE growth_strategy_evaluations SET status=$2, updated_at=NOW() WHERE strategy_key=$1`, [strategyKey, newStatus]);
+    // If store_id exists, increment the store's profile rating if high feedback
+    if (storeId && rating >= 4) {
+      const caseCount = await pool.query(`SELECT COUNT(*)::int AS c FROM marketing_case_library WHERE store_id=$1 AND score>=60`, [storeId]);
+      if (caseCount.rows?.[0]?.c > 0) {
+        const avgScore = await pool.query(`SELECT AVG(score)::int AS avg_s FROM marketing_case_library WHERE store_id=$1 AND score>=60`, [storeId]);
+        const newScore = Math.min(100, Math.round(Number(avgScore.rows?.[0]?.avg_s || 70) + rating * 2));
+        await pool.query(`UPDATE store_marketing_profiles SET execution_level=CASE WHEN $2>=80 THEN 'strong' WHEN $2>=60 THEN 'moderate' ELSE 'unknown' END, updated_at=NOW() WHERE store_id=$1`, [storeId, newScore]);
+      }
+    }
+    return res.json({ ok: true, new_status: newStatus });
+  });
+
   // ── Phase 5: LLM semantic parsing (text → tags) ──
   app.post('/api/growth/semantic-parse', async (req, res) => {
     if (!requireGrowthAuth(req, res)) return;
