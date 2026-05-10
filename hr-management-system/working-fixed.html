@@ -13469,7 +13469,7 @@
                 <button class="btn" id="btn-agents-config-card" style="display:none;" onclick="openAgentConfigModal()">打开配置中心</button>
             </div>
 
-            <div id="growth-page" class="hidden">
+            <div id="growth-page" class="hidden" style="display:none;position:fixed;top:-9999px;left:0;width:1px;height:1px;overflow:hidden;">
                 <div style="max-width:1200px;margin:0 auto;padding:20px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
                         <h2 style="font-size:22px;font-weight:800;">增长看板</h2>
@@ -20222,6 +20222,8 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                     loadAgentsData();
                     break;
                 case 'growth':
+                    var gp = document.getElementById('growth-page');
+                    if (gp) { gp.style.display = ''; gp.style.position = ''; gp.style.top = ''; gp.style.width = ''; gp.style.height = ''; gp.style.overflow = ''; }
                     refreshGrowthDashboard();
                     break;
                 case 'agent-tasks':

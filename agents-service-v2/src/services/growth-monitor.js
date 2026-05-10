@@ -477,6 +477,31 @@ export async function runGrowthMonitor({ createTasks = true } = {}) {
     logger.warn({ err: e?.message }, 'daily report failed');
   }
 
+  // Phase 2: WeChat customers auto-sync from Feishu Bitable
+  try {
+    const feishuConfig = await query(
+      `SELECT data FROM hrms_state WHERE key = 'growth_feishu_config' LIMIT 1`
+    );
+    const config = feishuConfig.rows?.[0]?.data;
+    if (config && config.app_token && config.table_id) {
+      const hrmsBase = process.env.HRMS_BASE_URL || 'http://127.0.0.1:3000';
+      const hrmsSecret = process.env.HRMS_MONITOR_SECRET || process.env.MINIPROGRAM_SYNC_SECRET || '';
+      if (hrmsSecret) {
+        const resp = await fetch(hrmsBase.replace(/\/$/, '') + '/api/growth/wechat-work/import-feishu', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Miniprogram-Sync-Secret': hrmsSecret },
+          body: JSON.stringify({ app_token: config.app_token, table_id: config.table_id })
+        });
+        if (resp.ok) {
+          const result = await resp.json();
+          if (result.imported > 0) logger.info({ imported: result.imported, matched: result.matched }, 'Feishu WeChat sync completed');
+        }
+      }
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'feishu wechat sync failed');
+  }
+
   logger.info({ checked: r.rows?.length || 0, alerts: results.length }, 'growth monitor completed');
   return { ok: true, checked: r.rows?.length || 0, alerts: results.length, results };
 }
