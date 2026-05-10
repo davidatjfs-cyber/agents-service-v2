@@ -249,7 +249,7 @@ export async function pushGrowthAlert(alert) {
   const users = await query(
     `SELECT open_id FROM feishu_users
      WHERE registered = TRUE AND open_id NOT LIKE '%probe%'
-       AND (store = $1 OR role IN ('admin','hq_manager'))`,
+       AND role IN ('admin','hq_manager')`,
     [alert.storeId || alert.store || '']
   );
   const results = [];
@@ -270,7 +270,7 @@ export async function pushGrowthTaskCard(task, alert) {
   const users = await query(
     `SELECT open_id FROM feishu_users
      WHERE registered = TRUE AND open_id NOT LIKE '%probe%'
-       AND (store = $1 OR role IN ('admin','hq_manager'))`,
+       AND role IN ('admin','hq_manager')`,
     [alert.storeId || alert.store || '']
   );
   const results = [];
@@ -304,13 +304,13 @@ export async function pushRhythmReport(content) {
   return { ok: false, reason: 'no_hq_chat_id_and_no_admins' };
 }
 
-/** 推送门店私域日报（P3-7） */
+/** 推送门店私域日报（仅管理员） */
 export async function pushDailyReport(content) {
   try {
     const r = await query(
       `SELECT open_id FROM feishu_users
        WHERE registered = true AND open_id IS NOT NULL
-         AND role IN ('admin','hq_manager','store_manager')
+         AND role IN ('admin','hq_manager')
          AND open_id NOT LIKE '%probe%'`
     );
     let sent = 0;
