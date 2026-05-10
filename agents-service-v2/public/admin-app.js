@@ -2203,6 +2203,34 @@ function viewFlags() {
     return g;
   })()));
 
+  // PLLM 智能经营助手开关
+  w.appendChild(card('PLLM 智能经营助手', (() => {
+    const g = el('div', { className: 'space-y-3' });
+    const row = el('div', { className: 'flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg' });
+    const left = el('div', { className: 'flex-1' });
+    left.appendChild(el('div', { className: 'font-medium text-sm' }, '自动分析异常并生成 Proactive 行动方案'));
+    left.appendChild(el('div', { className: 'text-xs text-gray-500' }, '开启后每5分钟扫描异常→LLM分析→创建PLLM任务给管理员。默认关闭（Agent任务平台仅手动触发）'));
+    row.appendChild(left);
+    const toggle = el('label', { className: 'relative inline-flex items-center cursor-pointer' });
+    const ck = el('input', { type: 'checkbox', id: 'pllm_toggle', className: 'sr-only peer' });
+    toggle.appendChild(ck);
+    toggle.appendChild(el('div', { className: 'w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600' }));
+    row.appendChild(toggle);
+    g.appendChild(row);
+    g.appendChild(el('div', { id: 'pllm_status_text', className: 'text-xs text-gray-500 px-1' }));
+    // 加载当前状态
+    GET('/api/pllm/status').then(r => { ck.checked = r.enabled; $('#pllm_status_text').textContent = r.enabled ? '🟢 已开启' : '🔴 已关闭'; }).catch(() => {});
+    ck.addEventListener('change', async () => {
+      const en = ck.checked;
+      try {
+        await POST('/api/pllm/toggle', { enabled: en });
+        $('#pllm_status_text').textContent = en ? '🟢 已开启' : '🔴 已关闭';
+        msg(en ? 'PLLM 已开启，5分钟后开始调度' : 'PLLM 已关闭');
+      } catch (e) { ck.checked = !en; msg('操作失败: ' + (e?.message || '')); }
+    });
+    return g;
+  })()));
+
   w.appendChild(el('div', { className: 'mt-3 text-xs text-gray-400' }, '提示: 功能开关变更后,需要重启服务或等待下次请求生效。部分功能(如节奏引擎)可能需要重新加载cron。'));
   return w;
 }
