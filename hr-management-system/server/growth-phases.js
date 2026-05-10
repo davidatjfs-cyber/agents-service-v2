@@ -115,7 +115,7 @@ export async function ensurePhaseTables(pool) {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_calendar_date ON growth_content_calendar (publish_date, store_id, channel)`);
 
   // Phase 9: POS orders (from KeruYun via Feishu bitable)
-  // Column order matches KeruYun export: 编号,订单号,订单来源,营业日,下单时间,结账时间,订单状态,订单金额,总优惠金额,支付方式,支付笔数,订单收入,会员姓名,会员手机号,订单类型,桌台,就餐人数,就餐时长,+门店名称
+  // Column order matches KeruYun export: 编号,订单号,订单来源,营业日,下单时间,结账时间,订单状态,折前金额,总优惠金额,折后金额,支付方式,支付笔数,会员姓名,会员手机号,订单类型,桌台,就餐人数,就餐时长,+门店名称
   await pool.query(`
     CREATE TABLE IF NOT EXISTS pos_orders (
       id BIGSERIAL PRIMARY KEY,
@@ -126,11 +126,11 @@ export async function ensurePhaseTables(pool) {
       order_time TIMESTAMPTZ,
       checkout_time TIMESTAMPTZ,
       order_status TEXT,
-      total_amount NUMERIC DEFAULT 0,
+      amount_before_discount NUMERIC DEFAULT 0,
       total_discount NUMERIC DEFAULT 0,
+      amount_after_discount NUMERIC DEFAULT 0,
       payment_method TEXT,
       payment_count INTEGER DEFAULT 0,
-      revenue NUMERIC DEFAULT 0,
       member_name TEXT,
       phone TEXT,
       order_type TEXT,
@@ -149,7 +149,7 @@ export async function ensurePhaseTables(pool) {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_pos_orders_date ON pos_orders (biz_date DESC, store_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_pos_orders_customer ON pos_orders (customer_id) WHERE customer_id IS NOT NULL`);
 
-  // Column order matches KeruYun export: 营业日,门店编号,门店名称,订单号,商品编码,商品名称,规格,菜品标签,单价,数量,单位,菜品合计金额,服务费分摊,菜品优惠,菜品收入,商品中类,商品大类
+  // Column order matches KeruYun export: 营业日,门店编号,门店名称,订单号,商品编码,商品名称,规格,菜品标签,单价,数量,单位,前折金额,服务费分摊,菜品优惠,折后金额,商品中类,商品大类
   await pool.query(`
     CREATE TABLE IF NOT EXISTS pos_order_items (
       id BIGSERIAL PRIMARY KEY,
@@ -164,10 +164,10 @@ export async function ensurePhaseTables(pool) {
       unit_price NUMERIC DEFAULT 0,
       qty NUMERIC DEFAULT 0,
       unit TEXT,
-      subtotal NUMERIC DEFAULT 0,
+      amount_before_discount NUMERIC DEFAULT 0,
       service_fee NUMERIC DEFAULT 0,
       discount NUMERIC DEFAULT 0,
-      item_revenue NUMERIC DEFAULT 0,
+      amount_after_discount NUMERIC DEFAULT 0,
       category_mid TEXT,
       category TEXT,
       synced_at TIMESTAMPTZ DEFAULT NOW()
@@ -479,14 +479,14 @@ export function registerPhaseRoutes(app, pool) {
         const phone = parseKeruyunPhone(o.phone || o.member_phone || '');
         const bizDate = (o.biz_date || '').toString().trim().replace(/[\/年]/g, '-').replace(/月/g, '-').replace(/日/g, '');
         await pool.query(`
-          INSERT INTO pos_orders(seq_no,order_no,order_source,biz_date,order_time,checkout_time,order_status,total_amount,total_discount,payment_method,payment_count,revenue,member_name,phone,order_type,table_no,diners,duration,store_name,store_id)
+          INSERT INTO pos_orders(seq_no,order_no,order_source,biz_date,order_time,checkout_time,order_status,amount_before_discount,total_discount,amount_after_discount,payment_method,payment_count,member_name,phone,order_type,table_no,diners,duration,store_name,store_id)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
           ON CONFLICT(order_no) DO UPDATE SET
             order_source=EXCLUDED.order_source,
             checkout_time=COALESCE(EXCLUDED.checkout_time,pos_orders.checkout_time),
             order_status=COALESCE(EXCLUDED.order_status,pos_orders.order_status),
-            total_amount=EXCLUDED.total_amount,total_discount=EXCLUDED.total_discount,
-            revenue=EXCLUDED.revenue,
+            amount_before_discount=EXCLUDED.amount_before_discount,total_discount=EXCLUDED.total_discount,
+            amount_after_discount=EXCLUDED.amount_after_discount,
             payment_method=COALESCE(EXCLUDED.payment_method,pos_orders.payment_method),
             payment_count=EXCLUDED.payment_count,
             phone=COALESCE(NULLIF(EXCLUDED.phone,''),pos_orders.phone),
@@ -501,9 +501,9 @@ export function registerPhaseRoutes(app, pool) {
           cleanText(o.seq_no || '', 32), cleanText(o.order_no || '', 64),
           cleanText(o.order_source || '', 80), bizDate || null,
           parseKeruyunDateTime(o.order_time), parseKeruyunDateTime(o.checkout_time),
-          cleanText(o.order_status || '', 40), parseNum(o.total_amount), parseNum(o.total_discount),
+          cleanText(o.order_status || '', 40), parseNum(o.amount_before_discount), parseNum(o.total_discount),
+          parseNum(o.amount_after_discount),
           cleanText(o.payment_method || '', 80), Number(o.payment_count) || 0,
-          parseNum(o.revenue),
           cleanText(o.member_name || '', 100), phone,
           cleanText(o.order_type || '', 40), cleanText(o.table_no || '', 40),
           Number(o.diners) || null, cleanText(o.duration || '', 40),
@@ -517,7 +517,7 @@ export function registerPhaseRoutes(app, pool) {
       for (const it of items) {
         const itemBizDate = (it.biz_date || '').toString().trim().replace(/[\/年]/g, '-').replace(/月/g, '-').replace(/日/g, '');
         await pool.query(`
-          INSERT INTO pos_order_items(biz_date,store_code,store_name,order_no,sku,dish_name,spec,tags,unit_price,qty,unit,subtotal,service_fee,discount,item_revenue,category_mid,category)
+          INSERT INTO pos_order_items(biz_date,store_code,store_name,order_no,sku,dish_name,spec,tags,unit_price,qty,unit,amount_before_discount,service_fee,discount,amount_after_discount,category_mid,category)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
           ON CONFLICT DO NOTHING
         `, [
@@ -525,8 +525,8 @@ export function registerPhaseRoutes(app, pool) {
           cleanText(it.order_no || '', 64), cleanText(it.sku || '', 64), cleanText(it.dish_name || '', 300),
           cleanText(it.spec || '', 100), cleanText(it.tags || '', 500),
           parseNum(it.unit_price), parseNum(it.qty), cleanText(it.unit || '', 20),
-          parseNum(it.subtotal), parseNum(it.service_fee),
-          parseNum(it.discount), parseNum(it.item_revenue),
+          parseNum(it.amount_before_discount), parseNum(it.service_fee),
+          parseNum(it.discount), parseNum(it.amount_after_discount),
           cleanText(it.category_mid || '', 100), cleanText(it.category || '', 100)
         ]);
         itemsUpserted++;
@@ -585,7 +585,7 @@ export function registerPhaseRoutes(app, pool) {
     const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
     const r = await pool.query(`
       SELECT po.phone, gc.id AS customer_id, gc.openid, gcp.lifecycle_stage, gcp.price_sensitivity,
-             COUNT(*)::int AS order_count, SUM(po.revenue) AS total_revenue,
+             COUNT(*)::int AS order_count, SUM(po.amount_after_discount) AS total_revenue,
              MIN(po.biz_date) AS first_order, MAX(po.biz_date) AS last_order
       FROM pos_orders po
       LEFT JOIN growth_customers gc ON po.phone = gc.phone
@@ -668,8 +668,8 @@ export function registerPhaseRoutes(app, pool) {
         const ORDERS_FIELD_MAP = {
         '编号': 'seq_no', '订单号': 'order_no', '订单来源': 'order_source',
         '营业日': 'biz_date', '下单时间': 'order_time', '结账时间': 'checkout_time',
-        '订单状态': 'order_status', '订单金额': 'total_amount', '总优惠金额': 'total_discount',
-        '支付方式': 'payment_method', '支付笔数': 'payment_count', '订单收入': 'revenue',
+        '订单状态': 'order_status', '折前金额': 'amount_before_discount', '总优惠金额': 'total_discount',
+        '折后金额': 'amount_after_discount', '支付方式': 'payment_method', '支付笔数': 'payment_count',
         '会员姓名': 'member_name', '会员手机号': 'phone', '订单类型': 'order_type',
         '桌台': 'table_no', '就餐人数': 'diners', '就餐时长': 'duration', '门店名称': 'store_name'
       };
@@ -708,8 +708,8 @@ export function registerPhaseRoutes(app, pool) {
         '营业日': 'biz_date', '门店编号': 'store_code', '门店名称': 'store_name',
         '订单号': 'order_no', '商品编码': 'sku', '商品名称': 'dish_name',
         '规格': 'spec', '菜品标签': 'tags', '单价': 'unit_price', '数量': 'qty',
-        '单位': 'unit', '菜品合计金额': 'subtotal', '服务费分摊': 'service_fee',
-        '菜品优惠': 'discount', '菜品收入': 'item_revenue', '商品中类': 'category_mid',
+        '单位': 'unit', '前折金额': 'amount_before_discount', '服务费分摊': 'service_fee',
+        '菜品优惠': 'discount', '折后金额': 'amount_after_discount', '商品中类': 'category_mid',
         '商品大类': 'category'
       };
       let pageToken = '';
