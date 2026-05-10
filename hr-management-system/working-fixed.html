@@ -13471,6 +13471,9 @@
                         <button onclick="showGrowthTab('wecom')" id="growth-tab-wecom" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">企微客户</button>
                         <button onclick="showGrowthTab('campaigns')" id="growth-tab-campaigns" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">活动管理</button>
                         <button onclick="showGrowthTab('feedback')" id="growth-tab-feedback" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">方案反馈</button>
+                        <button onclick="showGrowthTab('profiles')" id="growth-tab-profiles" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">用户画像</button>
+                        <button onclick="showGrowthTab('constraints')" id="growth-tab-constraints" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">营销约束</button>
+                        <button onclick="showGrowthTab('actions')" id="growth-tab-actions" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">AI建议执行</button>
                     </div>
                     <div id="growth-dashboard-content">
                     <div id="growth-metrics-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;"></div>
@@ -13522,6 +13525,49 @@
                                 <button onclick="loadStrategyEvaluations()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新列表</button>
                             </div>
                             <div id="strategy-evaluations-list" style="max-height:500px;overflow-y:auto;"></div>
+                        </div>
+                    </div>
+                    <div id="growth-profiles-content" style="display:none;">
+                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
+                            <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">用户画像</div>
+                            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+                                <button onclick="loadGrowthProfiles()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新画像</button>
+                                <button onclick="recomputeGrowthProfiles()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:13px;">重算画像</button>
+                            </div>
+                            <div id="growth-profiles-list" style="max-height:500px;overflow-y:auto;"></div>
+                        </div>
+                    </div>
+                    <div id="growth-constraints-content" style="display:none;">
+                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
+                            <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">门店营销约束</div>
+                            <div style="display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:12px;">
+                                <input id="constraint-store-id" placeholder="门店ID" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
+                                <input id="constraint-brand" placeholder="品牌" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
+                                <input id="constraint-min-discount" placeholder="最低折扣(0.9)" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
+                                <input id="constraint-max-coupon" placeholder="最大券面值(分)" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
+                                <input id="constraint-budget" placeholder="月预算(分)" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
+                                <input id="constraint-touch" placeholder="72小时最大触达次数" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
+                                <input id="constraint-cooldown" placeholder="支付后冷静期(小时)" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
+                                <input id="constraint-voice" placeholder="品牌语气，如 接地气/年轻" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
+                            </div>
+                            <textarea id="constraint-disallowed-campaign-types" placeholder="禁用活动类型，逗号分隔" style="margin-top:12px;width:100%;height:70px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;"></textarea>
+                            <textarea id="constraint-disallowed-dishes" placeholder="禁用菜品，逗号分隔" style="margin-top:12px;width:100%;height:70px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;"></textarea>
+                            <textarea id="constraint-allowed-channels" placeholder="允许渠道，逗号分隔" style="margin-top:12px;width:100%;height:70px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;"></textarea>
+                            <textarea id="constraint-notes" placeholder="执行备注" style="margin-top:12px;width:100%;height:80px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;"></textarea>
+                            <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+                                <button onclick="saveGrowthConstraint()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">保存约束</button>
+                                <button onclick="loadGrowthConstraints()" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.08);color:#fff;border:none;cursor:pointer;font-size:13px;">加载列表</button>
+                            </div>
+                            <div id="growth-constraints-list" style="max-height:260px;overflow-y:auto;margin-top:16px;"></div>
+                        </div>
+                    </div>
+                    <div id="growth-actions-content" style="display:none;">
+                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
+                            <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">AI建议执行</div>
+                            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+                                <button onclick="loadGrowthActionBoard()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新建议</button>
+                            </div>
+                            <div id="growth-action-board" style="max-height:520px;overflow-y:auto;"></div>
                         </div>
                     </div>
                  </div>
@@ -44175,7 +44221,7 @@ ${body}
         }
 
         function showGrowthTab(tab) {
-            ['dashboard', 'wecom', 'campaigns', 'feedback'].forEach(function(name) {
+            ['dashboard', 'wecom', 'campaigns', 'feedback', 'profiles', 'constraints', 'actions'].forEach(function(name) {
                 var content = document.getElementById('growth-' + name + '-content');
                 var btn = document.getElementById('growth-tab-' + name);
                 if (content) content.style.display = name === tab ? '' : 'none';
@@ -44191,9 +44237,19 @@ ${body}
                 loadCampaignPlans();
             } else if (tab === 'feedback') {
                 loadStrategyEvaluations();
+            } else if (tab === 'profiles') {
+                loadGrowthProfiles();
+            } else if (tab === 'constraints') {
+                loadGrowthConstraints();
+            } else if (tab === 'actions') {
+                loadGrowthActionBoard();
             } else {
                 refreshGrowthDashboard();
             }
+        }
+
+        function growthCsvList(id) {
+            return String(document.getElementById(id)?.value || '').split(',').map(function(x) { return x.trim(); }).filter(Boolean);
         }
 
         async function loadWechatWorkStats() {
@@ -44370,6 +44426,187 @@ ${body}
                 loadStrategyEvaluations();
             } catch (e) {
                 showNotification('反馈提交失败：' + (e?.message || e), 'error');
+            }
+        }
+
+        async function loadGrowthProfiles() {
+            try {
+                const store = document.getElementById('growth-store-filter')?.value || '';
+                const url = '/api/growth/customer-profiles' + (store ? ('?store_id=' + encodeURIComponent(store)) : '');
+                const r = await fetch(url, { headers: growthAuthHeaders() });
+                const data = await r.json();
+                const rows = data?.profiles || [];
+                const host = document.getElementById('growth-profiles-list');
+                host.innerHTML = rows.length ? rows.map(function(x) {
+                    return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">'
+                        + '<div style="display:flex;justify-content:space-between;gap:12px;">'
+                        + '<div style="color:#fff;font-weight:600;">客户#' + (x.customer_id || '-') + ' · ' + (x.phone || x.openid || '-') + '</div>'
+                        + '<div style="color:#38bdf8;">' + (x.lifecycle_stage || 'new') + '</div>'
+                        + '</div>'
+                        + '<div style="color:rgba(226,232,240,0.6);margin-top:4px;">门店: ' + (x.store_id || '-') + ' · 价格敏感度: ' + (x.price_sensitivity || 0) + ' · 折扣响应: ' + (x.response_to_discount || 0) + '</div>'
+                        + '<div style="color:rgba(226,232,240,0.45);margin-top:4px;">触达窗口: ' + (x.best_contact_window || '-') + ' · 偏好时段: ' + (x.preferred_visit_time || '-') + '</div>'
+                        + '</div>';
+                }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无用户画像</div>';
+            } catch (e) {
+                document.getElementById('growth-profiles-list').innerHTML = '<div style="color:#ef4444;">加载用户画像失败</div>';
+            }
+        }
+
+        async function recomputeGrowthProfiles() {
+            try {
+                const r = await fetch('/api/growth/customer-profiles/recompute', {
+                    method: 'POST',
+                    headers: growthAuthHeaders(),
+                    body: JSON.stringify({ days: 90 })
+                });
+                const data = await r.json();
+                if (!data.ok) throw new Error(data.error || 'recompute_failed');
+                showNotification('用户画像已重算', 'success');
+                loadGrowthProfiles();
+            } catch (e) {
+                showNotification('重算画像失败：' + (e?.message || e), 'error');
+            }
+        }
+
+        async function loadGrowthConstraints() {
+            try {
+                const r = await fetch('/api/growth/store-constraints', { headers: growthAuthHeaders() });
+                const data = await r.json();
+                const rows = data?.constraints || [];
+                const host = document.getElementById('growth-constraints-list');
+                host.innerHTML = rows.length ? rows.map(function(x) {
+                    return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">'
+                        + '<div style="color:#fff;font-weight:600;">' + (x.store_id || '-') + ' · ' + (x.brand || '-') + '</div>'
+                        + '<div style="color:rgba(226,232,240,0.6);margin-top:4px;">最低折扣: ' + (x.min_discount_rate || '-') + ' · 最大券面值: ' + (x.max_coupon_value_fen || '-') + '分 · 月预算: ' + (x.monthly_budget_fen || '-') + '分</div>'
+                        + '<div style="color:rgba(226,232,240,0.45);margin-top:4px;">品牌语气: ' + (x.brand_voice_style || '-') + '</div>'
+                        + '</div>';
+                }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无营销约束</div>';
+            } catch (e) {
+                document.getElementById('growth-constraints-list').innerHTML = '<div style="color:#ef4444;">加载营销约束失败</div>';
+            }
+        }
+
+        async function saveGrowthConstraint() {
+            try {
+                const payload = {
+                    store_id: document.getElementById('constraint-store-id')?.value || '',
+                    brand: document.getElementById('constraint-brand')?.value || '',
+                    min_discount_rate: document.getElementById('constraint-min-discount')?.value || null,
+                    max_coupon_value_fen: document.getElementById('constraint-max-coupon')?.value || null,
+                    monthly_budget_fen: document.getElementById('constraint-budget')?.value || null,
+                    max_touch_per_72h: document.getElementById('constraint-touch')?.value || 1,
+                    cooldown_hours_after_payment: document.getElementById('constraint-cooldown')?.value || 24,
+                    brand_voice_style: document.getElementById('constraint-voice')?.value || '',
+                    disallowed_campaign_types: growthCsvList('constraint-disallowed-campaign-types'),
+                    disallowed_dishes: growthCsvList('constraint-disallowed-dishes'),
+                    allowed_channels: growthCsvList('constraint-allowed-channels'),
+                    execution_notes: document.getElementById('constraint-notes')?.value || ''
+                };
+                const r = await fetch('/api/growth/store-constraints', {
+                    method: 'POST',
+                    headers: growthAuthHeaders(),
+                    body: JSON.stringify(payload)
+                });
+                const data = await r.json();
+                if (!data.ok) throw new Error(data.error || 'save_failed');
+                showNotification('营销约束已保存', 'success');
+                loadGrowthConstraints();
+            } catch (e) {
+                showNotification('保存营销约束失败：' + (e?.message || e), 'error');
+            }
+        }
+
+        async function loadGrowthActionBoard() {
+            try {
+                const [actionsRes, explanationsRes] = await Promise.all([
+                    fetch('/api/growth/actions', { headers: growthAuthHeaders() }),
+                    fetch('/api/growth/strategy-explanations?store_id=' + encodeURIComponent(document.getElementById('growth-store-filter')?.value || ''), { headers: growthAuthHeaders() })
+                ]);
+                const actionsData = await actionsRes.json();
+                const explanationsData = await explanationsRes.json();
+                const rows = actionsData?.actions || [];
+                const explanations = explanationsData?.explanations || [];
+                const explainByStrategy = {};
+                explanations.forEach(function(e) { if (e.strategy_key) explainByStrategy[e.strategy_key] = e; });
+                const host = document.getElementById('growth-action-board');
+                host.innerHTML = rows.length ? rows.map(function(x) {
+                    const key = x.action_key || '';
+                    var stratKey = (x.payload && x.payload.strategy_key) || x.action_key;
+                    var exp = explainByStrategy[stratKey];
+                    var expHtml = exp ? '<div style="margin-top:6px;padding:8px;background:rgba(14,165,233,0.08);border-radius:6px;font-size:12px;color:rgba(226,232,240,0.7);">'
+                        + '<div>🎯 ' + (exp.why_this_audience || '') + '</div>'
+                        + '<div style="margin-top:4px;">⏰ ' + (exp.why_now || '') + '</div>'
+                        + '<div style="margin-top:4px;">💡 ' + (exp.why_this_action || '') + '</div>'
+                        + (exp.expected_result ? '<div style="margin-top:4px;">📊 预期: ' + exp.expected_result + '</div>' : '')
+                        + (exp.historical_reference ? '<div style="margin-top:4px;">📚 参考: ' + exp.historical_reference + '</div>' : '')
+                        + '</div>' : '';
+                    return '<div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">'
+                        + '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">'
+                        + '<div style="color:#fff;font-weight:600;">' + (x.title || '-') + '</div>'
+                        + '<div style="color:' + (x.status === 'executed' ? '#22c55e' : x.status === 'ignored' ? '#ef4444' : '#f59e0b') + ';">' + (x.status || '-') + '</div>'
+                        + '</div>'
+                        + '<div style="color:rgba(226,232,240,0.6);margin-top:4px;">' + (x.detail || '-') + '</div>'
+                        + expHtml
+                        + '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">'
+                        + '<button onclick="executeGrowthAction(\'' + key + '\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(34,197,94,0.2);color:#22c55e;cursor:pointer;">执行</button>'
+                        + '<button onclick="editExecuteGrowthAction(\'' + key + '\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(14,165,233,0.2);color:#38bdf8;cursor:pointer;">修改后执行</button>'
+                        + '<button onclick="ignoreGrowthAction(\'' + key + '\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(239,68,68,0.2);color:#ef4444;cursor:pointer;">忽略</button>'
+                        + '</div>'
+                        + '</div>';
+                }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无AI建议</div>';
+            } catch (e) {
+                document.getElementById('growth-action-board').innerHTML = '<div style="color:#ef4444;">加载AI建议失败</div>';
+            }
+        }
+
+        async function executeGrowthAction(actionKey) {
+            try {
+                const reason = prompt('执行备注（可留空）', '同意执行');
+                if (reason === null) return;
+                const r = await fetch('/api/growth/actions/' + encodeURIComponent(actionKey) + '/execute', {
+                    method: 'POST', headers: growthAuthHeaders(), body: JSON.stringify({ reason: reason || '' })
+                });
+                const data = await r.json();
+                if (!data.ok) throw new Error(data.error || 'execute_failed');
+                showNotification('动作已执行', 'success');
+                loadGrowthActionBoard();
+            } catch (e) {
+                showNotification('执行失败：' + (e?.message || e), 'error');
+            }
+        }
+
+        async function editExecuteGrowthAction(actionKey) {
+            const patch = prompt('请输入 JSON patch，例如 {"channel":"wecom"}', '{}');
+            if (patch == null) return;
+            const reason = prompt('修改原因', '已调整后执行');
+            if (reason === null) return;
+            try {
+                const payload = JSON.parse(patch || '{}');
+                const r = await fetch('/api/growth/actions/' + encodeURIComponent(actionKey) + '/edit-and-execute', {
+                    method: 'POST', headers: growthAuthHeaders(), body: JSON.stringify({ payload: payload, reason: reason || '' })
+                });
+                const data = await r.json();
+                if (!data.ok) throw new Error(data.error || 'edit_execute_failed');
+                showNotification('动作已修改并执行', 'success');
+                loadGrowthActionBoard();
+            } catch (e) {
+                showNotification('修改执行失败：' + (e?.message || e), 'error');
+            }
+        }
+
+        async function ignoreGrowthAction(actionKey) {
+            const reason = prompt('请输入忽略原因', '当前不适合执行');
+            if (reason === null) return;
+            try {
+                const r = await fetch('/api/growth/actions/' + encodeURIComponent(actionKey) + '/ignore', {
+                    method: 'POST', headers: growthAuthHeaders(), body: JSON.stringify({ reason: reason || '' })
+                });
+                const data = await r.json();
+                if (!data.ok) throw new Error(data.error || 'ignore_failed');
+                showNotification('动作已忽略', 'success');
+                loadGrowthActionBoard();
+            } catch (e) {
+                showNotification('忽略失败：' + (e?.message || e), 'error');
             }
         }
 

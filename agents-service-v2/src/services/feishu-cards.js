@@ -377,7 +377,8 @@ export function buildGrowthAlertCard(alert) {
   const sevEmoji = alert.severity === 'high' ? '🚨' : alert.severity === 'medium' ? '⚠️' : 'ℹ️';
   const storeText = alert.storeId || alert.store || '全部门店';
   const campaignText = alert.campaignId || '';
-  const dashboardUrl = (process.env.HRMS_BASE_URL || 'https://nnyx.cc').replace(/\/$/, '') + '/working-fixed.html?page=growth';
+  const baseUrl = (process.env.HRMS_BASE_URL || 'https://nnyx.cc').replace(/\/$/, '');
+  const dashboardUrl = baseUrl + '/working-fixed.html?page=growth';
   const metrics = alert.metrics || {};
   const metricLines = [];
   if (metrics.scanCount != null) metricLines.push(`扫码：${metrics.scanCount}`);
@@ -385,31 +386,28 @@ export function buildGrowthAlertCard(alert) {
   if (metrics.redeemedCount != null) metricLines.push(`核销：${metrics.redeemedCount}`);
   if (metrics.revenueFen != null && metrics.revenueFen > 0) metricLines.push(`收入：¥${(metrics.revenueFen / 100).toFixed(2)}`);
   const metricStr = metricLines.length ? `\n**指标**：${metricLines.join(' / ')}` : '';
-  return {
-    config: { wide_screen_mode: true },
-    header: { title: { tag: 'plain_text', content: `${sevEmoji} 增长告警 — ${storeText}` }, template: sevColor },
-    elements: [
-      { tag: 'div', text: { tag: 'lark_md', content: `**门店**：${storeText}\n**活动**：${campaignText || '-'}\n**严重度**：${sevEmoji} ${alert.severity}\n**消息**：${alert.message || ''}${metricStr}` } },
-      { tag: 'div', text: { tag: 'lark_md', content: `**建议动作**：${alert.suggestedAction || ''}` } },
-      {
-        tag: 'action',
-        actions: [
-          {
-            tag: 'button',
-            text: { tag: 'plain_text', content: '查看增长看板' },
-            type: 'primary',
-            url: dashboardUrl
-          },
-          {
-            tag: 'button',
-            text: { tag: 'plain_text', content: '复制处理建议' },
-            type: 'default',
-            multi_url: { url: dashboardUrl }
-          }
-        ]
-      },
-      { tag: 'hr' },
-      { tag: 'note', elements: [{ tag: 'plain_text', content: '🔄 增长监控自动生成，每小时刷新一次。请及时处理。' }] }
-    ]
-  };
+  const actionKey = alert.action_key || '';
+  const callbackBase = baseUrl + '/api/growth/feishu-callback';
+  const callbackSecret = process.env.MINIPROGRAM_SYNC_SECRET || '';
+  const actions = [
+    { tag: 'button', text: { tag: 'plain_text', content: '查看看板' }, type: 'default', url: dashboardUrl }
+  ];
+  if (actionKey && callbackSecret) {
+    actions.unshift({
+      tag: 'button', text: { tag: 'plain_text', content: '立即处理' }, type: 'primary',
+      url: `${callbackBase}?action_key=${encodeURIComponent(actionKey)}&decision=execute&secret=${encodeURIComponent(callbackSecret)}`
+    });
+    actions.push({
+      tag: 'button', text: { tag: 'plain_text', content: '忽略' }, type: 'danger',
+      url: `${callbackBase}?action_key=${encodeURIComponent(actionKey)}&decision=ignore&secret=${encodeURIComponent(callbackSecret)}`
+    });
+  }
+  const elements = [
+    { tag: 'div', text: { tag: 'lark_md', content: `**门店**：${storeText}\n**活动**：${campaignText || '-'}\n**严重度**：${sevEmoji} ${alert.severity}\n**消息**：${alert.message || ''}${metricStr}` } },
+    { tag: 'div', text: { tag: 'lark_md', content: `**建议动作**：${alert.suggestedAction || ''}` } },
+    { tag: 'action', actions },
+    { tag: 'hr' },
+    { tag: 'note', elements: [{ tag: 'plain_text', content: '🔄 增长监控自动生成，每小时刷新一次。点击「立即处理」一键执行，点击「忽略」关闭告警。' }] }
+  ];
+  return { config: { wide_screen_mode: true }, header: { title: { tag: 'plain_text', content: `${sevEmoji} 增长告警 — ${storeText}` }, template: sevColor }, elements };
 }

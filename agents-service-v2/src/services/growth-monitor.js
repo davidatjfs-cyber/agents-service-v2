@@ -290,6 +290,20 @@ async function checkStoreNotExecuting() {
 
 export async function runGrowthMonitor({ createTasks = true } = {}) {
   await recomputeGrowthMetrics(8);
+  try {
+    const hrmsBase = process.env.HRMS_BASE_URL || 'http://127.0.0.1:3000';
+    const hrmsSecret = process.env.HRMS_MONITOR_SECRET || process.env.MINIPROGRAM_SYNC_SECRET || '';
+    if (hrmsSecret) {
+      const resp = await fetch(hrmsBase.replace(/\/$/, '') + '/api/growth/customer-profiles/recompute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Miniprogram-Sync-Secret': hrmsSecret },
+        body: JSON.stringify({ days: 90 })
+      });
+      if (!resp.ok) console.warn('[growth-monitor] profile recompute status:', resp.status);
+    }
+  } catch (e) {
+    console.warn('[growth-monitor] profile recompute failed:', e?.message || e);
+  }
   const r = await query(
     `SELECT
        store_id,
@@ -322,7 +336,8 @@ export async function runGrowthMonitor({ createTasks = true } = {}) {
         task = await createGrowthTask(alert).catch((e) => ({ ok: false, error: e?.message }));
       }
       if (alert.severity === 'high' || alert.severity === 'medium') {
-        pushGrowthAlert(alert).catch((e) => logger.warn({ err: e?.message, alertKey: alert.key }, 'growth alert push failed'));
+        pushGrowthAlert(Object.assign({}, alert, { action_key: action?.action_key || `action:${alert.key}` }))
+          .catch((e) => logger.warn({ err: e?.message, alertKey: alert.key }, 'growth alert push failed'));
       }
       results.push({ alert: savedAlert, action, task });
     } catch (e) {

@@ -107,6 +107,35 @@ export async function buildStoreProfileContext(storeId) {
   return `【门店画像】\n${lines.join('\n')}`;
 }
 
+export async function buildStoreConstraintContext(storeId) {
+  if (!storeId) return '';
+  const r = await query(
+    `SELECT min_discount_rate, max_coupon_value_fen, monthly_budget_fen,
+            max_touch_per_72h, cooldown_hours_after_payment, allowed_channels,
+            disallowed_campaign_types, disallowed_dishes, preferred_channels,
+            brand_voice_style, execution_notes
+     FROM store_marketing_constraints
+     WHERE store_id = $1 AND active = TRUE
+     LIMIT 1`,
+    [storeId]
+  );
+  if (!r.rows.length) return '';
+  const c = r.rows[0];
+  const lines = [];
+  if (c.min_discount_rate != null) lines.push(`最低折扣：${Math.round(Number(c.min_discount_rate) * 100)}%`);
+  if (c.max_coupon_value_fen != null) lines.push(`最大券面值：¥${(Number(c.max_coupon_value_fen) / 100).toFixed(2)}`);
+  if (c.monthly_budget_fen != null) lines.push(`月营销预算：¥${(Number(c.monthly_budget_fen) / 100).toFixed(2)}`);
+  if (c.max_touch_per_72h != null) lines.push(`72小时最大触达：${c.max_touch_per_72h}次`);
+  if (c.cooldown_hours_after_payment != null) lines.push(`支付后冷静期：${c.cooldown_hours_after_payment}小时`);
+  if (c.allowed_channels?.length) lines.push(`允许渠道：${c.allowed_channels.join('、')}`);
+  if (c.preferred_channels?.length) lines.push(`优先渠道：${c.preferred_channels.join('、')}`);
+  if (c.disallowed_campaign_types?.length) lines.push(`禁用活动类型：${c.disallowed_campaign_types.join('、')}`);
+  if (c.disallowed_dishes?.length) lines.push(`禁用菜品：${c.disallowed_dishes.join('、')}`);
+  if (c.brand_voice_style) lines.push(`品牌语气：${c.brand_voice_style}`);
+  if (c.execution_notes) lines.push(`执行备注：${c.execution_notes}`);
+  return lines.length ? `【门店营销约束】\n${lines.join('\n')}` : '';
+}
+
 export function evaluateStrategyByProfile(strategy, profile) {
   if (!profile || !strategy) return { score: 70, issues: [] };
   const issues = [];

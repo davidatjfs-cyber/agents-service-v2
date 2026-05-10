@@ -47,7 +47,7 @@ import {
   resolveMonthlyRevenueTargetYuan,
   buildMaterialReportReplyForDateRange
 } from './deterministic-replies.js';
-import { buildGrowthMetricsContext, buildGrowthAlertContext, buildGrowthCaseContext, buildStoreProfileContext, evaluateStrategyByProfile } from './growth-agent-helper.js';
+import { buildGrowthMetricsContext, buildGrowthAlertContext, buildGrowthCaseContext, buildStoreProfileContext, buildStoreConstraintContext, evaluateStrategyByProfile } from './growth-agent-helper.js';
 import { analyzeMetricTree, formatMetricAnalysisForPrompt } from './analysis-engine.js';
 import { getBestStrategy, formatExperiencePromptBlock } from './agent-experience.js';
 import { getSOPByScenario, detectScenario, formatSopPromptAppendix } from './sop-service.js';
@@ -2508,6 +2508,13 @@ async function handleMarketingPlanner(text, ctx) {
     console.warn('[DB_ERROR]', err.message);
   }
 
+  try {
+    const constraintCtx = await buildStoreConstraintContext(store);
+    if (constraintCtx) mktData += '\n\n' + constraintCtx;
+  } catch (err) {
+    console.warn('[DB_ERROR]', err.message);
+  }
+
   let marginConstraintNote = '';
   try {
     const { rows: _profileRows } = await query('SELECT store_id, avg_ticket_fen, gross_margin_floor, suitable_offers, unsuitable_offers FROM store_marketing_profiles WHERE store_id ILIKE $1 LIMIT 1', [`%${store || ''}%`]);
@@ -2566,6 +2573,79 @@ async function handleMarketingPlanner(text, ctx) {
   } catch (err) {
     console.warn('[DB_ERROR]', err.message);
     logger.warn({ err: err.message }, 'marketing_planner recallMemories');
+  }
+
+  // ── Phase 4: Past similar strategy results ──
+  try {
+    const pastResults = await query(
+      `SELECT l.conclusion, l.score, l.title, l.channel, l.offer
+       FROM marketing_case_library l
+       WHERE ($1::text = '' OR l.store_id = $1)
+       ORDER BY l.score DESC, l.created_at DESC
+       LIMIT 5`,
+      [store || '']
+    );
+    if (pastResults.rows?.length) {
+      mktData += '\n\n【历史相似策略结果】\n' + pastResults.rows.map((r, i) =>
+        `${i + 1}. ${r.title || '-'} | 渠道:${r.channel || '-'} | offer:${r.offer || '-'} | 评分:${r.score || 0} | 结论:${(r.conclusion || '').slice(0, 80)}`
+      ).join('\n');
+    }
+  } catch (e) { console.warn('[past_results]', e.message); }
+
+  // ── Phase 5: Brand voice + channel style ──
+  let brandVoiceNote = '';
+  try {
+    const bc = await query(
+      `SELECT brand_voice_style, allowed_channels, preferred_channels FROM store_marketing_constraints
+       WHERE store_id = $1 AND active = TRUE LIMIT 1`,
+      [store || '']
+    );
+    if (bc.rows?.[0]) {
+      const c = bc.rows[0];
+      const parts = [];
+      if (c.brand_voice_style) parts.push(`语气风格：${c.brand_voice_style}`);
+      if (c.preferred_channels?.length) parts.push(`优先渠道：${c.preferred_channels.join('、')}`);
+      if (c.allowed_channels?.length) parts.push(`允许渠道：${c.allowed_channels.join('、')}`);
+      if (parts.length) brandVoiceNote = '\n【品牌风格】' + parts.join('；');
+    }
+  } catch (e) { console.warn('[brand_voice]', e.message); }
+
+  // ── Phase 6: Weather / seasonal context ──
+  let seasonContext = '';
+  try {
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const day = now.getDate();
+    const hour = now.getHours();
+    const weekDay = now.getDay();
+    const season = month >= 3 && month <= 5 ? '春季' : month >= 6 && month <= 8 ? '夏季' : month >= 9 && month <= 11 ? '秋季' : '冬季';
+    const isWeekend = weekDay === 0 || weekDay === 6;
+    const mealPeriod = hour >= 10 && hour < 14 ? '午市' : hour >= 17 && hour < 21 ? '晚市' : hour >= 6 && hour < 10 ? '早餐' : '非餐时段';
+    seasonContext = `\n【当前上下文】时间：${month}月${day}日 ${season}${isWeekend ? '（周末）' : '（工作日）'} ${mealPeriod}`;
+  } catch (e) { /* silent */ }
+
+  // ── Phase 6: Active time window + discount preference from profiles ──
+  let timingNote = '';
+  try {
+    const tp = await query(
+      `SELECT best_contact_window, price_sensitivity, response_to_discount,
+              COUNT(*)::int AS profile_count
+       FROM growth_customer_profiles WHERE store_id = $1 AND lifecycle_stage IN ('active','at_risk')
+       GROUP BY best_contact_window, price_sensitivity, response_to_discount
+       ORDER BY COUNT(*) DESC LIMIT 3`,
+      [store || '']
+    );
+    if (tp.rows?.length) {
+      const top = tp.rows[0];
+      const window = top.best_contact_window || '';
+      const ps = top.price_sensitivity != null ? `价格敏感度:${Number(top.price_sensitivity).toFixed(2)}` : '';
+      const rd = top.response_to_discount != null ? `折扣响应:${Number(top.response_to_discount).toFixed(2)}` : '';
+      if (window || ps || rd) timingNote = `\n【客群触达参考】${[window ? '最佳触达:' + window : '', ps, rd].filter(Boolean).join(' | ')}`;
+    }
+  } catch (e) { console.warn('[timing]', e.message); }
+
+  if (seasonContext || brandVoiceNote || timingNote) {
+    mktData += seasonContext + (brandVoiceNote || '') + (timingNote || '');
   }
 
   if (!mktData.trim()) {
@@ -2761,6 +2841,63 @@ ${marginConstraintNote}`;
         responseText += `\n\n💡 系统评分：${strategyEval.score}/100${strategyEval.issues.length ? '，注意：' + strategyEval.issues.join('；') : ''}`;
       }
     } catch (e) { console.warn('[strategy_eval]', e.message); }
+  }
+
+  try {
+    let explainWhyAudience = '基于近7天增长指标、门店画像、历史策略与当前门店上下文筛选。';
+    let explainWhyNow = '当前时间窗口结合门店近期增长、告警和活动状态生成建议。';
+    let explainExpectedResult = '目标是提升转化、复购或执行效率。';
+    let explainHistoricalRef = '已参考增长案例库、历史方案记录与门店经营数据摘要。';
+    let explainWhyAction = '动作来自系统策略引擎，并在门店约束和毛利限制内扩写。';
+    try {
+      const mr = await query(
+        `SELECT SUM(scan_count)::int AS total_scan, SUM(authorized_count)::int AS total_auth,
+                SUM(coupon_redeemed_count)::int AS total_redeem, SUM(revenue_fen)::int AS total_rev
+         FROM growth_daily_metrics WHERE store_id = $1 AND metric_date >= CURRENT_DATE - 7`,
+        [store]
+      );
+      if (mr.rows?.[0]) {
+        const m = mr.rows[0];
+        const scan = Number(m.total_scan) || 0;
+        const auth = Number(m.total_auth) || 0;
+        const authRate = scan > 0 ? `${Math.round(auth/scan*100)}%` : '-';
+        const rev = Number(m.total_rev) || 0;
+        const redeem = Number(m.total_redeem) || 0;
+        if (scan > 0) explainWhyAudience = `近7天门店增长数据：扫码${scan}次，授权${auth}(${authRate})，核销${redeem}张，收入¥${(rev/100).toFixed(2)}。基于此筛选适配客群。`;
+        if (scan > 0) explainWhyNow = `当前扫码${scan}次，根据近期转化效率判断营销时机。`;
+        if (rev > 0) explainExpectedResult = `预计提升转化${redeem > 0 ? `，参考历史核销率${Math.round(redeem/scan*100)}%` : ''}，方案以衡量指标为准。`;
+      }
+    } catch (_) {}
+    try {
+      await query(
+        `INSERT INTO growth_strategy_explanations (
+           strategy_key, store_id, customer_segment, why_this_audience,
+           why_now, why_this_action, expected_result, historical_reference,
+           risk_notes, evidence
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)`,
+        [
+          `planner:${storeKey}:${Date.now()}`,
+          store || '',
+          '门店当前经营相关客群',
+          explainWhyAudience,
+          explainWhyNow,
+          explainWhyAction,
+          explainExpectedResult,
+          explainHistoricalRef,
+          strategyEval && strategyEval.issues.length ? strategyEval.issues.join('；') : '注意执行节奏、预算和门店承接能力。',
+          JSON.stringify({
+            score: textOutScore,
+            strategy_eval_score: strategyEval ? strategyEval.score : null,
+            has_growth_data: /增长数据/.test(mktData),
+            has_cases: /营销案例/.test(mktData)
+          })
+        ]
+      );
+    } catch (e) {
+      console.warn('[growth_strategy_explanations]', e.message);
+    }
+  } catch (e) {
+    console.warn('[explain_save]', e.message);
   }
 
   return {
