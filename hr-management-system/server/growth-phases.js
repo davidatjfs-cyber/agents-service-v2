@@ -180,14 +180,30 @@ export async function ensurePhaseTables(pool) {
 
 // ── Phase 9 helpers: parse KeruYun order data ──
 
+const CN_OFFSET = 8 * 60 * 60 * 1000;
 function parseKeruyunDateTime(val) {
   if (!val) return null;
+  const n = Number(val);
+  if (Number.isFinite(n) && n > 1e12) {
+    return new Date(n).toISOString();
+  }
   const s = String(val).trim().replace(/：/g, ':');
   const m = s.match(/(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})[日]?\s*(\d{1,2})?[：:]?(\d{1,2})?/);
   if (!m) return null;
   const d = `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}T${(m[4]||'0').padStart(2,'0')}:${(m[5]||'0').padStart(2,'0')}:00`;
   const parsed = new Date(d);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+function cnDate(val) {
+  if (!val) return null;
+  const ts = Number(val);
+  if (Number.isFinite(ts) && ts > 1e12) {
+    return new Date(ts + CN_OFFSET).toISOString().slice(0, 10);
+  }
+  const dt = parseKeruyunDateTime(val);
+  if (dt) return new Date(new Date(dt).getTime() + CN_OFFSET).toISOString().slice(0, 10);
+  const s = String(val).trim().replace(/[\/年]/g, '-').replace(/月/g, '-').replace(/日/g, '');
+  return s || null;
 }
 
 function parseKeruyunPhone(val) {
@@ -476,8 +492,8 @@ export function registerPhaseRoutes(app, pool) {
 
     if (orders.length) {
       for (const o of orders) {
-        const phone = parseKeruyunPhone(o.phone || o.member_phone || '');
-        const bizDate = (o.biz_date || '').toString().trim().replace(/[\/年]/g, '-').replace(/月/g, '-').replace(/日/g, '');
+            const phone = parseKeruyunPhone(o.phone || o.member_phone || '');
+           const bizDate = cnDate(o.biz_date);
         await pool.query(`
           INSERT INTO pos_orders(seq_no,order_no,order_source,biz_date,order_time,checkout_time,order_status,amount_before_discount,total_discount,amount_after_discount,payment_method,payment_count,member_name,phone,order_type,table_no,diners,duration,store_name,store_id)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
@@ -513,10 +529,10 @@ export function registerPhaseRoutes(app, pool) {
       }
     }
 
-    if (items.length) {
-      for (const it of items) {
-        const itemBizDate = (it.biz_date || '').toString().trim().replace(/[\/年]/g, '-').replace(/月/g, '-').replace(/日/g, '');
-        await pool.query(`
+      if (items.length) {
+       for (const it of items) {
+         const itemBizDate = cnDate(it.biz_date);
+         await pool.query(`
           INSERT INTO pos_order_items(biz_date,store_code,store_name,order_no,sku,dish_name,spec,tags,unit_price,qty,unit,amount_before_discount,service_fee,discount,amount_after_discount,category_mid,category)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
           ON CONFLICT DO NOTHING
@@ -671,7 +687,8 @@ export function registerPhaseRoutes(app, pool) {
         '订单状态': 'order_status', '折前金额': 'amount_before_discount', '总优惠金额': 'total_discount',
         '折后金额': 'amount_after_discount', '支付方式': 'payment_method', '支付笔数': 'payment_count',
         '会员姓名': 'member_name', '会员手机号': 'phone', '订单类型': 'order_type',
-        '桌台': 'table_no', '就餐人数': 'diners', '就餐时长': 'duration', '门店名称': 'store_name'
+        '桌台': 'table_no', '就餐人数': 'diners', '就餐时长': 'duration', '就餐时长(分钟）': 'duration',
+        '门店名称': 'store_name'
       };
       let pageToken = '';
       let ordersBatch = [];
@@ -690,15 +707,48 @@ export function registerPhaseRoutes(app, pool) {
           }
           if (order.order_no) ordersBatch.push(order);
         }
-        pageToken = resp.data?.has_more ? (resp.data.page_token || '') : '';
-      } while (pageToken);
+         pageToken = (rd.data?.has_more && rd.data?.page_token) ? rd.data.page_token : '';
+       } while (pageToken);
 
       if (ordersBatch.length) {
-        const sr = await axios.post('http://127.0.0.1:' + (process.env.PORT || 3000) + '/api/growth/pos-orders',
-          {store_id: storeId, orders: ordersBatch, items: []},
-          {headers: {'Authorization': 'Bearer ' + (process.env.MINIPROGRAM_SYNC_SECRET || ''), 'Content-Type': 'application/json'}, timeout: 30000}
-        );
-        totalOrders = sr.data?.orders_upserted || 0;
+         for (const o of ordersBatch) {
+          const phone = parseKeruyunPhone(o.phone || o.member_phone || '');
+          const bizDate = cnDate(o.biz_date);
+          try {
+            await pool.query(`
+              INSERT INTO pos_orders(seq_no,order_no,order_source,biz_date,order_time,checkout_time,order_status,amount_before_discount,total_discount,amount_after_discount,payment_method,payment_count,member_name,phone,order_type,table_no,diners,duration,store_name,store_id)
+              VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+              ON CONFLICT(order_no) DO UPDATE SET
+                order_source=EXCLUDED.order_source,
+                checkout_time=COALESCE(EXCLUDED.checkout_time,pos_orders.checkout_time),
+                order_status=COALESCE(EXCLUDED.order_status,pos_orders.order_status),
+                amount_before_discount=EXCLUDED.amount_before_discount,total_discount=EXCLUDED.total_discount,
+                amount_after_discount=EXCLUDED.amount_after_discount,
+                payment_method=COALESCE(EXCLUDED.payment_method,pos_orders.payment_method),
+                payment_count=EXCLUDED.payment_count,
+                phone=COALESCE(NULLIF(EXCLUDED.phone,''),pos_orders.phone),
+                member_name=COALESCE(NULLIF(EXCLUDED.member_name,'-'),NULLIF(EXCLUDED.member_name,''),pos_orders.member_name),
+                table_no=COALESCE(NULLIF(EXCLUDED.table_no,''),pos_orders.table_no),
+                diners=COALESCE(EXCLUDED.diners,pos_orders.diners),
+                duration=COALESCE(NULLIF(EXCLUDED.duration,''),pos_orders.duration),
+                store_name=COALESCE(NULLIF(EXCLUDED.store_name,''),pos_orders.store_name),
+                seq_no=COALESCE(NULLIF(EXCLUDED.seq_no,''),pos_orders.seq_no),
+                synced_at=NOW()
+            `, [
+              cleanText(o.seq_no || '', 32), cleanText(o.order_no || '', 64),
+              cleanText(o.order_source || '', 80), bizDate || null,
+              parseKeruyunDateTime(o.order_time), parseKeruyunDateTime(o.checkout_time),
+              cleanText(o.order_status || '', 40), parseNum(o.amount_before_discount), parseNum(o.total_discount),
+              parseNum(o.amount_after_discount),
+              cleanText(o.payment_method || '', 80), Number(o.payment_count) || 0,
+              cleanText(o.member_name || '', 100), phone,
+              cleanText(o.order_type || '', 40), cleanText(o.table_no || '', 40),
+              Number(o.diners) || null, cleanText(o.duration || '', 40),
+              cleanText(o.store_name || '', 200), storeId || cleanText(o.store_id || '', 128)
+            ]);
+            totalOrders++;
+          } catch (e) { console.error('[pos-feishu-sync] order upsert error:', e.message, o.order_no); }
+        }
       }
     }
 
@@ -714,12 +764,15 @@ export function registerPhaseRoutes(app, pool) {
       };
       let pageToken = '';
       let itemsBatch = [];
+      let itemsPageCount = 0;
       do {
         const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${config.items_app_token}/tables/${config.items_table_id}/records?page_size=500${pageToken ? '&page_token=' + pageToken : ''}`;
-        const resp = await axios.get(url, {headers: {'Authorization': 'Bearer ' + tenantToken}, timeout: 10000});
+        const resp = await axios.get(url, {headers: {'Authorization': 'Bearer ' + tenantToken}, timeout: 15000});
         const rd = resp.data;
         if (rd.code !== 0) return res.status(502).json({ok:false,error:'items_bitable_error', detail: rd.msg});
         const records = rd.data?.items || [];
+        itemsPageCount++;
+        console.log(`[pos-feishu-sync] items page ${itemsPageCount}: got ${records.length} records, has_more=${rd.data?.has_more}, total=${rd.data?.total}`);
         for (const rec of records) {
           const f = rec.fields || {};
           const item = {};
@@ -729,19 +782,72 @@ export function registerPhaseRoutes(app, pool) {
           }
           if (item.order_no) itemsBatch.push(item);
         }
-        pageToken = resp.data?.has_more ? (resp.data.page_token || '') : '';
+        pageToken = (rd.data?.has_more && rd.data?.page_token) ? rd.data.page_token : '';
       } while (pageToken);
 
       if (itemsBatch.length) {
-        const sr = await axios.post('http://127.0.0.1:' + (process.env.PORT || 3000) + '/api/growth/pos-orders',
-          {store_id: storeId, orders: [], items: itemsBatch},
-          {headers: {'Authorization': 'Bearer ' + (process.env.MINIPROGRAM_SYNC_SECRET || ''), 'Content-Type': 'application/json'}, timeout: 30000}
-        );
-        totalItems = sr.data?.items_upserted || 0;
+        for (const it of itemsBatch) {
+            const itemBizDate = cnDate(it.biz_date);
+           try {
+            await pool.query(`
+              INSERT INTO pos_order_items(biz_date,store_code,store_name,order_no,sku,dish_name,spec,tags,unit_price,qty,unit,amount_before_discount,service_fee,discount,amount_after_discount,category_mid,category)
+              VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+              ON CONFLICT DO NOTHING
+            `, [
+              itemBizDate || null, cleanText(it.store_code || '', 64), cleanText(it.store_name || '', 200),
+              cleanText(it.order_no || '', 64), cleanText(it.sku || '', 64), cleanText(it.dish_name || '', 300),
+              cleanText(it.spec || '', 100), cleanText(it.tags || '', 500),
+              parseNum(it.unit_price), parseNum(it.qty), cleanText(it.unit || '', 20),
+              parseNum(it.amount_before_discount), parseNum(it.service_fee),
+              parseNum(it.discount), parseNum(it.amount_after_discount),
+              cleanText(it.category_mid || '', 100), cleanText(it.category || '', 100)
+            ]);
+            totalItems++;
+          } catch (e) { console.error('[pos-feishu-sync] item upsert error:', e.message, it.order_no); }
+        }
       }
     }
 
     totalLinked = await linkPosOrdersToCustomers(pool);
     res.json({ok:true, orders_synced: totalOrders, items_synced: totalItems, customers_linked: totalLinked});
   });
+
+  // ── POS Feishu sync cron: daily at 01:10 Asia/Shanghai ──
+  const POS_SYNC_CRON_KEY = 'pos_feishu_sync';
+  let lastPosSyncDate = '';
+  function shouldRunPosSync() {
+    const now = new Date(Date.now() + 8 * 3600000);
+    const today = now.toISOString().slice(0, 10);
+    const hour = now.getUTCHours();
+    return hour === 17 && today !== lastPosSyncDate; // UTC 17:00 = CST 01:00
+  }
+  setInterval(async () => {
+    if (!shouldRunPosSync()) return;
+    const now = new Date(Date.now() + 8 * 3600000);
+    lastPosSyncDate = now.toISOString().slice(0, 10);
+    console.log(`[pos-sync-cron] Starting daily POS Feishu sync at ${now.toISOString()}`);
+    try {
+      const resp = await axios.post(`http://127.0.0.1:${process.env.PORT || 3000}/api/growth/pos-feishu-sync`, {}, {
+        headers: {'Authorization': 'Bearer ' + (process.env.MINIPROGRAM_SYNC_SECRET || ''), 'Content-Type': 'application/json'},
+        timeout: 300000
+      });
+      const data = resp.data;
+      if (data && data.ok) {
+        console.log(`[pos-sync-cron] Success: ${data.orders_synced} orders, ${data.items_synced} items, ${data.customers_linked} linked`);
+      } else {
+        throw new Error(data?.error || 'unknown_error');
+      }
+    } catch (e) {
+      console.error('[pos-sync-cron] Failed:', e.message);
+      try {
+        await pool.query(`INSERT INTO growth_sync_failures (source, event_type, payload, error_message) VALUES ($1,$2,$3,$4)`,
+          [POS_SYNC_CRON_KEY, 'daily_sync_failed', '{}', e.message || String(e)]);
+        await pool.query(`INSERT INTO growth_alerts (alert_key, alert_type, severity, title, message, suggested_action, status)
+          VALUES ($1,$2,$3,$4,$5,$6,'open')
+          ON CONFLICT (alert_key) DO UPDATE SET severity=EXCLUDED.severity, message=EXCLUDED.message, suggested_action=EXCLUDED.suggested_action, status='open', updated_at=NOW()`,
+          ['pos_sync_failed', 'pos_sync_failed', 'high', 'POS数据同步失败', '每日凌晨POS飞书同步失败：' + (e.message || String(e)).slice(0, 200), '检查飞书应用权限、表字段、网络连接；手动调 POST /api/growth/pos-feishu-sync 重试']);
+      } catch (_) {}
+    }
+  }, 60 * 1000);
+  console.log('[pos-sync-cron] Scheduled: daily at ~01:10 CST, failure alerts to growth_sync_failures');
 }
