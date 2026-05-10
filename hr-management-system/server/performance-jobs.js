@@ -254,31 +254,33 @@ export async function runMonthlyPerformanceClose() {
     const summary = `月度自动评分（${period}）：执行力 ${es.execution_rating || '—'}，态度 ${es.attitude_rating || '—'}，能力 ${es.ability_rating || '—'}，门店 ${fmtStoreLevelLabel(storeRating)}。`;
     try {
       await pool().query(
-        `INSERT INTO agent_scores (brand, store, username, name, role, period, score_model, total_score, breakdown, deductions, summary)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11)
-         ON CONFLICT (brand, store, username, period)
-         DO UPDATE SET
-           name = EXCLUDED.name,
-           total_score = EXCLUDED.total_score,
-           breakdown = EXCLUDED.breakdown,
-           deductions = EXCLUDED.deductions,
-           summary = EXCLUDED.summary,
-           feishu_notified = FALSE,
-           updated_at = NOW()`,
-        [
-          brand,
-          store,
-          u.username,
-          u.name,
-          u.role,
-          period,
-          'new_model_monthly',
-          es.total_score,
-          JSON.stringify(breakdown),
-          JSON.stringify(deductions),
-          summary
-        ]
-      );
+          `INSERT INTO agent_scores (brand, store, username, name, role, period, score_model, base_score, total_score, breakdown, deductions, summary)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12)
+           ON CONFLICT (brand, store, username, period)
+           DO UPDATE SET
+             name = EXCLUDED.name,
+             base_score = EXCLUDED.base_score,
+             total_score = EXCLUDED.total_score,
+             breakdown = EXCLUDED.breakdown,
+             deductions = EXCLUDED.deductions,
+             summary = EXCLUDED.summary,
+             feishu_notified = FALSE,
+             updated_at = NOW()`,
+          [
+            brand,
+            store,
+            u.username,
+            u.name,
+            u.role,
+            period,
+            'new_model_monthly',
+            es.base_score ?? es.total_score,
+            es.total_score,
+            JSON.stringify(breakdown),
+            JSON.stringify(deductions),
+            summary
+          ]
+        );
     } catch (e) {
       console.error('[perf-jobs] upsert agent_scores monthly failed:', u.username, e?.message);
     }

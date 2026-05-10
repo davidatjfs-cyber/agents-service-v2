@@ -267,8 +267,9 @@ export async function calculateStoreRating(store, brand, period) {
 // ─────────────────────────────────────────────
 
 /**
- * 与 agents-service「月度综合」一致：上月各自然周 `anomaly_rollups_v2` 的 total_score 算术平均。
- * BI 异常经 periodic-scoring 已体现在周行扣分与 total_score 中；此处不再用 agent_issues 加减分混算 total_score，避免双口径。
+  * 与 agents-service「月度综合」一致：上月最新自然周 `anomaly_rollups_v2` 的 total_score。
+  * BI 异常经 periodic-scoring 已体现在周行扣分与 total_score 中；此处不再用 agent_issues 加减分混算 total_score，避免双口径。
+  * 只有毛利率异常不在周度中体现，需额外扣除。
  */
 export async function getMonthlyAnomalyRollupAverageScore(username, period) {
   const [year, month] = String(period || '').split('-');
@@ -302,11 +303,12 @@ export async function getMonthlyAnomalyRollupAverageScore(username, period) {
 
 export async function calculateEmployeeScore(store, username, role, period) {
   try {
-    const baseScore = 100;
+    const latestWeekScore = await getMonthlyAnomalyRollupAverageScore(username, period);
     const exceptionBonus = await calculateExceptionBonus(username, period);
     const exceptionDeduction = await calculateExceptionDeduction(username, period);
-    const biMonthlyAvg = await getMonthlyAnomalyRollupAverageScore(username, period);
-    const totalScore = biMonthlyAvg;
+    const laborEffDeduction = await getLaborEfficiencyDeduction(store, period);
+    const baseScore = latestWeekScore;
+    const totalScore = Math.round(latestWeekScore + exceptionBonus - exceptionDeduction - laborEffDeduction.deduction);
 
     // 2～4：缺数据或无法判断 → 待定（禁止再用 C/D 当默认值误导）
     let executionRating = EMPLOYEE_RATING_PENDING;
@@ -338,7 +340,7 @@ export async function calculateEmployeeScore(store, username, role, period) {
       await saveEmployeeScore(store, username, role, period, {
         base_score: baseScore,
         exception_bonus: exceptionBonus,
-        exception_deduction: exceptionDeduction,
+        exception_deduction: exceptionDeduction + laborEffDeduction.deduction,
         total_score: totalScore,
         execution_rating: executionRating,
         attitude_rating: attitudeRating,
@@ -347,6 +349,7 @@ export async function calculateEmployeeScore(store, username, role, period) {
     } catch (e) { console.warn('[employee_score] save error:', e?.message); }
     
     return {
+      base_score: baseScore,
       total_score: totalScore,
       execution_rating: executionRating,
       attitude_rating: attitudeRating,
@@ -356,7 +359,8 @@ export async function calculateEmployeeScore(store, username, role, period) {
   } catch (error) {
     console.error('[employee_score] 计算失败:', error);
     return {
-      total_score: 100,
+      base_score: null,
+      total_score: null,
       execution_rating: EMPLOYEE_RATING_PENDING,
       attitude_rating: EMPLOYEE_RATING_PENDING,
       ability_rating: EMPLOYEE_RATING_PENDING
@@ -851,6 +855,33 @@ async function calculateExceptionBonus(username, period) {
 const DEDUCTION_RULES = {
   '总实收毛利率异常': { high: 40, medium: 20, low: 0, frequency: 'monthly' },
 };
+
+const LABOR_EFFICIENCY_THRESHOLDS = {
+  '洪潮': { high: { below: 1000, points: 20 }, medium: { below: 1100, points: 10 } },
+  '马己仙': { high: { below: 1400, points: 20 }, medium: { below: 1500, points: 10 } },
+};
+
+function inferBrandFromStore(store) {
+  if (/洪潮/.test(store)) return '洪潮';
+  return '马己仙';
+}
+
+async function getLaborEfficiencyDeduction(store, period) {
+  const { startDate, endDate } = periodDateRange(period);
+  const pats = scoringStoreAggregateIlikePatterns(store);
+  const result = await pool().query(
+    `SELECT AVG(efficiency) AS avg_eff FROM daily_reports WHERE store ILIKE ANY($1::text[]) AND date >= $2::date AND date <= $3::date AND efficiency > 0`,
+    [pats, startDate, endDate]
+  );
+  const avgEff = parseFloat(result.rows[0]?.avg_eff || 0);
+  if (!avgEff) return { deduction: 0, severity: null, avgEff: 0 };
+  const brand = inferBrandFromStore(store);
+  const thresholds = LABOR_EFFICIENCY_THRESHOLDS[brand];
+  if (!thresholds) return { deduction: 0, severity: null, avgEff: Math.round(avgEff) };
+  if (avgEff < thresholds.high.below) return { deduction: thresholds.high.points, severity: 'high', avgEff: Math.round(avgEff) };
+  if (avgEff < thresholds.medium.below) return { deduction: thresholds.medium.points, severity: 'medium', avgEff: Math.round(avgEff) };
+  return { deduction: 0, severity: null, avgEff: Math.round(avgEff) };
+}
 
 // 根据频率计算一个月内最多触发次数
 function getMaxTriggers(frequency, period) {

@@ -161,6 +161,36 @@ const EXCEPTION_DEDUCTION_RULES = {
   '总实收毛利率异常': { high: 40, medium: 20, low: 0, frequency: 'monthly' },
 };
 
+const LABOR_EFFICIENCY_THRESHOLDS = {
+  '洪潮': { high: { below: 1000, points: 20 }, medium: { below: 1100, points: 10 } },
+  '马己仙': { high: { below: 1400, points: 20 }, medium: { below: 1500, points: 10 } },
+};
+
+function inferBrandFromStore(store) {
+  if (/洪潮/.test(store)) return '洪潮';
+  return '马己仙';
+}
+
+async function getLaborEfficiencyDeduction(store, period) {
+  const [year, month] = period.split('-');
+  const startDate = `${year}-${month}-01`;
+  const endDate = `${year}-${month}-${String(getDaysInMonth(period)).padStart(2, '0')}`;
+  const pats = expandAgentStoreLabels(String(store || '').trim());
+  const likeConditions = pats.map((_, i) => `store ILIKE ANY($${1}::text[])`).join(' OR ');
+  const result = await query(
+    `SELECT AVG(efficiency) AS avg_eff FROM daily_reports WHERE store ILIKE ANY($1::text[]) AND date >= $2::date AND date <= $3::date AND efficiency > 0`,
+    [pats.map(l => `%${String(l).replace(/%/g, '')}%`), startDate, endDate]
+  );
+  const avgEff = parseFloat(result.rows[0]?.avg_eff || 0);
+  if (!avgEff) return { deduction: 0, severity: null, avgEff: 0 };
+  const brand = inferBrandFromStore(store);
+  const thresholds = LABOR_EFFICIENCY_THRESHOLDS[brand];
+  if (!thresholds) return { deduction: 0, severity: null, avgEff: Math.round(avgEff) };
+  if (avgEff < thresholds.high.below) return { deduction: thresholds.high.points, severity: 'high', avgEff: Math.round(avgEff) };
+  if (avgEff < thresholds.medium.below) return { deduction: thresholds.medium.points, severity: 'medium', avgEff: Math.round(avgEff) };
+  return { deduction: 0, severity: null, avgEff: Math.round(avgEff) };
+}
+
 async function getExceptionDeduction(username, period) {
   const [year, month] = period.split('-');
   const startDate = `${year}-${month}-01`;
@@ -625,6 +655,12 @@ async function loadMonthlyComprehensiveStaff() {
 export async function runMonthlyComprehensiveRating(period) {
   try {
     period = period || getPrevMonthPeriod();
+    const { y: curY, m: curM } = getShanghaiYmdParts();
+    const currentMonth = `${curY}-${String(curM).padStart(2, '0')}`;
+    if (period >= currentMonth) {
+      logger.warn({ period, currentMonth }, 'monthly comprehensive rating: cannot rate current or future month, aborting');
+      return { period, evaluated: 0, results: [], error: 'cannot rate current or future month' };
+    }
     logger.info({ period }, 'monthly comprehensive rating: starting');
 
     const staff = await loadMonthlyComprehensiveStaff();
@@ -640,11 +676,12 @@ export async function runMonthlyComprehensiveRating(period) {
       const ratingU = String(s.ratingSubjectUsername || username || '').trim() || username;
 
       try {
-        // 1. 绩效得分（月度最新周 anomaly 分数 + exception bonus - exception deduction）
+        // 1. 绩效得分（月度最新周 anomaly 分数 + exception bonus - exception deduction - 人效值扣分）
         const latestWeekScore = await getMonthlyPerformanceScore(ratingU, period);
         const exceptionBonus = await getExceptionBonus(ratingU, period);
         const exceptionDeduction = await getExceptionDeduction(ratingU, period);
-        const performanceScore = Math.round(latestWeekScore + exceptionBonus - exceptionDeduction);
+        const laborEffResult = await getLaborEfficiencyDeduction(store, period);
+        const performanceScore = Math.round(latestWeekScore + exceptionBonus - exceptionDeduction - laborEffResult.deduction);
 
         // 2. 工作态度评级
         const attitudeResult = await getAttitudeRating(ratingU, period);
@@ -715,8 +752,35 @@ export async function runMonthlyComprehensiveRating(period) {
             latestWeekScore,
             performanceScore,
             JSON.stringify(breakdown),
-            JSON.stringify({ execution_data: executionData, attitude_data: attitudeData, ability_data: abilityData, exception_bonus: exceptionBonus, exception_deduction: exceptionDeduction }),
+            JSON.stringify({ execution_data: executionData, attitude_data: attitudeData, ability_data: abilityData, exception_bonus: exceptionBonus, exception_deduction: exceptionDeduction, labor_efficiency_deduction: laborEffResult.deduction, labor_efficiency_avg: laborEffResult.avgEff, labor_efficiency_severity: laborEffResult.severity }),
             summary
+          ]
+        );
+
+        await query(
+          `INSERT INTO employee_scores (store, brand, username, name, role, period, base_score, exception_bonus, exception_deduction, total_score, execution_rating, attitude_rating, ability_rating)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+           ON CONFLICT (store, username, role, period)
+           DO UPDATE SET
+             brand = EXCLUDED.brand,
+             name = EXCLUDED.name,
+             base_score = EXCLUDED.base_score,
+             exception_bonus = EXCLUDED.exception_bonus,
+             exception_deduction = EXCLUDED.exception_deduction,
+             total_score = EXCLUDED.total_score,
+             execution_rating = EXCLUDED.execution_rating,
+             attitude_rating = EXCLUDED.attitude_rating,
+             ability_rating = EXCLUDED.ability_rating,
+             updated_at = NOW()`,
+          [
+            store, brand, username, name, role, period,
+            latestWeekScore,
+            exceptionBonus,
+            exceptionDeduction + laborEffResult.deduction,
+            performanceScore,
+            executionResult?.rating || MONTHLY_RATING_PENDING,
+            attitudeResult.rating,
+            abilityResult?.rating || MONTHLY_RATING_PENDING
           ]
         );
 
@@ -730,6 +794,9 @@ export async function runMonthlyComprehensiveRating(period) {
           execution_detail: executionData,
           attitude_detail: attitudeData,
           ability_detail: abilityData,
+          labor_efficiency_deduction: laborEffResult.deduction,
+          labor_efficiency_severity: laborEffResult.severity,
+          labor_efficiency_avg: laborEffResult.avgEff,
           filing_exec_ops: filingExecOps,
           filing_attitude_mt: filingAttMt
         });
