@@ -130,30 +130,106 @@ async function getMonthlyPerformanceScore(username, period) {
   const monthKey = `${year}${month}`;
 
   const result = await query(
-    `SELECT COALESCE(SUM(total_score), 0) as total,
-             COUNT(*) as week_count
-      FROM agent_scores
-      WHERE LOWER(TRIM(username)) = LOWER(TRIM($1))
-        AND score_model = 'anomaly_rollups_v2'
-        AND COALESCE(is_invalidated, false) = false
-        AND (store IS NULL OR store !~* '(测试门店|SAFE_TEST|_SAFE_TEST|沙箱|sandbox)')
-        AND COALESCE(username,'') NOT LIKE '__periodic%'
-        AND LOWER(TRIM(COALESCE(username,''))) <> 'nnyxcs35'
-        AND (
-          (POSITION('__' IN period) = 0
-            AND substring(period from 6 for 10)::date >= $2::date
-            AND substring(period from 6 for 10)::date <= $3::date)
-          OR
-          (POSITION('__' IN period) > 0 AND split_part(period, '__', 2) = $4)
-        )`,
+    `SELECT total_score, period
+     FROM agent_scores
+     WHERE LOWER(TRIM(username)) = LOWER(TRIM($1))
+       AND score_model = 'anomaly_rollups_v2'
+       AND COALESCE(is_invalidated, false) = false
+       AND (store IS NULL OR store !~* '(测试门店|SAFE_TEST|_SAFE_TEST|沙箱|sandbox)')
+       AND COALESCE(username,'') NOT LIKE '__periodic%'
+       AND LOWER(TRIM(COALESCE(username,''))) <> 'nnyxcs35'
+       AND (
+         (POSITION('__' IN period) = 0
+           AND substring(period from 6 for 10)::date >= $2::date
+           AND substring(period from 6 for 10)::date <= $3::date)
+         OR
+         (POSITION('__' IN period) > 0 AND split_part(period, '__', 2) = $4)
+       )
+     ORDER BY updated_at DESC NULLS LAST, created_at DESC
+     LIMIT 1`,
     [username, startDate, endDate, monthKey]
   );
 
-  const total = Number(result.rows[0]?.total || 0);
-  const weekCount = Number(result.rows[0]?.week_count || 0);
+  if (result.rows.length > 0) {
+    return Number(result.rows[0].total_score);
+  }
 
-  // 满分100，按周汇总后取平均
-  return weekCount > 0 ? Math.round(total / weekCount) : 100;
+  return 100;
+}
+
+const EXCEPTION_DEDUCTION_RULES = {
+  '实收营收异常':     { high: 40, medium: 20, low: 0, frequency: 'monthly' },
+  '人效值异常':       { high: 20, medium: 10, low: 0, frequency: 'monthly' },
+  '充值异常':         { high: 2,  medium: 1,  low: 0, frequency: 'daily' },
+  '桌访异常':         { high: 10, medium: 5,  low: 0, frequency: 'weekly' },
+  '桌访占比异常':     { high: 20, medium: 10, low: 0, frequency: 'monthly' },
+  '总实收毛利率异常': { high: 40, medium: 20, low: 0, frequency: 'monthly' },
+  '产品差评异常':     { high: 10, medium: 5,  low: 0, frequency: 'weekly' },
+  '服务差评异常':     { high: 10, medium: 5,  low: 0, frequency: 'weekly' },
+};
+
+async function getExceptionDeduction(username, period) {
+  const [year, month] = period.split('-');
+  const startDate = `${year}-${month}-01`;
+  const endDate = `${year}-${month}-${String(getDaysInMonth(period)).padStart(2, '0')}`;
+  const result = await query(
+    `SELECT category, severity, COUNT(*) as count
+     FROM agent_issues
+     WHERE assignee_username = $1
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $2::date
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $3::date
+     GROUP BY category, severity`,
+    [username, startDate, endDate]
+  );
+  let totalDeduction = 0;
+  for (const row of result.rows) {
+    const rule = EXCEPTION_DEDUCTION_RULES[row.category];
+    if (!rule) continue;
+    const sev = String(row.severity || '').toLowerCase();
+    if (sev === 'low') continue;
+    const pointsPerTrigger = rule[sev] || 0;
+    if (pointsPerTrigger === 0) continue;
+    const days = getDaysInMonth(period);
+    let maxTriggers = 1;
+    if (rule.frequency === 'daily') maxTriggers = days;
+    else if (rule.frequency === 'weekly') maxTriggers = Math.ceil(days / 7);
+    const actualTriggers = Math.min(Number(row.count), maxTriggers);
+    totalDeduction += actualTriggers * pointsPerTrigger;
+  }
+  return totalDeduction;
+}
+
+async function getExceptionBonus(username, period) {
+  const [year, month] = period.split('-');
+  const startDate = `${year}-${month}-01`;
+  const endDate = `${year}-${month}-${String(getDaysInMonth(period)).padStart(2, '0')}`;
+  const issueResult = await query(
+    `SELECT COUNT(*) as count FROM agent_issues
+     WHERE assignee_username = $1
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date >= $2::date
+       AND (created_at AT TIME ZONE 'Asia/Shanghai')::date <= $3::date`,
+    [username, startDate, endDate]
+  );
+  const issueCount = Number(issueResult.rows[0]?.count || 0);
+  if (issueCount > 0) return 0;
+  const weekResult = await query(
+    `SELECT deductions
+     FROM agent_scores
+     WHERE lower(username) = lower($1)
+       AND score_model = 'anomaly_rollups_v2'
+       AND COALESCE(is_invalidated, false) = false
+       AND period LIKE 'week_%'
+       AND substring(period from 6 for 10)::date >= $2::date
+       AND substring(period from 6 for 10)::date <= $3::date`,
+    [username, startDate, endDate]
+  );
+  for (const row of weekResult.rows || []) {
+    let arr = row.deductions;
+    if (typeof arr === 'string') { try { arr = JSON.parse(arr); } catch (_e) { arr = []; } }
+    if (!Array.isArray(arr)) continue;
+    if (arr.some(d => Number(d?.points || 0) > 0)) return 0;
+  }
+  return 10;
 }
 
 // ─────────────────────────────────────────────
@@ -571,8 +647,11 @@ export async function runMonthlyComprehensiveRating(period) {
       const ratingU = String(s.ratingSubjectUsername || username || '').trim() || username;
 
       try {
-        // 1. 绩效得分（马己仙观察账号与黎永荣同一统计口径）
-        const performanceScore = await getMonthlyPerformanceScore(ratingU, period);
+        // 1. 绩效得分（月度最新周 anomaly 分数 + exception bonus - exception deduction）
+        const latestWeekScore = await getMonthlyPerformanceScore(ratingU, period);
+        const exceptionBonus = await getExceptionBonus(ratingU, period);
+        const exceptionDeduction = await getExceptionDeduction(ratingU, period);
+        const performanceScore = Math.round(latestWeekScore + exceptionBonus - exceptionDeduction);
 
         // 2. 工作态度评级
         const attitudeResult = await getAttitudeRating(ratingU, period);
@@ -625,11 +704,12 @@ export async function runMonthlyComprehensiveRating(period) {
         const summary = `月度绩效成绩单（${period}）：执行力 ${executionResult?.rating || '—'}，态度 ${attitudeResult.rating}，能力 ${abilityResult?.rating || '—'}，门店 ${fmtStoreLevelLabel(storeRatingResult.rating)}。`;
 
         await query(
-          `INSERT INTO agent_scores (brand, store, username, name, role, period, score_model, total_score, breakdown, deductions, summary)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11)
+          `INSERT INTO agent_scores (brand, store, username, name, role, period, score_model, base_score, total_score, breakdown, deductions, summary)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12)
            ON CONFLICT (brand, store, username, period)
            DO UPDATE SET
              name = EXCLUDED.name,
+             base_score = EXCLUDED.base_score,
              total_score = EXCLUDED.total_score,
              breakdown = EXCLUDED.breakdown,
              deductions = EXCLUDED.deductions,
@@ -639,9 +719,10 @@ export async function runMonthlyComprehensiveRating(period) {
           [
             brand, store, username, name, role, period,
             'new_model_monthly',
+            latestWeekScore,
             performanceScore,
             JSON.stringify(breakdown),
-            JSON.stringify({ execution_data: executionData, attitude_data: attitudeData, ability_data: abilityData }),
+            JSON.stringify({ execution_data: executionData, attitude_data: attitudeData, ability_data: abilityData, exception_bonus: exceptionBonus, exception_deduction: exceptionDeduction }),
             summary
           ]
         );
