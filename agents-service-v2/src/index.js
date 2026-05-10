@@ -63,6 +63,7 @@ import { getAIOperationsReport } from './services/ai-operations.js';
 import { runGrowthMonitor } from './services/growth-monitor.js';
 import { runCampaignAutopilot } from './services/campaign-autopilot.js';
 import { runCampaignReview } from './services/campaign-review.js';
+import { runPublicPromo, runWeeklyReview } from './services/public-promo-service.js';
 import adminApi from './routes/admin-api.js';
 import agentTaskBoardApi from './routes/agent-task-board-api.js';
 import { registerChairmanConfigRoutes } from './routes/chairman-config-api.js';
@@ -1473,6 +1474,20 @@ async function start() {
         .catch((e) => logger.warn({ err: e?.message }, 'campaign review cron error'));
     }, { timezone: 'Asia/Shanghai' });
     logger.info('Campaign review scheduled daily at 03:30 Asia/Shanghai');
+
+    // Phase 8: Public promo topic generation — daily at 06:00
+    cron.schedule('0 6 * * *', () => {
+      runWithCronLog('public_promo', () => runPublicPromo())
+        .catch((e) => logger.warn({ err: e?.message }, 'public promo cron error'));
+    }, { timezone: 'Asia/Shanghai' });
+    logger.info('Public promo topic generation daily at 06:00 Asia/Shanghai');
+
+    // Phase 8: Weekly public promo review — Monday at 07:00
+    cron.schedule('0 7 * * 1', () => {
+      runWithCronLog('weekly_promo_review', () => runWeeklyReview())
+        .catch((e) => logger.warn({ err: e?.message }, 'weekly promo review cron error'));
+    }, { timezone: 'Asia/Shanghai' });
+    logger.info('Weekly promo review scheduled Monday at 07:00 Asia/Shanghai');
     // 实际毛利率表：每日 05:16（上海）拉取飞书表数据（非「毛利率异常」月检；与 05:00 周度BI、05:08 日频BI 错开）
     cron.schedule('16 5 * * *', async () => {
       try {

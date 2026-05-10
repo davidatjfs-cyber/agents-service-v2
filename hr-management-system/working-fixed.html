@@ -13707,6 +13707,7 @@
                         <button onclick="showGrowthTab('profiles')" id="growth-tab-profiles" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">用户画像</button>
                         <button onclick="showGrowthTab('constraints')" id="growth-tab-constraints" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">营销约束</button>
                         <button onclick="showGrowthTab('posters')" id="growth-tab-posters" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">海报</button>
+                        <button onclick="showGrowthTab('public')" id="growth-tab-public" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">公域品宣</button>
                         <button onclick="showGrowthTab('actions')" id="growth-tab-actions" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">AI建议执行</button>
                     </div>
                     <div id="growth-dashboard-content">
@@ -13863,6 +13864,29 @@
                                     <button onclick="saveBrandVoiceSamples()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">训练并分析</button>
                                 </div>
                                 <div id="bv-result" style="margin-top:16px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="growth-public-content" style="display:none;">
+                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
+                            <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">公域品宣管理</div>
+                            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+                                <button onclick="loadPublicTasks()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新任务</button>
+                                <button onclick="loadChannelEffects()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:13px;">渠道效果</button>
+                            </div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                                <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px;">
+                                    <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);margin-bottom:10px;">📋 品宣任务</div>
+                                    <div id="public-tasks-list" style="max-height:400px;overflow-y:auto;"></div>
+                                </div>
+                                <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px;">
+                                    <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);margin-bottom:10px;">📊 渠道效果</div>
+                                    <div id="public-channel-effects" style="max-height:400px;overflow-y:auto;"></div>
+                                </div>
+                            </div>
+                            <div id="public-content-calendar" style="margin-top:16px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px;">
+                                <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);margin-bottom:10px;">📅 内容日历</div>
+                                <div id="public-calendar-list" style="max-height:300px;overflow-y:auto;"></div>
                             </div>
                         </div>
                     </div>
@@ -44611,6 +44635,10 @@ ${body}
             } else if (tab === 'posters') {
                 loadPosterTemplates();
                 loadPosterHistory();
+            } else if (tab === 'public') {
+                loadPublicTasks();
+                loadChannelEffects();
+                loadContentCalendar();
             } else {
                 refreshGrowthDashboard();
             }
@@ -45520,12 +45548,12 @@ ${body}
                 total.revenue += Number(m.revenue_fen) || 0;
             });
             var cards = [
-                { label: '扫码', value: total.scan, tag: 'SCAN' },
-                { label: '授权', value: total.auth, tag: 'AUTH' },
-                { label: '发券', value: total.issued, tag: 'COUPON' },
-                { label: '核销', value: total.redeem, tag: 'USE' },
-                { label: '支付', value: total.payment, tag: 'PAY' },
-                { label: '收入(元)', value: (total.revenue / 100).toFixed(2), tag: 'GMV' }
+                { label: '扫码', value: total.scan, tag: '扫码' },
+                { label: '授权', value: total.auth, tag: '授权' },
+                { label: '发券', value: total.issued, tag: '发券' },
+                { label: '核销', value: total.redeem, tag: '核销' },
+                { label: '支付', value: total.payment, tag: '支付' },
+                { label: '收入(元)', value: (total.revenue / 100).toFixed(2), tag: '收入' }
             ];
             document.getElementById('growth-metrics-cards').innerHTML = cards.map(function(c) {
                 return '<div class="growth-metric-card" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;text-align:center;">'
@@ -45860,6 +45888,63 @@ ${body}
             + '</div><div style="padding:6px;font-size:11px;color:rgba(226,232,240,0.6);text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">'
             + (p.title || '-') + '</div></div>';
         }).join('') : '<div style="color:rgba(226,232,240,0.4);grid-column:1/-1;padding:20px;">暂无已生成海报</div>';
+      } catch (e) { /* ignore */ }
+    }
+
+    // ════════════════════════════════════════════════
+    // Phase 8: 公域品宣管理
+    // ════════════════════════════════════════════════
+
+    async function loadPublicTasks() {
+      try {
+        var r = await fetch('/api/growth/public-promo-tasks', { headers: growthAuthHeaders() });
+        var d = await r.json();
+        var tasks = d?.tasks || [];
+        var host = document.getElementById('public-tasks-list');
+        if (!host) return;
+        host.innerHTML = tasks.length ? tasks.map(function(t) {
+          var statusColor = t.status === 'published' ? '#22c55e' : t.status === 'planned' ? '#f59e0b' : '#94a3b8';
+          return '<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px;">'
+            + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">'
+            + '<div style="color:#fff;font-weight:600;">' + (t.title || '-').slice(0, 40) + '</div>'
+            + '<span style="font-size:10px;padding:2px 6px;border-radius:999px;background:' + statusColor + '22;color:' + statusColor + ';">' + (t.status || '-') + '</span>'
+            + '</div>'
+            + '<div style="color:rgba(226,232,240,0.5);margin-top:3px;">' + (t.channel_key || '-') + (t.store_id ? ' · ' + t.store_id : '') + '</div>'
+            + '</div>';
+        }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:16px;">暂无品宣任务</div>';
+      } catch (e) { /* ignore */ }
+    }
+
+    async function loadChannelEffects() {
+      try {
+        var r = await fetch('/api/growth/channel-effects', { headers: growthAuthHeaders() });
+        var d = await r.json();
+        var effects = d?.effects || d?.rows || [];
+        var host = document.getElementById('public-channel-effects');
+        if (!host) return;
+        host.innerHTML = effects.length ? effects.map(function(e) {
+          return '<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px;">'
+            + '<div style="color:#fff;font-weight:600;">' + (e.channel || e.platform || '-') + '</div>'
+            + '<div style="color:rgba(226,232,240,0.5);margin-top:3px;">发布' + (e.publish_count || e.total || 0) + ' · 扫码' + (e.scan_count || 0) + ' · 核销' + (e.redeem_count || 0) + ' · 收入¥' + ((e.revenue_fen || 0)/100).toFixed(0) + '</div>'
+            + '</div>';
+        }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:16px;">暂无渠道数据</div>';
+      } catch (e) { /* ignore */ }
+    }
+
+    async function loadContentCalendar() {
+      try {
+        var r = await fetch('/api/growth/content-calendar/upcoming', { headers: growthAuthHeaders() });
+        var d = await r.json();
+        var items = d?.items || d?.rows || [];
+        var host = document.getElementById('public-calendar-list');
+        if (!host) return;
+        host.innerHTML = items.length ? items.map(function(i) {
+          var dateStr = i.publish_date ? String(i.publish_date).slice(0, 10) : '-';
+          return '<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px;">'
+            + '<div style="color:#fff;font-weight:600;">' + (i.title || '-').slice(0, 40) + '</div>'
+            + '<div style="color:rgba(226,232,240,0.5);margin-top:3px;">' + dateStr + ' · ' + (i.channel || '') + (i.store_id ? ' · ' + i.store_id : '') + '</div>'
+            + '</div>';
+        }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:16px;">暂无内容计划</div>';
       } catch (e) { /* ignore */ }
     }
 

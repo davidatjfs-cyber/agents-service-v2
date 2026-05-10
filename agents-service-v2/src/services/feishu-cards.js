@@ -113,6 +113,7 @@ ${bonusLines}
 }
 
 export function buildAnomalyCard(store, anomalyKey, severity, detail, taskId) {
+  const sevZh = severity === 'high' ? '严重' : severity === 'medium' ? '中等' : '低';
   const typeZh = anomalyRuleLabelZh(anomalyKey);
   const sevColor = severity === 'high' ? 'red' : severity === 'medium' ? 'orange' : 'yellow';
   const sevEmoji = severity === 'high' ? '🚨' : '⚠️';
@@ -122,7 +123,7 @@ export function buildAnomalyCard(store, anomalyKey, severity, detail, taskId) {
   // 食安类需展示「来源表 + 日期 + 原文摘录」，字数显著多于其它异常
   const detailLimit = anomalyKey === 'food_safety' ? 3800 : 900;
   const elements = [
-    { tag: 'div', text: { tag: 'lark_md', content: `**门店**：${store}\n**类型**：${typeZh}\n**严重度**：${sevEmoji} ${severity}` } },
+    { tag: 'div', text: { tag: 'lark_md', content: `**门店**：${store}\n**类型**：${typeZh}\n**严重度**：${sevEmoji} ${alertSevZh}` } },
     { tag: 'div', text: { tag: 'lark_md', content: `**详情**：${(detail || '').slice(0, detailLimit)}${taskHint}` } },
     { tag: 'hr' },
     { tag: 'note', elements: [{ tag: 'plain_text', content: '⏰ 催办规则：下发后每间隔1小时提醒，共3次；仍未有效闭环将提交HR记入绩效' }] }
@@ -439,8 +440,9 @@ export function buildGrowthAlertCard(alert) {
       url: `${callbackBase}?action_key=${encodeURIComponent(actionKey)}&decision=ignore&secret=${encodeURIComponent(callbackSecret)}`
     });
   }
+  const alertSevZh = alert.severity === 'high' ? '严重' : alert.severity === 'medium' ? '中等' : '低';
   const elements = [
-    { tag: 'div', text: { tag: 'lark_md', content: `**门店**：${storeText}\n**活动**：${campaignText || '-'}\n**严重度**：${sevEmoji} ${alert.severity}\n**消息**：${alert.message || ''}${metricStr}` } },
+    { tag: 'div', text: { tag: 'lark_md', content: `**门店**：${storeText}\n**活动**：${campaignText || '-'}\n**严重度**：${sevEmoji} ${sevZh}\n**消息**：${alert.message || ''}${metricStr}` } },
     { tag: 'div', text: { tag: 'lark_md', content: `**建议动作**：${alert.suggestedAction || ''}` } },
     { tag: 'action', actions },
     { tag: 'hr' },
