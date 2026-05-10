@@ -13558,6 +13558,11 @@
                     </div>
                     <div id="growth-constraints-content" style="display:none;">
                         <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
+                            <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+                                <button onclick="document.getElementById('constraint-main-panel').style.display='';document.getElementById('brand-voice-panel').style.display='none';" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">营销约束</button>
+                                <button onclick="document.getElementById('constraint-main-panel').style.display='none';document.getElementById('brand-voice-panel').style.display='';loadBrandVoiceSamples();" style="padding:6px 14px;border-radius:8px;background:rgba(14,165,233,0.15);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);cursor:pointer;font-size:13px;">品牌声音训练</button>
+                            </div>
+                            <div id="constraint-main-panel">
                             <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">门店营销约束</div>
                             <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
                                 <select id="constraint-brand-template" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.8);font-size:13px;" onchange="applyBrandTemplate()">
@@ -13586,24 +13591,11 @@
                             </div>
                             <div style="margin-top:12px;">
                                 <label style="font-size:12px;color:rgba(226,232,240,0.5);display:block;margin-bottom:6px;">允许渠道（可多选）</label>
-                                <div style="display:flex;gap:10px;flex-wrap:wrap;" id="constraint-channels-checkboxes">
-                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="wecom"> 企微</label>
-                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="miniprogram"> 小程序</label>
-                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="xiaohongshu"> 小红书</label>
-                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="douyin"> 抖音</label>
-                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="dianping"> 大众点评</label>
-                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="sms"> 短信</label>
-                                </div>
+                                <div style="display:flex;gap:10px;flex-wrap:wrap;" id="constraint-channels-checkboxes">...</div>
                             </div>
                             <div style="margin-top:12px;">
                                 <label style="font-size:12px;color:rgba(226,232,240,0.5);display:block;margin-bottom:6px;">禁用活动类型（可多选）</label>
-                                <div style="display:flex;gap:10px;flex-wrap:wrap;" id="constraint-campaign-checkboxes">
-                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="大额折扣"> 大额折扣</label>
-                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="满减"> 满减</label>
-                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="赠品"> 赠品</label>
-                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="套餐"> 套餐</label>
-                                    <label style="color:rgba(226,232,240,0.7);font-size:13px;"><input type="checkbox" value="充值"> 充值</label>
-                                </div>
+                                <div style="display:flex;gap:10px;flex-wrap:wrap;" id="constraint-campaign-checkboxes">...</div>
                             </div>
                             <textarea id="constraint-disallowed-dishes" placeholder="禁用菜品，逗号分隔" style="margin-top:12px;width:100%;height:70px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;"></textarea>
                             <textarea id="constraint-notes" placeholder="执行备注" style="margin-top:12px;width:100%;height:80px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;"></textarea>
@@ -13612,6 +13604,19 @@
                                 <button onclick="loadGrowthConstraints()" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.08);color:#fff;border:none;cursor:pointer;font-size:13px;">加载列表</button>
                             </div>
                             <div id="growth-constraints-list" style="max-height:260px;overflow-y:auto;margin-top:16px;"></div>
+                            </div>
+                            <div id="brand-voice-panel" style="display:none;">
+                                <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">品牌声音训练</div>
+                                <div style="margin-bottom:12px;">
+                                    <input id="bv-brand" placeholder="品牌名称" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;width:200px;">
+                                </div>
+                                <div style="margin-bottom:8px;font-size:12px;color:rgba(226,232,240,0.5);">输入您的历史营销文案（每行一条，建议10-20条）：</div>
+                                <textarea id="bv-samples" placeholder="每条文案一行，例如：&#10;限时特惠，招牌烧鹅8折！&#10;新品上市，鲜嫩多汁。&#10;老客专享，满100减20。" style="width:100%;height:200px;padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;"></textarea>
+                                <div style="display:flex;gap:8px;margin-top:12px;">
+                                    <button onclick="saveBrandVoiceSamples()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">训练并分析</button>
+                                </div>
+                                <div id="bv-result" style="margin-top:16px;"></div>
+                            </div>
                         </div>
                     </div>
                     <div id="growth-actions-content" style="display:none;">
@@ -44571,6 +44576,26 @@ ${body}
                 }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无营销约束</div>';
             } catch (e) {
                 document.getElementById('growth-constraints-list').innerHTML = '<div style="color:#ef4444;">加载营销约束失败</div>';
+            }
+        }
+
+        async function saveBrandVoiceSamples() {
+            const brand = document.getElementById('bv-brand')?.value || '';
+            if (!brand) { showNotification('请输入品牌名称', 'warning'); return; }
+            const raw = document.getElementById('bv-samples')?.value || '';
+            const samples = raw.split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
+            if (samples.length < 3) { showNotification('至少输入3条文案', 'warning'); return; }
+            try {
+                const r = await fetch('/api/growth/brand-voice-samples', {
+                    method: 'POST', headers: growthAuthHeaders(), body: JSON.stringify({ brand: brand, samples: samples.slice(0, 20) })
+                });
+                const data = await r.json();
+                if (!data.ok) throw new Error(data.error || 'train_failed');
+                var styleHtml = data.detected_style ? '检测到风格：<strong>' + data.detected_style.join('、') + '</strong>' : '';
+                document.getElementById('bv-result').innerHTML = '<div style="padding:12px;background:rgba(34,197,94,0.1);border-radius:8px;font-size:13px;color:rgba(226,232,240,0.8);">✅ 已分析 ' + data.sample_count + ' 条文案<br>' + styleHtml + '</div>';
+                showNotification('品牌声音训练完成', 'success');
+            } catch (e) {
+                showNotification('训练失败：' + (e?.message || e), 'error');
             }
         }
 

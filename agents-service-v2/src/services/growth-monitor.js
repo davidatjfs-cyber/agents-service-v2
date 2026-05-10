@@ -349,6 +349,35 @@ export async function runGrowthMonitor({ createTasks = true } = {}) {
     }
   }
 
+  // Phase 6: Repurchase critical period - auto detect at-risk users and create actions
+  try {
+    const storeIds = [...new Set((r.rows || []).map(r => r.store_id).filter(Boolean))];
+    for (const sid of storeIds) {
+      const atRisk = await query(
+        `SELECT cp.customer_id, cp.phone, cp.lifecycle_stage, cp.response_to_discount
+         FROM growth_customer_profiles cp
+         WHERE cp.store_id = $1 AND cp.lifecycle_stage IN ('at_risk','churned') AND cp.phone IS NOT NULL
+         LIMIT 30`,
+        [sid]
+      );
+      if (atRisk.rows.length > 0) {
+        const alertKey = `repurchase:${sid}:${new Date().toISOString().slice(0, 10)}`;
+        await query(
+          `INSERT INTO growth_alerts (alert_key, alert_type, severity, store_id, title, message, suggested_action, metrics)
+           VALUES ($1,'repurchase_risk','medium',$2,$3,$4,$5,$6::jsonb)
+           ON CONFLICT (alert_key) DO NOTHING`,
+          [alertKey, sid,
+           '复购临界客户提醒',
+           `${atRisk.rows.length}位客户处于复购临界期（${atRisk.rows.filter(r=>r.lifecycle_stage==='churned').length}位已流失）`,
+           '建议执行触达方案，发送优惠券或内容唤醒',
+           JSON.stringify({ at_risk_count: atRisk.rows.length, store_id: sid })
+        ]);
+      }
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'repurchase trigger failed');
+  }
+
   logger.info({ checked: r.rows?.length || 0, alerts: results.length }, 'growth monitor completed');
   return { ok: true, checked: r.rows?.length || 0, alerts: results.length, results };
 }

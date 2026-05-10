@@ -1559,37 +1559,49 @@ export function registerGrowthRoutes(app, pool) {
     return res.json({ ok: true, new_status: newStatus });
   });
 
-  // ── Phase 5: LLM semantic parsing (text → tags) ──
+  // ── Phase 5: LLM semantic parsing with real LLM ──
   app.post('/api/growth/semantic-parse', async (req, res) => {
     if (!requireGrowthAuth(req, res)) return;
-    const b = req.body || {};
-    const text = cleanText(b.text, 4000);
+    const text = cleanText(req.body.text, 4000);
     if (!text) return res.status(400).json({ ok: false, error: 'missing_text' });
+    const simpleTags = [];
+    if (/辣|麻辣/.test(text)) simpleTags.push('嗜辣');
+    if (/清淡|少油|少盐/.test(text)) simpleTags.push('清淡偏好');
+    if (/甜|甜品/.test(text)) simpleTags.push('甜品偏好');
+    if (/再来|还会|下次/.test(text)) simpleTags.push('复购意向');
+    if (/差|不好|失望|太差/.test(text)) simpleTags.push('负面情绪');
+    if (/好|好吃|满意|推荐/.test(text)) simpleTags.push('正面情绪');
+    // Use LLM for deeper parsing
+    let llmResult = {};
     try {
-      const jsonwebtoken = (await import('jsonwebtoken')).default;
-      const admToken = jsonwebtoken.sign({ username: 'growth_semantic', role: 'admin' }, process.env.JWT_SECRET || 'dev', { expiresIn: '30s' });
+      const { default: jwt } = await import('jsonwebtoken');
+      const admToken = jwt.sign({ username: 'growth_semantic', role: 'admin' }, process.env.JWT_SECRET || 'dev', { expiresIn: '30s' });
       const agentResp = await fetch((process.env.AGENTS_SERVICE_URL || 'http://127.0.0.1:3101') + '/api/agent/chat', {
         method: 'POST', headers: { 'Authorization': 'Bearer ' + admToken, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ route: 'train_advisor', text: b.text, store: b.store_id || '' })
+        body: JSON.stringify({
+          route: 'train_advisor',
+          text: `请分析这段顾客反馈，用JSON格式输出(只输出JSON，不要其他文字)：{"taste_tags":["口味标签数组"],"price_sensitivity":0-1数字,"emotion":"正面/负面/中性","return_intent":true/false,"key_insight":"一句话洞察"}。顾客反馈：${text}`,
+          store: req.body.store_id || ''
+        })
       });
-      let parsed = {};
-      const simpleTags = [];
-      if (/辣|麻辣/.test(text)) simpleTags.push('嗜辣');
-      if (/清淡|少油|少盐/.test(text)) simpleTags.push('清淡偏好');
-      if (/甜|甜品/.test(text)) simpleTags.push('甜品偏好');
-      if (/再来|还会|下次/.test(text)) simpleTags.push('复购意向');
-      if (/差|不好|失望|太差/.test(text)) simpleTags.push('负面情绪');
-      if (/好|好吃|满意|推荐/.test(text)) simpleTags.push('正面情绪');
       if (agentResp.ok) {
         const chatBody = await agentResp.json();
         const llmText = chatBody?.text || chatBody?.response || '';
-        parsed = Object.assign(parsed, { llm_text: llmText.slice(0, 500) });
+        const jsonMatch = llmText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try { llmResult = JSON.parse(jsonMatch[0]); } catch (e) { llmResult = {}; }
+        }
       }
-      parsed = Object.assign(parsed, { ok: true, simple_tags: simpleTags, taste_tags: [], price_sensitivity_hint: null, return_intent: simpleTags.includes('复购意向') });
-      return res.json(parsed);
-    } catch (e) {
-      return res.json({ ok: true, simple_tags: [], taste_tags: [], error: e?.message || 'parse_error' });
-    }
+    } catch (e) { llmResult = { error: e?.message }; }
+    return res.json({
+      ok: true, simple_tags: simpleTags,
+      taste_tags: llmResult.taste_tags || [],
+      price_sensitivity: llmResult.price_sensitivity != null ? Number(llmResult.price_sensitivity) : null,
+      emotion: llmResult.emotion || null,
+      return_intent: llmResult.return_intent || simpleTags.includes('复购意向'),
+      key_insight: llmResult.key_insight || null,
+      llm_raw: llmResult
+    });
   });
 
   // ── Phase 4: Enhanced case search (multi-dimension) ──
@@ -1771,21 +1783,77 @@ export function registerGrowthRoutes(app, pool) {
     return res.json({ ok: true, customer_id: customerId, tags_written: tags.concat(tasteTags), return_intent: returnIntent });
   });
 
-  // ── Phase 6: Weather context + active time window ──
+  // ── Phase 6: Weather context + China holidays ──
+  const CHINA_HOLIDAYS = {
+    '2026-01-01':'元旦','2026-01-28':'小年','2026-02-12':'除夕','2026-02-13':'春节','2026-02-14':'初二','2026-02-15':'初三','2026-02-16':'初四','2026-02-17':'初五',
+    '2026-02-18':'初六','2026-03-01':'元宵节','2026-04-04':'清明节','2026-04-05':'清明','2026-04-06':'清明假期','2026-05-01':'劳动节','2026-05-02':'劳动节','2026-05-03':'劳动节',
+    '2026-06-20':'端午节','2026-06-21':'端午','2026-06-22':'端午假期','2026-08-28':'七夕','2026-09-17':'中秋节','2026-09-18':'中秋','2026-09-19':'中秋假期',
+    '2026-10-01':'国庆节','2026-10-02':'国庆','2026-10-03':'国庆','2026-10-04':'国庆','2026-10-05':'国庆','2026-10-06':'国庆','2026-10-07':'国庆',
+    '2026-12-25':'圣诞节'
+  };
   app.get('/api/growth/weather-context', async (req, res) => {
     const city = cleanText(req.query.city || '上海', 80);
-    let weatherData = { city, temperature: null, condition: null, error: null };
+    const today = new Date().toISOString().slice(0, 10);
+    const holiday = CHINA_HOLIDAYS[today] || null;
+    const month = new Date().getMonth() + 1;
+    const season = month >= 3 && month <= 5 ? '春季' : month >= 6 && month <= 8 ? '夏季' : month >= 9 && month <= 11 ? '秋季' : '冬季';
+    let weatherData = { city, temperature: null, condition: null, humidity: null, holiday, season };
+    // Try weather API with fallback
     try {
-      const resp = await fetch('https://wttr.in/' + encodeURIComponent(city) + '?format=%t|%C|%h', { timeout: 5000 });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const resp = await fetch(`https://wttr.in/${encodeURIComponent(city)}?format=%t|%C|%h&lang=zh`, { signal: controller.signal });
+      clearTimeout(timeoutId);
       if (resp.ok) {
         const text = await resp.text();
-        const parts = text.split('|').map(s => s.trim());
+        const parts = text.split('|').map(s => s.trim().replace(/[+]/g, ''));
         weatherData.temperature = parts[0] || null;
         weatherData.condition = parts[1] || null;
         weatherData.humidity = parts[2] || null;
       }
-    } catch (e) { weatherData.error = e?.message || 'weather_unavailable'; }
-    return res.json({ ok: !weatherData.error, ...weatherData });
+    } catch (e) { /* weather unavailable, fallback to seasonal */ }
+    const tips = [];
+    if (holiday) tips.push(`今天是${holiday}`);
+    if (weatherData.condition?.includes('雨')) tips.push('下雨天，适合推送温暖主题');
+    if (weatherData.condition?.includes('雪')) tips.push('下雪天，适合推送火锅/热饮');
+    if (parseInt(weatherData.temperature) > 35) tips.push('高温天气，适合推送冰饮/凉菜');
+    if (parseInt(weatherData.temperature) < 5) tips.push('寒冷天气，适合推送热汤/暖锅');
+    tips.push(`当前${season}，${holiday ? `${holiday}期间` : ''}适合${season === '夏季' ? '清爽/宵夜' : season === '冬季' ? '暖身/火锅' : '应季'}主题`);
+    weatherData.tips = tips;
+    weatherData.ok = true;
+    return res.json(weatherData);
+  });
+
+  // ── Phase 6: Repurchase critical period auto-trigger ──
+  app.post('/api/growth/repurchase-trigger', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const storeId = cleanText(req.body.store_id || '', 128);
+    const r = await pool.query(
+      `SELECT cp.customer_id, cp.phone, cp.store_id, cp.lifecycle_stage, cp.next_visit_probability,
+              cp.best_contact_window, cp.response_to_discount, cp.price_sensitivity
+       FROM growth_customer_profiles cp
+       WHERE ($1='' OR cp.store_id=$1) AND cp.lifecycle_stage IN ('at_risk','churned')
+         AND cp.phone IS NOT NULL
+       LIMIT 50`,
+      [storeId]
+    );
+    let created = 0;
+    for (const row of r.rows) {
+      const actionKey = `repurchase:${row.customer_id}:${Date.now()}`;
+      const useCoupon = Number(row.response_to_discount) > 0.4;
+      await pool.query(
+        `INSERT INTO growth_actions (action_key, action_type, status, store_id, title, detail, payload, created_by)
+         VALUES ($1,'send_voucher','proposed',NULLIF($2,''),$3,$4,$5::jsonb,'agent_v2')
+         ON CONFLICT (action_key) DO NOTHING`,
+        [actionKey, row.store_id,
+         `复购唤醒-客户#${row.customer_id}`,
+         `客户${row.phone}已${row.lifecycle_stage === 'churned' ? '流失' : '临近复购临界期'}，${useCoupon ? '建议发送优惠券' : '建议内容触达'}。最佳触达时间:${row.best_contact_window || '未设定'}`,
+         JSON.stringify({ customer_id: row.customer_id, phone: row.phone, use_coupon: useCoupon, channel: 'wecom', strategy_key: 'repurchase_auto' })
+        ]
+      );
+      created++;
+    }
+    return res.json({ ok: true, triggered: created, total_at_risk: r.rows.length });
   });
 
   // ── Phase 6: Active time window prediction ──
@@ -1814,6 +1882,56 @@ export function registerGrowthRoutes(app, pool) {
         repurchaseRisk.rows.length ? `⏰ ${repurchaseRisk.rows[0].at_risk_count || 0}位客户处于复购临界期，建议尽快触达` : '',
         ...r.rows.filter(r => r.top_window).map(r => `📅 ${r.lifecycle_stage}客群最佳触达: ${r.top_window}，敏感度:${r.avg_price_sens||'N/A'}`)
       ].filter(Boolean)
+    });
+  });
+
+  // ── Phase 6: User clustering (similarity based on profiles) ──
+  app.get('/api/growth/user-clusters', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const storeId = cleanText(req.query.store_id || '', 128);
+    const r = await pool.query(
+      `WITH clusters AS (
+         SELECT lifecycle_stage,
+           ROUND(AVG(price_sensitivity)::numeric, 2) AS avg_price_sens,
+           ROUND(AVG(response_to_discount)::numeric, 2) AS avg_discount_resp,
+           ROUND(AVG(adventurous_score)::numeric, 2) AS avg_adventurous,
+           ROUND(AVG(spicy_level)::numeric, 2) AS avg_spicy,
+           COUNT(*)::int AS user_count,
+           MODE() WITHIN GROUP (ORDER BY best_contact_window) AS contact_window,
+           STRING_AGG(DISTINCT favourite_tags, ', ') AS common_tags
+         FROM growth_customer_profiles
+         WHERE ($1='' OR store_id=$1)
+         GROUP BY lifecycle_stage
+       )
+       SELECT *, ROW_NUMBER() OVER (ORDER BY user_count DESC) AS cluster_id FROM clusters`,
+      [storeId]
+    );
+    return res.json({ ok: true, clusters: r.rows });
+  });
+
+  // ── Phase 6: Discount preference modeling ──
+  app.get('/api/growth/discount-preference', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const storeId = cleanText(req.query.store_id || '', 128);
+    const r = await pool.query(
+      `SELECT
+         CASE
+           WHEN price_sensitivity >= 0.7 THEN '高敏感'
+           WHEN price_sensitivity >= 0.4 THEN '中敏感'
+           ELSE '低敏感'
+         END AS sensitivity_segment,
+         ROUND(AVG(response_to_discount)::numeric, 2) AS avg_discount_response,
+         COUNT(*)::int AS user_count,
+         MODE() WITHIN GROUP (ORDER BY COALESCE(best_contact_window, '')) AS best_window
+       FROM growth_customer_profiles
+       WHERE ($1='' OR store_id=$1) AND price_sensitivity IS NOT NULL
+       GROUP BY 1 ORDER BY user_count DESC`,
+      [storeId]
+    );
+    const total = r.rows.reduce((s, r) => s + Number(r.user_count), 0);
+    return res.json({
+      ok: true, segments: r.rows, total_users: total,
+      recommendation: total > 0 ? `高敏感用户(${r.rows.find(r=>r.sensitivity_segment==='高敏感')?.user_count||0}人)建议发券，低敏感用户(${r.rows.find(r=>r.sensitivity_segment==='低敏感')?.user_count||0}人)建议内容触达` : '数据不足'
     });
   });
 }
