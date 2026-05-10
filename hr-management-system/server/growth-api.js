@@ -533,7 +533,9 @@ export function registerGrowthRoutes(app, pool) {
   app.get('/api/growth/metrics', async (req, res) => {
     if (!requireGrowthAuth(req, res)) return;
     const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 90);
-    await recomputeDailyMetrics(days);
+    if (req.query.recompute === '1' || req.query.recompute === 'true') {
+      await recomputeDailyMetrics(days);
+    }
     const r = await pool.query(
       `SELECT * FROM growth_daily_metrics
        WHERE metric_date >= CURRENT_DATE - ($1::int || ' days')::interval
@@ -783,5 +785,71 @@ export function registerGrowthRoutes(app, pool) {
       [cleanText(b.poster_key, 255), cleanText(b.campaign_id, 128), cleanText(b.store_id, 128), cleanText(b.template_key, 128), cleanText(b.title, 500), cleanText(b.subtitle, 1000), cleanText(b.cta, 500), cleanText(b.image_url, 1000), cleanText(b.output_url, 1000), cleanText(b.status, 40), JSON.stringify(b.meta || {})]
     );
     return res.json({ ok: true, poster: r.rows[0] });
+  });
+
+  app.get('/api/growth/customers', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const phone = cleanText(req.query.phone || '', 32);
+    const openid = cleanText(req.query.openid || '', 128);
+    const store_id = cleanText(req.query.store_id || '', 128);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 500);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+    if (phone) { conditions.push(`phone = $${idx++}`); params.push(phone); }
+    if (openid) { conditions.push(`openid = $${idx++}`); params.push(openid); }
+    if (store_id) { conditions.push(`(first_store_id = $${idx} OR last_store_id = $${idx})`); params.push(store_id); idx++; }
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+    const r = await pool.query(`SELECT id, phone, openid, external_userid, first_store_id, last_store_id, first_seen_at, last_seen_at, meta, created_at FROM growth_customers ${where} ORDER BY last_seen_at DESC NULLS LAST LIMIT $${idx++} OFFSET $${idx}`, [...params, limit, offset]);
+    return res.json({ ok: true, customers: r.rows });
+  });
+
+  app.get('/api/growth/events', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const event_type = cleanText(req.query.event_type || '', 80);
+    const store_id = cleanText(req.query.store_id || '', 128);
+    const campaign_id = cleanText(req.query.campaign_id || '', 128);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 500);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+    if (event_type) { conditions.push(`event_type = $${idx++}`); params.push(event_type); }
+    if (store_id) { conditions.push(`store_id = $${idx++}`); params.push(store_id); }
+    if (campaign_id) { conditions.push(`campaign_id = $${idx++}`); params.push(campaign_id); }
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+    const r = await pool.query(`SELECT id, event_type, customer_id, phone, openid, store_id, campaign_id, channel, coupon_id, order_id, amount_fen, occurred_at FROM growth_events ${where} ORDER BY occurred_at DESC LIMIT $${idx++} OFFSET $${idx}`, [...params, limit, offset]);
+    return res.json({ ok: true, events: r.rows });
+  });
+
+  app.get('/api/growth/campaigns', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const store_id = cleanText(req.query.store_id || '', 128);
+    const status = cleanText(req.query.status || '', 40);
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+    if (store_id) { conditions.push(`store_id = $${idx++}`); params.push(store_id); }
+    if (status) { conditions.push(`status = $${idx++}`); params.push(status); }
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+    const r = await pool.query(`SELECT * FROM growth_campaigns ${where} ORDER BY created_at DESC`, params);
+    return res.json({ ok: true, campaigns: r.rows });
+  });
+
+  app.get('/api/growth/redemptions', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const campaign_id = cleanText(req.query.campaign_id || '', 128);
+    const store_id = cleanText(req.query.store_id || '', 128);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 500);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+    if (campaign_id) { conditions.push(`campaign_id = $${idx++}`); params.push(campaign_id); }
+    if (store_id) { conditions.push(`store_id = $${idx++}`); params.push(store_id); }
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+    const r = await pool.query(`SELECT id, customer_id, coupon_id, campaign_id, store_id, amount_fen, redeemed_at FROM growth_redemptions ${where} ORDER BY redeemed_at DESC LIMIT $${idx++} OFFSET $${idx}`, [...params, limit, offset]);
+    return res.json({ ok: true, redemptions: r.rows });
   });
 }

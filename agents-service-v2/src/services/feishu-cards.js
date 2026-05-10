@@ -377,6 +377,7 @@ export function buildGrowthAlertCard(alert) {
   const sevEmoji = alert.severity === 'high' ? '🚨' : alert.severity === 'medium' ? '⚠️' : 'ℹ️';
   const storeText = alert.storeId || alert.store || '全部门店';
   const campaignText = alert.campaignId || '';
+  const dashboardUrl = (process.env.HRMS_BASE_URL || 'https://nnyx.cc').replace(/\/$/, '') + '/working-fixed.html?page=growth';
   const metrics = alert.metrics || {};
   const metricLines = [];
   if (metrics.scanCount != null) metricLines.push(`扫码：${metrics.scanCount}`);
@@ -390,6 +391,23 @@ export function buildGrowthAlertCard(alert) {
     elements: [
       { tag: 'div', text: { tag: 'lark_md', content: `**门店**：${storeText}\n**活动**：${campaignText || '-'}\n**严重度**：${sevEmoji} ${alert.severity}\n**消息**：${alert.message || ''}${metricStr}` } },
       { tag: 'div', text: { tag: 'lark_md', content: `**建议动作**：${alert.suggestedAction || ''}` } },
+      {
+        tag: 'action',
+        actions: [
+          {
+            tag: 'button',
+            text: { tag: 'plain_text', content: '查看增长看板' },
+            type: 'primary',
+            url: dashboardUrl
+          },
+          {
+            tag: 'button',
+            text: { tag: 'plain_text', content: '复制处理建议' },
+            type: 'default',
+            multi_url: { url: dashboardUrl }
+          }
+        ]
+      },
       { tag: 'hr' },
       { tag: 'note', elements: [{ tag: 'plain_text', content: '🔄 增长监控自动生成，每小时刷新一次。请及时处理。' }] }
     ]

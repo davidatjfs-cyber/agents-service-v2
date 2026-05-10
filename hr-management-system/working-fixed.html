@@ -13466,6 +13466,13 @@
                             <button onclick="refreshGrowthDashboard()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:600;">刷新</button>
                         </div>
                     </div>
+                    <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;">
+                        <button onclick="showGrowthTab('dashboard')" id="growth-tab-dashboard" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:600;">看板</button>
+                        <button onclick="showGrowthTab('wecom')" id="growth-tab-wecom" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">企微客户</button>
+                        <button onclick="showGrowthTab('campaigns')" id="growth-tab-campaigns" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">活动管理</button>
+                        <button onclick="showGrowthTab('feedback')" id="growth-tab-feedback" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">方案反馈</button>
+                    </div>
+                    <div id="growth-dashboard-content">
                     <div id="growth-metrics-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;"></div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
                         <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
@@ -13483,10 +13490,42 @@
                     </div>
                     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;margin-top:16px;">
                         <div style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">行动建议</div>
-                        <div id="growth-actions" style="min-height:200px;"></div>
+                         <div id="growth-actions" style="min-height:200px;"></div>
+                     </div>
                     </div>
-                </div>
-            </div>
+                    <div id="growth-wecom-content" style="display:none;">
+                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
+                            <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">企微客户管理</div>
+                            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+                                <button onclick="loadWechatWorkStats()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新统计</button>
+                                <button onclick="showWechatImportDialog()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:13px;">飞书导入</button>
+                                <button onclick="showWechatManualDialog()" style="padding:6px 14px;border-radius:8px;background:rgba(245,158,11,0.2);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);cursor:pointer;font-size:13px;">手动添加</button>
+                            </div>
+                            <div id="wecom-stats" style="margin-bottom:16px;"></div>
+                            <div id="wecom-customers-list" style="max-height:400px;overflow-y:auto;"></div>
+                        </div>
+                    </div>
+                    <div id="growth-campaigns-content" style="display:none;">
+                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
+                            <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">活动管理</div>
+                            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+                                <button onclick="loadCampaignPlans()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新列表</button>
+                                <button onclick="showCreateCampaignDialog()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:13px;">创建活动</button>
+                            </div>
+                            <div id="campaign-plans-list" style="max-height:500px;overflow-y:auto;"></div>
+                        </div>
+                    </div>
+                    <div id="growth-feedback-content" style="display:none;">
+                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
+                            <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">策略评价 & 反馈</div>
+                            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+                                <button onclick="loadStrategyEvaluations()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新列表</button>
+                            </div>
+                            <div id="strategy-evaluations-list" style="max-height:500px;overflow-y:auto;"></div>
+                        </div>
+                    </div>
+                 </div>
+             </div>
             <div id="exam-page" class="hidden">
                 <div class="exam-shell">
                     <div class="exam-header">
@@ -44125,6 +44164,212 @@ ${body}
             } catch (e) {
                 console.error('文件上传失败:', e);
                 showNotification('文件上传失败: ' + (e?.message || '未知错误'), 'error');
+            }
+        }
+
+        function growthAuthHeaders() {
+            return {
+                'Authorization': 'Bearer ' + (HRMS_API.token() || ''),
+                'Content-Type': 'application/json'
+            };
+        }
+
+        function showGrowthTab(tab) {
+            ['dashboard', 'wecom', 'campaigns', 'feedback'].forEach(function(name) {
+                var content = document.getElementById('growth-' + name + '-content');
+                var btn = document.getElementById('growth-tab-' + name);
+                if (content) content.style.display = name === tab ? '' : 'none';
+                if (btn) {
+                    btn.style.background = name === tab ? '#0ea5e9' : 'rgba(255,255,255,0.06)';
+                    btn.style.color = name === tab ? '#fff' : 'rgba(226,232,240,0.7)';
+                }
+            });
+            if (tab === 'wecom') {
+                loadWechatWorkStats();
+                loadWechatWorkCustomers();
+            } else if (tab === 'campaigns') {
+                loadCampaignPlans();
+            } else if (tab === 'feedback') {
+                loadStrategyEvaluations();
+            } else {
+                refreshGrowthDashboard();
+            }
+        }
+
+        async function loadWechatWorkStats() {
+            try {
+                const r = await fetch('/api/growth/wechat-work/stats', { headers: growthAuthHeaders() });
+                const data = await r.json();
+                const rows = data?.stats || [];
+                const host = document.getElementById('wecom-stats');
+                host.innerHTML = rows.length ? rows.map(function(x) {
+                    return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">'
+                        + '<strong>' + (x.store_id || '未分配门店') + '</strong>'
+                        + ' · 总数 ' + (x.total_count || 0)
+                        + ' · 已绑定 ' + (x.bound_count || 0)
+                        + ' · 未绑定 ' + (x.unbound_count || 0)
+                        + '</div>';
+                }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无企微统计</div>';
+            } catch (e) {
+                document.getElementById('wecom-stats').innerHTML = '<div style="color:#ef4444;">加载企微统计失败</div>';
+            }
+        }
+
+        async function loadWechatWorkCustomers() {
+            try {
+                const store = document.getElementById('growth-store-filter')?.value || '';
+                const url = '/api/growth/wechat-work/customers' + (store ? ('?store_id=' + encodeURIComponent(store)) : '');
+                const r = await fetch(url, { headers: growthAuthHeaders() });
+                const data = await r.json();
+                const rows = data?.customers || [];
+                const host = document.getElementById('wecom-customers-list');
+                host.innerHTML = rows.length ? rows.map(function(x) {
+                    return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">'
+                        + '<div style="color:#fff;font-weight:600;">' + (x.name || '-') + ' · ' + (x.phone || '-') + '</div>'
+                        + '<div style="color:rgba(226,232,240,0.6);margin-top:4px;">门店: ' + (x.store_id || '-') + ' · external_userid: ' + (x.external_userid || '-') + '</div>'
+                        + '<div style="color:' + (x.bind_customer_id ? '#22c55e' : '#f59e0b') + ';margin-top:4px;">' + (x.bind_customer_id ? ('已绑定客户 #' + x.bind_customer_id) : '未绑定') + '</div>'
+                        + '</div>';
+                }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无企微客户</div>';
+            } catch (e) {
+                document.getElementById('wecom-customers-list').innerHTML = '<div style="color:#ef4444;">加载企微客户失败</div>';
+            }
+        }
+
+        async function showWechatImportDialog() {
+            const appToken = prompt('请输入飞书 app_token');
+            if (!appToken) return;
+            const tableId = prompt('请输入飞书 table_id');
+            if (!tableId) return;
+            try {
+                const r = await fetch('/api/growth/wechat-work/import-feishu', {
+                    method: 'POST',
+                    headers: growthAuthHeaders(),
+                    body: JSON.stringify({ app_token: appToken, table_id: tableId })
+                });
+                const data = await r.json();
+                if (!data.ok) throw new Error(data.error || 'import_failed');
+                showNotification('飞书导入成功：' + (data.imported || 0) + ' 条', 'success');
+                loadWechatWorkStats();
+                loadWechatWorkCustomers();
+            } catch (e) {
+                showNotification('飞书导入失败：' + (e?.message || e), 'error');
+            }
+        }
+
+        async function showWechatManualDialog() {
+            const raw = prompt('请输入 JSON 数组，如 [{"phone":"138...","name":"张三","store_id":"store_1"}]');
+            if (!raw) return;
+            try {
+                const customers = JSON.parse(raw);
+                const r = await fetch('/api/growth/wechat-work/customers', {
+                    method: 'POST',
+                    headers: growthAuthHeaders(),
+                    body: JSON.stringify({ customers: customers })
+                });
+                const data = await r.json();
+                if (!data.ok) throw new Error(data.error || 'save_failed');
+                showNotification('手动导入成功：' + (data.imported || 0) + ' 条', 'success');
+                loadWechatWorkStats();
+                loadWechatWorkCustomers();
+            } catch (e) {
+                showNotification('手动导入失败：' + (e?.message || e), 'error');
+            }
+        }
+
+        async function loadCampaignPlans() {
+            try {
+                const store = document.getElementById('growth-store-filter')?.value || '';
+                const url = '/api/growth/campaign-plans' + (store ? ('?store_id=' + encodeURIComponent(store)) : '');
+                const r = await fetch(url, { headers: growthAuthHeaders() });
+                const data = await r.json();
+                const rows = data?.plans || [];
+                const host = document.getElementById('campaign-plans-list');
+                host.innerHTML = rows.length ? rows.map(function(x) {
+                    return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">'
+                        + '<div style="color:#fff;font-weight:600;">' + (x.title || '-') + '</div>'
+                        + '<div style="color:rgba(226,232,240,0.6);margin-top:4px;">门店: ' + (x.store_id || '-') + ' · 渠道: ' + (x.channel || '-') + ' · 状态: ' + (x.status || '-') + '</div>'
+                        + '<div style="color:rgba(226,232,240,0.45);margin-top:4px;">plan_id: ' + (x.plan_id || '-') + ' · campaign_id: ' + (x.campaign_id || '-') + '</div>'
+                        + '</div>';
+                }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无活动计划</div>';
+            } catch (e) {
+                document.getElementById('campaign-plans-list').innerHTML = '<div style="color:#ef4444;">加载活动计划失败</div>';
+            }
+        }
+
+        async function showCreateCampaignDialog() {
+            const store_id = prompt('门店 ID');
+            if (!store_id) return;
+            const title = prompt('活动标题');
+            if (!title) return;
+            const channel = prompt('渠道（如 miniprogram / wecom / xiaohongshu）', 'miniprogram') || 'miniprogram';
+            const status = prompt('状态（draft / active）', 'draft') || 'draft';
+            try {
+                const payload = {
+                    plan_id: 'plan_' + Date.now(),
+                    campaign_id: 'campaign_' + Date.now(),
+                    store_id: store_id,
+                    title: title,
+                    channel: channel,
+                    status: status
+                };
+                const r = await fetch('/api/growth/campaign-plans', {
+                    method: 'POST',
+                    headers: growthAuthHeaders(),
+                    body: JSON.stringify(payload)
+                });
+                const data = await r.json();
+                if (!data.ok) throw new Error(data.error || 'create_failed');
+                showNotification('活动创建成功', 'success');
+                loadCampaignPlans();
+            } catch (e) {
+                showNotification('活动创建失败：' + (e?.message || e), 'error');
+            }
+        }
+
+        async function loadStrategyEvaluations() {
+            try {
+                const store = document.getElementById('growth-store-filter')?.value || '';
+                const url = '/api/growth/strategy-evaluations' + (store ? ('?store_id=' + encodeURIComponent(store)) : '');
+                const r = await fetch(url, { headers: growthAuthHeaders() });
+                const data = await r.json();
+                const rows = data?.evaluations || [];
+                const host = document.getElementById('strategy-evaluations-list');
+                host.innerHTML = rows.length ? rows.map(function(x) {
+                    const key = x.strategy_key || '';
+                    return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">'
+                        + '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">'
+                        + '<div style="color:#fff;font-weight:600;">' + (x.title || '-') + '</div>'
+                        + '<div style="color:' + (Number(x.total_score) >= 70 ? '#22c55e' : '#f59e0b') + ';font-weight:700;">' + (x.total_score || 0) + '分</div>'
+                        + '</div>'
+                        + '<div style="color:rgba(226,232,240,0.6);margin-top:4px;">门店: ' + (x.store_id || '-') + ' · 状态: ' + (x.status || '-') + ' · 反馈: ' + (x.feedback || '-') + '</div>'
+                        + '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">'
+                        + '<button onclick="submitStrategyFeedback(\'' + key + '\',4,\'采纳\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(34,197,94,0.2);color:#22c55e;cursor:pointer;">采纳</button>'
+                        + '<button onclick="submitStrategyFeedback(\'' + key + '\',2,\'不适合\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(245,158,11,0.2);color:#f59e0b;cursor:pointer;">不适合</button>'
+                        + '<button onclick="submitStrategyFeedback(\'' + key + '\',5,\'效果好\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(14,165,233,0.2);color:#38bdf8;cursor:pointer;">效果好</button>'
+                        + '<button onclick="submitStrategyFeedback(\'' + key + '\',1,\'效果差\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(239,68,68,0.2);color:#ef4444;cursor:pointer;">效果差</button>'
+                        + '</div>'
+                        + '</div>';
+                }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无策略评价</div>';
+            } catch (e) {
+                document.getElementById('strategy-evaluations-list').innerHTML = '<div style="color:#ef4444;">加载策略评价失败</div>';
+            }
+        }
+
+        async function submitStrategyFeedback(strategyKey, rating, defaultText) {
+            const feedback = prompt('请输入反馈内容', defaultText || '已采纳');
+            if (feedback == null) return;
+            try {
+                const r = await fetch('/api/growth/strategy-feedback', {
+                    method: 'POST',
+                    headers: growthAuthHeaders(),
+                    body: JSON.stringify({ strategy_key: strategyKey, rating: rating, feedback: feedback })
+                });
+                const data = await r.json();
+                if (!data.ok) throw new Error(data.error || 'feedback_failed');
+                showNotification('反馈已提交', 'success');
+                loadStrategyEvaluations();
+            } catch (e) {
+                showNotification('反馈提交失败：' + (e?.message || e), 'error');
             }
         }
 

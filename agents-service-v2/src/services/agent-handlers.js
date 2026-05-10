@@ -98,7 +98,7 @@ import {
 } from './agent-handlers/knowledge-base.js';
 
 import {
-  NOW_CN, FMT_DATE, stripJsonFromResponse
+  NOW_CN, FMT_DATE, stripJsonFromResponse, extractFirstBalancedJsonObject, decodeJsonStringEscapesForFeishu
 } from './agent-handlers/text-utils.js';
 
 const FACTUAL_BLOCKED = '抱歉，我当前无法从数据库中获取相关凭证/数据，请您登录系统手动核查。';
@@ -2500,12 +2500,29 @@ async function handleMarketingPlanner(text, ctx) {
     mktData += '\n\n【营销案例】读取失败';
   }
 
+  let storeProfileForEval = null;
   try {
     const profileCtx = await buildStoreProfileContext(store);
     if (profileCtx) mktData += '\n\n' + profileCtx;
   } catch (err) {
     console.warn('[DB_ERROR]', err.message);
   }
+
+  let marginConstraintNote = '';
+  try {
+    const { rows: _profileRows } = await query('SELECT store_id, avg_ticket_fen, gross_margin_floor, suitable_offers, unsuitable_offers FROM store_marketing_profiles WHERE store_id ILIKE $1 LIMIT 1', [`%${store || ''}%`]);
+    const sp = _profileRows?.[0];
+    if (sp) {
+      storeProfileForEval = { avg_ticket_fen: Number(sp.avg_ticket_fen) || 0, gross_margin_floor: Number(sp.gross_margin_floor) || 0, suitable_offers: sp.suitable_offers || [], unsuitable_offers: sp.unsuitable_offers || [] };
+      const ticketYuan = sp.avg_ticket_fen ? (sp.avg_ticket_fen / 100).toFixed(0) : null;
+      const marginNote = sp.gross_margin_floor ? `\n毛利底线: ${(sp.gross_margin_floor * 100).toFixed(0)}%` : '';
+      const suitableNote = Array.isArray(sp.suitable_offers) && sp.suitable_offers.length ? `适合券类型: ${sp.suitable_offers.join('、')}` : '';
+      const unsuitableNote = Array.isArray(sp.unsuitable_offers) && sp.unsuitable_offers.length ? `不适合活动: ${sp.unsuitable_offers.join('、')}` : '';
+      if (ticketYuan || marginNote || suitableNote || unsuitableNote) {
+        marginConstraintNote = `\n【门店画像约束】${ticketYuan ? `客单价约${ticketYuan}元;` : ''}${marginNote}${suitableNote ? '; ' + suitableNote : ''}${unsuitableNote ? '; ' + unsuitableNote : ''}\n要求: 券面值不超过客单价50%; 不适合的活动类型禁止推荐; 毛利低于底线时优先引流而非打折。`;
+      }
+    }
+  } catch (e) { console.warn('[margin_constraint]', e.message); }
 
   try {
     const reviews = await query(
@@ -2606,11 +2623,21 @@ ${unifiedKnowledgeBlock_mkt}${mplMemoryBlock || ''}
 ${JSON.stringify(engineStrategies, null, 2)}
 
 要求：
-1. 每条策略写成完整可执行方案（目标、动作、衡量、负责人/时间窗口等）
-2. 保留策略核心，不要改变策略内容（尤其 action 中的关键表述）
-3. 可以增加执行细节，但不能发明与上表无关的新策略
-4. 若关键信息不足，仅可输出：{"type":"ask","question":"..."}；否则输出完整中文正文（不要用 JSON 包裹全文方案）
-5. 语气专业、可交给门店直接执行`;
+ 1. 每条策略写成完整可执行方案（目标、动作、衡量、负责人/时间窗口等）
+ 2. 保留策略核心，不要改变策略内容（尤其 action 中的关键表述）
+ 3. 可以增加执行细节，但不能发明与上表无关的新策略
+ 4. 若关键信息不足，仅可输出：{"type":"ask","question":"..."}；否则输出完整中文正文（不要用 JSON 包裹全文方案）
+ 5. 语气专业、可交给门店直接执行
+ 6. 输出正文时，每条策略必须严格包含以下字段标题：
+    - 策略名称
+    - 目标
+    - 对象
+    - 具体动作
+    - 负责人
+    - 时间窗口
+    - 衡量指标
+    - 风险提醒
+${marginConstraintNote}`;
 
   const plannerTemp = 0.42;
   const r = await callLLM([
@@ -2723,6 +2750,19 @@ ${JSON.stringify(engineStrategies, null, 2)}
       metadata: { score: textScore }
     });
   }
+
+  let strategyEval = null;
+  if (store && storeProfileForEval) {
+    try {
+      strategyEval = evaluateStrategyByProfile(responseText, storeProfileForEval);
+      if (strategyEval && strategyEval.score < 60) {
+        responseText += `\n\n⚠️ 系统评分提醒：此方案适配评分 ${strategyEval.score}/100，存在以下问题：${strategyEval.issues.join('；')}。建议调整后再执行。`;
+      } else if (strategyEval && strategyEval.issues.length) {
+        responseText += `\n\n💡 系统评分：${strategyEval.score}/100${strategyEval.issues.length ? '，注意：' + strategyEval.issues.join('；') : ''}`;
+      }
+    } catch (e) { console.warn('[strategy_eval]', e.message); }
+  }
+
   return {
     agent: 'marketing_planner',
     response: responseText,
