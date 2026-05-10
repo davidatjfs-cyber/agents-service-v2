@@ -113,9 +113,11 @@ export async function ensurePhaseTables(pool) {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_calendar_date ON growth_content_calendar (publish_date, store_id, channel)`);
 
   // Phase 9: POS orders (from KeruYun via Feishu bitable)
+  // Column order matches KeruYun export exactly: 编号,订单号,订单来源,营业日,下单时间,结账时间,订单状态,订单金额,总优惠金额,支付方式,支付笔数,订单收入,会员姓名,会员手机号,订单类型,桌台,就餐人数,就餐时长
   await pool.query(`
     CREATE TABLE IF NOT EXISTS pos_orders (
       id BIGSERIAL PRIMARY KEY,
+      seq_no TEXT,
       order_no TEXT NOT NULL,
       order_source TEXT,
       biz_date DATE,
@@ -124,27 +126,17 @@ export async function ensurePhaseTables(pool) {
       order_status TEXT,
       total_amount NUMERIC DEFAULT 0,
       total_discount NUMERIC DEFAULT 0,
-      revenue NUMERIC DEFAULT 0,
       payment_method TEXT,
       payment_count INTEGER DEFAULT 0,
-      cross_day_payment TEXT,
-      received_amount NUMERIC DEFAULT 0,
-      refund_amount NUMERIC DEFAULT 0,
+      revenue NUMERIC DEFAULT 0,
       member_name TEXT,
       phone TEXT,
       order_type TEXT,
       table_no TEXT,
-      take_no TEXT,
       diners INTEGER,
       duration TEXT,
-      cashier TEXT,
-      order_remark TEXT,
-      is_test TEXT,
-      third_party_take_code TEXT,
-      store_id TEXT,
-      store_name TEXT,
-      store_code TEXT,
       customer_id BIGINT,
+      store_id TEXT,
       synced_at TIMESTAMPTZ DEFAULT NOW(),
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
@@ -154,17 +146,17 @@ export async function ensurePhaseTables(pool) {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_pos_orders_date ON pos_orders (biz_date DESC, store_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_pos_orders_customer ON pos_orders (customer_id) WHERE customer_id IS NOT NULL`);
 
+  // Column order matches KeruYun export: 营业日,门店编号,门店名称,订单号,商品编码,商品名称,规格,菜品标签,单价,数量,单位,菜品合计金额,服务费分摊,菜品优惠,菜品收入,商品中类,商品大类
   await pool.query(`
     CREATE TABLE IF NOT EXISTS pos_order_items (
       id BIGSERIAL PRIMARY KEY,
-      order_no TEXT NOT NULL,
-      store_name TEXT,
-      store_code TEXT,
       biz_date DATE,
+      store_code TEXT,
+      store_name TEXT,
+      order_no TEXT NOT NULL,
       sku TEXT,
       dish_name TEXT,
       spec TEXT,
-      sale_type TEXT,
       tags TEXT,
       unit_price NUMERIC DEFAULT 0,
       qty NUMERIC DEFAULT 0,
@@ -173,13 +165,8 @@ export async function ensurePhaseTables(pool) {
       service_fee NUMERIC DEFAULT 0,
       discount NUMERIC DEFAULT 0,
       item_revenue NUMERIC DEFAULT 0,
-      refund_qty NUMERIC DEFAULT 0,
-      refund_amount NUMERIC DEFAULT 0,
-      gift_qty NUMERIC DEFAULT 0,
-      gift_amount NUMERIC DEFAULT 0,
       category_mid TEXT,
       category TEXT,
-      operator TEXT,
       synced_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
@@ -486,32 +473,37 @@ export function registerPhaseRoutes(app, pool) {
 
     if (orders.length) {
       for (const o of orders) {
-        const phone = parseKeruyunPhone(o.member_phone || o.phone || '');
+        const phone = parseKeruyunPhone(o.phone || o.member_phone || '');
+        const bizDate = (o.biz_date || '').toString().trim().replace(/[\/年]/g, '-').replace(/月/g, '-').replace(/日/g, '');
         await pool.query(`
-          INSERT INTO pos_orders(order_no,order_source,biz_date,order_time,checkout_time,order_status,total_amount,total_discount,revenue,payment_method,payment_count,cross_day_payment,received_amount,refund_amount,member_name,phone,order_type,table_no,take_no,diners,duration,cashier,order_remark,is_test,third_party_take_code,store_id,store_name,store_code)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
+          INSERT INTO pos_orders(seq_no,order_no,order_source,biz_date,order_time,checkout_time,order_status,total_amount,total_discount,payment_method,payment_count,revenue,member_name,phone,order_type,table_no,diners,duration,store_id)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
           ON CONFLICT(order_no) DO UPDATE SET
-            order_source=EXCLUDED.order_source,checkout_time=COALESCE(EXCLUDED.checkout_time,pos_orders.checkout_time),
+            order_source=EXCLUDED.order_source,
+            checkout_time=COALESCE(EXCLUDED.checkout_time,pos_orders.checkout_time),
             order_status=COALESCE(EXCLUDED.order_status,pos_orders.order_status),
-            total_amount=EXCLUDED.total_amount,total_discount=EXCLUDED.total_discount,revenue=EXCLUDED.revenue,
+            total_amount=EXCLUDED.total_amount,total_discount=EXCLUDED.total_discount,
+            revenue=EXCLUDED.revenue,
             payment_method=COALESCE(EXCLUDED.payment_method,pos_orders.payment_method),
+            payment_count=EXCLUDED.payment_count,
             phone=COALESCE(NULLIF(EXCLUDED.phone,''),pos_orders.phone),
-            member_name=COALESCE(NULLIF(EXCLUDED.member_name,''),pos_orders.member_name),
+            member_name=COALESCE(NULLIF(EXCLUDED.member_name,'-'),NULLIF(EXCLUDED.member_name,''),pos_orders.member_name),
             table_no=COALESCE(NULLIF(EXCLUDED.table_no,''),pos_orders.table_no),
             diners=COALESCE(EXCLUDED.diners,pos_orders.diners),
             duration=COALESCE(NULLIF(EXCLUDED.duration,''),pos_orders.duration),
+            seq_no=COALESCE(NULLIF(EXCLUDED.seq_no,''),pos_orders.seq_no),
             synced_at=NOW()
         `, [
-          cleanText(o.order_no || '', 64), cleanText(o.order_source || '', 80),
-          o.biz_date || null, parseKeruyunDateTime(o.order_time), parseKeruyunDateTime(o.checkout_time),
+          cleanText(o.seq_no || '', 32), cleanText(o.order_no || '', 64),
+          cleanText(o.order_source || '', 80), bizDate || null,
+          parseKeruyunDateTime(o.order_time), parseKeruyunDateTime(o.checkout_time),
           cleanText(o.order_status || '', 40), parseNum(o.total_amount), parseNum(o.total_discount),
-          parseNum(o.revenue), cleanText(o.payment_method || '', 80), Number(o.payment_count) || 0,
-          cleanText(o.cross_day_payment || '', 20), parseNum(o.received_amount), parseNum(o.refund_amount),
-          cleanText(o.member_name || '', 100), phone, cleanText(o.order_type || '', 40),
-          cleanText(o.table_no || '', 40), cleanText(o.take_no || '', 40), Number(o.diners) || null,
-          cleanText(o.duration || '', 40), cleanText(o.cashier || '', 100), cleanText(o.order_remark || '', 500),
-          cleanText(o.is_test || '', 20), cleanText(o.third_party_take_code || '', 40),
-          storeId || cleanText(o.store_id || '', 128), cleanText(o.store_name || '', 200), cleanText(o.store_code || '', 64)
+          cleanText(o.payment_method || '', 80), Number(o.payment_count) || 0,
+          parseNum(o.revenue),
+          cleanText(o.member_name || '', 100), phone,
+          cleanText(o.order_type || '', 40), cleanText(o.table_no || '', 40),
+          Number(o.diners) || null, cleanText(o.duration || '', 40),
+          storeId || cleanText(o.store_id || '', 128)
         ]);
         ordersUpserted++;
       }
@@ -519,18 +511,19 @@ export function registerPhaseRoutes(app, pool) {
 
     if (items.length) {
       for (const it of items) {
+        const itemBizDate = (it.biz_date || '').toString().trim().replace(/[\/年]/g, '-').replace(/月/g, '-').replace(/日/g, '');
         await pool.query(`
-          INSERT INTO pos_order_items(order_no,store_name,store_code,biz_date,sku,dish_name,spec,sale_type,tags,unit_price,qty,unit,subtotal,service_fee,discount,item_revenue,refund_qty,refund_amount,gift_qty,gift_amount,category_mid,category,operator)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+          INSERT INTO pos_order_items(biz_date,store_code,store_name,order_no,sku,dish_name,spec,tags,unit_price,qty,unit,subtotal,service_fee,discount,item_revenue,category_mid,category)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
           ON CONFLICT DO NOTHING
         `, [
-          cleanText(it.order_no || '', 64), cleanText(it.store_name || '', 200), cleanText(it.store_code || '', 64),
-          it.biz_date || null, cleanText(it.sku || '', 64), cleanText(it.dish_name || '', 300),
-          cleanText(it.spec || '', 100), cleanText(it.sale_type || '', 40), cleanText(it.tags || '', 500),
+          itemBizDate || null, cleanText(it.store_code || '', 64), cleanText(it.store_name || '', 200),
+          cleanText(it.order_no || '', 64), cleanText(it.sku || '', 64), cleanText(it.dish_name || '', 300),
+          cleanText(it.spec || '', 100), cleanText(it.tags || '', 500),
           parseNum(it.unit_price), parseNum(it.qty), cleanText(it.unit || '', 20),
-          parseNum(it.subtotal), parseNum(it.service_fee), parseNum(it.discount), parseNum(it.item_revenue),
-          parseNum(it.refund_qty), parseNum(it.refund_amount), parseNum(it.gift_qty), parseNum(it.gift_amount),
-          cleanText(it.category_mid || '', 100), cleanText(it.category || '', 100), cleanText(it.operator || '', 100)
+          parseNum(it.subtotal), parseNum(it.service_fee),
+          parseNum(it.discount), parseNum(it.item_revenue),
+          cleanText(it.category_mid || '', 100), cleanText(it.category || '', 100)
         ]);
         itemsUpserted++;
       }
@@ -605,5 +598,142 @@ export function registerPhaseRoutes(app, pool) {
     if (!rqa(req, res)) return;
     const linked = await linkPosOrdersToCustomers(pool);
     res.json({ok:true, customers_linked: linked});
+  });
+
+  // ── Phase 9: Feishu bitable sync config for POS orders ──
+  app.get('/api/growth/pos-feishu-config', async (req, res) => {
+    if (!rqa(req, res)) return;
+    const r = await pool.query(`SELECT data FROM hrms_state WHERE key = 'pos_feishu_config' LIMIT 1`);
+    const config = r.rows?.[0]?.data || null;
+    res.json({ok:true, config});
+  });
+
+  app.post('/api/growth/pos-feishu-config', async (req, res) => {
+    if (!rqa(req, res)) return;
+    const b = req.body || {};
+    const config = {
+      orders_app_token: cleanText(b.orders_app_token || '', 200),
+      orders_table_id: cleanText(b.orders_table_id || '', 200),
+      items_app_token: cleanText(b.items_app_token || '', 200),
+      items_table_id: cleanText(b.items_table_id || '', 200),
+      store_id: cleanText(b.store_id || '', 128)
+    };
+    if (!config.orders_app_token || !config.orders_table_id)
+      return res.status(400).json({ok:false,error:'missing orders_app_token or orders_table_id'});
+    await pool.query(
+      `INSERT INTO hrms_state (key, data, updated_at) VALUES ('pos_feishu_config', $1::jsonb, NOW())
+       ON CONFLICT (key) DO UPDATE SET data = $1::jsonb, updated_at = NOW()`,
+      [JSON.stringify(config)]
+    );
+    res.json({ok:true, config});
+  });
+
+  app.post('/api/growth/pos-feishu-sync', async (req, res) => {
+    if (!rqa(req, res)) return;
+    const b = req.body || {};
+    const override = b.config || null;
+
+    let config = override;
+    if (!config) {
+      const cr = await pool.query(`SELECT data FROM hrms_state WHERE key = 'pos_feishu_config' LIMIT 1`);
+      config = cr.rows?.[0]?.data || null;
+    }
+    if (!config) return res.status(400).json({ok:false,error:'no pos_feishu_config found, POST /api/growth/pos-feishu-config first'});
+
+    const LARK_APP_ID = process.env.LARK_APP_ID || process.env.FEISHU_APP_ID || '';
+    const LARK_APP_SECRET = process.env.LARK_APP_SECRET || process.env.FEISHU_APP_SECRET || '';
+    if (!LARK_APP_ID || !LARK_APP_SECRET) return res.status(503).json({ok:false,error:'LARK_APP_ID/LARK_APP_SECRET not configured'});
+
+    let tenantToken = '';
+    try {
+      const tr = await (await import('node-fetch')).default('https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({app_id: LARK_APP_ID, app_secret: LARK_APP_SECRET})
+      }).then(r => r.json());
+      tenantToken = tr.tenant_access_token || '';
+    } catch (e) { return res.status(502).json({ok:false,error:'lark_token_failed',detail: e.message}); }
+    if (!tenantToken) return res.status(502).json({ok:false,error:'lark_token_empty'});
+
+    const storeId = config.store_id || '';
+    let totalOrders = 0, totalItems = 0, totalLinked = 0;
+
+    // ── Sync orders table ──
+    if (config.orders_app_token && config.orders_table_id) {
+      const ORDERS_FIELD_MAP = {
+        '编号': 'seq_no', '订单号': 'order_no', '订单来源': 'order_source',
+        '营业日': 'biz_date', '下单时间': 'order_time', '结账时间': 'checkout_time',
+        '订单状态': 'order_status', '订单金额': 'total_amount', '总优惠金额': 'total_discount',
+        '支付方式': 'payment_method', '支付笔数': 'payment_count', '订单收入': 'revenue',
+        '会员姓名': 'member_name', '会员手机号': 'phone', '订单类型': 'order_type',
+        '桌台': 'table_no', '就餐人数': 'diners', '就餐时长': 'duration'
+      };
+      let pageToken = '';
+      let ordersBatch = [];
+      do {
+        const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${config.orders_app_token}/tables/${config.orders_table_id}/records?page_size=500${pageToken ? '&page_token=' + pageToken : ''}`;
+        const resp = await (await import('node-fetch')).default(url, {headers: {'Authorization': 'Bearer ' + tenantToken}}).then(r => r.json());
+        if (resp.code !== 0) return res.status(502).json({ok:false,error:'orders_bitable_error', detail: resp.msg});
+        const items = resp.data?.items || [];
+        for (const rec of items) {
+          const f = rec.fields || {};
+          const order = {store_id: storeId};
+          for (const [cn, en] of Object.entries(ORDERS_FIELD_MAP)) {
+            const val = f[cn];
+            if (val != null) order[en] = typeof val === 'object' ? (val.text || val.link || val.name || JSON.stringify(val)) : val;
+          }
+          if (order.order_no) ordersBatch.push(order);
+        }
+        pageToken = resp.data?.has_more ? (resp.data.page_token || '') : '';
+      } while (pageToken);
+
+      if (ordersBatch.length) {
+        const sr = await (await import('node-fetch')).default('https://nnyx.cc/api/growth/pos-orders', {
+          method: 'POST', headers: {'Authorization': 'Bearer ' + (process.env.MINIPROGRAM_SYNC_SECRET || ''), 'Content-Type': 'application/json'},
+          body: JSON.stringify({store_id: storeId, orders: ordersBatch, items: []})
+        }).then(r => r.json());
+        totalOrders = sr.orders_upserted || 0;
+      }
+    }
+
+    // ── Sync items table ──
+    if (config.items_app_token && config.items_table_id) {
+      const ITEMS_FIELD_MAP = {
+        '营业日': 'biz_date', '门店编号': 'store_code', '门店名称': 'store_name',
+        '订单号': 'order_no', '商品编码': 'sku', '商品名称': 'dish_name',
+        '规格': 'spec', '菜品标签': 'tags', '单价': 'unit_price', '数量': 'qty',
+        '单位': 'unit', '菜品合计金额': 'subtotal', '服务费分摊': 'service_fee',
+        '菜品优惠': 'discount', '菜品收入': 'item_revenue', '商品中类': 'category_mid',
+        '商品大类': 'category'
+      };
+      let pageToken = '';
+      let itemsBatch = [];
+      do {
+        const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${config.items_app_token}/tables/${config.items_table_id}/records?page_size=500${pageToken ? '&page_token=' + pageToken : ''}`;
+        const resp = await (await import('node-fetch')).default(url, {headers: {'Authorization': 'Bearer ' + tenantToken}}).then(r => r.json());
+        if (resp.code !== 0) return res.status(502).json({ok:false,error:'items_bitable_error', detail: resp.msg});
+        const records = resp.data?.items || [];
+        for (const rec of records) {
+          const f = rec.fields || {};
+          const item = {};
+          for (const [cn, en] of Object.entries(ITEMS_FIELD_MAP)) {
+            const val = f[cn];
+            if (val != null) item[en] = typeof val === 'object' ? (val.text || val.link || val.name || JSON.stringify(val)) : val;
+          }
+          if (item.order_no) itemsBatch.push(item);
+        }
+        pageToken = resp.data?.has_more ? (resp.data.page_token || '') : '';
+      } while (pageToken);
+
+      if (itemsBatch.length) {
+        const sr = await (await import('node-fetch')).default('https://nnyx.cc/api/growth/pos-orders', {
+          method: 'POST', headers: {'Authorization': 'Bearer ' + (process.env.MINIPROGRAM_SYNC_SECRET || ''), 'Content-Type': 'application/json'},
+          body: JSON.stringify({store_id: storeId, orders: [], items: itemsBatch})
+        }).then(r => r.json());
+        totalItems = sr.items_upserted || 0;
+      }
+    }
+
+    totalLinked = await linkPosOrdersToCustomers(pool);
+    res.json({ok:true, orders_synced: totalOrders, items_synced: totalItems, customers_linked: totalLinked});
   });
 }
