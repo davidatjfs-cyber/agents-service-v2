@@ -557,7 +557,10 @@ async function sendTaskCardToAssignee(taskId, { reminder = false, reminderCount 
     const trendText = trend
       ? `\n\n**出品问题趋势**：近3天问题 ${trend.currentIssueCount} 条 / 总记录 ${trend.currentTotalCount} 条；前3天问题 ${trend.previousIssueCount} 条 / 总记录 ${trend.previousTotalCount} 条；判断：${trend.label}`
       : '';
-    const required = `\n\n**请门店必须回复**：\n1. 具体整改方案\n2. 完成时间\n3. 责任人\n4. 现场照片/文件证据（可在飞书回复或管理端补充）`;
+    const isPllmAdminTask = String(task.source || '').trim() === 'proactive_llm';
+    const required = isPllmAdminTask
+      ? `\n\n**请管理员回复**：\n1. 是否执行该行动计划？\n2. 若不执行请说明原因`
+      : `\n\n**请门店必须回复**：\n1. 具体整改方案\n2. 完成时间\n3. 责任人\n4. 现场照片/文件证据（可在飞书回复或管理端补充）`;
     const card = {
       config: { wide_screen_mode: true },
       header: {
@@ -977,16 +980,19 @@ export async function sendTaskReminders(taskId, agent) {
       await logEvent(taskId, 'status_transition', 'task_watchdog', task.assignee_agent, task.status, 'hr_filed', { noStoreReply: true, reminders: currentReminders, trend, forced: true });
     }
     await notifyAdminsBoardIssue(`🚨 门店未响应Agent任务，已三次催办并备案\n门店：${canon || task.store || '-'}\n任务：${task.title || taskId}\n任务ID：${taskId}\n当前趋势：${trend.label}（近3天问题${trend.currentIssueCount}条/总记录${trend.currentTotalCount}条，前3天问题${trend.previousIssueCount}条/总记录${trend.previousTotalCount}条）`);
-    const derived = await createBoardTask({
-      content: `继续追踪：${task.title || task.detail || taskId}\n原因：门店三次催办未回复，需重新派发并升级关注。`,
-      priority: task.priority || task.severity || 'high',
-      store: canon || task.store,
-      createdBy: 'task_watchdog',
-      createdByRole: 'system'
-    });
-    if (derived.ok) {
-      await query(`UPDATE master_tasks SET parent_task_id = $2, related_task_ids = COALESCE(related_task_ids,'[]'::jsonb) || $3::jsonb WHERE task_id = $1`, [derived.taskId, taskId, JSON.stringify([taskId])]).catch(() => {});
-      await logEvent(taskId, 'no_reply_revision_task_created', 'task_watchdog', 'master', 'hr_filed', 'hr_filed', { revisionTaskId: derived.taskId });
+    // PLLM 任务本身已分配给管理员，不再创建门店追踪任务（管理员已收到告警）
+    if (String(task.source || '').trim() !== 'proactive_llm') {
+      const derived = await createBoardTask({
+        content: `继续追踪：${task.title || task.detail || taskId}\n原因：门店三次催办未回复，需重新派发并升级关注。`,
+        priority: task.priority || task.severity || 'high',
+        store: canon || task.store,
+        createdBy: 'task_watchdog',
+        createdByRole: 'system'
+      });
+      if (derived.ok) {
+        await query(`UPDATE master_tasks SET parent_task_id = $2, related_task_ids = COALESCE(related_task_ids,'[]'::jsonb) || $3::jsonb WHERE task_id = $1`, [derived.taskId, taskId, JSON.stringify([taskId])]).catch(() => {});
+        await logEvent(taskId, 'no_reply_revision_task_created', 'task_watchdog', 'master', 'hr_filed', 'hr_filed', { revisionTaskId: derived.taskId });
+      }
     }
     return { ok: true, filed: true, revisionTask: derived };
   }
