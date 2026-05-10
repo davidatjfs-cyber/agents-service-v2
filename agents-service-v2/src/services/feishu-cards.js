@@ -177,6 +177,7 @@ export function buildGrowthTaskCard(task, alert) {
   if (actionKey && callbackSecret) {
     actions.push({ tag: 'button', text: { tag: 'plain_text', content: '✅ 立即执行' }, type: 'primary', url: `${callbackUrl}?action_key=${encodeURIComponent(actionKey)}&decision=execute&secret=${encodeURIComponent(callbackSecret)}` });
     actions.push({ tag: 'button', text: { tag: 'plain_text', content: '✏️ 修改方案' }, type: 'default', url: dashboardUrl });
+    actions.push({ tag: 'button', text: { tag: 'plain_text', content: '📝 回填结果' }, type: 'primary', url: `${callbackUrl}?action_key=${encodeURIComponent(actionKey)}&decision=feedback&secret=${encodeURIComponent(callbackSecret)}&reason=%E5%B7%B2%E6%89%A7%E8%A1%8C` });
     actions.push({ tag: 'button', text: { tag: 'plain_text', content: '⛔ 忽略' }, type: 'danger', url: `${callbackUrl}?action_key=${encodeURIComponent(actionKey)}&decision=ignore&secret=${encodeURIComponent(callbackSecret)}` });
   }
   actions.push({ tag: 'button', text: { tag: 'plain_text', content: '📊 看板' }, type: 'default', url: dashboardUrl });

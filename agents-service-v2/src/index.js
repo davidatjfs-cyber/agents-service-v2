@@ -61,6 +61,8 @@ import { runDailyAttitudeFilingReport } from './services/daily-attitude-filing-r
 import { runMonthlyComprehensiveRating } from './services/monthly-comprehensive-rating.js';
 import { getAIOperationsReport } from './services/ai-operations.js';
 import { runGrowthMonitor } from './services/growth-monitor.js';
+import { runCampaignAutopilot } from './services/campaign-autopilot.js';
+import { runCampaignReview } from './services/campaign-review.js';
 import adminApi from './routes/admin-api.js';
 import agentTaskBoardApi from './routes/agent-task-board-api.js';
 import { registerChairmanConfigRoutes } from './routes/chairman-config-api.js';
@@ -1457,6 +1459,20 @@ async function start() {
         .catch((e) => logger.warn({ err: e?.message }, 'growth monitor cron error'));
     }, { timezone: 'Asia/Shanghai' });
     logger.info('Growth monitor scheduled hourly at :10 Asia/Shanghai');
+
+    // Phase 5: Campaign autopilot — every 2 hours at :30
+    cron.schedule('30 */2 * * *', () => {
+      runWithCronLog('campaign_autopilot', () => runCampaignAutopilot())
+        .catch((e) => logger.warn({ err: e?.message }, 'campaign autopilot cron error'));
+    }, { timezone: 'Asia/Shanghai' });
+    logger.info('Campaign autopilot scheduled every 2 hours at :30');
+
+    // Phase 5: Campaign review — daily at 03:30 (after midnight when campaigns end)
+    cron.schedule('30 3 * * *', () => {
+      runWithCronLog('campaign_review', () => runCampaignReview())
+        .catch((e) => logger.warn({ err: e?.message }, 'campaign review cron error'));
+    }, { timezone: 'Asia/Shanghai' });
+    logger.info('Campaign review scheduled daily at 03:30 Asia/Shanghai');
     // 实际毛利率表：每日 05:16（上海）拉取飞书表数据（非「毛利率异常」月检；与 05:00 周度BI、05:08 日频BI 错开）
     cron.schedule('16 5 * * *', async () => {
       try {

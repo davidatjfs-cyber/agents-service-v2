@@ -10079,9 +10079,225 @@
                 --input-padding: 14px 16px;
             }
 
+            .mobile-topbar {
+                display: none !important;
+            }
+
+            html,
+            body {
+                margin-top: 0 !important;
+                padding-top: 0 !important;
+                scroll-padding-top: 0 !important;
+            }
+
+            #main-app,
+            .main-app,
+            .container,
+            .content {
+                margin-top: 0 !important;
+                top: 0 !important;
+            }
+
             .content {
                 padding: 14px !important;
+                padding-top: 0 !important;
                 padding-bottom: calc(var(--mobile-bottom-safe) + env(safe-area-inset-bottom, 0px)) !important;
+            }
+
+            #growth-page {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: radial-gradient(circle at 18% 0%, rgba(14,165,233,0.20), transparent 34%), #090b10;
+                color: #f8fafc;
+            }
+
+            #growth-page .growth-shell {
+                max-width: none !important;
+                margin: 0 !important;
+                padding: 0 10px calc(var(--mobile-bottom-safe) + 24px) !important;
+            }
+
+            #growth-page .growth-hero {
+                display: grid !important;
+                grid-template-columns: 1fr !important;
+                gap: 12px !important;
+                align-items: stretch !important;
+                margin: 0 -10px 12px !important;
+                padding: 16px 14px 14px !important;
+                border-bottom: 1px solid rgba(148,163,184,0.14);
+                background: linear-gradient(135deg, rgba(15,23,42,0.98), rgba(8,13,24,0.92));
+            }
+
+            #growth-page .growth-hero h2 {
+                font-size: 24px !important;
+                line-height: 1.05 !important;
+                letter-spacing: -0.04em;
+                margin: 0 !important;
+            }
+
+            #growth-page .growth-hero h2::after {
+                content: '私域获客 · 转化 · 执行';
+                display: block;
+                margin-top: 6px;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 0.12em;
+                color: rgba(125,211,252,0.72);
+            }
+
+            #growth-page .growth-controls {
+                display: grid !important;
+                grid-template-columns: 1fr auto !important;
+                gap: 8px !important;
+            }
+
+            #growth-page .growth-controls select,
+            #growth-page .growth-controls button {
+                min-height: 42px !important;
+                border-radius: 14px !important;
+                font-size: 13px !important;
+            }
+
+            #growth-page .growth-tabs {
+                display: flex !important;
+                gap: 8px !important;
+                flex-wrap: nowrap !important;
+                overflow-x: auto !important;
+                -webkit-overflow-scrolling: touch;
+                margin: 0 -10px 12px !important;
+                padding: 0 10px 8px !important;
+                scrollbar-width: none;
+            }
+
+            #growth-page .growth-tabs::-webkit-scrollbar {
+                display: none;
+            }
+
+            #growth-page .growth-tabs button {
+                flex: 0 0 auto;
+                min-height: 38px !important;
+                border-radius: 999px !important;
+                padding: 8px 14px !important;
+                white-space: nowrap;
+            }
+
+            #growth-metrics-cards {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 10px !important;
+                margin-bottom: 12px !important;
+            }
+
+            #growth-page .growth-metric-card,
+            #growth-page .growth-panel {
+                border-radius: 18px !important;
+                background: linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.035)) !important;
+                border: 1px solid rgba(148,163,184,0.14) !important;
+                box-shadow: 0 16px 40px rgba(0,0,0,0.20) !important;
+            }
+
+            #growth-page .growth-metric-card {
+                padding: 14px !important;
+                text-align: left !important;
+                min-height: 104px;
+            }
+
+            #growth-page .growth-metric-card .metric-tag {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                height: 24px;
+                padding: 0 9px;
+                margin: 0 0 12px !important;
+                border-radius: 999px;
+                font-size: 10px;
+                font-weight: 900;
+                letter-spacing: 0.08em;
+                background: rgba(14,165,233,0.16);
+                color: #7dd3fc;
+                border: 1px solid rgba(125,211,252,0.22);
+            }
+
+            #growth-page .growth-metric-card .metric-value {
+                font-size: 24px !important;
+                line-height: 1 !important;
+            }
+
+            #growth-page .growth-dashboard-grid {
+                display: grid !important;
+                grid-template-columns: 1fr !important;
+                gap: 12px !important;
+            }
+
+            #growth-page .growth-panel {
+                padding: 14px !important;
+                margin-top: 12px !important;
+            }
+
+            #growth-page .growth-dashboard-grid .growth-panel {
+                margin-top: 0 !important;
+            }
+
+            #growth-page .growth-panel-title {
+                margin-bottom: 10px !important;
+                font-size: 14px !important;
+                letter-spacing: -0.01em;
+            }
+
+            #growth-funnel,
+            #growth-alerts,
+            #growth-trends,
+            #growth-actions {
+                min-height: 0 !important;
+            }
+
+            #growth-page input,
+            #growth-page select,
+            #growth-page textarea,
+            #growth-page button {
+                max-width: 100%;
+            }
+
+            #campaign-create-form {
+                margin-top: 12px !important;
+                padding: 14px !important;
+                border-radius: 18px !important;
+            }
+
+            #campaign-create-form > div[style*="grid-template-columns"] {
+                display: grid !important;
+                grid-template-columns: 1fr !important;
+                gap: 10px !important;
+            }
+
+            #campaign-create-form input,
+            #campaign-create-form select,
+            #campaign-create-form textarea {
+                width: 100% !important;
+                min-height: 46px !important;
+                padding: 12px 14px !important;
+                border-radius: 14px !important;
+                font-size: 16px !important;
+                line-height: 1.35 !important;
+            }
+
+            #campaign-create-form textarea {
+                min-height: 96px !important;
+                height: 96px !important;
+                resize: vertical;
+            }
+
+            #campaign-create-form > div:last-child {
+                display: grid !important;
+                grid-template-columns: 1fr 1fr !important;
+                gap: 10px !important;
+            }
+
+            #campaign-create-form > div:last-child button {
+                width: 100% !important;
+                min-height: 46px !important;
+                border-radius: 14px !important;
+                font-size: 14px !important;
+                font-weight: 800 !important;
             }
 
             .content > div[id$="-page"] {
@@ -13470,17 +13686,20 @@
             </div>
 
             <div id="growth-page" class="hidden" style="display:none;position:fixed;top:-9999px;left:0;width:1px;height:1px;overflow:hidden;">
-                <div style="max-width:1200px;margin:0 auto;padding:20px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                <div class="growth-shell" style="max-width:1200px;margin:0 auto;padding:20px;">
+                    <div class="growth-hero" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
                         <h2 style="font-size:22px;font-weight:800;">增长看板</h2>
-                        <div style="display:flex;gap:8px;">
+                        <div class="growth-controls" style="display:flex;gap:8px;">
                             <select id="growth-store-filter" style="padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
                                 <option value="">全部门店</option>
+                            </select>
+                            <select id="growth-campaign-filter" style="padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
+                                <option value="">全部活动</option>
                             </select>
                             <button onclick="refreshGrowthDashboard()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:600;">刷新</button>
                         </div>
                     </div>
-                    <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;">
+                    <div class="growth-tabs" style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;">
                         <button onclick="showGrowthTab('dashboard')" id="growth-tab-dashboard" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:600;">看板</button>
                         <button onclick="showGrowthTab('wecom')" id="growth-tab-wecom" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">企微客户</button>
                         <button onclick="showGrowthTab('campaigns')" id="growth-tab-campaigns" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">活动管理</button>
@@ -13491,24 +13710,24 @@
                     </div>
                     <div id="growth-dashboard-content">
                     <div id="growth-metrics-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;"></div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
-                            <div style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">活动漏斗</div>
+                    <div class="growth-dashboard-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                        <div class="growth-panel" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
+                            <div class="growth-panel-title" style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">活动漏斗</div>
                             <div id="growth-funnel" style="min-height:200px;"></div>
                         </div>
-                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
-                            <div style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">告警列表</div>
+                        <div class="growth-panel" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
+                            <div class="growth-panel-title" style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">告警列表</div>
                             <div id="growth-alerts" style="min-height:200px;"></div>
                         </div>
                     </div>
-                    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;margin-top:16px;">
-                        <div style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">近期指标趋势</div>
+                    <div class="growth-panel" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;margin-top:16px;">
+                        <div class="growth-panel-title" style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">近期指标趋势</div>
                         <div id="growth-trends" style="min-height:200px;"></div>
                     </div>
-                    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;margin-top:16px;">
-                        <div style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">行动建议</div>
+                    <div class="growth-panel" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;margin-top:16px;">
+                        <div class="growth-panel-title" style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">行动建议</div>
                          <div id="growth-actions" style="min-height:200px;"></div>
-                     </div>
+                      </div>
                     </div>
                     <div id="growth-wecom-content" style="display:none;">
                         <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
@@ -13516,7 +13735,7 @@
                             <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
                                 <button onclick="loadWecomFullDashboard()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新看板</button>
                                 <button onclick="showImportWechatCsv()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:13px;">CSV/Excel导入</button>
-                                <button onclick="showWechatImportDialog()" style="padding:6px 14px;border-radius:8px;background:rgba(14,165,233,0.15);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);cursor:pointer;font-size:13px;">飞书导入</button>
+                                <button onclick="showWechatImportDialog()" style="padding:6px 14px;border-radius:8px;background:rgba(14,165,233,0.15);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);cursor:pointer;font-size:13px;">飞书导入/配置</button>
                                 <button onclick="showWechatManualDialog()" style="padding:6px 14px;border-radius:8px;background:rgba(245,158,11,0.2);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);cursor:pointer;font-size:13px;">手动添加</button>
                             </div>
                             <div id="wecom-stats" style="margin-bottom:16px;"></div>
@@ -19237,6 +19456,10 @@ th { background: #f5f5f5; font-weight: 700; }
                 const r = String(role == null ? currentUser?.role : role || '').trim();
                 return r === ROLES.ADMIN || r === ROLES.HQ_MANAGER || r === ROLES.HR_MANAGER;
             }
+            if (page === 'growth') {
+                const r = String(role == null ? currentUser?.role : role || '').trim();
+                return r === ROLES.ADMIN || r === ROLES.HQ_MANAGER || r === ROLES.STORE_MANAGER || r === ROLES.FRONT_MANAGER;
+            }
             const pages = getRoleModulePages(role == null ? currentUser?.role : role);
             if (pages === null) return true;
             return Array.isArray(pages) && pages.includes(page);
@@ -19244,13 +19467,13 @@ th { background: #f5f5f5; font-weight: 700; }
 
         function getRoleBottomNavPages(role) {
             const r = String(role || '').trim();
-            if (r === ROLES.ADMIN) return ['profile', 'agent-tasks', 'reports', 'agents'];
-            if (r === ROLES.STORE_MANAGER) return ['profile', 'attendance', 'daily-report', 'payment'];
+            if (r === ROLES.ADMIN) return ['profile', 'growth', 'reports', 'agents'];
+            if (r === ROLES.STORE_MANAGER) return ['profile', 'growth', 'attendance', 'daily-report'];
             if (r === ROLES.PRODUCTION_MANAGER) return ['profile', 'attendance', 'forecast', 'rewards'];
-            if (r === ROLES.HQ_MANAGER) return ['profile', 'daily-report', 'approvals', 'reports'];
+            if (r === ROLES.HQ_MANAGER) return ['profile', 'growth', 'daily-report', 'reports'];
             if (r === ROLES.HR_MANAGER) return ['profile', 'attendance', 'approvals', 'reports'];
             if (r === ROLES.CASHIER) return ['profile', 'attendance', 'payment', 'exam'];
-            if (r === ROLES.FRONT_MANAGER) return ['profile', 'daily-report', 'approvals', 'attendance'];
+            if (r === ROLES.FRONT_MANAGER) return ['profile', 'growth', 'daily-report', 'attendance'];
             return ['profile', 'attendance', 'points', 'exam'];
         }
 
@@ -20075,8 +20298,22 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             
             // 显示目标页面
             const targetPage = document.getElementById(pageName + '-page');
+            const contentRoot = document.querySelector('.content');
+            if (targetPage && contentRoot && targetPage.parentElement !== contentRoot) {
+                contentRoot.appendChild(targetPage);
+            }
             if (targetPage) {
                 targetPage.classList.remove('hidden');
+            }
+
+            if (window.innerWidth <= 768) {
+                try {
+                    window.scrollTo(0, 0);
+                    document.documentElement.scrollTop = 0;
+                    document.body.scrollTop = 0;
+                    const contentEl = document.querySelector('.content');
+                    if (contentEl) contentEl.scrollTop = 0;
+                } catch (e) {}
             }
             
             // 更新导航状态
@@ -20224,6 +20461,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                 case 'growth':
                     var gp = document.getElementById('growth-page');
                     if (gp) { gp.style.display = ''; gp.style.position = ''; gp.style.top = ''; gp.style.width = ''; gp.style.height = ''; gp.style.overflow = ''; }
+                    loadCampaignFilterOptions();
                     refreshGrowthDashboard();
                     break;
                 case 'agent-tasks':
@@ -43093,6 +43331,7 @@ ${body}
                 { icon:'📚', label:'知识库', page:'knowledge' },
                 { icon:'📁', label:'文件中心', page:'files', roles:['admin'] },
                 { icon:'📊', label:'数据中心', page:'agents', roles:['admin'] },
+                { icon:'📈', label:'增长看板', page:'growth', roles:['admin','hq_manager','store_manager','front_manager'] },
                 { icon:'🧭', label:'Agent任务', page:'agent-tasks', roles:['admin','hq_manager','hr_manager'] },
                 { icon:'📝', label:'考试测评', page:'exam' },
                 // 奖惩管理：管理员/HR/总部营运/店长/出品经理 可见
@@ -43237,6 +43476,7 @@ ${body}
                 forecast: { icon: '📦', label: '智能助手' },
                 agents: { icon: '📦', label: '智能助手' },
                 'agent-tasks': { icon: '🧭', label: '任务' },
+                growth: { icon: '📈', label: '增长' },
                 exam: { icon: '📝', label: '考试' },
                 'daily-report': { icon: '📒', label: '日报' },
                 payment: { icon: '💰', label: '请款' },
@@ -43291,6 +43531,7 @@ ${body}
                     'knowledge': 'knowledge',
                     'agents': 'agents',
                     'agent-tasks': 'agent-tasks',
+                    'growth': 'growth',
                     'exam': 'exam',
                     'approvals': 'approvals',
                     'payment': 'payment',
@@ -44382,24 +44623,44 @@ ${body}
         }
 
         async function showWechatImportDialog() {
-            const appToken = prompt('请输入飞书 app_token');
+            // 先加载已有配置
+            var currentConfig = null;
+            try {
+                var cr = await fetch('/api/growth/feishu-config', { headers: growthAuthHeaders() });
+                var cd = await cr.json();
+                currentConfig = cd?.config || null;
+            } catch (e) { /* ignore */ }
+            var msg = '配置飞书多维表格自动同步';
+            if (currentConfig && currentConfig.app_token) {
+                msg = '当前配置：\napp_token: ' + currentConfig.app_token.slice(0, 8) + '...\ntable_id: ' + currentConfig.table_id.slice(0, 8) + '...\n\n如需修改请重新输入';
+            }
+            var appToken = prompt(msg + '\n\n请输入飞书 app_token', currentConfig?.app_token || '');
             if (!appToken) return;
-            const tableId = prompt('请输入飞书 table_id');
+            var tableId = prompt('请输入飞书 table_id', currentConfig?.table_id || '');
             if (!tableId) return;
             try {
-                showNotification('正在从飞书导入，请稍候...', 'info');
-                const r = await fetch('/api/growth/wechat-work/import-feishu', {
+                showNotification('正在保存配置并导入飞书数据，请稍候...', 'info');
+                // 保存配置（持久化，供定时任务自动同步）
+                var saveR = await fetch('/api/growth/feishu-config', {
                     method: 'POST',
                     headers: growthAuthHeaders(),
                     body: JSON.stringify({ app_token: appToken, table_id: tableId })
                 });
-                const data = await r.json();
+                var saveData = await saveR.json();
+                if (!saveData.ok) throw new Error(saveData.error || 'save_failed');
+                // 立即执行一次导入
+                var r = await fetch('/api/growth/wechat-work/import-feishu', {
+                    method: 'POST',
+                    headers: growthAuthHeaders(),
+                    body: JSON.stringify({ app_token: appToken, table_id: tableId })
+                });
+                var data = await r.json();
                 if (!data.ok) throw new Error(data.error || 'import_failed');
-                showNotification('飞书导入成功：' + (data.imported || 0) + ' 条，匹配 ' + (data.matched || 0) + ' 条', 'success');
+                showNotification('配置已保存，导入成功：' + (data.imported || 0) + ' 条，匹配 ' + (data.matched || 0) + ' 条', 'success');
                 loadWechatWorkStats();
                 loadWechatWorkCustomers();
             } catch (e) {
-                showNotification('飞书导入失败：' + (e?.message || e), 'error');
+                showNotification('操作失败：' + (e?.message || e), 'error');
             }
         }
 
@@ -44476,6 +44737,23 @@ ${body}
 
         async function loadWecomFullDashboard() {
             try {
+                // 显示飞书自动同步配置状态
+                var configHost = document.getElementById('wecom-feishu-status');
+                if (!configHost) {
+                    configHost = document.createElement('div');
+                    configHost.id = 'wecom-feishu-status';
+                    var statsHost = document.getElementById('wecom-stats');
+                    if (statsHost && statsHost.parentNode) statsHost.parentNode.insertBefore(configHost, statsHost);
+                }
+                try {
+                    var fc = await fetch('/api/growth/feishu-config', { headers: growthAuthHeaders() });
+                    var fd = await fc.json();
+                    if (fd?.config?.app_token) {
+                        configHost.innerHTML = '<div style="padding:8px 12px;margin-bottom:12px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:8px;font-size:12px;color:#22c55e;">✅ 飞书自动同步已配置 (app_token: ' + fd.config.app_token.slice(0, 8) + '...) — 系统每小时自动同步</div>';
+                    } else {
+                        configHost.innerHTML = '<div style="padding:8px 12px;margin-bottom:12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;font-size:12px;color:#f59e0b;">⚠️ 未配置飞书同步。点击「飞书导入/配置」按钮设置，设置后系统将每小时自动同步企微客户数据</div>';
+                    }
+                } catch (e) { /* ignore */ }
                 const r = await fetch('/api/growth/wechat-work/stats', { headers: growthAuthHeaders() });
                 const data = await r.json();
                 const rows = data?.stats || [];
@@ -44506,6 +44784,13 @@ ${body}
             var form = document.getElementById('campaign-create-form');
             if (form) {
                 form.style.display = form.style.display === 'none' ? 'block' : 'none';
+                if (form.style.display !== 'none') {
+                    var list = document.getElementById('campaign-plans-list');
+                    if (list && form.parentElement === list.parentElement && form.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_PRECEDING) {
+                        list.parentElement.insertBefore(form, list);
+                    }
+                    try { form.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) {}
+                }
             }
         }
 
@@ -44553,8 +44838,12 @@ ${body}
                 const rows = data?.plans || [];
                 const host = document.getElementById('campaign-plans-list');
                 host.innerHTML = rows.length ? rows.map(function(x) {
+                    var cid = x.campaign_id || x.plan_id || '';
                     return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">'
+                        + '<div style="display:flex;justify-content:space-between;align-items:center;">'
                         + '<div style="color:#fff;font-weight:600;">' + (x.title || '-') + '</div>'
+                        + (cid ? '<button onclick="showCampaignFunnelDashboard(\'' + cid.replace(/'/g, '') + '\')" style="padding:4px 10px;border-radius:6px;background:rgba(14,165,233,0.15);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);cursor:pointer;font-size:11px;">查看漏斗</button>' : '')
+                        + '</div>'
                         + '<div style="color:rgba(226,232,240,0.6);margin-top:4px;">门店: ' + (x.store_id || '-') + ' · 渠道: ' + (x.channel || '-') + ' · 状态: ' + (x.status || '-') + '</div>'
                         + '<div style="color:rgba(226,232,240,0.45);margin-top:4px;">plan_id: ' + (x.plan_id || '-') + ' · campaign_id: ' + (x.campaign_id || '-') + '</div>'
                         + '</div>';
@@ -44562,6 +44851,18 @@ ${body}
             } catch (e) {
                 document.getElementById('campaign-plans-list').innerHTML = '<div style="color:#ef4444;">加载活动计划失败</div>';
             }
+        }
+
+        function showCampaignFunnelDashboard(campaignId) {
+            var sel = document.getElementById('growth-campaign-filter');
+            if (sel) {
+                // 尝试选中对应活动
+                for (var i = 0; i < sel.options.length; i++) {
+                    if (sel.options[i].value === campaignId) { sel.selectedIndex = i; break; }
+                }
+            }
+            showGrowthTab('dashboard');
+            refreshGrowthDashboard();
         }
 
         async function showCreateCampaignDialog() {
@@ -45073,9 +45374,12 @@ ${body}
 
         async function refreshGrowthDashboard() {
             const storeFilter = document.getElementById('growth-store-filter')?.value || '';
+            const campaignFilter = document.getElementById('growth-campaign-filter')?.value || '';
             try {
                 var gh = { 'Authorization': 'Bearer ' + (HRMS_API.token() || '') };
-                const metricsRes = await fetch('/api/growth/metrics?days=7&store_id=' + encodeURIComponent(storeFilter), { headers: gh });
+                var metricsUrl = '/api/growth/metrics?days=7&store_id=' + encodeURIComponent(storeFilter);
+                if (campaignFilter) metricsUrl += '&campaign_id=' + encodeURIComponent(campaignFilter);
+                const metricsRes = await fetch(metricsUrl, { headers: gh });
                 const metricsData = await metricsRes.json();
                 const metrics = metricsData?.rows || [];
                 const alertsRes = await fetch('/api/growth/alerts?status=open', { headers: gh });
@@ -45087,6 +45391,16 @@ ${body}
 
                 renderGrowthMetricsCards(metrics);
                 renderGrowthFunnel(metrics);
+
+                // 如果选择了具体活动，额外加载该活动的独立漏斗（campaign_id值展示）
+                if (campaignFilter) {
+                    try {
+                        var funnelRes = await fetch('/api/growth/campaigns/' + encodeURIComponent(campaignFilter) + '/funnel', { headers: gh });
+                        var funnelData = await funnelRes.json();
+                        if (funnelData?.counts) renderCampaignFunnelDetail(campaignFilter, funnelData.counts, metrics);
+                    } catch (e) { /* campaign funnel optional */ }
+                }
+
                 renderGrowthAlerts(alerts);
                 renderGrowthTrends(metrics);
                 renderGrowthActions(actions);
@@ -45095,6 +45409,66 @@ ${body}
             } catch (e) {
                 console.error('growth dashboard error:', e);
                 document.getElementById('growth-metrics-cards').innerHTML = '<div style="color:red;padding:20px;">加载失败</div>';
+            }
+        }
+
+        async function loadCampaignFilterOptions() {
+            try {
+                var gh = { 'Authorization': 'Bearer ' + (HRMS_API.token() || '') };
+                var r = await fetch('/api/growth/campaigns', { headers: gh });
+                var d = await r.json();
+                var campaigns = d?.campaigns || [];
+                var sel = document.getElementById('growth-campaign-filter');
+                if (!sel) return;
+                sel.innerHTML = '<option value="">全部活动</option>';
+                campaigns.forEach(function(c) {
+                    var opt = document.createElement('option');
+                    opt.value = c.campaign_id || '';
+                    opt.textContent = (c.name || c.campaign_id || '-').slice(0, 50);
+                    sel.appendChild(opt);
+                });
+            } catch (e) { /* ignore */ }
+        }
+
+        function renderCampaignFunnelDetail(campaignId, counts, dailyMetrics) {
+            var detailHost = document.createElement('div');
+            detailHost.id = 'growth-campaign-funnel-detail';
+            detailHost.style.marginTop = '16px';
+            detailHost.style.padding = '16px';
+            detailHost.style.background = 'rgba(14,165,233,0.06)';
+            detailHost.style.border = '1px solid rgba(14,165,233,0.2)';
+            detailHost.style.borderRadius = '12px';
+
+            var countMap = {};
+            counts.forEach(function(c) { countMap[c.event_type] = c.count; });
+            var steps = [
+                { key: 'campaign_scan', label: '扫码', count: countMap['campaign_scan'] || 0, pctBase: countMap['campaign_scan'] || 0 },
+                { key: 'phone_authorized', label: '授权', count: countMap['phone_authorized'] || 0, pctBase: countMap['campaign_scan'] || 1 },
+                { key: 'coupon_claimed', label: '领券', count: countMap['coupon_claimed'] || 0, pctBase: countMap['phone_authorized'] || 1 },
+                { key: 'coupon_purchased', label: '购券', count: (countMap['coupon_purchased'] || 0) + (countMap['marketing_triggered'] || 0), pctBase: countMap['coupon_claimed'] || 1 },
+                { key: 'coupon_redeemed', label: '核销', count: countMap['coupon_redeemed'] || 0, pctBase: (countMap['coupon_purchased'] || 0) + (countMap['marketing_triggered'] || 0) || 1 },
+                { key: 'payment_success', label: '支付', count: countMap['payment_success'] || 0, pctBase: countMap['coupon_redeemed'] || 1 }
+            ];
+
+            // 从 dailyMetrics 累计收入
+            var revenueFen = 0;
+            (dailyMetrics || []).forEach(function(m) {
+                revenueFen += Number(m.revenue_fen) || 0;
+            });
+
+            detailHost.innerHTML = '<div style="font-size:13px;font-weight:700;color:#38bdf8;margin-bottom:10px;">📊 活动漏斗：' + campaignId.slice(0, 40) + '</div>'
+                + '<div style="margin-bottom:8px;">' + steps.map(function(s, i) {
+                    var pct = s.pctBase > 0 ? Math.round(s.count / s.pctBase * 100) : 0;
+                    var barColor = pct < 10 ? '#ef4444' : pct < 30 ? '#f59e0b' : '#22c55e';
+                    return '<div style="margin-bottom:8px;"><div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;color:rgba(226,232,240,0.78);"><strong style="color:#fff;">' + s.label + '</strong><span>' + s.count + ' · ' + pct + '%</span></div><div style="height:8px;background:rgba(255,255,255,0.07);border-radius:999px;overflow:hidden;"><div style="height:100%;width:' + Math.max(4, Math.min(100, pct)) + '%;background:' + barColor + ';border-radius:999px;"></div></div></div>';
+                }).join('') + '</div>'
+                + '<div style="font-size:12px;color:#22c55e;margin-top:8px;">💰 总收入(events): ¥' + (revenueFen / 100).toFixed(2) + '</div>';
+
+            var existing = document.getElementById('growth-campaign-funnel-detail');
+            if (existing) existing.replaceWith(detailHost);
+            else {
+                var funnelPanel = document.getElementById('growth-funnel')?.parentElement;
+                if (funnelPanel) funnelPanel.after(detailHost);
             }
         }
 
@@ -45109,17 +45483,17 @@ ${body}
                 total.revenue += Number(m.revenue_fen) || 0;
             });
             var cards = [
-                { label: '扫码', value: total.scan, icon: '📱' },
-                { label: '授权', value: total.auth, icon: '✅' },
-                { label: '发券', value: total.issued, icon: '🎫' },
-                { label: '核销', value: total.redeem, icon: '✔️' },
-                { label: '支付', value: total.payment, icon: '💰' },
-                { label: '收入(元)', value: (total.revenue / 100).toFixed(2), icon: '💵' }
+                { label: '扫码', value: total.scan, tag: 'SCAN' },
+                { label: '授权', value: total.auth, tag: 'AUTH' },
+                { label: '发券', value: total.issued, tag: 'COUPON' },
+                { label: '核销', value: total.redeem, tag: 'USE' },
+                { label: '支付', value: total.payment, tag: 'PAY' },
+                { label: '收入(元)', value: (total.revenue / 100).toFixed(2), tag: 'GMV' }
             ];
             document.getElementById('growth-metrics-cards').innerHTML = cards.map(function(c) {
-                return '<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;text-align:center;">'
-                    + '<div style="font-size:24px;margin-bottom:6px;">' + c.icon + '</div>'
-                    + '<div style="font-size:28px;font-weight:800;color:#fff;">' + c.value + '</div>'
+                return '<div class="growth-metric-card" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;text-align:center;">'
+                    + '<div class="metric-tag">' + c.tag + '</div>'
+                    + '<div class="metric-value" style="font-size:28px;font-weight:800;color:#fff;">' + c.value + '</div>'
                     + '<div style="font-size:12px;color:rgba(226,232,240,0.5);">' + c.label + '</div>'
                     + '</div>';
             }).join('');
@@ -45143,12 +45517,12 @@ ${body}
             ];
             document.getElementById('growth-funnel').innerHTML = steps.map(function(s, i) {
                 var barColor = s.pct < 10 ? '#ef4444' : s.pct < 30 ? '#f59e0b' : '#22c55e';
-                return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
-                    + '<div style="width:40px;font-size:13px;font-weight:600;color:rgba(226,232,240,0.8);">' + s.name + '</div>'
-                    + '<div style="flex:1;height:24px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden;">'
-                    + '<div style="height:100%;width:' + s.pct + '%;background:' + barColor + ';border-radius:6px;display:flex;align-items:center;padding-left:6px;min-width:40px;">'
-                    + '<span style="font-size:11px;font-weight:700;color:#fff;">' + s.count + ' (' + s.pct + '%)</span>'
-                    + '</div></div></div>';
+                return '<div style="margin-bottom:12px;">'
+                    + '<div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:6px;font-size:12px;color:rgba(226,232,240,0.78);">'
+                    + '<strong style="color:#fff;">' + s.name + '</strong><span>' + s.count + ' · ' + s.pct + '%</span></div>'
+                    + '<div style="height:10px;background:rgba(255,255,255,0.07);border-radius:999px;overflow:hidden;">'
+                    + '<div style="height:100%;width:' + Math.max(4, Math.min(100, s.pct)) + '%;background:' + barColor + ';border-radius:999px;"></div>'
+                    + '</div></div>';
             }).join('');
             if (!total.scan && !total.auth) {
                 document.getElementById('growth-funnel').innerHTML = '<div style="color:rgba(226,232,240,0.4);padding:20px;">暂无数据</div>';
@@ -45163,12 +45537,12 @@ ${body}
             document.getElementById('growth-alerts').innerHTML = alerts.slice(0, 10).map(function(a) {
                 var sevColor = a.severity === 'high' ? '#ef4444' : a.severity === 'medium' ? '#f59e0b' : '#22c55e';
                 var sevEmoji = a.severity === 'high' ? '🚨' : a.severity === 'medium' ? '⚠️' : 'ℹ️';
-                return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
-                    + '<div style="display:flex;justify-content:space-between;align-items:center;">'
-                    + '<span style="font-size:13px;font-weight:600;color:#fff;">' + sevEmoji + ' ' + (a.title || '').slice(0, 40) + '</span>'
-                    + '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:' + sevColor + ';color:#fff;">' + a.severity + '</span>'
+                return '<div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
+                    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">'
+                    + '<span style="font-size:13px;font-weight:800;color:#fff;line-height:1.35;">' + sevEmoji + ' ' + (a.title || '').slice(0, 48) + '</span>'
+                    + '<span style="font-size:10px;padding:3px 8px;border-radius:999px;background:' + sevColor + ';color:#fff;flex:0 0 auto;">' + a.severity + '</span>'
                     + '</div>'
-                    + '<div style="font-size:12px;color:rgba(226,232,240,0.6);margin-top:4px;">' + (a.message || '').slice(0, 80) + '</div>'
+                    + '<div style="font-size:12px;color:rgba(226,232,240,0.66);margin-top:6px;line-height:1.55;">' + (a.message || '').slice(0, 120) + '</div>'
                     + '</div>';
             }).join('');
         }
@@ -45219,10 +45593,13 @@ ${body}
                 return;
             }
             document.getElementById('growth-actions').innerHTML = actions.slice(0, 10).map(function(a) {
-                return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
-                    + '<div style="font-size:13px;font-weight:600;color:#fff;">💡 ' + (a.title || '').slice(0, 50) + '</div>'
-                    + '<div style="font-size:12px;color:rgba(226,232,240,0.6);margin-top:4px;">' + (a.detail || '').slice(0, 120) + '</div>'
-                    + '<div style="font-size:11px;color:rgba(226,232,240,0.35);margin-top:2px;">状态: ' + (a.status || '-') + '</div>'
+                var status = a.status || '-';
+                var statusColor = status === 'executed' ? '#22c55e' : status === 'ignored' ? '#ef4444' : '#f59e0b';
+                return '<div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
+                    + '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">'
+                    + '<div style="font-size:13px;font-weight:800;color:#fff;line-height:1.4;">💡 ' + (a.title || '').slice(0, 54) + '</div>'
+                    + '<span style="font-size:10px;padding:3px 8px;border-radius:999px;background:' + statusColor + '22;color:' + statusColor + ';border:1px solid ' + statusColor + '55;white-space:nowrap;">' + status + '</span></div>'
+                    + '<div style="font-size:12px;color:rgba(226,232,240,0.66);margin-top:7px;line-height:1.55;">' + (a.detail || '-').slice(0, 150) + '</div>'
                     + '</div>';
             }).join('');
         }
@@ -45234,9 +45611,9 @@ ${body}
             <span class="mobile-nav-icon">🏠</span>
             <span class="mobile-nav-label">首页</span>
         </div>
-        <div class="mobile-nav-item" id="mobile-nav-slot-2" data-page="attendance" onclick="mobileNavigateTo(this.dataset.page, event, this)">
-            <span class="mobile-nav-icon">👤</span>
-            <span class="mobile-nav-label">打卡</span>
+        <div class="mobile-nav-item" id="mobile-nav-slot-2" data-page="growth" onclick="mobileNavigateTo(this.dataset.page, event, this)">
+            <span class="mobile-nav-icon">📈</span>
+            <span class="mobile-nav-label">增长</span>
         </div>
         <div class="mobile-nav-item" id="mobile-nav-slot-3" data-page="knowledge" onclick="mobileNavigateTo(this.dataset.page, event, this)">
             <span class="mobile-nav-icon">📚</span>

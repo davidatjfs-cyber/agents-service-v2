@@ -788,6 +788,24 @@ export function registerGrowthRoutes(app, pool) {
         );
       }
 
+      // Phase 2: 授权手机号/匹配检查时，反查 wechat_work_customers 并绑定
+      const matchPhone = cleanPhone(body.phone);
+      if ((eventType === 'phone_authorized' || eventType === 'wechat_match_check') && matchPhone) {
+        try {
+          const wwMatch = await pool.query(
+            `UPDATE wechat_work_customers SET bind_customer_id = $1, updated_at = NOW()
+             WHERE phone = $2 AND bind_customer_id IS NULL
+             RETURNING id, store_id`,
+            [customer?.id, matchPhone]
+          );
+          if (wwMatch.rows.length) {
+            console.log(`[growth] wechat_work customer matched: phone=${matchPhone}, customer_id=${customer?.id}`);
+          }
+        } catch (e) {
+          console.warn('[growth] wechat_work match failed:', e?.message);
+        }
+      }
+
       return res.json({ ok: true, inserted: inserted.rows.length > 0, customer_id: customer?.id || null });
     } catch (e) {
       console.error('[growth] miniprogram event failed:', e?.message || e);
@@ -1489,6 +1507,17 @@ export function registerGrowthRoutes(app, pool) {
         await pool.query(`UPDATE growth_actions SET status='ignored', updated_at=NOW() WHERE action_key=$1`, [actionKey]);
         await appendExecutionLog(pool, { action_key: actionKey, store_id: before.store_id, action_type: before.action_type, decision: 'ignored', operator_username: 'feishu_callback', operator_role: 'admin', decision_reason: b.reason || '飞书卡片忽略', result_summary: '从飞书卡片忽略' });
         return res.json({ ok: true, action: 'ignored' });
+      } else if (decision === 'feedback') {
+        // 允许从飞书卡片提交简短执行反馈
+        const note = cleanText(b.reason || b.note || '', 2000);
+        await pool.query(
+          `UPDATE growth_actions
+           SET status = 'executed', payload = COALESCE(payload,'{}'::jsonb) || $2::jsonb, updated_at = NOW(), executed_at = COALESCE(executed_at, NOW())
+           WHERE action_key = $1`,
+          [actionKey, JSON.stringify({ feishu_feedback_note: note, feedback_source: 'feishu_card' })]
+        );
+        await appendExecutionLog(pool, { action_key: actionKey, store_id: before.store_id, action_type: before.action_type, decision: 'feedback', operator_username: 'feishu_callback', operator_role: 'admin', decision_reason: note || '飞书卡片执行回填', result_summary: note || '从飞书卡片回填' });
+        return res.json({ ok: true, action: 'feedback_submitted' });
       }
       return res.status(400).json({ ok: false, error: 'invalid_decision' });
     } catch (e) { return res.status(500).json({ ok: false, error: e?.message || 'callback_error' }); }
@@ -1910,6 +1939,28 @@ export function registerGrowthRoutes(app, pool) {
       created++;
     }
     return res.json({ ok: true, triggered: created, total_at_risk: r.rows.length });
+  });
+
+  // ── Phase 2: Feishu config persistence for WeChat customer auto-sync ──
+  app.get('/api/growth/feishu-config', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const r = await pool.query(`SELECT data FROM hrms_state WHERE key = 'growth_feishu_config' LIMIT 1`);
+    const config = r.rows?.[0]?.data || null;
+    res.json({ ok: true, config });
+  });
+
+  app.post('/api/growth/feishu-config', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const b = req.body || {};
+    const appToken = cleanText(b.app_token, 200);
+    const tableId = cleanText(b.table_id, 200);
+    if (!appToken || !tableId) return res.status(400).json({ ok: false, error: 'missing app_token or table_id' });
+    await pool.query(
+      `INSERT INTO hrms_state (key, data, updated_at) VALUES ('growth_feishu_config', $1::jsonb, NOW())
+       ON CONFLICT (key) DO UPDATE SET data = $1::jsonb, updated_at = NOW()`,
+      [JSON.stringify({ app_token: appToken, table_id: tableId })]
+    );
+    res.json({ ok: true, config: { app_token: appToken, table_id: tableId } });
   });
 
   // ── Phase 6: Active time window prediction ──
