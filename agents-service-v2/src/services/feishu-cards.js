@@ -230,7 +230,7 @@ export function buildApprovalTaskCard(task) {
  * 差评新记录通知卡片 — 简洁信息卡（无按钮）
  * 在 Bitable 轮询检测到新差评时由 bitable-poller 调用
  */
-export function buildBadReviewCard({ store, date, platform, rating, responsibility, content, weekCount, monthCount }) {
+export function buildBadReviewCard({ store, date, platform, rating, responsibility, content, weekCount, monthCount, aiReply }) {
   const fmtDate = (v) => {
     if (v == null || v === '-') return '-';
     if (typeof v === 'number') {
@@ -244,29 +244,30 @@ export function buildBadReviewCard({ store, date, platform, rating, responsibili
   const starNum = Math.min(Math.max(parseInt(String(rating || '').replace(/[^0-9.]/g, ''), 10) || 0, 0), 5);
   const stars = '★'.repeat(starNum) + '☆'.repeat(5 - starNum);
   const respLabels = [];
-  if (responsibility?.isProduct) respLabels.push('🔴 出品问题');
-  if (responsibility?.isService) respLabels.push('🟡 服务问题');
-  if (!respLabels.length) respLabels.push('⚪ 无法确定');
+  if (responsibility?.isProduct) respLabels.push('出品');
+  if (responsibility?.isService) respLabels.push('服务');
+  if (!respLabels.length) respLabels.push('无法确定');
   const respText = respLabels.join('、');
+  const replySection = aiReply ? `\n\n**差评回复**：\n${aiReply}` : '';
 
   const body = `**门店**：${store}
-**差评日期**：${fmtDate(date)}
 **平台**：${platform || '-'}
+**差评日期**：${fmtDate(date)}
 **星级**：${stars || '-'}
-**责任归属**：${respText}
+**差评关键词**：${respText}
 
 **差评内容**：
-${content || '-'}
+${content || '-'}${replySection}
 
 📊 本周累计差评：${weekCount}条
 📊 本月累计差评：${monthCount}条`;
 
   return {
-    header: { title: { tag: 'plain_text', content: `⭐ 新差评通知 · ${store}` }, template: 'red' },
+    header: { title: { tag: 'plain_text', content: `📋 平台差评报告 · ${store}` }, template: 'red' },
     elements: [
       { tag: 'div', text: { tag: 'lark_md', content: body } },
       { tag: 'hr' },
-      { tag: 'note', elements: [{ tag: 'plain_text', content: '差评对我们很重要，下次不要再发生！' }] }
+      { tag: 'note', elements: [{ tag: 'plain_text', content: `差评回复由AI辅助生成，建议门店负责人根据实际情况调整后使用。` }] }
     ]
   };
 }

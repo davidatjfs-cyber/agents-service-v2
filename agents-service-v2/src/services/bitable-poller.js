@@ -1024,9 +1024,29 @@ async function sendBadReviewNewCard(fields, recordId) {
   const weekCount = await queryBadReviewCount(store, 'week').catch(() => 0);
   const monthCount = await queryBadReviewCount(store, 'month').catch(() => 0);
 
+  // AI 差评回复
+  let aiReply = '';
+  try {
+    const { callDeepSeek } = await import('../services/llm-provider.js');
+    const prompt = `你是一家餐饮门店的店长，请在美团/大众点评上回复一条差评。要求：语气自然真诚，像真实店长写的，不要像AI或客服模板。针对具体问题回应，表达歉意和改进态度，50-120字。
+
+差评平台：${platform || '大众点评'}
+差评内容：${(content || '').slice(0, 500)}
+责任归属：${responsibility?.isProduct ? '出品问题' : ''}${responsibility?.isService ? '服务问题' : ''}
+
+只输出回复内容，不要任何前缀或说明。`;
+    const resp = await callDeepSeek(prompt, { temperature: 0.8, maxTokens: 300 });
+    const text = typeof resp === 'string' ? resp : (resp?.text || resp?.content || '');
+    if (text) {
+      aiReply = text.replace(/^["']|["']$/g, '').trim().slice(0, 500);
+    }
+  } catch (e) {
+    logger.debug({ err: e?.message }, 'bad_review: ai reply generation skipped');
+  }
+
   let card;
   try {
-    card = buildBadReviewCard({ store, date, platform, rating, responsibility, content, weekCount, monthCount });
+    card = buildBadReviewCard({ store, date, platform, rating, responsibility, content, weekCount, monthCount, aiReply });
   } catch (e) {
     logger.warn({ err: e?.message, store }, 'bad_review: build card failed');
     return;
