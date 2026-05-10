@@ -13515,12 +13515,18 @@
                         <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
                             <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">企微客户管理</div>
                             <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-                                <button onclick="loadWechatWorkStats()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新统计</button>
-                                <button onclick="showWechatImportDialog()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:13px;">飞书导入</button>
+                                <button onclick="loadWecomFullDashboard()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新看板</button>
+                                <button onclick="showImportWechatCsv()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:13px;">CSV/Excel导入</button>
+                                <button onclick="showWechatImportDialog()" style="padding:6px 14px;border-radius:8px;background:rgba(14,165,233,0.15);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);cursor:pointer;font-size:13px;">飞书导入</button>
                                 <button onclick="showWechatManualDialog()" style="padding:6px 14px;border-radius:8px;background:rgba(245,158,11,0.2);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);cursor:pointer;font-size:13px;">手动添加</button>
                             </div>
                             <div id="wecom-stats" style="margin-bottom:16px;"></div>
+                            <div id="wecom-dashboard" style="margin-bottom:16px;"></div>
                             <div id="wecom-customers-list" style="max-height:400px;overflow-y:auto;"></div>
+                            <div id="wecom-unbound-section" style="margin-top:16px;display:none;">
+                                <div style="font-size:13px;font-weight:700;color:#f59e0b;margin-bottom:8px;">⚠️ 未绑定客户（需推入会）</div>
+                                <div id="wecom-unbound-list" style="max-height:200px;overflow-y:auto;"></div>
+                            </div>
                         </div>
                     </div>
                     <div id="growth-campaigns-content" style="display:none;">
@@ -13528,9 +13534,31 @@
                             <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">活动管理</div>
                             <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
                                 <button onclick="loadCampaignPlans()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新列表</button>
-                                <button onclick="showCreateCampaignDialog()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:13px;">创建活动</button>
+                                <button onclick="showCreateCampaignForm()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:13px;">创建活动</button>
                             </div>
                             <div id="campaign-plans-list" style="max-height:500px;overflow-y:auto;"></div>
+                            <div id="campaign-create-form" style="display:none;margin-top:16px;padding:16px;background:rgba(14,165,233,0.06);border:1px solid rgba(14,165,233,0.2);border-radius:12px;">
+                                <div style="font-size:13px;font-weight:700;color:#38bdf8;margin-bottom:12px;">新建营销活动</div>
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                                    <input id="camp-store" placeholder="门店ID" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
+                                    <input id="camp-title" placeholder="活动标题" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
+                                    <select id="camp-channel" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.8);">
+                                        <option value="miniprogram">小程序</option><option value="wecom">企微</option><option value="xiaohongshu">小红书</option><option value="douyin">抖音</option><option value="dianping">大众点评</option>
+                                    </select>
+                                    <select id="camp-audience" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.8);">
+                                        <option value="all">全部顾客</option><option value="new">新客</option><option value="inactive">沉睡客户</option><option value="active">活跃客户</option><option value="vip">VIP</option><option value="at_risk">临界流失</option>
+                                    </select>
+                                    <input id="camp-budget" placeholder="预算(分) 如 50000" type="number" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
+                                    <input id="camp-coupon-value" placeholder="券面值(分) 如 2000" type="number" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
+                                    <input id="camp-start" type="date" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
+                                    <input id="camp-end" type="date" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
+                                </div>
+                                <textarea id="camp-detail" placeholder="活动详细描述" style="width:100%;height:60px;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;margin-bottom:10px;"></textarea>
+                                <div style="display:flex;gap:8px;">
+                                    <button onclick="createCampaignFromForm()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">创建活动</button>
+                                    <button onclick="document.getElementById('campaign-create-form').style.display='none'" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">取消</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div id="growth-feedback-content" style="display:none;">
@@ -44358,6 +44386,7 @@ ${body}
             const tableId = prompt('请输入飞书 table_id');
             if (!tableId) return;
             try {
+                showNotification('正在从飞书导入，请稍候...', 'info');
                 const r = await fetch('/api/growth/wechat-work/import-feishu', {
                     method: 'POST',
                     headers: growthAuthHeaders(),
@@ -44365,12 +44394,63 @@ ${body}
                 });
                 const data = await r.json();
                 if (!data.ok) throw new Error(data.error || 'import_failed');
-                showNotification('飞书导入成功：' + (data.imported || 0) + ' 条', 'success');
+                showNotification('飞书导入成功：' + (data.imported || 0) + ' 条，匹配 ' + (data.matched || 0) + ' 条', 'success');
                 loadWechatWorkStats();
                 loadWechatWorkCustomers();
             } catch (e) {
                 showNotification('飞书导入失败：' + (e?.message || e), 'error');
             }
+        }
+
+        async function showImportWechatCsv() {
+            var f = document.getElementById('csv-upload-input');
+            if (!f) {
+                f = document.createElement('input');
+                f.type = 'file';
+                f.id = 'csv-upload-input';
+                f.accept = '.csv,.xlsx,.xls';
+                f.style.display = 'none';
+                document.body.appendChild(f);
+                f.onchange = function() {
+                    var file = f.files[0];
+                    if (!file) return;
+                    var reader = new FileReader();
+                    reader.onload = function(e) {
+                        var text = e.target.result;
+                        var lines = text.split('\n').map(function(l) { return l.trim(); }).filter(Boolean);
+                        if (lines.length < 2) { showNotification('CSV文件至少需要表头+1行数据', 'warning'); return; }
+                        var customers = [];
+                        for (var i = 1; i < lines.length; i++) {
+                            var cols = lines[i].split(',').map(function(c) { return c.trim().replace(/\"/g, ''); });
+                            if (cols[0] || cols[1]) {
+                                customers.push({
+                                    name: cols[0] || '',
+                                    phone: cols[1] || '',
+                                    external_userid: cols[2] || '',
+                                    store_id: cols[3] || '',
+                                    note: cols[4] || ''
+                                });
+                            }
+                        }
+                        if (customers.length === 0) { showNotification('未找到有效数据行', 'warning'); return; }
+                        showNotification('解析到 ' + customers.length + ' 条记录，正在导入...', 'info');
+                        fetch('/api/growth/wechat-work/customers', {
+                            method: 'POST',
+                            headers: Object.assign({}, growthAuthHeaders(), { 'Content-Type': 'application/json' }),
+                            body: JSON.stringify({ customers: customers })
+                        }).then(function(r) { return r.json(); }).then(function(data) {
+                            if (!data.ok) throw new Error(data.error || 'import_failed');
+                            showNotification('导入成功：' + (data.imported || 0) + ' 条，匹配 ' + (data.matched || 0) + ' 条', 'success');
+                            loadWechatWorkStats();
+                            loadWechatWorkCustomers();
+                        }).catch(function(e) {
+                            showNotification('导入失败：' + (e?.message || e), 'error');
+                        });
+                    };
+                    reader.readAsText(file);
+                };
+            }
+            f.click();
         }
 
         async function showWechatManualDialog() {
@@ -44390,6 +44470,76 @@ ${body}
                 loadWechatWorkCustomers();
             } catch (e) {
                 showNotification('手动导入失败：' + (e?.message || e), 'error');
+            }
+        }
+
+        async function loadWecomFullDashboard() {
+            try {
+                const r = await fetch('/api/growth/wechat-work/stats', { headers: growthAuthHeaders() });
+                const data = await r.json();
+                const rows = data?.stats || [];
+                const host = document.getElementById('wecom-stats');
+                host.innerHTML = rows.length ? rows.map(function(x) {
+                    return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">'
+                        + '<strong>' + (x.store_id || '未分配门店') + '</strong>'
+                        + ' · 总数 ' + (x.total_count || 0)
+                        + ' · 已绑定 ' + (x.bound_count || 0)
+                        + ' · 未绑定 ' + (x.unbound_count || 0)
+                        + '</div>';
+                }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无企微统计</div>';
+                // Show unbound customers section
+                const unboundSection = document.getElementById('wecom-unbound-section');
+                if (unboundSection) {
+                    var totalUnbound = rows.reduce(function(s, r) { return s + (r.unbound || r.unbound_count || 0); }, 0);
+                    unboundSection.style.display = totalUnbound > 0 ? 'block' : 'none';
+                    if (totalUnbound > 0) {
+                        loadWechatWorkCustomers();
+                    }
+                }
+            } catch (e) {
+                document.getElementById('wecom-stats').innerHTML = '<div style="color:#ef4444;">加载企微统计失败</div>';
+            }
+        }
+
+        function showCreateCampaignForm() {
+            var form = document.getElementById('campaign-create-form');
+            if (form) {
+                form.style.display = form.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+
+        async function createCampaignFromForm() {
+            try {
+                const payload = {
+                    plan_id: 'plan_' + Date.now(),
+                    campaign_id: 'campaign_' + Date.now(),
+                    store_id: document.getElementById('camp-store')?.value || '',
+                    title: document.getElementById('camp-title')?.value || '',
+                    channel: document.getElementById('camp-channel')?.value || 'miniprogram',
+                    target_audience: document.getElementById('camp-audience')?.value || 'all',
+                    budget_fen: parseInt(document.getElementById('camp-budget')?.value || '0', 10),
+                    planned_start: document.getElementById('camp-start')?.value || null,
+                    planned_end: document.getElementById('camp-end')?.value || null,
+                    status: 'draft',
+                    voucher_template_id: '',
+                    created_by: 'admin'
+                };
+                if (!payload.store_id || !payload.title) {
+                    showNotification('请填写门店ID和活动标题', 'warning');
+                    return;
+                }
+                const r = await fetch('/api/growth/campaign-plans', {
+                    method: 'POST',
+                    headers: growthAuthHeaders(),
+                    body: JSON.stringify(payload)
+                });
+                const data = await r.json();
+                if (!data.ok) throw new Error(data.error || 'create_failed');
+                showNotification('活动创建成功', 'success');
+                document.getElementById('campaign-create-form').style.display = 'none';
+                loadCampaignPlans();
+            } catch (e) {
+                showNotification('创建失败：' + (e?.message || e), 'error');
             }
         }
 

@@ -1,7 +1,7 @@
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { createUnifiedTask } from './task-orchestrator.js';
-import { pushGrowthAlert, pushGrowthTaskCard } from './feishu-client.js';
+import { pushGrowthAlert, pushGrowthTaskCard, pushDailyReport } from './feishu-client.js';
 
 function rate(numerator, denominator) {
   const n = Number(numerator) || 0;
@@ -376,6 +376,105 @@ export async function runGrowthMonitor({ createTasks = true } = {}) {
     }
   } catch (e) {
     logger.warn({ err: e?.message }, 'repurchase trigger failed');
+  }
+
+  // Phase 2: Detect unbound WeChat customers and create alert
+  try {
+    const unboundCustomers = await query(
+      `SELECT w.store_id, COUNT(*)::int AS unbound_count
+       FROM wechat_work_customers w
+       LEFT JOIN growth_customers g ON w.bind_customer_id = g.id
+       WHERE w.bind_customer_id IS NULL
+       GROUP BY w.store_id
+       HAVING COUNT(*) >= 3`
+    );
+    for (const row of (unboundCustomers.rows || [])) {
+      const alertKey = `wecom_unbound:${row.store_id}:${new Date().toISOString().slice(0, 10)}`;
+      await query(
+        `INSERT INTO growth_alerts (alert_key, alert_type, severity, store_id, title, message, suggested_action, metrics)
+         VALUES ($1,'unbound_wecom','medium',$2,$3,$4,$5,$6::jsonb)
+         ON CONFLICT (alert_key) DO NOTHING`,
+        [alertKey, row.store_id,
+         '企微客户未绑定',
+         `${row.store_id}门店有${row.unbound_count}位企微客户尚未绑定小程序会员`,
+         '建议引导企微客户扫码入会，推动手机号授权绑定',
+         JSON.stringify({ unbound_count: row.unbound_count, store_id: row.store_id })
+        ]
+      );
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'wecom unbound detection failed');
+  }
+
+  // Phase 3: Daily diagnosis
+  try {
+    const dailyMetrics = await query(
+      `SELECT store_id, campaign_id,
+         SUM(scan_count)::int AS scans,
+         SUM(authorized_count)::int AS auths,
+         SUM(coupon_redeemed_count)::int AS redeems,
+         SUM(revenue_fen)::int AS revenue
+       FROM growth_daily_metrics
+       WHERE metric_date >= CURRENT_DATE - 1
+       GROUP BY store_id, campaign_id
+       HAVING SUM(scan_count) > 0 OR SUM(authorized_count) > 0`
+    );
+    const diagnoses = [];
+    for (const row of (dailyMetrics.rows || [])) {
+      const storeId = row.store_id || '未指定';
+      const scans = Number(row.scans) || 0;
+      const auths = Number(row.auths) || 0;
+      const authRate = scans > 0 ? Math.round(auths / scans * 100) : 0;
+      if (scans >= 10 && authRate < 30) {
+        diagnoses.push(`⚠️ ${storeId}: 授权率偏低(${authRate}%)，扫码${scans}次/授权${auths}次。建议优化授权入口文案或激励措施。`);
+      }
+      if (auths > 0 && authRate >= 50) {
+        diagnoses.push(`✅ ${storeId}: 授权率良好(${authRate}%)。继续保持。`);
+      }
+    }
+    if (diagnoses.length > 0) {
+      const alertKey = `daily_diagnosis:${new Date().toISOString().slice(0, 10)}`;
+      await query(
+        `INSERT INTO growth_alerts (alert_key, alert_type, severity, title, message, suggested_action, metrics)
+         VALUES ($1,'daily_diagnosis','low',$2,$3,$4,$5::jsonb)
+         ON CONFLICT (alert_key) DO NOTHING`,
+        [alertKey,
+         '每日私域诊断',
+         diagnoses.join('\n'),
+         '参考以上诊断调整运营策略',
+         JSON.stringify({ diagnoses: diagnoses })
+        ]
+      );
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'daily diagnosis failed');
+  }
+
+  // Phase 3: Feishu daily report push
+  try {
+    const reportDate = new Date().toISOString().slice(0, 10);
+    const storeMetrics = await query(
+      `SELECT store_id,
+         SUM(scan_count)::int AS scans,
+         SUM(authorized_count)::int AS auths,
+         SUM(coupon_issued_count)::int AS issued,
+         SUM(coupon_redeemed_count)::int AS redeems,
+         SUM(revenue_fen)::int AS revenue
+       FROM growth_daily_metrics
+       WHERE metric_date >= CURRENT_DATE - 7
+         AND COALESCE(store_id, '') != ''
+       GROUP BY store_id
+       ORDER BY scans DESC LIMIT 20`
+    );
+    if (storeMetrics.rows?.length) {
+      const reportLines = storeMetrics.rows.map(r =>
+        `📊 ${r.store_id}: 扫码${r.scans} 授权${r.auths} 核销${r.redeems} 收入¥${(Number(r.revenue)/100).toFixed(0)}`
+      ).join('\n');
+      const report = `📈 门店私域日报 (${reportDate})\n${reportLines}`;
+      pushDailyReport(report).catch(e => logger.warn({ err: e?.message }, 'daily report push failed'));
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'daily report failed');
   }
 
   logger.info({ checked: r.rows?.length || 0, alerts: results.length }, 'growth monitor completed');

@@ -6,7 +6,8 @@ const EVENT_TYPES = new Set([
   'coupon_redeemed',
   'payment_success',
   'customer_arrived',
-  'marketing_triggered'
+  'marketing_triggered',
+  'wechat_match_check'
 ]);
 
 function cleanText(value, max = 255) {
