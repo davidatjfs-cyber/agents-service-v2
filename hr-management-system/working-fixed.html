@@ -10559,7 +10559,7 @@
                     </a>
                 </div>
                 <div class="nav-item" data-page="growth">
-                    <a href="#" class="nav-link" onclick="showPage('growth')">
+                    <a href="#" class="nav-link growth-nav-link" onclick="showPage('growth')" style="display:none;">
                         <i>📈</i> <span>增长看板</span>
                     </a>
                 </div>
@@ -44608,7 +44608,7 @@ ${body}
         }
 
         function showGrowthTab(tab) {
-            ['dashboard', 'wecom', 'campaigns', 'feedback', 'profiles', 'constraints', 'actions'].forEach(function(name) {
+            ['dashboard', 'wecom', 'campaigns', 'feedback', 'profiles', 'constraints', 'posters', 'public', 'actions'].forEach(function(name) {
                 var content = document.getElementById('growth-' + name + '-content');
                 var btn = document.getElementById('growth-tab-' + name);
                 if (content) content.style.display = name === tab ? '' : 'none';
@@ -44643,6 +44643,16 @@ ${body}
                 refreshGrowthDashboard();
             }
         }
+
+        
+    // Phase 8: 增长模块仅管理员/总部可见
+    try {
+      var growthNavLinks = document.querySelectorAll('.growth-nav-link');
+      var userRole = (HRMS_API.user && HRMS_API.user.role) || (window.__user_role) || '';
+      if (userRole === 'admin' || userRole === 'hq_manager') {
+        growthNavLinks.forEach(function(el) { el.style.display = ''; });
+      }
+    } catch(e) {}
 
         function growthCsvList(id) {
             return String(document.getElementById(id)?.value || '').split(',').map(function(x) { return x.trim(); }).filter(Boolean);
@@ -45223,7 +45233,7 @@ ${body}
                     return '<div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">'
                         + '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">'
                         + '<div style="color:#fff;font-weight:600;cursor:pointer;" onclick="openActionDetailModal(\'' + key + '\')">📄 ' + (x.title || '-') + '</div>'
-                        + '<div style="color:' + (x.status === 'executed' ? '#22c55e' : x.status === 'ignored' ? '#ef4444' : '#f59e0b') + ';">' + (x.status || '-') + '</div>'
+                        + '<div style="color:' + (x.status === 'executed' ? '#22c55e' : x.status === 'ignored' ? '#ef4444' : '#f59e0b') + ';">' + (x.status === 'executed' ? '已执行' : x.status === 'ignored' ? '已忽略' : x.status === 'proposed' ? '待处理' : x.status || '-') + '</div>'
                         + '</div>'
                         + '<div style="color:rgba(226,232,240,0.6);margin-top:4px;">' + (x.detail || '-') + '</div>'
                         + expHtml
@@ -45295,7 +45305,7 @@ ${body}
             host.innerHTML = '<div style="margin-bottom:16px;padding:12px;border-radius:8px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);color:#22c55e;font-weight:700;font-size:14px;">' + actionTypeLabel + '</div>'
                 + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">'
                 + '<div><span style="color:rgba(226,232,240,0.5);font-size:12px;">门店</span><div style="color:#fff;font-weight:600;margin-top:4px;">' + (x.store_id || '-') + '</div></div>'
-                + '<div><span style="color:rgba(226,232,240,0.5);font-size:12px;">状态</span><div style="color:' + (x.status === 'executed' ? '#22c55e' : x.status === 'ignored' ? '#ef4444' : '#f59e0b') + ';font-weight:600;margin-top:4px;">' + (x.status || '-') + '</div></div>'
+                + '<div><span style="color:rgba(226,232,240,0.5);font-size:12px;">状态</span><div style="color:' + (x.status === 'executed' ? '#22c55e' : x.status === 'ignored' ? '#ef4444' : '#f59e0b') + ';font-weight:600;margin-top:4px;">' + (x.status === 'executed' ? '已执行' : x.status === 'ignored' ? '已忽略' : x.status === 'proposed' ? '待处理' : x.status || '-') + '</div></div>'
                 + '<div><span style="color:rgba(226,232,240,0.5);font-size:12px;">渠道</span><div style="color:#fff;margin-top:4px;">' + (payload.channel || '-') + '</div></div>'
                 + '<div><span style="color:rgba(226,232,240,0.5);font-size:12px;">预算</span><div style="color:#fff;margin-top:4px;">' + (payload.budget_fen ? '¥' + Math.round(Number(payload.budget_fen) / 100) : '-') + '</div></div>'
                 + '<div style="grid-column:span 2;"><span style="color:rgba(226,232,240,0.5);font-size:12px;">目标人群</span><div style="color:#fff;margin-top:4px;">' + (payload.audience || '门店活跃客群') + '</div></div>'
@@ -45605,7 +45615,7 @@ ${body}
                 return '<div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
                     + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">'
                     + '<span style="font-size:13px;font-weight:800;color:#fff;line-height:1.35;">' + sevEmoji + ' ' + (a.title || '').slice(0, 48) + '</span>'
-                    + '<span style="font-size:10px;padding:3px 8px;border-radius:999px;background:' + sevColor + ';color:#fff;flex:0 0 auto;">' + a.severity + '</span>'
+                    + '<span style="font-size:10px;padding:3px 8px;border-radius:999px;background:' + sevColor + ';color:#fff;flex:0 0 auto;">' + sevZh + '</span>'
                     + '</div>'
                     + '<div style="font-size:12px;color:rgba(226,232,240,0.66);margin-top:6px;line-height:1.55;">' + (a.message || '').slice(0, 120) + '</div>'
                     + '</div>';
