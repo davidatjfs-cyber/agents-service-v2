@@ -1531,11 +1531,13 @@ export function registerGrowthRoutes(app, pool) {
     const channel = cleanText(req.query.channel || '', 80);
     const audience = cleanText(req.query.audience || '', 200);
     const offer = cleanText(req.query.offer || '', 200);
+    const brand = cleanText(req.query.brand || '', 128);
     const minScore = Math.max(0, Math.min(100, Number(req.query.min_score) || 0));
     const conditions = [];
     const params = [];
     let idx = 1;
-    if (storeId) { conditions.push(`store_id = $${idx++}`); params.push(storeId); }
+    if (storeId) { conditions.push(`(store_id = $${idx} OR store_id ILIKE '%' || $${idx} || '%')`); idx++; params.push(storeId); }
+    if (brand) { conditions.push(`(metrics->>'brand' ILIKE $${idx} OR metrics->>'brand' = $${idx})`); idx++; params.push(`%${brand}%`); }
     if (channel) { conditions.push(`channel ILIKE $${idx++}`); params.push(`%${channel}%`); }
     if (audience) { conditions.push(`audience ILIKE $${idx++}`); params.push(`%${audience}%`); }
     if (offer) { conditions.push(`offer ILIKE $${idx++}`); params.push(`%${offer}%`); }
@@ -1543,6 +1545,80 @@ export function registerGrowthRoutes(app, pool) {
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
     const r = await pool.query(`SELECT * FROM marketing_case_library ${where} ORDER BY score DESC, created_at DESC LIMIT 100`, params);
     return res.json({ ok: true, cases: r.rows });
+  });
+
+  // ── Phase 4: Weight adjust with ROI ──
+  app.post('/api/growth/weight-adjust', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const days = Math.min(Math.max(Number(req.query.days) || 14, 1), 90);
+    const lowThreshold = Number(req.query.ignore_threshold) || 3;
+    const highThreshold = Number(req.query.execute_threshold) || 2;
+    const roiMin = Number(req.query.roi_min) || 0.5;
+    const ignored = await pool.query(
+      `SELECT store_id, action_type, COUNT(*)::int as ignore_count
+       FROM growth_execution_logs
+       WHERE decision = 'ignored' AND created_at >= CURRENT_DATE - ($1::int || ' days')::interval
+       GROUP BY store_id, action_type HAVING COUNT(*) >= $2 ORDER BY ignore_count DESC`,
+      [days, lowThreshold]
+    );
+    const executed = await pool.query(
+      `SELECT e.store_id, e.action_type, COUNT(*)::int as exec_count,
+              COALESCE(AVG(g.revenue_fen::numeric), 0) as avg_revenue,
+              COALESCE(SUM(g.revenue_fen)::int, 0) as total_revenue
+       FROM growth_execution_logs e
+       LEFT JOIN growth_daily_metrics g ON g.store_id = e.store_id AND g.metric_date >= CURRENT_DATE - ($1::int || ' days')::interval
+       WHERE e.decision IN ('executed','edited_then_executed') AND e.created_at >= CURRENT_DATE - ($1::int || ' days')::interval
+       GROUP BY e.store_id, e.action_type HAVING COUNT(*) >= $2 ORDER BY exec_count DESC`,
+      [days, highThreshold]
+    );
+    const highRoi = executed.rows.filter(r => Number(r.total_revenue) > 0 && (Number(r.total_revenue) / Math.max(1, Number(r.exec_count))) >= roiMin * 100);
+    return res.json({
+      ok: true, days,
+      ignored_suggestions: ignored.rows.map(r => `门店${r.store_id || '-'}的${r.action_type}类动作被忽略${r.ignore_count}次，建议降低优先级`),
+      executed_suggestions: executed.rows.map(r => `门店${r.store_id || '-'}的${r.action_type}类动作被执行${r.exec_count}次，收入¥${(Number(r.total_revenue)/100).toFixed(2)}，${highRoi.includes(r) ? '✅ ROI良好建议升权' : '收入数据不足需观察'}`),
+      ignored_actions: ignored.rows, executed_actions: executed.rows, high_roi_actions: highRoi
+    });
+  });
+
+  // ── Phase 4: Standardized strategy feedback with reason codes ──
+  app.post('/api/growth/strategy-feedback-v2', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const b = req.body || {};
+    const strategyKey = cleanText(b.strategy_key, 255);
+    if (!strategyKey) return res.status(400).json({ ok: false, error: 'missing_strategy_key' });
+    const rating = b.rating == null ? null : Math.max(1, Math.min(5, Number(b.rating)));
+    const feedback = cleanText(b.feedback, 2000);
+    const reasonCode = cleanText(b.reason_code || '', 80);
+    const validReasonCodes = ['discount_too_deep', 'store_cant_execute', 'wrong_timing', 'wrong_audience', 'content_mismatch_brand', 'other'];
+    const status = rating >= 4 ? 'accepted' : rating <= 2 ? 'rejected' : 'proposed';
+    await pool.query(
+      `UPDATE growth_strategy_evaluations
+       SET feedback=$2, feedback_rating=$3, status=$4,
+           detail = COALESCE(detail,'{}'::jsonb) || jsonb_build_object('reason_code', $5, 'reason_label', $6),
+           updated_at=NOW()
+       WHERE strategy_key=$1`,
+      [strategyKey, feedback, rating, status, reasonCode, validReasonCodes.includes(reasonCode) ? ({
+        discount_too_deep: '折扣太大', store_cant_execute: '门店执行不了', wrong_timing: '时机不对',
+        wrong_audience: '客群不对', content_mismatch_brand: '内容不符合品牌', other: '其他'
+      })[reasonCode] || '' : '']
+    );
+    // Auto-promote to case library if rating >= 4
+    if (rating >= 4) {
+      const ev = await pool.query(`SELECT * FROM growth_strategy_evaluations WHERE strategy_key=$1 LIMIT 1`, [strategyKey]);
+      if (ev.rows.length) {
+        const e = ev.rows[0];
+        await pool.query(
+          `INSERT INTO marketing_case_library (case_key, store_id, campaign_id, title, score, conclusion, reusable, metrics)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)
+           ON CONFLICT (case_key) DO UPDATE SET score = EXCLUDED.score, updated_at = NOW()`,
+          [`feedback_case:${strategyKey}`, cleanText(e.store_id, 128), cleanText(e.campaign_id, 128),
+           cleanText(e.title, 500), Math.min(100, Math.max(0, Math.round(Number(rating) * 20))),
+           feedback || '基于反馈自动创建', true,
+           JSON.stringify({ source: 'strategy_feedback_v2', strategy_key: strategyKey, rating, reason_code: reasonCode })]
+        );
+      }
+    }
+    return res.json({ ok: true, new_status: status });
   });
 
   // ── Phase 4: Weight adjust based on execution patterns ──

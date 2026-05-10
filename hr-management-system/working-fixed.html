@@ -44409,6 +44409,7 @@ ${body}
                         + '<button onclick="submitStrategyFeedback(\'' + key + '\',2,\'不适合\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(245,158,11,0.2);color:#f59e0b;cursor:pointer;">不适合</button>'
                         + '<button onclick="submitStrategyFeedback(\'' + key + '\',5,\'效果好\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(14,165,233,0.2);color:#38bdf8;cursor:pointer;">效果好</button>'
                         + '<button onclick="submitStrategyFeedback(\'' + key + '\',1,\'效果差\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(239,68,68,0.2);color:#ef4444;cursor:pointer;">效果差</button>'
+                        + '<button onclick="submitStrategyReason(\'' + key + '\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(245,158,11,0.15);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);cursor:pointer;font-size:12px;">未执行原因</button>'
                         + '<button onclick="promoteFeedbackToCase(\'' + key + '\')" style="padding:4px 10px;border:none;border-radius:6px;background:rgba(14,165,233,0.15);color:#0ea5e9;border:1px solid rgba(14,165,233,0.3);cursor:pointer;">存入案例库</button>'
                         + '</div>'
                         + '</div>';
@@ -44422,17 +44423,46 @@ ${body}
             const feedback = prompt('请输入反馈内容', defaultText || '已采纳');
             if (feedback == null) return;
             try {
-                const r = await fetch('/api/growth/strategy-feedback', {
+                const r = await fetch('/api/growth/strategy-feedback-v2', {
                     method: 'POST',
                     headers: growthAuthHeaders(),
-                    body: JSON.stringify({ strategy_key: strategyKey, rating: rating, feedback: feedback })
+                    body: JSON.stringify({ strategy_key: strategyKey, rating: rating, feedback: feedback, reason_code: '' })
                 });
                 const data = await r.json();
                 if (!data.ok) throw new Error(data.error || 'feedback_failed');
-                showNotification('反馈已提交', 'success');
+                showNotification('反馈已提交' + (data.new_status === 'accepted' ? '（已采纳为案例）' : ''), 'success');
                 loadStrategyEvaluations();
             } catch (e) {
                 showNotification('反馈提交失败：' + (e?.message || e), 'error');
+            }
+        }
+
+        async function submitStrategyReason(strategyKey) {
+            const reasonCodes = [
+                { code: 'discount_too_deep', label: '折扣太大' },
+                { code: 'store_cant_execute', label: '门店执行不了' },
+                { code: 'wrong_timing', label: '时机不对' },
+                { code: 'wrong_audience', label: '客群不对' },
+                { code: 'content_mismatch_brand', label: '内容不符合品牌' },
+                { code: 'other', label: '其他' }
+            ];
+            const reasonText = reasonCodes.map(function(r, i) { return (i + 1) + '. ' + r.label; }).join('\n');
+            const choice = parseInt(prompt('选择未执行原因：\n' + reasonText + '\n\n请输入数字'), 10);
+            if (isNaN(choice) || choice < 1 || choice > reasonCodes.length) return;
+            const selected = reasonCodes[choice - 1];
+            const detail = prompt('详细说明（可选）', '');
+            if (detail === null) return;
+            try {
+                const r = await fetch('/api/growth/strategy-feedback-v2', {
+                    method: 'POST', headers: growthAuthHeaders(),
+                    body: JSON.stringify({ strategy_key: strategyKey, rating: 2, feedback: detail || selected.label, reason_code: selected.code })
+                });
+                const data = await r.json();
+                if (!data.ok) throw new Error(data.error || 'feedback_failed');
+                showNotification('原因已记录: ' + selected.label, 'success');
+                loadStrategyEvaluations();
+            } catch (e) {
+                showNotification('提交失败：' + (e?.message || e), 'error');
             }
         }
 
@@ -44673,7 +44703,8 @@ ${body}
             try {
                 const store = document.getElementById('growth-store-filter')?.value || '';
                 const channel = prompt('按渠道筛选（留空查全部）', '') || '';
-                const url = '/api/growth/cases/search?store_id=' + encodeURIComponent(store) + '&channel=' + encodeURIComponent(channel) + '&min_score=0';
+                const brand = prompt('按品牌筛选（留空查全部）', '') || '';
+                const url = '/api/growth/cases/search?store_id=' + encodeURIComponent(store) + '&channel=' + encodeURIComponent(channel) + '&brand=' + encodeURIComponent(brand) + '&min_score=0';
                 const r = await fetch(url, { headers: growthAuthHeaders() });
                 const data = await r.json();
                 const rows = data?.cases || [];
