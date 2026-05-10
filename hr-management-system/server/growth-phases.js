@@ -1,3 +1,5 @@
+import axios from 'axios';
+
 const PHASE_EVENT_TYPES = new Set([
   'campaign_scan', 'phone_authorized', 'coupon_claimed',
   'coupon_purchased', 'coupon_redeemed', 'payment_success',
@@ -616,7 +618,9 @@ export function registerPhaseRoutes(app, pool) {
       orders_table_id: cleanText(b.orders_table_id || '', 200),
       items_app_token: cleanText(b.items_app_token || '', 200),
       items_table_id: cleanText(b.items_table_id || '', 200),
-      store_id: cleanText(b.store_id || '', 128)
+      store_id: cleanText(b.store_id || '', 128),
+      app_id: cleanText(b.app_id || '', 80),
+      app_secret: cleanText(b.app_secret || '', 200)
     };
     if (!config.orders_app_token || !config.orders_table_id)
       return res.status(400).json({ok:false,error:'missing orders_app_token or orders_table_id'});
@@ -640,17 +644,17 @@ export function registerPhaseRoutes(app, pool) {
     }
     if (!config) return res.status(400).json({ok:false,error:'no pos_feishu_config found, POST /api/growth/pos-feishu-config first'});
 
-    const LARK_APP_ID = process.env.LARK_APP_ID || process.env.FEISHU_APP_ID || '';
-    const LARK_APP_SECRET = process.env.LARK_APP_SECRET || process.env.FEISHU_APP_SECRET || '';
-    if (!LARK_APP_ID || !LARK_APP_SECRET) return res.status(503).json({ok:false,error:'LARK_APP_ID/LARK_APP_SECRET not configured'});
+    const LARK_APP_ID = config.app_id || process.env.BITABLE_TASK_RESP_APP_ID || process.env.LARK_APP_ID || process.env.FEISHU_APP_ID || '';
+    const LARK_APP_SECRET = config.app_secret || process.env.BITABLE_TASK_RESP_APP_SECRET || process.env.LARK_APP_SECRET || process.env.FEISHU_APP_SECRET || '';
+    if (!LARK_APP_ID || !LARK_APP_SECRET) return res.status(503).json({ok:false,error:'no Feishu app credentials configured'});
 
     let tenantToken = '';
     try {
-      const tr = await (await import('node-fetch')).default('https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({app_id: LARK_APP_ID, app_secret: LARK_APP_SECRET})
-      }).then(r => r.json());
-      tenantToken = tr.tenant_access_token || '';
+      const tr = await axios.post('https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
+        {app_id: LARK_APP_ID, app_secret: LARK_APP_SECRET},
+        {headers: {'Content-Type': 'application/json'}, timeout: 10000}
+      );
+      tenantToken = tr.data?.tenant_access_token || '';
     } catch (e) { return res.status(502).json({ok:false,error:'lark_token_failed',detail: e.message}); }
     if (!tenantToken) return res.status(502).json({ok:false,error:'lark_token_empty'});
 
@@ -671,9 +675,10 @@ export function registerPhaseRoutes(app, pool) {
       let ordersBatch = [];
       do {
         const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${config.orders_app_token}/tables/${config.orders_table_id}/records?page_size=500${pageToken ? '&page_token=' + pageToken : ''}`;
-        const resp = await (await import('node-fetch')).default(url, {headers: {'Authorization': 'Bearer ' + tenantToken}}).then(r => r.json());
-        if (resp.code !== 0) return res.status(502).json({ok:false,error:'orders_bitable_error', detail: resp.msg});
-        const items = resp.data?.items || [];
+        const resp = await axios.get(url, {headers: {'Authorization': 'Bearer ' + tenantToken}, timeout: 10000});
+        const rd = resp.data;
+        if (rd.code !== 0) return res.status(502).json({ok:false,error:'orders_bitable_error', detail: rd.msg});
+        const items = rd.data?.items || [];
         for (const rec of items) {
           const f = rec.fields || {};
           const order = {store_id: storeId};
@@ -687,11 +692,11 @@ export function registerPhaseRoutes(app, pool) {
       } while (pageToken);
 
       if (ordersBatch.length) {
-        const sr = await (await import('node-fetch')).default('https://nnyx.cc/api/growth/pos-orders', {
-          method: 'POST', headers: {'Authorization': 'Bearer ' + (process.env.MINIPROGRAM_SYNC_SECRET || ''), 'Content-Type': 'application/json'},
-          body: JSON.stringify({store_id: storeId, orders: ordersBatch, items: []})
-        }).then(r => r.json());
-        totalOrders = sr.orders_upserted || 0;
+        const sr = await axios.post('http://127.0.0.1:' + (process.env.PORT || 3000) + '/api/growth/pos-orders',
+          {store_id: storeId, orders: ordersBatch, items: []},
+          {headers: {'Authorization': 'Bearer ' + (process.env.MINIPROGRAM_SYNC_SECRET || ''), 'Content-Type': 'application/json'}, timeout: 30000}
+        );
+        totalOrders = sr.data?.orders_upserted || 0;
       }
     }
 
@@ -709,9 +714,10 @@ export function registerPhaseRoutes(app, pool) {
       let itemsBatch = [];
       do {
         const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${config.items_app_token}/tables/${config.items_table_id}/records?page_size=500${pageToken ? '&page_token=' + pageToken : ''}`;
-        const resp = await (await import('node-fetch')).default(url, {headers: {'Authorization': 'Bearer ' + tenantToken}}).then(r => r.json());
-        if (resp.code !== 0) return res.status(502).json({ok:false,error:'items_bitable_error', detail: resp.msg});
-        const records = resp.data?.items || [];
+        const resp = await axios.get(url, {headers: {'Authorization': 'Bearer ' + tenantToken}, timeout: 10000});
+        const rd = resp.data;
+        if (rd.code !== 0) return res.status(502).json({ok:false,error:'items_bitable_error', detail: rd.msg});
+        const records = rd.data?.items || [];
         for (const rec of records) {
           const f = rec.fields || {};
           const item = {};
@@ -725,11 +731,11 @@ export function registerPhaseRoutes(app, pool) {
       } while (pageToken);
 
       if (itemsBatch.length) {
-        const sr = await (await import('node-fetch')).default('https://nnyx.cc/api/growth/pos-orders', {
-          method: 'POST', headers: {'Authorization': 'Bearer ' + (process.env.MINIPROGRAM_SYNC_SECRET || ''), 'Content-Type': 'application/json'},
-          body: JSON.stringify({store_id: storeId, orders: [], items: itemsBatch})
-        }).then(r => r.json());
-        totalItems = sr.items_upserted || 0;
+        const sr = await axios.post('http://127.0.0.1:' + (process.env.PORT || 3000) + '/api/growth/pos-orders',
+          {store_id: storeId, orders: [], items: itemsBatch},
+          {headers: {'Authorization': 'Bearer ' + (process.env.MINIPROGRAM_SYNC_SECRET || ''), 'Content-Type': 'application/json'}, timeout: 30000}
+        );
+        totalItems = sr.data?.items_upserted || 0;
       }
     }
 
