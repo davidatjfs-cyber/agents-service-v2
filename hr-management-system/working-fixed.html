@@ -45528,6 +45528,8 @@ ${body}
         }
 
         async function refreshGrowthDashboard() {
+            var _growthRole = (HRMS_API.user && HRMS_API.user.role) || (window.__user_role) || '';
+            if (_growthRole !== 'admin' && _growthRole !== 'hq_manager') { document.getElementById('growth-page').style.display = 'none'; return; }
             const storeFilter = document.getElementById('growth-store-filter')?.value || '';
             const campaignFilter = document.getElementById('growth-campaign-filter')?.value || '';
             try {
