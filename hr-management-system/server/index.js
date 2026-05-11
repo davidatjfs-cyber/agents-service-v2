@@ -2049,7 +2049,11 @@ app.get('/api/approvals', authRequired, async (req, res) => {
         chain: chainDecorated
       };
     };
-    const items = await Promise.all((r.rows || []).map(decorate));
+    let filteredRows = r.rows || [];
+    if ((view === 'assigned' || view === 'approved') && role === 'store_production_manager') {
+      filteredRows = filteredRows.filter(row => String(row.type || '') !== 'points');
+    }
+    const items = await Promise.all(filteredRows.map(decorate));
     return res.json({ items });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: 'internal_error' });
@@ -2064,6 +2068,7 @@ function canUserViewApprovalRow(user, row, state0) {
   const un = String(user.username || '').trim().toLowerCase();
   const role = String(user.role || '').trim();
   if (['admin', 'hq_manager', 'cashier', 'hr_manager'].includes(role)) return true;
+  if (role === 'store_production_manager' && String(row.type || '') === 'points') return false;
   const appl = String(row.applicant_username || '').trim().toLowerCase();
   if (appl && appl === un) return true;
   const curr = String(row.current_assignee_username || '').trim().toLowerCase();

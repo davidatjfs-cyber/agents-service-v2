@@ -17670,7 +17670,10 @@
             const bulkBtn = document.getElementById('approvals-bulk-approve-btn');
             if (!box || !empty) return;
 
-            const list = Array.isArray(items) ? items : [];
+            const list = (Array.isArray(items) ? items : []).filter(it => {
+                if (currentUser && currentUser.role === 'store_production_manager' && String(it?.type || '') === 'points') return false;
+                return true;
+            });
             const canBulkApproveType = (item) => {
                 const t = String(item?.type || '').trim();
                 return ['points', 'reward_punishment', 'monthly_confirm', 'payment'].includes(t);
@@ -36830,6 +36833,7 @@ tr:nth-child(even) td { background: #fafafa; }
                 const myUn = String(currentUser.username || '').toLowerCase();
                 const pending = all.filter(it => {
                     if (String(it?.status || '') !== 'pending') return false;
+                    if (currentUser.role === 'store_production_manager' && String(it?.type || '') === 'points') return false;
                     const assignee = String(it?.current_assignee_username || '').toLowerCase();
                     if (assignee === myUn) return true;
                     const chain = Array.isArray(it?.chain) ? it.chain : [];
