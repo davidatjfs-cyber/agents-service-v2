@@ -3324,6 +3324,35 @@ function viewDataSources() {
 
 function viewPllm() {
   const w = el('div');
+
+  // PLLM 开关
+  w.appendChild(card('PLLM 控制', (() => {
+    const row = el('div', { className: 'flex items-center justify-between py-2' });
+    const left = el('div', { className: 'flex-1' });
+    left.appendChild(el('div', { className: 'font-medium text-sm' }, 'PLLM 智能经营助手'));
+    left.appendChild(el('div', { className: 'text-xs text-gray-500' }, '开启后每5分钟扫描异常→LLM分析→创建PLLM任务给管理员'));
+    row.appendChild(left);
+    const toggle = el('label', { className: 'relative inline-flex items-center cursor-pointer ml-4' });
+    const ck = el('input', { type: 'checkbox', id: 'pllm_toggle_panel', className: 'sr-only peer' });
+    toggle.appendChild(ck);
+    toggle.appendChild(el('div', { className: 'w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600' }));
+    row.appendChild(toggle);
+    const g = el('div');
+    g.appendChild(row);
+    g.appendChild(el('div', { id: 'pllm_panel_status', className: 'text-xs' }));
+    GET('/api/pllm/status').then(r => { ck.checked = r.enabled; $('#pllm_panel_status').textContent = r.enabled ? '🟢 运行中' : '🔴 已关闭'; }).catch(() => {});
+    ck.addEventListener('change', async () => {
+      const en = ck.checked;
+      try {
+        await POST('/api/pllm/toggle', { enabled: en });
+        $('#pllm_panel_status').textContent = en ? '🟢 运行中' : '🔴 已关闭';
+        msg(en ? 'PLLM 已开启' : 'PLLM 已关闭');
+      } catch (e) { ck.checked = !en; msg('操作失败: ' + (e?.message || '')); }
+    });
+    return g;
+  })()));
+  w.appendChild(el('div', { className: 'mb-4' }));
+
   const d = S.pllmDashboard || {};
   const month = String(d.month || '');
   const sum = d.summary || {};
