@@ -20644,8 +20644,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                     loadAgentsData();
                     break;
                 case 'growth':
-                    var _userRole = (HRMS_API.user && HRMS_API.user.role) || (window.__user_role) || '';
-                    if (_userRole !== 'admin' && _userRole !== 'hq_manager') {
+                    if (!canAccessGrowthModule()) {
                         if (typeof showNotification === 'function') showNotification('无权限访问', 'error');
                         return;
                     }
