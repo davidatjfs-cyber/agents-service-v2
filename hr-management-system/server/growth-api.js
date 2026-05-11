@@ -426,6 +426,16 @@ export async function ensureGrowthTables(pool) {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS brand_voice_samples (
+      brand TEXT PRIMARY KEY,
+      samples JSONB NOT NULL DEFAULT '[]'::jsonb,
+      detected_style JSONB NOT NULL DEFAULT '[]'::jsonb,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS generated_posters (
       id BIGSERIAL PRIMARY KEY,
       poster_key TEXT UNIQUE,
@@ -1807,7 +1817,6 @@ export function registerGrowthRoutes(app, pool) {
   });
 
   // ── Phase 5: Brand voice samples ──
-  const brandVoiceSamples = {};
   app.post('/api/growth/brand-voice-samples', async (req, res) => {
     if (!requireGrowthAuth(req, res)) return;
     const b = req.body || {};
@@ -1822,12 +1831,27 @@ export function registerGrowthRoutes(app, pool) {
     if (/情怀|记忆|老|传统/.test(samples.join(''))) style.push('情感导向');
     if (/潮|新|网红|打卡/.test(samples.join(''))) style.push('潮流导向');
     if (!style.length) style.push('综合');
+    await pool.query(
+      `INSERT INTO brand_voice_samples (brand, samples, detected_style, updated_at)
+       VALUES ($1, $2::jsonb, $3::jsonb, NOW())
+       ON CONFLICT (brand) DO UPDATE SET
+         samples = EXCLUDED.samples,
+         detected_style = EXCLUDED.detected_style,
+         updated_at = NOW()`,
+      [brand, JSON.stringify(samples), JSON.stringify(style)]
+    );
     return res.json({ ok: true, brand, sample_count: samples.length, detected_style: style, samples });
   });
   app.get('/api/growth/brand-voice-samples', async (req, res) => {
     if (!requireGrowthAuth(req, res)) return;
     const brand = cleanText(req.query.brand || '', 128);
-    return res.json({ ok: true, brand, data: brand ? brandVoiceSamples[brand] || null : brandVoiceSamples });
+    if (brand) {
+      const r = await pool.query(`SELECT brand, samples, detected_style, updated_at FROM brand_voice_samples WHERE brand = $1 LIMIT 1`, [brand]);
+      return res.json({ ok: true, brand, data: r.rows[0] || null });
+    }
+    const r = await pool.query(`SELECT brand, samples, detected_style, updated_at FROM brand_voice_samples ORDER BY updated_at DESC, brand ASC LIMIT 100`);
+    const data = Object.fromEntries(r.rows.map(row => [row.brand, row]));
+    return res.json({ ok: true, brand: '', data });
   });
 
   // ── Phase 5: Semantic write-back to profiles ──
@@ -1921,7 +1945,6 @@ export function registerGrowthRoutes(app, pool) {
   app.get('/api/growth/active-window', async (req, res) => {
     if (!requireGrowthAuth(req, res)) return;
     const storeId = cleanText(req.query.store_id || '', 128);
-    // Predict best time window from historical event patterns
     const timePatterns = await pool.query(
       `SELECT
          COUNT(*)::int as event_count,
@@ -1944,10 +1967,19 @@ export function registerGrowthRoutes(app, pool) {
     );
     const profileSegments = await pool.query(
       `SELECT lifecycle_stage, COUNT(*)::int as cnt,
+              MODE() WITHIN GROUP (ORDER BY best_contact_window) AS top_window,
               ROUND(AVG(price_sensitivity)::numeric, 2) AS avg_price_sens,
               ROUND(AVG(response_to_discount)::numeric, 2) AS avg_discount_resp
        FROM growth_customer_profiles
        WHERE ($1='' OR store_id=$1) GROUP BY lifecycle_stage ORDER BY cnt DESC`,
+       [storeId]
+     );
+    const repurchaseRisk = await pool.query(
+      `SELECT COUNT(*)::int as at_risk_count, store_id
+       FROM growth_customer_profiles
+       WHERE lifecycle_stage IN ('at_risk','churned')
+         AND ($1='' OR store_id=$1)
+       GROUP BY store_id`,
       [storeId]
     );
     const topPattern = timePatterns.rows[0];
@@ -1956,11 +1988,14 @@ export function registerGrowthRoutes(app, pool) {
       ok: true,
       predicted_window: prediction,
       time_patterns: timePatterns.rows.slice(0, 5),
+      segments: profileSegments.rows,
       profile_segments: profileSegments.rows,
+      repurchase_risk: repurchaseRisk.rows,
       recommendations: [
         prediction !== '数据不足' ? `📅 预测最佳触达: ${prediction}` : '',
+        repurchaseRisk.rows.length ? `⏰ ${repurchaseRisk.rows[0].at_risk_count || 0}位客户处于复购临界期，建议尽快触达` : '',
         ...profileSegments.rows.filter(r => r.cnt > 0).map(r =>
-          `📊 ${r.lifecycle_stage}客群(${r.cnt}人) 价格敏感度:${r.avg_price_sens||'N/A'} 折扣响应:${r.avg_discount_resp||'N/A'}`
+          `📊 ${r.lifecycle_stage}客群(${r.cnt}人) 最佳触达:${r.top_window || '未设定'} 价格敏感度:${r.avg_price_sens||'N/A'} 折扣响应:${r.avg_discount_resp||'N/A'}`
         )
       ].filter(Boolean)
     });
@@ -2018,35 +2053,6 @@ export function registerGrowthRoutes(app, pool) {
       [JSON.stringify({ app_token: appToken, table_id: tableId })]
     );
     res.json({ ok: true, config: { app_token: appToken, table_id: tableId } });
-  });
-
-  // ── Phase 6: Active time window prediction ──
-  app.get('/api/growth/active-window', async (req, res) => {
-    if (!requireGrowthAuth(req, res)) return;
-    const storeId = cleanText(req.query.store_id || '', 128);
-    const r = await pool.query(
-      `SELECT lifecycle_stage, COUNT(*)::int as cnt,
-              MODE() WITHIN GROUP (ORDER BY best_contact_window) AS top_window,
-              ROUND(AVG(price_sensitivity)::numeric, 2) AS avg_price_sens,
-              ROUND(AVG(response_to_discount)::numeric, 2) AS avg_discount_resp
-       FROM growth_customer_profiles
-       WHERE ($1='' OR store_id=$1)
-       GROUP BY lifecycle_stage ORDER BY cnt DESC`,
-      [storeId]
-    );
-    const repurchaseRisk = await pool.query(
-      `SELECT COUNT(*)::int as at_risk_count, store_id
-       FROM growth_customer_profiles WHERE lifecycle_stage IN ('at_risk','churned')
-       AND ($1='' OR store_id=$1) GROUP BY store_id`,
-      [storeId]
-    );
-    return res.json({
-      ok: true, segments: r.rows, repurchase_risk: repurchaseRisk.rows,
-      recommendations: [
-        repurchaseRisk.rows.length ? `⏰ ${repurchaseRisk.rows[0].at_risk_count || 0}位客户处于复购临界期，建议尽快触达` : '',
-        ...r.rows.filter(r => r.top_window).map(r => `📅 ${r.lifecycle_stage}客群最佳触达: ${r.top_window}，敏感度:${r.avg_price_sens||'N/A'}`)
-      ].filter(Boolean)
-    });
   });
 
   // ── Phase 6: User clustering (simplified, indexed) ──

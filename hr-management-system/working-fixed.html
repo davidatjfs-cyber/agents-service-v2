@@ -13873,12 +13873,39 @@
                         <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
                             <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">公域品宣管理</div>
                             <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-                                <button onclick="loadPublicTasks()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新任务</button>
+                                <button onclick="refreshPublicContentWorkspace()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新全部</button>
                                 <button onclick="loadChannelEffects()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:13px;">渠道效果</button>
                             </div>
-                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;align-items:start;">
+                                <div style="background:linear-gradient(180deg,rgba(148,163,184,0.08),rgba(30,41,59,0.14));border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px;">
+                                    <div style="font-size:13px;font-weight:800;color:#f8fafc;margin-bottom:12px;">📡 渠道台账</div>
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                        <input id="public-channel-key" placeholder="channel_key" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <input id="public-channel-name" placeholder="渠道名称" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <input id="public-channel-platform" placeholder="平台，如小红书" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <input id="public-channel-store" placeholder="store_id" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <input id="public-channel-owner" placeholder="负责人账号" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;grid-column:1/-1;">
+                                    </div>
+                                    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+                                        <button onclick="savePublicChannel()" style="padding:6px 14px;border-radius:8px;background:#22c55e;color:#fff;border:none;cursor:pointer;font-size:12px;">保存渠道</button>
+                                        <button onclick="loadPublicChannels()" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.08);color:#fff;border:none;cursor:pointer;font-size:12px;">刷新渠道</button>
+                                    </div>
+                                    <div id="public-channels-list" style="max-height:240px;overflow-y:auto;margin-top:14px;"></div>
+                                </div>
                                 <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px;">
                                     <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);margin-bottom:10px;">📋 品宣任务</div>
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+                                        <input id="public-task-title" placeholder="任务标题" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;grid-column:1/-1;">
+                                        <select id="public-task-channel" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;"></select>
+                                        <input id="public-task-store" placeholder="store_id" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <input id="public-task-campaign" placeholder="campaign_id" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <input id="public-task-due" type="datetime-local" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <textarea id="public-task-brief" placeholder="内容简述 / 核心卖点" style="grid-column:1/-1;height:72px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;"></textarea>
+                                    </div>
+                                    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+                                        <button onclick="savePublicTask()" style="padding:6px 14px;border-radius:8px;background:#f59e0b;color:#fff;border:none;cursor:pointer;font-size:12px;">创建任务</button>
+                                        <button onclick="loadPublicTasks()" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.08);color:#fff;border:none;cursor:pointer;font-size:12px;">刷新任务</button>
+                                    </div>
                                     <div id="public-tasks-list" style="max-height:400px;overflow-y:auto;"></div>
                                 </div>
                                 <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px;">
@@ -13887,8 +13914,28 @@
                                 </div>
                             </div>
                             <div id="public-content-calendar" style="margin-top:16px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px;">
-                                <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);margin-bottom:10px;">📅 内容日历</div>
-                                <div id="public-calendar-list" style="max-height:300px;overflow-y:auto;"></div>
+                                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;align-items:start;">
+                                    <div>
+                                        <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);margin-bottom:10px;">📅 内容日历</div>
+                                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                            <input id="public-calendar-item-id" placeholder="item_id，不填自动生成" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;grid-column:1/-1;">
+                                            <input id="public-calendar-title" placeholder="内容标题" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;grid-column:1/-1;">
+                                            <input id="public-calendar-date" type="date" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                            <select id="public-calendar-channel" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;"></select>
+                                            <input id="public-calendar-store" placeholder="store_id" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                            <input id="public-calendar-campaign" placeholder="campaign_id" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                            <textarea id="public-calendar-brief" placeholder="内容摘要" style="grid-column:1/-1;height:68px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;"></textarea>
+                                        </div>
+                                        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+                                            <button onclick="saveContentCalendarItem()" style="padding:6px 14px;border-radius:8px;background:#a855f7;color:#fff;border:none;cursor:pointer;font-size:12px;">保存日历</button>
+                                            <button onclick="loadContentCalendar()" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.08);color:#fff;border:none;cursor:pointer;font-size:12px;">刷新日历</button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);margin-bottom:10px;">🗓 已排期内容</div>
+                                        <div id="public-calendar-list" style="max-height:300px;overflow-y:auto;"></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -13923,6 +13970,39 @@
                             <div id="poster-history" style="margin-top:16px;">
                                 <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.8);margin-bottom:8px;">已生成海报</div>
                                 <div id="poster-history-list" style="max-height:300px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;"></div>
+                            </div>
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:16px;align-items:start;">
+                                <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px;">
+                                    <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);margin-bottom:10px;">🧩 模板资产库</div>
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                        <input id="poster-template-key-input" placeholder="template_key" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <input id="poster-template-name-input" placeholder="模板名称" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <input id="poster-template-category-input" placeholder="分类" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <input id="poster-template-channel-input" placeholder="渠道" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <input id="poster-template-aspect-input" placeholder="比例，如 3:4" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;grid-column:1/-1;">
+                                    </div>
+                                    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+                                        <button onclick="savePosterTemplateMeta()" style="padding:6px 14px;border-radius:8px;background:#6366f1;color:#fff;border:none;cursor:pointer;font-size:12px;">保存模板</button>
+                                        <button onclick="loadPosterTemplates()" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.08);color:#fff;border:none;cursor:pointer;font-size:12px;">刷新模板</button>
+                                    </div>
+                                    <div id="poster-template-library" style="max-height:220px;overflow-y:auto;margin-top:14px;"></div>
+                                </div>
+                                <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px;">
+                                    <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);margin-bottom:10px;">🖼 创意素材库</div>
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                        <input id="creative-asset-key" placeholder="asset_key" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <input id="creative-asset-name" placeholder="素材名称" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <input id="creative-asset-type" placeholder="类型，如 dish_photo" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <input id="creative-asset-store" placeholder="store_id" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <input id="creative-asset-url" placeholder="素材URL" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;grid-column:1/-1;">
+                                        <input id="creative-asset-tags" placeholder="标签，逗号分隔" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;grid-column:1/-1;">
+                                    </div>
+                                    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+                                        <button onclick="saveCreativeAsset()" style="padding:6px 14px;border-radius:8px;background:#ec4899;color:#fff;border:none;cursor:pointer;font-size:12px;">保存素材</button>
+                                        <button onclick="loadCreativeAssets()" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.08);color:#fff;border:none;cursor:pointer;font-size:12px;">刷新素材</button>
+                                    </div>
+                                    <div id="creative-assets-list" style="max-height:220px;overflow-y:auto;margin-top:14px;"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -19573,12 +19653,12 @@ th { background: #f5f5f5; font-weight: 700; }
         function getRoleBottomNavPages(role) {
             const r = String(role || '').trim();
             if (r === ROLES.ADMIN) return ['profile', 'growth', 'reports', 'agents'];
-            if (r === ROLES.STORE_MANAGER) return ['profile', 'growth', 'attendance', 'daily-report'];
+            if (r === ROLES.STORE_MANAGER) return ['profile', 'attendance', 'daily-report', 'exam'];
             if (r === ROLES.PRODUCTION_MANAGER) return ['profile', 'attendance', 'forecast', 'rewards'];
             if (r === ROLES.HQ_MANAGER) return ['profile', 'growth', 'daily-report', 'reports'];
             if (r === ROLES.HR_MANAGER) return ['profile', 'attendance', 'approvals', 'reports'];
             if (r === ROLES.CASHIER) return ['profile', 'attendance', 'payment', 'exam'];
-            if (r === ROLES.FRONT_MANAGER) return ['profile', 'growth', 'daily-report', 'attendance'];
+            if (r === ROLES.FRONT_MANAGER) return ['profile', 'daily-report', 'attendance', 'exam'];
             return ['profile', 'attendance', 'points', 'exam'];
         }
 

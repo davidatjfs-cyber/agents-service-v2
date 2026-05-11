@@ -173,6 +173,45 @@ export async function ensurePhaseTables(pool) {
       synced_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await pool.query(`
+    DELETE FROM pos_order_items a
+    USING pos_order_items b
+    WHERE a.id > b.id
+      AND a.biz_date IS NOT DISTINCT FROM b.biz_date
+      AND a.store_code IS NOT DISTINCT FROM b.store_code
+      AND a.order_no = b.order_no
+      AND a.sku IS NOT DISTINCT FROM b.sku
+      AND a.dish_name IS NOT DISTINCT FROM b.dish_name
+      AND a.spec IS NOT DISTINCT FROM b.spec
+      AND a.tags IS NOT DISTINCT FROM b.tags
+      AND a.unit_price IS NOT DISTINCT FROM b.unit_price
+      AND a.qty IS NOT DISTINCT FROM b.qty
+      AND a.unit IS NOT DISTINCT FROM b.unit
+      AND a.amount_before_discount IS NOT DISTINCT FROM b.amount_before_discount
+      AND a.service_fee IS NOT DISTINCT FROM b.service_fee
+      AND a.discount IS NOT DISTINCT FROM b.discount
+      AND a.amount_after_discount IS NOT DISTINCT FROM b.amount_after_discount
+      AND a.category_mid IS NOT DISTINCT FROM b.category_mid
+      AND a.category IS NOT DISTINCT FROM b.category
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_pos_items_dedupe ON pos_order_items (
+    order_no,
+    biz_date,
+    store_code,
+    COALESCE(sku, ''),
+    COALESCE(dish_name, ''),
+    COALESCE(spec, ''),
+    COALESCE(tags, ''),
+    unit_price,
+    qty,
+    COALESCE(unit, ''),
+    amount_before_discount,
+    service_fee,
+    discount,
+    amount_after_discount,
+    COALESCE(category_mid, ''),
+    COALESCE(category, '')
+  )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_pos_items_order ON pos_order_items (order_no)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_pos_items_dish ON pos_order_items (dish_name)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_pos_items_cat ON pos_order_items (category) WHERE category IS NOT NULL`);
@@ -625,8 +664,7 @@ export function registerPhaseRoutes(app, pool) {
     if (!rqa(req, res)) return;
     const sid = cleanText(req.query.store_id || '', 128);
     const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
-    const storeCond = sid ? `AND store_id = '${sid.replace(/'/g, "''")}'` : '';
-    const dateCond = `AND biz_date >= CURRENT_DATE - (${days} || ' days')::interval`;
+    const statsParams = [sid, days];
 
     const [
       summaryR, storeR, hourR, payR, dishR, repeatR
@@ -636,16 +674,23 @@ export function registerPhaseRoutes(app, pool) {
         ROUND(AVG(amount_after_discount),2) AS avg_check,
         COUNT(DISTINCT phone) AS distinct_phones,
         COUNT(*) FILTER (WHERE phone IS NOT NULL AND phone <> '')::int AS identified_orders
-        FROM pos_orders WHERE 1=1 ${storeCond} ${dateCond}`),
+        FROM pos_orders
+        WHERE ($1::text = '' OR store_id = $1)
+          AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval`, statsParams),
       pool.query(`SELECT store_name, COUNT(*)::int AS orders,
         ROUND(AVG(amount_after_discount),2) AS avg_check,
         COALESCE(SUM(amount_after_discount),0)::numeric AS total_revenue
-        FROM pos_orders WHERE 1=1 ${storeCond} ${dateCond}
-        GROUP BY store_name ORDER BY total_revenue DESC`),
+        FROM pos_orders
+        WHERE ($1::text = '' OR store_id = $1)
+          AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
+        GROUP BY store_name ORDER BY total_revenue DESC`, statsParams),
       pool.query(`SELECT EXTRACT(HOUR FROM order_time)::int AS hour, COUNT(*)::int AS orders,
         COALESCE(SUM(amount_after_discount),0)::numeric AS revenue
-        FROM pos_orders WHERE order_time IS NOT NULL ${storeCond} ${dateCond}
-        GROUP BY 1 ORDER BY 1`),
+        FROM pos_orders
+        WHERE order_time IS NOT NULL
+          AND ($1::text = '' OR store_id = $1)
+          AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
+        GROUP BY 1 ORDER BY 1`, statsParams),
       pool.query(`SELECT
         CASE
           WHEN payment_method LIKE '%微信%' THEN '微信'
@@ -658,16 +703,20 @@ export function registerPhaseRoutes(app, pool) {
         END AS pay_group,
         COUNT(*)::int AS orders,
         COALESCE(SUM(amount_after_discount),0)::numeric AS revenue
-        FROM pos_orders WHERE 1=1 ${storeCond} ${dateCond}
-        GROUP BY 1 ORDER BY orders DESC`),
+        FROM pos_orders
+        WHERE ($1::text = '' OR store_id = $1)
+          AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
+        GROUP BY 1 ORDER BY orders DESC`, statsParams),
       pool.query(`SELECT category, dish_name,
         SUM(qty)::int AS total_qty,
         COALESCE(SUM(amount_after_discount),0)::numeric AS revenue
         FROM pos_order_items WHERE order_no IN (
-          SELECT order_no FROM pos_orders WHERE 1=1 ${storeCond} ${dateCond}
+          SELECT order_no FROM pos_orders
+          WHERE ($1::text = '' OR store_id = $1)
+            AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
         ) AND category IS NOT NULL AND category <> '-'
         GROUP BY category, dish_name
-        ORDER BY revenue DESC LIMIT 15`),
+        ORDER BY revenue DESC LIMIT 15`, statsParams),
       pool.query(`SELECT
         COUNT(*) FILTER (WHERE order_cnt = 1)::int AS one_timer,
         COUNT(*) FILTER (WHERE order_cnt = 2)::int AS two_timer,
@@ -676,9 +725,11 @@ export function registerPhaseRoutes(app, pool) {
         FROM (
           SELECT phone, COUNT(*)::int AS order_cnt
           FROM pos_orders
-          WHERE phone IS NOT NULL AND phone <> '' ${storeCond} ${dateCond}
+          WHERE phone IS NOT NULL AND phone <> ''
+            AND ($1::text = '' OR store_id = $1)
+            AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
           GROUP BY phone
-        ) sub`)
+        ) sub`, statsParams)
     ]);
 
     const [lifecycleR, spendDistR, visitR, dishCatR, highValueR] = await Promise.all([
@@ -686,28 +737,51 @@ export function registerPhaseRoutes(app, pool) {
           CASE WHEN sub.order_cnt <= 1 THEN 'new'
                WHEN sub.order_cnt BETWEEN 2 AND 3 THEN 'active'
                ELSE 'loyal' END) AS lifecycle_stage, COUNT(*)::int AS cnt
-        FROM (SELECT phone, COUNT(*)::int AS order_cnt FROM pos_orders WHERE phone IS NOT NULL AND phone <> '' ${storeCond} ${dateCond} GROUP BY phone) sub
+        FROM (
+          SELECT phone, COUNT(*)::int AS order_cnt
+          FROM pos_orders
+          WHERE phone IS NOT NULL AND phone <> ''
+            AND ($1::text = '' OR store_id = $1)
+            AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
+          GROUP BY phone
+        ) sub
         LEFT JOIN growth_customer_profiles cp ON cp.phone = sub.phone
-        GROUP BY 1 ORDER BY cnt DESC`),
+        GROUP BY 1 ORDER BY cnt DESC`, statsParams),
       pool.query(`SELECT CASE
           WHEN avg_check < 200 THEN '0-200'
           WHEN avg_check < 400 THEN '200-400'
           WHEN avg_check < 600 THEN '400-600'
           WHEN avg_check < 800 THEN '600-800'
           ELSE '800+' END AS spend_tier, COUNT(*)::int AS cnt
-        FROM (SELECT phone, AVG(amount_after_discount) AS avg_check FROM pos_orders WHERE phone IS NOT NULL AND phone <> '' ${storeCond} ${dateCond} GROUP BY phone) sub
-        GROUP BY 1 ORDER BY 1`),
+        FROM (
+          SELECT phone, AVG(amount_after_discount) AS avg_check
+          FROM pos_orders
+          WHERE phone IS NOT NULL AND phone <> ''
+            AND ($1::text = '' OR store_id = $1)
+            AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
+          GROUP BY phone
+        ) sub
+        GROUP BY 1 ORDER BY 1`, statsParams),
       pool.query(`SELECT CASE
           WHEN EXTRACT(HOUR FROM order_time) BETWEEN 10 AND 14 THEN '午市(10-14点)'
           WHEN EXTRACT(HOUR FROM order_time) BETWEEN 17 AND 21 THEN '晚市(17-21点)'
           ELSE '其他时段' END AS visit_time, COUNT(*)::int AS cnt
-        FROM pos_orders WHERE phone IS NOT NULL AND phone <> '' ${storeCond} ${dateCond} AND order_time IS NOT NULL
-        GROUP BY 1 ORDER BY cnt DESC`),
+        FROM pos_orders
+        WHERE phone IS NOT NULL AND phone <> ''
+          AND order_time IS NOT NULL
+          AND ($1::text = '' OR store_id = $1)
+          AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
+        GROUP BY 1 ORDER BY cnt DESC`, statsParams),
       pool.query(`SELECT category, SUM(qty)::int AS total_qty FROM pos_order_items WHERE order_no IN (
-          SELECT order_no FROM pos_orders WHERE phone IS NOT NULL AND phone <> '' ${storeCond} ${dateCond}
-        ) AND category IS NOT NULL AND category <> '-' GROUP BY category ORDER BY total_qty DESC LIMIT 5`),
+          SELECT order_no FROM pos_orders
+          WHERE phone IS NOT NULL AND phone <> ''
+            AND ($1::text = '' OR store_id = $1)
+            AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
+        ) AND category IS NOT NULL AND category <> '-' GROUP BY category ORDER BY total_qty DESC LIMIT 5`, statsParams),
       pool.query(`SELECT COUNT(*)::int AS count, ROUND(AVG(pos_total_spend)::numeric, 2) AS avg_spending, ROUND(AVG(pos_order_count)::numeric, 1) AS avg_orders
-        FROM growth_customer_profiles WHERE pos_total_spend > 0 ${sid ? "AND store_id = '"+sid.replace(/'/g,"''")+"'" : ''}`)
+        FROM growth_customer_profiles
+        WHERE pos_total_spend > 0
+          AND ($1::text = '' OR store_id = $1)`, [sid])
     ]);
 
     const profileInsights = {
