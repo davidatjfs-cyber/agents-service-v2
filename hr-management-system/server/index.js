@@ -4515,12 +4515,12 @@ app.post('/api/checkin', authRequired, async (req, res) => {
       return res.status(400).json({ error: 'duplicate_checkin', message: `1小时内已${label}打卡，请勿重复操作` });
     }
 
-    // 规则1：超过11:00不允许上班打卡
+    // 规则1：超过14:00不允许上班打卡
     if (type === 'clock_in') {
       const shNow = new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai', hour12: false });
       const shHour = parseInt(shNow.split(', ')[1]?.split(':')[0] || '0', 10);
-      if (shHour >= 11) {
-        return res.status(400).json({ error: 'late_clock_in', message: '超过11:00不允许上班打卡' });
+      if (shHour >= 14) {
+        return res.status(400).json({ error: 'late_clock_in', message: '超过14:00不允许上班打卡' });
       }
     }
 
@@ -19833,7 +19833,7 @@ process.on('unhandledRejection', (reason, promise) => {
 async function cleanupOldNotifications() {
   let deleted = 0;
   try {
-    const r = await pool.query(`DELETE FROM hrms_user_notifications WHERE created_at < now() - interval '15 days'`);
+    const r = await pool.query(`DELETE FROM hrms_user_notifications WHERE created_at < now() - interval '3 days' AND id NOT IN (SELECT id FROM hrms_user_notifications ORDER BY created_at DESC LIMIT 50)`);
     deleted = r.rowCount ?? 0;
   } catch (e) {
     console.error('[cleanup] hrms_user_notifications error:', e?.message);
@@ -19843,3 +19843,21 @@ async function cleanupOldNotifications() {
 // Run every 6 hours; first run deferred 1 min after startup
 setTimeout(() => { cleanupOldNotifications(); }, 60000);
 setInterval(cleanupOldNotifications, 6 * 3600 * 1000);
+
+app.delete('/api/notifications/:id', authRequired, async (req, res) => {
+  if (String(req.user?.role || '') !== 'admin') {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  const notifId = String(req.params.id || '').trim();
+  if (!notifId) return res.status(400).json({ error: 'missing_id' });
+  try {
+    const r = await pool.query(`DELETE FROM hrms_user_notifications WHERE id = $1`, [notifId]);
+    if (r.rowCount === 0) {
+      return res.json({ ok: true, deleted: 0, note: 'not_in_db' });
+    }
+    res.json({ ok: true, deleted: r.rowCount });
+  } catch (e) {
+    console.error('[DELETE /api/notifications/:id] error:', e?.message);
+    res.status(500).json({ error: 'db_error' });
+  }
+});

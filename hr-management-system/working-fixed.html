@@ -22190,25 +22190,28 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             showNotification('公告已发布', 'success');
         }
 
-        async function deleteAnnouncement(annId) {
-            if (!isAdminUser()) {
-                showNotification('仅管理员可删除公告', 'warning');
-                return;
-            }
-            const id = String(annId || '').trim();
-            if (!id) return;
-            const _okAnn = await hrmsConfirm({ title: '删除公告', message: '确定删除该公告？删除后不可恢复。', okText: '确认删除', icon: '📢' });
-            if (!_okAnn) return;
+         async function deleteAnnouncement(annId) {
+             if (!isAdminUser()) {
+                 showNotification('仅管理员可删除公告', 'warning');
+                 return;
+             }
+             const id = String(annId || '').trim();
+             if (!id) return;
+             const _okAnn = await hrmsConfirm({ title: '删除公告', message: '确定删除该公告？删除后不可恢复。', okText: '确认删除', icon: '📢' });
+             if (!_okAnn) return;
 
-            const data = HRMS_STORE.ensure();
-            const anns = Array.isArray(data.announcements) ? data.announcements : [];
-            const next = anns.filter(a => String(a.id) !== id);
-            data.announcements = next;
-            HRMS_STORE.set(data);
-            try { await HRMS_API.saveState(HRMS_STORE.ensure()); } catch (e) { console.warn('state save after deleteAnnouncement failed', e); }
-            try { loadProfileData(); } catch (e) {}
-            showNotification('已删除，所有员工将不再看到该通知', 'success');
-        }
+             const data = HRMS_STORE.ensure();
+             const anns = Array.isArray(data.announcements) ? data.announcements : [];
+             const next = anns.filter(a => String(a.id) !== id);
+             data.announcements = next;
+             if (id) {
+                 try { await HRMS_API.request('/api/notifications/' + encodeURIComponent(id), { method: 'DELETE' }); } catch (e) { console.warn('db announcement delete failed', e); }
+             }
+             HRMS_STORE.set(data);
+             try { await HRMS_API.saveState(HRMS_STORE.ensure()); } catch (e) { console.warn('state save after deleteAnnouncement failed', e); }
+             try { loadProfileData(); } catch (e) {}
+             showNotification('已删除，所有员工将不再看到该通知', 'success');
+         }
 
         async function deleteKnowledgeItem(itemId) {
             if (!isAdminUser()) {
@@ -36991,6 +36994,9 @@ tr:nth-child(even) td { background: #fafafa; }
                     const notifs = Array.isArray(data.notifications) ? data.notifications.slice() : [];
                     const realIdx = notifs.findIndex(n => n.id === target._id);
                     if (realIdx >= 0) { notifs.splice(realIdx, 1); data.notifications = notifs; }
+                    if (target._id) {
+                        try { await HRMS_API.request('/api/notifications/' + encodeURIComponent(target._id), { method: 'DELETE' }); } catch (e) { console.warn('db notif delete failed', e); }
+                    }
                 } else {
                     const anns = Array.isArray(data.announcements) ? data.announcements.slice() : [];
                     const realIdx = anns.findIndex(a => a === target || a.id === target._id);
