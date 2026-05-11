@@ -44741,6 +44741,15 @@ ${body}
             };
         }
 
+        function growthRoleCode() {
+            return hrmsNormalizeRoleCode((HRMS_API.user && HRMS_API.user.role) || (window.__user_role) || '');
+        }
+
+        function canAccessGrowthModule() {
+            var role = growthRoleCode();
+            return role === 'admin' || role === 'hq_manager';
+        }
+
         function showGrowthTab(tab) {
             ['dashboard', 'wecom', 'campaigns', 'feedback', 'profiles', 'constraints', 'posters', 'public', 'actions', 'pos'].forEach(function(name) {
                 var content = document.getElementById('growth-' + name + '-content');
@@ -44783,8 +44792,7 @@ ${body}
 
     // 增长移动端导航权限
     try {
-      var _mobileRole = (HRMS_API.user && HRMS_API.user.role) || (window.__user_role) || '';
-      if (_mobileRole === 'admin' || _mobileRole === 'hq_manager') {
+      if (canAccessGrowthModule()) {
         document.querySelectorAll('.growth-mobile-nav').forEach(function(el) { el.style.display = ''; });
       }
     } catch(e) {}
@@ -44792,8 +44800,7 @@ ${body}
     // Phase 8: 增长模块仅管理员/总部可见
     try {
       var growthNavLinks = document.querySelectorAll('.growth-nav-link');
-      var userRole = (HRMS_API.user && HRMS_API.user.role) || (window.__user_role) || '';
-      if (userRole === 'admin' || userRole === 'hq_manager') {
+      if (canAccessGrowthModule()) {
         growthNavLinks.forEach(function(el) { el.style.display = ''; });
       }
     } catch(e) {}
@@ -45643,8 +45650,7 @@ ${body}
         }
 
         async function refreshGrowthDashboard() {
-            var _growthRole = (HRMS_API.user && HRMS_API.user.role) || (window.__user_role) || '';
-            if (_growthRole !== 'admin' && _growthRole !== 'hq_manager') { document.getElementById('growth-page').style.display = 'none'; return; }
+            if (!canAccessGrowthModule()) { document.getElementById('growth-page').style.display = 'none'; return; }
             const storeFilter = document.getElementById('growth-store-filter')?.value || '';
             const campaignFilter = document.getElementById('growth-campaign-filter')?.value || '';
             try {
@@ -45867,15 +45873,28 @@ ${body}
         function renderPosStoreTable(stores) {
             var el = document.getElementById('pos-stats-stores');
             if (!stores.length) { el.innerHTML = '<div style="padding:20px;color:rgba(226,232,240,0.4);font-size:13px;">暂无数据</div>'; return; }
-            el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">'
-                + stores.map(function(s) {
+            var ranked = stores.slice().sort(function(a, b) { return Number(b.total_revenue || 0) - Number(a.total_revenue || 0); });
+            var totalRevenue = ranked.reduce(function(sum, item) { return sum + Number(item.total_revenue || 0); }, 0) || 1;
+            el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;">'
+                + ranked.map(function(s, idx) {
                     var displayName = s.store_name || growthStoreName(s.store_id) || '-';
-                    return '<div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:14px;">'
-                        + '<div style="font-size:14px;font-weight:700;color:#fff;margin-bottom:8px;">🏪 ' + displayName + '</div>'
+                    var rank = idx + 1;
+                    var badge = rank === 1 ? '🥇 TOP1' : rank === 2 ? '🥈 TOP2' : rank === 3 ? '🥉 TOP3' : '#' + rank;
+                    var revenue = Number(s.total_revenue || 0);
+                    var share = Math.round(revenue / totalRevenue * 1000) / 10;
+                    return '<div style="background:linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.04));border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px;box-shadow:0 8px 24px rgba(15,23,42,0.2);">'
+                        + '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:8px;">'
+                        + '<div style="font-size:14px;font-weight:700;color:#fff;line-height:1.4;">🏪 ' + displayName + '</div>'
+                        + '<div style="font-size:11px;font-weight:800;color:' + (rank === 1 ? '#facc15' : rank === 2 ? '#cbd5e1' : rank === 3 ? '#fdba74' : '#94a3b8') + ';background:rgba(15,23,42,0.38);border:1px solid rgba(255,255,255,0.08);padding:4px 8px;border-radius:999px;white-space:nowrap;">' + badge + '</div>'
+                        + '</div>'
+                        + '<div style="font-size:11px;color:rgba(226,232,240,0.58);margin-bottom:10px;">营收贡献 ' + share + '%</div>'
                         + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">'
                         + '<div style="text-align:center;padding:6px 0;background:rgba(255,255,255,0.04);border-radius:6px;"><div style="font-size:18px;font-weight:800;color:#38bdf8;">' + s.orders + '</div><div style="font-size:10px;color:rgba(226,232,240,0.5);margin-top:2px;">订单</div></div>'
-                        + '<div style="text-align:center;padding:6px 0;background:rgba(255,255,255,0.04);border-radius:6px;"><div style="font-size:18px;font-weight:800;color:#22c55e;">¥' + parseFloat(s.total_revenue).toLocaleString() + '</div><div style="font-size:10px;color:rgba(226,232,240,0.5);margin-top:2px;">总营收</div></div>'
+                        + '<div style="text-align:center;padding:6px 0;background:rgba(255,255,255,0.04);border-radius:6px;"><div style="font-size:18px;font-weight:800;color:#22c55e;">¥' + revenue.toLocaleString(undefined, { maximumFractionDigits: 0 }) + '</div><div style="font-size:10px;color:rgba(226,232,240,0.5);margin-top:2px;">总营收</div></div>'
                         + '<div style="text-align:center;padding:6px 0;background:rgba(255,255,255,0.04);border-radius:6px;"><div style="font-size:18px;font-weight:800;color:#f59e0b;">¥' + parseFloat(s.avg_check || 0).toFixed(0) + '</div><div style="font-size:10px;color:rgba(226,232,240,0.5);margin-top:2px;">客单价</div></div>'
+                        + '</div>'
+                        + '<div style="margin-top:10px;height:8px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;">'
+                        + '<div style="width:' + Math.max(8, share) + '%;height:100%;background:linear-gradient(90deg,#22c55e,#38bdf8);"></div>'
                         + '</div></div>';
                 }).join('') + '</div>';
         }
