@@ -2219,7 +2219,7 @@ function viewFlags() {
     g.appendChild(row);
     g.appendChild(el('div', { id: 'pllm_status_text', className: 'text-xs text-gray-500 px-1' }));
     // 加载当前状态
-    GET('/api/pllm/status').then(r => { ck.checked = r.enabled; $('#pllm_status_text').textContent = r.enabled ? '🟢 已开启' : '🔴 已关闭'; }).catch(() => {});
+    G('/api/pllm/status').then(r => { ck.checked = r.enabled; $('#pllm_status_text').textContent = r.enabled ? '🟢 已开启' : '🔴 已关闭'; }).catch(() => {});
     ck.addEventListener('change', async () => {
       const en = ck.checked;
       try {
@@ -3340,7 +3340,7 @@ function viewPllm() {
     const g = el('div');
     g.appendChild(row);
     g.appendChild(el('div', { id: 'pllm_panel_status', className: 'text-xs' }));
-    GET('/api/pllm/status').then(r => { ck.checked = r.enabled; $('#pllm_panel_status').textContent = r.enabled ? '🟢 运行中' : '🔴 已关闭'; }).catch(() => {});
+    G('/api/pllm/status').then(r => { ck.checked = r.enabled; $('#pllm_panel_status').textContent = r.enabled ? '🟢 运行中' : '🔴 已关闭'; }).catch(() => {});
     ck.addEventListener('change', async () => {
       const en = ck.checked;
       try {
