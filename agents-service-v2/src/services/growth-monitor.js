@@ -451,32 +451,50 @@ export async function runGrowthMonitor({ createTasks = true } = {}) {
     logger.warn({ err: e?.message }, 'daily diagnosis failed');
   }
 
-  // Phase 3: Feishu daily report push
+  // Phase 3: Feishu daily report push (每日只推送一次)
   try {
     const reportDate = new Date().toISOString().slice(0, 10);
-    const storeMetrics = await query(
-      `SELECT store_id,
-         SUM(scan_count)::int AS scans,
-         SUM(authorized_count)::int AS auths,
-         SUM(coupon_issued_count)::int AS issued,
-         SUM(coupon_redeemed_count)::int AS redeems,
-         SUM(revenue_fen)::int AS revenue
-       FROM growth_daily_metrics
-       WHERE metric_date >= CURRENT_DATE - 7
-         AND COALESCE(store_id, '') != ''
-       GROUP BY store_id
-       ORDER BY scans DESC LIMIT 20`
+    // 检查今天是否已推送过日报
+    const alreadySent = await query(
+      `SELECT id FROM growth_alerts WHERE alert_key = 'daily_report_sent:${reportDate}' LIMIT 1`
     );
-    if (storeMetrics.rows?.length) {
-      const reportLines = storeMetrics.rows.map(r =>
-        `📊 ${r.store_id}: 扫码${r.scans} 授权${r.auths} 核销${r.redeems} 收入¥${(Number(r.revenue)/100).toFixed(0)}`
-      ).join('\n');
-      try {
-        const { buildReportCard } = await import('./feishu-cards.js');
-        const card = buildReportCard('📈 门店私域日报', reportLines, '自动生成 · 数据范围近7天');
-        pushDailyReport(card).catch(e => logger.warn({ err: e?.message }, 'daily report card push failed'));
-      } catch (_e) {
-        pushDailyReport(report).catch(e => logger.warn({ err: e?.message }, 'daily report push failed'));
+    if (alreadySent.rows?.length) {
+      logger.info('daily report already sent today, skipping');
+    } else {
+      const storeMetrics = await query(
+        `SELECT store_id,
+           SUM(scan_count)::int AS scans,
+           SUM(authorized_count)::int AS auths,
+           SUM(coupon_issued_count)::int AS issued,
+           SUM(coupon_redeemed_count)::int AS redeems,
+           SUM(revenue_fen)::int AS revenue
+         FROM growth_daily_metrics
+         WHERE metric_date >= CURRENT_DATE - 7
+           AND COALESCE(store_id, '') != ''
+           AND store_id NOT ILIKE '%test%'
+           AND store_id NOT ILIKE '5186%'
+           AND store_id NOT ILIKE 'store_audit%'
+         GROUP BY store_id
+         ORDER BY scans DESC LIMIT 20`
+      );
+      if (storeMetrics.rows?.length >= 1) {
+        const reportLines = storeMetrics.rows.map(r =>
+          `📊 ${r.store_id}: 扫码${r.scans} 授权${r.auths} 核销${r.redeems} 收入¥${(Number(r.revenue)/100).toFixed(0)}`
+        ).join('\n');
+        try {
+          const { buildReportCard } = await import('./feishu-cards.js');
+          const card = buildReportCard('📈 门店私域日报', reportLines, '自动生成 · 数据范围近7天');
+          await pushDailyReport(card);
+        } catch (_e) {
+          // fallback to text
+        }
+        // 记录已推送
+        await query(
+          `INSERT INTO growth_alerts (alert_key, alert_type, severity, title, message, created_at)
+           VALUES ($1, 'daily_report', 'low', '日报已推送', '', NOW())
+           ON CONFLICT (alert_key) DO NOTHING`,
+          [`daily_report_sent:${reportDate}`]
+        );
       }
     }
   } catch (e) {

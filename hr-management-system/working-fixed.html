@@ -20564,6 +20564,11 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                     loadAgentsData();
                     break;
                 case 'growth':
+                    var _userRole = (HRMS_API.user && HRMS_API.user.role) || (window.__user_role) || '';
+                    if (_userRole !== 'admin' && _userRole !== 'hq_manager') {
+                        if (typeof showNotification === 'function') showNotification('无权限访问', 'error');
+                        return;
+                    }
                     var gp = document.getElementById('growth-page');
                     if (gp) { gp.style.display = ''; gp.style.position = ''; gp.style.top = ''; gp.style.width = ''; gp.style.height = ''; gp.style.overflow = ''; }
                     loadCampaignFilterOptions();
@@ -44694,6 +44699,15 @@ ${body}
         }
 
         
+
+    // 增长移动端导航权限
+    try {
+      var _mobileRole = (HRMS_API.user && HRMS_API.user.role) || (window.__user_role) || '';
+      if (_mobileRole === 'admin' || _mobileRole === 'hq_manager') {
+        document.querySelectorAll('.growth-mobile-nav').forEach(function(el) { el.style.display = ''; });
+      }
+    } catch(e) {}
+
     // Phase 8: 增长模块仅管理员/总部可见
     try {
       var growthNavLinks = document.querySelectorAll('.growth-nav-link');
@@ -46254,7 +46268,7 @@ ${body}
             <span class="mobile-nav-icon">🏠</span>
             <span class="mobile-nav-label">首页</span>
         </div>
-        <div class="mobile-nav-item" id="mobile-nav-slot-2" data-page="growth" onclick="mobileNavigateTo(this.dataset.page, event, this)">
+        <div class="mobile-nav-item growth-mobile-nav" id="mobile-nav-slot-2" data-page="growth" onclick="mobileNavigateTo(this.dataset.page, event, this)" style="display:none;">
             <span class="mobile-nav-icon">📈</span>
             <span class="mobile-nav-label">增长</span>
         </div>
