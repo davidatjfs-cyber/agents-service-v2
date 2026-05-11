@@ -4515,6 +4515,29 @@ app.post('/api/checkin', authRequired, async (req, res) => {
       return res.status(400).json({ error: 'duplicate_checkin', message: `1小时内已${label}打卡，请勿重复操作` });
     }
 
+    // 规则1：超过11:00不允许上班打卡
+    if (type === 'clock_in') {
+      const shNow = new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai', hour12: false });
+      const shHour = parseInt(shNow.split(', ')[1]?.split(':')[0] || '0', 10);
+      if (shHour >= 11) {
+        return res.status(400).json({ error: 'late_clock_in', message: '超过11:00不允许上班打卡' });
+      }
+    }
+
+    // 规则2：无上班打卡不允许下班打卡
+    if (type === 'clock_out') {
+      const todayClockIn = await pool.query(
+        `SELECT id FROM checkin_records
+         WHERE LOWER(username) = LOWER($1) AND type = 'clock_in'
+           AND (timezone('Asia/Shanghai', check_time))::date = CURRENT_DATE
+         LIMIT 1`,
+        [username]
+      );
+      if (!todayClockIn.rows?.length) {
+        return res.status(400).json({ error: 'no_clock_in', message: '今日无上班打卡记录，无法下班打卡' });
+      }
+    }
+
     if (noGpsRequested || (lat === 0 && lng === 0)) {
       return res.status(400).json({ error: 'no_gps', message: '因为未获取到有效定位，无法打卡' });
     }
