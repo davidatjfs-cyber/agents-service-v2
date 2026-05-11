@@ -1,0 +1,8 @@
+# ═══════════════════════════════════════════════════════════════
+# CODEOWNERS — 文件变更必须指定管理员审批
+# ═══════════════════════════════════════════════════════════════
+# 语法: 文件路径模式 @审批人
+# 参考: https://docs.github.com/en/repositories/managing-your-repositorys-settings-features/customizing-your-repository/about-code-owners
+
+# 绩效评分逻辑 — 修改必须管理员审批
+/agents-service-v2/src/services/periodic-scoring.js @davidatjfs-cyber

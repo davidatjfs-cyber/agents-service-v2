@@ -68,6 +68,24 @@ log "🔍 执行本地语法检查..."
 cd "$AGENTS_DIR"
 bash scripts/verify-agents-local.sh || error_exit "agents-service-v2本地验证失败"
 
+# 绩效评分文件变更保护
+if git diff HEAD -- agents-service-v2/src/services/periodic-scoring.js 2>/dev/null | grep -q .; then
+  log "⚠️ ⚠️ ⚠️  绩效评分文件有变更！(periodic-scoring.js)"
+  log "此文件直接影响员工绩效工资，修改前必须管理员确认"
+  log "当前变更:"
+  git diff HEAD -- agents-service-v2/src/services/periodic-scoring.js 2>/dev/null | head -30
+  log ""
+  echo ""
+  echo "═══════════════════════════════════════════════════════════════════"
+  echo "  ⚠️  绩效评分文件被修改！确认管理员知晓？(y/N) "
+  echo "═══════════════════════════════════════════════════════════════════"
+  read -r confirm
+  if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+    error_exit "部署中止：绩效评分文件变更需管理员确认"
+  fi
+  log "✅ 管理员已确认绩效评分文件变更"
+fi
+
 cd "$HRMS_DIR"
 node --check server/agents.js || error_exit "hr-management-system本地验证失败"
 node --check server/bi-weekly-report.js || error_exit "hr-management-system本地验证失败"
