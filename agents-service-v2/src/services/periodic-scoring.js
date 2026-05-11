@@ -586,8 +586,7 @@ export async function scoreStoreForPeriod(store, periodMonday, options = {}) {
               `SELECT total_score FROM agent_scores
                WHERE score_model = 'anomaly_rollups_v2'
                  AND username = $1 AND store = $2 AND role = $3
-                 AND period LIKE 'week_' || $4 || '%'
-                 AND position('__' in period) = 0
+                 AND (period LIKE 'week_' || $4 || '%' OR period LIKE '%__' || REPLACE($4, '-', '') || '%')
                  AND substring(period from 6) < $5
                  AND substring(period from 6) >= $6
                ORDER BY period DESC LIMIT 1`,
