@@ -14044,17 +14044,21 @@
                             </div>
                             <div id="pos-stats-loading" style="display:none;text-align:center;padding:40px;color:rgba(226,232,240,0.5);">加载中...</div>
                             <div id="pos-stats-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;"></div>
-                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                                <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;">
-                                    <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">👥 客户画像</div>
-                                    <div id="pos-stats-profile" style="min-height:100px;"></div>
-                                </div>
+                            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;margin-bottom:12px;">
+                                <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">👥 客户画像</div>
+                                <div id="pos-stats-profile" style="min-height:100px;"></div>
+                            </div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
                                 <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;">
                                     <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">🔁 复购分布</div>
                                     <div id="pos-stats-repeat" style="min-height:100px;"></div>
                                 </div>
+                                <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;">
+                                    <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">🔥 菜品TOP15</div>
+                                    <div id="pos-stats-dishes" style="min-height:180px;"></div>
+                                </div>
                             </div>
-                            <div style="display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px;">
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                                 <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;">
                                     <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">📊 时段分布</div>
                                     <div id="pos-stats-hour" style="min-height:180px;"></div>
@@ -14063,14 +14067,24 @@
                                     <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">💳 支付方式</div>
                                     <div id="pos-stats-pay" style="min-height:80px;"></div>
                                 </div>
+                            </div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px;">
                                 <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;">
-                                    <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">🔥 菜品TOP15</div>
-                                    <div id="pos-stats-dishes" style="min-height:180px;"></div>
+                                    <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">🍽 订单类型</div>
+                                    <div id="pos-stats-order-type" style="min-height:80px;"></div>
                                 </div>
                                 <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;">
-                                    <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">🏪 门店对比</div>
-                                    <div id="pos-stats-stores" style="min-height:100px;"></div>
+                                    <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">📲 订单来源</div>
+                                    <div id="pos-stats-order-source" style="min-height:80px;"></div>
                                 </div>
+                                <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;">
+                                    <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">👨‍🍳 出品部门</div>
+                                    <div id="pos-stats-dept" style="min-height:80px;"></div>
+                                </div>
+                            </div>
+                            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;margin-top:12px;">
+                                <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">🏪 门店对比</div>
+                                <div id="pos-stats-stores" style="min-height:100px;"></div>
                             </div>
                         </div>
                     </div>
@@ -45936,11 +45950,18 @@ ${body}
                 if (!d.summary) throw new Error('empty_response');
 
                 var s = d.summary;
+                var takeaway = (d.byOrderType || []).find(function(t) { return t.order_type === '平台外卖'; });
+                var takeawayOrders = takeaway ? takeaway.cnt : 0;
+                var takeawayRevenue = takeaway ? Number(takeaway.revenue) : 0;
+                var allOrders = (s.total_orders || 0) + takeawayOrders;
+                var allRevenue = Number(s.total_revenue || 0) + takeawayRevenue;
                 var kpisEl = document.getElementById('pos-stats-kpis');
                 if (kpisEl) kpisEl.innerHTML = [
-                    { label: '总订单', value: s.total_orders || 0, tag: '订单' },
-                    { label: '总收入(元)', value: Number(s.total_revenue || 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}), tag: '收入' },
-                    { label: '客单价(元)', value: Number(s.avg_check || 0).toFixed(2), tag: '均消' },
+                    { label: '总订单', value: allOrders, tag: '订单' },
+                    { label: '总收入(元)', value: allRevenue.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}), tag: '收入' },
+                    { label: '客单价(元)', value: (allOrders > 0 ? (allRevenue / allOrders).toFixed(2) : '0.00'), tag: '均消' },
+                    { label: '外卖订单', value: takeawayOrders, tag: '外卖' },
+                    { label: '外卖收入', value: '¥' + takeawayRevenue.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0}), tag: '外卖收' },
                     { label: '识别客户', value: s.distinct_phones || 0, tag: '手机号' },
                     { label: '新客率', value: (d.profileInsights && d.profileInsights.new_vs_returning ? d.profileInsights.new_vs_returning.new_pct : '-') + '%', tag: '新客' },
                     { label: '回头率', value: (d.profileInsights && d.profileInsights.new_vs_returning ? d.profileInsights.new_vs_returning.returning_pct : '-') + '%', tag: '复购' }
@@ -45953,7 +45974,10 @@ ${body}
                 renderPosTopDishes(d.topDishes || []);
                 renderPosStoreTable(d.byStore || []);
                 renderPosRepeatStats(d.repeatStats || {});
-                renderPosProfileInsights(d.profileInsights || {});
+                renderPosProfileInsights(d.profileInsights || {}, d.byOrderType || [], d.byOrderSource || [], d.byDept || []);
+                renderPosOrderType(d.byOrderType || []);
+                renderPosOrderSource(d.byOrderSource || []);
+                renderPosDept(d.byDept || []);
                 if (loadingEl) loadingEl.style.display = 'none';
             } catch (e) {
                 console.error('loadPosStats error:', e);
@@ -46017,6 +46041,31 @@ ${body}
         var __AUDIENCE_MAP = { 'all': '全部顾客', 'new': '新客', 'inactive': '沉睡客户', 'active': '活跃客户', 'vip': 'VIP', 'at_risk': '临界流失' };
         function growthAudienceLabel(au) { return __AUDIENCE_MAP[au] || au; }
 
+        function renderPosBreakdown(elId, rows, labelKey) {
+            var el = document.getElementById(elId);
+            if (!el) return;
+            if (!rows.length) { el.innerHTML = '<div style="padding:10px;color:rgba(226,232,240,0.4);font-size:12px;">暂无数据</div>'; return; }
+            var totalRev = rows.reduce(function(s, r) { return s + Number(r.revenue || 0); }, 0) || 1;
+            var colors = ['#38bdf8','#22c55e','#f59e0b','#ef4444','#a78bfa','#f472b6','#94a3b8','#fb923c','#4ade80','#e879f9'];
+            el.innerHTML = rows.map(function(r, i) {
+                var pct = Math.round(Number(r.revenue) / totalRev * 1000) / 10;
+                var c = colors[i % colors.length];
+                return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+                    + '<div style="width:6px;height:6px;border-radius:50%;background:' + c + ';flex-shrink:0;"></div>'
+                    + '<div style="flex:1;min-width:0;">'
+                    + '<div style="display:flex;justify-content:space-between;font-size:12px;">'
+                    + '<span style="color:#fff;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (r[labelKey] || '-') + '</span>'
+                    + '<span style="color:' + c + ';font-weight:700;flex-shrink:0;margin-left:4px;">' + pct + '%</span></div>'
+                    + '<div style="font-size:10px;color:rgba(226,232,240,0.5);">' + r.cnt + '笔 · ¥' + Number(r.revenue || 0).toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0}) + '</div>'
+                    + '<div style="height:3px;border-radius:2px;background:rgba(255,255,255,0.06);margin-top:3px;"><div style="width:' + Math.max(4, pct) + '%;height:100%;border-radius:2px;background:' + c + ';"></div></div>'
+                    + '</div></div>';
+            }).join('');
+        }
+
+        function renderPosOrderType(rows) { renderPosBreakdown('pos-stats-order-type', rows, 'order_type'); }
+        function renderPosOrderSource(rows) { renderPosBreakdown('pos-stats-order-source', rows, 'order_source'); }
+        function renderPosDept(rows) { renderPosBreakdown('pos-stats-dept', rows, 'department'); }
+
         function renderPosStoreTable(stores) {
             var el = document.getElementById('pos-stats-stores');
             if (!stores.length) { el.innerHTML = '<div style="padding:20px;color:rgba(226,232,240,0.4);font-size:13px;">暂无数据</div>'; return; }
@@ -46068,94 +46117,171 @@ ${body}
                 + '<div style="margin-top:6px;font-size:11px;color:rgba(226,232,240,0.5);">共 ' + total + ' 位客户产生POS消费</div>';
         }
 
-        function renderPosProfileInsights(pi) {
+        function renderPosProfileInsights(pi, orderTypes, orderSources, depts) {
             var el = document.getElementById('pos-stats-profile');
             if (!el) return;
             if (!pi || !pi.lifecycle) { el.innerHTML = '<div style="padding:20px;color:rgba(226,232,240,0.4);font-size:13px;">暂无画像数据</div>'; return; }
+
+            function totalOf(obj) {
+                var total = 0;
+                for (var k in obj) total += Number(obj[k] || 0);
+                return total;
+            }
+
+            function renderMiniBars(title, dataMap, colorMap, labelMap, unit, limit) {
+                var keys = Object.keys(dataMap || {});
+                if (!keys.length) return '';
+                keys.sort(function(a, b) { return Number(dataMap[b] || 0) - Number(dataMap[a] || 0); });
+                if (limit) keys = keys.slice(0, limit);
+                var total = 0;
+                keys.forEach(function(k) { total += Number(dataMap[k] || 0); });
+                var html = '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:12px;">'
+                    + '<div style="font-size:12px;color:rgba(226,232,240,0.88);font-weight:700;margin-bottom:8px;">' + title + '</div>';
+                keys.forEach(function(k) {
+                    var val = Number(dataMap[k] || 0);
+                    var pct = total > 0 ? Math.round(val / total * 100) : 0;
+                    var color = (colorMap && colorMap[k]) || '#38bdf8';
+                    var label = (labelMap && labelMap[k]) || k;
+                    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+                        + '<div style="width:72px;font-size:11px;color:rgba(226,232,240,0.66);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + label + '</div>'
+                        + '<div style="flex:1;height:8px;background:rgba(255,255,255,0.06);border-radius:999px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:' + color + ';border-radius:999px;"></div></div>'
+                        + '<div style="width:64px;text-align:right;font-size:11px;color:rgba(226,232,240,0.66);">' + val + unit + ' ' + pct + '%</div>'
+                        + '</div>';
+                });
+                html += '</div>';
+                return html;
+            }
+
+            function topRow(rows, key) {
+                if (!rows || !rows.length) return null;
+                var sorted = rows.slice().sort(function(a, b) { return Number(b[key] || b.cnt || 0) - Number(a[key] || a.cnt || 0); });
+                return sorted[0] || null;
+            }
+
             var lifecycle = pi.lifecycle || {};
             var lifecycleLabels = { new: '新客', active: '活跃', loyal: '忠诚', at_risk: '临界流失', churned: '已流失' };
-            var totalLc = 0; for (var k in lifecycle) totalLc += (lifecycle[k] || 0);
+            var totalLc = totalOf(lifecycle);
             var lcColors = { new: '#38bdf8', active: '#22c55e', loyal: '#f59e0b', at_risk: '#ef4444', churned: '#94a3b8' };
-            var lcHtml = '<div style="margin-bottom:12px;"><div style="font-size:11px;color:rgba(226,232,240,0.6);margin-bottom:6px;">客户生命周期</div>'
-                + '<div style="display:flex;gap:0;height:24px;border-radius:999px;overflow:hidden;">';
+            var lcHtml = '<div style="margin-bottom:12px;"><div style="font-size:12px;color:rgba(226,232,240,0.88);font-weight:700;margin-bottom:8px;">客户生命周期</div>'
+                + '<div style="display:flex;gap:0;height:26px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,0.04);">';
             for (var lk in lifecycleLabels) {
-                var cnt = lifecycle[lk] || 0;
+                var cnt = Number(lifecycle[lk] || 0);
                 if (cnt > 0) {
                     var pct = totalLc > 0 ? (cnt / totalLc * 100) : 0;
-                    lcHtml += '<div style="flex:0 0 ' + pct + '%;background:' + (lcColors[lk] || '#94a3b8') + ';display:flex;align-items:center;justify-content:center;min-width:' + (cnt > 0 ? '30px' : '0') + ';"><span style="font-size:10px;color:#fff;font-weight:600;">' + lifecycleLabels[lk] + ' ' + cnt + '</span></div>';
+                    lcHtml += '<div style="flex:0 0 ' + pct + '%;background:' + (lcColors[lk] || '#94a3b8') + ';display:flex;align-items:center;justify-content:center;min-width:34px;"><span style="font-size:10px;color:#fff;font-weight:700;">' + lifecycleLabels[lk] + ' ' + cnt + '</span></div>';
                 }
             }
             lcHtml += '</div></div>';
 
-            var spendDist = pi.avg_spend_dist || {};
-            var spendLabels = { '0-200': '0-200元', '200-400': '200-400元', '400-600': '400-600元', '600-800': '600-800元', '800+': '800元+' };
-            var spendColors = { '0-200': '#38bdf8', '200-400': '#22c55e', '400-600': '#f59e0b', '600-800': '#ef4444', '800+': '#a78bfa' };
-            var totalSpend = 0; for (var sk in spendDist) totalSpend += (spendDist[sk] || 0);
-            var spendHtml = '<div style="margin-bottom:12px;"><div style="font-size:11px;color:rgba(226,232,240,0.6);margin-bottom:6px;">客单价分布</div>';
-            for (var sk2 in spendLabels) {
-                var cnt2 = spendDist[sk2] || 0;
-                var pct2 = totalSpend > 0 ? Math.round(cnt2 / totalSpend * 100) : 0;
-                spendHtml += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
-                    + '<div style="width:60px;font-size:11px;color:rgba(226,232,240,0.6);">' + spendLabels[sk2] + '</div>'
-                    + '<div style="flex:1;height:8px;background:rgba(255,255,255,0.06);border-radius:999px;overflow:hidden;"><div style="height:100%;width:' + pct2 + '%;background:' + (spendColors[sk2] || '#94a3b8') + ';border-radius:999px;"></div></div>'
-                    + '<div style="width:50px;text-align:right;font-size:11px;color:rgba(226,232,240,0.6);">' + cnt2 + '人 ' + pct2 + '%</div></div>';
-            }
-            spendHtml += '</div>';
-
-            var visitTimes = pi.top_visit_times || {};
-            var visitLabels = { '午市(10-14点)': '午市', '晚市(17-21点)': '晚市', '其他时段': '其他' };
-            var totalVisit = 0; for (var vk in visitTimes) totalVisit += (visitTimes[vk] || 0);
-            var visitColors = { '午市(10-14点)': '#f59e0b', '晚市(17-21点)': '#38bdf8', '其他时段': '#94a3b8' };
-            var visitHtml = '<div style="margin-bottom:12px;"><div style="font-size:11px;color:rgba(226,232,240,0.6);margin-bottom:6px;">到店时段偏好</div>';
-            for (var vk2 in visitLabels) {
-                var cnt3 = visitTimes[vk2] || 0;
-                var pct3 = totalVisit > 0 ? Math.round(cnt3 / totalVisit * 100) : 0;
-                visitHtml += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
-                    + '<div style="width:40px;font-size:11px;color:rgba(226,232,240,0.6);">' + visitLabels[vk2] + '</div>'
-                    + '<div style="flex:1;height:8px;background:rgba(255,255,255,0.06);border-radius:999px;overflow:hidden;"><div style="height:100%;width:' + pct3 + '%;background:' + (visitColors[vk2] || '#94a3b8') + ';border-radius:999px;"></div></div>'
-                    + '<div style="width:50px;text-align:right;font-size:11px;color:rgba(226,232,240,0.6);">' + cnt3 + '单 ' + pct3 + '%</div></div>';
-            }
-            visitHtml += '</div>';
-
-            var dishCats = pi.top_dish_categories || {};
-            var dishCatHtml = '';
-            var totalDishCat = 0; for (var dk in dishCats) totalDishCat += (dishCats[dk] || 0);
-            if (totalDishCat > 0) {
-                dishCatHtml = '<div style="margin-bottom:12px;"><div style="font-size:11px;color:rgba(226,232,240,0.6);margin-bottom:6px;">品类偏好 TOP5</div>';
-                var catColors = ['#38bdf8', '#22c55e', '#f59e0b', '#ef4444', '#a78bfa'];
-                var ci = 0;
-                for (var dk2 in dishCats) {
-                    var cnt4 = dishCats[dk2] || 0;
-                    var pct4 = totalDishCat > 0 ? Math.round(cnt4 / totalDishCat * 100) : 0;
-                    dishCatHtml += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
-                        + '<div style="width:6px;height:6px;border-radius:50%;background:' + catColors[ci % catColors.length] + ';flex-shrink:0;"></div>'
-                        + '<div style="width:70px;font-size:11px;color:#fff;">' + dk2 + '</div>'
-                        + '<div style="flex:1;height:8px;background:rgba(255,255,255,0.06);border-radius:999px;overflow:hidden;"><div style="height:100%;width:' + pct4 + '%;background:' + catColors[ci % catColors.length] + ';border-radius:999px;"></div></div>'
-                        + '<div style="width:30px;text-align:right;font-size:11px;color:rgba(226,232,240,0.6);">' + cnt4 + '</div></div>';
-                    ci++;
-                }
-                dishCatHtml += '</div>';
-            }
-
             var hv = pi.high_value_customers || {};
-            var hvHtml = '';
-            if (hv && hv.count) {
-                hvHtml = '<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:10px;margin-bottom:8px;">'
-                    + '<div style="font-size:11px;color:#f59e0b;font-weight:700;margin-bottom:4px;">💎 高价值客户（消费>0）</div>'
-                    + '<div style="display:flex;gap:16px;font-size:12px;color:rgba(226,232,240,0.7);">'
-                    + '<span>' + hv.count + '人</span>'
-                    + '<span>人均消费 ¥' + (hv.avg_spending || '0') + '</span>'
-                    + '<span>人均 ' + (hv.avg_orders || '0') + ' 单</span>'
-                    + '</div></div>';
-            }
-
             var nvr = pi.new_vs_returning || {};
-            var nvrHtml = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">'
-                + '<div style="background:rgba(56,189,248,0.1);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#38bdf8;">' + (nvr.new_pct || 0) + '%</div><div style="font-size:10px;color:rgba(226,232,240,0.5);">新客</div></div>'
-                + '<div style="background:rgba(34,197,94,0.1);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#22c55e;">' + (nvr.returning_pct || 0) + '%</div><div style="font-size:10px;color:rgba(226,232,240,0.5);">回头客</div></div>'
+            var topSource = topRow(orderSources || [], 'cnt');
+            var topDept = topRow(depts || [], 'cnt');
+            var takeawayRow = (orderTypes || []).find(function(x) { return x.order_type === '平台外卖'; }) || null;
+            var dineInRow = (orderTypes || []).find(function(x) { return x.order_type === '堂食'; }) || null;
+            var takeawayPct = takeawayRow && (takeawayRow.cnt || 0) > 0 ? Math.round(Number(takeawayRow.cnt) / ((Number(takeawayRow.cnt) || 0) + (Number(dineInRow && dineInRow.cnt) || 0)) * 100) : 0;
+            var topLifecycleKey = Object.keys(lifecycle).sort(function(a, b) { return Number(lifecycle[b] || 0) - Number(lifecycle[a] || 0); })[0] || 'active';
+            var topLifecycleLabel = lifecycleLabels[topLifecycleKey] || topLifecycleKey;
+            var personaHtml = '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px;">'
+                + '<div style="background:linear-gradient(180deg,rgba(59,130,246,0.14),rgba(56,189,248,0.05));border:1px solid rgba(56,189,248,0.18);border-radius:12px;padding:12px;">'
+                + '<div style="font-size:11px;color:rgba(226,232,240,0.58);margin-bottom:6px;">核心客群</div>'
+                + '<div style="font-size:16px;font-weight:800;color:#fff;">' + topLifecycleLabel + '客为主</div>'
+                + '<div style="font-size:12px;color:rgba(226,232,240,0.7);margin-top:6px;">当前以' + topLifecycleLabel + '阶段客户为主体，适合围绕复购和加深黏性运营。</div>'
+                + '</div>'
+                + '<div style="background:linear-gradient(180deg,rgba(34,197,94,0.14),rgba(34,197,94,0.05));border:1px solid rgba(34,197,94,0.18);border-radius:12px;padding:12px;">'
+                + '<div style="font-size:11px;color:rgba(226,232,240,0.58);margin-bottom:6px;">渠道画像</div>'
+                + '<div style="font-size:16px;font-weight:800;color:#fff;">' + (topSource ? topSource.order_source : '暂无') + '</div>'
+                + '<div style="font-size:12px;color:rgba(226,232,240,0.7);margin-top:6px;">客户主要从' + (topSource ? topSource.order_source : '主渠道') + '完成下单，建议围绕该触点做活动承接。</div>'
+                + '</div>'
+                + '<div style="background:linear-gradient(180deg,rgba(249,115,22,0.14),rgba(249,115,22,0.05));border:1px solid rgba(249,115,22,0.18);border-radius:12px;padding:12px;">'
+                + '<div style="font-size:11px;color:rgba(226,232,240,0.58);margin-bottom:6px;">消费场景</div>'
+                + '<div style="font-size:16px;font-weight:800;color:#fff;">' + (takeawayPct > 0 ? ('外卖占比 ' + takeawayPct + '%') : '堂食消费为主') + '</div>'
+                + '<div style="font-size:12px;color:rgba(226,232,240,0.7);margin-top:6px;">' + (takeawayPct >= 20 ? '存在明显外卖需求，适合做平台券和外卖套餐。' : '消费仍以到店堂食为主，适合做到店复购和桌边加购。') + '</div>'
+                + '</div>'
+                + '<div style="background:linear-gradient(180deg,rgba(168,85,247,0.14),rgba(168,85,247,0.05));border:1px solid rgba(168,85,247,0.18);border-radius:12px;padding:12px;">'
+                + '<div style="font-size:11px;color:rgba(226,232,240,0.58);margin-bottom:6px;">口味锚点</div>'
+                + '<div style="font-size:16px;font-weight:800;color:#fff;">' + (topDept ? topDept.department : '暂无') + '</div>'
+                + '<div style="font-size:12px;color:rgba(226,232,240,0.7);margin-top:6px;">客户下单更集中在' + (topDept ? topDept.department : '核心出品部门') + '，可围绕该线做主推与组合推荐。</div>'
+                + '</div>'
+                + '</div>';
+            var adviceTitle = takeawayPct >= 20 ? '补强外卖套餐与平台承接' : '强化堂食复购与到店加购';
+            var adviceDesc = takeawayPct >= 20
+                ? '当前外卖需求已形成规模，优先围绕' + (topSource ? topSource.order_source : '主渠道') + '设计套餐、满减券和二次复购券。'
+                : '当前消费以堂食为主，优先围绕' + topLifecycleLabel + '客做到店回访、桌边加购和次日复购提醒。';
+            var segmentTitle = (nvr.new_pct || 0) >= 60 ? '优先触达新客首单群体' : '优先触达已消费活跃客群';
+            var segmentDesc = (nvr.new_pct || 0) >= 60
+                ? '新客占比较高，建议用首单礼、加企微/会员入会券提升二次转化。'
+                : '回头客基础已经形成，建议做老客唤醒、节气菜单、双人套餐等复购动作。';
+            var actionTitle = topDept && topDept.department ? ('主推' + topDept.department + '关联菜品') : '主推高偏好菜品组合';
+            var actionDesc = topDept && topDept.department
+                ? '围绕' + topDept.department + '做套餐锚点，搭配' + (topSource ? topSource.order_source : '主渠道') + '专属券，更容易提升转化。'
+                : '围绕当前高频品类做套餐和加价购，提高客单与复购。';
+            var suggestHtml = '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:12px;">'
+                + '<div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.16);border-radius:12px;padding:12px;">'
+                + '<div style="font-size:11px;color:rgba(226,232,240,0.58);margin-bottom:6px;">门店经营建议</div>'
+                + '<div style="font-size:15px;font-weight:800;color:#fff;">' + adviceTitle + '</div>'
+                + '<div style="font-size:12px;line-height:1.6;color:rgba(226,232,240,0.74);margin-top:6px;">' + adviceDesc + '</div>'
+                + '</div>'
+                + '<div style="background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.16);border-radius:12px;padding:12px;">'
+                + '<div style="font-size:11px;color:rgba(226,232,240,0.58);margin-bottom:6px;">适合触达客群</div>'
+                + '<div style="font-size:15px;font-weight:800;color:#fff;">' + segmentTitle + '</div>'
+                + '<div style="font-size:12px;line-height:1.6;color:rgba(226,232,240,0.74);margin-top:6px;">' + segmentDesc + '</div>'
+                + '</div>'
+                + '<div style="background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.16);border-radius:12px;padding:12px;">'
+                + '<div style="font-size:11px;color:rgba(226,232,240,0.58);margin-bottom:6px;">推荐营销动作</div>'
+                + '<div style="font-size:15px;font-weight:800;color:#fff;">' + actionTitle + '</div>'
+                + '<div style="font-size:12px;line-height:1.6;color:rgba(226,232,240,0.74);margin-top:6px;">' + actionDesc + '</div>'
+                + '</div>'
+                + '</div>';
+            var overviewHtml = '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px;">'
+                + '<div style="background:rgba(56,189,248,0.10);border:1px solid rgba(56,189,248,0.18);border-radius:10px;padding:10px;"><div style="font-size:11px;color:rgba(226,232,240,0.6);">新客占比</div><div style="font-size:22px;font-weight:800;color:#38bdf8;">' + (nvr.new_pct || 0) + '%</div></div>'
+                + '<div style="background:rgba(34,197,94,0.10);border:1px solid rgba(34,197,94,0.18);border-radius:10px;padding:10px;"><div style="font-size:11px;color:rgba(226,232,240,0.6);">回头客占比</div><div style="font-size:22px;font-weight:800;color:#22c55e;">' + (nvr.returning_pct || 0) + '%</div></div>'
+                + '<div style="background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.18);border-radius:10px;padding:10px;"><div style="font-size:11px;color:rgba(226,232,240,0.6);">POS消费客户</div><div style="font-size:22px;font-weight:800;color:#f59e0b;">' + Number(hv.count || 0) + '</div></div>'
+                + '<div style="background:rgba(167,139,250,0.10);border:1px solid rgba(167,139,250,0.18);border-radius:10px;padding:10px;"><div style="font-size:11px;color:rgba(226,232,240,0.6);">人均消费</div><div style="font-size:22px;font-weight:800;color:#a78bfa;">¥' + (hv.avg_spending || '0') + '</div></div>'
                 + '</div>';
 
-            el.innerHTML = lcHtml + nvrHtml + hvHtml + spendHtml + visitHtml + dishCatHtml;
+            var spendHtml = renderMiniBars('客单价分布', pi.avg_spend_dist || {}, {
+                '0-200': '#38bdf8', '200-400': '#22c55e', '400-600': '#f59e0b', '600-800': '#ef4444', '800+': '#a78bfa'
+            }, {
+                '0-200': '0-200元', '200-400': '200-400元', '400-600': '400-600元', '600-800': '600-800元', '800+': '800元+'
+            }, '人');
+
+            var visitHtml = renderMiniBars('到店时段偏好', pi.top_visit_times || {}, {
+                '午市(10-14点)': '#f59e0b', '晚市(17-21点)': '#38bdf8', '其他时段': '#94a3b8'
+            }, {
+                '午市(10-14点)': '午市', '晚市(17-21点)': '晚市', '其他时段': '其他'
+            }, '单');
+
+            var custTypeHtml = renderMiniBars('客户订单类型偏好', pi.cust_order_type || {}, {
+                '堂食': '#22c55e', '平台外卖': '#f97316'
+            }, null, '项');
+
+            var custSourceHtml = renderMiniBars('客户订单来源偏好', pi.cust_order_source || {}, {
+                '微信小程序': '#22c55e', '收银POS': '#38bdf8', '掌上客如云': '#a78bfa', '支付宝小程序': '#f59e0b', '美团外卖': '#f97316', '淘宝闪购餐饮外卖': '#ef4444'
+            }, null, '项', 6);
+
+            var deptHtml = renderMiniBars('客户偏好出品部门', pi.cust_dept || {}, {
+                '热厨': '#ef4444', '烧味': '#f59e0b', '卤水档': '#22c55e', '刺身档': '#38bdf8', '煲仔档': '#a78bfa', '汤档': '#14b8a6', '水吧': '#e879f9', '上杂': '#fb7185', '前厅': '#94a3b8'
+            }, null, '份', 8);
+
+            var dishHtml = renderMiniBars('品类偏好 TOP5', pi.top_dish_categories || {}, {
+                '广东小炒': '#38bdf8', '饮品酒水': '#22c55e', '招牌主食': '#f59e0b', '名厨啫啫': '#ef4444', '招牌烧味': '#a78bfa'
+            }, null, '份', 5);
+
+            el.innerHTML = personaHtml
+                + suggestHtml
+                + overviewHtml
+                + lcHtml
+                + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">'
+                + spendHtml
+                + visitHtml
+                + custTypeHtml
+                + '</div>'
+                + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px;">'
+                + custSourceHtml
+                + deptHtml
+                + dishHtml
+                + '</div>';
         }
 
         function renderGrowthFunnel(metrics) {

@@ -262,6 +262,27 @@ async function linkPosOrdersToCustomers(pool) {
     FROM growth_customers gc
     WHERE o.phone <> '' AND o.phone = gc.phone AND o.customer_id IS NULL
   `);
+  await pool.query(`
+    UPDATE growth_customer_profiles gcp
+    SET pos_order_count = s.order_cnt,
+        pos_total_spend = s.total_spend,
+        pos_dine_in_ratio = CASE WHEN s.order_cnt > 0 THEN
+          ROUND(((s.dine_cnt)::numeric / s.order_cnt), 2) ELSE NULL END,
+        pos_last_order_at = s.last_order
+    FROM (
+      SELECT gcp2.customer_id,
+             COUNT(po.id)::int AS order_cnt,
+             COALESCE(SUM(po.amount_after_discount),0) AS total_spend,
+             COUNT(*) FILTER (WHERE po.order_type = '堂食') AS dine_cnt,
+             MAX(po.order_time) AS last_order
+      FROM growth_customer_profiles gcp2
+      JOIN growth_customers gc ON gc.id = gcp2.customer_id
+      JOIN pos_orders po ON po.phone = gc.phone
+      WHERE gcp2.phone IS NOT NULL AND gcp2.phone <> ''
+      GROUP BY gcp2.customer_id
+    ) s
+    WHERE gcp.customer_id = s.customer_id
+  `);
   return r.rowCount;
 }
 
@@ -571,19 +592,22 @@ export function registerPhaseRoutes(app, pool) {
       if (items.length) {
        for (const it of items) {
          const itemBizDate = cnDate(it.biz_date);
-         await pool.query(`
-          INSERT INTO pos_order_items(biz_date,store_code,store_name,order_no,sku,dish_name,spec,tags,unit_price,qty,unit,amount_before_discount,service_fee,discount,amount_after_discount,category_mid,category)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
-          ON CONFLICT DO NOTHING
-        `, [
-          itemBizDate || null, cleanText(it.store_code || '', 64), cleanText(it.store_name || '', 200),
-          cleanText(it.order_no || '', 64), cleanText(it.sku || '', 64), cleanText(it.dish_name || '', 300),
-          cleanText(it.spec || '', 100), cleanText(it.tags || '', 500),
-          parseNum(it.unit_price), parseNum(it.qty), cleanText(it.unit || '', 20),
-          parseNum(it.amount_before_discount), parseNum(it.service_fee),
-          parseNum(it.discount), parseNum(it.amount_after_discount),
-          cleanText(it.category_mid || '', 100), cleanText(it.category || '', 100)
-        ]);
+             await pool.query(`
+              INSERT INTO pos_order_items(biz_date,store_name,store_code,order_no,sku,dish_name,department,table_name,table_area,sale_type,category_mid,category,spec,unit,order_type,order_source,qty,amount_before_discount,discount,service_fee,amount_after_discount,order_time,checkout_time)
+              VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+              ON CONFLICT DO NOTHING
+            `, [
+              itemBizDate || null, cleanText(it.store_name || '', 200), cleanText(it.store_code || '', 64),
+              cleanText(it.order_no || '', 128), cleanText(it.sku || '', 64), cleanText(it.dish_name || '', 300),
+              cleanText(it.department || '', 100), cleanText(it.table_name || '', 100), cleanText(it.table_area || '', 100),
+              cleanText(it.sale_type || '', 40),
+              cleanText(it.category_mid || '', 100), cleanText(it.category || '', 100),
+              cleanText(it.spec || '', 100), cleanText(it.unit || '', 20),
+              cleanText(it.order_type || '', 40), cleanText(it.order_source || '', 200),
+              parseNum(it.qty), parseNum(it.amount_before_discount),
+              parseNum(it.discount), parseNum(it.service_fee), parseNum(it.amount_after_discount),
+              parseKeruyunDateTime(it.order_time), parseKeruyunDateTime(it.checkout_time)
+            ]);
         itemsUpserted++;
       }
     }
@@ -666,6 +690,7 @@ export function registerPhaseRoutes(app, pool) {
     const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
     const byName = /[\u4e00-\u9fff\uff08\uff09【】]/.test(sid);
     const posCond = sid ? (byName ? `store_name = $1` : `store_id = $1`) : `$1::text = ''`;
+    const itemsCond = sid ? (byName ? `store_name = $1` : `store_code = $1`) : `$1::text = ''`;
     const profCond = sid ? `store_id = $1` : `$1::text = ''`;
     const statsParams = [sid, days];
 
@@ -735,7 +760,29 @@ export function registerPhaseRoutes(app, pool) {
         ) sub`, statsParams)
     ]);
 
-    const [lifecycleR, spendDistR, visitR, dishCatR, highValueR] = await Promise.all([
+    const [byOrderTypeR, byOrderSourceR, byDeptR, lifecycleR, spendDistR, visitR, dishCatR, highValueR, custOrderTypeR, custOrderSourceR, custDeptR] = await Promise.all([
+      pool.query(`SELECT order_type, COUNT(*)::int AS cnt,
+        COALESCE(SUM(amount_after_discount),0)::numeric AS revenue,
+        COALESCE(SUM(qty),0)::int AS total_qty
+        FROM pos_order_items
+        WHERE ${itemsCond}
+          AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
+        GROUP BY order_type ORDER BY revenue DESC`, statsParams),
+      pool.query(`SELECT order_source, COUNT(*)::int AS cnt,
+        COALESCE(SUM(amount_after_discount),0)::numeric AS revenue,
+        COALESCE(SUM(qty),0)::int AS total_qty
+        FROM pos_order_items
+        WHERE ${itemsCond}
+          AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
+        GROUP BY order_source ORDER BY revenue DESC`, statsParams),
+      pool.query(`SELECT department, COUNT(*)::int AS cnt,
+        COALESCE(SUM(amount_after_discount),0)::numeric AS revenue,
+        COALESCE(SUM(qty),0)::int AS total_qty
+        FROM pos_order_items
+        WHERE ${itemsCond}
+          AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
+          AND department IS NOT NULL AND department <> ''
+        GROUP BY department ORDER BY revenue DESC`, statsParams),
       pool.query(`SELECT COALESCE(cp.lifecycle_stage,
           CASE WHEN sub.order_cnt <= 1 THEN 'new'
                WHEN sub.order_cnt BETWEEN 2 AND 3 THEN 'active'
@@ -784,7 +831,31 @@ export function registerPhaseRoutes(app, pool) {
       pool.query(`SELECT COUNT(*)::int AS count, ROUND(AVG(pos_total_spend)::numeric, 2) AS avg_spending, ROUND(AVG(pos_order_count)::numeric, 1) AS avg_orders
         FROM growth_customer_profiles
         WHERE pos_total_spend > 0
-          AND ${profCond}`, [sid])
+          AND ${profCond}`, [sid]),
+      pool.query(`SELECT order_type, COUNT(*)::int AS cnt
+        FROM pos_order_items WHERE order_no IN (
+          SELECT order_no FROM pos_orders
+          WHERE phone IS NOT NULL AND phone <> ''
+            AND ${posCond}
+            AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
+        ) AND order_type IS NOT NULL AND order_type <> ''
+        GROUP BY order_type ORDER BY cnt DESC`, statsParams),
+      pool.query(`SELECT order_source, COUNT(*)::int AS cnt
+        FROM pos_order_items WHERE order_no IN (
+          SELECT order_no FROM pos_orders
+          WHERE phone IS NOT NULL AND phone <> ''
+            AND ${posCond}
+            AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
+        ) AND order_source IS NOT NULL AND order_source <> ''
+        GROUP BY order_source ORDER BY cnt DESC`, statsParams),
+      pool.query(`SELECT department, SUM(qty)::int AS total_qty
+        FROM pos_order_items WHERE order_no IN (
+          SELECT order_no FROM pos_orders
+          WHERE phone IS NOT NULL AND phone <> ''
+            AND ${posCond}
+            AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
+        ) AND department IS NOT NULL AND department <> ''
+        GROUP BY department ORDER BY total_qty DESC`, statsParams)
     ]);
 
     const profileInsights = {
@@ -796,7 +867,10 @@ export function registerPhaseRoutes(app, pool) {
       new_vs_returning: {
         new_pct: repeatR.rows[0] ? Math.round((repeatR.rows[0].one_timer / (repeatR.rows[0].total_customers || 1)) * 1000) / 10 : 0,
         returning_pct: repeatR.rows[0] ? Math.round(((repeatR.rows[0].two_timer + repeatR.rows[0].repeat_3plus) / (repeatR.rows[0].total_customers || 1)) * 1000) / 10 : 0
-      }
+      },
+      cust_order_type: Object.fromEntries(custOrderTypeR.rows.map(r => [r.order_type, r.cnt])),
+      cust_order_source: Object.fromEntries(custOrderSourceR.rows.map(r => [r.order_source, r.cnt])),
+      cust_dept: Object.fromEntries(custDeptR.rows.map(r => [r.department, r.total_qty]))
     };
 
     res.json({
@@ -807,7 +881,10 @@ export function registerPhaseRoutes(app, pool) {
       payDist: payR.rows,
       topDishes: dishR.rows,
       repeatStats: repeatR.rows[0] || {},
-      profileInsights
+      profileInsights,
+      byOrderType: byOrderTypeR.rows,
+      byOrderSource: byOrderSourceR.rows,
+      byDept: byDeptR.rows
     });
   });
 
@@ -945,13 +1022,16 @@ export function registerPhaseRoutes(app, pool) {
 
     // ── Sync items table ──
     if (config.items_app_token && config.items_table_id) {
-      const ITEMS_FIELD_MAP = {
-        '营业日': 'biz_date', '门店编号': 'store_code', '门店名称': 'store_name',
-        '订单号': 'order_no', '商品编码': 'sku', '商品名称': 'dish_name',
-        '规格': 'spec', '菜品标签': 'tags', '单价': 'unit_price', '数量': 'qty',
-        '单位': 'unit', '前折金额': 'amount_before_discount', '服务费分摊': 'service_fee',
-        '菜品优惠': 'discount', '折后金额': 'amount_after_discount', '商品中类': 'category_mid',
-        '商品大类': 'category'
+       const ITEMS_FIELD_MAP = {
+        '营业日期': 'biz_date', '营业日': 'biz_date', '门店名称': 'store_name', '菜品名称': 'dish_name',
+        '出品部门': 'department', '桌台名称': 'table_name', '桌台区域': 'table_area',
+        '销售类型': 'sale_type', '菜品编码': 'sku', '大类名称': 'category',
+        '中类名称': 'category_mid', '规格': 'spec', '单位': 'unit',
+        '订单号': 'order_no', '订单类型': 'order_type', '订单来源': 'order_source',
+        '销售数量': 'qty', '折前金额': 'amount_before_discount',
+        '优惠金额': 'discount', '服务费分摊收入': 'service_fee',
+        '折后金额': 'amount_after_discount', '下单时间': 'order_time',
+        '结账时间': 'checkout_time'
       };
       let pageToken = '';
       let itemsBatch = [];
@@ -980,18 +1060,21 @@ export function registerPhaseRoutes(app, pool) {
         for (const it of itemsBatch) {
             const itemBizDate = cnDate(it.biz_date);
            try {
-            await pool.query(`
-              INSERT INTO pos_order_items(biz_date,store_code,store_name,order_no,sku,dish_name,spec,tags,unit_price,qty,unit,amount_before_discount,service_fee,discount,amount_after_discount,category_mid,category)
-              VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+             await pool.query(`
+              INSERT INTO pos_order_items(biz_date,store_name,store_code,order_no,sku,dish_name,department,table_name,table_area,sale_type,category_mid,category,spec,unit,order_type,order_source,qty,amount_before_discount,discount,service_fee,amount_after_discount,order_time,checkout_time)
+              VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
               ON CONFLICT DO NOTHING
             `, [
-              itemBizDate || null, cleanText(it.store_code || '', 64), cleanText(it.store_name || '', 200),
-              cleanText(it.order_no || '', 64), cleanText(it.sku || '', 64), cleanText(it.dish_name || '', 300),
-              cleanText(it.spec || '', 100), cleanText(it.tags || '', 500),
-              parseNum(it.unit_price), parseNum(it.qty), cleanText(it.unit || '', 20),
-              parseNum(it.amount_before_discount), parseNum(it.service_fee),
-              parseNum(it.discount), parseNum(it.amount_after_discount),
-              cleanText(it.category_mid || '', 100), cleanText(it.category || '', 100)
+              itemBizDate || null, cleanText(it.store_name || '', 200), (function() { var sn = cleanText(it.store_name || '', 200); if (sn && sn.includes('洪潮')) return '64822111'; if (sn && sn.includes('马己仙')) return '51866138'; return cleanText(it.store_code || '', 64); })(),
+              cleanText(it.order_no || '', 128), cleanText(it.sku || '', 64), cleanText(it.dish_name || '', 300),
+              cleanText(it.department || '', 100), cleanText(it.table_name || '', 100), cleanText(it.table_area || '', 100),
+              cleanText(it.sale_type || '', 40),
+              cleanText(it.category_mid || '', 100), cleanText(it.category || '', 100),
+              cleanText(it.spec || '', 100), cleanText(it.unit || '', 20),
+              cleanText(it.order_type || '', 40), cleanText(it.order_source || '', 200),
+              parseNum(it.qty), parseNum(it.amount_before_discount),
+              parseNum(it.discount), parseNum(it.service_fee), parseNum(it.amount_after_discount),
+              parseKeruyunDateTime(it.order_time), parseKeruyunDateTime(it.checkout_time)
             ]);
             totalItems++;
           } catch (e) { console.error('[pos-feishu-sync] item upsert error:', e.message, it.order_no); }
