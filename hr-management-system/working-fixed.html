@@ -13724,6 +13724,20 @@
                             <div id="growth-alerts" style="min-height:200px;"></div>
                         </div>
                     </div>
+                    <div class="growth-dashboard-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:16px;">
+                        <div class="growth-panel" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
+                            <div class="growth-panel-title" style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">🌤️ 天气/时令</div>
+                            <div id="growth-weather" style="min-height:80px;"></div>
+                        </div>
+                        <div class="growth-panel" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
+                            <div class="growth-panel-title" style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">📅 最佳触达时段</div>
+                            <div id="growth-active-window" style="min-height:80px;"></div>
+                        </div>
+                        <div class="growth-panel" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
+                            <div class="growth-panel-title" style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">🔄 复购触发</div>
+                            <div id="growth-repurchase" style="min-height:80px;"></div>
+                        </div>
+                    </div>
                     <div class="growth-panel" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;margin-top:16px;">
                         <div class="growth-panel-title" style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">近期指标趋势</div>
                         <div id="growth-trends" style="min-height:200px;"></div>
@@ -13803,7 +13817,17 @@
                                 <button onclick="loadGrowthProfiles()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新画像</button>
                                 <button onclick="recomputeGrowthProfiles()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:13px;">重算画像</button>
                             </div>
-                            <div id="growth-profiles-list" style="max-height:500px;overflow-y:auto;"></div>
+                             <div id="growth-profiles-list" style="max-height:500px;overflow-y:auto;"></div>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+                            <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
+                                <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">📊 生命周期分群</div>
+                                <div id="growth-clusters" style="min-height:80px;"></div>
+                            </div>
+                            <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
+                                <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">💰 价格敏感度</div>
+                                <div id="growth-discount-pref" style="min-height:80px;"></div>
+                            </div>
                         </div>
                     </div>
                     <div id="growth-constraints-content" style="display:none;">
@@ -45179,6 +45203,9 @@ ${body}
                 const data = await r.json();
                 if (!data.ok) throw new Error(data.error || 'feedback_failed');
                 showNotification('反馈已提交' + (data.new_status === 'accepted' ? '（已采纳为案例）' : ''), 'success');
+                if (rating >= 4 && strategyKey) {
+                    try { await fetch('/api/growth/feedback-backpropagate', { method: 'POST', headers: growthAuthHeaders(), body: JSON.stringify({ strategy_key: strategyKey }) }); } catch (e) {}
+                }
                 loadStrategyEvaluations();
             } catch (e) {
                 showNotification('反馈提交失败：' + (e?.message || e), 'error');
@@ -45208,6 +45235,7 @@ ${body}
                 const data = await r.json();
                 if (!data.ok) throw new Error(data.error || 'feedback_failed');
                 showNotification('原因已记录: ' + selected.label, 'success');
+                try { await fetch('/api/growth/feedback-backpropagate', { method: 'POST', headers: growthAuthHeaders(), body: JSON.stringify({ strategy_key: strategyKey }) }); } catch (e) {}
                 loadStrategyEvaluations();
             } catch (e) {
                 showNotification('提交失败：' + (e?.message || e), 'error');
@@ -45241,6 +45269,18 @@ ${body}
             } catch (e) {
                 document.getElementById('growth-profiles-list').innerHTML = '<div style="color:#ef4444;">加载用户画像失败</div>';
             }
+            try {
+                var cs = document.getElementById('growth-store-filter')?.value || '';
+                var cRes = await fetch('/api/growth/user-clusters' + (cs ? '?store_id=' + encodeURIComponent(cs) : ''), { headers: growthAuthHeaders() });
+                var cData = await cRes.json();
+                renderGrowthClusters(cData);
+            } catch (e) { document.getElementById('growth-clusters').innerHTML = '<div style="color:rgba(226,232,240,0.4);font-size:12px;">分群数据暂不可用</div>'; }
+            try {
+                var ds = document.getElementById('growth-store-filter')?.value || '';
+                var dRes = await fetch('/api/growth/discount-preference' + (ds ? '?store_id=' + encodeURIComponent(ds) : ''), { headers: growthAuthHeaders() });
+                var dData = await dRes.json();
+                renderGrowthDiscountPref(dData);
+            } catch (e) { document.getElementById('growth-discount-pref').innerHTML = '<div style="color:rgba(226,232,240,0.4);font-size:12px;">价格敏感度数据暂不可用</div>'; }
         }
 
         async function recomputeGrowthProfiles() {
@@ -45257,6 +45297,44 @@ ${body}
             } catch (e) {
                 showNotification('重算画像失败：' + (e?.message || e), 'error');
             }
+        }
+
+        function renderGrowthClusters(data) {
+            var el = document.getElementById('growth-clusters');
+            if (!el) return;
+            var clusters = Array.isArray(data?.clusters) ? data.clusters : [];
+            var total = data?.total || 0;
+            if (!clusters.length) { el.innerHTML = '<div style="color:rgba(226,232,240,0.4);font-size:12px;">暂无分群数据</div>'; return; }
+            var stageColors = { new: '#38bdf8', active: '#22c55e', loyal: '#a855f7', at_risk: '#f59e0b', churned: '#ef4444' };
+            var stageLabels = { new: '新客', active: '活跃', loyal: '忠实', at_risk: '临界', churned: '流失' };
+            el.innerHTML = '<div style="font-size:11px;color:rgba(226,232,240,0.5);margin-bottom:8px;">共' + total + '人</div>' + clusters.map(function(c) {
+                var label = stageLabels[c.lifecycle_stage] || c.lifecycle_stage;
+                var color = stageColors[c.lifecycle_stage] || '#38bdf8';
+                var pct = total > 0 ? Math.round(c.user_count / total * 100) : 0;
+                return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">'
+                    + '<span style="font-size:11px;padding:2px 8px;border-radius:999px;background:' + color + '22;color:' + color + ';border:1px solid ' + color + '55;white-space:nowrap;">' + label + '</span>'
+                    + '<span style="font-size:12px;color:#fff;font-weight:700;min-width:32px;">' + c.user_count + '</span>'
+                    + '<div style="flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,0.06);overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:' + color + ';border-radius:3px;"></div></div>'
+                    + '<span style="font-size:11px;color:rgba(226,232,240,0.45);">' + pct + '%</span>'
+                    + '</div>';
+            }).join('');
+        }
+
+        function renderGrowthDiscountPref(data) {
+            var el = document.getElementById('growth-discount-pref');
+            if (!el) return;
+            var segments = Array.isArray(data?.segments) ? data.segments : [];
+            var rec = data?.recommendation || '';
+            if (!segments.length) { el.innerHTML = '<div style="color:rgba(226,232,240,0.4);font-size:12px;">暂无敏感度数据</div>'; return; }
+            var segColors = { '高敏感': '#ef4444', '中敏感': '#f59e0b', '低敏感': '#22c55e' };
+            el.innerHTML = segments.map(function(s) {
+                var color = segColors[s.sensitivity_segment] || '#38bdf8';
+                return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">'
+                    + '<span style="font-size:11px;padding:2px 8px;border-radius:999px;background:' + color + '22;color:' + color + ';border:1px solid ' + color + '55;white-space:nowrap;">' + s.sensitivity_segment + '</span>'
+                    + '<span style="font-size:12px;color:#fff;font-weight:700;">' + s.user_count + '人</span>'
+                    + '<span style="font-size:11px;color:rgba(226,232,240,0.45);">折扣响应 ' + (s.avg_discount_response || '-') + '</span>'
+                    + '</div>';
+            }).join('') + (rec ? '<div style="font-size:11px;color:#38bdf8;margin-top:8px;padding:4px 0;border-top:1px solid rgba(255,255,255,0.06);">💡 ' + rec + '</div>' : '');
         }
 
         async function loadGrowthConstraints() {
@@ -45685,6 +45763,27 @@ ${body}
                 renderGrowthAlerts(alerts);
                 renderGrowthTrends(metrics);
                 renderGrowthActions(actions);
+
+                try {
+                    var wRes = await fetch('/api/growth/weather-context', { headers: gh });
+                    var wData = await wRes.json();
+                    renderGrowthWeather(wData);
+                } catch (e) { document.getElementById('growth-weather').innerHTML = '<div style="color:rgba(226,232,240,0.4);font-size:12px;">天气数据暂不可用</div>'; }
+                try {
+                    var awStore = document.getElementById('growth-store-filter')?.value || '';
+                    var awRes = await fetch('/api/growth/active-window' + (awStore ? '?store_id=' + encodeURIComponent(awStore) : ''), { headers: gh });
+                    var awData = await awRes.json();
+                    renderGrowthActiveWindow(awData);
+                } catch (e) { document.getElementById('growth-active-window').innerHTML = '<div style="color:rgba(226,232,240,0.4);font-size:12px;">触达时段数据暂不可用</div>'; }
+                try {
+                    var rpStore = document.getElementById('growth-store-filter')?.value || '';
+                    var rpRes = await fetch('/api/growth/customer-profiles?limit=1000' + (rpStore ? '&store_id=' + encodeURIComponent(rpStore) : ''), { headers: gh });
+                    var rpData = await rpRes.json();
+                    var rpRows = rpData?.profiles || [];
+                    var atRisk = rpRows.filter(function(p) { return p.lifecycle_stage === 'at_risk'; });
+                    var churned = rpRows.filter(function(p) { return p.lifecycle_stage === 'churned'; });
+                    renderGrowthRepurchase(atRisk.length, churned.length, rpStore);
+                } catch (e) { document.getElementById('growth-repurchase').innerHTML = '<div style="color:rgba(226,232,240,0.4);font-size:12px;">复购数据暂不可用</div>'; }
 
                 document.querySelectorAll('#growth-page .hidden').forEach(function(e) { e.classList.remove('hidden'); });
             } catch (e) {
@@ -46119,6 +46218,76 @@ ${body}
                     + '</div>';
             }).join('');
         }
+
+        function renderGrowthWeather(data) {
+            var el = document.getElementById('growth-weather');
+            if (!el) return;
+            var tips = Array.isArray(data?.tips) ? data.tips : [];
+            var temp = data?.temperature || '-';
+            var cond = data?.condition || '-';
+            var season = data?.season || '-';
+            var holiday = data?.holiday || '';
+            var isWeekend = data?.is_weekend;
+            var dayType = holiday ? '🎯 ' + holiday : (isWeekend ? '🌿 周末' : '💼 工作日');
+            el.innerHTML = '<div style="font-size:28px;font-weight:800;color:#fff;">' + temp + '</div>'
+                + '<div style="font-size:13px;color:rgba(226,232,240,0.7);margin-top:4px;">' + cond + ' · ' + season + '</div>'
+                + '<div style="font-size:12px;color:#38bdf8;margin-top:6px;">' + dayType + '</div>'
+                + (tips.length ? '<div style="margin-top:8px;">' + tips.map(function(t) { return '<div style="font-size:11px;color:rgba(226,232,240,0.55);padding:2px 0;">💡 ' + t + '</div>'; }).join('') + '</div>' : '');
+        }
+
+        function renderGrowthActiveWindow(data) {
+            var el = document.getElementById('growth-active-window');
+            if (!el) return;
+            var pred = data?.predicted_window || '数据不足';
+            var recs = Array.isArray(data?.recommendations) ? data.recommendations : [];
+            var segments = Array.isArray(data?.segments) ? data.segments : [];
+            var risk = Array.isArray(data?.repurchase_risk) ? data.repurchase_risk : [];
+            var html = '<div style="font-size:13px;font-weight:700;color:' + (pred !== '数据不足' ? '#22c55e' : 'rgba(226,232,240,0.5)') + ';margin-bottom:8px;">' + (pred !== '数据不足' ? '✅ ' + pred : '⏳ 暂无足够事件数据') + '</div>';
+            if (segments.length) {
+                html += '<div style="font-size:11px;color:rgba(226,232,240,0.55);margin-bottom:6px;">客群分布</div>';
+                segments.forEach(function(s) {
+                    html += '<div style="font-size:11px;color:rgba(226,232,240,0.5);padding:2px 0;">' + (s.lifecycle_stage || '-') + ': ' + (s.cnt || 0) + '人 · 触达窗口 ' + (s.top_window || '-') + '</div>';
+                });
+            }
+            if (risk.length) {
+                html += '<div style="font-size:11px;color:#f59e0b;margin-top:6px;">⚠️ ' + risk[0].at_risk_count + '位客户复购临界</div>';
+            }
+            el.innerHTML = html;
+        }
+
+        function renderGrowthRepurchase(atRiskCount, churnedCount, storeId) {
+            var el = document.getElementById('growth-repurchase');
+            if (!el) return;
+            var total = atRiskCount + churnedCount;
+            var html = '<div style="display:flex;gap:16px;margin-bottom:10px;">'
+                + '<div style="text-align:center;"><div style="font-size:22px;font-weight:800;color:#f59e0b;">' + atRiskCount + '</div><div style="font-size:11px;color:rgba(226,232,240,0.55);">临界客户</div></div>'
+                + '<div style="text-align:center;"><div style="font-size:22px;font-weight:800;color:#ef4444;">' + churnedCount + '</div><div style="font-size:11px;color:rgba(226,232,240,0.55);">流失客户</div></div>'
+                + '</div>';
+            if (total > 0) {
+                html += '<button onclick="triggerRepurchase(\'' + (storeId || '') + '\')" style="padding:6px 14px;border-radius:8px;background:rgba(245,158,11,0.2);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);cursor:pointer;font-size:12px;">🚀 立即触发复购行动</button>';
+            } else {
+                html += '<div style="font-size:12px;color:rgba(226,232,240,0.4);">当前无复购临界客户</div>';
+            }
+            el.innerHTML = html;
+        }
+
+        async function triggerRepurchase(storeId) {
+            try {
+                var r = await fetch('/api/growth/repurchase-trigger', {
+                    method: 'POST',
+                    headers: growthAuthHeaders(),
+                    body: JSON.stringify({ store_id: storeId || '' })
+                });
+                var data = await r.json();
+                if (!data.ok && !data.triggered) throw new Error(data.error || 'trigger_failed');
+                var count = data.triggered || data.actions_created || 0;
+                showNotification('复购行动已触发' + (count ? '，创建了' + count + '条行动' : ''), 'success');
+                refreshGrowthDashboard();
+            } catch (e) {
+                showNotification('触发复购失败：' + (e?.message || e), 'error');
+            }
+        }
+
     // ════════════════════════════════════════════════
     // Phase 6: 海报模板 + 渲染系统
     // ════════════════════════════════════════════════
