@@ -44741,7 +44741,7 @@ ${body}
         }
 
         function growthRoleCode() {
-            return hrmsNormalizeRoleCode((HRMS_API.user && HRMS_API.user.role) || (window.__user_role) || '');
+            return hrmsNormalizeRoleCode((currentUser && currentUser.role) || (window.__user_role) || '');
         }
 
         function canAccessGrowthModule() {
