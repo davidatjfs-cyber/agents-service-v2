@@ -662,8 +662,11 @@ export function registerPhaseRoutes(app, pool) {
   // ── POS consumption stats ──
   app.get('/api/growth/pos-stats', async (req, res) => {
     if (!rqa(req, res)) return;
-    const sid = cleanText(req.query.store_id || '', 128);
+    const sid = cleanText(req.query.store_id || req.query.store_name || '', 200);
     const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
+    const byName = /[\u4e00-\u9fff\uff08\uff09【】]/.test(sid);
+    const posCond = sid ? (byName ? `store_name = $1` : `store_id = $1`) : `$1::text = ''`;
+    const profCond = sid ? `store_id = $1` : `$1::text = ''`;
     const statsParams = [sid, days];
 
     const [
@@ -675,20 +678,20 @@ export function registerPhaseRoutes(app, pool) {
         COUNT(DISTINCT phone) AS distinct_phones,
         COUNT(*) FILTER (WHERE phone IS NOT NULL AND phone <> '')::int AS identified_orders
         FROM pos_orders
-        WHERE ($1::text = '' OR store_id = $1)
+        WHERE ${posCond}
           AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval`, statsParams),
-      pool.query(`SELECT store_name, COUNT(*)::int AS orders,
+      pool.query(`SELECT store_id, store_name, COUNT(*)::int AS orders,
         ROUND(AVG(amount_after_discount),2) AS avg_check,
         COALESCE(SUM(amount_after_discount),0)::numeric AS total_revenue
         FROM pos_orders
-        WHERE ($1::text = '' OR store_id = $1)
+        WHERE ${posCond}
           AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
-        GROUP BY store_name ORDER BY total_revenue DESC`, statsParams),
+        GROUP BY store_id, store_name ORDER BY total_revenue DESC`, statsParams),
       pool.query(`SELECT EXTRACT(HOUR FROM order_time)::int AS hour, COUNT(*)::int AS orders,
         COALESCE(SUM(amount_after_discount),0)::numeric AS revenue
         FROM pos_orders
         WHERE order_time IS NOT NULL
-          AND ($1::text = '' OR store_id = $1)
+          AND ${posCond}
           AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
         GROUP BY 1 ORDER BY 1`, statsParams),
       pool.query(`SELECT
@@ -704,7 +707,7 @@ export function registerPhaseRoutes(app, pool) {
         COUNT(*)::int AS orders,
         COALESCE(SUM(amount_after_discount),0)::numeric AS revenue
         FROM pos_orders
-        WHERE ($1::text = '' OR store_id = $1)
+        WHERE ${posCond}
           AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
         GROUP BY 1 ORDER BY orders DESC`, statsParams),
       pool.query(`SELECT category, dish_name,
@@ -712,7 +715,7 @@ export function registerPhaseRoutes(app, pool) {
         COALESCE(SUM(amount_after_discount),0)::numeric AS revenue
         FROM pos_order_items WHERE order_no IN (
           SELECT order_no FROM pos_orders
-          WHERE ($1::text = '' OR store_id = $1)
+          WHERE ${posCond}
             AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
         ) AND category IS NOT NULL AND category <> '-'
         GROUP BY category, dish_name
@@ -726,7 +729,7 @@ export function registerPhaseRoutes(app, pool) {
           SELECT phone, COUNT(*)::int AS order_cnt
           FROM pos_orders
           WHERE phone IS NOT NULL AND phone <> ''
-            AND ($1::text = '' OR store_id = $1)
+            AND ${posCond}
             AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
           GROUP BY phone
         ) sub`, statsParams)
@@ -741,7 +744,7 @@ export function registerPhaseRoutes(app, pool) {
           SELECT phone, COUNT(*)::int AS order_cnt
           FROM pos_orders
           WHERE phone IS NOT NULL AND phone <> ''
-            AND ($1::text = '' OR store_id = $1)
+            AND ${posCond}
             AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
           GROUP BY phone
         ) sub
@@ -757,7 +760,7 @@ export function registerPhaseRoutes(app, pool) {
           SELECT phone, AVG(amount_after_discount) AS avg_check
           FROM pos_orders
           WHERE phone IS NOT NULL AND phone <> ''
-            AND ($1::text = '' OR store_id = $1)
+            AND ${posCond}
             AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
           GROUP BY phone
         ) sub
@@ -769,19 +772,19 @@ export function registerPhaseRoutes(app, pool) {
         FROM pos_orders
         WHERE phone IS NOT NULL AND phone <> ''
           AND order_time IS NOT NULL
-          AND ($1::text = '' OR store_id = $1)
+          AND ${posCond}
           AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
         GROUP BY 1 ORDER BY cnt DESC`, statsParams),
       pool.query(`SELECT category, SUM(qty)::int AS total_qty FROM pos_order_items WHERE order_no IN (
           SELECT order_no FROM pos_orders
           WHERE phone IS NOT NULL AND phone <> ''
-            AND ($1::text = '' OR store_id = $1)
+            AND ${posCond}
             AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
         ) AND category IS NOT NULL AND category <> '-' GROUP BY category ORDER BY total_qty DESC LIMIT 5`, statsParams),
       pool.query(`SELECT COUNT(*)::int AS count, ROUND(AVG(pos_total_spend)::numeric, 2) AS avg_spending, ROUND(AVG(pos_order_count)::numeric, 1) AS avg_orders
         FROM growth_customer_profiles
         WHERE pos_total_spend > 0
-          AND ($1::text = '' OR store_id = $1)`, [sid])
+          AND ${profCond}`, [sid])
     ]);
 
     const profileInsights = {
@@ -932,7 +935,7 @@ export function registerPhaseRoutes(app, pool) {
               cleanText(o.member_name || '', 100), phone,
               cleanText(o.order_type || '', 40), cleanText(o.table_no || '', 40),
               Number(o.diners) || null, cleanText(o.duration || '', 40),
-              cleanText(o.store_name || '', 200), storeId || cleanText(o.store_id || '', 128)
+               cleanText(o.store_name || '', 200), (function() { var sn = cleanText(o.store_name || '', 200); var sid = storeId || cleanText(o.store_id || '', 128); if (sn && sn.includes('洪潮')) return '64822111'; if (sn && sn.includes('马己仙')) return '51866138'; return sid; })()
             ]);
             totalOrders++;
           } catch (e) { console.error('[pos-feishu-sync] order upsert error:', e.message, o.order_no); }

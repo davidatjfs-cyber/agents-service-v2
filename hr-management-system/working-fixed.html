@@ -13692,7 +13692,6 @@
                         <div class="growth-controls" style="display:flex;gap:8px;">
                             <select id="growth-store-filter" style="padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
                                 <option value="">全部门店</option>
-                                <option value="51866138">51866138（马己仙+洪潮）</option>
                             </select>
                             <select id="growth-campaign-filter" style="padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
                                 <option value="">全部活动</option>
@@ -20678,6 +20677,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                     var gp = document.getElementById('growth-page');
                     if (gp) { gp.style.display = ''; gp.style.position = ''; gp.style.top = ''; gp.style.width = ''; gp.style.height = ''; gp.style.overflow = ''; }
                     loadCampaignFilterOptions();
+                    loadGrowthStoreOptions();
                     refreshGrowthDashboard();
                     break;
                 case 'agent-tasks':
@@ -45804,11 +45804,56 @@ ${body}
                 campaigns.forEach(function(c) {
                     var opt = document.createElement('option');
                     opt.value = c.campaign_id || '';
-                    opt.textContent = (c.name || c.campaign_id || '-').slice(0, 50) + (c.channel ? ' (' + c.channel + ')' : '');
+                    var chLabel = growthChannelLabel(c.channel || '');
+                    var storeLabel = growthStoreName(c.store_id || '');
+                    var displayName = c.name || chLabel || c.campaign_id || '-';
+                    opt.textContent = displayName + (storeLabel && storeLabel !== c.campaign_id ? ' · ' + storeLabel : '');
                     sel.appendChild(opt);
                 });
             } catch (e) { /* ignore */ }
         }
+
+         async function loadGrowthStoreOptions() {
+             try {
+                 var gh = { 'Authorization': 'Bearer ' + (HRMS_API.token() || '') };
+                 var r = await fetch('/api/growth/pos-stats?days=30', { headers: gh });
+                 var d = await r.json();
+                 var sel = document.getElementById('growth-store-filter');
+                 if (!sel) return;
+                 sel.innerHTML = '<option value="">全部门店</option>';
+                 var stores = Array.isArray(d?.byStore) ? d.byStore : [];
+                 if (stores.length > 0) {
+                     stores.forEach(function(s) {
+                         var opt = document.createElement('option');
+                         var sid = s.store_id || '';
+                         var sname = s.store_name || '-';
+                         if (!sid) { sid = Object.keys(__GROWTH_STORE_MAP).find(function(k) { return __GROWTH_STORE_MAP[k] === sname; }) || sname; }
+                         opt.value = sid;
+                         opt.textContent = sname;
+                         if (!__GROWTH_STORE_MAP[sid]) __GROWTH_STORE_MAP[sid] = sname;
+                         sel.appendChild(opt);
+                     });
+                 } else {
+                     Object.keys(__GROWTH_STORE_MAP).forEach(function(k) {
+                         var opt = document.createElement('option');
+                         opt.value = k;
+                         opt.textContent = __GROWTH_STORE_MAP[k];
+                         sel.appendChild(opt);
+                     });
+                 }
+             } catch (e) {
+                 var sel = document.getElementById('growth-store-filter');
+                 if (sel) {
+                     sel.innerHTML = '<option value="">全部门店</option>';
+                     Object.keys(__GROWTH_STORE_MAP).forEach(function(k) {
+                         var opt = document.createElement('option');
+                         opt.value = k;
+                         opt.textContent = __GROWTH_STORE_MAP[k];
+                         sel.appendChild(opt);
+                     });
+                 }
+             }
+         }
 
         function renderCampaignFunnelDetail(campaignId, counts, dailyMetrics) {
             var detailHost = document.createElement('div');
@@ -45963,7 +46008,7 @@ ${body}
                 }).join('') + '</tbody></table></div>';
         }
 
-        var __GROWTH_STORE_MAP = { '51866138': '马己仙+洪潮', 'store_test_001': '测试门店', 'store_test': '测试门店', 'store_test_002': '测试门店2', 'store_form_001': '表单测试门店', 'store_ui': 'UI测试门店', 'store_audit': '审核门店', 'test': '测试' };
+        var __GROWTH_STORE_MAP = { '51866138': '马己仙广东小馆·荔枝木烧鹅', '64822111': '洪潮传统潮汕菜', 'store_test_001': '测试门店', 'store_test': '测试门店', 'store_test_002': '测试门店2', 'store_form_001': '表单测试门店', 'store_ui': 'UI测试门店', 'store_audit': '审核门店', 'test': '测试' };
         function growthStoreName(id) { return __GROWTH_STORE_MAP[id] || id; }
         var __CHANNEL_MAP = { 'miniprogram': '微信小程序', 'wecom': '企微私聊', 'xiaohongshu': '小红书', 'douyin': '抖音', 'dianping': '大众点评', 'sms': '短信', 'email': '邮件' };
         function growthChannelLabel(ch) { return __CHANNEL_MAP[ch] || ch; }
