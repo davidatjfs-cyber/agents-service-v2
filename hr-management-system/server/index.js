@@ -2945,8 +2945,8 @@ app.post('/api/approvals', authRequired, async (req, res) => {
         const storeManagerByStore = pickStoreRoleUsernameByStore(state, applicantStoreName, ['store_manager']);
         const productionManagerByStore = pickStoreRoleUsernameByStore(state, applicantStoreName, ['store_production_manager']);
         if (kitchenApplicant) {
-          // 后厨：出品经理 → 店长
-          assignees = [productionManagerByStore, storeManagerByStore].filter(Boolean);
+          // 后厨：店长（出品经理无审批权）
+          assignees = [storeManagerByStore].filter(Boolean);
         } else {
           // 前厅：店长
           assignees = [storeManagerByStore].filter(Boolean);
