@@ -2945,8 +2945,8 @@ app.post('/api/approvals', authRequired, async (req, res) => {
         const storeManagerByStore = pickStoreRoleUsernameByStore(state, applicantStoreName, ['store_manager']);
         const productionManagerByStore = pickStoreRoleUsernameByStore(state, applicantStoreName, ['store_production_manager']);
         if (kitchenApplicant) {
-          // 后厨：店长（出品经理无审批权）
-          assignees = [storeManagerByStore].filter(Boolean);
+          // 后厨：出品经理 → 店长
+          assignees = [productionManagerByStore, storeManagerByStore].filter(Boolean);
         } else {
           // 前厅：店长
           assignees = [storeManagerByStore].filter(Boolean);
@@ -2973,9 +2973,9 @@ app.post('/api/approvals', authRequired, async (req, res) => {
           // 奖惩: 直属上级 → 人事经理
           assignees = [applicantManager, hrManagerUsername].filter(Boolean);
         } else if (type === 'points') {
-          // 积分: 直属上级 → 门店店长(若直属非店长) → 总部营运 → 人事经理
+          // 积分: 门店店长 → 总部营运 → 人事经理（仅店长可见）
           const storeManagerForPoints = pickStoreRoleUsernameByStore(state, applicantStore, ['store_manager']);
-          assignees = [applicantManager, storeManagerForPoints, hqManagerUsername, hrManagerUsername].filter(Boolean);
+          assignees = [storeManagerForPoints, hqManagerUsername, hrManagerUsername].filter(Boolean);
         } else {
           assignees = [applicantManager, adminUsername].filter(Boolean);
         }
