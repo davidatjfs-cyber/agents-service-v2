@@ -1824,7 +1824,6 @@ export function registerGrowthRoutes(app, pool) {
     if (!brand) return res.status(400).json({ ok: false, error: 'missing_brand' });
     const samples = Array.isArray(b.samples) ? b.samples.slice(0, 20) : [];
     if (!samples.length) return res.status(400).json({ ok: false, error: 'missing_samples' });
-    brandVoiceSamples[brand] = { samples, updated_at: new Date().toISOString() };
     const style = [];
     if (/优惠|折扣|减|省/.test(samples.join(''))) style.push('价格导向');
     if (/好吃|美味|鲜|食材/.test(samples.join(''))) style.push('品质导向');

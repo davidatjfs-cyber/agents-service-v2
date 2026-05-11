@@ -36385,7 +36385,7 @@ tr:nth-child(even) td { background: #fafafa; }
                     position: _empRec.position || currentUser.position || '',
                     level: _empRec.level || _empRec.jobLevel || _empRec.rank || currentUser.level || '',
                     joinDate: _empRec.joinDate || _empRec.hireDate || _empRec.entryDate || _empRec.onboardDate || currentUser.joinDate || '',
-                    managerUsername: _empRec.managerUsername || _empRec.manager || currentUser.managerUsername || ''
+                    managerUsername: _empRec.managerUsername || _empRec.manager || currentUser.managerUsername || '', managerName: _empRec.managerName || currentUser.managerName || ''
                 };
             } catch (e) {}
             
@@ -36412,7 +36412,9 @@ tr:nth-child(even) td { background: #fafafa; }
                     const mgrUser = users.find(u => String(u?.username || '').trim().toLowerCase() === key);
                     const mgrEmp = employees.find(e => String(e?.username || '').trim().toLowerCase() === key || String(e?.id || '').trim().toLowerCase() === key || String(e?.name || '').trim() === mgrUsername);
                     const mgrName = String(mgrEmp?.name || mgrUser?.name || '').trim();
-                    managerEl.textContent = mgrName || mgrUsername;
+                    // 如果按username找不到名字，尝试从员工档案中的managerName读取
+                    const mgrNameFromEmp = !mgrName ? String(currentUser.managerName || _empRec?.managerName || '').trim() : '';
+                    managerEl.textContent = mgrName || mgrNameFromEmp || mgrUsername;
                 }
             }
 
@@ -44767,10 +44769,9 @@ ${body}
             } else if (tab === 'posters') {
                 loadPosterTemplates();
                 loadPosterHistory();
+                loadCreativeAssets();
             } else if (tab === 'public') {
-                loadPublicTasks();
-                loadChannelEffects();
-                loadContentCalendar();
+                refreshPublicContentWorkspace();
             } else if (tab === 'pos') {
                 loadPosStats();
             } else {
@@ -45280,9 +45281,43 @@ ${body}
                 if (!data.ok) throw new Error(data.error || 'train_failed');
                 var styleHtml = data.detected_style ? '检测到风格：<strong>' + data.detected_style.join('、') + '</strong>' : '';
                 document.getElementById('bv-result').innerHTML = '<div style="padding:12px;background:rgba(34,197,94,0.1);border-radius:8px;font-size:13px;color:rgba(226,232,240,0.8);">✅ 已分析 ' + data.sample_count + ' 条文案<br>' + styleHtml + '</div>';
+                loadBrandVoiceSamples();
                 showNotification('品牌声音训练完成', 'success');
             } catch (e) {
                 showNotification('训练失败：' + (e?.message || e), 'error');
+            }
+        }
+
+        async function loadBrandVoiceSamples() {
+            try {
+                var brand = document.getElementById('bv-brand')?.value || '';
+                var url = '/api/growth/brand-voice-samples' + (brand ? ('?brand=' + encodeURIComponent(brand)) : '');
+                var r = await fetch(url, { headers: growthAuthHeaders() });
+                var data = await r.json();
+                var host = document.getElementById('bv-result');
+                if (!host) return;
+                if (brand) {
+                    var item = data?.data;
+                    if (!item) {
+                        host.innerHTML = '<div style="padding:12px;background:rgba(255,255,255,0.05);border-radius:8px;font-size:13px;color:rgba(226,232,240,0.6);">当前品牌暂无已保存样本</div>';
+                        return;
+                    }
+                    host.innerHTML = '<div style="padding:12px;background:rgba(14,165,233,0.1);border-radius:8px;font-size:13px;color:rgba(226,232,240,0.82);">'
+                        + '<div style="font-weight:700;color:#fff;">' + escapeHtml(item.brand || brand) + '</div>'
+                        + '<div style="margin-top:4px;color:rgba(226,232,240,0.65);">风格：' + escapeHtml((item.detected_style || []).join('、') || '综合') + '</div>'
+                        + '<div style="margin-top:8px;line-height:1.6;">' + (item.samples || []).slice(0, 5).map(function(s) { return '• ' + escapeHtml(String(s)); }).join('<br>') + '</div>'
+                        + '</div>';
+                    return;
+                }
+                var rows = Object.keys(data?.data || {}).map(function(k) { return data.data[k]; });
+                host.innerHTML = rows.length ? rows.map(function(item) {
+                    return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12px;">'
+                        + '<div style="color:#fff;font-weight:700;">' + escapeHtml(item.brand || '-') + '</div>'
+                        + '<div style="margin-top:4px;color:rgba(226,232,240,0.6);">' + escapeHtml((item.detected_style || []).join('、') || '综合') + ' · ' + ((item.samples || []).length || 0) + '条样本</div>'
+                        + '</div>';
+                }).join('') : '<div style="padding:12px;background:rgba(255,255,255,0.05);border-radius:8px;font-size:13px;color:rgba(226,232,240,0.6);">暂无已保存样本</div>';
+            } catch (e) {
+                document.getElementById('bv-result').innerHTML = '<div style="color:#ef4444;font-size:12px;">加载品牌声音失败</div>';
             }
         }
 
@@ -45824,7 +45859,7 @@ ${body}
         function growthStoreName(id) { return __GROWTH_STORE_MAP[id] || id; }
         var __CHANNEL_MAP = { 'miniprogram': '微信小程序', 'wecom': '企微私聊', 'xiaohongshu': '小红书', 'douyin': '抖音', 'dianping': '大众点评', 'sms': '短信', 'email': '邮件' };
         function growthChannelLabel(ch) { return __CHANNEL_MAP[ch] || ch; }
-        var __STATUS_MAP = { 'proposed': '待处理', 'draft': '草稿', 'active': '进行中', 'executed': '已执行', 'ignored': '已忽略', 'completed': '已完成', 'paused': '已暂停' };
+        var __STATUS_MAP = { 'proposed': '待处理', 'planned': '已排期', 'published': '已发布', 'draft': '草稿', 'active': '进行中', 'executed': '已执行', 'ignored': '已忽略', 'completed': '已完成', 'paused': '已暂停' };
         function growthStatusLabel(st) { return __STATUS_MAP[st] || st; }
         var __AUDIENCE_MAP = { 'all': '全部顾客', 'new': '新客', 'inactive': '沉睡客户', 'active': '活跃客户', 'vip': 'VIP', 'at_risk': '临界流失' };
         function growthAudienceLabel(au) { return __AUDIENCE_MAP[au] || au; }
@@ -46163,6 +46198,8 @@ ${body}
     ];
 
     var _selectedPosterTemplate = 'new_welcome';
+    var _savedPosterTemplates = [];
+    var _growthPublicChannels = [];
     var _posterCanvasW = 540, _posterCanvasH = 720;
 
     function roundRect(ctx, x, y, w, h, r) {
@@ -46172,7 +46209,7 @@ ${body}
       ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
     }
 
-    function loadPosterTemplates() {
+    function renderPosterTemplateSelector() {
       var host = document.getElementById('poster-template-selector');
       if (!host) return;
       host.innerHTML = POSTER_TEMPLATES.map(function(t) {
@@ -46185,9 +46222,39 @@ ${body}
       }).join('');
     }
 
+    function renderPosterTemplateLibrary() {
+      var host = document.getElementById('poster-template-library');
+      if (!host) return;
+      host.innerHTML = _savedPosterTemplates.length ? _savedPosterTemplates.map(function(t) {
+        return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12px;">'
+          + '<div style="color:#fff;font-weight:700;">' + escapeHtml(t.name || t.template_key || '-') + '</div>'
+          + '<div style="margin-top:4px;color:rgba(226,232,240,0.6);">' + escapeHtml([t.template_key, t.category, t.channel, t.aspect_ratio].filter(Boolean).join(' · ') || '-') + '</div>'
+          + '</div>';
+      }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无已保存模板</div>';
+    }
+
+    async function loadPosterTemplates() {
+      renderPosterTemplateSelector();
+      try {
+        var r = await fetch('/api/growth/poster-templates', { headers: growthAuthHeaders() });
+        var d = await r.json();
+        _savedPosterTemplates = d?.templates || [];
+        _savedPosterTemplates.forEach(function(saved) {
+          var local = POSTER_TEMPLATES.find(function(t) { return t.key === saved.template_key; });
+          if (!local) return;
+          if (saved.name) local.name = saved.name;
+          local.desc = [saved.category, saved.channel].filter(Boolean).join(' · ') || local.desc;
+        });
+      } catch (e) {
+        _savedPosterTemplates = [];
+      }
+      renderPosterTemplateSelector();
+      renderPosterTemplateLibrary();
+    }
+
     function selectPosterTemplate(key) {
       _selectedPosterTemplate = key;
-      loadPosterTemplates();
+      renderPosterTemplateSelector();
       renderPosterPreview();
     }
 
@@ -46227,10 +46294,22 @@ ${body}
         var offers = { new_welcome: '首次到店立减', recall: '老客回馈', vip: 'VIP专属优惠', festival: '节日特惠', new_dish: '尝鲜特价' };
         var ctas = { new_welcome: '立即领取', recall: '回来坐坐', vip: '查看权益', festival: '了解详情', new_dish: '立即品尝' };
         var key = _selectedPosterTemplate;
-        document.getElementById('poster-title').value = titles[key] || '欢迎光临';
-        document.getElementById('poster-subtitle').value = '用心为您准备了一份惊喜';
-        document.getElementById('poster-offer').value = offers[key] || '到店享优惠';
-        document.getElementById('poster-cta').value = ctas[key] || '立即前往';
+        var storeName = document.getElementById('poster-store')?.value || '';
+        var parseResp = await fetch('/api/growth/semantic-parse', {
+          method: 'POST',
+          headers: growthAuthHeaders(),
+          body: JSON.stringify({ text: [tpl?.name || '', storeName, campaignId, context].filter(Boolean).join('；') })
+        });
+        var parsed = await parseResp.json();
+        var tasteTag = Array.isArray(parsed?.taste_tags) && parsed.taste_tags.length ? parsed.taste_tags[0] : '';
+        var title = titles[key] || (tpl?.name || '欢迎光临');
+        var subtitle = (parsed?.key_insight && parsed.key_insight !== '关键词解析（LLM不可用）' ? parsed.key_insight : context) || (tpl?.desc || '用心为您准备了一份惊喜');
+        var offer = offers[key] || '到店享优惠';
+        if (tasteTag) offer += ' · ' + tasteTag + '推荐';
+        document.getElementById('poster-title').value = title;
+        document.getElementById('poster-subtitle').value = String(subtitle).slice(0, 24) || '用心为您准备了一份惊喜';
+        document.getElementById('poster-offer').value = offer;
+        document.getElementById('poster-cta').value = parsed?.return_intent ? '马上安排' : (ctas[key] || '立即前往');
         renderPosterPreview();
         showNotification('文案已生成，可手动调整', 'success');
       } catch (e) {
@@ -46252,6 +46331,10 @@ ${body}
             poster_key: 'poster_' + Date.now(),
             campaign_id: campaignId || undefined,
             title: title || '海报',
+            store_id: document.getElementById('poster-store')?.value || '',
+            template_key: _selectedPosterTemplate,
+            subtitle: document.getElementById('poster-subtitle')?.value || '',
+            cta: document.getElementById('poster-cta')?.value || '',
             status: 'generated',
             output_url: dataURL,
             meta: { template: _selectedPosterTemplate }
@@ -46289,6 +46372,70 @@ ${body}
     // Phase 8: 公域品宣管理
     // ════════════════════════════════════════════════
 
+    function renderPublicChannelSelectOptions() {
+      var options = '<option value="">选择渠道</option>' + _growthPublicChannels.map(function(ch) {
+        var label = [ch.name, ch.platform].filter(Boolean).join(' · ');
+        return '<option value="' + escapeHtml(ch.channel_key || '') + '">' + escapeHtml(label || (ch.channel_key || '-')) + '</option>';
+      }).join('');
+      ['public-task-channel', 'public-calendar-channel'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.innerHTML = options;
+      });
+    }
+
+    function refreshPublicContentWorkspace() {
+      loadPublicChannels();
+      loadPublicTasks();
+      loadChannelEffects();
+      loadContentCalendar();
+    }
+
+    async function loadPublicChannels() {
+      try {
+        var r = await fetch('/api/growth/public-channels', { headers: growthAuthHeaders() });
+        var d = await r.json();
+        _growthPublicChannels = d?.channels || [];
+        renderPublicChannelSelectOptions();
+        var host = document.getElementById('public-channels-list');
+        if (!host) return;
+        host.innerHTML = _growthPublicChannels.length ? _growthPublicChannels.map(function(ch) {
+          return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px;">'
+            + '<div style="color:#fff;font-weight:700;">' + escapeHtml(ch.name || ch.channel_key || '-') + '</div>'
+            + '<div style="margin-top:4px;color:rgba(226,232,240,0.55);">' + escapeHtml([ch.channel_key, ch.platform, growthStoreName(ch.store_id || ''), ch.owner_username].filter(Boolean).join(' · ')) + '</div>'
+            + '</div>';
+        }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无渠道台账</div>';
+      } catch (e) {
+        document.getElementById('public-channels-list').innerHTML = '<div style="color:#ef4444;font-size:12px;">渠道加载失败</div>';
+      }
+    }
+
+    async function savePublicChannel() {
+      var payload = {
+        channel_key: document.getElementById('public-channel-key')?.value || '',
+        name: document.getElementById('public-channel-name')?.value || '',
+        platform: document.getElementById('public-channel-platform')?.value || '',
+        store_id: document.getElementById('public-channel-store')?.value || '',
+        owner_username: document.getElementById('public-channel-owner')?.value || ''
+      };
+      if (!payload.channel_key || !payload.name || !payload.platform) {
+        showNotification('请完整填写渠道键、名称、平台', 'warning');
+        return;
+      }
+      try {
+        var r = await fetch('/api/growth/public-channels', {
+          method: 'POST',
+          headers: growthAuthHeaders(),
+          body: JSON.stringify(payload)
+        });
+        var d = await r.json();
+        if (!d.ok) throw new Error(d.error || 'save_failed');
+        showNotification('渠道已保存', 'success');
+        loadPublicChannels();
+      } catch (e) {
+        showNotification('保存渠道失败：' + (e?.message || e), 'error');
+      }
+    }
+
     async function loadPublicTasks() {
       try {
         var r = await fetch('/api/growth/public-promo-tasks', { headers: growthAuthHeaders() });
@@ -46301,12 +46448,44 @@ ${body}
           return '<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px;">'
             + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">'
             + '<div style="color:#fff;font-weight:600;">' + (t.title || '-').slice(0, 40) + '</div>'
-            + '<span style="font-size:10px;padding:2px 6px;border-radius:999px;background:' + statusColor + '22;color:' + statusColor + ';">' + (t.status || '-') + '</span>'
+            + '<span style="font-size:10px;padding:2px 6px;border-radius:999px;background:' + statusColor + '22;color:' + statusColor + ';">' + escapeHtml(growthStatusLabel(t.status || '-')) + '</span>'
             + '</div>'
-            + '<div style="color:rgba(226,232,240,0.5);margin-top:3px;">' + (t.channel_key || '-') + (t.store_id ? ' · ' + t.store_id : '') + '</div>'
+            + '<div style="color:rgba(226,232,240,0.5);margin-top:3px;">' + escapeHtml(growthChannelLabel(t.channel_key || '-')) + (t.store_id ? ' · ' + escapeHtml(growthStoreName(t.store_id)) : '') + '</div>'
+            + (t.content_brief ? '<div style="color:rgba(226,232,240,0.42);margin-top:4px;line-height:1.5;">' + escapeHtml(String(t.content_brief).slice(0, 56)) + '</div>' : '')
             + '</div>';
         }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:16px;">暂无品宣任务</div>';
       } catch (e) { /* ignore */ }
+    }
+
+    async function savePublicTask() {
+      var payload = {
+        task_key: 'public_task_' + Date.now(),
+        title: document.getElementById('public-task-title')?.value || '',
+        channel_key: document.getElementById('public-task-channel')?.value || '',
+        store_id: document.getElementById('public-task-store')?.value || '',
+        campaign_id: document.getElementById('public-task-campaign')?.value || '',
+        due_at: document.getElementById('public-task-due')?.value || '',
+        content_brief: document.getElementById('public-task-brief')?.value || '',
+        copy_text: document.getElementById('public-task-brief')?.value || '',
+        status: 'planned'
+      };
+      if (!payload.title || !payload.channel_key) {
+        showNotification('请至少填写任务标题和渠道', 'warning');
+        return;
+      }
+      try {
+        var r = await fetch('/api/growth/public-promo-tasks', {
+          method: 'POST',
+          headers: growthAuthHeaders(),
+          body: JSON.stringify(payload)
+        });
+        var d = await r.json();
+        if (!d.ok) throw new Error(d.error || 'save_failed');
+        showNotification('品宣任务已创建', 'success');
+        loadPublicTasks();
+      } catch (e) {
+        showNotification('创建任务失败：' + (e?.message || e), 'error');
+      }
     }
 
     async function loadChannelEffects() {
@@ -46319,7 +46498,7 @@ ${body}
         host.innerHTML = effects.length ? effects.map(function(e) {
           return '<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px;">'
             + '<div style="color:#fff;font-weight:600;">' + (e.channel || e.platform || '-') + '</div>'
-            + '<div style="color:rgba(226,232,240,0.5);margin-top:3px;">发布' + (e.publish_count || e.total || 0) + ' · 扫码' + (e.scan_count || 0) + ' · 核销' + (e.redeem_count || 0) + ' · 收入¥' + ((e.revenue_fen || 0)/100).toFixed(0) + '</div>'
+            + '<div style="color:rgba(226,232,240,0.5);margin-top:3px;">发布' + (e.published || e.publish_count || e.total_items || 0) + ' / 总计划' + (e.total_items || e.total || 0) + ' · 扫码' + (e.total_scans || e.scan_count || 0) + ' · 收入¥' + ((e.total_revenue_fen || e.revenue_fen || 0)/100).toFixed(0) + '</div>'
             + '</div>';
         }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:16px;">暂无渠道数据</div>';
       } catch (e) { /* ignore */ }
@@ -46336,10 +46515,121 @@ ${body}
           var dateStr = i.publish_date ? String(i.publish_date).slice(0, 10) : '-';
           return '<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px;">'
             + '<div style="color:#fff;font-weight:600;">' + (i.title || '-').slice(0, 40) + '</div>'
-            + '<div style="color:rgba(226,232,240,0.5);margin-top:3px;">' + dateStr + ' · ' + (i.channel || '') + (i.store_id ? ' · ' + i.store_id : '') + '</div>'
+            + '<div style="color:rgba(226,232,240,0.5);margin-top:3px;">' + dateStr + ' · ' + escapeHtml(growthChannelLabel(i.channel || '')) + (i.store_id ? ' · ' + escapeHtml(growthStoreName(i.store_id)) : '') + '</div>'
+            + (i.content_brief ? '<div style="color:rgba(226,232,240,0.42);margin-top:4px;line-height:1.5;">' + escapeHtml(String(i.content_brief).slice(0, 56)) + '</div>' : '')
             + '</div>';
         }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:16px;">暂无内容计划</div>';
       } catch (e) { /* ignore */ }
+    }
+
+    async function saveContentCalendarItem() {
+      var title = document.getElementById('public-calendar-title')?.value || '';
+      var brief = document.getElementById('public-calendar-brief')?.value || '';
+      var channel = document.getElementById('public-calendar-channel')?.value || '';
+      if (!title || !channel) {
+        showNotification('请至少填写内容标题和渠道', 'warning');
+        return;
+      }
+      try {
+        var r = await fetch('/api/growth/content-calendar', {
+          method: 'POST',
+          headers: growthAuthHeaders(),
+          body: JSON.stringify({
+            item_id: document.getElementById('public-calendar-item-id')?.value || ('calendar_' + Date.now()),
+            title: title,
+            publish_date: document.getElementById('public-calendar-date')?.value || '',
+            channel: channel,
+            store_id: document.getElementById('public-calendar-store')?.value || '',
+            campaign_id: document.getElementById('public-calendar-campaign')?.value || '',
+            content_brief: brief,
+            copy_text: brief,
+            status: 'draft'
+          })
+        });
+        var d = await r.json();
+        if (!d.ok) throw new Error(d.error || 'save_failed');
+        showNotification('内容日历已保存', 'success');
+        loadContentCalendar();
+        loadChannelEffects();
+      } catch (e) {
+        showNotification('保存日历失败：' + (e?.message || e), 'error');
+      }
+    }
+
+    async function loadCreativeAssets() {
+      try {
+        var r = await fetch('/api/growth/creative-assets', { headers: growthAuthHeaders() });
+        var d = await r.json();
+        var assets = d?.assets || [];
+        var host = document.getElementById('creative-assets-list');
+        if (!host) return;
+        host.innerHTML = assets.length ? assets.map(function(a) {
+          return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px;">'
+            + '<div style="color:#fff;font-weight:700;">' + escapeHtml(a.name || '-') + '</div>'
+            + '<div style="margin-top:4px;color:rgba(226,232,240,0.55);">' + escapeHtml([a.asset_type, growthStoreName(a.store_id || ''), (a.tags || []).join('/')].filter(Boolean).join(' · ')) + '</div>'
+            + (a.url ? '<a href="' + escapeHtml(a.url) + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;color:#38bdf8;font-size:11px;">打开素材</a>' : '')
+            + '</div>';
+        }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无素材</div>';
+      } catch (e) {
+        document.getElementById('creative-assets-list').innerHTML = '<div style="color:#ef4444;font-size:12px;">素材加载失败</div>';
+      }
+    }
+
+    async function saveCreativeAsset() {
+      var payload = {
+        asset_key: document.getElementById('creative-asset-key')?.value || ('asset_' + Date.now()),
+        name: document.getElementById('creative-asset-name')?.value || '',
+        asset_type: document.getElementById('creative-asset-type')?.value || '',
+        store_id: document.getElementById('creative-asset-store')?.value || '',
+        url: document.getElementById('creative-asset-url')?.value || '',
+        tags: growthCsvList('creative-asset-tags')
+      };
+      if (!payload.name || !payload.asset_type) {
+        showNotification('请至少填写素材名称和类型', 'warning');
+        return;
+      }
+      try {
+        var r = await fetch('/api/growth/creative-assets', {
+          method: 'POST',
+          headers: growthAuthHeaders(),
+          body: JSON.stringify(payload)
+        });
+        var d = await r.json();
+        if (!d.ok) throw new Error(d.error || 'save_failed');
+        showNotification('创意素材已保存', 'success');
+        loadCreativeAssets();
+      } catch (e) {
+        showNotification('保存素材失败：' + (e?.message || e), 'error');
+      }
+    }
+
+    async function savePosterTemplateMeta() {
+      var payload = {
+        template_key: document.getElementById('poster-template-key-input')?.value || '',
+        name: document.getElementById('poster-template-name-input')?.value || '',
+        category: document.getElementById('poster-template-category-input')?.value || '',
+        channel: document.getElementById('poster-template-channel-input')?.value || '',
+        aspect_ratio: document.getElementById('poster-template-aspect-input')?.value || '',
+        layout: {},
+        style_guide: {}
+      };
+      if (!payload.template_key || !payload.name) {
+        showNotification('请至少填写模板键和名称', 'warning');
+        return;
+      }
+      try {
+        var r = await fetch('/api/growth/poster-templates', {
+          method: 'POST',
+          headers: growthAuthHeaders(),
+          body: JSON.stringify(payload)
+        });
+        var d = await r.json();
+        if (!d.ok) throw new Error(d.error || 'save_failed');
+        showNotification('模板已保存', 'success');
+        loadPosterTemplates();
+      } catch (e) {
+        showNotification('保存模板失败：' + (e?.message || e), 'error');
+      }
     }
 
     </script>
