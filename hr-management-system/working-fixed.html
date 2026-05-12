@@ -46658,7 +46658,8 @@ ${body}
         var offers = { new_welcome: '首次到店立减', recall: '老客回馈', vip: 'VIP专属优惠', festival: '节日特惠', new_dish: '尝鲜特价' };
         var ctas = { new_welcome: '立即领取', recall: '回来坐坐', vip: '查看权益', festival: '了解详情', new_dish: '立即品尝' };
         var key = _selectedPosterTemplate;
-        var storeName = document.getElementById('poster-store')?.value || '';
+        var storeEl = document.getElementById('poster-store');
+        var storeName = storeEl ? (storeEl.options[storeEl.selectedIndex]?.text || storeEl.value || '') : '';
         var parseResp = await fetch('/api/growth/semantic-parse', {
           method: 'POST',
           headers: growthAuthHeaders(),
