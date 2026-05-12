@@ -14048,9 +14048,13 @@
                                   <div style="display:flex;flex-direction:column;gap:6px;">
                                     <input id="poster-template-key-input" placeholder="模板key（英文唯一标识，如 summer_sale）" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
                                     <input id="poster-template-name-input" placeholder="模板名称" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
-                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                                      <select id="poster-template-category-input" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;"><option value="">选择分类</option></select>
-                                      <select id="poster-template-channel-input" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;"><option value="">选择渠道</option></select>
+                                    <div style="grid-column:1/-1;">
+                                      <label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:3px;">用途分类（可复选）</label>
+                                      <div id="poster-template-category-checkboxes" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+                                    </div>
+                                    <div style="grid-column:1/-1;">
+                                      <label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:3px;">投放渠道（可复选）</label>
+                                      <div id="poster-template-channel-checkboxes" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
                                     </div>
                                     <select id="poster-template-aspect-input" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;"><option value="">选择比例</option></select>
                                     <select id="poster-template-style-input" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;"><option value="">选择模板风格</option></select>
@@ -46527,13 +46531,13 @@ ${body}
       return Array.from(checks).map(function(c) { return c.value; });
     }
     function populateTemplateFormSelects() {
+      renderTagCheckboxes('poster-template-category-checkboxes', __TEMPLATE_CATEGORY_OPTIONS, []);
+      renderTagCheckboxes('poster-template-channel-checkboxes', __TEMPLATE_CHANNEL_OPTIONS, []);
       function fillSelect(id, options) {
         var el = document.getElementById(id);
         if (!el) return;
         el.innerHTML = '<option value="">请选择</option>' + options.map(function(o) { return '<option value="' + escapeHtml(o) + '">' + escapeHtml(o) + '</option>'; }).join('');
       }
-      fillSelect('poster-template-category-input', __TEMPLATE_CATEGORY_OPTIONS);
-      fillSelect('poster-template-channel-input', __TEMPLATE_CHANNEL_OPTIONS);
       fillSelect('poster-template-aspect-input', __TEMPLATE_ASPECT_OPTIONS);
       fillSelect('poster-template-style-input', __TEMPLATE_STYLE_OPTIONS);
       fillSelect('poster-template-prompt-notes-input', __TEMPLATE_PROMPT_OPTIONS);
@@ -46541,10 +46545,12 @@ ${body}
 
     function resetTemplateForm() {
       _editingTemplateKey = '';
-       ['poster-template-key-input','poster-template-name-input','poster-template-category-input','poster-template-channel-input','poster-template-aspect-input','poster-template-style-input','poster-template-prompt-notes-input','poster-template-image-url'].forEach(function(id) {
+       ['poster-template-key-input','poster-template-name-input','poster-template-aspect-input','poster-template-style-input','poster-template-prompt-notes-input','poster-template-image-url'].forEach(function(id) {
          var el = document.getElementById(id);
          if (el) el.value = '';
        });
+       renderTagCheckboxes('poster-template-category-checkboxes', __TEMPLATE_CATEGORY_OPTIONS, []);
+       renderTagCheckboxes('poster-template-channel-checkboxes', __TEMPLATE_CHANNEL_OPTIONS, []);
        document.getElementById('poster-template-image-preview').style.display = 'none';
     }
 
@@ -46557,12 +46563,12 @@ ${body}
            aspect_ratio: '', image_url: '', style_guide: { style: builtin.style || builtin.desc || '',
            prompt_notes: builtin.promptNotes || '' } };
        }
-       _editingTemplateKey = key;
-       setField('poster-template-key-input', t.template_key || '');
-       setField('poster-template-name-input', t.name || '');
-       setField('poster-template-category-input', t.category || '');
-       setField('poster-template-channel-input', t.channel || '');
-       setField('poster-template-aspect-input', t.aspect_ratio || '');
+        _editingTemplateKey = key;
+        setField('poster-template-key-input', t.template_key || '');
+        setField('poster-template-name-input', t.name || '');
+        renderTagCheckboxes('poster-template-category-checkboxes', __TEMPLATE_CATEGORY_OPTIONS, (t.category || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean));
+        renderTagCheckboxes('poster-template-channel-checkboxes', __TEMPLATE_CHANNEL_OPTIONS, (t.channel || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean));
+        setField('poster-template-aspect-input', t.aspect_ratio || '');
         setField('poster-template-style-input', (t.style_guide && t.style_guide.style) || '');
         setField('poster-template-prompt-notes-input', (t.style_guide && t.style_guide.prompt_notes) || '');
         setField('poster-template-image-url', t.image_url || '');
@@ -46897,13 +46903,21 @@ ${body}
             var host = document.getElementById('poster-history-list');
             if (!host) return;
             host.innerHTML = posters.length ? '<div style="grid-column:1/-1;font-size:11px;color:rgba(226,232,240,0.4);margin-bottom:4px;">共 ' + posters.length + ' 张</div>' + posters.slice(0, 30).map(function(p) {
-              return '<div style="border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;cursor:pointer;" onclick="window.open(\'' + (p.output_url || '#') + '\')">'
+              return '<div style="border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;cursor:pointer;position:relative;" onclick="window.open(\'' + (p.output_url || '#') + '\')">'
+                + (p.id ? '<button onclick="event.stopPropagation();deleteGeneratedPoster(' + p.id + ')" style="position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:6px;background:rgba(0,0,0,0.5);color:#fca5a5;border:none;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;z-index:2;">✕</button>' : '')
                 + '<div style="aspect-ratio:3/4;background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center;overflow:hidden;">'
                 + (p.output_url ? '<img src="' + p.output_url + '" loading="lazy" style="width:100%;height:100%;object-fit:cover;">' : '<span style="color:rgba(226,232,240,0.3);font-size:11px;">无预览</span>')
                 + '</div><div style="padding:6px;font-size:11px;color:rgba(226,232,240,0.6);text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">'
                 + (p.title || '-') + '</div></div>';
             }).join('') : '<div style="color:rgba(226,232,240,0.4);grid-column:1/-1;padding:20px;">暂无已生成海报</div>';
       } catch (e) { /* ignore */ }
+    }
+
+    function deleteGeneratedPoster(id) {
+      if (!confirm('确认删除此海报？')) return;
+      fetch('/api/growth/generated-posters/' + id, { method: 'DELETE', headers: growthAuthHeaders() }).then(function(r){return r.json();}).then(function(d){
+        if(d.ok){showNotification('海报已删除','success');loadPosterHistory();}else{showNotification('删除失败','error');}
+      }).catch(function(e){showNotification('删除失败:'+e.message,'error');});
     }
 
     // ════════════════════════════════════════════════
@@ -47157,20 +47171,20 @@ ${body}
       }
     }
 
-    async function savePosterTemplateMeta() {
-       var payload = {
-         template_key: document.getElementById('poster-template-key-input')?.value || '',
-         name: document.getElementById('poster-template-name-input')?.value || '',
-         category: document.getElementById('poster-template-category-input')?.value || '',
-         channel: document.getElementById('poster-template-channel-input')?.value || '',
-         aspect_ratio: document.getElementById('poster-template-aspect-input')?.value || '',
-         image_url: document.getElementById('poster-template-image-url')?.value || '',
-         layout: {},
-         style_guide: {
-          style: document.getElementById('poster-template-style-input')?.value || '',
-          prompt_notes: document.getElementById('poster-template-prompt-notes-input')?.value || ''
-        }
-      };
+     async function savePosterTemplateMeta() {
+        var payload = {
+          template_key: document.getElementById('poster-template-key-input')?.value || '',
+          name: document.getElementById('poster-template-name-input')?.value || '',
+          category: getCheckedValues('poster-template-category-checkboxes').join(','),
+          channel: getCheckedValues('poster-template-channel-checkboxes').join(','),
+          aspect_ratio: document.getElementById('poster-template-aspect-input')?.value || '',
+          image_url: document.getElementById('poster-template-image-url')?.value || '',
+          layout: {},
+          style_guide: {
+           style: document.getElementById('poster-template-style-input')?.value || '',
+           prompt_notes: document.getElementById('poster-template-prompt-notes-input')?.value || ''
+         }
+        };
       if (!payload.template_key || !payload.name) {
         showNotification('请至少填写模板键和名称', 'warning');
         return;
