@@ -46672,23 +46672,27 @@ ${body}
        try {
          var storeEl = document.getElementById('poster-store');
          var storeName = storeEl ? (storeEl.options[storeEl.selectedIndex]?.text || storeEl.value || '') : '';
-         var context = (titleEl?.value || '') + ' ' + (offerEl?.value || '') + ' ' + storeName;
          var parseResp = await fetch('/api/growth/semantic-parse', {
            method: 'POST',
            headers: growthAuthHeaders(),
-           body: JSON.stringify({ text: '请为以下餐厅海报生成一句吸引人的引流卖点文案（15字以内），突出顾客价值：' + context })
+           body: JSON.stringify({
+             text: '你是一家餐厅的文案策划。请根据以下海报信息，生成一句有吸引力的引流卖点文案（12-20字），要求：口语化、有行动号召力、突出顾客利益。不要评价，只输出文案。\n标题：' + (titleEl?.value || '') + '\n优惠：' + (offerEl?.value || '') + '\n门店：' + storeName
+           })
          });
          var parsed = await parseResp.json();
          var sellPoint = '';
          if (parsed?.key_insight && parsed.key_insight !== '关键词解析（LLM不可用）') {
            sellPoint = parsed.key_insight;
+         } else if (parsed?.return_intent) {
+           sellPoint = parsed.return_intent;
          } else {
-           sellPoint = (offerEl?.value || '') + '，等您来享';
+           var fallback = ['限时尝鲜，美味不等人', '到店即享，不负好食光', '口碑好味，等你来品', '今日特惠，错过等明天'];
+           sellPoint = fallback[Math.floor(Math.random() * fallback.length)];
          }
          var subEl = document.getElementById('poster-subtitle');
-         if (subEl) subEl.value = sellPoint.slice(0, 30);
+         if (subEl) subEl.value = sellPoint.slice(0, 24);
          renderPosterPreview();
-         showNotification('引流卖点已生成到副标题位置', 'success');
+         showNotification('引流卖点已生成到副标题', 'success');
        } catch (e) {
          showNotification('生成失败：' + (e?.message || e), 'error');
        }
@@ -46720,17 +46724,19 @@ ${body}
          'If the poster has a food photo, place it as a background or side hero — text must remain fully readable over or beside it.',
          'No mockup frame, no watermark, no random English text, no collage, no low-quality stock look, no cartoon style.',
          '',
-         '## Content to include',
-         'Main headline in Chinese: ' + (editor.title || '未填写标题') + '.',
-         'Subtitle in Chinese: ' + (editor.subtitle || '未填写副标题') + '.',
-         'Offer copy in Chinese: ' + (editor.offer || '未填写优惠信息') + '.',
-         (editor.price ? 'Displayed price in Chinese: ' + editor.price + '.' : ''),
-         (editor.size ? 'Displayed size/spec in Chinese: ' + editor.size + '.' : ''),
-         'CTA button copy (inside rounded button shape): ' + (editor.cta || '不显示CTA按钮') + '.',
-         (editor.store ? 'Brand/store name in Chinese at bottom: ' + editor.store + '.' : ''),
-         (editor.keywords ? 'Extra scene / mood / product cues: ' + editor.keywords + '.' : ''),
-         (editor.clarity ? 'Clarity requirement: ' + editor.clarity + '.' : ''),
-         (editor.format ? 'Output format requirement: ' + editor.format + '.' : '')
+          '## Content to include (all text to be rendered on the poster image)',
+          'Main headline in Chinese: ' + (editor.title || '未填写标题') + '.',
+          'Subtitle in Chinese: ' + (editor.subtitle || '未填写副标题') + '.',
+          'Offer copy in Chinese: ' + (editor.offer || '未填写优惠信息') + '.',
+          (editor.price ? 'Displayed price in Chinese: ' + editor.price + '.' : ''),
+          'CTA button copy (inside rounded button shape): ' + (editor.cta || '不显示CTA按钮') + '.',
+          (editor.store ? 'Brand/store name in Chinese at bottom: ' + editor.store + '.' : ''),
+          (editor.keywords ? 'Extra scene / mood / product cues: ' + editor.keywords + '.' : ''),
+          '',
+          '## Image generation parameters (do NOT render these as text on the poster)',
+          (editor.size ? 'Canvas/output resolution: ' + editor.size + ' pixels.' : ''),
+          (editor.clarity ? 'Image quality/clarity: ' + editor.clarity + '.' : 'Image quality: high-definition commercial grade.'),
+          (editor.format ? 'Output format: ' + editor.format + '.' : '')
        ].filter(Boolean).join('\n');
       var out = document.getElementById('poster-image2-prompt');
       if (out) out.value = prompt;
