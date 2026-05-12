@@ -7702,7 +7702,7 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
           const dbResult = await pool.query(
             `SELECT dr.store, dr.date, dr.dianping_rating, dr.new_wechat_members, dr.wechat_month_total, dr.operational_anomaly_note
              FROM daily_reports dr
-             INNER JOIN (SELECT * FROM unnest($1::text[], $2::text[]) AS pairs(store, ymd))
+             INNER JOIN (SELECT * FROM unnest($1::text[], $2::text[]) AS t(store, ymd)) pairs
                ON TRIM(dr.store) = TRIM(pairs.store) AND dr.date = pairs.ymd::date`,
             [pairStores, pairDates]
           );
@@ -10634,7 +10634,8 @@ app.get('/api/reports/payroll', authRequired, async (req, res) => {
     const store = role === 'store_manager' ? myStore : storeQ;
 
     const start = `${month}-01`;
-    const end = `${month}-31`;
+    const [yr, mo] = month.split('-').map(Number);
+    const end = `${month}-${String(new Date(yr, mo, 0).getDate()).padStart(2, '0')}`;
     const pointStoreByUser = new Map();
     const pointSubsidyByUserStore = new Map();
     const pointRecords = Array.isArray(state0?.pointRecords) ? state0.pointRecords : [];
