@@ -14045,23 +14045,23 @@
                                    <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);">🧩 模板资产库</div>
                                    <button onclick="resetTemplateForm()" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.6);border:1px solid rgba(255,255,255,0.1);cursor:pointer;font-size:11px;">新增模板</button>
                                  </div>
-                                 <div style="display:flex;flex-direction:column;gap:6px;">
-                                   <input id="poster-template-key-input" placeholder="模板key（英文唯一标识）" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
-                                   <input id="poster-template-name-input" placeholder="模板名称" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
-                                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                                     <input id="poster-template-category-input" placeholder="分类（拉新/召回/节日等）" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
-                                     <input id="poster-template-channel-input" placeholder="渠道（小红书/美团/朋友圈）" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
-                                   </div>
-                                   <input id="poster-template-aspect-input" placeholder="比例，如 3:4" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
-                                   <textarea id="poster-template-style-input" placeholder="模板风格描述" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;height:60px;box-sizing:border-box;resize:vertical;"></textarea>
-                                   <textarea id="poster-template-prompt-notes-input" placeholder="Image2 提示词附加约束" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;height:60px;box-sizing:border-box;resize:vertical;"></textarea>
-                                   <div style="display:flex;gap:6px;align-items:center;">
-                                     <input id="poster-template-image-url" placeholder="缩略图URL" readonly style="flex:1;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
-                                     <input type="file" id="poster-template-image-upload" accept="image/*" style="display:none;" onchange="uploadTemplateImage(event)">
-                                     <button onclick="document.getElementById('poster-template-image-upload').click()" style="padding:6px 10px;border-radius:6px;background:rgba(99,102,241,0.2);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);cursor:pointer;font-size:11px;white-space:nowrap;">上传</button>
-                                   </div>
-                                   <div id="poster-template-image-preview" style="display:none;"><img id="poster-template-image-preview-img" style="max-height:80px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);"></div>
-                                 </div>
+                                  <div style="display:flex;flex-direction:column;gap:6px;">
+                                    <input id="poster-template-key-input" placeholder="模板key（英文唯一标识，如 summer_sale）" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
+                                    <input id="poster-template-name-input" placeholder="模板名称" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                                      <select id="poster-template-category-input" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;"><option value="">选择分类</option></select>
+                                      <select id="poster-template-channel-input" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;"><option value="">选择渠道</option></select>
+                                    </div>
+                                    <select id="poster-template-aspect-input" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;"><option value="">选择比例</option></select>
+                                    <select id="poster-template-style-input" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;"><option value="">选择模板风格</option></select>
+                                    <select id="poster-template-prompt-notes-input" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;"><option value="">选择提示词约束</option></select>
+                                    <div style="display:flex;gap:6px;align-items:center;">
+                                      <input id="poster-template-image-url" placeholder="缩略图URL" readonly style="flex:1;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
+                                      <input type="file" id="poster-template-image-upload" accept="image/*" style="display:none;" onchange="uploadTemplateImage(event)">
+                                      <button onclick="document.getElementById('poster-template-image-upload').click()" style="padding:6px 10px;border-radius:6px;background:rgba(99,102,241,0.2);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);cursor:pointer;font-size:11px;white-space:nowrap;">上传</button>
+                                    </div>
+                                    <div id="poster-template-image-preview" style="display:none;"><img id="poster-template-image-preview-img" style="max-height:80px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);"></div>
+                                  </div>
                                  <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
                                    <button onclick="savePosterTemplateMeta()" style="flex:1;padding:8px;border-radius:6px;background:#6366f1;color:#fff;border:none;cursor:pointer;font-size:12px;">保存模板</button>
                                    <button onclick="loadPosterTemplates()" style="padding:8px 12px;border-radius:6px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.6);border:1px solid rgba(255,255,255,0.1);cursor:pointer;font-size:12px;">刷新</button>
@@ -44924,6 +44924,7 @@ ${body}
                 initAutoCampaignId();
                 renderTagCheckboxes('poster-gen-purposes', __CONTENT_PURPOSE_TAGS, []);
                 renderTagCheckboxes('poster-gen-channels', __CONTENT_CHANNEL_TAGS, []);
+                populateTemplateFormSelects();
             } else if (tab === 'public') {
                 refreshPublicContentWorkspace();
             } else if (tab === 'pos') {
@@ -45870,9 +45871,14 @@ ${body}
                 }).join('') + '</tbody></table></div>';
         }
 
-        var __GROWTH_STORE_MAP = { '51866138': '马己仙广东小馆·荔枝木烧鹅', '64822111': '洪潮传统潮汕菜', 'store_test_001': '测试门店', 'store_test': '测试门店', 'store_test_002': '测试门店2', 'store_form_001': '表单测试门店', 'store_ui': 'UI测试门店', 'store_audit': '审核门店', 'test': '测试' };
+        var __GROWTH_STORE_MAP = { '51866138': '马己仙广东小馆·荔枝木烧鹅', '64822111': '洪潮传统潮汕菜' };
         var __CONTENT_PURPOSE_TAGS = ['品宣','促销','拉新','召回','节日','会员日','新品','限时特惠'];
         var __CONTENT_CHANNEL_TAGS = ['朋友圈','小红书','美团','大众点评','企微','门店','抖音','公众号'];
+        var __TEMPLATE_CATEGORY_OPTIONS = ['拉新','召回','节日','品宣','促销','会员日','新品','通用'];
+        var __TEMPLATE_CHANNEL_OPTIONS = ['朋友圈','小红书','美团','大众点评','企微','门店','抖音','公众号'];
+        var __TEMPLATE_ASPECT_OPTIONS = ['3:4','9:16','1:1','16:9','4:3','2:3'];
+        var __TEMPLATE_STYLE_OPTIONS = ['明亮暖色促销，橙红渐变','深灰暖金老客召回，氛围感','黑金高端会员，奢华克制','红金节日庆典，喜庆热烈','清新现代新品，简洁编辑感','奶油白底酒红配，杂志感','极简留白高级感','中式传统红金风'];
+        var __TEMPLATE_PROMPT_OPTIONS = ['保留大面积留白','产品主体占画面40%','文案位置给顶部与左侧','不要卡通风，保持真实质感','暖色灯光氛围','突出食物纹理细节','人物与食物互动','无特定约束'];
         function growthStoreName(id) { return __GROWTH_STORE_MAP[id] || id; }
         var __CHANNEL_MAP = { 'miniprogram': '微信小程序', 'wecom': '企微私聊', 'xiaohongshu': '小红书', 'douyin': '抖音', 'dianping': '大众点评', 'sms': '短信', 'email': '邮件' };
         function growthChannelLabel(ch) { return __CHANNEL_MAP[ch] || ch; }
@@ -46519,6 +46525,18 @@ ${body}
     function getCheckedValues(containerId) {
       var checks = document.querySelectorAll('#' + containerId + ' input[type=checkbox]:checked');
       return Array.from(checks).map(function(c) { return c.value; });
+    }
+    function populateTemplateFormSelects() {
+      function fillSelect(id, options) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.innerHTML = '<option value="">请选择</option>' + options.map(function(o) { return '<option value="' + escapeHtml(o) + '">' + escapeHtml(o) + '</option>'; }).join('');
+      }
+      fillSelect('poster-template-category-input', __TEMPLATE_CATEGORY_OPTIONS);
+      fillSelect('poster-template-channel-input', __TEMPLATE_CHANNEL_OPTIONS);
+      fillSelect('poster-template-aspect-input', __TEMPLATE_ASPECT_OPTIONS);
+      fillSelect('poster-template-style-input', __TEMPLATE_STYLE_OPTIONS);
+      fillSelect('poster-template-prompt-notes-input', __TEMPLATE_PROMPT_OPTIONS);
     }
 
     function resetTemplateForm() {

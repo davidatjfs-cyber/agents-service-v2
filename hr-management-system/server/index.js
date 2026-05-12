@@ -13081,7 +13081,7 @@ function calcEmployeeMonthlyActualRestFromDailyReports(state, employee, month) {
     }
 
     if (days != null && days > 0) {
-      byDay[repDate] = Number(days.toFixed(2));
+      byDay[repDate] = 1;
     }
   });
 
