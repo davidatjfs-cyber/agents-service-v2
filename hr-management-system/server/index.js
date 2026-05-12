@@ -10434,6 +10434,7 @@ app.get('/api/reports/leave-owed', authRequired, async (req, res) => {
         cumulativeLeaveDays: Number(bal?.cumulativeLeaveDays || 0),
         monthRemaining: Number(bal?.monthRemaining || 0),
         computedRemaining: bal.computedRemaining,
+        usedLeaveDetails: Array.isArray(bal?.usedLeaveDetails) ? bal.usedLeaveDetails : [],
         remaining,
         isOwed: remaining > 0,
         owedDays: remaining > 0 ? Number(remaining.toFixed(2)) : 0,
@@ -13378,10 +13379,12 @@ function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
 
   const restStats = calcEmployeeMonthlyActualRestFromDailyReports(state, emp, m);
   let usedLeave = Number(restStats?.total || 0);
+  const usedLeaveDetails = [];
 
   Object.entries(restStats?.byDay || {}).forEach(([day, val]) => {
     const n = Number(val || 0);
     if (!(Number.isFinite(n) && n > 0)) return;
+    usedLeaveDetails.push({ date: day, days: n, type: '休息', source: '日报休息' });
     weekDetails.forEach((wk) => {
       const [ws, we] = String(wk?.range || '').split('~');
       if (!ws || !we) return;
@@ -13390,7 +13393,8 @@ function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
     });
   });
 
-  // Approved leave is additive with rest days: all monthly leave + rest should deduct this month's quota.
+  // Approved leave: only count days NOT already covered by daily report rest (避免重复)
+  const restDateKeys = new Set(Object.keys(restStats?.byDay || {}));
   const leaveRecords = Array.isArray(state?.leaveRecords) ? state.leaveRecords : [];
   const uLower = uname.toLowerCase();
   leaveRecords.forEach((lr) => {
@@ -13403,15 +13407,29 @@ function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
 
     let days = 0;
     if (overlapDays > 0) {
+      // 逐日计算：跳过已在日报中标记为休息的日期
       const sameMonthRange = sd.startsWith(m) && ed.startsWith(m);
-      days = (sameMonthRange && rawDays != null && Number.isFinite(rawDays) && rawDays > 0)
-        ? rawDays
-        : overlapDays;
+      if (sameMonthRange && rawDays != null && Number.isFinite(rawDays) && rawDays > 0) {
+        // 计算休假天数中不重复的天数
+        let uniqueDays = 0;
+        const sdDate = new Date(sd + 'T00:00:00');
+        const edDate = new Date(ed + 'T00:00:00');
+        for (let dt = new Date(sdDate); dt <= edDate; dt.setDate(dt.getDate() + 1)) {
+          const ymd = dt.toISOString().slice(0, 10);
+          if (!restDateKeys.has(ymd)) uniqueDays += 1;
+        }
+        days = Math.min(rawDays, uniqueDays);
+      } else {
+        // 跨月休假：按重叠天数同样去重
+        days = overlapDays;
+      }
     } else if (rawDays != null && Number.isFinite(rawDays) && rawDays > 0 && sd.startsWith(m)) {
-      days = rawDays;
+      // 单日休假：检查是否已在日报休息中
+      if (!restDateKeys.has(sd)) days = rawDays;
     }
     if (!(Number.isFinite(days) && days > 0)) return;
     usedLeave += days;
+    usedLeaveDetails.push({ date: `${sd}~${ed}`, days, type: '休假', source: '已批休假' });
 
     if (overlapDays > 0) {
       weekDetails.forEach((wk) => {
@@ -13471,6 +13489,7 @@ function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
     overridden,
     overrideValue: overridden ? Number(overrideValue) : null,
     overrideMode: overridden ? overrideMode : null,
+    usedLeaveDetails,
     /** 人事已手动校准「截止上月累计假期」：月初池以人工为准，当月内不按公式滚动重算该池（次月1日系统锁数后可对照核验） */
     cumulativeLeaveManualLock: carryoverManualLock,
     weeklyDetails: weekDetails,

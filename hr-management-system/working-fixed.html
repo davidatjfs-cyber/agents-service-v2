@@ -41534,6 +41534,7 @@ ${badge}
                         const latestM = months[months.length - 1] || month;
                         const latestActualRest = Number(r?.monthly?.[latestM]?.actualRestDays || 0);
                         const latestHolidayDays = Number(r?.monthly?.[latestM]?.holidayDays || 0);
+                        const restDetails = r?.monthly?.[latestM]?.usedLeaveDetails || [];
                         const adj = r?.lastAdjustment || null;
                         const adjText = adj
                             ? `${escapeHtml(String(adj?.adjustedBy || '-'))} · ${escapeHtml(String(adj?.adjustedAt || '').slice(0, 16).replace('T', ' '))}<br><span style="opacity:0.85">${escapeHtml(String(adj?.note || ''))}</span>`
@@ -41564,6 +41565,15 @@ ${badge}
                                     ${monthCells}
                                     <div class="rep-pay-cell"><span class="k">当月实际休息</span><span class="v">${fmt(latestActualRest, 2)}</span></div>
                                     <div class="rep-pay-cell"><span class="k">当月假期天数</span><span class="v">${fmt(latestHolidayDays, 2)}</span></div>
+                                    <div style="grid-column:1/-1;margin-top:8px;border-top:1px solid rgba(255,255,255,0.06);padding-top:8px;">
+                                        <div style="font-size:11px;color:rgba(200,215,230,0.6);margin-bottom:6px;">明细</div>
+                                        ${restDetails.length ? restDetails.map(function(d) {
+                                            return '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;color:rgba(200,215,230,0.8);">'
+                                                + '<span>' + escapeHtml(d.type) + ' · ' + escapeHtml(d.date || '') + '</span>'
+                                                + '<span>' + (d.days || 0) + '天</span>'
+                                                + '</div>';
+                                        }).join('') : '<div style="font-size:11px;color:rgba(200,215,230,0.4);">暂无明细</div>'}
+                                    </div>
                                     <div class="rep-pay-cell rep-pay-cell--warn" style="grid-column:1/-1;"><span class="k">累计假期（首页同口径）</span><span class="v">${fmt(r?.cumulativeLeaveDays || 0, 2)}</span></div>
                                     <div class="rep-pay-cell" style="grid-column:1/-1;"><span class="k">最近调整</span><span class="v" style="font-size:12px;font-weight:600;line-height:1.45;">${adjText}</span></div>
                                 </div>
