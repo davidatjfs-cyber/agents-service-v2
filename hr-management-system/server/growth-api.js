@@ -194,38 +194,13 @@ export async function ensureGrowthTables(pool) {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_growth_actions_status ON growth_actions (status, created_at DESC)`);
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS marketing_case_library (
-      id BIGSERIAL PRIMARY KEY,
-      case_key TEXT UNIQUE,
-      store_id TEXT,
-      campaign_id TEXT,
-      title TEXT NOT NULL,
-      objective TEXT,
-      channel TEXT,
-      audience TEXT,
-      offer TEXT,
-      copy_text TEXT,
-      poster_url TEXT,
-      metrics JSONB DEFAULT '{}'::jsonb,
-      conclusion TEXT,
-      reusable BOOLEAN DEFAULT FALSE,
-      score INTEGER DEFAULT 0,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_marketing_case_store_score ON marketing_case_library (store_id, score DESC, created_at DESC)`);
-
-  await pool.query(`
     CREATE TABLE IF NOT EXISTS store_marketing_profiles (
       id BIGSERIAL PRIMARY KEY,
       store_id TEXT UNIQUE NOT NULL,
       brand TEXT,
       avg_ticket_fen INTEGER DEFAULT 0,
       primary_audience TEXT,
-      signature_dishes JSONB DEFAULT '[]'::jsonb,
       peak_hours JSONB DEFAULT '[]'::jsonb,
-      gross_margin_floor NUMERIC,
       suitable_offers JSONB DEFAULT '[]'::jsonb,
       unsuitable_offers JSONB DEFAULT '[]'::jsonb,
       best_campaigns JSONB DEFAULT '[]'::jsonb,
@@ -319,24 +294,6 @@ export async function ensureGrowthTables(pool) {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_store_marketing_constraints_active ON store_marketing_constraints (active, updated_at DESC)`);
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS growth_strategy_explanations (
-      id BIGSERIAL PRIMARY KEY,
-      strategy_key TEXT NOT NULL,
-      store_id TEXT,
-      customer_segment TEXT,
-      why_this_audience TEXT,
-      why_now TEXT,
-      why_this_action TEXT,
-      expected_result TEXT,
-      historical_reference TEXT,
-      risk_notes TEXT,
-      evidence JSONB DEFAULT '{}'::jsonb,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_growth_strategy_explanations_key ON growth_strategy_explanations (strategy_key, created_at DESC)`);
-
-  await pool.query(`
     CREATE TABLE IF NOT EXISTS growth_execution_logs (
       id BIGSERIAL PRIMARY KEY,
       action_key TEXT,
@@ -354,6 +311,45 @@ export async function ensureGrowthTables(pool) {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_growth_execution_logs_action ON growth_execution_logs (action_key, created_at DESC)`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS growth_touch_rules (
+      id BIGSERIAL PRIMARY KEY,
+      rule_key TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      enabled BOOLEAN DEFAULT TRUE,
+      priority INTEGER DEFAULT 100,
+      auto_execute BOOLEAN DEFAULT TRUE,
+      criteria JSONB DEFAULT '{}'::jsonb,
+      action_type TEXT NOT NULL DEFAULT 'send_message',
+      action_payload JSONB DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_growth_touch_rules_enabled ON growth_touch_rules (enabled, priority ASC, updated_at DESC)`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS growth_delivery_logs (
+      id BIGSERIAL PRIMARY KEY,
+      delivery_key TEXT UNIQUE,
+      action_key TEXT,
+      rule_key TEXT,
+      customer_id BIGINT,
+      store_id TEXT,
+      channel TEXT NOT NULL,
+      external_userid TEXT,
+      provider_msg_id TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      payload JSONB DEFAULT '{}'::jsonb,
+      result JSONB DEFAULT '{}'::jsonb,
+      error_message TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_growth_delivery_logs_action ON growth_delivery_logs (action_key, created_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_growth_delivery_logs_msg ON growth_delivery_logs (provider_msg_id, created_at DESC)`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS public_channels (
@@ -426,16 +422,6 @@ export async function ensureGrowthTables(pool) {
   `);
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS brand_voice_samples (
-      brand TEXT PRIMARY KEY,
-      samples JSONB NOT NULL DEFAULT '[]'::jsonb,
-      detected_style JSONB NOT NULL DEFAULT '[]'::jsonb,
-      updated_at TIMESTAMPTZ DEFAULT NOW(),
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-
-  await pool.query(`
     CREATE TABLE IF NOT EXISTS generated_posters (
       id BIGSERIAL PRIMARY KEY,
       poster_key TEXT UNIQUE,
@@ -453,6 +439,97 @@ export async function ensureGrowthTables(pool) {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+
+  const defaultTouchRules = [
+    {
+      rule_key: 'high_risk_churn_voucher',
+      name: '高危流失自动回流券',
+      priority: 10,
+      auto_execute: true,
+      criteria: { min_days_since_last_visit: 21, max_days_since_last_visit: 45, min_visit_count: 5 },
+      action_type: 'send_voucher',
+      action_payload: {
+        channel: 'wecom',
+        coupon_value_fen: 3000,
+        valid_days: 7,
+        coupon_name: '高危回流券',
+        title_template: '高危流失回流券',
+        content_template: '{customer_name}，你已有{days_since_last_visit}天未到店，系统已为你发放一张{coupon_value_text}高危回流券，7天内可用。'
+      }
+    },
+    {
+      rule_key: 'lost_customer_miss_you',
+      name: '已流失客户想念你触达',
+      priority: 20,
+      auto_execute: true,
+      criteria: { min_days_since_last_visit: 45, min_visit_count: 3 },
+      action_type: 'send_voucher',
+      action_payload: {
+        channel: 'wecom',
+        coupon_value_fen: 1200,
+        valid_days: 7,
+        coupon_name: '想念你小券',
+        title_template: '我们想念你',
+        content_template: '{customer_name}，我们想念你。已有{days_since_last_visit}天没见啦，这张{coupon_value_text}小券为你保留7天，欢迎回来。'
+      }
+    },
+    {
+      rule_key: 'loyal_birthday_month',
+      name: '忠诚客户生日月礼遇',
+      priority: 30,
+      auto_execute: true,
+      criteria: { min_visit_count: 3, max_visit_interval_days: 10 },
+      action_type: 'send_voucher',
+      action_payload: {
+        channel: 'wecom',
+        coupon_value_fen: 1800,
+        valid_days: 7,
+        coupon_name: '生日月礼券',
+        title_template: '忠诚客户生日月礼遇',
+        content_template: '{customer_name}，感谢一直以来的喜爱，生日月为你准备了一张{coupon_value_text}专享礼券，7天内到店可用。'
+      }
+    },
+    {
+      rule_key: 'silent_new_customer_activate',
+      name: '新客未激活推荐菜触达',
+      priority: 40,
+      auto_execute: true,
+      criteria: { min_days_since_last_visit: 14, exact_visit_count: 1 },
+      action_type: 'send_message',
+      action_payload: {
+        channel: 'wecom',
+        title_template: '新客推荐菜触达',
+        content_template: '{customer_name}，上次来店后已经{days_since_last_visit}天了，推荐你下次试试 {favorite_dishes_text}。'
+      }
+    }
+  ];
+  for (const rule of defaultTouchRules) {
+    await pool.query(
+      `INSERT INTO growth_touch_rules (rule_key, name, enabled, priority, auto_execute, criteria, action_type, action_payload)
+       VALUES ($1,$2,TRUE,$3,$4,$5::jsonb,$6,$7::jsonb)
+       ON CONFLICT (rule_key) DO UPDATE SET
+         name = EXCLUDED.name,
+         priority = EXCLUDED.priority,
+         auto_execute = EXCLUDED.auto_execute,
+         criteria = EXCLUDED.criteria,
+         action_type = EXCLUDED.action_type,
+         action_payload = EXCLUDED.action_payload,
+         updated_at = NOW()`,
+      [
+        rule.rule_key,
+        rule.name,
+        rule.priority,
+        rule.auto_execute !== false,
+        JSON.stringify(rule.criteria || {}),
+        rule.action_type,
+        JSON.stringify(rule.action_payload || {})
+      ]
+    );
+  }
+  await pool.query(
+    `DELETE FROM growth_touch_rules WHERE rule_key = ANY($1::text[])`,
+    [['churn_21_return_coupon', 'churn_45_return_coupon', 'birthday_month_touch', 'high_frequency_upgrade']]
+  );
 }
 
 async function upsertCustomer(pool, payload) {
@@ -695,6 +772,446 @@ async function appendExecutionLog(pool, payload) {
   );
 }
 
+async function getStateValue(pool, key) {
+  const r = await pool.query(`SELECT data FROM hrms_state WHERE key = $1 LIMIT 1`, [key]);
+  return r.rows?.[0]?.data || null;
+}
+
+function fmtYmd(value) {
+  const d = value ? new Date(value) : new Date();
+  if (Number.isNaN(d.getTime())) return 'unknown';
+  return d.toISOString().slice(0, 10);
+}
+
+function fmtYm(value) {
+  const d = value ? new Date(value) : new Date();
+  if (Number.isNaN(d.getTime())) return 'unknown';
+  return d.toISOString().slice(0, 7);
+}
+
+function deriveBirthdayMonth(meta = {}) {
+  const monthRaw = cleanText(meta?.birthday_month, 2);
+  if (/^(0?[1-9]|1[0-2])$/.test(monthRaw)) return monthRaw.padStart(2, '0');
+  const birthday = cleanText(meta?.birthday, 32);
+  const m = birthday.match(/^(?:\d{4}[-/])?(\d{1,2})[-/](\d{1,2})$/);
+  if (!m) return '';
+  return String(m[1]).padStart(2, '0');
+}
+
+function interpolateTemplate(template, context) {
+  return String(template || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (_, key) => {
+    const value = context[key];
+    return value == null ? '' : String(value);
+  });
+}
+
+async function insertGrowthEvent(pool, payload) {
+  const metadata = payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {};
+  await pool.query(
+    `INSERT INTO growth_events (
+       event_type, customer_id, phone, openid, external_userid, store_id, campaign_id, channel,
+       coupon_id, order_id, amount_fen, idempotency_key, metadata, occurred_at
+     ) VALUES ($1,$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),NULLIF($6,''),NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),NULLIF($10,''),$11,NULLIF($12,''),$13::jsonb,$14)
+     ON CONFLICT (idempotency_key) DO NOTHING`,
+    [
+      cleanText(payload.event_type, 80),
+      payload.customer_id ? Number(payload.customer_id) : null,
+      cleanPhone(payload.phone),
+      cleanText(payload.openid, 128),
+      cleanText(payload.external_userid, 128),
+      cleanText(payload.store_id, 128),
+      cleanText(payload.campaign_id, 128),
+      cleanText(payload.channel, 80),
+      cleanText(payload.coupon_id, 128),
+      cleanText(payload.order_id, 128),
+      Math.max(0, Math.floor(Number(payload.amount_fen) || 0)),
+      cleanText(payload.idempotency_key, 255),
+      JSON.stringify(metadata),
+      parseOccurredAt(payload.occurred_at)
+    ]
+  );
+}
+
+async function upsertDeliveryLog(pool, payload) {
+  const r = await pool.query(
+    `INSERT INTO growth_delivery_logs (
+       delivery_key, action_key, rule_key, customer_id, store_id, channel,
+       external_userid, provider_msg_id, status, payload, result, error_message, updated_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12,NOW())
+     ON CONFLICT (delivery_key) DO UPDATE SET
+       provider_msg_id = COALESCE(NULLIF(EXCLUDED.provider_msg_id,''), growth_delivery_logs.provider_msg_id),
+       status = EXCLUDED.status,
+       result = EXCLUDED.result,
+       error_message = EXCLUDED.error_message,
+       updated_at = NOW()
+     RETURNING *`,
+    [
+      cleanText(payload.delivery_key, 255),
+      cleanText(payload.action_key, 255),
+      cleanText(payload.rule_key, 128),
+      payload.customer_id ? Number(payload.customer_id) : null,
+      cleanText(payload.store_id, 128),
+      cleanText(payload.channel || 'wecom', 40),
+      cleanText(payload.external_userid, 128),
+      cleanText(payload.provider_msg_id, 255),
+      cleanText(payload.status || 'pending', 40),
+      JSON.stringify(payload.payload || {}),
+      JSON.stringify(payload.result || {}),
+      cleanText(payload.error_message, 2000)
+    ]
+  );
+  return r.rows[0] || null;
+}
+
+let __growthWecomTokenCache = { token: '', expiresAt: 0 };
+
+async function getWecomConfig(pool) {
+  const config = await getStateValue(pool, 'growth_wecom_config');
+  return config && typeof config === 'object' ? config : null;
+}
+
+async function getWecomAccessToken(pool) {
+  const now = Date.now();
+  if (__growthWecomTokenCache.token && __growthWecomTokenCache.expiresAt > now + 10000) return __growthWecomTokenCache.token;
+  const config = await getWecomConfig(pool);
+  const corpId = cleanText(config?.corp_id, 200);
+  const corpSecret = cleanText(config?.corp_secret, 500);
+  if (!corpId || !corpSecret) throw new Error('missing_wecom_config');
+  const url = `https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=${encodeURIComponent(corpId)}&corpsecret=${encodeURIComponent(corpSecret)}`;
+  const resp = await fetch(url, { method: 'GET' });
+  const data = await resp.json();
+  if (!resp.ok || Number(data?.errcode) !== 0 || !data?.access_token) throw new Error(data?.errmsg || 'wecom_token_failed');
+  __growthWecomTokenCache = {
+    token: cleanText(data.access_token, 500),
+    expiresAt: now + Math.max(300, Number(data.expires_in) || 7200) * 1000
+  };
+  return __growthWecomTokenCache.token;
+}
+
+async function sendWecomExternalMessage(pool, payload) {
+  const config = await getWecomConfig(pool);
+  const senderUserId = cleanText(payload.sender_userid || config?.sender_userid, 128);
+  const externalUserId = cleanText(payload.external_userid, 128);
+  const content = cleanText(payload.content, 1800);
+  if (!senderUserId) throw new Error('missing_wecom_sender_userid');
+  if (!externalUserId) throw new Error('missing_external_userid');
+  if (!content) throw new Error('missing_message_content');
+  const accessToken = await getWecomAccessToken(pool);
+  const resp = await fetch(`https://qyapi.weixin.qq.com/cgi-bin/externalcontact/add_msg_template?access_token=${encodeURIComponent(accessToken)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_type: 'single',
+      external_userid: [externalUserId],
+      sender: senderUserId,
+      allow_select: false,
+      text: { content }
+    })
+  });
+  const data = await resp.json();
+  if (!resp.ok || Number(data?.errcode) !== 0) throw new Error(data?.errmsg || 'wecom_send_failed');
+  return { provider_msg_id: cleanText(data?.msgid || data?.msgid_list?.[0], 255), raw: data };
+}
+
+function buildActionMessage(actionRow, payload) {
+  const couponValueFen = Math.max(0, Math.floor(Number(payload.coupon_value_fen || payload.value_fen) || 0));
+  const favoriteDishesText = cleanText(payload.favorite_dishes_text || '', 200) || '店内推荐菜';
+  const context = {
+    customer_name: cleanText(payload.customer_name || '您好', 80) || '您好',
+    days_since_last_visit: Math.max(0, Math.floor(Number(payload.days_since_last_visit) || 0)),
+    visit_count: Math.max(0, Math.floor(Number(payload.visit_count) || 0)),
+    coupon_value_text: couponValueFen > 0 ? `¥${(couponValueFen / 100).toFixed(0)}` : '',
+    valid_days: Math.max(0, Math.floor(Number(payload.valid_days) || 0)),
+    favorite_dishes_text: favoriteDishesText
+  };
+  const template = cleanText(payload.content_template || payload.message_template, 1800);
+  if (template) return interpolateTemplate(template, context);
+  return cleanText(actionRow.detail || actionRow.title || '', 1800);
+}
+
+async function executeGrowthActionRecord(pool, before, operator, extraPayload = {}, reason = '') {
+  const basePayload = before.payload && typeof before.payload === 'object' ? before.payload : {};
+  const payload = Object.assign({}, basePayload, extraPayload || {});
+  const storeId = cleanText(before.store_id || payload.store_id, 128);
+  const campaignId = cleanText(before.campaign_id || payload.campaign_id, 128);
+  const actionType = cleanText(before.action_type, 80);
+  const actionKey = cleanText(before.action_key, 255);
+  let executionResults = { action_type: actionType, real_executions: [] };
+
+  try {
+    if (actionType === 'send_voucher' || actionType === 'campaign_activate') {
+      const title = cleanText(before.title, 500);
+      const planId = `exec_plan_${Date.now()}`;
+      const channel = cleanText(payload.channel || 'miniprogram', 80);
+      const planResult = await pool.query(
+        `INSERT INTO growth_campaign_plans (plan_id, store_id, campaign_id, title, channel, status, planned_start, planned_end, created_by)
+         VALUES ($1,$2,$3,$4,$5,'active',NOW(),NOW() + ($6::int || ' days')::interval,$7)
+         ON CONFLICT (plan_id) DO UPDATE SET status='active', updated_at=NOW()
+         RETURNING plan_id, status`,
+        [planId, storeId, campaignId || `camp_${Date.now()}`, title, channel, Math.max(1, Math.floor(Number(payload.valid_days) || 7)), operator.username]
+      );
+      executionResults.real_executions.push({ type: 'campaign_plan', plan_id: planResult.rows[0]?.plan_id, status: 'active' });
+      if (campaignId) {
+        await pool.query(
+          `INSERT INTO growth_campaigns (campaign_id, name, channel, store_id, status)
+           VALUES ($1,$2,$3,$4,'active')
+           ON CONFLICT (campaign_id) DO UPDATE SET status='active', updated_at=NOW()`,
+          [campaignId, title, channel, storeId]
+        );
+        executionResults.real_executions.push({ type: 'campaign', campaign_id: campaignId, status: 'active' });
+      }
+      const couponId = payload.coupon_id ? cleanText(payload.coupon_id, 128) : `exec_coupon_${Date.now()}`;
+      await pool.query(
+        `INSERT INTO growth_coupons (coupon_id, name, type, value_fen, valid_days, usage_rule, store_id, is_active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)
+         ON CONFLICT (coupon_id) DO UPDATE SET name=EXCLUDED.name, value_fen=EXCLUDED.value_fen, valid_days=EXCLUDED.valid_days, usage_rule=EXCLUDED.usage_rule, is_active=TRUE, updated_at=NOW()`,
+        [
+          couponId,
+          cleanText(payload.coupon_name || before.title, 300),
+          cleanText(payload.coupon_type || 'cash', 40),
+          Math.max(0, Math.floor(Number(payload.coupon_value_fen || payload.value_fen) || 1000)),
+          Math.max(1, Math.floor(Number(payload.valid_days) || 7)),
+          cleanText(payload.usage_rule || '规则引擎自动触达', 1000),
+          storeId
+        ]
+      );
+      payload.coupon_id = couponId;
+      executionResults.real_executions.push({ type: 'coupon', coupon_id: couponId });
+    } else if (actionType === 'create_content' || actionType === 'promo_task') {
+      const itemId = `exec_content_${Date.now()}`;
+      const channel = cleanText(payload.channel || 'miniprogram', 80);
+      const contentResult = await pool.query(
+        `INSERT INTO growth_content_calendar (item_id, store_id, channel, publish_date, title, content_brief, copy_text, status)
+         VALUES ($1,$2,$3,CURRENT_DATE,$4,$5,$6,'planned')
+         RETURNING item_id`,
+        [itemId, storeId, channel, cleanText(before.title, 500), cleanText(payload.content_brief || payload.detail, 2000), cleanText(before.detail, 4000)]
+      );
+      executionResults.real_executions.push({ type: 'content_calendar', item_id: contentResult.rows[0]?.item_id });
+    } else if (actionType === 'generate_poster') {
+      const posterKey = `exec_poster_${Date.now()}`;
+      const posterResult = await pool.query(
+        `INSERT INTO generated_posters (poster_key, campaign_id, store_id, title, status)
+         VALUES ($1,$2,$3,$4,'generated')
+         RETURNING poster_key`,
+        [posterKey, campaignId, storeId, cleanText(before.title, 500)]
+      );
+      executionResults.real_executions.push({ type: 'poster', poster_key: posterResult.rows[0]?.poster_key });
+    } else {
+      executionResults.real_executions.push({ type: 'marked_executed', note: '直接执行触达动作' });
+    }
+
+    if (cleanText(payload.channel || '', 80) === 'wecom' && cleanText(payload.external_userid, 128)) {
+      const deliveryKey = `${actionKey}:${cleanText(payload.external_userid, 128)}:${Date.now()}`;
+      const messageContent = buildActionMessage(before, payload);
+      try {
+        const sent = await sendWecomExternalMessage(pool, {
+          external_userid: cleanText(payload.external_userid, 128),
+          sender_userid: cleanText(payload.sender_userid, 128),
+          content: messageContent
+        });
+        payload.delivery_key = deliveryKey;
+        payload.provider_msg_id = sent.provider_msg_id;
+        await upsertDeliveryLog(pool, {
+          delivery_key: deliveryKey,
+          action_key: actionKey,
+          rule_key: cleanText(payload.rule_key, 128),
+          customer_id: payload.customer_id,
+          store_id: storeId,
+          channel: 'wecom',
+          external_userid: cleanText(payload.external_userid, 128),
+          provider_msg_id: sent.provider_msg_id,
+          status: 'sent',
+          payload: { content: messageContent },
+          result: sent.raw || {}
+        });
+        await insertGrowthEvent(pool, {
+          event_type: 'marketing_triggered',
+          customer_id: payload.customer_id,
+          phone: payload.phone,
+          external_userid: payload.external_userid,
+          store_id: storeId,
+          campaign_id: campaignId,
+          channel: 'wecom',
+          coupon_id: payload.coupon_id,
+          idempotency_key: `marketing_triggered:${actionKey}:${sent.provider_msg_id || deliveryKey}`,
+          metadata: {
+            action_key: actionKey,
+            rule_key: cleanText(payload.rule_key, 128),
+            delivery_key: deliveryKey,
+            provider_msg_id: sent.provider_msg_id,
+            content: messageContent
+          }
+        });
+        executionResults.real_executions.push({ type: 'wecom_message', provider_msg_id: sent.provider_msg_id || deliveryKey, status: 'sent' });
+      } catch (deliveryErr) {
+        executionResults.delivery_error = deliveryErr?.message || 'wecom_send_failed';
+        await upsertDeliveryLog(pool, {
+          delivery_key: deliveryKey,
+          action_key: actionKey,
+          rule_key: cleanText(payload.rule_key, 128),
+          customer_id: payload.customer_id,
+          store_id: storeId,
+          channel: 'wecom',
+          external_userid: cleanText(payload.external_userid, 128),
+          status: 'failed',
+          payload: { content: messageContent },
+          result: {},
+          error_message: deliveryErr?.message || 'wecom_send_failed'
+        });
+      }
+    }
+  } catch (execErr) {
+    executionResults.error = execErr?.message;
+  }
+
+  const result = await pool.query(
+    `UPDATE growth_actions
+     SET status = 'executed',
+         payload = CASE WHEN $2::jsonb = '{}'::jsonb THEN payload ELSE COALESCE(payload,'{}'::jsonb) || $2::jsonb END,
+         updated_at = NOW(),
+         executed_at = NOW()
+     WHERE action_key = $1
+     RETURNING *`,
+    [actionKey, JSON.stringify(Object.assign({}, payload, executionResults))]
+  );
+  await appendExecutionLog(pool, {
+    action_key: actionKey,
+    strategy_key: cleanText(basePayload.strategy_key || payload.strategy_key || '', 255),
+    store_id: storeId,
+    action_type: actionType,
+    decision: 'executed',
+    operator_username: operator.username,
+    operator_role: operator.role,
+    before_payload: basePayload,
+    after_payload: result.rows[0]?.payload || {},
+    decision_reason: cleanText(reason, 2000),
+    result_summary: `真实执行: ${executionResults.real_executions.map((e) => `${e.type}=${Object.values(e).slice(1).join(',')}`).join('; ') || 'none'}`
+  });
+  return { action: result.rows[0], execution: executionResults };
+}
+
+function buildRuleActionKey(ruleKey, customerId, periodKey) {
+  return `rule:${cleanText(ruleKey, 128)}:${Number(customerId) || 0}:${cleanText(periodKey, 40)}`;
+}
+
+async function createChurnAlert(pool, rule, row) {
+  const days = Math.max(0, Math.floor(Number(row.days_since_last_visit) || 0));
+  const alertKey = `churn:${cleanText(rule.rule_key, 128)}:${Number(row.customer_id) || 0}:${fmtYmd(row.last_visit_at)}`;
+  await pool.query(
+    `INSERT INTO growth_alerts (alert_key, alert_type, severity, store_id, title, message, suggested_action, metrics)
+     VALUES ($1,'churn','medium',$2,$3,$4,$5,$6::jsonb)
+     ON CONFLICT (alert_key) DO UPDATE SET message = EXCLUDED.message, metrics = EXCLUDED.metrics, status = 'open', updated_at = NOW()`,
+    [
+      alertKey,
+      cleanText(row.store_id, 128),
+      `${days}天未到店流失预警`,
+      `${cleanText(row.customer_name || row.phone || `客户#${row.customer_id}`, 120)} 已${days}天未到店，系统已自动触发回流触达。`,
+      '已由规则引擎自动发送回流触达',
+      JSON.stringify({ customer_id: row.customer_id, days_since_last_visit: days, rule_key: rule.rule_key })
+    ]
+  );
+}
+
+async function loadRuleCandidates(pool, rule) {
+  if (rule.rule_key === 'loyal_birthday_month') {
+    const r = await pool.query(
+      `SELECT cp.customer_id, cp.store_id, cp.phone, cp.pos_order_count, cp.pos_last_order_at, cp.visit_interval_days,
+              gc.meta AS customer_meta, gc.last_seen_at, gc.external_userid AS customer_external_userid,
+              COALESCE(ww.external_userid, gc.external_userid) AS external_userid,
+              COALESCE(NULLIF(ww.name,''), NULLIF(gc.meta->>'name',''), cp.phone, '') AS customer_name
+       FROM growth_customer_profiles cp
+       JOIN growth_customers gc ON gc.id = cp.customer_id
+       LEFT JOIN wechat_work_customers ww ON ww.bind_customer_id = cp.customer_id
+       WHERE COALESCE(ww.external_userid, gc.external_userid) IS NOT NULL
+       LIMIT 500`
+    );
+    const currentMonth = fmtYm(new Date()).slice(5, 7);
+    return r.rows.filter((row) => {
+      const visits = Math.max(0, Math.floor(Number(row.pos_order_count) || 0));
+      const interval = Number(row.visit_interval_days);
+      return deriveBirthdayMonth(row.customer_meta || {}) === currentMonth && visits >= 3 && Number.isFinite(interval) && interval <= 10;
+    });
+  }
+  const r = await pool.query(
+    `SELECT cp.customer_id, cp.store_id, cp.phone, cp.price_sensitivity, cp.response_to_discount,
+            cp.pos_order_count, cp.pos_total_spend, cp.pos_last_order_at, cp.visit_interval_days, cp.favorite_dishes, gc.last_seen_at,
+            COALESCE(cp.pos_last_order_at::date, gc.last_seen_at::date) AS last_visit_at,
+            (CURRENT_DATE - COALESCE(cp.pos_last_order_at::date, gc.last_seen_at::date))::int AS days_since_last_visit,
+            gc.meta AS customer_meta,
+            COALESCE(ww.external_userid, gc.external_userid) AS external_userid,
+            COALESCE(NULLIF(ww.name,''), NULLIF(gc.meta->>'name',''), cp.phone, '') AS customer_name
+     FROM growth_customer_profiles cp
+     JOIN growth_customers gc ON gc.id = cp.customer_id
+     LEFT JOIN wechat_work_customers ww ON ww.bind_customer_id = cp.customer_id
+     WHERE COALESCE(ww.external_userid, gc.external_userid) IS NOT NULL
+     LIMIT 1000`
+  );
+  return r.rows.filter((row) => {
+    const days = Math.max(0, Math.floor(Number(row.days_since_last_visit) || 0));
+    const visits = Math.max(0, Math.floor(Number(row.pos_order_count) || 0));
+    const interval = Number(row.visit_interval_days);
+    if (rule.rule_key === 'high_risk_churn_voucher') return visits >= 5 && days >= 21 && days <= 45;
+    if (rule.rule_key === 'lost_customer_miss_you') return visits >= 3 && days > 45;
+    if (rule.rule_key === 'silent_new_customer_activate') return visits === 1 && days >= 14;
+    return false;
+  });
+}
+
+function buildRulePeriodKey(ruleKey, row) {
+  if (ruleKey === 'loyal_birthday_month') return fmtYm(new Date());
+  return fmtYmd(row.last_visit_at || row.pos_last_order_at || row.last_seen_at);
+}
+
+async function runTouchRuleEngine(pool, options = {}) {
+  const limitPerRule = Math.min(Math.max(Number(options.limit_per_rule) || 100, 1), 500);
+  const rulesResult = await pool.query(`SELECT * FROM growth_touch_rules WHERE enabled = TRUE ORDER BY priority ASC, rule_key ASC LIMIT 20`);
+  const createdActions = [];
+  for (const rule of (rulesResult.rows || [])) {
+    const candidates = (await loadRuleCandidates(pool, rule)).slice(0, limitPerRule);
+    for (const row of candidates) {
+      const actionPayload = Object.assign({}, rule.action_payload || {}, {
+        rule_key: rule.rule_key,
+        customer_id: row.customer_id,
+        store_id: row.store_id,
+        phone: row.phone,
+        external_userid: row.external_userid,
+        customer_name: row.customer_name || row.phone || `客户#${row.customer_id}`,
+        days_since_last_visit: row.days_since_last_visit,
+        visit_count: row.pos_order_count,
+        visit_interval_days: row.visit_interval_days,
+        price_sensitivity: row.price_sensitivity,
+        response_to_discount: row.response_to_discount,
+        pos_total_spend: row.pos_total_spend,
+        favorite_dishes_text: Array.isArray(row.favorite_dishes) && row.favorite_dishes.length ? row.favorite_dishes.slice(0, 3).join('、') : '店内推荐菜',
+        strategy_key: `rule_engine:${rule.rule_key}`
+      });
+      const actionKey = buildRuleActionKey(rule.rule_key, row.customer_id, buildRulePeriodKey(rule.rule_key, row));
+      const insert = await pool.query(
+        `INSERT INTO growth_actions (action_key, action_type, status, store_id, title, detail, payload, created_by)
+         VALUES ($1,$2,'proposed',NULLIF($3,''),$4,$5,$6::jsonb,'rule_engine')
+         ON CONFLICT (action_key) DO NOTHING
+         RETURNING *`,
+        [
+          actionKey,
+          cleanText(rule.action_type || 'send_message', 80),
+          cleanText(row.store_id, 128),
+          interpolateTemplate(cleanText(actionPayload.title_template || rule.name, 500), actionPayload),
+          interpolateTemplate(cleanText(actionPayload.content_template || rule.name, 2000), actionPayload),
+          JSON.stringify(actionPayload)
+        ]
+      );
+      if (!insert.rows.length) continue;
+      if (rule.rule_key === 'high_risk_churn_voucher') await createChurnAlert(pool, rule, row);
+      const actionRow = insert.rows[0];
+      if (rule.auto_execute !== false) {
+        await executeGrowthActionRecord(pool, actionRow, { username: 'rule_engine', role: 'system' }, {}, `规则引擎自动执行:${rule.rule_key}`);
+      }
+      createdActions.push(actionKey);
+    }
+  }
+  return { created: createdActions.length, action_keys: createdActions };
+}
+
 export function registerGrowthRoutes(app, pool) {
   function requireGrowthAuth(req, res) {
     const auth = authMiniProgramSync(req);
@@ -919,6 +1436,50 @@ export function registerGrowthRoutes(app, pool) {
     return res.json({ ok: true, alert: r.rows[0] });
   });
 
+  app.get('/api/growth/touch-rules', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const r = await pool.query(`SELECT * FROM growth_touch_rules ORDER BY priority ASC, rule_key ASC LIMIT 100`);
+    return res.json({ ok: true, rules: r.rows });
+  });
+
+  app.post('/api/growth/touch-rules', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const b = req.body || {};
+    const ruleKey = cleanText(b.rule_key, 128);
+    if (!ruleKey) return res.status(400).json({ ok: false, error: 'missing_rule_key' });
+    const r = await pool.query(
+      `INSERT INTO growth_touch_rules (rule_key, name, enabled, priority, auto_execute, criteria, action_type, action_payload)
+       VALUES ($1,$2,COALESCE($3,TRUE),$4,COALESCE($5,TRUE),$6::jsonb,$7,$8::jsonb)
+       ON CONFLICT (rule_key) DO UPDATE SET
+         name = EXCLUDED.name,
+         enabled = EXCLUDED.enabled,
+         priority = EXCLUDED.priority,
+         auto_execute = EXCLUDED.auto_execute,
+         criteria = EXCLUDED.criteria,
+         action_type = EXCLUDED.action_type,
+         action_payload = EXCLUDED.action_payload,
+         updated_at = NOW()
+       RETURNING *`,
+      [
+        ruleKey,
+        cleanText(b.name || ruleKey, 255),
+        b.enabled !== false,
+        Math.max(1, Math.floor(Number(b.priority) || 100)),
+        b.auto_execute !== false,
+        JSON.stringify(b.criteria || {}),
+        cleanText(b.action_type || 'send_message', 80),
+        JSON.stringify(b.action_payload || {})
+      ]
+    );
+    return res.json({ ok: true, rule: r.rows[0] });
+  });
+
+  app.post('/api/growth/rule-engine/run', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const result = await runTouchRuleEngine(pool, req.body || {});
+    return res.json({ ok: true, result });
+  });
+
   app.get('/api/growth/actions', async (req, res) => {
     if (!requireGrowthAuth(req, res)) return;
     const r = await pool.query(`SELECT * FROM growth_actions ORDER BY created_at DESC LIMIT 200`);
@@ -945,99 +1506,8 @@ export function registerGrowthRoutes(app, pool) {
     const current = await pool.query(`SELECT * FROM growth_actions WHERE action_key = $1 LIMIT 1`, [actionKey]);
     if (!current.rows.length) return res.status(404).json({ ok: false, error: 'action_not_found' });
     const before = current.rows[0];
-    const payload = before.payload || {};
-    const storeId = cleanText(before.store_id, 128);
-    const campaignId = cleanText(before.campaign_id || payload.campaign_id, 128);
-    const actionType = cleanText(before.action_type, 80);
-    let executionResults = { action_type: actionType, real_executions: [] };
-
-    // Real execution based on action type
-    try {
-      if (actionType === 'send_voucher' || actionType === 'campaign_activate') {
-        const title = cleanText(before.title, 500);
-        const planId = `exec_plan_${Date.now()}`;
-        const channel = cleanText(payload.channel || 'miniprogram', 80);
-        const planResult = await pool.query(
-          `INSERT INTO growth_campaign_plans (plan_id, store_id, campaign_id, title, channel, status, planned_start, created_by)
-           VALUES ($1,$2,$3,$4,$5,'active',NOW(),$6)
-           ON CONFLICT (plan_id) DO UPDATE SET status='active', updated_at=NOW()
-           RETURNING plan_id, status`,
-          [planId, storeId, campaignId || `camp_${Date.now()}`, title, channel, operator.username]
-        );
-        executionResults.real_executions.push({ type: 'campaign_plan', plan_id: planResult.rows[0]?.plan_id, status: 'active' });
-        // Also create/update growth_campaigns
-        if (campaignId) {
-          await pool.query(
-            `INSERT INTO growth_campaigns (campaign_id, name, channel, store_id, status)
-             VALUES ($1,$2,$3,$4,'active')
-             ON CONFLICT (campaign_id) DO UPDATE SET status='active', updated_at=NOW()`,
-            [campaignId, title, channel, storeId]
-          );
-          executionResults.real_executions.push({ type: 'campaign', campaign_id: campaignId, status: 'active' });
-        }
-        // If voucher_template_id in payload, create a coupon record
-        const vtid = cleanText(payload.voucher_template_id || payload.template_id, 128);
-        if (vtid) {
-          const couponId = `exec_coupon_${Date.now()}`;
-          await pool.query(
-            `INSERT INTO growth_coupons (coupon_id, name, type, value_fen, store_id, is_active)
-             VALUES ($1,$2,$3,$4,$5,TRUE)
-             ON CONFLICT (coupon_id) DO NOTHING`,
-            [couponId, cleanText(before.title, 300), 'cash', Math.floor(Number(payload.value_fen) || 1000), storeId]
-          );
-          executionResults.real_executions.push({ type: 'coupon', coupon_id: couponId });
-        }
-      } else if (actionType === 'create_content' || actionType === 'promo_task') {
-        const itemId = `exec_content_${Date.now()}`;
-        const channel = cleanText(payload.channel || 'miniprogram', 80);
-        const contentResult = await pool.query(
-          `INSERT INTO growth_content_calendar (item_id, store_id, channel, publish_date, title, content_brief, copy_text, status)
-           VALUES ($1,$2,$3,CURRENT_DATE,$4,$5,$6,'planned')
-           RETURNING item_id`,
-          [itemId, storeId, channel, cleanText(before.title, 500), cleanText(payload.content_brief || payload.detail, 2000), cleanText(before.detail, 4000)]
-        );
-        executionResults.real_executions.push({ type: 'content_calendar', item_id: contentResult.rows[0]?.item_id });
-      } else if (actionType === 'generate_poster') {
-        const posterKey = `exec_poster_${Date.now()}`;
-        const posterResult = await pool.query(
-          `INSERT INTO generated_posters (poster_key, campaign_id, store_id, title, status)
-           VALUES ($1,$2,$3,$4,'generated')
-           RETURNING poster_key`,
-          [posterKey, campaignId, storeId, cleanText(before.title, 500)]
-        );
-        executionResults.real_executions.push({ type: 'poster', poster_key: posterResult.rows[0]?.poster_key });
-      } else {
-        // Default: monitor-type action, just mark as executed
-        executionResults.real_executions.push({ type: 'marked_executed', note: '监控类动作-标记已执行' });
-      }
-    } catch (execErr) {
-      executionResults.error = execErr?.message;
-    }
-
-    const result = await pool.query(
-      `UPDATE growth_actions
-       SET status = 'executed',
-           payload = CASE WHEN $2::jsonb = '{}'::jsonb THEN payload ELSE COALESCE(payload,'{}'::jsonb) || $2::jsonb END,
-           updated_at = NOW(),
-           executed_at = NOW()
-       WHERE action_key = $1
-       RETURNING *`,
-      [actionKey, JSON.stringify(Object.assign({}, executionResults, req.body?.payload || {}))]
-    );
-    await appendExecutionLog(pool, {
-      action_key: actionKey,
-      strategy_key: cleanText(before.payload?.strategy_key || '', 255),
-      store_id: storeId,
-      action_type: actionType,
-      decision: 'executed',
-      operator_username: operator.username,
-      operator_role: operator.role,
-      before_payload: before.payload || {},
-      after_payload: result.rows[0]?.payload || {},
-      decision_reason: cleanText(req.body?.reason || '', 2000),
-      result_summary: `真实执行: ${executionResults.real_executions.map(e => `${e.type}=${Object.values(e).slice(1).join(',')}`).join('; ')}`
-    });
-    return res.json({ ok: true, action: result.rows[0], execution: executionResults });
+    const executed = await executeGrowthActionRecord(pool, before, operator, req.body?.payload || {}, req.body?.reason || '');
+    return res.json({ ok: true, action: executed.action, execution: executed.execution });
   });
 
   app.post('/api/growth/actions/:actionKey/ignore', async (req, res) => {
@@ -1109,21 +1579,19 @@ export function registerGrowthRoutes(app, pool) {
     const storeId = cleanText(b.store_id, 128);
     if (!storeId) return res.status(400).json({ ok: false, error: 'missing_store_id' });
     const r = await pool.query(
-      `INSERT INTO store_marketing_profiles (store_id, brand, avg_ticket_fen, primary_audience, signature_dishes, peak_hours, gross_margin_floor, suitable_offers, unsuitable_offers, notes)
-       VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8::jsonb,$9::jsonb,$10)
+      `INSERT INTO store_marketing_profiles (store_id, brand, avg_ticket_fen, primary_audience, peak_hours, suitable_offers, unsuitable_offers, notes)
+       VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8)
        ON CONFLICT (store_id) DO UPDATE SET
          brand = EXCLUDED.brand,
          avg_ticket_fen = EXCLUDED.avg_ticket_fen,
          primary_audience = EXCLUDED.primary_audience,
-         signature_dishes = EXCLUDED.signature_dishes,
          peak_hours = EXCLUDED.peak_hours,
-         gross_margin_floor = EXCLUDED.gross_margin_floor,
          suitable_offers = EXCLUDED.suitable_offers,
          unsuitable_offers = EXCLUDED.unsuitable_offers,
          notes = EXCLUDED.notes,
          updated_at = NOW()
        RETURNING *`,
-      [storeId, cleanText(b.brand, 128), Math.max(0, Math.floor(Number(b.avg_ticket_fen) || 0)), cleanText(b.primary_audience, 500), JSON.stringify(b.signature_dishes || []), JSON.stringify(b.peak_hours || []), b.gross_margin_floor == null ? null : Number(b.gross_margin_floor), JSON.stringify(b.suitable_offers || []), JSON.stringify(b.unsuitable_offers || []), cleanText(b.notes, 4000)]
+      [storeId, cleanText(b.brand, 128), Math.max(0, Math.floor(Number(b.avg_ticket_fen) || 0)), cleanText(b.primary_audience, 500), JSON.stringify(b.peak_hours || []), JSON.stringify(b.suitable_offers || []), JSON.stringify(b.unsuitable_offers || []), cleanText(b.notes, 4000)]
     );
     return res.json({ ok: true, profile: r.rows[0] });
   });
@@ -1258,48 +1726,7 @@ export function registerGrowthRoutes(app, pool) {
     return res.json({ ok: true, constraint: r.rows[0] });
   });
 
-  app.get('/api/growth/strategy-explanations', async (req, res) => {
-    if (!requireGrowthAuth(req, res)) return;
-    const strategyKey = cleanText(req.query.strategy_key || '', 255);
-    const storeId = cleanText(req.query.store_id || '', 128);
-    const r = await pool.query(
-      `SELECT * FROM growth_strategy_explanations
-       WHERE ($1::text = '' OR strategy_key = $1)
-         AND ($2::text = '' OR store_id = $2)
-       ORDER BY created_at DESC
-       LIMIT 200`,
-      [strategyKey, storeId]
-    );
-    return res.json({ ok: true, explanations: r.rows });
-  });
-
-  app.post('/api/growth/strategy-explanations', async (req, res) => {
-    if (!requireGrowthAuth(req, res)) return;
-    const b = req.body || {};
-    const r = await pool.query(
-      `INSERT INTO growth_strategy_explanations (
-        strategy_key, store_id, customer_segment, why_this_audience,
-        why_now, why_this_action, expected_result, historical_reference,
-        risk_notes, evidence
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)
-      RETURNING *`,
-      [
-        cleanText(b.strategy_key, 255),
-        cleanText(b.store_id, 128),
-        cleanText(b.customer_segment, 255),
-        cleanText(b.why_this_audience, 4000),
-        cleanText(b.why_now, 4000),
-        cleanText(b.why_this_action, 4000),
-        cleanText(b.expected_result, 4000),
-        cleanText(b.historical_reference, 4000),
-        cleanText(b.risk_notes, 4000),
-        JSON.stringify(b.evidence || {})
-      ]
-    );
-    return res.json({ ok: true, explanation: r.rows[0] });
-  });
-
-  // ── Phase 7: Strategy context — 为 Agent 提供案例库+门店画像+约束上下文 ──
+  // ── Strategy context — 为 Agent 提供门店画像+约束上下文 ──
   app.get('/api/growth/strategy-context', async (req, res) => {
     if (!requireGrowthAuth(req, res)) return;
     await handleStrategyContext(cleanText(req.query.store_id, 128), cleanText(req.query.channel, 80), cleanText(req.query.audience, 200), res);
@@ -1307,7 +1734,7 @@ export function registerGrowthRoutes(app, pool) {
 
   // Shared handler for strategy-context (used by both GET and POST)
   async function handleStrategyContext(storeId, channel, audience, res) {
-    const result = { storeId, channel, audience, cases: [], profile: null, constraints: null };
+    const result = { storeId, channel, audience, profile: null, constraints: null };
     try {
       if (storeId) {
         const [p, c] = await Promise.all([
@@ -1317,39 +1744,13 @@ export function registerGrowthRoutes(app, pool) {
         if (p.rows?.length) result.profile = p.rows[0];
         if (c.rows?.length) result.constraints = c.rows[0];
       }
-      const params = []; const conds = []; let idx = 1;
-      if (storeId) { conds.push(`(store_id = $${idx} OR store_id IS NULL)`); params.push(storeId); idx++; }
-      if (channel) { conds.push(`(channel = $${idx} OR channel IS NULL OR channel = '')`); params.push(channel); idx++; }
-      if (audience) { conds.push(`(audience ILIKE $${idx} OR audience IS NULL OR audience = '')`); params.push(`%${audience}%`); idx++; }
-      conds.push('score >= 40');
-      const q = await pool.query(`SELECT title, channel, audience, offer, conclusion, score, reusable, LEFT(copy_text, 300) AS copy_snippet FROM marketing_case_library WHERE ${conds.join(' AND ')} ORDER BY score DESC, created_at DESC LIMIT 8`, params);
-      result.cases = q.rows || [];
-      res.json({ ok: true, context: result, summary: { has_profile: !!result.profile, has_constraints: !!result.constraints, case_count: result.cases.length } });
+      res.json({ ok: true, context: result, summary: { has_profile: !!result.profile, has_constraints: !!result.constraints } });
     } catch (e) { res.status(500).json({ ok: false, error: e?.message }); }
   }
 
   app.post('/api/growth/strategy-context', async (req, res) => {
     if (!requireGrowthAuth(req, res)) return;
     await handleStrategyContext(cleanText(req.body.store_id, 128), cleanText(req.body.channel, 80), cleanText(req.body.audience, 200), res);
-  });
-
-  app.get('/api/growth/cases', async (req, res) => {
-    if (!requireGrowthAuth(req, res)) return;
-    const r = await pool.query(`SELECT * FROM marketing_case_library ORDER BY score DESC, created_at DESC LIMIT 200`);
-    return res.json({ ok: true, cases: r.rows });
-  });
-
-  app.post('/api/growth/cases', async (req, res) => {
-    if (!requireGrowthAuth(req, res)) return;
-    const b = req.body || {};
-    const r = await pool.query(
-      `INSERT INTO marketing_case_library (case_key, store_id, campaign_id, title, objective, channel, audience, offer, copy_text, poster_url, metrics, conclusion, reusable, score)
-       VALUES (NULLIF($1,''),NULLIF($2,''),NULLIF($3,''),$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14)
-       ON CONFLICT (case_key) DO UPDATE SET metrics = EXCLUDED.metrics, conclusion = EXCLUDED.conclusion, reusable = EXCLUDED.reusable, score = EXCLUDED.score, updated_at = NOW()
-       RETURNING *`,
-      [cleanText(b.case_key, 255), cleanText(b.store_id, 128), cleanText(b.campaign_id, 128), cleanText(b.title, 500), cleanText(b.objective, 1000), cleanText(b.channel, 80), cleanText(b.audience, 500), cleanText(b.offer, 500), cleanText(b.copy_text, 4000), cleanText(b.poster_url, 1000), JSON.stringify(b.metrics || {}), cleanText(b.conclusion, 2000), !!b.reusable, Math.max(0, Math.min(100, Math.floor(Number(b.score) || 0)))]
-    );
-    return res.json({ ok: true, case: r.rows[0] });
   });
 
   app.get('/api/growth/public-channels', async (req, res) => {
@@ -1614,53 +2015,7 @@ export function registerGrowthRoutes(app, pool) {
     return res.json({ ok: true, action: r.rows[0] });
   });
 
-  // ── Phase 4: Promote feedback → case (call after existing strategy-feedback) ──
-  app.post('/api/growth/promote-feedback-to-case', async (req, res) => {
-    if (!requireGrowthAuth(req, res)) return;
-    const b = req.body || {};
-    const strategyKey = cleanText(b.strategy_key, 255);
-    if (!strategyKey) return res.status(400).json({ ok: false, error: 'missing_strategy_key' });
-    const ev = await pool.query(`SELECT * FROM growth_strategy_evaluations WHERE strategy_key=$1 LIMIT 1`, [strategyKey]);
-    if (!ev.rows.length) return res.status(404).json({ ok: false, error: 'evaluation_not_found' });
-    const e = ev.rows[0];
-    if (!e.feedback_rating || e.feedback_rating < 3) return res.json({ ok: false, reason: 'rating_too_low' });
-    await pool.query(
-      `INSERT INTO marketing_case_library (case_key, store_id, campaign_id, title, objective, channel, audience, offer, score, conclusion, reusable, metrics)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb)
-       ON CONFLICT (case_key) DO UPDATE SET score = EXCLUDED.score, conclusion = EXCLUDED.conclusion, updated_at = NOW()`,
-      [`feedback_case:${strategyKey}`, cleanText(e.store_id, 128), cleanText(e.campaign_id, 128), cleanText(e.title, 500), '', '', '', '', Math.min(100, Math.max(0, Math.round(Number(e.feedback_rating) * 20))), cleanText(e.feedback, 2000), true, JSON.stringify({ source: 'strategy_feedback', strategy_key: strategyKey, rating: e.feedback_rating })]
-    );
-    return res.json({ ok: true });
-  });
-
-  // ── Phase 4: Feedback back-propagation ──
-  app.post('/api/growth/feedback-backpropagate', async (req, res) => {
-    if (!requireGrowthAuth(req, res)) return;
-    const b = req.body || {};
-    const strategyKey = cleanText(b.strategy_key, 255);
-    if (!strategyKey) return res.status(400).json({ ok: false, error: 'missing_strategy_key' });
-    const ev = await pool.query(`SELECT * FROM growth_strategy_evaluations WHERE strategy_key=$1 LIMIT 1`, [strategyKey]);
-    if (!ev.rows.length) return res.status(404).json({ ok: false, error: 'evaluation_not_found' });
-    const e = ev.rows[0];
-    if (!e.feedback_rating) return res.json({ ok: false, reason: 'no_feedback_yet' });
-    const storeId = cleanText(e.store_id, 128);
-    const rating = Math.max(1, Math.min(5, Number(e.feedback_rating)));
-    // Update the strategy_evaluation status based on rating
-    const newStatus = rating >= 4 ? 'accepted' : rating <= 2 ? 'rejected' : 'proposed';
-    await pool.query(`UPDATE growth_strategy_evaluations SET status=$2, updated_at=NOW() WHERE strategy_key=$1`, [strategyKey, newStatus]);
-    // If store_id exists, increment the store's profile rating if high feedback
-    if (storeId && rating >= 4) {
-      const caseCount = await pool.query(`SELECT COUNT(*)::int AS c FROM marketing_case_library WHERE store_id=$1 AND score>=60`, [storeId]);
-      if (caseCount.rows?.[0]?.c > 0) {
-        const avgScore = await pool.query(`SELECT AVG(score)::int AS avg_s FROM marketing_case_library WHERE store_id=$1 AND score>=60`, [storeId]);
-        const newScore = Math.min(100, Math.round(Number(avgScore.rows?.[0]?.avg_s || 70) + rating * 2));
-        await pool.query(`UPDATE store_marketing_profiles SET execution_level=CASE WHEN $2>=80 THEN 'strong' WHEN $2>=60 THEN 'moderate' ELSE 'unknown' END, updated_at=NOW() WHERE store_id=$1`, [storeId, newScore]);
-      }
-    }
-    return res.json({ ok: true, new_status: newStatus });
-  });
-
-  // ── Phase 5: LLM semantic parsing via agents direct LLM endpoint ──
+  // ── Phase 5: Semantic write-back to profiles ──
   app.post('/api/growth/semantic-parse', async (req, res) => {
     if (!requireGrowthAuth(req, res)) return;
     const text = cleanText(req.body.text, 4000);
@@ -1690,167 +2045,6 @@ export function registerGrowthRoutes(app, pool) {
       return_intent: /再来|下次|还会/.test(text),
       key_insight: '关键词解析（LLM不可用）', source: 'keyword_fallback'
     });
-  });
-
-  // ── Phase 4: Enhanced case search (multi-dimension) ──
-  app.get('/api/growth/cases/search', async (req, res) => {
-    if (!requireGrowthAuth(req, res)) return;
-    const storeId = cleanText(req.query.store_id || '', 128);
-    const channel = cleanText(req.query.channel || '', 80);
-    const audience = cleanText(req.query.audience || '', 200);
-    const offer = cleanText(req.query.offer || '', 200);
-    const brand = cleanText(req.query.brand || '', 128);
-    const minScore = Math.max(0, Math.min(100, Number(req.query.min_score) || 0));
-    const conditions = [];
-    const params = [];
-    let idx = 1;
-    if (storeId) { conditions.push(`(store_id = $${idx} OR store_id ILIKE '%' || $${idx} || '%')`); idx++; params.push(storeId); }
-    if (brand) { conditions.push(`(metrics->>'brand' ILIKE $${idx} OR metrics->>'brand' = $${idx})`); idx++; params.push(`%${brand}%`); }
-    if (channel) { conditions.push(`channel ILIKE $${idx++}`); params.push(`%${channel}%`); }
-    if (audience) { conditions.push(`audience ILIKE $${idx++}`); params.push(`%${audience}%`); }
-    if (offer) { conditions.push(`offer ILIKE $${idx++}`); params.push(`%${offer}%`); }
-    if (minScore > 0) { conditions.push(`score >= $${idx++}`); params.push(minScore); }
-    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
-    const r = await pool.query(`SELECT * FROM marketing_case_library ${where} ORDER BY score DESC, created_at DESC LIMIT 100`, params);
-    return res.json({ ok: true, cases: r.rows });
-  });
-
-  // ── Phase 4: Weight adjust with ROI ──
-  app.post('/api/growth/weight-adjust', async (req, res) => {
-    if (!requireGrowthAuth(req, res)) return;
-    const days = Math.min(Math.max(Number(req.query.days) || 14, 1), 90);
-    const lowThreshold = Number(req.query.ignore_threshold) || 3;
-    const highThreshold = Number(req.query.execute_threshold) || 2;
-    const roiMin = Number(req.query.roi_min) || 0.5;
-    const ignored = await pool.query(
-      `SELECT store_id, action_type, COUNT(*)::int as ignore_count
-       FROM growth_execution_logs
-       WHERE decision = 'ignored' AND created_at >= CURRENT_DATE - ($1::int || ' days')::interval
-       GROUP BY store_id, action_type HAVING COUNT(*) >= $2 ORDER BY ignore_count DESC`,
-      [days, lowThreshold]
-    );
-    const executed = await pool.query(
-      `SELECT e.store_id, e.action_type, COUNT(*)::int as exec_count,
-              COALESCE(AVG(g.revenue_fen::numeric), 0) as avg_revenue,
-              COALESCE(SUM(g.revenue_fen)::int, 0) as total_revenue
-       FROM growth_execution_logs e
-       LEFT JOIN growth_daily_metrics g ON g.store_id = e.store_id AND g.metric_date >= CURRENT_DATE - ($1::int || ' days')::interval
-       WHERE e.decision IN ('executed','edited_then_executed') AND e.created_at >= CURRENT_DATE - ($1::int || ' days')::interval
-       GROUP BY e.store_id, e.action_type HAVING COUNT(*) >= $2 ORDER BY exec_count DESC`,
-      [days, highThreshold]
-    );
-    const highRoi = executed.rows.filter(r => Number(r.total_revenue) > 0 && (Number(r.total_revenue) / Math.max(1, Number(r.exec_count))) >= roiMin * 100);
-    return res.json({
-      ok: true, days,
-      ignored_suggestions: ignored.rows.map(r => `门店${r.store_id || '-'}的${r.action_type}类动作被忽略${r.ignore_count}次，建议降低优先级`),
-      executed_suggestions: executed.rows.map(r => `门店${r.store_id || '-'}的${r.action_type}类动作被执行${r.exec_count}次，收入¥${(Number(r.total_revenue)/100).toFixed(2)}，${highRoi.includes(r) ? '✅ ROI良好建议升权' : '收入数据不足需观察'}`),
-      ignored_actions: ignored.rows, executed_actions: executed.rows, high_roi_actions: highRoi
-    });
-  });
-
-  // ── Phase 4: Standardized strategy feedback with reason codes ──
-  app.post('/api/growth/strategy-feedback-v2', async (req, res) => {
-    if (!requireGrowthAuth(req, res)) return;
-    try {
-      const b = req.body || {};
-      const strategyKey = cleanText(b.strategy_key, 255);
-      if (!strategyKey) return res.status(400).json({ ok: false, error: 'missing_strategy_key' });
-      const rating = b.rating == null ? null : Math.max(1, Math.min(5, Number(b.rating)));
-      const feedback = cleanText(b.feedback, 2000);
-      const reasonCode = cleanText(b.reason_code || '', 80);
-      const validReasonCodes = ['discount_too_deep', 'store_cant_execute', 'wrong_timing', 'wrong_audience', 'content_mismatch_brand', 'other'];
-      const status = rating >= 4 ? 'accepted' : rating === 3 ? 'executed' : rating <= 2 ? 'rejected' : 'proposed';
-      const reasonLabel = reasonCode && validReasonCodes.includes(reasonCode) ? ({
-        discount_too_deep: '折扣太大', store_cant_execute: '门店执行不了', wrong_timing: '时机不对',
-        wrong_audience: '客群不对', content_mismatch_brand: '内容不符合品牌', other: '其他'
-      })[reasonCode] || '' : '';
-      await pool.query(
-        `UPDATE growth_strategy_evaluations SET feedback=$2, feedback_rating=COALESCE($3::int, feedback_rating), status=$4, detail = COALESCE(detail,'{}'::jsonb) || jsonb_build_object('reason_code', COALESCE(NULLIF($5,''), 'other'), 'reason_label', COALESCE(NULLIF($6,''), '')), updated_at=NOW() WHERE strategy_key=$1`,
-        [strategyKey, feedback || '', rating, status || '', reasonCode || 'other', reasonLabel || '']
-      );
-      if (rating >= 4) {
-        const ev = await pool.query(`SELECT * FROM growth_strategy_evaluations WHERE strategy_key=$1 LIMIT 1`, [strategyKey]);
-        if (ev.rows.length) {
-          const e = ev.rows[0];
-          await pool.query(
-            `INSERT INTO marketing_case_library (case_key, store_id, campaign_id, title, score, conclusion, reusable, metrics) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb) ON CONFLICT (case_key) DO UPDATE SET score = EXCLUDED.score, updated_at = NOW()`,
-            [`feedback_case:${strategyKey}`, cleanText(e.store_id, 128), cleanText(e.campaign_id, 128), cleanText(e.title, 500), Math.min(100, Math.max(0, Math.round(Number(rating) * 20))), feedback || '基于反馈自动创建', true, JSON.stringify({ source: 'strategy_feedback_v2', strategy_key: strategyKey, rating, reason_code: reasonCode })]
-          );
-        }
-      }
-      return res.json({ ok: true, new_status: status });
-    } catch (e) {
-      console.error('[growth] strategy-feedback-v2 error:', e?.message);
-      return res.status(500).json({ ok: false, error: e?.message || 'feedback_error' });
-    }
-  });
-
-  // ── Phase 4: Weight adjust with ROI evaluation ──
-  app.post('/api/growth/weight-adjust', async (req, res) => {
-    if (!requireGrowthAuth(req, res)) return;
-    const days = Math.min(Math.max(Number(req.query.days) || 14, 1), 90);
-    const lowThreshold = Number(req.query.ignore_threshold) || 3;
-    const highThreshold = Number(req.query.execute_threshold) || 2;
-    const roiMin = Number(req.query.roi_min) || 0.5;
-    const ignored = await pool.query(
-      `SELECT store_id, action_type, COUNT(*)::int as ignore_count FROM growth_execution_logs
-       WHERE decision='ignored' AND created_at>=CURRENT_DATE-($1::int||' days')::interval
-       GROUP BY store_id, action_type HAVING COUNT(*) >= $2 ORDER BY ignore_count DESC`,
-      [days, lowThreshold]
-    );
-    const executed = await pool.query(
-      `SELECT e.store_id, e.action_type, COUNT(*)::int as exec_count,
-              COALESCE(SUM(g.revenue_fen)::int,0) as total_revenue
-       FROM growth_execution_logs e
-       LEFT JOIN growth_daily_metrics g ON g.store_id=e.store_id AND g.metric_date>=CURRENT_DATE-($1::int||' days')::interval
-       WHERE e.decision IN ('executed','edited_then_executed') AND e.created_at>=CURRENT_DATE-($1::int||' days')::interval
-       GROUP BY e.store_id, e.action_type HAVING COUNT(*) >= $2 ORDER BY exec_count DESC`,
-      [days, highThreshold]
-    );
-    const highRoi = executed.rows.filter(r => Number(r.total_revenue) > 0 && (Number(r.total_revenue)/Math.max(1,Number(r.exec_count))) >= roiMin * 100);
-    return res.json({
-      ok: true, days,
-      ignored_suggestions: ignored.rows.map(r => `门店${r.store_id||'-'}的${r.action_type}类动作被忽略${r.ignore_count}次，建议降低优先级`),
-      executed_suggestions: executed.rows.map(r => `门店${r.store_id||'-'}的${r.action_type}类动作被执行${r.exec_count}次，收入¥${(Number(r.total_revenue)/100).toFixed(2)}，${highRoi.includes(r)?'✅ROI良好建议升权':'收入数据不足需观察'}`),
-      ignored_actions: ignored.rows, executed_actions: executed.rows, high_roi_actions: highRoi
-    });
-  });
-
-  // ── Phase 5: Brand voice samples ──
-  app.post('/api/growth/brand-voice-samples', async (req, res) => {
-    if (!requireGrowthAuth(req, res)) return;
-    const b = req.body || {};
-    const brand = cleanText(b.brand, 128);
-    if (!brand) return res.status(400).json({ ok: false, error: 'missing_brand' });
-    const samples = Array.isArray(b.samples) ? b.samples.slice(0, 20) : [];
-    if (!samples.length) return res.status(400).json({ ok: false, error: 'missing_samples' });
-    const style = [];
-    if (/优惠|折扣|减|省/.test(samples.join(''))) style.push('价格导向');
-    if (/好吃|美味|鲜|食材/.test(samples.join(''))) style.push('品质导向');
-    if (/情怀|记忆|老|传统/.test(samples.join(''))) style.push('情感导向');
-    if (/潮|新|网红|打卡/.test(samples.join(''))) style.push('潮流导向');
-    if (!style.length) style.push('综合');
-    await pool.query(
-      `INSERT INTO brand_voice_samples (brand, samples, detected_style, updated_at)
-       VALUES ($1, $2::jsonb, $3::jsonb, NOW())
-       ON CONFLICT (brand) DO UPDATE SET
-         samples = EXCLUDED.samples,
-         detected_style = EXCLUDED.detected_style,
-         updated_at = NOW()`,
-      [brand, JSON.stringify(samples), JSON.stringify(style)]
-    );
-    return res.json({ ok: true, brand, sample_count: samples.length, detected_style: style, samples });
-  });
-  app.get('/api/growth/brand-voice-samples', async (req, res) => {
-    if (!requireGrowthAuth(req, res)) return;
-    const brand = cleanText(req.query.brand || '', 128);
-    if (brand) {
-      const r = await pool.query(`SELECT brand, samples, detected_style, updated_at FROM brand_voice_samples WHERE brand = $1 LIMIT 1`, [brand]);
-      return res.json({ ok: true, brand, data: r.rows[0] || null });
-    }
-    const r = await pool.query(`SELECT brand, samples, detected_style, updated_at FROM brand_voice_samples ORDER BY updated_at DESC, brand ASC LIMIT 100`);
-    const data = Object.fromEntries(r.rows.map(row => [row.brand, row]));
-    return res.json({ ok: true, brand: '', data });
   });
 
   // ── Phase 5: Semantic write-back to profiles ──
@@ -2032,6 +2226,84 @@ export function registerGrowthRoutes(app, pool) {
     return res.json({ ok: true, triggered: created, total_at_risk: r.rows.length });
   });
 
+  app.get('/api/growth/wecom-config', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const config = await getWecomConfig(pool);
+    return res.json({ ok: true, config });
+  });
+
+  app.post('/api/growth/wecom-config', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const b = req.body || {};
+    const corpId = cleanText(b.corp_id, 200);
+    const corpSecret = cleanText(b.corp_secret, 500);
+    const senderUserId = cleanText(b.sender_userid, 128);
+    if (!corpId || !corpSecret || !senderUserId) return res.status(400).json({ ok: false, error: 'missing corp_id/corp_secret/sender_userid' });
+    const config = {
+      corp_id: corpId,
+      corp_secret: corpSecret,
+      sender_userid: senderUserId,
+      agent_id: cleanText(b.agent_id, 64),
+      callback_secret: cleanText(b.callback_secret, 500)
+    };
+    await pool.query(
+      `INSERT INTO hrms_state (key, data, updated_at) VALUES ('growth_wecom_config', $1::jsonb, NOW())
+       ON CONFLICT (key) DO UPDATE SET data = $1::jsonb, updated_at = NOW()`,
+      [JSON.stringify(config)]
+    );
+    __growthWecomTokenCache = { token: '', expiresAt: 0 };
+    return res.json({ ok: true, config });
+  });
+
+  app.post('/api/growth/wecom/callback', async (req, res) => {
+    const config = await getWecomConfig(pool);
+    const configuredSecret = cleanText(config?.callback_secret || process.env.GROWTH_WECOM_CALLBACK_SECRET || '', 500);
+    const headerSecret = cleanText(req.headers['x-wecom-callback-secret'] || '', 500);
+    if (configuredSecret && headerSecret !== configuredSecret) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    const b = req.body || {};
+    const providerMsgId = cleanText(b.provider_msg_id || b.msgid, 255);
+    const eventType = cleanText(b.event_type || b.event || '', 80).toLowerCase();
+    if (!providerMsgId || !eventType) return res.status(400).json({ ok: false, error: 'missing provider_msg_id or event_type' });
+    const delivery = await pool.query(`SELECT * FROM growth_delivery_logs WHERE provider_msg_id = $1 ORDER BY created_at DESC LIMIT 1`, [providerMsgId]);
+    const row = delivery.rows[0] || null;
+    if (!row) return res.status(404).json({ ok: false, error: 'delivery_not_found' });
+    const statusMap = { sent: 'sent', delivered: 'delivered', read: 'read', clicked: 'clicked', redeemed: 'redeemed' };
+    const eventMap = {
+      delivered: 'wecom_message_delivered',
+      read: 'wecom_message_read',
+      clicked: 'wecom_message_clicked',
+      redeemed: 'wecom_coupon_redeemed'
+    };
+    const newStatus = statusMap[eventType] || 'received';
+    await upsertDeliveryLog(pool, {
+      delivery_key: row.delivery_key,
+      action_key: row.action_key,
+      rule_key: row.rule_key,
+      customer_id: row.customer_id,
+      store_id: row.store_id,
+      channel: row.channel,
+      external_userid: row.external_userid,
+      provider_msg_id: providerMsgId,
+      status: newStatus,
+      payload: row.payload || {},
+      result: Object.assign({}, row.result || {}, b)
+    });
+    if (eventMap[eventType]) {
+      await insertGrowthEvent(pool, {
+        event_type: eventMap[eventType],
+        customer_id: row.customer_id,
+        external_userid: row.external_userid,
+        store_id: row.store_id,
+        channel: row.channel,
+        campaign_id: cleanText((row.payload || {}).campaign_id, 128),
+        coupon_id: cleanText((row.payload || {}).coupon_id, 128),
+        idempotency_key: `${eventMap[eventType]}:${providerMsgId}`,
+        metadata: { provider_msg_id: providerMsgId, action_key: row.action_key, callback: b }
+      });
+    }
+    return res.json({ ok: true, status: newStatus });
+  });
+
   // ── Phase 2: Feishu config persistence for WeChat customer auto-sync ──
   app.get('/api/growth/feishu-config', async (req, res) => {
     if (!requireGrowthAuth(req, res)) return;
@@ -2075,29 +2347,13 @@ export function registerGrowthRoutes(app, pool) {
     return res.json({ ok: true, clusters: r.rows, total: r.rows.reduce((s, r) => s + Number(r.user_count), 0) });
   });
 
-  // ── Phase 6: Discount preference modeling ──
-  app.get('/api/growth/discount-preference', async (req, res) => {
-    if (!requireGrowthAuth(req, res)) return;
-    const storeId = cleanText(req.query.store_id || '', 128);
-    const r = await pool.query(
-      `SELECT
-         CASE
-           WHEN price_sensitivity >= 0.7 THEN '高敏感'
-           WHEN price_sensitivity >= 0.4 THEN '中敏感'
-           ELSE '低敏感'
-         END AS sensitivity_segment,
-         ROUND(AVG(response_to_discount)::numeric, 2) AS avg_discount_response,
-         COUNT(*)::int AS user_count,
-         MODE() WITHIN GROUP (ORDER BY COALESCE(best_contact_window, '')) AS best_window
-       FROM growth_customer_profiles
-       WHERE ($1='' OR store_id=$1) AND price_sensitivity IS NOT NULL
-       GROUP BY 1 ORDER BY user_count DESC`,
-      [storeId]
-    );
-    const total = r.rows.reduce((s, r) => s + Number(r.user_count), 0);
-    return res.json({
-      ok: true, segments: r.rows, total_users: total,
-      recommendation: total > 0 ? `高敏感用户(${r.rows.find(r=>r.sensitivity_segment==='高敏感')?.user_count||0}人)建议发券，低敏感用户(${r.rows.find(r=>r.sensitivity_segment==='低敏感')?.user_count||0}人)建议内容触达` : '数据不足'
-    });
-  });
+  if (!globalThis.__growthTouchRuleTimer) {
+    globalThis.__growthTouchRuleTimer = setInterval(() => {
+      runTouchRuleEngine(pool, { limit_per_rule: 100 }).catch((e) => console.warn('[growth] rule engine run failed:', e?.message));
+    }, 15 * 60 * 1000);
+    setTimeout(() => {
+      runTouchRuleEngine(pool, { limit_per_rule: 100 }).catch((e) => console.warn('[growth] initial rule engine run failed:', e?.message));
+    }, 10000);
+  }
+
 }

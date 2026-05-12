@@ -85,22 +85,6 @@ export async function ensurePhaseTables(pool) {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_plans_store ON growth_campaign_plans (store_id, status, created_at DESC)`);
 
-  // Phase 7: strategy_evaluations
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS growth_strategy_evaluations (
-      id BIGSERIAL PRIMARY KEY, strategy_key TEXT UNIQUE, store_id TEXT,
-      campaign_id TEXT, title TEXT NOT NULL,
-      feasibility_score INTEGER DEFAULT 0, fit_score INTEGER DEFAULT 0,
-      cost_risk_score INTEGER DEFAULT 0, case_similarity_score INTEGER DEFAULT 0,
-      clarity_score INTEGER DEFAULT 0, channel_score INTEGER DEFAULT 0,
-      reviewable_score INTEGER DEFAULT 0, total_score NUMERIC DEFAULT 0,
-      detail JSONB DEFAULT '{}'::jsonb, feedback TEXT,
-      feedback_rating INTEGER, status TEXT DEFAULT 'proposed',
-      created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_evals_store ON growth_strategy_evaluations (store_id, total_score DESC)`);
-
   // Phase 8: content_calendar
   await pool.query(`
     CREATE TABLE IF NOT EXISTS growth_content_calendar (
@@ -286,20 +270,6 @@ async function linkPosOrdersToCustomers(pool) {
   return r.rowCount;
 }
 
-const SCORE_WEIGHTS = { feasibility: 20, fit: 20, cost_risk: 15, case_similarity: 15, clarity: 10, channel: 10, reviewable: 10 };
-
-function computeTotalScore(s) {
-  let t = 0;
-  if (s.feasibility != null) t += s.feasibility * SCORE_WEIGHTS.feasibility / 100;
-  if (s.fit != null) t += s.fit * SCORE_WEIGHTS.fit / 100;
-  if (s.cost_risk != null) t += s.cost_risk * SCORE_WEIGHTS.cost_risk / 100;
-  if (s.case_similarity != null) t += s.case_similarity * SCORE_WEIGHTS.case_similarity / 100;
-  if (s.clarity != null) t += s.clarity * SCORE_WEIGHTS.clarity / 100;
-  if (s.channel != null) t += s.channel * SCORE_WEIGHTS.channel / 100;
-  if (s.reviewable != null) t += s.reviewable * SCORE_WEIGHTS.reviewable / 100;
-  return Math.round(t);
-}
-
 export function registerPhaseRoutes(app, pool) {
   function rqa(req, res) {
     const auth = authPhaseApi(req);
@@ -452,47 +422,6 @@ export function registerPhaseRoutes(app, pool) {
        FROM growth_daily_metrics dm WHERE dm.metric_date>=CURRENT_DATE-($1::int||' days')::interval
        GROUP BY dm.store_id ORDER BY revenue_fen DESC,scan_count DESC LIMIT 200`,[days]);
     res.json({ok:true,rankings:r.rows.map((row,i)=>({rank:i+1,...row}))});
-  });
-
-  // ── Phase 7: Strategy Evaluations + Feedback ──
-  app.post('/api/growth/strategy-evaluations', async (req, res) => {
-    if (!rqa(req, res)) return;
-    const b = req.body || {};
-    const s = { feasibility:Math.max(0,Math.min(100,Math.floor(Number(b.feasibility_score)||0))),
-      fit:Math.max(0,Math.min(100,Math.floor(Number(b.fit_score)||0))),
-      cost_risk:Math.max(0,Math.min(100,Math.floor(Number(b.cost_risk_score)||0))),
-      case_similarity:Math.max(0,Math.min(100,Math.floor(Number(b.case_similarity_score)||0))),
-      clarity:Math.max(0,Math.min(100,Math.floor(Number(b.clarity_score)||0))),
-      channel:Math.max(0,Math.min(100,Math.floor(Number(b.channel_score)||0))),
-      reviewable:Math.max(0,Math.min(100,Math.floor(Number(b.reviewable_score)||0))) };
-    const total = computeTotalScore(s);
-    const r = await pool.query(
-      `INSERT INTO growth_strategy_evaluations(strategy_key,store_id,campaign_id,title,feasibility_score,fit_score,cost_risk_score,case_similarity_score,clarity_score,channel_score,reviewable_score,total_score,detail,status)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14)
-       ON CONFLICT(strategy_key) DO UPDATE SET total_score=EXCLUDED.total_score,detail=EXCLUDED.detail,status=EXCLUDED.status,updated_at=NOW() RETURNING *`,
-      [cleanText(b.strategy_key,128),cleanText(b.store_id,128),cleanText(b.campaign_id,128),cleanText(b.title,500),
-       s.feasibility,s.fit,s.cost_risk,s.case_similarity,s.clarity,s.channel,s.reviewable,total,
-       JSON.stringify(b.detail||{}),cleanText(b.status||'proposed',40)]
-    );
-    res.json({ok:true,evaluation:r.rows[0]});
-  });
-
-  app.get('/api/growth/strategy-evaluations', async (req, res) => {
-    if (!rqa(req, res)) return;
-    const sid = cleanText(req.query.store_id||'',128);
-    const r = await pool.query(`SELECT * FROM growth_strategy_evaluations WHERE ($1='' OR store_id=$1) ORDER BY total_score DESC,created_at DESC LIMIT 200`,[sid]);
-    res.json({ok:true,evaluations:r.rows});
-  });
-
-  app.post('/api/growth/strategy-feedback', async (req, res) => {
-    if (!rqa(req, res)) return;
-    const b = req.body || {};
-    const sk = cleanText(b.strategy_key,128);
-    if (!sk) return res.status(400).json({ok:false,error:'missing strategy_key'});
-    const rating = Math.max(0,Math.min(5,Math.floor(Number(b.rating)||0)));
-    await pool.query('UPDATE growth_strategy_evaluations SET feedback=$2,feedback_rating=$3,status=COALESCE($4,status),updated_at=NOW() WHERE strategy_key=$1',
-      [sk,cleanText(b.feedback,4000),rating,cleanText(b.status,40)]);
-    res.json({ok:true});
   });
 
   // ── Phase 8: Content Calendar + Channel Effects ──
