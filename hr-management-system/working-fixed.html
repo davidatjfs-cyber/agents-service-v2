@@ -13928,130 +13928,151 @@
                     </div>
                     <div id="growth-posters-content" style="display:none;">
                         <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
-                            <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">海报制作</div>
-                            <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-                                <div style="flex:1;min-width:340px;max-width:720px;">
-                                    <div style="margin-bottom:12px;">
-                                        <label style="font-size:12px;color:rgba(226,232,240,0.6);display:block;margin-bottom:4px;">选择模板</label>
-                                        <div id="poster-template-selector" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;"></div>
-                                    </div>
-                                    <div id="poster-template-brief" style="margin-bottom:12px;padding:12px;border-radius:10px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.18);color:rgba(226,232,240,0.78);font-size:12px;line-height:1.6;"></div>
-                                    <div id="poster-editor-form" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">标题</label><input id="poster-title" placeholder="主标题" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
-                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">副标题</label><input id="poster-subtitle" placeholder="副标题" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
-                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">利益点/优惠</label><input id="poster-offer" placeholder="如: 满100减30" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
-                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">CTA按钮文案</label><input id="poster-cta" placeholder="如: 点击领取" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
-                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">价格</label><input id="poster-price" placeholder="如: ¥39 / 39元" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
-                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">海报尺寸</label><select id="poster-size" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
-                                            <option value="">选择尺寸</option>
-                                            <option value="1080x1920">1080×1920（手机竖版）</option>
-                                            <option value="1920x1080">1920×1080（横版）</option>
-                                            <option value="1080x1080">1080×1080（正方形）</option>
-                                            <option value="750x1334">750×1334（iPhone 6/7/8）</option>
-                                            <option value="1242x2208">1242×2208（iPhone 6/7/8 Plus）</option>
-                                            <option value="1125x2436">1125×2436（iPhone X）</option>
-                                            <option value="1080x2340">1080×2340（安卓全面屏）</option>
-                                            <option value="800x1200">800×1200（A4海报）</option>
-                                            <option value="594x841">594×841（A2海报）</option>
-                                            <option value="420x594">420×594（A3海报）</option>
-                                        </select></div>
-                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">清晰度</label><select id="poster-clarity" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
-                                            <option value="高清可商用">高清可商用</option>
-                                            <option value="印刷级300dpi">印刷级300dpi</option>
-                                            <option value="网络发布72dpi" selected>网络发布72dpi</option>
-                                            <option value="超清4K">超清4K</option>
-                                            <option value="食物纹理真实">食物纹理真实</option>
-                                        </select></div>
-                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">输出格式</label><select id="poster-format" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
-                                            <option value="3:4竖版PNG" selected>3:4竖版 PNG</option>
-                                            <option value="1:1正方形PNG">1:1正方形 PNG</option>
-                                            <option value="9:16竖版PNG">9:16竖版 PNG（小红书封面）</option>
-                                            <option value="16:9横版JPG">16:9横版 JPG</option>
-                                            <option value="4:3横版PNG">4:3横版 PNG</option>
-                                            <option value="2:3竖版PNG">2:3竖版 PNG</option>
-                                        </select></div>
-                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">门店</label><select id="poster-store" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></select></div>
-                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">活动ID(自动生成)</label><input id="poster-campaign" readonly style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(99,102,241,0.28);background:rgba(99,102,241,0.06);color:#a5b4fc;font-size:12px;"></div>
-                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">券ID(可选)</label><input id="poster-coupon" placeholder="coupon_id / 券模板ID" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
-                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">公域渠道</label><select id="poster-public-channel" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></select></div>
-                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">公域发布时间</label><input id="poster-public-date" type="date" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
-                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">私域触达渠道</label><select id="poster-private-channel" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"><option value="wecom">企微</option><option value="miniprogram">小程序</option></select></div>
-                                        <div style="grid-column:1/-1;"><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">补充卖点 / 场景关键词</label><input id="poster-keywords" placeholder="如: 晚市聚餐 / 精致法餐 / 奶油白+酒红色 / 人像不要太多字" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
-                                        <div style="grid-column:1/-1;">
-                                            <label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">Image2 提示词</label>
-                                            <div style="display:flex;gap:6px;align-items:stretch;">
-                                                <textarea id="poster-image2-prompt" placeholder="点击下方按钮生成最佳 Image2 提示词" style="flex:1;height:140px;padding:10px;border-radius:8px;border:1px solid rgba(99,102,241,0.28);background:rgba(99,102,241,0.06);color:#fff;font-size:12px;line-height:1.6;"></textarea>
-                                                <button onclick="copyImage2Prompt()" style="width:36px;padding:6px;border-radius:8px;background:rgba(99,102,241,0.2);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);cursor:pointer;font-size:14px;writing-mode:vertical-lr;text-orientation:upright;display:flex;align-items:center;justify-content:center;" title="一键复制">📋</button>
-                                            </div>
-                                        </div>
-                                        <div style="grid-column:1/-1;">
-                                            <label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">Image2 成图（上传制作好的海报）</label>
-                                            <div style="display:flex;gap:8px;align-items:center;">
-                                                <input id="poster-final-image-url" readonly placeholder="上传后将自动填充" style="flex:1;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
-                                                <input type="file" id="poster-image-upload-input" accept="image/*" style="display:none;" onchange="uploadPosterImage(event)">
-                                                <button onclick="document.getElementById('poster-image-upload-input').click()" style="padding:6px 12px;border-radius:8px;background:rgba(99,102,241,0.2);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);cursor:pointer;font-size:12px;white-space:nowrap;">上传图片</button>
-                                            </div>
-                                            <div id="poster-upload-preview" style="margin-top:6px;display:none;"><img id="poster-upload-preview-img" style="max-height:120px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);"></div>
-                                        </div>
-                                    </div>
-                                    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
-                                        <button onclick="generatePosterCopy()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:12px;">🎯 生成引流卖点</button>
-                                        <button onclick="generatePosterImagePrompt()" style="padding:6px 14px;border-radius:8px;background:#6366f1;color:#fff;border:none;cursor:pointer;font-size:12px;">✨ 生成 Image2 提示词</button>
-                                        <button onclick="renderPosterPreview()" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.08);color:#fff;border:none;cursor:pointer;font-size:12px;">本地排版预览</button>
-                                        <button onclick="saveGeneratedPoster()" style="padding:6px 14px;border-radius:8px;background:#f59e0b;color:#fff;border:none;cursor:pointer;font-size:12px;">💾 保存最终海报</button>
-                                        <button onclick="createPosterPrivateFlow()" style="padding:6px 14px;border-radius:8px;background:rgba(34,197,94,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:12px;">🔒 进入私域链路</button>
-                                        <button onclick="createPosterPublicFlow()" style="padding:6px 14px;border-radius:8px;background:rgba(14,165,233,0.2);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);cursor:pointer;font-size:12px;">📣 进入公域链路</button>
-                                        <a id="poster-download-link" style="display:none;"></a>
-                                    </div>
-                                    <div style="margin-top:10px;font-size:11px;color:rgba(226,232,240,0.52);line-height:1.6;">推荐流程：选模板 → 填标题/优惠 → 生成文案 → 生成Image2提示词 → 提示词+产品图交给 GPT Image 2 → 上传成图 → 保存 → 进入私域/公域链路</div>
-                                </div>
-                                <div style="flex:0 0 auto;">
-                                    <canvas id="poster-canvas" width="360" height="480" style="border-radius:8px;border:1px solid rgba(255,255,255,0.12);width:360px;height:480px;"></canvas>
-                                </div>
-                            </div>
-                            <div id="poster-history" style="margin-top:16px;">
-                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                                    <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.8);">已生成海报</div>
-                                    <button onclick="loadPosterHistory()" style="padding:4px 10px;border-radius:6px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.6);border:1px solid rgba(255,255,255,0.1);cursor:pointer;font-size:11px;">刷新</button>
-                                </div>
-                                <div id="poster-history-list" style="max-height:300px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;"></div>
-                            </div>
-                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:16px;align-items:start;">
-                                <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px;">
-                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-                                        <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);">营销内容库</div>
-                                        <button onclick="resetTemplateForm()" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.6);border:1px solid rgba(255,255,255,0.1);cursor:pointer;font-size:11px;">新增模板</button>
-                                    </div>
-                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                                        <input id="poster-template-key-input" placeholder="模板key（英文唯一标识）" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
-                                        <input id="poster-template-name-input" placeholder="模板名称" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
-                                        <div style="grid-column:1/-1;">
-                                            <label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:3px;">营销用途（可复选）</label>
-                                            <div id="poster-template-purposes" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
-                                        </div>
-                                        <div style="grid-column:1/-1;">
-                                            <label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:3px;">投放渠道（可复选）</label>
-                                            <div id="poster-template-channels" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
-                                        </div>
-                                        <input id="poster-template-aspect-input" placeholder="比例，如 3:4" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;grid-column:1/-1;">
-                                        <textarea id="poster-template-style-input" placeholder="模板风格描述：如 奶油白底 / 酒红+橄榄绿 / 左对齐 / 杂志感 / 留白高级" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;grid-column:1/-1;height:72px;"></textarea>
-                                        <textarea id="poster-template-prompt-notes-input" placeholder="Image2 提示词附加约束：如 保留大面积留白 / 文案位置给顶部与左侧 / 产品主体占画面40% / 不要卡通风" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;grid-column:1/-1;height:72px;"></textarea>
-                                        <div style="grid-column:1/-1;">
-                                            <label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:4px;">模板缩略图（上传模板样例图）</label>
-                                            <div style="display:flex;gap:8px;align-items:center;">
-                                                <input id="poster-template-image-url" placeholder="上传后会自动填充" readonly style="flex:1;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
-                                                <input type="file" id="poster-template-image-upload" accept="image/*" style="display:none;" onchange="uploadTemplateImage(event)">
-                                                <button onclick="document.getElementById('poster-template-image-upload').click()" style="padding:6px 10px;border-radius:6px;background:rgba(99,102,241,0.2);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);cursor:pointer;font-size:11px;white-space:nowrap;">上传</button>
-                                            </div>
-                                            <div id="poster-template-image-preview" style="margin-top:6px;display:none;"><img id="poster-template-image-preview-img" style="max-height:80px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);"></div>
-                                        </div>
-                                    </div>
-                                    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
-                                        <button onclick="savePosterTemplateMeta()" style="padding:6px 14px;border-radius:8px;background:#6366f1;color:#fff;border:none;cursor:pointer;font-size:12px;">保存模板</button>
-                                        <button onclick="loadPosterTemplates()" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.08);color:#fff;border:none;cursor:pointer;font-size:12px;">刷新模板</button>
-                                    </div>
-                                    <div id="poster-template-library" style="max-height:300px;overflow-y:auto;margin-top:14px;"></div>
-                                </div>
+                             <div style="max-width:960px;margin:0 auto;">
+                             <div style="font-size:16px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:16px;">海报制作</div>
+
+                             <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;margin-bottom:10px;">
+                               <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.75);margin-bottom:6px;">① 选择模板</div>
+                               <div id="poster-template-selector" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+                               <div id="poster-template-brief" style="margin-top:6px;padding:8px;border-radius:8px;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.12);color:rgba(226,232,240,0.7);font-size:11px;line-height:1.5;"></div>
+                             </div>
+
+                             <div id="poster-editor-form" style="display:flex;flex-direction:column;gap:8px;">
+                               <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;">
+                                 <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.75);margin-bottom:8px;">② 填写内容</div>
+                                 <div style="display:flex;flex-direction:column;gap:8px;">
+                                   <input id="poster-title" placeholder="主标题" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
+                                   <input id="poster-subtitle" placeholder="副标题" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
+                                   <input id="poster-offer" placeholder="利益点/优惠 如: 满100减30" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
+                                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                     <input id="poster-cta" placeholder="CTA按钮文案" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
+                                     <input id="poster-price" placeholder="价格 如: ¥39" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
+                                   </div>
+                                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                     <select id="poster-size" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
+                                       <option value="">海报尺寸</option>
+                                       <option value="1080x1920">1080×1920 手机竖版</option>
+                                       <option value="1920x1080">1920×1080 横版</option>
+                                       <option value="1080x1080">1080×1080 正方形</option>
+                                       <option value="800x1200">800×1200 A4海报</option>
+                                     </select>
+                                     <select id="poster-store" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></select>
+                                   </div>
+                                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                     <select id="poster-clarity" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
+                                       <option value="网络发布72dpi">网络发布72dpi</option>
+                                       <option value="高清可商用">高清可商用</option>
+                                       <option value="印刷级300dpi">印刷级300dpi</option>
+                                       <option value="超清4K">超清4K</option>
+                                     </select>
+                                     <select id="poster-format" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
+                                       <option value="3:4竖版PNG">3:4竖版 PNG</option>
+                                       <option value="1:1正方形PNG">1:1正方形 PNG</option>
+                                       <option value="9:16竖版PNG">9:16竖版PNG 小红书封面</option>
+                                       <option value="16:9横版JPG">16:9横版 JPG</option>
+                                     </select>
+                                   </div>
+                                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                     <input id="poster-campaign" readonly placeholder="活动ID（自动生成）" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(99,102,241,0.28);background:rgba(99,102,241,0.06);color:#a5b4fc;font-size:12px;box-sizing:border-box;">
+                                     <input id="poster-coupon" placeholder="券模板ID（可选）" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;box-sizing:border-box;">
+                                   </div>
+                                   <input id="poster-keywords" placeholder="补充卖点/场景关键词" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;box-sizing:border-box;">
+                                 </div>
+                               </div>
+
+                               <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;">
+                                 <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.75);margin-bottom:8px;">③ AI辅助生成</div>
+                                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                                   <button onclick="generatePosterCopy()" style="flex:1;min-width:120px;padding:10px;border-radius:8px;background:rgba(16,185,129,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.25);cursor:pointer;font-size:13px;font-weight:600;">🎯 生成引流卖点</button>
+                                   <button onclick="generatePosterImagePrompt()" style="flex:1;min-width:120px;padding:10px;border-radius:8px;background:#6366f1;color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:600;">✨ 生成Image2提示词</button>
+                                   <button onclick="renderPosterPreview()" style="flex:1;min-width:100px;padding:10px;border-radius:8px;background:rgba(255,255,255,0.08);color:rgba(226,232,240,0.9);border:none;cursor:pointer;font-size:13px;font-weight:600;">🖼 预览</button>
+                                 </div>
+                                 <div style="position:relative;">
+                                   <textarea id="poster-image2-prompt" placeholder="点击上方按钮生成 Image2 提示词，然后复制到 GPT Image 2 生成图片" style="width:100%;height:100px;padding:10px;border-radius:8px;border:1px solid rgba(99,102,241,0.2);background:rgba(99,102,241,0.04);color:#fff;font-size:12px;line-height:1.6;box-sizing:border-box;resize:vertical;"></textarea>
+                                   <button onclick="copyImage2Prompt()" style="position:absolute;bottom:8px;right:8px;padding:6px 10px;border-radius:6px;background:rgba(99,102,241,0.3);color:#a5b4fc;border:none;cursor:pointer;font-size:11px;">📋 复制</button>
+                                 </div>
+                               </div>
+
+                               <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;">
+                                 <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.75);margin-bottom:8px;">④ 上传成图 + 标记用途</div>
+                                 <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+                                   <input id="poster-final-image-url" readonly placeholder="上传图片自动填充" style="flex:1;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;box-sizing:border-box;">
+                                   <input type="file" id="poster-image-upload-input" accept="image/*" style="display:none;" onchange="uploadPosterImage(event)">
+                                   <button onclick="document.getElementById('poster-image-upload-input').click()" style="padding:10px 16px;border-radius:8px;background:rgba(99,102,241,0.2);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);cursor:pointer;font-size:13px;white-space:nowrap;">上传图片</button>
+                                 </div>
+                                 <div id="poster-upload-preview" style="display:none;margin-bottom:8px;"><img id="poster-upload-preview-img" style="max-height:140px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);width:100%;object-fit:contain;"></div>
+                                 <div style="margin-bottom:6px;">
+                                   <div style="font-size:11px;color:rgba(226,232,240,0.5);margin-bottom:4px;">营销用途（可复选）</div>
+                                   <div id="poster-gen-purposes" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+                                 </div>
+                                 <div>
+                                   <div style="font-size:11px;color:rgba(226,232,240,0.5);margin-bottom:4px;">投放渠道（可复选）</div>
+                                   <div id="poster-gen-channels" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+                                 </div>
+                               </div>
+
+                               <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;">
+                                 <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.75);margin-bottom:8px;">⑤ 发布</div>
+                                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+                                   <select id="poster-public-channel" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></select>
+                                   <input id="poster-public-date" type="date" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;box-sizing:border-box;">
+                                 </div>
+                                 <div style="display:flex;gap:8px;margin-bottom:8px;">
+                                   <span style="font-size:11px;color:rgba(226,232,240,0.5);align-self:center;">私域渠道：</span>
+                                   <select id="poster-private-channel" style="flex:1;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"><option value="wecom">企微</option><option value="miniprogram">小程序</option></select>
+                                 </div>
+                                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                   <button onclick="saveGeneratedPoster()" style="flex:1;min-width:80px;padding:12px;border-radius:8px;background:#f59e0b;color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:600;">💾 保存</button>
+                                   <button onclick="createPosterPrivateFlow()" style="flex:1;min-width:80px;padding:12px;border-radius:8px;background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.25);cursor:pointer;font-size:13px;font-weight:600;">🔒 私域触达</button>
+                                   <button onclick="createPosterPublicFlow()" style="flex:1;min-width:80px;padding:12px;border-radius:8px;background:rgba(14,165,233,0.15);color:#38bdf8;border:1px solid rgba(14,165,233,0.25);cursor:pointer;font-size:13px;font-weight:600;">📣 公域发布</button>
+                                   <a id="poster-download-link" style="display:none;"></a>
+                                 </div>
+                                 <div style="margin-top:8px;font-size:10px;color:rgba(226,232,240,0.4);line-height:1.5;">操作流程：选模板 → 填内容 → AI生成 → 上传成图并打标签 → 保存 → 选择发布链路</div>
+                               </div>
+
+                               <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;">
+                                 <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.75);margin-bottom:8px;">🖼 预览</div>
+                                 <canvas id="poster-canvas" width="360" height="480" style="width:100%;max-width:360px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);display:block;margin:0 auto;"></canvas>
+                               </div>
+                             </div>
+
+                             <div style="margin-top:12px;">
+                               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                                 <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.8);">已生成海报</div>
+                                 <button onclick="loadPosterHistory()" style="padding:4px 10px;border-radius:6px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.6);border:1px solid rgba(255,255,255,0.1);cursor:pointer;font-size:11px;">刷新</button>
+                               </div>
+                               <div id="poster-history-list" style="max-height:300px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;"></div>
+                             </div>
+
+                             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px;">
+                               <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;">
+                                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                                   <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);">🧩 模板资产库</div>
+                                   <button onclick="resetTemplateForm()" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.6);border:1px solid rgba(255,255,255,0.1);cursor:pointer;font-size:11px;">新增模板</button>
+                                 </div>
+                                 <div style="display:flex;flex-direction:column;gap:6px;">
+                                   <input id="poster-template-key-input" placeholder="模板key（英文唯一标识）" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
+                                   <input id="poster-template-name-input" placeholder="模板名称" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
+                                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                                     <input id="poster-template-category-input" placeholder="分类（拉新/召回/节日等）" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
+                                     <input id="poster-template-channel-input" placeholder="渠道（小红书/美团/朋友圈）" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
+                                   </div>
+                                   <input id="poster-template-aspect-input" placeholder="比例，如 3:4" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
+                                   <textarea id="poster-template-style-input" placeholder="模板风格描述" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;height:60px;box-sizing:border-box;resize:vertical;"></textarea>
+                                   <textarea id="poster-template-prompt-notes-input" placeholder="Image2 提示词附加约束" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;height:60px;box-sizing:border-box;resize:vertical;"></textarea>
+                                   <div style="display:flex;gap:6px;align-items:center;">
+                                     <input id="poster-template-image-url" placeholder="缩略图URL" readonly style="flex:1;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
+                                     <input type="file" id="poster-template-image-upload" accept="image/*" style="display:none;" onchange="uploadTemplateImage(event)">
+                                     <button onclick="document.getElementById('poster-template-image-upload').click()" style="padding:6px 10px;border-radius:6px;background:rgba(99,102,241,0.2);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);cursor:pointer;font-size:11px;white-space:nowrap;">上传</button>
+                                   </div>
+                                   <div id="poster-template-image-preview" style="display:none;"><img id="poster-template-image-preview-img" style="max-height:80px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);"></div>
+                                 </div>
+                                 <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+                                   <button onclick="savePosterTemplateMeta()" style="flex:1;padding:8px;border-radius:6px;background:#6366f1;color:#fff;border:none;cursor:pointer;font-size:12px;">保存模板</button>
+                                   <button onclick="loadPosterTemplates()" style="padding:8px 12px;border-radius:6px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.6);border:1px solid rgba(255,255,255,0.1);cursor:pointer;font-size:12px;">刷新</button>
+                                 </div>
+                                 <div id="poster-template-library" style="max-height:260px;overflow-y:auto;margin-top:8px;"></div>
+                               </div>
                                 <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px;">
                                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                                         <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);">🖼 创意素材库</div>
@@ -44896,8 +44917,8 @@ ${body}
                 loadPublicChannels();
                 populatePosterStoreSelect();
                 initAutoCampaignId();
-                renderTagCheckboxes('poster-template-purposes', __CONTENT_PURPOSE_TAGS, []);
-                renderTagCheckboxes('poster-template-channels', __CONTENT_CHANNEL_TAGS, []);
+                renderTagCheckboxes('poster-gen-purposes', __CONTENT_PURPOSE_TAGS, []);
+                renderTagCheckboxes('poster-gen-channels', __CONTENT_CHANNEL_TAGS, []);
             } else if (tab === 'public') {
                 refreshPublicContentWorkspace();
             } else if (tab === 'pos') {
@@ -46440,58 +46461,29 @@ ${body}
         + '<div style="margin-top:4px;"><span style="color:rgba(226,232,240,0.45);">Image2 附加约束：</span>' + escapeHtml(tpl.promptNotes || '无') + '</div>';
     }
 
-    var _contentLibraryFilter = { purpose: '', channel: '' };
-    function setContentLibraryFilter(type, val) {
-      _contentLibraryFilter[type] = val;
-      renderPosterTemplateLibrary();
-    }
     function renderPosterTemplateLibrary() {
       var host = document.getElementById('poster-template-library');
       if (!host) return;
-      var filterBar = '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">'
-        + '<span style="font-size:11px;color:rgba(226,232,240,0.5);">筛选：</span>'
-        + '<select onchange="setContentLibraryFilter(\'purpose\',this.value)" style="padding:3px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:#fff;font-size:11px;">'
-        + '<option value="">全部用途</option>'
-        + __CONTENT_PURPOSE_TAGS.map(function(t) { return '<option value="' + t + '"' + (_contentLibraryFilter.purpose === t ? ' selected' : '') + '>' + t + '</option>'; }).join('')
-        + '</select>'
-        + '<select onchange="setContentLibraryFilter(\'channel\',this.value)" style="padding:3px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:#fff;font-size:11px;">'
-        + '<option value="">全部渠道</option>'
-        + __CONTENT_CHANNEL_TAGS.map(function(t) { return '<option value="' + t + '"' + (_contentLibraryFilter.channel === t ? ' selected' : '') + '>' + t + '</option>'; }).join('')
-        + '</select></div>';
       var allItems = _savedPosterTemplates.slice();
       POSTER_TEMPLATES.forEach(function(pt) {
         if (!allItems.some(function(s) { return s.template_key === pt.key; })) {
           allItems.push({ template_key: pt.key, name: pt.name + ' (系统)', category: '系统', channel: '', aspect_ratio: '',
             image_url: '', style_guide: { style: pt.style || '', prompt_notes: pt.promptNotes || '' },
-            purposes: [], channels: [],
             _isBuiltin: true, _builtinKey: pt.key });
         }
       });
-      if (_contentLibraryFilter.purpose) {
-        allItems = allItems.filter(function(t) { return Array.isArray(t.purposes) && t.purposes.indexOf(_contentLibraryFilter.purpose) >= 0; });
-      }
-      if (_contentLibraryFilter.channel) {
-        allItems = allItems.filter(function(t) { return Array.isArray(t.channels) && t.channels.indexOf(_contentLibraryFilter.channel) >= 0; });
-      }
-      host.innerHTML = filterBar + (allItems.length ? allItems.map(function(t) {
-        var thumb = t.image_url ? '<img src="' + escapeHtml(t.image_url) + '" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;">' : '';
+      host.innerHTML = allItems.length ? allItems.map(function(t) {
+        var thumb = t.image_url ? '<img src="' + escapeHtml(t.image_url) + '" style="width:36px;height:36px;object-fit:cover;border-radius:6px;flex-shrink:0;">' : '';
         var nameLabel = t._isBuiltin ? (t.name || t.template_key) : (t.name || t.template_key || '-');
         var isBuiltin = t._isBuiltin;
-        var badges = (Array.isArray(t.purposes) ? t.purposes : []).map(function(p) {
-          return '<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(99,102,241,0.15);color:#a5b4fc;font-size:10px;margin-right:3px;">' + escapeHtml(p) + '</span>';
-        }).concat((Array.isArray(t.channels) ? t.channels : []).map(function(c) {
-          return '<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(34,197,94,0.15);color:#86efac;font-size:10px;margin-right:3px;">' + escapeHtml(c) + '</span>';
-        })).join('');
-        return '<div style="display:flex;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12px;">'
+        return '<div style="display:flex;gap:6px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px;">'
           + thumb
-          + '<div style="flex:1;min-width:0;">'
-          + '<div style="color:#fff;font-weight:700;">' + escapeHtml(nameLabel) + '</div>'
-          + '<div style="margin-top:2px;">' + (badges || '<span style="color:rgba(226,232,240,0.35);font-size:11px;">无标签</span>') + '</div>'
-          + '</div>'
-          + '<button onclick="editPosterTemplate(\'' + t.template_key + '\')" style="padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:none;cursor:pointer;font-size:11px;">编辑</button>'
-          + (isBuiltin ? '' : '<button onclick="deletePosterTemplate(' + t.id + ')" style="padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.15);color:#fca5a5;border:none;cursor:pointer;font-size:11px;">删除</button>')
+          + '<div style="flex:1;min-width:0;color:#fff;font-weight:600;">' + escapeHtml(nameLabel) + '</div>'
+          + '<div style="color:rgba(226,232,240,0.4);font-size:10px;margin-right:6px;">' + escapeHtml(t.category || '') + '</div>'
+          + '<button onclick="editPosterTemplate(\'' + t.template_key + '\')" style="padding:2px 6px;border-radius:4px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:none;cursor:pointer;font-size:10px;">编辑</button>'
+          + (isBuiltin ? '' : '<button onclick="deletePosterTemplate(' + t.id + ')" style="padding:2px 6px;border-radius:4px;background:rgba(239,68,68,0.15);color:#fca5a5;border:none;cursor:pointer;font-size:10px;">删除</button>')
           + '</div>';
-      }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无模板</div>');
+      }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:8px 0;font-size:11px;">暂无模板</div>';
     }
 
     function populatePosterStoreSelect() {
@@ -46529,12 +46521,10 @@ ${body}
 
     function resetTemplateForm() {
       _editingTemplateKey = '';
-      ['poster-template-key-input','poster-template-name-input','poster-template-category-input','poster-template-channel-input','poster-template-aspect-input','poster-template-style-input','poster-template-prompt-notes-input','poster-template-image-url'].forEach(function(id) {
-        var el = document.getElementById(id);
+       ['poster-template-key-input','poster-template-name-input','poster-template-category-input','poster-template-channel-input','poster-template-aspect-input','poster-template-style-input','poster-template-prompt-notes-input','poster-template-image-url'].forEach(function(id) {
+         var el = document.getElementById(id);
          if (el) el.value = '';
        });
-       renderTagCheckboxes('poster-template-purposes', __CONTENT_PURPOSE_TAGS, []);
-       renderTagCheckboxes('poster-template-channels', __CONTENT_CHANNEL_TAGS, []);
        document.getElementById('poster-template-image-preview').style.display = 'none';
     }
 
@@ -46556,8 +46546,6 @@ ${body}
         setField('poster-template-style-input', (t.style_guide && t.style_guide.style) || '');
         setField('poster-template-prompt-notes-input', (t.style_guide && t.style_guide.prompt_notes) || '');
         setField('poster-template-image-url', t.image_url || '');
-        renderTagCheckboxes('poster-template-purposes', __CONTENT_PURPOSE_TAGS, Array.isArray(t.purposes) ? t.purposes : []);
-        renderTagCheckboxes('poster-template-channels', __CONTENT_CHANNEL_TAGS, Array.isArray(t.channels) ? t.channels : []);
        var previewEl = document.getElementById('poster-template-image-preview');
        var previewImg = document.getElementById('poster-template-image-preview-img');
        if (previewEl && previewImg && t.image_url) {
@@ -46675,6 +46663,8 @@ ${body}
         template_key: _selectedPosterTemplate,
         subtitle: editor.subtitle || '',
         cta: editor.cta || '',
+        purposes: getCheckedValues('poster-gen-purposes'),
+        channels: getCheckedValues('poster-gen-channels'),
         status: 'generated',
         image_url: editor.finalImageUrl,
         output_url: editor.finalImageUrl,
@@ -47170,8 +47160,6 @@ ${body}
          channel: document.getElementById('poster-template-channel-input')?.value || '',
          aspect_ratio: document.getElementById('poster-template-aspect-input')?.value || '',
          image_url: document.getElementById('poster-template-image-url')?.value || '',
-         purposes: getCheckedValues('poster-template-purposes'),
-         channels: getCheckedValues('poster-template-channels'),
          layout: {},
          style_guide: {
           style: document.getElementById('poster-template-style-input')?.value || '',

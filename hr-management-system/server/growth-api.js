@@ -424,6 +424,8 @@ export async function ensureGrowthTables(pool) {
   await pool.query(`ALTER TABLE poster_templates ADD COLUMN IF NOT EXISTS image_url TEXT`);
   await pool.query(`ALTER TABLE poster_templates ADD COLUMN IF NOT EXISTS purposes TEXT[] DEFAULT '{}'::text[]`);
   await pool.query(`ALTER TABLE poster_templates ADD COLUMN IF NOT EXISTS channels TEXT[] DEFAULT '{}'::text[]`);
+  await pool.query(`ALTER TABLE generated_posters ADD COLUMN IF NOT EXISTS purposes TEXT[] DEFAULT '{}'::text[]`);
+  await pool.query(`ALTER TABLE generated_posters ADD COLUMN IF NOT EXISTS channels TEXT[] DEFAULT '{}'::text[]`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS generated_posters (
@@ -437,6 +439,8 @@ export async function ensureGrowthTables(pool) {
       cta TEXT,
       image_url TEXT,
       output_url TEXT,
+      purposes TEXT[] DEFAULT '{}'::text[],
+      channels TEXT[] DEFAULT '{}'::text[],
       status TEXT NOT NULL DEFAULT 'draft',
       meta JSONB DEFAULT '{}'::jsonb,
       created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -1908,11 +1912,11 @@ export function registerGrowthRoutes(app, pool) {
     if (!requireGrowthAuth(req, res)) return;
     const b = req.body || {};
     const r = await pool.query(
-      `INSERT INTO generated_posters (poster_key, campaign_id, store_id, template_key, title, subtitle, cta, image_url, output_url, status, meta)
-       VALUES (NULLIF($1,''),NULLIF($2,''),NULLIF($3,''),NULLIF($4,''),$5,$6,$7,$8,$9,COALESCE(NULLIF($10,''),'draft'),$11::jsonb)
-       ON CONFLICT (poster_key) DO UPDATE SET title = EXCLUDED.title, subtitle = EXCLUDED.subtitle, cta = EXCLUDED.cta, output_url = EXCLUDED.output_url, status = EXCLUDED.status, meta = EXCLUDED.meta, updated_at = NOW()
+      `INSERT INTO generated_posters (poster_key, campaign_id, store_id, template_key, title, subtitle, cta, image_url, output_url, purposes, channels, status, meta)
+       VALUES (NULLIF($1,''),NULLIF($2,''),NULLIF($3,''),NULLIF($4,''),$5,$6,$7,$8,$9,$10,$11,COALESCE(NULLIF($12,''),'draft'),$13::jsonb)
+       ON CONFLICT (poster_key) DO UPDATE SET title = EXCLUDED.title, subtitle = EXCLUDED.subtitle, cta = EXCLUDED.cta, output_url = EXCLUDED.output_url, purposes = EXCLUDED.purposes, channels = EXCLUDED.channels, status = EXCLUDED.status, meta = EXCLUDED.meta, updated_at = NOW()
        RETURNING *`,
-      [cleanText(b.poster_key, 255), cleanText(b.campaign_id, 128), cleanText(b.store_id, 128), cleanText(b.template_key, 128), cleanText(b.title, 500), cleanText(b.subtitle, 1000), cleanText(b.cta, 500), cleanText(b.image_url, 1000), cleanText(b.output_url, 1000), cleanText(b.status, 40), JSON.stringify(b.meta || {})]
+      [cleanText(b.poster_key, 255), cleanText(b.campaign_id, 128), cleanText(b.store_id, 128), cleanText(b.template_key, 128), cleanText(b.title, 500), cleanText(b.subtitle, 1000), cleanText(b.cta, 500), cleanText(b.image_url, 1000), cleanText(b.output_url, 1000), Array.isArray(b.purposes) ? b.purposes.filter(Boolean) : [], Array.isArray(b.channels) ? b.channels.filter(Boolean) : [], cleanText(b.status, 40), JSON.stringify(b.meta || {})]
     );
     return res.json({ ok: true, poster: r.rows[0] });
   });
@@ -1922,13 +1926,17 @@ export function registerGrowthRoutes(app, pool) {
     const purpose = cleanText(req.query.purpose || '', 40);
     const channel = cleanText(req.query.channel || '', 40);
     const storeId = cleanText(req.query.store_id || '', 128);
-    const conditions = ['enabled = TRUE'];
+    const conditions = ["gp.status IN ('generated','published')"];
     const params = [];
     let idx = 1;
-    if (purpose) { conditions.push(`$${idx} = ANY(purposes)`); params.push(purpose); idx++; }
-    if (channel) { conditions.push(`$${idx} = ANY(channels)`); params.push(channel); idx++; }
-    if (storeId) { conditions.push(`(store_id IS NULL OR store_id = '' OR store_id = $${idx})`); params.push(storeId); idx++; }
-    const query = `SELECT id, template_key, name, category, channel, aspect_ratio, purposes, channels, image_url, style_guide FROM poster_templates WHERE ${conditions.join(' AND ')} ORDER BY name LIMIT 100`;
+    if (purpose) { conditions.push(`$${idx} = ANY(gp.purposes)`); params.push(purpose); idx++; }
+    if (channel) { conditions.push(`$${idx} = ANY(gp.channels)`); params.push(channel); idx++; }
+    if (storeId) { conditions.push(`(gp.store_id IS NULL OR gp.store_id = '' OR gp.store_id = $${idx})`); params.push(storeId); idx++; }
+    const query = `SELECT gp.id, gp.poster_key AS template_key, COALESCE(pt.name, gp.title, '海报') AS name, gp.title, gp.subtitle, gp.purposes, gp.channels, gp.output_url AS image_url, gp.created_at
+      FROM generated_posters gp
+      LEFT JOIN poster_templates pt ON pt.template_key = gp.template_key
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY gp.created_at DESC LIMIT 100`;
     const r = await pool.query(query, params);
     return res.json({ ok: true, items: r.rows });
   });
