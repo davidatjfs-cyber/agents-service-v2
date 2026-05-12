@@ -14060,10 +14060,8 @@
                                       <label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:3px;">投放渠道（可复选）</label>
                                       <div id="poster-template-channel-checkboxes" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
                                     </div>
-                                    <select id="poster-template-aspect-input" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;"><option value="">选择比例</option></select>
-                                    <select id="poster-template-style-input" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;"><option value="">选择模板风格</option></select>
-                                    <select id="poster-template-prompt-notes-input" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;"><option value="">选择提示词约束</option></select>
-                                    <div style="display:flex;gap:6px;align-items:center;">
+                                     <select id="poster-template-aspect-input" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;"><option value="">选择比例</option></select>
+                                     <div style="display:flex;gap:6px;align-items:center;">
                                       <input id="poster-template-image-url" placeholder="缩略图URL" readonly style="flex:1;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
                                       <input type="file" id="poster-template-image-upload" accept="image/*" style="display:none;" onchange="uploadTemplateImage(event)">
                                       <button onclick="document.getElementById('poster-template-image-upload').click()" style="padding:6px 10px;border-radius:6px;background:rgba(99,102,241,0.2);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);cursor:pointer;font-size:11px;white-space:nowrap;">上传</button>
@@ -46557,7 +46555,7 @@ ${body}
 
     function resetTemplateForm() {
       _editingTemplateKey = '';
-       ['poster-template-key-input','poster-template-name-input','poster-template-aspect-input','poster-template-style-input','poster-template-prompt-notes-input','poster-template-image-url'].forEach(function(id) {
+        ['poster-template-key-input','poster-template-name-input','poster-template-aspect-input','poster-template-image-url'].forEach(function(id) {
          var el = document.getElementById(id);
          if (el) el.value = '';
        });
