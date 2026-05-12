@@ -13433,7 +13433,7 @@ function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
     } else if (rawDays != null && Number.isFinite(rawDays) && rawDays > 0 && sd.startsWith(m)) {
       days = rawDays;
     }
-    if (!(Number.isFinite(days) && days > 0)) return;
+    if (!(Number.isFinite(days) && days > 0) || (rawDays !== null && rawDays === 0)) return;
     usedLeave += days;
     usedLeaveDetails.push({ date: `${sd}~${ed}`, days, type: '休假', source: '已批休假' });
 

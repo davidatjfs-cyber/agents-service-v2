@@ -13976,7 +13976,11 @@
                                      <input id="poster-campaign" readonly placeholder="活动ID（自动生成）" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(99,102,241,0.28);background:rgba(99,102,241,0.06);color:#a5b4fc;font-size:12px;box-sizing:border-box;">
                                      <input id="poster-coupon" placeholder="券模板ID（可选）" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;box-sizing:border-box;">
                                    </div>
-                                   <input id="poster-keywords" placeholder="补充卖点/场景关键词" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;box-sizing:border-box;">
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                      <select id="poster-gen-style-select" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"><option value="">选择视觉风格（从模板继承）</option></select>
+                                      <select id="poster-gen-prompt-select" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"><option value="">选择排版约束（从模板继承）</option></select>
+                                    </div>
+                                    <input id="poster-keywords" placeholder="补充卖点/场景关键词" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;box-sizing:border-box;">
                                  </div>
                                </div>
 
@@ -44928,6 +44932,7 @@ ${body}
                 initAutoCampaignId();
                 renderTagCheckboxes('poster-gen-purposes', __CONTENT_PURPOSE_TAGS, []);
                 renderTagCheckboxes('poster-gen-channels', __CONTENT_CHANNEL_TAGS, []);
+                populatePosterGenStylePrompt();
                 populateTemplateFormSelects();
             } else if (tab === 'public') {
                 refreshPublicContentWorkspace();
@@ -46539,8 +46544,15 @@ ${body}
         el.innerHTML = '<option value="">请选择</option>' + options.map(function(o) { return '<option value="' + escapeHtml(o) + '">' + escapeHtml(o) + '</option>'; }).join('');
       }
       fillSelect('poster-template-aspect-input', __TEMPLATE_ASPECT_OPTIONS);
-      fillSelect('poster-template-style-input', __TEMPLATE_STYLE_OPTIONS);
-      fillSelect('poster-template-prompt-notes-input', __TEMPLATE_PROMPT_OPTIONS);
+    }
+    function populatePosterGenStylePrompt() {
+      function fillSelect(id, options, label) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.innerHTML = '<option value="">' + label + '</option>' + options.map(function(o) { return '<option value="' + escapeHtml(o) + '">' + escapeHtml(o) + '</option>'; }).join('');
+      }
+      fillSelect('poster-gen-style-select', __TEMPLATE_STYLE_OPTIONS, '选择视觉风格（从模板继承）');
+      fillSelect('poster-gen-prompt-select', __TEMPLATE_PROMPT_OPTIONS, '选择排版约束（从模板继承）');
     }
 
     function resetTemplateForm() {
@@ -46641,6 +46653,11 @@ ${body}
     function selectPosterTemplate(key) {
       _selectedPosterTemplate = key;
       renderPosterTemplateSelector();
+      var tpl = POSTER_TEMPLATES.find(function(t) { return t.key === key; });
+      if (tpl) {
+        setField('poster-gen-style-select', tpl.style || '');
+        setField('poster-gen-prompt-select', tpl.promptNotes || '');
+      }
     }
 
     function getPosterEditorData() {
@@ -46749,15 +46766,18 @@ ${body}
      }
 
      function generatePosterImagePrompt() {
-       var tpl = POSTER_TEMPLATES.find(function(t) { return t.key === _selectedPosterTemplate; });
-       if (!tpl) { showNotification('请先选择模板', 'warning'); return; }
-       var editor = getPosterEditorData();
-       if (!editor.title && !editor.offer) { showNotification('请先填写标题或优惠信息', 'warning'); return; }
-       var prompt = [
-         'Create a premium restaurant marketing poster image for GPT Image 2.',
-         'Use this visual style: ' + (tpl.style || tpl.desc || ''),
-         'Follow these composition constraints: ' + (tpl.promptNotes || 'clear hierarchy, enough empty space for Chinese copy, commercial ad quality.'),
-         'Aspect ratio: ' + (((_savedPosterTemplates.find(function(t) { return t.template_key === _selectedPosterTemplate; }) || {}).aspect_ratio) || '3:4') + '.',
+        var tpl = POSTER_TEMPLATES.find(function(t) { return t.key === _selectedPosterTemplate; });
+        if (!tpl) { showNotification('请先选择模板', 'warning'); return; }
+        var editor = getPosterEditorData();
+        if (!editor.title && !editor.offer) { showNotification('请先填写标题或优惠信息', 'warning'); return; }
+        var styleVal = document.getElementById('poster-gen-style-select')?.value || tpl.style || tpl.desc || '';
+        var promptVal = document.getElementById('poster-gen-prompt-select')?.value || tpl.promptNotes || 'clear hierarchy, enough empty space for Chinese copy, commercial ad quality.';
+        var aspectRatio = ((_savedPosterTemplates.find(function(t) { return t.template_key === _selectedPosterTemplate; }) || {}).aspect_ratio) || '3:4';
+        var prompt = [
+          'Create a premium restaurant marketing poster image for GPT Image 2.',
+          'Use this visual style: ' + styleVal,
+          'Follow these composition constraints: ' + promptVal,
+          'Aspect ratio: ' + aspectRatio + '.',
          '',
          '## Typography & Font Specifications (critical for Chinese poster)',
          'Font family — Headline: bold modern Chinese sans-serif (思源黑体 / Source Han Sans SC / Noto Sans SC), weight 700–900.',
