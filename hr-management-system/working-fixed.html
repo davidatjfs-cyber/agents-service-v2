@@ -14019,14 +14019,20 @@
                             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:16px;align-items:start;">
                                 <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px;">
                                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-                                        <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);">🧩 模板资产库</div>
+                                        <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);">营销内容库</div>
                                         <button onclick="resetTemplateForm()" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.6);border:1px solid rgba(255,255,255,0.1);cursor:pointer;font-size:11px;">新增模板</button>
                                     </div>
                                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                                         <input id="poster-template-key-input" placeholder="模板key（英文唯一标识）" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
                                         <input id="poster-template-name-input" placeholder="模板名称" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
-                                        <input id="poster-template-category-input" placeholder="分类（拉新/召回/节日等）" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
-                                        <input id="poster-template-channel-input" placeholder="渠道（小红书/美团/朋友圈）" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <div style="grid-column:1/-1;">
+                                            <label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:3px;">营销用途（可复选）</label>
+                                            <div id="poster-template-purposes" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+                                        </div>
+                                        <div style="grid-column:1/-1;">
+                                            <label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:3px;">投放渠道（可复选）</label>
+                                            <div id="poster-template-channels" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+                                        </div>
                                         <input id="poster-template-aspect-input" placeholder="比例，如 3:4" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;grid-column:1/-1;">
                                         <textarea id="poster-template-style-input" placeholder="模板风格描述：如 奶油白底 / 酒红+橄榄绿 / 左对齐 / 杂志感 / 留白高级" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;grid-column:1/-1;height:72px;"></textarea>
                                         <textarea id="poster-template-prompt-notes-input" placeholder="Image2 提示词附加约束：如 保留大面积留白 / 文案位置给顶部与左侧 / 产品主体占画面40% / 不要卡通风" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;grid-column:1/-1;height:72px;"></textarea>
@@ -44890,6 +44896,8 @@ ${body}
                 loadPublicChannels();
                 populatePosterStoreSelect();
                 initAutoCampaignId();
+                renderTagCheckboxes('poster-template-purposes', __CONTENT_PURPOSE_TAGS, []);
+                renderTagCheckboxes('poster-template-channels', __CONTENT_CHANNEL_TAGS, []);
             } else if (tab === 'public') {
                 refreshPublicContentWorkspace();
             } else if (tab === 'pos') {
@@ -45840,6 +45848,8 @@ ${body}
         }
 
         var __GROWTH_STORE_MAP = { '51866138': '马己仙广东小馆·荔枝木烧鹅', '64822111': '洪潮传统潮汕菜', 'store_test_001': '测试门店', 'store_test': '测试门店', 'store_test_002': '测试门店2', 'store_form_001': '表单测试门店', 'store_ui': 'UI测试门店', 'store_audit': '审核门店', 'test': '测试' };
+        var __CONTENT_PURPOSE_TAGS = ['品宣','促销','拉新','召回','节日','会员日','新品','限时特惠'];
+        var __CONTENT_CHANNEL_TAGS = ['朋友圈','小红书','美团','大众点评','企微','门店','抖音','公众号'];
         function growthStoreName(id) { return __GROWTH_STORE_MAP[id] || id; }
         var __CHANNEL_MAP = { 'miniprogram': '微信小程序', 'wecom': '企微私聊', 'xiaohongshu': '小红书', 'douyin': '抖音', 'dianping': '大众点评', 'sms': '短信', 'email': '邮件' };
         function growthChannelLabel(ch) { return __CHANNEL_MAP[ch] || ch; }
@@ -46430,31 +46440,58 @@ ${body}
         + '<div style="margin-top:4px;"><span style="color:rgba(226,232,240,0.45);">Image2 附加约束：</span>' + escapeHtml(tpl.promptNotes || '无') + '</div>';
     }
 
+    var _contentLibraryFilter = { purpose: '', channel: '' };
+    function setContentLibraryFilter(type, val) {
+      _contentLibraryFilter[type] = val;
+      renderPosterTemplateLibrary();
+    }
     function renderPosterTemplateLibrary() {
       var host = document.getElementById('poster-template-library');
       if (!host) return;
+      var filterBar = '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">'
+        + '<span style="font-size:11px;color:rgba(226,232,240,0.5);">筛选：</span>'
+        + '<select onchange="setContentLibraryFilter(\'purpose\',this.value)" style="padding:3px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:#fff;font-size:11px;">'
+        + '<option value="">全部用途</option>'
+        + __CONTENT_PURPOSE_TAGS.map(function(t) { return '<option value="' + t + '"' + (_contentLibraryFilter.purpose === t ? ' selected' : '') + '>' + t + '</option>'; }).join('')
+        + '</select>'
+        + '<select onchange="setContentLibraryFilter(\'channel\',this.value)" style="padding:3px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:#fff;font-size:11px;">'
+        + '<option value="">全部渠道</option>'
+        + __CONTENT_CHANNEL_TAGS.map(function(t) { return '<option value="' + t + '"' + (_contentLibraryFilter.channel === t ? ' selected' : '') + '>' + t + '</option>'; }).join('')
+        + '</select></div>';
       var allItems = _savedPosterTemplates.slice();
       POSTER_TEMPLATES.forEach(function(pt) {
-        if (!allItems.some(function(s) { return s.template_key === pt.key || s.template_key === pt.key; })) {
+        if (!allItems.some(function(s) { return s.template_key === pt.key; })) {
           allItems.push({ template_key: pt.key, name: pt.name + ' (系统)', category: '系统', channel: '', aspect_ratio: '',
             image_url: '', style_guide: { style: pt.style || '', prompt_notes: pt.promptNotes || '' },
+            purposes: [], channels: [],
             _isBuiltin: true, _builtinKey: pt.key });
         }
       });
-      host.innerHTML = allItems.length ? allItems.map(function(t) {
+      if (_contentLibraryFilter.purpose) {
+        allItems = allItems.filter(function(t) { return Array.isArray(t.purposes) && t.purposes.indexOf(_contentLibraryFilter.purpose) >= 0; });
+      }
+      if (_contentLibraryFilter.channel) {
+        allItems = allItems.filter(function(t) { return Array.isArray(t.channels) && t.channels.indexOf(_contentLibraryFilter.channel) >= 0; });
+      }
+      host.innerHTML = filterBar + (allItems.length ? allItems.map(function(t) {
         var thumb = t.image_url ? '<img src="' + escapeHtml(t.image_url) + '" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;">' : '';
         var nameLabel = t._isBuiltin ? (t.name || t.template_key) : (t.name || t.template_key || '-');
         var isBuiltin = t._isBuiltin;
+        var badges = (Array.isArray(t.purposes) ? t.purposes : []).map(function(p) {
+          return '<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(99,102,241,0.15);color:#a5b4fc;font-size:10px;margin-right:3px;">' + escapeHtml(p) + '</span>';
+        }).concat((Array.isArray(t.channels) ? t.channels : []).map(function(c) {
+          return '<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(34,197,94,0.15);color:#86efac;font-size:10px;margin-right:3px;">' + escapeHtml(c) + '</span>';
+        })).join('');
         return '<div style="display:flex;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12px;">'
           + thumb
           + '<div style="flex:1;min-width:0;">'
           + '<div style="color:#fff;font-weight:700;">' + escapeHtml(nameLabel) + '</div>'
-          + '<div style="margin-top:2px;color:rgba(226,232,240,0.55);font-size:11px;">' + escapeHtml([t.category, t.channel, t.aspect_ratio].filter(Boolean).join(' · ') || '-') + '</div>'
+          + '<div style="margin-top:2px;">' + (badges || '<span style="color:rgba(226,232,240,0.35);font-size:11px;">无标签</span>') + '</div>'
           + '</div>'
           + '<button onclick="editPosterTemplate(\'' + t.template_key + '\')" style="padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:none;cursor:pointer;font-size:11px;">编辑</button>'
           + (isBuiltin ? '' : '<button onclick="deletePosterTemplate(' + t.id + ')" style="padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.15);color:#fca5a5;border:none;cursor:pointer;font-size:11px;">删除</button>')
           + '</div>';
-      }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无模板</div>';
+      }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无模板</div>');
     }
 
     function populatePosterStoreSelect() {
@@ -46475,13 +46512,30 @@ ${body}
       }
     }
 
+    function renderTagCheckboxes(containerId, tags, selectedArr) {
+      var container = document.getElementById(containerId);
+      if (!container) return;
+      container.innerHTML = tags.map(function(tag) {
+        var checked = selectedArr.indexOf(tag) >= 0 ? 'checked' : '';
+        return '<label style="display:flex;align-items:center;gap:3px;padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);cursor:pointer;font-size:11px;color:rgba(226,232,240,0.8);">' +
+          '<input type="checkbox" value="' + escapeHtml(tag) + '" ' + checked + ' style="margin:0;width:14px;height:14px;accent-color:#6366f1;">' +
+          escapeHtml(tag) + '</label>';
+      }).join('');
+    }
+    function getCheckedValues(containerId) {
+      var checks = document.querySelectorAll('#' + containerId + ' input[type=checkbox]:checked');
+      return Array.from(checks).map(function(c) { return c.value; });
+    }
+
     function resetTemplateForm() {
       _editingTemplateKey = '';
       ['poster-template-key-input','poster-template-name-input','poster-template-category-input','poster-template-channel-input','poster-template-aspect-input','poster-template-style-input','poster-template-prompt-notes-input','poster-template-image-url'].forEach(function(id) {
         var el = document.getElementById(id);
-        if (el) el.value = '';
-      });
-      document.getElementById('poster-template-image-preview').style.display = 'none';
+         if (el) el.value = '';
+       });
+       renderTagCheckboxes('poster-template-purposes', __CONTENT_PURPOSE_TAGS, []);
+       renderTagCheckboxes('poster-template-channels', __CONTENT_CHANNEL_TAGS, []);
+       document.getElementById('poster-template-image-preview').style.display = 'none';
     }
 
      function editPosterTemplate(key) {
@@ -46499,9 +46553,11 @@ ${body}
        setField('poster-template-category-input', t.category || '');
        setField('poster-template-channel-input', t.channel || '');
        setField('poster-template-aspect-input', t.aspect_ratio || '');
-       setField('poster-template-style-input', (t.style_guide && t.style_guide.style) || '');
-       setField('poster-template-prompt-notes-input', (t.style_guide && t.style_guide.prompt_notes) || '');
-       setField('poster-template-image-url', t.image_url || '');
+        setField('poster-template-style-input', (t.style_guide && t.style_guide.style) || '');
+        setField('poster-template-prompt-notes-input', (t.style_guide && t.style_guide.prompt_notes) || '');
+        setField('poster-template-image-url', t.image_url || '');
+        renderTagCheckboxes('poster-template-purposes', __CONTENT_PURPOSE_TAGS, Array.isArray(t.purposes) ? t.purposes : []);
+        renderTagCheckboxes('poster-template-channels', __CONTENT_CHANNEL_TAGS, Array.isArray(t.channels) ? t.channels : []);
        var previewEl = document.getElementById('poster-template-image-preview');
        var previewImg = document.getElementById('poster-template-image-preview-img');
        if (previewEl && previewImg && t.image_url) {
@@ -47107,15 +47163,17 @@ ${body}
     }
 
     async function savePosterTemplateMeta() {
-      var payload = {
-        template_key: document.getElementById('poster-template-key-input')?.value || '',
-        name: document.getElementById('poster-template-name-input')?.value || '',
-        category: document.getElementById('poster-template-category-input')?.value || '',
-        channel: document.getElementById('poster-template-channel-input')?.value || '',
-        aspect_ratio: document.getElementById('poster-template-aspect-input')?.value || '',
-        image_url: document.getElementById('poster-template-image-url')?.value || '',
-        layout: {},
-        style_guide: {
+       var payload = {
+         template_key: document.getElementById('poster-template-key-input')?.value || '',
+         name: document.getElementById('poster-template-name-input')?.value || '',
+         category: document.getElementById('poster-template-category-input')?.value || '',
+         channel: document.getElementById('poster-template-channel-input')?.value || '',
+         aspect_ratio: document.getElementById('poster-template-aspect-input')?.value || '',
+         image_url: document.getElementById('poster-template-image-url')?.value || '',
+         purposes: getCheckedValues('poster-template-purposes'),
+         channels: getCheckedValues('poster-template-channels'),
+         layout: {},
+         style_guide: {
           style: document.getElementById('poster-template-style-input')?.value || '',
           prompt_notes: document.getElementById('poster-template-prompt-notes-input')?.value || ''
         }

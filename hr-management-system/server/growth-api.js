@@ -422,6 +422,8 @@ export async function ensureGrowthTables(pool) {
     )
   `);
   await pool.query(`ALTER TABLE poster_templates ADD COLUMN IF NOT EXISTS image_url TEXT`);
+  await pool.query(`ALTER TABLE poster_templates ADD COLUMN IF NOT EXISTS purposes TEXT[] DEFAULT '{}'::text[]`);
+  await pool.query(`ALTER TABLE poster_templates ADD COLUMN IF NOT EXISTS channels TEXT[] DEFAULT '{}'::text[]`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS generated_posters (
@@ -1850,9 +1852,11 @@ export function registerGrowthRoutes(app, pool) {
   app.post('/api/growth/poster-templates', async (req, res) => {
     if (!requireGrowthAuth(req, res)) return;
     const b = req.body || {};
+    const purposes = Array.isArray(b.purposes) ? b.purposes.filter(Boolean) : [];
+    const channels = Array.isArray(b.channels) ? b.channels.filter(Boolean) : [];
     const r = await pool.query(
-      `INSERT INTO poster_templates (template_key, name, category, channel, aspect_ratio, layout, style_guide, image_url, enabled)
-       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,COALESCE($9, TRUE))
+      `INSERT INTO poster_templates (template_key, name, category, channel, aspect_ratio, layout, style_guide, image_url, enabled, purposes, channels)
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,COALESCE($9, TRUE),$10,$11)
        ON CONFLICT (template_key) DO UPDATE SET
          name = EXCLUDED.name,
          category = EXCLUDED.category,
@@ -1862,9 +1866,11 @@ export function registerGrowthRoutes(app, pool) {
          style_guide = EXCLUDED.style_guide,
          image_url = EXCLUDED.image_url,
          enabled = EXCLUDED.enabled,
+         purposes = EXCLUDED.purposes,
+         channels = EXCLUDED.channels,
          updated_at = NOW()
        RETURNING *`,
-      [cleanText(b.template_key, 128), cleanText(b.name, 300), cleanText(b.category, 80), cleanText(b.channel, 80), cleanText(b.aspect_ratio, 40), JSON.stringify(b.layout || {}), JSON.stringify(b.style_guide || {}), cleanText(b.image_url, 1000), b.enabled !== false]
+      [cleanText(b.template_key, 128), cleanText(b.name, 300), cleanText(b.category, 80), cleanText(b.channel, 80), cleanText(b.aspect_ratio, 40), JSON.stringify(b.layout || {}), JSON.stringify(b.style_guide || {}), cleanText(b.image_url, 1000), b.enabled !== false, purposes, channels]
     );
     return res.json({ ok: true, template: r.rows[0] });
   });
@@ -1909,6 +1915,22 @@ export function registerGrowthRoutes(app, pool) {
       [cleanText(b.poster_key, 255), cleanText(b.campaign_id, 128), cleanText(b.store_id, 128), cleanText(b.template_key, 128), cleanText(b.title, 500), cleanText(b.subtitle, 1000), cleanText(b.cta, 500), cleanText(b.image_url, 1000), cleanText(b.output_url, 1000), cleanText(b.status, 40), JSON.stringify(b.meta || {})]
     );
     return res.json({ ok: true, poster: r.rows[0] });
+  });
+
+  app.get('/api/growth/content-library', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const purpose = cleanText(req.query.purpose || '', 40);
+    const channel = cleanText(req.query.channel || '', 40);
+    const storeId = cleanText(req.query.store_id || '', 128);
+    const conditions = ['enabled = TRUE'];
+    const params = [];
+    let idx = 1;
+    if (purpose) { conditions.push(`$${idx} = ANY(purposes)`); params.push(purpose); idx++; }
+    if (channel) { conditions.push(`$${idx} = ANY(channels)`); params.push(channel); idx++; }
+    if (storeId) { conditions.push(`(store_id IS NULL OR store_id = '' OR store_id = $${idx})`); params.push(storeId); idx++; }
+    const query = `SELECT id, template_key, name, category, channel, aspect_ratio, purposes, channels, image_url, style_guide FROM poster_templates WHERE ${conditions.join(' AND ')} ORDER BY name LIMIT 100`;
+    const r = await pool.query(query, params);
+    return res.json({ ok: true, items: r.rows });
   });
 
   app.get('/api/growth/customers', async (req, res) => {
