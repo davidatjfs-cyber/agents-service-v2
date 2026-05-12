@@ -13995,7 +13995,7 @@
                                         </div>
                                     </div>
                                     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
-                                        <button onclick="generatePosterCopy()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:12px;">🤖 生成文案（标题+副标题+优惠+CTA）</button>
+                                        <button onclick="generatePosterCopy()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:12px;">🤖 生成关键词建议</button>
                                         <button onclick="generatePosterImagePrompt()" style="padding:6px 14px;border-radius:8px;background:#6366f1;color:#fff;border:none;cursor:pointer;font-size:12px;">✨ 生成 Image2 提示词</button>
                                         <button onclick="renderPosterPreview()" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.08);color:#fff;border:none;cursor:pointer;font-size:12px;">本地排版预览</button>
                                         <button onclick="saveGeneratedPoster()" style="padding:6px 14px;border-radius:8px;background:#f59e0b;color:#fff;border:none;cursor:pointer;font-size:12px;">💾 保存最终海报</button>
@@ -46283,11 +46283,11 @@ ${body}
           ctx.fillStyle='rgba(255,255,255,0.04)'; ctx.beginPath(); ctx.arc(w*0.2,h*0.7,180,0,Math.PI*2); ctx.fill();
           ctx.textAlign='center';
           ctx.fillStyle='rgba(255,255,255,0.15)'; ctx.font='bold 72px sans-serif'; ctx.fillText('🎉', w/2, 160);
-          ctx.fillStyle='#FFFFFF'; ctx.font='bold 58px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillText(d.title||'欢迎新客', w/2, 280);
-          ctx.font='28px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillStyle='rgba(255,255,255,0.85)'; ctx.fillText(d.subtitle||'首次到店享专属优惠', w/2, 350);
+          ctx.fillStyle='#FFFFFF'; ctx.font='bold 58px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillText(d.title||'', w/2, 280);
+          ctx.font='28px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillStyle='rgba(255,255,255,0.85)'; if(d.subtitle) ctx.fillText(d.subtitle, w/2, 350);
           ctx.fillStyle='rgba(255,215,0,0.15)'; roundRect(ctx, w/2-160,420,320,160,20); ctx.fill();
-          ctx.fillStyle='#FFD700'; ctx.font='bold 44px sans-serif'; ctx.fillText(d.offer||'满100减30', w/2, 540);
-          ctx.fillStyle='#FFFFFF'; ctx.font='22px "PingFang SC",sans-serif'; ctx.fillText(d.cta||'立即领取', w/2, 620);
+          ctx.fillStyle='#FFD700'; ctx.font='bold 44px sans-serif'; if(d.offer) ctx.fillText(d.offer, w/2, 540);
+          if(d.cta){ctx.fillStyle='#FFFFFF'; ctx.font='22px "PingFang SC",sans-serif'; ctx.fillText(d.cta, w/2, 620);}
           ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.font='18px sans-serif'; ctx.fillText(d.store||'', w/2, h-100);
           if (d.qrDataURL) { ctx.drawImage(d.qrDataURL, w/2-50, h-230, 100, 100); }
         }
@@ -46303,11 +46303,11 @@ ${body}
           ctx.fillStyle='rgba(253,203,110,0.08)'; ctx.beginPath(); ctx.arc(w/2,h/2,300,0,Math.PI*2); ctx.fill();
           ctx.textAlign='center';
           ctx.fillStyle='rgba(253,203,110,0.2)'; ctx.font='bold 60px sans-serif'; ctx.fillText('💝', w/2, 160);
-          ctx.fillStyle='#FDCB6E'; ctx.font='bold 50px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillText(d.title||'好久不见', w/2, 290);
-          ctx.fillStyle='rgba(255,255,255,0.8)'; ctx.font='24px "PingFang SC",sans-serif'; ctx.fillText(d.subtitle||'我们想你了，来坐坐吧', w/2, 360);
+          ctx.fillStyle='#FDCB6E'; ctx.font='bold 50px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillText(d.title||'', w/2, 290);
+          ctx.fillStyle='rgba(255,255,255,0.8)'; ctx.font='24px "PingFang SC",sans-serif'; if(d.subtitle) ctx.fillText(d.subtitle, w/2, 360);
           ctx.fillStyle='rgba(253,203,110,0.12)'; roundRect(ctx, w/2-170,410,340,140,16); ctx.fill();
-          ctx.fillStyle='#FDCB6E'; ctx.font='bold 40px sans-serif'; ctx.fillText(d.offer||'老客专享8折', w/2, 520);
-          ctx.fillStyle='#FFFFFF'; ctx.font='22px "PingFang SC",sans-serif'; ctx.fillText(d.cta||'点击领取', w/2, 600);
+          ctx.fillStyle='#FDCB6E'; ctx.font='bold 40px sans-serif'; if(d.offer) ctx.fillText(d.offer, w/2, 520);
+          if(d.cta){ctx.fillStyle='#FFFFFF'; ctx.font='22px "PingFang SC",sans-serif'; ctx.fillText(d.cta, w/2, 600);}
           ctx.fillStyle='rgba(255,255,255,0.4)'; ctx.font='16px sans-serif'; ctx.fillText(d.store||'', w/2, h-90);
           if (d.qrDataURL) { ctx.drawImage(d.qrDataURL, w/2-45, h-210, 90, 90); }
         }
@@ -46324,11 +46324,11 @@ ${body}
           ctx.strokeStyle='rgba(197,165,90,0.2)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(w/2,h*0.4,280,0,Math.PI*2); ctx.stroke();
           ctx.textAlign='center';
           ctx.fillStyle='#C5A55A'; ctx.font='bold 40px sans-serif'; ctx.fillText('👑 VIP', w/2, 150);
-          ctx.fillStyle='#FFD700'; ctx.font='bold 44px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillText(d.title||'专属礼遇', w/2, 260);
-          ctx.fillStyle='rgba(255,255,255,0.7)'; ctx.font='22px "PingFang SC",sans-serif'; ctx.fillText(d.subtitle||'仅限VIP会员', w/2, 330);
+          ctx.fillStyle='#FFD700'; ctx.font='bold 44px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillText(d.title||'', w/2, 260);
+          ctx.fillStyle='rgba(255,255,255,0.7)'; ctx.font='22px "PingFang SC",sans-serif'; if(d.subtitle) ctx.fillText(d.subtitle, w/2, 330);
           ctx.fillStyle='rgba(197,165,90,0.15)'; roundRect(ctx, w/2-180,380,360,150,20); ctx.fill();
-          ctx.fillStyle='#FFD700'; ctx.font='bold 38px sans-serif'; ctx.fillText(d.offer||'VIP专享价', w/2, 490);
-          ctx.fillStyle='#FFFFFF'; ctx.font='20px "PingFang SC",sans-serif'; ctx.fillText(d.cta||'立即查看', w/2, 570);
+          ctx.fillStyle='#FFD700'; ctx.font='bold 38px sans-serif'; if(d.offer) ctx.fillText(d.offer, w/2, 490);
+          if(d.cta){ctx.fillStyle='#FFFFFF'; ctx.font='20px "PingFang SC",sans-serif'; ctx.fillText(d.cta, w/2, 570);}
           ctx.fillStyle='rgba(255,255,255,0.35)'; ctx.font='16px sans-serif'; ctx.fillText(d.store||'', w/2, h-90);
           if (d.qrDataURL) { ctx.drawImage(d.qrDataURL, w/2-45, h-210, 90, 90); }
         }
@@ -46345,11 +46345,11 @@ ${body}
           ctx.fillStyle='rgba(255,215,0,0.07)'; ctx.beginPath(); ctx.arc(w-100,h-200,180,0,Math.PI*2); ctx.fill();
           ctx.textAlign='center';
           ctx.fillStyle='rgba(255,215,0,0.15)'; ctx.font='bold 56px sans-serif'; ctx.fillText('🎊', w/2, 140);
-          ctx.fillStyle='#FFD700'; ctx.font='bold 52px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillText(d.title||'节日快乐', w/2, 270);
-          ctx.fillStyle='rgba(255,255,255,0.85)'; ctx.font='26px "PingFang SC",sans-serif'; ctx.fillText(d.subtitle||'节日限定 美味共享', w/2, 340);
+          ctx.fillStyle='#FFD700'; ctx.font='bold 52px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillText(d.title||'', w/2, 270);
+          ctx.fillStyle='rgba(255,255,255,0.85)'; ctx.font='26px "PingFang SC",sans-serif'; if(d.subtitle) ctx.fillText(d.subtitle, w/2, 340);
           ctx.fillStyle='rgba(255,255,255,0.12)'; roundRect(ctx, w/2-180,390,360,145,18); ctx.fill();
-          ctx.fillStyle='#FFFFFF'; ctx.font='bold 36px sans-serif'; ctx.fillText(d.offer||'节日特惠', w/2, 495);
-          ctx.fillStyle='#FFD700'; ctx.font='22px "PingFang SC",sans-serif'; ctx.fillText(d.cta||'了解详情', w/2, 570);
+          ctx.fillStyle='#FFFFFF'; ctx.font='bold 36px sans-serif'; if(d.offer) ctx.fillText(d.offer, w/2, 495);
+          if(d.cta){ctx.fillStyle='#FFD700'; ctx.font='22px "PingFang SC",sans-serif'; ctx.fillText(d.cta, w/2, 570);}
           ctx.fillStyle='rgba(255,255,255,0.45)'; ctx.font='18px sans-serif'; ctx.fillText(d.store||'', w/2, h-90);
           if (d.qrDataURL) { ctx.drawImage(d.qrDataURL, w/2-45, h-210, 90, 90); }
         }
@@ -46365,11 +46365,11 @@ ${body}
           ctx.fillStyle='rgba(52,211,153,0.05)'; ctx.beginPath(); ctx.arc(w*0.25,h*0.3,200,0,Math.PI*2); ctx.fill();
           ctx.textAlign='center';
           ctx.fillStyle='rgba(52,211,153,0.2)'; ctx.font='bold 50px sans-serif'; ctx.fillText('✨', w/2, 130);
-          ctx.fillStyle='#34D399'; ctx.font='bold 48px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillText(d.title||'新品上市', w/2, 260);
-          ctx.fillStyle='rgba(255,255,255,0.8)'; ctx.font='24px "PingFang SC",sans-serif'; ctx.fillText(d.subtitle||'用心做好每一道菜', w/2, 330);
+          ctx.fillStyle='#34D399'; ctx.font='bold 48px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillText(d.title||'', w/2, 260);
+          ctx.fillStyle='rgba(255,255,255,0.8)'; ctx.font='24px "PingFang SC",sans-serif'; if(d.subtitle) ctx.fillText(d.subtitle, w/2, 330);
           ctx.fillStyle='rgba(52,211,153,0.12)'; roundRect(ctx, w/2-170,380,340,140,18); ctx.fill();
-          ctx.fillStyle='#FFFFFF'; ctx.font='bold 34px sans-serif'; ctx.fillText(d.offer||'尝鲜价', w/2, 490);
-          ctx.fillStyle='#34D399'; ctx.font='20px "PingFang SC",sans-serif'; ctx.fillText(d.cta||'立即品尝', w/2, 570);
+          ctx.fillStyle='#FFFFFF'; ctx.font='bold 34px sans-serif'; if(d.offer) ctx.fillText(d.offer, w/2, 490);
+          if(d.cta){ctx.fillStyle='#34D399'; ctx.font='20px "PingFang SC",sans-serif'; ctx.fillText(d.cta, w/2, 570);}
           ctx.fillStyle='rgba(255,255,255,0.4)'; ctx.font='16px sans-serif'; ctx.fillText(d.store||'', w/2, h-90);
           if (d.qrDataURL) { ctx.drawImage(d.qrDataURL, w/2-45, h-210, 90, 90); }
         }
@@ -46527,10 +46527,10 @@ ${body}
                 var g = ctx.createLinearGradient(0,0,w,h); g.addColorStop(0,'#334155'); g.addColorStop(1,'#0f172a');
                 ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
                 ctx.textAlign='left';
-                ctx.fillStyle='#ffffff'; ctx.font='bold 46px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.fillText(d2.title || '模板预览', 48, 140);
-                ctx.fillStyle='rgba(255,255,255,0.82)'; ctx.font='24px "PingFang SC",sans-serif'; ctx.fillText(d2.subtitle || '请使用 Image2 按提示词生成成图', 48, 190);
+                ctx.fillStyle='#ffffff'; ctx.font='bold 46px "PingFang SC","Microsoft YaHei",sans-serif'; if(d2.title) ctx.fillText(d2.title, 48, 140);
+                ctx.fillStyle='rgba(255,255,255,0.82)'; ctx.font='24px "PingFang SC",sans-serif'; if(d2.subtitle) ctx.fillText(d2.subtitle, 48, 190);
                 ctx.fillStyle='rgba(255,255,255,0.12)'; roundRect(ctx, 48, 250, w - 96, 120, 16); ctx.fill();
-                ctx.fillStyle='#a78bfa'; ctx.font='bold 34px sans-serif'; ctx.fillText(d2.offer || '优惠信息', 48, 320);
+                ctx.fillStyle='#a78bfa'; ctx.font='bold 34px sans-serif'; if(d2.offer) ctx.fillText(d2.offer, 48, 320);
                 ctx.fillStyle='rgba(255,255,255,0.6)'; ctx.font='18px sans-serif'; ctx.fillText(d2.store || '', 48, h - 60);
               }
             };
@@ -46582,7 +46582,7 @@ ${body}
     }
 
     function buildPosterCopyText(editor) {
-      var parts = [editor.title, editor.subtitle, editor.offer, editor.price, editor.size].filter(Boolean);
+      var parts = [editor.title, editor.subtitle, editor.offer, editor.price].filter(Boolean);
       if (editor.cta) parts.push(editor.cta);
       return parts.join('｜');
     }
@@ -46648,39 +46648,31 @@ ${body}
       tpl.draw(ctx, W, H, data);
     }
 
-    async function generatePosterCopy() {
-      var campaignId = document.getElementById('poster-campaign')?.value || '';
-      if (!campaignId) { showNotification('请先填写活动ID', 'warning'); return; }
-      try {
-        var tpl = POSTER_TEMPLATES.find(function(t) { return t.key === _selectedPosterTemplate; });
-        var context = document.getElementById('poster-keywords')?.value || '';
-        var titles = { new_welcome: '新客专享', recall: '好久不见', vip: 'VIP尊享', festival: '节日快乐', new_dish: '新品上市' };
-        var offers = { new_welcome: '首次到店立减', recall: '老客回馈', vip: 'VIP专属优惠', festival: '节日特惠', new_dish: '尝鲜特价' };
-        var ctas = { new_welcome: '立即领取', recall: '回来坐坐', vip: '查看权益', festival: '了解详情', new_dish: '立即品尝' };
-        var key = _selectedPosterTemplate;
-        var storeEl = document.getElementById('poster-store');
-        var storeName = storeEl ? (storeEl.options[storeEl.selectedIndex]?.text || storeEl.value || '') : '';
-        var parseResp = await fetch('/api/growth/semantic-parse', {
-          method: 'POST',
-          headers: growthAuthHeaders(),
-          body: JSON.stringify({ text: [tpl?.name || '', storeName, campaignId, context].filter(Boolean).join('；') })
-        });
-        var parsed = await parseResp.json();
-        var tasteTag = Array.isArray(parsed?.taste_tags) && parsed.taste_tags.length ? parsed.taste_tags[0] : '';
-        var title = titles[key] || (tpl?.name || '欢迎光临');
-        var subtitle = (parsed?.key_insight && parsed.key_insight !== '关键词解析（LLM不可用）' ? parsed.key_insight : context) || (tpl?.desc || '用心为您准备了一份惊喜');
-        var offer = offers[key] || '到店享优惠';
-        if (tasteTag) offer += ' · ' + tasteTag + '推荐';
-        document.getElementById('poster-title').value = title;
-        document.getElementById('poster-subtitle').value = String(subtitle).slice(0, 24) || '用心为您准备了一份惊喜';
-        document.getElementById('poster-offer').value = offer;
-        document.getElementById('poster-cta').value = parsed?.return_intent ? '马上安排' : (ctas[key] || '立即前往');
-        renderPosterPreview();
-        showNotification('文案已生成，可手动调整', 'success');
-      } catch (e) {
-        showNotification('生成失败：' + (e?.message || e), 'error');
-      }
-    }
+     async function generatePosterCopy() {
+       var campaignId = document.getElementById('poster-campaign')?.value || '';
+       if (!campaignId) { showNotification('请先填写活动ID', 'warning'); return; }
+       try {
+         var tpl = POSTER_TEMPLATES.find(function(t) { return t.key === _selectedPosterTemplate; });
+         var context = document.getElementById('poster-keywords')?.value || '';
+         var storeEl = document.getElementById('poster-store');
+         var storeName = storeEl ? (storeEl.options[storeEl.selectedIndex]?.text || storeEl.value || '') : '';
+         var parseResp = await fetch('/api/growth/semantic-parse', {
+           method: 'POST',
+           headers: growthAuthHeaders(),
+           body: JSON.stringify({ text: [tpl?.name || '', storeName, campaignId, context].filter(Boolean).join('；') })
+         });
+         var parsed = await parseResp.json();
+         var tags = [];
+         if (parsed?.key_insight && parsed.key_insight !== '关键词解析（LLM不可用）') tags.push(parsed.key_insight);
+         if (Array.isArray(parsed?.taste_tags) && parsed.taste_tags.length) tags.push.apply(tags, parsed.taste_tags);
+         if (parsed?.return_intent) tags.push('复购意图');
+         var keywords = [context, tags.join('、')].filter(Boolean).join('、') || '精选好味·到店即享';
+         document.getElementById('poster-keywords').value = keywords;
+         showNotification('关键词已生成，可手动补充调整', 'success');
+       } catch (e) {
+         showNotification('生成失败：' + (e?.message || e), 'error');
+       }
+     }
 
     function generatePosterImagePrompt() {
       var tpl = POSTER_TEMPLATES.find(function(t) { return t.key === _selectedPosterTemplate; });
