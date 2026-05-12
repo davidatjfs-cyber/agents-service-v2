@@ -13995,7 +13995,7 @@
                                         </div>
                                     </div>
                                     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
-                                        <button onclick="generatePosterCopy()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:12px;">🤖 生成关键词建议</button>
+                                        <button onclick="generatePosterCopy()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:12px;">🎯 生成引流卖点</button>
                                         <button onclick="generatePosterImagePrompt()" style="padding:6px 14px;border-radius:8px;background:#6366f1;color:#fff;border:none;cursor:pointer;font-size:12px;">✨ 生成 Image2 提示词</button>
                                         <button onclick="renderPosterPreview()" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.08);color:#fff;border:none;cursor:pointer;font-size:12px;">本地排版预览</button>
                                         <button onclick="saveGeneratedPoster()" style="padding:6px 14px;border-radius:8px;background:#f59e0b;color:#fff;border:none;cursor:pointer;font-size:12px;">💾 保存最终海报</button>
@@ -46666,26 +46666,29 @@ ${body}
     }
 
      async function generatePosterCopy() {
-       var campaignId = document.getElementById('poster-campaign')?.value || '';
-       if (!campaignId) { showNotification('请先填写活动ID', 'warning'); return; }
+       var titleEl = document.getElementById('poster-title');
+       var offerEl = document.getElementById('poster-offer');
+       if (!titleEl?.value && !offerEl?.value) { showNotification('请先填写标题或优惠信息', 'warning'); return; }
        try {
-         var tpl = POSTER_TEMPLATES.find(function(t) { return t.key === _selectedPosterTemplate; });
-         var context = document.getElementById('poster-keywords')?.value || '';
          var storeEl = document.getElementById('poster-store');
          var storeName = storeEl ? (storeEl.options[storeEl.selectedIndex]?.text || storeEl.value || '') : '';
+         var context = (titleEl?.value || '') + ' ' + (offerEl?.value || '') + ' ' + storeName;
          var parseResp = await fetch('/api/growth/semantic-parse', {
            method: 'POST',
            headers: growthAuthHeaders(),
-           body: JSON.stringify({ text: [tpl?.name || '', storeName, campaignId, context].filter(Boolean).join('；') })
+           body: JSON.stringify({ text: '请为以下餐厅海报生成一句吸引人的引流卖点文案（15字以内），突出顾客价值：' + context })
          });
          var parsed = await parseResp.json();
-         var tags = [];
-         if (parsed?.key_insight && parsed.key_insight !== '关键词解析（LLM不可用）') tags.push(parsed.key_insight);
-         if (Array.isArray(parsed?.taste_tags) && parsed.taste_tags.length) tags.push.apply(tags, parsed.taste_tags);
-         if (parsed?.return_intent) tags.push('复购意图');
-         var keywords = [context, tags.join('、')].filter(Boolean).join('、') || '精选好味·到店即享';
-         document.getElementById('poster-keywords').value = keywords;
-         showNotification('关键词已生成，可手动补充调整', 'success');
+         var sellPoint = '';
+         if (parsed?.key_insight && parsed.key_insight !== '关键词解析（LLM不可用）') {
+           sellPoint = parsed.key_insight;
+         } else {
+           sellPoint = (offerEl?.value || '') + '，等您来享';
+         }
+         var subEl = document.getElementById('poster-subtitle');
+         if (subEl) subEl.value = sellPoint.slice(0, 30);
+         renderPosterPreview();
+         showNotification('引流卖点已生成到副标题位置', 'success');
        } catch (e) {
          showNotification('生成失败：' + (e?.message || e), 'error');
        }
