@@ -46672,23 +46672,13 @@ ${body}
        try {
          var storeEl = document.getElementById('poster-store');
          var storeName = storeEl ? (storeEl.options[storeEl.selectedIndex]?.text || storeEl.value || '') : '';
-         var parseResp = await fetch('/api/growth/semantic-parse', {
+         var resp = await fetch('/api/growth/generate-selling-point', {
            method: 'POST',
            headers: growthAuthHeaders(),
-           body: JSON.stringify({
-             text: '你是一家餐厅的文案策划。请根据以下海报信息，生成一句有吸引力的引流卖点文案（12-20字），要求：口语化、有行动号召力、突出顾客利益。不要评价，只输出文案。\n标题：' + (titleEl?.value || '') + '\n优惠：' + (offerEl?.value || '') + '\n门店：' + storeName
-           })
+           body: JSON.stringify({ title: titleEl?.value || '', offer: offerEl?.value || '', store: storeName })
          });
-         var parsed = await parseResp.json();
-         var sellPoint = '';
-         if (parsed?.key_insight && parsed.key_insight !== '关键词解析（LLM不可用）') {
-           sellPoint = parsed.key_insight;
-         } else if (parsed?.return_intent) {
-           sellPoint = parsed.return_intent;
-         } else {
-           var fallback = ['限时尝鲜，美味不等人', '到店即享，不负好食光', '口碑好味，等你来品', '今日特惠，错过等明天'];
-           sellPoint = fallback[Math.floor(Math.random() * fallback.length)];
-         }
+         var data = await resp.json();
+         var sellPoint = data?.selling_point || '限时优惠，到店即享';
          var subEl = document.getElementById('poster-subtitle');
          if (subEl) subEl.value = sellPoint.slice(0, 24);
          renderPosterPreview();

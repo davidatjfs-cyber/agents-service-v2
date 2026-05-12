@@ -1021,6 +1021,26 @@ app.post('/api/growth/semantic-parse', async (req, res) => {
   }
 });
 
+app.post('/api/growth/generate-selling-point', async (req, res) => {
+  try {
+    const title = String(req.body?.title || '').trim().slice(0, 200);
+    const offer = String(req.body?.offer || '').trim().slice(0, 200);
+    const store = String(req.body?.store || '').trim().slice(0, 200);
+    const prompt = `你是一家餐厅的文案策划。根据以下海报信息，生成一句吸引人的引流卖点文案（12-20字）。
+要求：口语化、有行动号召力、突出顾客利益。输出纯文案，不要JSON，不要评价，不要多余内容。
+标题：${title}
+优惠：${offer}
+门店：${store}`;
+    const llmResp = await callLLM([
+      { role: 'user', content: prompt }
+    ], { temperature: 0.7, max_tokens: 100, purpose: 'selling_point' });
+    const text = String(llmResp?.content || llmResp?.text || '').trim().replace(/^["']|["']$/g, '').slice(0, 100);
+    return res.json({ ok: true, selling_point: text || '限时优惠，到店即享' });
+  } catch (e) {
+    return res.json({ ok: true, selling_point: '限时优惠，到店即享' });
+  }
+});
+
 // ─── Knowledge Base API ───
 app.get('/api/knowledge', authRequired, async (req, res) => {
   try { res.json({ items: await listKnowledge(req.query.category) }); }

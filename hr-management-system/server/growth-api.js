@@ -2375,4 +2375,18 @@ export function registerGrowthRoutes(app, pool) {
     }, 10000);
   }
 
+  app.post('/api/growth/generate-selling-point', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    try {
+      const agentResp = await fetch((process.env.AGENTS_SERVICE_URL || 'http://127.0.0.1:3101') + '/api/growth/generate-selling-point', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: req.body?.title || '', offer: req.body?.offer || '', store: req.body?.store || '' })
+      });
+      const data = await agentResp.json();
+      return res.json({ ok: true, selling_point: data?.selling_point || '限时优惠，到店即享' });
+    } catch (e) {
+      return res.json({ ok: true, selling_point: '限时优惠，到店即享' });
+    }
+  });
 }
