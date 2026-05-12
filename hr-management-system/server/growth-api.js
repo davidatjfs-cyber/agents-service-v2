@@ -406,7 +406,7 @@ export async function ensureGrowthTables(pool) {
   `);
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS poster_templates (
+     CREATE TABLE IF NOT EXISTS poster_templates (
       id BIGSERIAL PRIMARY KEY,
       template_key TEXT UNIQUE NOT NULL,
       name TEXT NOT NULL,
@@ -415,11 +415,13 @@ export async function ensureGrowthTables(pool) {
       aspect_ratio TEXT,
       layout JSONB DEFAULT '{}'::jsonb,
       style_guide JSONB DEFAULT '{}'::jsonb,
+      image_url TEXT,
       enabled BOOLEAN DEFAULT TRUE,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE poster_templates ADD COLUMN IF NOT EXISTS image_url TEXT`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS generated_posters (
@@ -1849,8 +1851,8 @@ export function registerGrowthRoutes(app, pool) {
     if (!requireGrowthAuth(req, res)) return;
     const b = req.body || {};
     const r = await pool.query(
-      `INSERT INTO poster_templates (template_key, name, category, channel, aspect_ratio, layout, style_guide, enabled)
-       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,COALESCE($8, TRUE))
+      `INSERT INTO poster_templates (template_key, name, category, channel, aspect_ratio, layout, style_guide, image_url, enabled)
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,COALESCE($9, TRUE))
        ON CONFLICT (template_key) DO UPDATE SET
          name = EXCLUDED.name,
          category = EXCLUDED.category,
@@ -1858,12 +1860,29 @@ export function registerGrowthRoutes(app, pool) {
          aspect_ratio = EXCLUDED.aspect_ratio,
          layout = EXCLUDED.layout,
          style_guide = EXCLUDED.style_guide,
+         image_url = EXCLUDED.image_url,
          enabled = EXCLUDED.enabled,
          updated_at = NOW()
        RETURNING *`,
-      [cleanText(b.template_key, 128), cleanText(b.name, 300), cleanText(b.category, 80), cleanText(b.channel, 80), cleanText(b.aspect_ratio, 40), JSON.stringify(b.layout || {}), JSON.stringify(b.style_guide || {}), b.enabled !== false]
+      [cleanText(b.template_key, 128), cleanText(b.name, 300), cleanText(b.category, 80), cleanText(b.channel, 80), cleanText(b.aspect_ratio, 40), JSON.stringify(b.layout || {}), JSON.stringify(b.style_guide || {}), cleanText(b.image_url, 1000), b.enabled !== false]
     );
     return res.json({ ok: true, template: r.rows[0] });
+  });
+
+  app.delete('/api/growth/poster-templates/:id', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ ok: false, error: 'invalid_id' });
+    await pool.query('DELETE FROM poster_templates WHERE id = $1', [id]);
+    return res.json({ ok: true });
+  });
+
+  app.delete('/api/growth/creative-assets/:id', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ ok: false, error: 'invalid_id' });
+    await pool.query('DELETE FROM creative_assets WHERE id = $1', [id]);
+    return res.json({ ok: true });
   });
 
   app.get('/api/growth/generated-posters', async (req, res) => {

@@ -5042,6 +5042,16 @@ const __ALLOW_SCHEMA_CHANGES__ = isSchemaChangeAllowed();
 registerGrowthRoutes(app, pool);
 registerPhaseRoutes(app, pool);
 
+app.post('/api/growth/upload', authRequired, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ ok: false, error: 'no_file' });
+    const url = `/uploads/${req.file.filename}`;
+    return res.json({ ok: true, url, filename: req.file.filename, size: req.file.size });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || 'upload_failed' });
+  }
+});
+
 async function ensureEmployeeAttachmentsTable() {
   try {
     await pool.query(`

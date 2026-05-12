@@ -13933,7 +13933,7 @@
                                 <div style="flex:1;min-width:340px;max-width:720px;">
                                     <div style="margin-bottom:12px;">
                                         <label style="font-size:12px;color:rgba(226,232,240,0.6);display:block;margin-bottom:4px;">选择模板</label>
-                                        <div id="poster-template-selector" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+                                        <div id="poster-template-selector" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;"></div>
                                     </div>
                                     <div id="poster-template-brief" style="margin-bottom:12px;padding:12px;border-radius:10px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.18);color:rgba(226,232,240,0.78);font-size:12px;line-height:1.6;"></div>
                                     <div id="poster-editor-form" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
@@ -13942,21 +13942,60 @@
                                         <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">利益点/优惠</label><input id="poster-offer" placeholder="如: 满100减30" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
                                         <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">CTA按钮文案</label><input id="poster-cta" placeholder="如: 点击领取" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
                                         <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">价格</label><input id="poster-price" placeholder="如: ¥39 / 39元" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
-                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">尺寸/规格</label><input id="poster-size" placeholder="如: 6寸 / 500g / 双人份" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
-                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">清晰度要求</label><input id="poster-clarity" placeholder="如: 高清可商用 / 细节清晰 / 食物纹理真实" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
-                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">输出格式要求</label><input id="poster-format" placeholder="如: 3:4 竖版 / PNG / 适合小红书封面" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
-                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">门店名称</label><input id="poster-store" placeholder="店名" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
-                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">活动ID(归因)</label><input id="poster-campaign" placeholder="campaign_id" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
+                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">海报尺寸</label><select id="poster-size" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
+                                            <option value="">选择尺寸</option>
+                                            <option value="1080x1920">1080×1920（手机竖版）</option>
+                                            <option value="1920x1080">1920×1080（横版）</option>
+                                            <option value="1080x1080">1080×1080（正方形）</option>
+                                            <option value="750x1334">750×1334（iPhone 6/7/8）</option>
+                                            <option value="1242x2208">1242×2208（iPhone 6/7/8 Plus）</option>
+                                            <option value="1125x2436">1125×2436（iPhone X）</option>
+                                            <option value="1080x2340">1080×2340（安卓全面屏）</option>
+                                            <option value="800x1200">800×1200（A4海报）</option>
+                                            <option value="594x841">594×841（A2海报）</option>
+                                            <option value="420x594">420×594（A3海报）</option>
+                                        </select></div>
+                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">清晰度</label><select id="poster-clarity" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
+                                            <option value="高清可商用">高清可商用</option>
+                                            <option value="印刷级300dpi">印刷级300dpi</option>
+                                            <option value="网络发布72dpi" selected>网络发布72dpi</option>
+                                            <option value="超清4K">超清4K</option>
+                                            <option value="食物纹理真实">食物纹理真实</option>
+                                        </select></div>
+                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">输出格式</label><select id="poster-format" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
+                                            <option value="3:4竖版PNG" selected>3:4竖版 PNG</option>
+                                            <option value="1:1正方形PNG">1:1正方形 PNG</option>
+                                            <option value="9:16竖版PNG">9:16竖版 PNG（小红书封面）</option>
+                                            <option value="16:9横版JPG">16:9横版 JPG</option>
+                                            <option value="4:3横版PNG">4:3横版 PNG</option>
+                                            <option value="2:3竖版PNG">2:3竖版 PNG</option>
+                                        </select></div>
+                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">门店</label><select id="poster-store" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></select></div>
+                                        <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">活动ID(自动生成)</label><input id="poster-campaign" readonly style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(99,102,241,0.28);background:rgba(99,102,241,0.06);color:#a5b4fc;font-size:12px;"></div>
                                         <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">券ID(可选)</label><input id="poster-coupon" placeholder="coupon_id / 券模板ID" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
                                         <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">公域渠道</label><select id="poster-public-channel" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></select></div>
                                         <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">公域发布时间</label><input id="poster-public-date" type="date" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
                                         <div><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">私域触达渠道</label><select id="poster-private-channel" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"><option value="wecom">企微</option><option value="miniprogram">小程序</option></select></div>
                                         <div style="grid-column:1/-1;"><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">补充卖点 / 场景关键词</label><input id="poster-keywords" placeholder="如: 晚市聚餐 / 精致法餐 / 奶油白+酒红色 / 人像不要太多字" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
-                                        <div style="grid-column:1/-1;"><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">Image2 提示词（系统生成后可微调）</label><textarea id="poster-image2-prompt" placeholder="点击下方按钮生成最佳 Image2 提示词" style="width:100%;height:180px;padding:10px;border-radius:8px;border:1px solid rgba(99,102,241,0.28);background:rgba(99,102,241,0.06);color:#fff;font-size:12px;line-height:1.6;"></textarea></div>
-                                        <div style="grid-column:1/-1;"><label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">Image2 成图地址 / 你上传后的图片URL</label><input id="poster-final-image-url" placeholder="把最终海报图上传后，将 URL 粘贴到这里" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></div>
+                                        <div style="grid-column:1/-1;">
+                                            <label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">Image2 提示词</label>
+                                            <div style="display:flex;gap:6px;align-items:stretch;">
+                                                <textarea id="poster-image2-prompt" placeholder="点击下方按钮生成最佳 Image2 提示词" style="flex:1;height:140px;padding:10px;border-radius:8px;border:1px solid rgba(99,102,241,0.28);background:rgba(99,102,241,0.06);color:#fff;font-size:12px;line-height:1.6;"></textarea>
+                                                <button onclick="copyImage2Prompt()" style="width:36px;padding:6px;border-radius:8px;background:rgba(99,102,241,0.2);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);cursor:pointer;font-size:14px;writing-mode:vertical-lr;text-orientation:upright;display:flex;align-items:center;justify-content:center;" title="一键复制">📋</button>
+                                            </div>
+                                        </div>
+                                        <div style="grid-column:1/-1;">
+                                            <label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:2px;">Image2 成图（上传制作好的海报）</label>
+                                            <div style="display:flex;gap:8px;align-items:center;">
+                                                <input id="poster-final-image-url" readonly placeholder="上传后将自动填充" style="flex:1;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
+                                                <input type="file" id="poster-image-upload-input" accept="image/*" style="display:none;" onchange="uploadPosterImage(event)">
+                                                <button onclick="document.getElementById('poster-image-upload-input').click()" style="padding:6px 12px;border-radius:8px;background:rgba(99,102,241,0.2);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);cursor:pointer;font-size:12px;white-space:nowrap;">上传图片</button>
+                                            </div>
+                                            <div id="poster-upload-preview" style="margin-top:6px;display:none;"><img id="poster-upload-preview-img" style="max-height:120px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);"></div>
+                                        </div>
                                     </div>
                                     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
-                                        <button onclick="generatePosterCopy()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:12px;">🤖 生成文案字段</button>
+                                        <button onclick="generatePosterCopy()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:12px;">🤖 生成文案（标题+副标题+优惠+CTA）</button>
                                         <button onclick="generatePosterImagePrompt()" style="padding:6px 14px;border-radius:8px;background:#6366f1;color:#fff;border:none;cursor:pointer;font-size:12px;">✨ 生成 Image2 提示词</button>
                                         <button onclick="renderPosterPreview()" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.08);color:#fff;border:none;cursor:pointer;font-size:12px;">本地排版预览</button>
                                         <button onclick="saveGeneratedPoster()" style="padding:6px 14px;border-radius:8px;background:#f59e0b;color:#fff;border:none;cursor:pointer;font-size:12px;">💾 保存最终海报</button>
@@ -13964,49 +14003,83 @@
                                         <button onclick="createPosterPublicFlow()" style="padding:6px 14px;border-radius:8px;background:rgba(14,165,233,0.2);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);cursor:pointer;font-size:12px;">📣 进入公域链路</button>
                                         <a id="poster-download-link" style="display:none;"></a>
                                     </div>
-                                    <div style="margin-top:10px;font-size:11px;color:rgba(226,232,240,0.52);line-height:1.6;">推荐流程：选模板 -> 填标题/副标题/优惠/关键词 -> 生成 Image2 提示词 -> 你把提示词和产品图交给 GPT Image 2 -> 上传成图 -> 把图片 URL 粘贴回来保存。</div>
+                                    <div style="margin-top:10px;font-size:11px;color:rgba(226,232,240,0.52);line-height:1.6;">推荐流程：选模板 → 填标题/优惠 → 生成文案 → 生成Image2提示词 → 提示词+产品图交给 GPT Image 2 → 上传成图 → 保存 → 进入私域/公域链路</div>
                                 </div>
                                 <div style="flex:0 0 auto;">
                                     <canvas id="poster-canvas" width="360" height="480" style="border-radius:8px;border:1px solid rgba(255,255,255,0.12);width:360px;height:480px;"></canvas>
                                 </div>
                             </div>
                             <div id="poster-history" style="margin-top:16px;">
-                                <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.8);margin-bottom:8px;">已生成海报</div>
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                                    <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.8);">已生成海报</div>
+                                    <button onclick="loadPosterHistory()" style="padding:4px 10px;border-radius:6px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.6);border:1px solid rgba(255,255,255,0.1);cursor:pointer;font-size:11px;">刷新</button>
+                                </div>
                                 <div id="poster-history-list" style="max-height:300px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;"></div>
                             </div>
-                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:16px;align-items:start;">
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:16px;align-items:start;">
                                 <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px;">
-                                    <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);margin-bottom:10px;">🧩 模板资产库</div>
+                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                                        <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);">🧩 模板资产库</div>
+                                        <button onclick="resetTemplateForm()" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.6);border:1px solid rgba(255,255,255,0.1);cursor:pointer;font-size:11px;">新增模板</button>
+                                    </div>
                                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                                        <input id="poster-template-key-input" placeholder="template_key" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <input id="poster-template-key-input" placeholder="模板key（英文唯一标识）" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
                                         <input id="poster-template-name-input" placeholder="模板名称" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
-                                        <input id="poster-template-category-input" placeholder="分类" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
-                                        <input id="poster-template-channel-input" placeholder="渠道" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <input id="poster-template-category-input" placeholder="分类（拉新/召回/节日等）" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <input id="poster-template-channel-input" placeholder="渠道（小红书/美团/朋友圈）" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
                                         <input id="poster-template-aspect-input" placeholder="比例，如 3:4" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;grid-column:1/-1;">
                                         <textarea id="poster-template-style-input" placeholder="模板风格描述：如 奶油白底 / 酒红+橄榄绿 / 左对齐 / 杂志感 / 留白高级" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;grid-column:1/-1;height:72px;"></textarea>
-                                        <textarea id="poster-template-prompt-notes-input" placeholder="Image2 提示词附加约束：如 保留大面积留白 / 文案位置给顶部与左侧 / 产品主体占画面40% / 不要卡通风" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;grid-column:1/-1;height:78px;"></textarea>
+                                        <textarea id="poster-template-prompt-notes-input" placeholder="Image2 提示词附加约束：如 保留大面积留白 / 文案位置给顶部与左侧 / 产品主体占画面40% / 不要卡通风" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;grid-column:1/-1;height:72px;"></textarea>
+                                        <div style="grid-column:1/-1;">
+                                            <label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:4px;">模板缩略图（上传模板样例图）</label>
+                                            <div style="display:flex;gap:8px;align-items:center;">
+                                                <input id="poster-template-image-url" placeholder="上传后会自动填充" readonly style="flex:1;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                                <input type="file" id="poster-template-image-upload" accept="image/*" style="display:none;" onchange="uploadTemplateImage(event)">
+                                                <button onclick="document.getElementById('poster-template-image-upload').click()" style="padding:6px 10px;border-radius:6px;background:rgba(99,102,241,0.2);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);cursor:pointer;font-size:11px;white-space:nowrap;">上传</button>
+                                            </div>
+                                            <div id="poster-template-image-preview" style="margin-top:6px;display:none;"><img id="poster-template-image-preview-img" style="max-height:80px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);"></div>
+                                        </div>
                                     </div>
                                     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
                                         <button onclick="savePosterTemplateMeta()" style="padding:6px 14px;border-radius:8px;background:#6366f1;color:#fff;border:none;cursor:pointer;font-size:12px;">保存模板</button>
                                         <button onclick="loadPosterTemplates()" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.08);color:#fff;border:none;cursor:pointer;font-size:12px;">刷新模板</button>
                                     </div>
-                                    <div id="poster-template-library" style="max-height:220px;overflow-y:auto;margin-top:14px;"></div>
+                                    <div id="poster-template-library" style="max-height:300px;overflow-y:auto;margin-top:14px;"></div>
                                 </div>
                                 <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px;">
-                                    <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);margin-bottom:10px;">🖼 创意素材库</div>
+                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                                        <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);">🖼 创意素材库</div>
+                                        <button onclick="resetAssetForm()" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.6);border:1px solid rgba(255,255,255,0.1);cursor:pointer;font-size:11px;">新增素材</button>
+                                    </div>
                                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                                        <input id="creative-asset-key" placeholder="asset_key" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                        <input id="creative-asset-key" placeholder="asset_key（留空自动生成）" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
                                         <input id="creative-asset-name" placeholder="素材名称" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
-                                        <input id="creative-asset-type" placeholder="类型，如 dish_photo" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
-                                        <input id="creative-asset-store" placeholder="store_id" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
-                                        <input id="creative-asset-url" placeholder="素材URL" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;grid-column:1/-1;">
+                                        <select id="creative-asset-type" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                            <option value="">选择素材类型</option>
+                                            <option value="dish_photo">菜品图</option>
+                                            <option value="store_photo">门店环境图</option>
+                                            <option value="poster_template">海报模板</option>
+                                            <option value="brand_logo">品牌Logo</option>
+                                            <option value="decoration">装饰元素</option>
+                                            <option value="other">其他</option>
+                                        </select>
+                                        <select id="creative-asset-store" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;"><option value="">选择门店（可选）</option></select>
+                                        <div style="grid-column:1/-1;">
+                                            <label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:4px;">素材文件</label>
+                                            <div style="display:flex;gap:8px;align-items:center;">
+                                                <input id="creative-asset-url" placeholder="上传后自动填充" readonly style="flex:1;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
+                                                <input type="file" id="creative-asset-file-upload" accept="image/*" style="display:none;" onchange="uploadAssetFile(event)">
+                                                <button onclick="document.getElementById('creative-asset-file-upload').click()" style="padding:6px 10px;border-radius:6px;background:#ec4899;color:#fff;border:none;cursor:pointer;font-size:11px;white-space:nowrap;">上传</button>
+                                            </div>
+                                            <div id="creative-asset-upload-preview" style="margin-top:6px;display:none;"><img id="creative-asset-upload-preview-img" style="max-height:80px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);"></div>
+                                        </div>
                                         <input id="creative-asset-tags" placeholder="标签，逗号分隔" style="padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;grid-column:1/-1;">
                                     </div>
                                     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
                                         <button onclick="saveCreativeAsset()" style="padding:6px 14px;border-radius:8px;background:#ec4899;color:#fff;border:none;cursor:pointer;font-size:12px;">保存素材</button>
                                         <button onclick="loadCreativeAssets()" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.08);color:#fff;border:none;cursor:pointer;font-size:12px;">刷新素材</button>
                                     </div>
-                                    <div id="creative-assets-list" style="max-height:220px;overflow-y:auto;margin-top:14px;"></div>
+                                    <div id="creative-assets-list" style="max-height:300px;overflow-y:auto;margin-top:14px;"></div>
                                 </div>
                             </div>
                         </div>
@@ -44772,11 +44845,10 @@ ${body}
             }
         }
 
-        function growthAuthHeaders() {
-            return {
-                'Authorization': 'Bearer ' + (HRMS_API.token() || ''),
-                'Content-Type': 'application/json'
-            };
+        function growthAuthHeaders(multipart) {
+            var h = { 'Authorization': 'Bearer ' + (HRMS_API.token() || '') };
+            if (!multipart) h['Content-Type'] = 'application/json';
+            return h;
         }
 
         function growthRoleCode() {
@@ -44815,6 +44887,8 @@ ${body}
                 loadPosterHistory();
                 loadCreativeAssets();
                 loadPublicChannels();
+                populatePosterStoreSelect();
+                initAutoCampaignId();
             } else if (tab === 'public') {
                 refreshPublicContentWorkspace();
             } else if (tab === 'pos') {
@@ -46306,6 +46380,18 @@ ${body}
     var _savedPosterTemplates = [];
     var _growthPublicChannels = [];
     var _posterCanvasW = 540, _posterCanvasH = 720;
+    var _editingTemplateKey = '';
+
+    function autoGenCampaignId() {
+      var d = new Date();
+      var ds = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+      var r = Math.random().toString(36).substring(2,6).toUpperCase();
+      return 'CAM' + ds + r;
+    }
+    function initAutoCampaignId() {
+      var el = document.getElementById('poster-campaign');
+      if (el && !el.value) el.value = autoGenCampaignId();
+    }
 
     function roundRect(ctx, x, y, w, h, r) {
       ctx.beginPath(); ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
@@ -46319,9 +46405,14 @@ ${body}
       if (!host) return;
       host.innerHTML = POSTER_TEMPLATES.map(function(t) {
         var sel = t.key === _selectedPosterTemplate;
-        return '<button onclick="selectPosterTemplate(\''+t.key+'\')" style="padding:8px 14px;border-radius:8px;'
-          + (sel ? 'background:'+t.colors.bg1+';color:#fff;border:2px solid '+t.colors.accent+';' : 'background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:1px solid rgba(255,255,255,0.12);')
+        var thumbHtml = '';
+        var savedTpl = _savedPosterTemplates.find(function(st) { return st.template_key === t.key; });
+        var imgUrl = savedTpl && savedTpl.image_url ? savedTpl.image_url : (t.image_url || '');
+        if (imgUrl) thumbHtml = '<img src="' + escapeHtml(imgUrl) + '" style="width:100%;height:60px;object-fit:cover;border-radius:6px;margin-bottom:4px;">';
+        return '<button onclick="selectPosterTemplate(\''+t.key+'\')" style="padding:8px;border-radius:8px;text-align:left;width:100%;'
+          + (sel ? 'background:'+(t.colors?.bg1||'#334155')+';color:#fff;border:2px solid '+(t.colors?.accent||'#a78bfa')+';' : 'background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:1px solid rgba(255,255,255,0.12);')
           + 'cursor:pointer;font-size:12px;font-weight:'+(sel?'700':'400')+';">'
+          + thumbHtml
           + '<span style="font-size:16px;">' + (sel?'◉':'○') + '</span> ' + t.name
           + '<br><span style="font-size:10px;opacity:0.6;">' + t.desc + '</span></button>';
       }).join('');
@@ -46342,11 +46433,78 @@ ${body}
       var host = document.getElementById('poster-template-library');
       if (!host) return;
       host.innerHTML = _savedPosterTemplates.length ? _savedPosterTemplates.map(function(t) {
-        return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12px;">'
+        var thumb = t.image_url ? '<img src="' + escapeHtml(t.image_url) + '" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;">' : '';
+        return '<div style="display:flex;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12px;">'
+          + thumb
+          + '<div style="flex:1;min-width:0;">'
           + '<div style="color:#fff;font-weight:700;">' + escapeHtml(t.name || t.template_key || '-') + '</div>'
-          + '<div style="margin-top:4px;color:rgba(226,232,240,0.6);">' + escapeHtml([t.template_key, t.category, t.channel, t.aspect_ratio].filter(Boolean).join(' · ') || '-') + '</div>'
+          + '<div style="margin-top:2px;color:rgba(226,232,240,0.55);font-size:11px;">' + escapeHtml([t.category, t.channel, t.aspect_ratio].filter(Boolean).join(' · ') || '-') + '</div>'
+          + '</div>'
+          + '<button onclick="editPosterTemplate(\'' + t.template_key + '\')" style="padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:none;cursor:pointer;font-size:11px;">编辑</button>'
+          + '<button onclick="deletePosterTemplate(' + t.id + ')" style="padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.15);color:#fca5a5;border:none;cursor:pointer;font-size:11px;">删除</button>'
           + '</div>';
       }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无已保存模板</div>';
+    }
+
+    function populatePosterStoreSelect() {
+      var sel = document.getElementById('poster-store');
+      if (!sel) return;
+      var cur = sel.value;
+      sel.innerHTML = '<option value="">选择门店</option>' + Object.keys(__GROWTH_STORE_MAP).map(function(k) {
+        return '<option value="' + k + '">' + escapeHtml(__GROWTH_STORE_MAP[k]) + '</option>';
+      }).join('');
+      if (cur) sel.value = cur;
+      var assetSel = document.getElementById('creative-asset-store');
+      if (assetSel) {
+        var cur2 = assetSel.value;
+        assetSel.innerHTML = '<option value="">选择门店（可选）</option>' + Object.keys(__GROWTH_STORE_MAP).map(function(k) {
+          return '<option value="' + k + '">' + escapeHtml(__GROWTH_STORE_MAP[k]) + '</option>';
+        }).join('');
+        if (cur2) assetSel.value = cur2;
+      }
+    }
+
+    function resetTemplateForm() {
+      _editingTemplateKey = '';
+      ['poster-template-key-input','poster-template-name-input','poster-template-category-input','poster-template-channel-input','poster-template-aspect-input','poster-template-style-input','poster-template-prompt-notes-input','poster-template-image-url'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      document.getElementById('poster-template-image-preview').style.display = 'none';
+    }
+
+    function editPosterTemplate(key) {
+      var t = _savedPosterTemplates.find(function(st) { return st.template_key === key; });
+      if (!t) return;
+      _editingTemplateKey = key;
+      setField('poster-template-key-input', t.template_key || '');
+      setField('poster-template-name-input', t.name || '');
+      setField('poster-template-category-input', t.category || '');
+      setField('poster-template-channel-input', t.channel || '');
+      setField('poster-template-aspect-input', t.aspect_ratio || '');
+      setField('poster-template-style-input', (t.style_guide && t.style_guide.style) || '');
+      setField('poster-template-prompt-notes-input', (t.style_guide && t.style_guide.prompt_notes) || '');
+      setField('poster-template-image-url', t.image_url || '');
+      var previewEl = document.getElementById('poster-template-image-preview');
+      var previewImg = document.getElementById('poster-template-image-preview-img');
+      if (previewEl && previewImg && t.image_url) {
+        previewImg.src = t.image_url;
+        previewEl.style.display = 'block';
+      } else if (previewEl) {
+        previewEl.style.display = 'none';
+      }
+      showNotification('已加载模板「' + t.name + '」到编辑区，修改后保存即可更新', 'info');
+    }
+
+    function deletePosterTemplate(id) {
+      if (!confirm('确认删除此模板？')) return;
+      fetch('/api/growth/poster-templates/' + id, {
+        method: 'DELETE',
+        headers: growthAuthHeaders()
+      }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.ok) { showNotification('模板已删除', 'success'); loadPosterTemplates(); }
+        else { showNotification('删除失败：' + (d.error || ''), 'error'); }
+      }).catch(function(e) { showNotification('删除失败：' + (e.message || e), 'error'); });
     }
 
     async function loadPosterTemplates() {
@@ -46384,6 +46542,7 @@ ${body}
             if (saved.style_guide.style) local.style = saved.style_guide.style;
             if (saved.style_guide.prompt_notes) local.promptNotes = saved.style_guide.prompt_notes;
           }
+          if (saved.image_url) local.image_url = saved.image_url;
         });
       } catch (e) {
         _savedPosterTemplates = [];
@@ -46399,6 +46558,7 @@ ${body}
     }
 
     function getPosterEditorData() {
+      var storeEl = document.getElementById('poster-store');
       return {
         title: document.getElementById('poster-title')?.value || '',
         subtitle: document.getElementById('poster-subtitle')?.value || '',
@@ -46408,7 +46568,8 @@ ${body}
         size: document.getElementById('poster-size')?.value || '',
         clarity: document.getElementById('poster-clarity')?.value || '',
         format: document.getElementById('poster-format')?.value || '',
-        store: document.getElementById('poster-store')?.value || '',
+        store: storeEl ? storeEl.options[storeEl.selectedIndex]?.text || storeEl.value || '' : '',
+        storeId: storeEl?.value || '',
         campaignId: document.getElementById('poster-campaign')?.value || '',
         couponId: document.getElementById('poster-coupon')?.value || '',
         publicChannelKey: document.getElementById('poster-public-channel')?.value || '',
@@ -46437,7 +46598,7 @@ ${body}
         poster_key: 'poster_' + Date.now(),
         campaign_id: editor.campaignId || undefined,
         title: title,
-        store_id: editor.store || '',
+        store_id: editor.storeId || '',
         template_key: _selectedPosterTemplate,
         subtitle: editor.subtitle || '',
         cta: editor.cta || '',
@@ -46572,7 +46733,7 @@ ${body}
             action_key: 'poster_private_' + Date.now(),
             action_type: actionType,
             status: 'proposed',
-            store_id: editor.store || '',
+            store_id: editor.storeId || '',
             campaign_id: editor.campaignId || '',
             title: (editor.title || '海报') + ' 私域触达',
             detail: copyText,
@@ -46584,7 +46745,7 @@ ${body}
               poster_url: savedPoster?.output_url || editor.finalImageUrl,
               content_template: copyText,
               title_template: editor.title || '海报触达',
-              store_id: editor.store || ''
+              store_id: editor.storeId || ''
             },
             created_by: 'poster_workflow'
           })
@@ -46613,7 +46774,7 @@ ${body}
           headers: growthAuthHeaders(),
           body: JSON.stringify({
             item_id: itemId,
-            store_id: editor.store || '',
+            store_id: editor.storeId || '',
             channel: channelName || editor.publicChannelKey,
             publish_date: editor.publicDate || '',
             title: editor.title || '海报发布',
@@ -46633,7 +46794,7 @@ ${body}
             task_key: taskKey,
             title: (editor.title || '海报') + ' 公域发布',
             channel_key: editor.publicChannelKey,
-            store_id: editor.store || '',
+            store_id: editor.storeId || '',
             campaign_id: editor.campaignId || '',
             due_at: editor.publicDate || '',
             content_brief: editor.subtitle || editor.offer || '',
@@ -46879,10 +47040,14 @@ ${body}
         var host = document.getElementById('creative-assets-list');
         if (!host) return;
         host.innerHTML = assets.length ? assets.map(function(a) {
-          return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px;">'
+          var thumb = a.url ? '<img src="' + escapeHtml(a.url) + '" style="width:36px;height:36px;object-fit:cover;border-radius:6px;flex-shrink:0;">' : '';
+          return '<div style="display:flex;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px;">'
+            + thumb
+            + '<div style="flex:1;min-width:0;">'
             + '<div style="color:#fff;font-weight:700;">' + escapeHtml(a.name || '-') + '</div>'
-            + '<div style="margin-top:4px;color:rgba(226,232,240,0.55);">' + escapeHtml([a.asset_type, growthStoreName(a.store_id || ''), (a.tags || []).join('/')].filter(Boolean).join(' · ')) + '</div>'
-            + (a.url ? '<a href="' + escapeHtml(a.url) + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;color:#38bdf8;font-size:11px;">打开素材</a>' : '')
+            + '<div style="margin-top:2px;color:rgba(226,232,240,0.55);font-size:11px;">' + escapeHtml([a.asset_type, growthStoreName(a.store_id || ''), (a.tags || []).join('/')].filter(Boolean).join(' · ')) + '</div>'
+            + '</div>'
+            + '<button onclick="deleteCreativeAsset(' + a.id + ')" style="padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.15);color:#fca5a5;border:none;cursor:pointer;font-size:11px;">删除</button>'
             + '</div>';
         }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无素材</div>';
       } catch (e) {
@@ -46925,6 +47090,7 @@ ${body}
         category: document.getElementById('poster-template-category-input')?.value || '',
         channel: document.getElementById('poster-template-channel-input')?.value || '',
         aspect_ratio: document.getElementById('poster-template-aspect-input')?.value || '',
+        image_url: document.getElementById('poster-template-image-url')?.value || '',
         layout: {},
         style_guide: {
           style: document.getElementById('poster-template-style-input')?.value || '',
@@ -46948,6 +47114,89 @@ ${body}
       } catch (e) {
         showNotification('保存模板失败：' + (e?.message || e), 'error');
       }
+    }
+
+    function copyImage2Prompt() {
+      var el = document.getElementById('poster-image2-prompt');
+      if (!el || !el.value) { showNotification('没有可复制的提示词', 'warning'); return; }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(el.value).then(function() { showNotification('提示词已复制到剪贴板', 'success'); });
+      } else {
+        el.select(); el.setSelectionRange(0, el.value.length);
+        document.execCommand('copy'); showNotification('提示词已复制到剪贴板', 'success');
+      }
+    }
+
+    function deleteCreativeAsset(id) {
+      if (!confirm('确认删除此素材？')) return;
+      fetch('/api/growth/creative-assets/' + id, {
+        method: 'DELETE',
+        headers: growthAuthHeaders()
+      }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.ok) { showNotification('素材已删除', 'success'); loadCreativeAssets(); }
+        else { showNotification('删除失败：' + (d.error || ''), 'error'); }
+      }).catch(function(e) { showNotification('删除失败：' + (e.message || e), 'error'); });
+    }
+
+    function resetAssetForm() {
+      ['creative-asset-key','creative-asset-name','creative-asset-url','creative-asset-tags'].forEach(function(id) {
+        var el = document.getElementById(id); if (el) el.value = '';
+      });
+      var typeEl = document.getElementById('creative-asset-type'); if (typeEl) typeEl.value = '';
+      var storeEl = document.getElementById('creative-asset-store'); if (storeEl) storeEl.value = '';
+      document.getElementById('creative-asset-upload-preview').style.display = 'none';
+    }
+
+    function setField(id, val) {
+      var el = document.getElementById(id); if (el) el.value = val;
+    }
+
+    async function uploadFile(file) {
+      var fd = new FormData(); fd.append('file', file);
+      var r = await fetch('/api/growth/upload', { method: 'POST', headers: growthAuthHeaders(true), body: fd });
+      var d = await r.json();
+      if (!d.ok) throw new Error(d.error || 'upload_failed');
+      var host = window.location.protocol + '//' + window.location.host;
+      return host + d.url;
+    }
+
+    function uploadPosterImage(event) {
+      var file = event.target?.files?.[0]; if (!file) return;
+      var previewEl = document.getElementById('poster-upload-preview');
+      var previewImg = document.getElementById('poster-upload-preview-img');
+      var reader = new FileReader();
+      reader.onload = function(e) { if (previewImg) previewImg.src = e.target.result; if (previewEl) previewEl.style.display = 'block'; };
+      reader.readAsDataURL(file);
+      uploadFile(file).then(function(url) {
+        document.getElementById('poster-final-image-url').value = url;
+        showNotification('海报已上传，URL已填充', 'success');
+      }).catch(function(e) { showNotification('上传失败：' + (e.message || e), 'error'); });
+    }
+
+    function uploadTemplateImage(event) {
+      var file = event.target?.files?.[0]; if (!file) return;
+      var previewEl = document.getElementById('poster-template-image-preview');
+      var previewImg = document.getElementById('poster-template-image-preview-img');
+      var reader = new FileReader();
+      reader.onload = function(e) { if (previewImg) previewImg.src = e.target.result; if (previewEl) previewEl.style.display = 'block'; };
+      reader.readAsDataURL(file);
+      uploadFile(file).then(function(url) {
+        document.getElementById('poster-template-image-url').value = url;
+        showNotification('模板缩略图已上传', 'success');
+      }).catch(function(e) { showNotification('上传失败：' + (e.message || e), 'error'); });
+    }
+
+    function uploadAssetFile(event) {
+      var file = event.target?.files?.[0]; if (!file) return;
+      var previewEl = document.getElementById('creative-asset-upload-preview');
+      var previewImg = document.getElementById('creative-asset-upload-preview-img');
+      var reader = new FileReader();
+      reader.onload = function(e) { if (previewImg) previewImg.src = e.target.result; if (previewEl) previewEl.style.display = 'block'; };
+      reader.readAsDataURL(file);
+      uploadFile(file).then(function(url) {
+        document.getElementById('creative-asset-url').value = url;
+        showNotification('素材文件已上传', 'success');
+      }).catch(function(e) { showNotification('上传失败：' + (e.message || e), 'error'); });
     }
 
     </script>
