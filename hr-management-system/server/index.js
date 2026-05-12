@@ -13414,7 +13414,6 @@ function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
   });
 
   // Approved leave: only count days NOT already covered by daily report rest (避免重复)
-  const restDateKeys = new Set(Object.keys(restStats?.byDay || {}));
   const leaveRecords = Array.isArray(state?.leaveRecords) ? state.leaveRecords : [];
   const uLower = uname.toLowerCase();
   leaveRecords.forEach((lr) => {
@@ -13427,25 +13426,12 @@ function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
 
     let days = 0;
     if (overlapDays > 0) {
-      // 逐日计算：跳过已在日报中标记为休息的日期
       const sameMonthRange = sd.startsWith(m) && ed.startsWith(m);
-      if (sameMonthRange && rawDays != null && Number.isFinite(rawDays) && rawDays > 0) {
-        // 计算休假天数中不重复的天数
-        let uniqueDays = 0;
-        const sdDate = new Date(sd + 'T00:00:00');
-        const edDate = new Date(ed + 'T00:00:00');
-        for (let dt = new Date(sdDate); dt <= edDate; dt.setDate(dt.getDate() + 1)) {
-          const ymd = dt.toISOString().slice(0, 10);
-          if (!restDateKeys.has(ymd)) uniqueDays += 1;
-        }
-        days = Math.min(rawDays, uniqueDays);
-      } else {
-        // 跨月休假：按重叠天数同样去重
-        days = overlapDays;
-      }
+      days = (sameMonthRange && rawDays != null && Number.isFinite(rawDays) && rawDays > 0)
+        ? rawDays
+        : overlapDays;
     } else if (rawDays != null && Number.isFinite(rawDays) && rawDays > 0 && sd.startsWith(m)) {
-      // 单日休假：检查是否已在日报休息中
-      if (!restDateKeys.has(sd)) days = rawDays;
+      days = rawDays;
     }
     if (!(Number.isFinite(days) && days > 0)) return;
     usedLeave += days;
