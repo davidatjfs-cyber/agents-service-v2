@@ -1941,6 +1941,14 @@ export function registerGrowthRoutes(app, pool) {
     return res.json({ ok: true, items: r.rows });
   });
 
+  app.delete('/api/growth/generated-posters/:id', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ ok: false, error: 'invalid_id' });
+    await pool.query('DELETE FROM generated_posters WHERE id = $1', [id]);
+    return res.json({ ok: true });
+  });
+
   app.get('/api/growth/customers', async (req, res) => {
     if (!requireGrowthAuth(req, res)) return;
     const phone = cleanText(req.query.phone || '', 32);

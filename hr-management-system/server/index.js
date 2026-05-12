@@ -13041,15 +13041,35 @@ function calcEmployeeMonthlyActualRestFromDailyReports(state, employee, month) {
     .map(x => String(x || '').trim())
     .filter(Boolean);
 
+  const getRestDaysForEmployee = (staffObj) => {
+    const so = staffObj && typeof staffObj === 'object' && !Array.isArray(staffObj) ? staffObj : {};
+    const lists = [
+      Array.isArray(so.restStaff) ? so.restStaff : [],
+      Array.isArray(so.frontRestStaff) ? so.frontRestStaff : [],
+      Array.isArray(so.kitchenRestStaff) ? so.kitchenRestStaff : []
+    ];
+    for (const arr of lists) {
+      for (const it of arr) {
+        const u = String(it?.user || it?.username || '').trim().toLowerCase();
+        const n = String(it?.name || '').trim();
+        if ((u && uname && u === uname) || (!u && name && n && n === name)) {
+          const d = Number(it?.days);
+          return Number.isFinite(d) && d > 0 ? d : 1;
+        }
+      }
+    }
+    return null;
+  };
+
   reportList.forEach((rep) => {
     const repDate = String(rep?.date || '').trim();
     if (!repDate || !repDate.startsWith(m + '-')) return;
     const data = rep?.data && typeof rep.data === 'object' ? rep.data : {};
 
-    let rested = dailyReportHasRestForEmployee(data?.staff, uname, name);
+    let days = getRestDaysForEmployee(data?.staff);
 
     // legacy fallback: comma-separated text names
-    if (!rested) {
+    if (days == null) {
       const frontRest = String(data?.staff?.frontRest || '').trim();
       const kitchenRest = String(data?.staff?.kitchenRest || '').trim();
       const tokens = splitNameTokens(frontRest).concat(splitNameTokens(kitchenRest));
@@ -13057,11 +13077,11 @@ function calcEmployeeMonthlyActualRestFromDailyReports(state, employee, month) {
       const hitByToken = (uname && tokenSet.has(uname)) || (!!name && tokenSet.has(name.toLowerCase()));
       const hitByRaw = (!!name && (frontRest.includes(name) || kitchenRest.includes(name)))
         || (uname && (frontRest.toLowerCase().includes(uname) || kitchenRest.toLowerCase().includes(uname)));
-      if (hitByToken || hitByRaw) rested = true;
+      if (hitByToken || hitByRaw) days = 1;
     }
 
-    if (rested) {
-      byDay[repDate] = 1;
+    if (days != null && days > 0) {
+      byDay[repDate] = Number(days.toFixed(2));
     }
   });
 

@@ -41399,7 +41399,8 @@ ${badge}
                         diff: Number((Number(r?.holidayDays || 0) - Number(r?.actualRestDays || 0)).toFixed(2)),
                         remaining: Number(r?.remaining || 0),
                         owedDays: Number(r?.owedDays || 0),
-                        isOwed: !!r?.isOwed
+                        isOwed: !!r?.isOwed,
+                        usedLeaveDetails: Array.isArray(r?.usedLeaveDetails) ? r.usedLeaveDetails : []
                     };
                     if (r?.lastAdjustment) row.lastAdjustment = r.lastAdjustment;
                 });
@@ -46651,7 +46652,17 @@ ${body}
     async function ensurePosterSavedForFlow() {
       var editor = getPosterEditorData();
       if (!editor.finalImageUrl) {
-        showNotification('请先生成成图并粘贴最终图片 URL', 'warning');
+        showNotification('请先上传成图', 'warning');
+        return null;
+      }
+      var purposes = getCheckedValues('poster-gen-purposes');
+      var channels = getCheckedValues('poster-gen-channels');
+      if (!purposes.length) {
+        showNotification('请至少选择一个营销用途', 'warning');
+        return null;
+      }
+      if (!channels.length) {
+        showNotification('请至少选择一个投放渠道', 'warning');
         return null;
       }
       var title = editor.title || '海报';
