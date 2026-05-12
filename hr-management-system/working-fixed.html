@@ -14068,8 +14068,9 @@
                                             <label style="font-size:11px;color:rgba(226,232,240,0.5);display:block;margin-bottom:4px;">素材文件</label>
                                             <div style="display:flex;gap:8px;align-items:center;">
                                                 <input id="creative-asset-url" placeholder="上传后自动填充" readonly style="flex:1;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;">
-                                                <input type="file" id="creative-asset-file-upload" accept="image/*" style="display:none;" onchange="uploadAssetFile(event)">
-                                                <button onclick="document.getElementById('creative-asset-file-upload').click()" style="padding:6px 10px;border-radius:6px;background:#ec4899;color:#fff;border:none;cursor:pointer;font-size:11px;white-space:nowrap;">上传</button>
+                                                <input type="file" id="creative-asset-file-upload" accept="image/*" multiple style="display:none;" onchange="uploadAssetFiles(event)">
+                                                <button onclick="document.getElementById('creative-asset-file-upload').click()" style="padding:6px 10px;border-radius:6px;background:#ec4899;color:#fff;border:none;cursor:pointer;font-size:11px;white-space:nowrap;">批量上传</button>
+                                                <span id="creative-asset-upload-count" style="font-size:11px;color:rgba(226,232,240,0.4);"></span>
                                             </div>
                                             <div id="creative-asset-upload-preview" style="margin-top:6px;display:none;"><img id="creative-asset-upload-preview-img" style="max-height:80px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);"></div>
                                         </div>
@@ -46432,18 +46433,28 @@ ${body}
     function renderPosterTemplateLibrary() {
       var host = document.getElementById('poster-template-library');
       if (!host) return;
-      host.innerHTML = _savedPosterTemplates.length ? _savedPosterTemplates.map(function(t) {
+      var allItems = _savedPosterTemplates.slice();
+      POSTER_TEMPLATES.forEach(function(pt) {
+        if (!allItems.some(function(s) { return s.template_key === pt.key || s.template_key === pt.key; })) {
+          allItems.push({ template_key: pt.key, name: pt.name + ' (系统)', category: '系统', channel: '', aspect_ratio: '',
+            image_url: '', style_guide: { style: pt.style || '', prompt_notes: pt.promptNotes || '' },
+            _isBuiltin: true, _builtinKey: pt.key });
+        }
+      });
+      host.innerHTML = allItems.length ? allItems.map(function(t) {
         var thumb = t.image_url ? '<img src="' + escapeHtml(t.image_url) + '" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;">' : '';
+        var nameLabel = t._isBuiltin ? (t.name || t.template_key) : (t.name || t.template_key || '-');
+        var isBuiltin = t._isBuiltin;
         return '<div style="display:flex;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12px;">'
           + thumb
           + '<div style="flex:1;min-width:0;">'
-          + '<div style="color:#fff;font-weight:700;">' + escapeHtml(t.name || t.template_key || '-') + '</div>'
+          + '<div style="color:#fff;font-weight:700;">' + escapeHtml(nameLabel) + '</div>'
           + '<div style="margin-top:2px;color:rgba(226,232,240,0.55);font-size:11px;">' + escapeHtml([t.category, t.channel, t.aspect_ratio].filter(Boolean).join(' · ') || '-') + '</div>'
           + '</div>'
           + '<button onclick="editPosterTemplate(\'' + t.template_key + '\')" style="padding:3px 8px;border-radius:6px;background:rgba(99,102,241,0.15);color:#a5b4fc;border:none;cursor:pointer;font-size:11px;">编辑</button>'
-          + '<button onclick="deletePosterTemplate(' + t.id + ')" style="padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.15);color:#fca5a5;border:none;cursor:pointer;font-size:11px;">删除</button>'
+          + (isBuiltin ? '' : '<button onclick="deletePosterTemplate(' + t.id + ')" style="padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.15);color:#fca5a5;border:none;cursor:pointer;font-size:11px;">删除</button>')
           + '</div>';
-      }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无已保存模板</div>';
+      }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无模板</div>';
     }
 
     function populatePosterStoreSelect() {
@@ -46473,28 +46484,34 @@ ${body}
       document.getElementById('poster-template-image-preview').style.display = 'none';
     }
 
-    function editPosterTemplate(key) {
-      var t = _savedPosterTemplates.find(function(st) { return st.template_key === key; });
-      if (!t) return;
-      _editingTemplateKey = key;
-      setField('poster-template-key-input', t.template_key || '');
-      setField('poster-template-name-input', t.name || '');
-      setField('poster-template-category-input', t.category || '');
-      setField('poster-template-channel-input', t.channel || '');
-      setField('poster-template-aspect-input', t.aspect_ratio || '');
-      setField('poster-template-style-input', (t.style_guide && t.style_guide.style) || '');
-      setField('poster-template-prompt-notes-input', (t.style_guide && t.style_guide.prompt_notes) || '');
-      setField('poster-template-image-url', t.image_url || '');
-      var previewEl = document.getElementById('poster-template-image-preview');
-      var previewImg = document.getElementById('poster-template-image-preview-img');
-      if (previewEl && previewImg && t.image_url) {
-        previewImg.src = t.image_url;
-        previewEl.style.display = 'block';
-      } else if (previewEl) {
-        previewEl.style.display = 'none';
-      }
-      showNotification('已加载模板「' + t.name + '」到编辑区，修改后保存即可更新', 'info');
-    }
+     function editPosterTemplate(key) {
+       var t = _savedPosterTemplates.find(function(st) { return st.template_key === key; });
+       if (!t) {
+         var builtin = POSTER_TEMPLATES.find(function(pt) { return pt.key === key; });
+         if (!builtin) return;
+         t = { template_key: builtin.key, name: builtin.name, category: '系统', channel: '',
+           aspect_ratio: '', image_url: '', style_guide: { style: builtin.style || builtin.desc || '',
+           prompt_notes: builtin.promptNotes || '' } };
+       }
+       _editingTemplateKey = key;
+       setField('poster-template-key-input', t.template_key || '');
+       setField('poster-template-name-input', t.name || '');
+       setField('poster-template-category-input', t.category || '');
+       setField('poster-template-channel-input', t.channel || '');
+       setField('poster-template-aspect-input', t.aspect_ratio || '');
+       setField('poster-template-style-input', (t.style_guide && t.style_guide.style) || '');
+       setField('poster-template-prompt-notes-input', (t.style_guide && t.style_guide.prompt_notes) || '');
+       setField('poster-template-image-url', t.image_url || '');
+       var previewEl = document.getElementById('poster-template-image-preview');
+       var previewImg = document.getElementById('poster-template-image-preview-img');
+       if (previewEl && previewImg && t.image_url) {
+         previewImg.src = t.image_url;
+         previewEl.style.display = 'block';
+       } else if (previewEl) {
+         previewEl.style.display = 'none';
+       }
+       showNotification('已加载模板「' + t.name + '」到编辑区，修改后保存即可更新', 'info');
+     }
 
     function deletePosterTemplate(id) {
       if (!confirm('确认删除此模板？')) return;
@@ -46674,30 +46691,44 @@ ${body}
        }
      }
 
-    function generatePosterImagePrompt() {
-      var tpl = POSTER_TEMPLATES.find(function(t) { return t.key === _selectedPosterTemplate; });
-      if (!tpl) { showNotification('请先选择模板', 'warning'); return; }
-      var editor = getPosterEditorData();
-      if (!editor.title && !editor.offer) { showNotification('请先填写标题或优惠信息', 'warning'); return; }
-      var prompt = [
-        'Create a premium restaurant marketing poster image for GPT Image 2.',
-        'Use this visual style: ' + (tpl.style || tpl.desc || ''),
-        'Follow these composition constraints: ' + (tpl.promptNotes || 'clear hierarchy, enough empty space for Chinese copy, commercial ad quality.'),
-        'Aspect ratio: ' + (((_savedPosterTemplates.find(function(t) { return t.template_key === _selectedPosterTemplate; }) || {}).aspect_ratio) || '3:4') + '.',
-        'Main headline in Chinese: ' + (editor.title || '未填写标题') + '.',
-        'Subtitle in Chinese: ' + (editor.subtitle || '未填写副标题') + '.',
-        'Offer copy in Chinese: ' + (editor.offer || '未填写优惠信息') + '.',
-        (editor.price ? 'Displayed price in Chinese: ' + editor.price + '.' : ''),
-        (editor.size ? 'Displayed size/spec in Chinese: ' + editor.size + '.' : ''),
-        'CTA copy in Chinese: ' + (editor.cta || '未填写CTA') + '.',
-        (editor.store ? 'Brand/store name in Chinese: ' + editor.store + '.' : ''),
-        (editor.keywords ? 'Extra scene / mood / product cues: ' + editor.keywords + '.' : ''),
-        (editor.clarity ? 'Clarity requirement: ' + editor.clarity + '.' : 'Clarity requirement: high-definition commercial output, realistic food texture, crisp details.'),
-        (editor.format ? 'Output format requirement: ' + editor.format + '.' : ''),
-        'Leave clean layout zones for headline, subtitle, offer and CTA. Keep typography placement realistic and readable.',
-        'Food/product should be the hero subject if a product image is provided. Match the template tone closely.',
-        'No mockup frame, no watermark, no random English text, no collage, no low-quality stock look, no cartoon style unless explicitly requested.'
-      ].filter(Boolean).join('\n');
+     function generatePosterImagePrompt() {
+       var tpl = POSTER_TEMPLATES.find(function(t) { return t.key === _selectedPosterTemplate; });
+       if (!tpl) { showNotification('请先选择模板', 'warning'); return; }
+       var editor = getPosterEditorData();
+       if (!editor.title && !editor.offer) { showNotification('请先填写标题或优惠信息', 'warning'); return; }
+       var prompt = [
+         'Create a premium restaurant marketing poster image for GPT Image 2.',
+         'Use this visual style: ' + (tpl.style || tpl.desc || ''),
+         'Follow these composition constraints: ' + (tpl.promptNotes || 'clear hierarchy, enough empty space for Chinese copy, commercial ad quality.'),
+         'Aspect ratio: ' + (((_savedPosterTemplates.find(function(t) { return t.template_key === _selectedPosterTemplate; }) || {}).aspect_ratio) || '3:4') + '.',
+         '',
+         '## Typography & Font Specifications (critical for Chinese poster)',
+         'Font family — Headline: bold modern Chinese sans-serif (思源黑体 / Source Han Sans SC / Noto Sans SC), weight 700–900.',
+         'Font family — Subtitle / body: lighter Chinese sans-serif (思源黑体 Light / Noto Sans SC Light), weight 300–400.',
+         'Font family — Offer / price: bold condensed Chinese font or medium weight, clearly differentiated from headline.',
+         'Font family — CTA button text: medium weight Chinese, enclosed in a rounded pill-shaped button.',
+         'Letter spacing (字间距): normal for headlines, +0.02em to +0.05em for subtitle/body for readability.',
+         'Line height (行距): 1.3x to 1.5x for multi-line Chinese text, avoid crowding.',
+         'Text alignment: center-aligned for headline + offer block; left-aligned if the template style specifies editorial/magazine feel.',
+         'Hierarchy order (top to bottom): headline → subtitle → offer/price block → CTA button → brand/store name at bottom.',
+         'Typography must be razor-sharp, no blurry or broken Chinese characters. All text must be perfectly rendered Chinese.',
+         'Leave generous negative space around each text block — do not overlap text with decorative elements or food imagery.',
+         'Keep at least 15% of the poster as clean margin around the edges. Do not let text touch the borders.',
+         'If the poster has a food photo, place it as a background or side hero — text must remain fully readable over or beside it.',
+         'No mockup frame, no watermark, no random English text, no collage, no low-quality stock look, no cartoon style.',
+         '',
+         '## Content to include',
+         'Main headline in Chinese: ' + (editor.title || '未填写标题') + '.',
+         'Subtitle in Chinese: ' + (editor.subtitle || '未填写副标题') + '.',
+         'Offer copy in Chinese: ' + (editor.offer || '未填写优惠信息') + '.',
+         (editor.price ? 'Displayed price in Chinese: ' + editor.price + '.' : ''),
+         (editor.size ? 'Displayed size/spec in Chinese: ' + editor.size + '.' : ''),
+         'CTA button copy (inside rounded button shape): ' + (editor.cta || '不显示CTA按钮') + '.',
+         (editor.store ? 'Brand/store name in Chinese at bottom: ' + editor.store + '.' : ''),
+         (editor.keywords ? 'Extra scene / mood / product cues: ' + editor.keywords + '.' : ''),
+         (editor.clarity ? 'Clarity requirement: ' + editor.clarity + '.' : ''),
+         (editor.format ? 'Output format requirement: ' + editor.format + '.' : '')
+       ].filter(Boolean).join('\n');
       var out = document.getElementById('poster-image2-prompt');
       if (out) out.value = prompt;
       showNotification('Image2 提示词已生成', 'success');
@@ -47179,18 +47210,65 @@ ${body}
       }).catch(function(e) { showNotification('上传失败：' + (e.message || e), 'error'); });
     }
 
-    function uploadAssetFile(event) {
-      var file = event.target?.files?.[0]; if (!file) return;
-      var previewEl = document.getElementById('creative-asset-upload-preview');
-      var previewImg = document.getElementById('creative-asset-upload-preview-img');
-      var reader = new FileReader();
-      reader.onload = function(e) { if (previewImg) previewImg.src = e.target.result; if (previewEl) previewEl.style.display = 'block'; };
-      reader.readAsDataURL(file);
-      uploadFile(file).then(function(url) {
-        document.getElementById('creative-asset-url').value = url;
-        showNotification('素材文件已上传', 'success');
-      }).catch(function(e) { showNotification('上传失败：' + (e.message || e), 'error'); });
-    }
+     function uploadAssetFile(event) {
+       var file = event.target?.files?.[0]; if (!file) return;
+       var previewEl = document.getElementById('creative-asset-upload-preview');
+       var previewImg = document.getElementById('creative-asset-upload-preview-img');
+       var reader = new FileReader();
+       reader.onload = function(e) { if (previewImg) previewImg.src = e.target.result; if (previewEl) previewEl.style.display = 'block'; };
+       reader.readAsDataURL(file);
+       uploadFile(file).then(function(url) {
+         document.getElementById('creative-asset-url').value = url;
+         showNotification('素材文件已上传', 'success');
+       }).catch(function(e) { showNotification('上传失败：' + (e.message || e), 'error'); });
+     }
+
+     function uploadAssetFiles(event) {
+       var files = event.target?.files; if (!files || !files.length) return;
+       var nameBase = document.getElementById('creative-asset-name')?.value || '素材';
+       var assetType = document.getElementById('creative-asset-type')?.value || 'other';
+       var storeId = document.getElementById('creative-asset-store')?.value || '';
+       var tagsInput = document.getElementById('creative-asset-tags')?.value || '';
+       var countEl = document.getElementById('creative-asset-upload-count');
+       var total = files.length;
+       var done = 0;
+       if (countEl) countEl.textContent = '0/' + total + ' 上传中...';
+       var uploadOne = function(idx) {
+         if (idx >= total) {
+           if (countEl) countEl.textContent = total + '/' + total + ' 全部完成';
+           loadCreativeAssets();
+           showNotification('全部 ' + total + ' 个素材上传完成', 'success');
+           return;
+         }
+         var file = files[idx];
+         var name = nameBase;
+         if (total > 1) name = nameBase + '_' + (idx + 1);
+         uploadFile(file).then(function(url) {
+           var payload = {
+             asset_key: 'asset_' + Date.now() + '_' + idx,
+             name: name,
+             asset_type: assetType,
+             store_id: storeId,
+             url: url,
+             tags: tagsInput ? tagsInput.split(/[,，\s]+/).filter(Boolean) : []
+           };
+           return fetch('/api/growth/creative-assets', {
+             method: 'POST',
+             headers: growthAuthHeaders(),
+             body: JSON.stringify(payload)
+           }).then(function(r) { return r.json(); });
+         }).then(function(d) {
+           if (d.ok) done++;
+           if (countEl) countEl.textContent = done + '/' + total + (done < total ? ' 上传中...' : '');
+           uploadOne(idx + 1);
+         }).catch(function(e) {
+           if (countEl) countEl.textContent = done + '/' + total + ' 部分失败';
+           showNotification('第 ' + (idx + 1) + ' 个上传失败：' + (e.message || e), 'error');
+           uploadOne(idx + 1);
+         });
+       };
+       uploadOne(0);
+     }
 
     </script>
 
