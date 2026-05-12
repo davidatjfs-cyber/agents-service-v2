@@ -46579,8 +46579,6 @@ ${body}
         renderTagCheckboxes('poster-template-category-checkboxes', __TEMPLATE_CATEGORY_OPTIONS, (t.category || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean));
         renderTagCheckboxes('poster-template-channel-checkboxes', __TEMPLATE_CHANNEL_OPTIONS, (t.channel || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean));
         setField('poster-template-aspect-input', t.aspect_ratio || '');
-        setField('poster-template-style-input', (t.style_guide && t.style_guide.style) || '');
-        setField('poster-template-prompt-notes-input', (t.style_guide && t.style_guide.prompt_notes) || '');
         setField('poster-template-image-url', t.image_url || '');
        var previewEl = document.getElementById('poster-template-image-preview');
        var previewImg = document.getElementById('poster-template-image-preview-img');
@@ -47198,10 +47196,7 @@ ${body}
           aspect_ratio: document.getElementById('poster-template-aspect-input')?.value || '',
           image_url: document.getElementById('poster-template-image-url')?.value || '',
           layout: {},
-          style_guide: {
-           style: document.getElementById('poster-template-style-input')?.value || '',
-           prompt_notes: document.getElementById('poster-template-prompt-notes-input')?.value || ''
-         }
+          style_guide: {}
         };
       if (!payload.template_key || !payload.name) {
         showNotification('请至少填写模板键和名称', 'warning');
