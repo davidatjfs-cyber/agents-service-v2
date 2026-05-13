@@ -9287,11 +9287,13 @@
             }
         }
 
-        /* ── 我的档案 / 员工管理 / 考勤打卡 / 奖惩管理：与#reports-page 同系金融面板 ── */
+        /* ── 我的档案 / 员工管理 / 考勤打卡 / 奖惩管理 / 厨房执行 / 增长看板：与#reports-page 同系金融面板 ── */
         #profile-page,
         #employees-page,
         #attendance-page,
-        #rewards-page {
+        #rewards-page,
+        #kitchen-page,
+        #growth-page {
             --rep-bg0: #06080c;
             --rep-bg1: #0b0f16;
             --rep-surface: rgba(255, 255, 255, 0.035);
@@ -9318,7 +9320,9 @@
         #employees-page .dr-shell,
         #attendance-page .dr-shell,
         #rewards-page .dr-shell,
-        #points-page .dr-shell {
+        #points-page .dr-shell,
+        #kitchen-page .dr-shell,
+        #growth-page .dr-shell {
             max-width: min(960px, 100%);
             margin: 0 auto;
             padding: 14px 14px 96px;
@@ -9328,7 +9332,9 @@
         #employees-page .rep-page-head,
         #attendance-page .rep-page-head,
         #rewards-page .rep-page-head,
-        #points-page .rep-page-head {
+        #points-page .rep-page-head,
+        #kitchen-page .rep-page-head,
+        #growth-page .rep-page-head {
             display: flex;
             align-items: flex-end;
             justify-content: space-between;
@@ -9342,7 +9348,9 @@
         #employees-page .rep-page-head h2,
         #attendance-page .rep-page-head h2,
         #rewards-page .rep-page-head h2,
-        #points-page .rep-page-head h2 {
+        #points-page .rep-page-head h2,
+        #kitchen-page .rep-page-head h2,
+        #growth-page .rep-page-head h2 {
             margin: 0;
             font-family: var(--rep-sans);
             font-weight: 700;
@@ -9355,7 +9363,9 @@
         #employees-page .rep-page-head__eyebrow,
         #attendance-page .rep-page-head__eyebrow,
         #rewards-page .rep-page-head__eyebrow,
-        #points-page .rep-page-head__eyebrow {
+        #points-page .rep-page-head__eyebrow,
+        #kitchen-page .rep-page-head__eyebrow,
+        #growth-page .rep-page-head__eyebrow {
             display: block;
             font-size: 10px;
             font-weight: 600;
@@ -9369,7 +9379,9 @@
         #employees-page .rep-page-head__sub,
         #attendance-page .rep-page-head__sub,
         #rewards-page .rep-page-head__sub,
-        #points-page .rep-page-head__sub {
+        #points-page .rep-page-head__sub,
+        #kitchen-page .rep-page-head__sub,
+        #growth-page .rep-page-head__sub {
             margin: 6px 0 0;
             font-size: 12px;
             line-height: 1.45;
@@ -9381,7 +9393,9 @@
         #profile-page .rep-page-head__actions,
         #employees-page .rep-page-head__actions,
         #attendance-page .rep-page-head__actions,
-        #rewards-page .rep-page-head__actions {
+        #rewards-page .rep-page-head__actions,
+        #kitchen-page .rep-page-head__actions,
+        #growth-page .rep-page-head__actions {
             display: flex;
             gap: 8px;
             align-items: center;
@@ -9393,10 +9407,14 @@
         #employees-page .rep-page-head__actions .btn,
         #attendance-page .rep-page-head__actions .btn,
         #rewards-page .rep-page-head__actions .btn,
+        #kitchen-page .rep-page-head__actions .btn,
+        #growth-page .rep-page-head__actions .btn,
         #profile-page .rep-page-head__actions .btn-secondary,
         #employees-page .rep-page-head__actions .btn-secondary,
         #attendance-page .rep-page-head__actions .btn-secondary,
-        #rewards-page .rep-page-head__actions .btn-secondary {
+        #rewards-page .rep-page-head__actions .btn-secondary,
+        #kitchen-page .rep-page-head__actions .btn-secondary,
+        #growth-page .rep-page-head__actions .btn-secondary {
             border-radius: 10px;
             font-weight: 600;
             font-size: 12px;
@@ -14563,75 +14581,67 @@
             <!-- ═══════════════════════════════════════════ -->
             <!-- 厨房备料执行页面                           -->
             <!-- ═══════════════════════════════════════════ -->
-            <div id="kitchen-page" class="hidden" style="padding:0;max-width:100vw;overflow-x:hidden;">
-              <!-- Sticky Header -->
-              <div style="position:sticky;top:0;z-index:100;background:rgba(18,18,22,0.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);">
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-                  <div style="min-width:0;">
-                    <div id="kitchen-page-title" style="font-size:18px;font-weight:800;color:#fff;line-height:1.3;">今日备料</div>
-                    <div id="kitchen-page-sub" style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:2px;">加载中…</div>
+            <div id="kitchen-page" class="hidden">
+              <div class="dr-shell">
+                <header class="rep-page-head">
+                  <div>
+                    <span class="rep-page-head__eyebrow" id="kitchen-eyebrow">KITCHEN</span>
+                    <h2 id="kitchen-page-title">今日备料</h2>
+                    <p class="rep-page-head__sub" id="kitchen-page-sub">加载中…</p>
                   </div>
-                  <div style="display:flex;gap:6px;flex-shrink:0;" id="kitchen-mgr-actions">
-                    <button onclick="showKitchenView('dashboard')" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">📊 看板</button>
-                    <button onclick="showKitchenView('manage')" id="kitchen-manage-btn" style="display:none;padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">⚙️ 配置</button>
-                    <button onclick="kitchenSyncSopSteps()" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(99,102,241,0.3);background:rgba(99,102,241,0.12);color:#a5b4fc;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">🔄 同步</button>
+                  <div class="rep-page-head__actions" id="kitchen-mgr-actions" style="display:none;">
+                    <button class="btn btn-secondary" type="button" onclick="showKitchenView('dashboard')">📊 看板</button>
+                    <button class="btn btn-secondary" type="button" id="kitchen-manage-btn" onclick="showKitchenView('manage')" style="display:none;">⚙️ 配置</button>
+                    <button class="btn btn-secondary" type="button" onclick="kitchenSyncSopSteps()">🔄 同步</button>
                   </div>
-                </div>
-                <!-- 进度环 (staff view) -->
-                <div id="kitchen-progress-ring" style="display:none;margin-top:14px;"></div>
-                <!-- 时段快选 (staff view) -->
-                <div id="kitchen-time-chips" style="display:none;margin-top:12px;overflow-x:auto;white-space:nowrap;padding-bottom:4px;-webkit-overflow-scrolling:touch;"></div>
-              </div>
+                </header>
 
-              <div style="padding:12px 16px 120px;">
+                <!-- 进度环 & 时段快选 (staff view) -->
+                <div id="kitchen-progress-ring" style="display:none;margin-bottom:16px;"></div>
+                <div id="kitchen-time-chips" style="display:none;margin-bottom:14px;overflow-x:auto;white-space:nowrap;padding-bottom:4px;-webkit-overflow-scrolling:touch;"></div>
 
                 <!-- 员工视图：今日任务清单 -->
                 <div id="kitchen-staff-view">
                   <div id="kitchen-task-list" style="display:grid;gap:10px;"></div>
-                  <div id="kitchen-empty-tip" style="display:none;text-align:center;padding:48px 20px;">
-                    <div style="width:72px;height:72px;border-radius:50%;background:rgba(34,197,94,0.12);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:36px;">✅</div>
-                    <div style="font-size:17px;font-weight:700;color:rgba(255,255,255,0.85);">今日任务已全部完成</div>
-                    <div style="font-size:13px;color:rgba(255,255,255,0.35);margin-top:6px;">辛苦了，明天见！</div>
+                  <div id="kitchen-empty-tip" style="display:none;text-align:center;padding:48px 20px;color:var(--rep-muted);">
+                    <div style="font-size:48px;margin-bottom:12px;">✅</div>
+                    <div style="font-size:17px;font-weight:700;color:var(--rep-text);">今日任务已全部完成</div>
+                    <div style="font-size:13px;margin-top:6px;">辛苦了，明天见！</div>
                   </div>
-                  <div id="kitchen-no-tasks" style="display:none;text-align:center;padding:48px 20px;">
-                    <div style="width:72px;height:72px;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:36px;">📋</div>
-                    <div style="font-size:17px;font-weight:700;color:rgba(255,255,255,0.85);">暂无配置任务</div>
-                    <div style="font-size:13px;color:rgba(255,255,255,0.35);margin-top:6px;" id="kitchen-no-tasks-reason"></div>
+                  <div id="kitchen-no-tasks" style="display:none;text-align:center;padding:48px 20px;color:var(--rep-muted);">
+                    <div style="font-size:48px;margin-bottom:12px;">📋</div>
+                    <div style="font-size:17px;font-weight:700;color:var(--rep-text);">暂无配置任务</div>
+                    <div style="font-size:13px;margin-top:6px;" id="kitchen-no-tasks-reason"></div>
                   </div>
                 </div>
 
                 <!-- 出品经理视图：完成率看板 -->
                 <div id="kitchen-dashboard-view" style="display:none;">
                   <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
-                    <button onclick="showKitchenView('staff')" style="padding:8px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;cursor:pointer;">👤 员工视图</button>
-                    <button onclick="showKitchenView('dashboard')" style="padding:8px 14px;border-radius:10px;border:1px solid rgba(99,102,241,0.3);background:rgba(99,102,241,0.12);color:#a5b4fc;font-size:12px;cursor:pointer;">📊 看板</button>
+                    <button class="btn btn-secondary" type="button" onclick="showKitchenView('staff')" style="font-size:12px;">👤 员工视图</button>
                   </div>
-                  <!-- 门店选择 -->
                   <div id="kitchen-dashboard-store-picker" style="display:none;margin-bottom:16px;"></div>
-                  <!-- 整体概览卡片 -->
                   <div id="kitchen-dashboard-overview" style="margin-bottom:14px;"></div>
-                  <!-- 岗位完成率卡片 -->
                   <div id="kitchen-dashboard-cards" style="display:grid;gap:10px;"></div>
-                  <!-- 未确认明细 -->
                   <div id="kitchen-unchecked-section" style="display:none;margin-top:16px;">
-                    <div style="font-size:14px;font-weight:700;color:rgba(255,200,100,0.9);margin-bottom:10px;">⚠️ 今日未确认项</div>
+                    <h3 style="font-size:14px;color:var(--rep-gold);margin-bottom:10px;">⚠️ 今日未确认项</h3>
                     <div id="kitchen-unchecked-list" style="display:grid;gap:6px;"></div>
                   </div>
                 </div>
 
                 <!-- 管理视图：菜品配置 -->
                 <div id="kitchen-manage-view" style="display:none;">
-                  <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:14px;padding:16px;margin-bottom:14px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;" onclick="document.getElementById('kitchen-config-form').style.display = document.getElementById('kitchen-config-form').style.display==='none'?'':'none';this.querySelector('span').textContent = document.getElementById('kitchen-config-form').style.display==='none'?'▶ 展开':'▼ 收起';">
-                      <h3 id="kitchen-form-title" style="font-size:15px;font-weight:700;color:rgba(255,255,255,0.85);margin:0;">添加岗位负责菜品</h3>
-                      <span style="font-size:12px;color:rgba(255,255,255,0.3);cursor:pointer;">▼ 收起</span>
+                  <div class="rep-filters" style="margin-bottom:14px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;cursor:pointer;" onclick="document.getElementById('kitchen-config-form').style.display=document.getElementById('kitchen-config-form').style.display==='none'?'':'none';this.querySelector('span').textContent=document.getElementById('kitchen-config-form').style.display==='none'?'▶ 展开':'▼ 收起';">
+                      <h3 id="kitchen-form-title" style="font-size:15px;font-weight:700;color:var(--rep-text);margin:0;">添加岗位负责菜品</h3>
+                      <span style="font-size:12px;color:var(--rep-muted);">▼ 收起</span>
                     </div>
                     <input id="kitchen-edit-id" type="hidden" value="">
                     <div id="kitchen-config-form" style="display:grid;gap:10px;">
                       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                         <div>
-                          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px;">档口</div>
-                          <select id="kitchen-add-station" onchange="onKitchenStationChange()" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:#fff;font-size:14px;appearance:none;-webkit-appearance:none;">
+                          <label class="rep-field" style="display:block;margin-bottom:4px;"><span style="font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--rep-muted);">档口</span></label>
+                          <select id="kitchen-add-station" onchange="onKitchenStationChange()" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;appearance:none;-webkit-appearance:none;">
                             <option value="">选择档口</option>
                             <option value="炒锅">炒锅</option>
                             <option value="烧味">烧味</option>
@@ -14640,40 +14650,41 @@
                           </select>
                         </div>
                         <div>
-                          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px;">分配员工</div>
-                          <select id="kitchen-add-employee" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:#fff;font-size:14px;appearance:none;-webkit-appearance:none;">
+                          <label class="rep-field" style="display:block;margin-bottom:4px;"><span style="font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--rep-muted);">员工</span></label>
+                          <select id="kitchen-add-employee" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;appearance:none;-webkit-appearance:none;">
                             <option value="">先选择档口</option>
                           </select>
                         </div>
                       </div>
                       <div>
-                        <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px;">菜品（可多选）</div>
-                        <select id="kitchen-add-dish" multiple size="6" style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:#fff;font-size:14px;">
+                        <label class="rep-field" style="display:block;margin-bottom:4px;"><span style="font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--rep-muted);">菜品（可多选）</span></label>
+                        <select id="kitchen-add-dish" multiple size="5" style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;">
                           <option value="">先选择档口</option>
                         </select>
-                        <div style="font-size:10px;color:rgba(255,255,255,0.25);margin-top:4px;">按住多选或点击逐个选择</div>
                       </div>
-                      <div>
-                        <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px;">每日执行时间</div>
-                        <input id="kitchen-add-times" type="text" placeholder="09:00, 14:00, 17:30" value="09:00" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:#fff;font-size:14px;">
+                      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                        <div>
+                          <label class="rep-field" style="display:block;margin-bottom:4px;"><span style="font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--rep-muted);">每日执行时间</span></label>
+                          <input id="kitchen-add-times" type="text" placeholder="09:00, 14:00, 17:30" value="09:00" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;">
+                        </div>
+                        <div>
+                          <label class="rep-field" style="display:block;margin-bottom:4px;"><span style="font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--rep-muted);">关键控制点</span></label>
+                          <input id="kitchen-add-step" type="text" placeholder="如：烫皮15秒" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;">
+                        </div>
                       </div>
-                      <div>
-                        <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px;">关键控制点（可选）</div>
-                        <input id="kitchen-add-step" type="text" placeholder="如：烫皮15秒" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:#fff;font-size:14px;">
-                      </div>
-                      <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
-                        <input id="kitchen-add-isprep" type="checkbox" style="width:18px;height:18px;accent-color:#f59e0b;">
-                        <span style="font-size:13px;color:rgba(255,255,255,0.65);">预制料（半成品非成品）</span>
+                      <div style="display:flex;align-items:center;gap:8px;">
+                        <input id="kitchen-add-isprep" type="checkbox" style="width:16px;height:16px;accent-color:var(--rep-gold);">
+                        <span style="font-size:12px;color:var(--rep-muted);">预制料（半成品非成品）</span>
                       </div>
                       <div style="display:flex;gap:8px;">
-                        <button id="kitchen-save-btn" type="button" onclick="kitchenSaveDishConfig()" style="flex:1;padding:12px;border-radius:10px;border:none;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">+ 添加</button>
-                        <button id="kitchen-cancel-edit-btn" type="button" onclick="kitchenResetForm()" style="display:none;padding:12px 16px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;cursor:pointer;">取消</button>
+                        <button class="btn" id="kitchen-save-btn" type="button" onclick="kitchenSaveDishConfig()" style="flex:1;">+ 添加</button>
+                        <button class="btn btn-secondary" id="kitchen-cancel-edit-btn" type="button" onclick="kitchenResetForm()" style="display:none;">取消</button>
                       </div>
                     </div>
                   </div>
                   <div style="margin-bottom:14px;display:flex;gap:10px;align-items:center;">
-                    <button type="button" onclick="kitchenSyncSopSteps()" style="padding:8px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(99,102,241,0.12);color:#a5b4fc;font-size:12px;cursor:pointer;">🔄 从飞书同步SOP步骤</button>
-                    <span id="kitchen-sync-status" style="font-size:11px;color:rgba(255,255,255,0.3);"></span>
+                    <button class="btn btn-secondary" type="button" onclick="kitchenSyncSopSteps()" style="font-size:12px;">🔄 从飞书同步SOP步骤</button>
+                    <span id="kitchen-sync-status" style="font-size:11px;color:var(--rep-muted);"></span>
                   </div>
                   <div id="kitchen-mapping-list" style="display:grid;gap:8px;"></div>
                 </div>
