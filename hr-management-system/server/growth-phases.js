@@ -437,6 +437,21 @@ export function registerPhaseRoutes(app, pool) {
     res.json({ok:true,template:r.rows[0]});
   });
 
+  app.patch('/api/growth/campaign-plans/:id/status', async (req, res) => {
+    if (!rqa(req, res)) return;
+    const id = cleanText(req.params.id, 128);
+    const status = cleanText(req.body.status, 40);
+    if (!['draft','active','completed','cancelled'].includes(status)) {
+      return res.status(400).json({ ok: false, error: 'invalid_status' });
+    }
+    const r = await pool.query(
+      `UPDATE growth_campaign_plans SET status=$1, updated_at=NOW() WHERE (plan_id=$2 OR campaign_id=$2) RETURNING *`,
+      [status, id]
+    );
+    if (!r.rows.length) return res.status(404).json({ ok: false, error: 'not_found' });
+    res.json({ ok: true, plan: r.rows[0] });
+  });
+
   app.delete('/api/growth/marketing-templates/:id', async (req, res) => {
     if (!rqa(req, res)) return;
     await pool.query('DELETE FROM marketing_templates WHERE id = $1', [Number(req.params.id)]);

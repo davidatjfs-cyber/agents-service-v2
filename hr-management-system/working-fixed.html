@@ -13813,7 +13813,9 @@
                                     <div id="camp-matched-poster-info" style="font-size:12px;color:#a5b4fc;"></div>
                                 </div>
                                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-                                    <input id="camp-store" placeholder="门店ID" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
+                                    <select id="camp-store" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.8);">
+                                        <option value="">选择门店</option>
+                                    </select>
                                     <input id="camp-title" placeholder="活动标题" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
                                     <select id="camp-channel" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.8);">
                                         <option value="miniprogram">小程序</option><option value="wecom">企微</option><option value="xiaohongshu">小红书</option><option value="douyin">抖音</option><option value="dianping">大众点评</option>
@@ -45420,20 +45422,37 @@ ${body}
             matchPosterForTemplate(tpl.channel || 'miniprogram');
         }
 
-        function showCreateCampaignForm() {
-            var form = document.getElementById('campaign-create-form');
-            if (form) {
-                form.style.display = form.style.display === 'none' ? 'block' : 'none';
-                if (form.style.display !== 'none') {
-                    loadMarketingTemplates();
-                    var list = document.getElementById('campaign-plans-list');
-                    if (list && form.parentElement === list.parentElement && form.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_PRECEDING) {
-                        list.parentElement.insertBefore(form, list);
-                    }
-                    try { form.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) {}
-                }
-            }
-        }
+         function showCreateCampaignForm() {
+             var form = document.getElementById('campaign-create-form');
+             if (form) {
+                 form.style.display = form.style.display === 'none' ? 'block' : 'none';
+                 if (form.style.display !== 'none') {
+                     loadMarketingTemplates();
+                     populateCampStoreSelect();
+                     var list = document.getElementById('campaign-plans-list');
+                     if (list && form.parentElement === list.parentElement && form.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_PRECEDING) {
+                         list.parentElement.insertBefore(form, list);
+                     }
+                     try { form.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) {}
+                 }
+             }
+         }
+
+         function populateCampStoreSelect() {
+             var sel = document.getElementById('camp-store');
+             if (!sel) return;
+             var currentVal = sel.value;
+             sel.innerHTML = '<option value="">选择门店</option>';
+             Object.keys(__GROWTH_STORE_MAP).forEach(function(k) {
+                 var opt = document.createElement('option');
+                 opt.value = k;
+                 opt.textContent = __GROWTH_STORE_MAP[k];
+                 sel.appendChild(opt);
+             });
+             if (currentVal) sel.value = currentVal;
+             var mainStore = document.getElementById('growth-store-filter')?.value;
+             if (mainStore && !sel.value) sel.value = mainStore;
+         }
 
         async function createCampaignFromForm() {
             try {
@@ -45476,33 +45495,64 @@ ${body}
             try {
                 const store = document.getElementById('growth-store-filter')?.value || '';
                 const url = '/api/growth/campaign-plans' + (store ? ('?store_id=' + encodeURIComponent(store)) : '');
-                const postersUrl = '/api/growth/generated-posters?status=generated';
-                const rs = await Promise.all([
+                const [planRes, posterRes, tplRes] = await Promise.all([
                     fetch(url, { headers: growthAuthHeaders() }),
-                    fetch(postersUrl, { headers: growthAuthHeaders() })
+                    fetch('/api/growth/generated-posters?status=generated', { headers: growthAuthHeaders() }),
+                    fetch('/api/growth/marketing-templates', { headers: growthAuthHeaders() })
                 ]);
-                const data = await rs[0].json();
-                const posterData = await rs[1].json();
+                const data = await planRes.json();
+                const posterData = await posterRes.json();
+                const tplData = await tplRes.json();
                 const rows = data?.plans || [];
                 const posters = posterData?.posters || [];
+                const templates = tplData?.templates || [];
                 var postersByCampaign = {};
                 posters.forEach(function(p) {
-                    var k = p.campaign_id || '';
+                    var k = p.campaign_id || p.plan_id || p.poster_key || '';
                     if (!k || postersByCampaign[k]) return;
                     postersByCampaign[k] = p;
                 });
+                var postersById = {};
+                posters.forEach(function(p) { postersById[p.id] = p; });
+                var tplsById = {};
+                templates.forEach(function(t) { tplsById[t.id] = t; });
                 const host = document.getElementById('campaign-plans-list');
                 host.innerHTML = rows.length ? rows.map(function(x) {
                     var cid = x.campaign_id || x.plan_id || '';
                     var poster = postersByCampaign[cid];
+                    var recPoster = x.recommended_poster_id ? postersById[x.recommended_poster_id] : null;
+                    var srcTpl = x.source_template_id ? tplsById[x.source_template_id] : null;
                     var statusLabel = growthStatusLabel(x.status);
-                    var statusColor = x.status === 'active' ? '#22c55e' : x.status === 'executed' ? '#38bdf8' : x.status === 'ignored' ? '#ef4444' : '#f59e0b';
+                    var statusColor = x.status === 'active' ? '#22c55e' : x.status === 'draft' ? '#f59e0b' : x.status === 'executed' ? '#38bdf8' : x.status === 'cancelled' ? '#ef4444' : '#f59e0b';
+                    var actionsHtml = '';
+                    if (x.status === 'draft') {
+                        actionsHtml = '<button onclick="activateCampaignPlan(\'' + cid.replace(/'/g, '\\\'') + '\')" style="padding:3px 8px;border-radius:6px;background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:11px;">激活</button>'
+                            + '<button onclick="cancelCampaignPlan(\'' + cid.replace(/'/g, '\\\'') + '\')" style="padding:3px 8px;border-radius:6px;background:rgba(239,68,68,0.10);color:#f87171;border:1px solid rgba(239,68,68,0.2);cursor:pointer;font-size:11px;">取消</button>';
+                    } else if (x.status === 'active') {
+                        actionsHtml = '<button onclick="completeCampaignPlan(\'' + cid.replace(/'/g, '\\\'') + '\')" style="padding:3px 8px;border-radius:6px;background:rgba(56,189,248,0.12);color:#38bdf8;border:1px solid rgba(56,189,248,0.25);cursor:pointer;font-size:11px;">完结</button>';
+                    }
+                    var posterHtml = '';
+                    if (poster && (poster.output_url || poster.image_url)) {
+                        posterHtml = '<div style="display:flex;gap:10px;align-items:center;margin-top:10px;padding:8px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:10px;">'
+                            + '<img src="' + escapeHtml(poster.output_url || poster.image_url) + '" loading="lazy" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,0.08);">'
+                            + '<div style="min-width:0;"><div style="font-size:11px;color:#f8fafc;font-weight:700;">已关联海报</div><div style="font-size:11px;color:rgba(226,232,240,0.5);margin-top:2px;">' + escapeHtml((poster.title || '海报').slice(0, 24)) + '</div></div>'
+                            + '<a href="' + escapeHtml(poster.output_url || poster.image_url) + '" target="_blank" style="margin-left:auto;padding:4px 8px;border:none;border-radius:6px;background:rgba(14,165,233,0.16);color:#7dd3fc;cursor:pointer;font-size:11px;text-decoration:none;">查看大图</a></div>';
+                    } else if (recPoster && (recPoster.output_url || recPoster.image_url)) {
+                        posterHtml = '<div style="display:flex;gap:10px;align-items:center;margin-top:10px;padding:8px 10px;background:rgba(99,102,241,0.04);border:1px dashed rgba(99,102,241,0.2);border-radius:10px;">'
+                            + '<img src="' + escapeHtml(recPoster.output_url || recPoster.image_url) + '" loading="lazy" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,0.08);">'
+                            + '<div style="min-width:0;"><div style="font-size:11px;color:#a5b4fc;font-weight:700;">推荐海报（未确认）</div><div style="font-size:11px;color:rgba(226,232,240,0.5);margin-top:2px;">' + escapeHtml((recPoster.title || '海报').slice(0, 24)) + '</div></div>'
+                            + '<a href="' + escapeHtml(recPoster.output_url || recPoster.image_url) + '" target="_blank" style="margin-left:auto;padding:4px 8px;border:none;border-radius:6px;background:rgba(99,102,241,0.12);color:#a5b4fc;cursor:pointer;font-size:11px;text-decoration:none;">预览</a></div>';
+                    } else {
+                        posterHtml = '<div style="margin-top:8px;font-size:11px;color:rgba(226,232,240,0.35);">暂无关联海报</div>';
+                    }
+                    var tplHtml = srcTpl ? '<div style="margin-top:4px;font-size:11px;color:rgba(226,232,240,0.4);">来源模板：' + escapeHtml(srcTpl.name) + ' | 已用' + (srcTpl.use_count || 0) + '次</div>' : '';
                     return '<div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">'
                         + '<div style="display:flex;justify-content:space-between;align-items:center;">'
-                        + '<div style="color:#fff;font-weight:600;">' + (x.title || '未命名活动') + '</div>'
+                        + '<div style="color:#fff;font-weight:600;">' + escapeHtml(x.title || '未命名活动') + '</div>'
                         + '<div style="display:flex;gap:6px;align-items:center;">'
                         + '<span style="font-size:11px;padding:2px 8px;border-radius:999px;background:' + statusColor + '22;color:' + statusColor + ';">' + statusLabel + '</span>'
-                        + (cid ? '<button onclick="showCampaignFunnelDashboard(\'' + cid.replace(/'/g, '') + '\')" style="padding:4px 10px;border-radius:6px;background:rgba(14,165,233,0.15);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);cursor:pointer;font-size:11px;">查看漏斗</button>' : '')
+                        + actionsHtml
+                        + (cid ? '<button onclick="showCampaignFunnelDashboard(\'' + cid.replace(/'/g, '\\\'') + '\')" style="padding:4px 10px;border-radius:6px;background:rgba(14,165,233,0.15);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);cursor:pointer;font-size:11px;">漏斗</button>' : '')
                         + '</div></div>'
                         + '<div style="color:rgba(226,232,240,0.6);margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;font-size:12px;">'
                         + '<span>' + growthStoreName(x.store_id) + '</span>'
@@ -45511,14 +45561,56 @@ ${body}
                         + '<span>·</span>'
                         + '<span>' + growthAudienceLabel(x.target_audience) + '</span>'
                         + (x.budget_fen ? '<span>·</span><span>预算¥' + Math.round(Number(x.budget_fen) / 100) + '</span>' : '')
+                        + (x.planned_start ? '<span>·</span><span>' + String(x.planned_start).slice(0,10) + '~' + String(x.planned_end || '').slice(0,10) + '</span>' : '')
                         + '</div>'
-                        + (poster && poster.output_url ? '<div style="display:flex;gap:10px;align-items:center;margin-top:10px;padding:8px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:10px;"><img src="' + escapeHtml(poster.output_url) + '" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,0.08);"><div style="min-width:0;"><div style="font-size:11px;color:#f8fafc;font-weight:700;">已关联海报</div><div style="font-size:11px;color:rgba(226,232,240,0.5);margin-top:2px;">' + escapeHtml((poster.title || '海报').slice(0, 24)) + '</div></div><button onclick="window.open(' + JSON.stringify(String(poster.output_url)) + ')" style="margin-left:auto;padding:4px 8px;border:none;border-radius:6px;background:rgba(14,165,233,0.16);color:#7dd3fc;cursor:pointer;font-size:11px;">打开海报</button></div>' : '<div style="margin-top:8px;font-size:11px;color:rgba(226,232,240,0.35);">暂无关联海报</div>')
-                        + '<div style="color:rgba(226,232,240,0.35);margin-top:4px;font-size:11px;">ID: ' + cid + '</div>'
+                        + posterHtml
+                        + tplHtml
+                        + '<div style="color:rgba(226,232,240,0.25);margin-top:4px;font-size:11px;">ID: ' + cid + '</div>'
                         + '</div>';
                 }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无活动计划</div>';
             } catch (e) {
                 document.getElementById('campaign-plans-list').innerHTML = '<div style="color:#ef4444;">加载活动计划失败</div>';
             }
+        }
+
+        async function activateCampaignPlan(planId) {
+            if (!confirm('确定激活该活动？')) return;
+            try {
+                var r = await fetch('/api/growth/campaign-plans/' + encodeURIComponent(planId) + '/status', {
+                    method: 'PATCH', headers: Object.assign({}, growthAuthHeaders(), {'Content-Type':'application/json'}),
+                    body: JSON.stringify({status:'active'})
+                });
+                var d = await r.json();
+                if (!d.ok) throw new Error(d.error);
+                showNotification('活动已激活', 'success');
+                loadCampaignPlans();
+            } catch (e) { showNotification('操作失败: ' + (e?.message||e), 'error'); }
+        }
+        async function cancelCampaignPlan(planId) {
+            if (!confirm('确定取消该活动？')) return;
+            try {
+                var r = await fetch('/api/growth/campaign-plans/' + encodeURIComponent(planId) + '/status', {
+                    method: 'PATCH', headers: Object.assign({}, growthAuthHeaders(), {'Content-Type':'application/json'}),
+                    body: JSON.stringify({status:'cancelled'})
+                });
+                var d = await r.json();
+                if (!d.ok) throw new Error(d.error);
+                showNotification('活动已取消', 'success');
+                loadCampaignPlans();
+            } catch (e) { showNotification('操作失败: ' + (e?.message||e), 'error'); }
+        }
+        async function completeCampaignPlan(planId) {
+            if (!confirm('确定完结该活动？')) return;
+            try {
+                var r = await fetch('/api/growth/campaign-plans/' + encodeURIComponent(planId) + '/status', {
+                    method: 'PATCH', headers: Object.assign({}, growthAuthHeaders(), {'Content-Type':'application/json'}),
+                    body: JSON.stringify({status:'completed'})
+                });
+                var d = await r.json();
+                if (!d.ok) throw new Error(d.error);
+                showNotification('活动已完结', 'success');
+                loadCampaignPlans();
+            } catch (e) { showNotification('操作失败: ' + (e?.message||e), 'error'); }
         }
 
         function showCampaignFunnelDashboard(campaignId) {
@@ -46151,7 +46243,7 @@ ${body}
         var __TEMPLATE_STYLE_OPTIONS = ['明亮暖色促销，橙红渐变','深灰暖金老客召回，氛围感','黑金高端会员，奢华克制','红金节日庆典，喜庆热烈','清新现代新品，简洁编辑感','奶油白底酒红配，杂志感','极简留白高级感','中式传统红金风'];
         var __TEMPLATE_PROMPT_OPTIONS = ['保留大面积留白','产品主体占画面40%','文案位置给顶部与左侧','不要卡通风，保持真实质感','暖色灯光氛围','突出食物纹理细节','人物与食物互动','无特定约束'];
         function growthStoreName(id) { return __GROWTH_STORE_MAP[id] || id; }
-        var __CHANNEL_MAP = { 'miniprogram': '微信小程序', 'wecom': '企微私聊', 'xiaohongshu': '小红书', 'douyin': '抖音', 'dianping': '大众点评', 'sms': '短信', 'email': '邮件' };
+        var __CHANNEL_MAP = { 'miniprogram': '微信小程序', 'wecom': '企微私聊', 'xiaohongshu': '小红书', 'douyin': '抖音', 'dianping': '大众点评', 'waimai': '外卖平台', 'sms': '短信', 'email': '邮件' };
         function growthChannelLabel(ch) { return __CHANNEL_MAP[ch] || ch; }
         var __STATUS_MAP = { 'proposed': '可一键执行', 'planned': '已排期', 'published': '已发布', 'draft': '草稿', 'active': '进行中', 'executed': '已执行', 'ignored': '已忽略', 'completed': '已完成', 'paused': '已暂停' };
         function growthStatusLabel(st) { return __STATUS_MAP[st] || st; }
