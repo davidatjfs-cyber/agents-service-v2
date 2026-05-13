@@ -46065,6 +46065,7 @@ ${body}
             else if (actionType === 'generate_poster') actionTypeLabel = '🖼️ 生成海报 — 将创建海报任务';
             else actionTypeLabel = '✅ 触达动作';
             document.getElementById('growth-action-detail-modal').classList.remove('hidden');
+            document.getElementById('growth-action-detail-modal').style.display = 'flex';
             document.getElementById('growth-action-detail-title').textContent = x.title || '执行草稿';
             var host = document.getElementById('growth-action-detail-body');
             host.innerHTML = '<div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
@@ -46098,6 +46099,7 @@ ${body}
         }
         function closeActionDetailModal() {
             document.getElementById('growth-action-detail-modal').classList.add('hidden');
+            document.getElementById('growth-action-detail-modal').style.display = '';
         }
 
         var __editingActionKey = null;
@@ -46108,6 +46110,7 @@ ${body}
             if (!x) { showNotification('动作数据未缓存', 'warning'); return; }
             var payload = x.payload || {};
             document.getElementById('edit-exec-modal').classList.remove('hidden');
+            document.getElementById('edit-exec-modal').style.display = 'flex';
             document.getElementById('edit-exec-store').textContent = x.store_id || '-';
             document.getElementById('edit-exec-title').textContent = x.title || '-';
             var channelEl = document.getElementById('edit-exec-channel');
@@ -46121,6 +46124,7 @@ ${body}
         }
         function closeEditExecuteForm() {
             document.getElementById('edit-exec-modal').classList.add('hidden');
+            document.getElementById('edit-exec-modal').style.display = '';
             __editingActionKey = null;
         }
         async function submitEditExecuteForm() {
@@ -46181,6 +46185,7 @@ ${body}
         async function openPosterPicker(actionKey) {
             __posterPickerActionKey = actionKey;
             document.getElementById('poster-picker-modal').classList.remove('hidden');
+            document.getElementById('poster-picker-modal').style.display = 'flex';
             var host = document.getElementById('poster-picker-list');
             host.innerHTML = '<div style="color:rgba(226,232,240,0.3);grid-column:1/-1;padding:20px;">加载海报列表...</div>';
             try {
@@ -46201,6 +46206,7 @@ ${body}
         }
         function closePosterPicker() {
             document.getElementById('poster-picker-modal').classList.add('hidden');
+            document.getElementById('poster-picker-modal').style.display = '';
             __posterPickerActionKey = null;
         }
         async function bindPosterToAction(posterId) {
