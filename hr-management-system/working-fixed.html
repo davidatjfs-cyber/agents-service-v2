@@ -9584,6 +9584,23 @@
             color: var(--rep-muted) !important;
             margin-bottom: 6px;
         }
+        #growth-page .dr-store-select {
+            width: 100%;
+            padding: 12px 14px !important;
+            border-radius: 12px !important;
+            font-size: 14px !important;
+            font-family: var(--rep-mono) !important;
+            background: rgba(0, 0, 0, 0.35) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            color: var(--rep-text) !important;
+            color-scheme: dark;
+            appearance: auto;
+        }
+        #growth-page .dr-store-select:focus {
+            outline: none;
+            border-color: rgba(212, 175, 55, 0.45) !important;
+            box-shadow: 0 0 0 3px var(--rep-gold-glow);
+        }
         #growth-page .rep-pay-card {
             border-radius: 18px;
             padding: 16px;
@@ -10405,6 +10422,10 @@
                 text-align: center !important;
                 padding: 9px 10px !important;
                 font-size: 11px !important;
+            }
+
+            #growth-page .rep-filters__grid {
+                grid-template-columns: 1fr !important;
             }
 
             #growth-metrics-cards {
@@ -14036,15 +14057,25 @@
                     <p class="rep-page-head__sub">私域获客 · 转化 · 执行</p>
                   </div>
                   <div class="rep-page-head__actions">
-                    <select id="growth-store-filter" style="padding:8px 12px;border-radius:10px;border:1px solid var(--rep-border-soft);background:rgba(255,255,255,0.04);color:var(--rep-text);font-size:12px;">
-                      <option value="">全部门店</option>
-                    </select>
-                    <select id="growth-campaign-filter" style="padding:8px 12px;border-radius:10px;border:1px solid var(--rep-border-soft);background:rgba(255,255,255,0.04);color:var(--rep-text);font-size:12px;">
-                      <option value="">全部活动</option>
-                    </select>
-                    <button class="btn btn-secondary" type="button" onclick="refreshGrowthDashboard()" style="font-size:12px;">刷新</button>
+                    <button class="btn btn-secondary" type="button" onclick="refreshGrowthDashboard()">刷新</button>
                   </div>
                 </header>
+                <div class="rep-filters" style="margin-bottom:14px;">
+                  <div class="rep-filters__grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;position:relative;">
+                    <div class="rep-field">
+                      <label for="growth-store-filter">门店范围</label>
+                      <select id="growth-store-filter" class="dr-store-select" onchange="refreshGrowthDashboard()">
+                        <option value="">全部门店</option>
+                      </select>
+                    </div>
+                    <div class="rep-field">
+                      <label for="growth-campaign-filter">活动筛选</label>
+                      <select id="growth-campaign-filter" class="dr-store-select">
+                        <option value="">全部活动</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
                 <nav class="rep-tabs" style="margin-bottom:16px;">
                   <button class="rep-tab rep-tab--active" onclick="showGrowthTab('dashboard')" id="growth-tab-dashboard">看板</button>
                   <button class="rep-tab" onclick="showGrowthTab('wecom')" id="growth-tab-wecom">企微客户</button>
