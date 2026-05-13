@@ -9491,6 +9491,174 @@
             box-shadow: 0 8px 24px -8px rgba(212, 175, 55, 0.45);
         }
 
+        /* ── Growth: report-style layout ── */
+        #growth-page .rep-filters {
+            position: relative;
+            border-radius: 20px;
+            padding: 18px;
+            margin-bottom: 14px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+            border: 1px solid var(--rep-border);
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset, 0 20px 40px -28px rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(14px);
+        }
+        #growth-page .rep-filters::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: 20px;
+            pointer-events: none;
+            background: linear-gradient(125deg, rgba(212, 175, 55, 0.07), transparent 42%);
+        }
+        #growth-page .rep-filters > * { position: relative; }
+        #growth-page .rep-filters__title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--rep-text);
+            letter-spacing: 0.02em;
+            margin-bottom: 14px;
+        }
+        #growth-page .rep-filters__eyebrow {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.2em;
+            color: var(--rep-gold);
+            opacity: 0.9;
+            margin-bottom: 4px;
+        }
+        #growth-page .rep-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+        #growth-page .rep-metric {
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            padding: 14px 12px;
+            backdrop-filter: blur(8px);
+        }
+        #growth-page .rep-metric .k {
+            font-size: 11px;
+            color: var(--rep-muted);
+            font-weight: 700;
+            letter-spacing: 0.06em;
+        }
+        #growth-page .rep-metric .v {
+            margin-top: 8px;
+            font-size: 19px;
+            font-weight: 700;
+            font-family: var(--rep-mono);
+            letter-spacing: 0.02em;
+            color: var(--rep-teal);
+        }
+        #growth-page .rep-hero {
+            border-radius: 20px;
+            padding: 20px;
+            background:
+                radial-gradient(800px 280px at 0% 0%, rgba(45, 212, 191, 0.12), transparent 55%),
+                linear-gradient(155deg, rgba(18, 26, 38, 0.95), rgba(8, 11, 18, 0.98));
+            color: var(--rep-text);
+            border: 1px solid var(--rep-border);
+            box-shadow: 0 28px 56px -36px rgba(0, 0, 0, 0.75);
+            margin-bottom: 14px;
+        }
+        #growth-page .rep-hero .meta {
+            color: var(--rep-muted);
+            font-size: 12px;
+            font-weight: 600;
+            font-family: var(--rep-mono);
+        }
+        #growth-page .rep-dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+        #growth-page .rep-field label {
+            display: block;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--rep-muted) !important;
+            margin-bottom: 6px;
+        }
+        #growth-page .rep-pay-card {
+            border-radius: 18px;
+            padding: 16px;
+            margin-bottom: 12px;
+            background: linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 16px 40px -28px rgba(0, 0, 0, 0.55);
+        }
+        #growth-page .rep-pay-card:last-child { margin-bottom: 0; }
+        #growth-page .rep-seg {
+            display: inline-flex;
+            gap: 4px;
+            margin-bottom: 14px;
+            padding: 5px;
+            border-radius: 14px;
+            background: rgba(0, 0, 0, 0.28);
+            border: 1px solid var(--rep-border-soft);
+            flex-wrap: wrap;
+        }
+        #growth-page .rep-seg-btn {
+            border: none;
+            border-radius: 10px;
+            padding: 9px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            color: var(--rep-muted);
+            background: transparent;
+            transition: color 0.2s, background 0.2s, box-shadow 0.2s, transform 0.15s;
+        }
+        #growth-page .rep-seg-btn--active {
+            color: #0a0c10 !important;
+            background: linear-gradient(135deg, #e8d48b, #c9a227) !important;
+            box-shadow: 0 6px 18px -8px rgba(212, 175, 55, 0.45);
+        }
+        #growth-page .rep-seg-btn:active { transform: scale(0.98); }
+        #growth-page .rep-progress {
+            height: 8px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            overflow: hidden;
+        }
+        #growth-page .rep-progress > div {
+            height: 100%;
+            width: 0;
+            background: linear-gradient(90deg, #34d399, var(--rep-teal));
+            border-radius: 999px;
+        }
+        /* action items scroll container */
+        #growth-page .rep-action-board {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 60vh;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        /* poster steps */
+        #growth-page .rep-poster-step {
+            border-radius: 20px;
+            padding: 18px;
+            margin-bottom: 12px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+            border: 1px solid var(--rep-border);
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
+        }
+        #growth-page .rep-poster-step__title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--rep-gold);
+            opacity: 0.85;
+            letter-spacing: 0.06em;
+            margin-bottom: 10px;
+        }
+
         #attendance-page .rep-filters-bar {
             display: flex;
             gap: 8px;
@@ -10205,6 +10373,38 @@
                 border-radius: 999px !important;
                 padding: 8px 14px !important;
                 white-space: nowrap;
+            }
+
+            #growth-page .rep-dashboard-grid {
+                grid-template-columns: 1fr !important;
+            }
+            #growth-page .rep-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+            #growth-page .rep-filters {
+                padding: 14px !important;
+                margin-bottom: 12px !important;
+            }
+            #growth-page .rep-poster-step {
+                padding: 14px !important;
+            }
+            #growth-page .rep-hero {
+                padding: 16px !important;
+            }
+            #growth-page .rep-hero .v {
+                font-size: 17px !important;
+            }
+            #growth-page .rep-action-board {
+                max-height: 50vh !important;
+            }
+            #growth-page .rep-seg {
+                width: 100% !important;
+            }
+            #growth-page .rep-seg-btn {
+                flex: 1 !important;
+                text-align: center !important;
+                padding: 9px 10px !important;
+                font-size: 11px !important;
             }
 
             #growth-metrics-cards {
@@ -13858,39 +14058,48 @@
                   <button class="rep-tab" onclick="showGrowthTab('pos')" id="growth-tab-pos">POS消费</button>
                 </nav>
                     <div id="growth-dashboard-content">
-                    <div id="growth-metrics-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;"></div>
-                    <div class="growth-dashboard-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-                        <div class="growth-panel" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
-                            <div class="growth-panel-title" style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">活动漏斗</div>
-                            <div id="growth-funnel" style="min-height:200px;"></div>
+                    <div id="growth-metrics-cards" class="rep-grid" style="margin-bottom:14px;"></div>
+                    <div class="rep-dashboard-grid">
+                        <div class="rep-hero">
+                            <div class="meta">FUNNEL</div>
+                            <div style="font-size:15px;font-weight:700;margin:8px 0 4px;color:var(--rep-text);letter-spacing:0.02em;">活动漏斗</div>
+                            <div id="growth-funnel" style="min-height:180px;"></div>
                         </div>
-                        <div class="growth-panel" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
-                        <div class="growth-panel-title" style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">流失预警</div>
-                            <div id="growth-alerts" style="min-height:200px;"></div>
-                        </div>
-                    </div>
-                    <div class="growth-dashboard-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:16px;">
-                        <div class="growth-panel" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
-                            <div class="growth-panel-title" style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">🌤️ 天气/时令</div>
-                            <div id="growth-weather" style="min-height:80px;"></div>
-                        </div>
-                        <div class="growth-panel" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
-                            <div class="growth-panel-title" style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">📅 最佳触达时段</div>
-                            <div id="growth-active-window" style="min-height:80px;"></div>
-                        </div>
-                        <div class="growth-panel" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
-                            <div class="growth-panel-title" style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">🔄 复购触发</div>
-                            <div id="growth-repurchase" style="min-height:80px;"></div>
+                        <div class="rep-hero">
+                            <div class="meta">ALERTS</div>
+                            <div style="font-size:15px;font-weight:700;margin:8px 0 4px;color:var(--rep-text);letter-spacing:0.02em;">流失预警</div>
+                            <div id="growth-alerts" style="min-height:180px;"></div>
                         </div>
                     </div>
-                    <div class="growth-panel" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;margin-top:16px;">
-                        <div class="growth-panel-title" style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">近期指标趋势</div>
-                        <div id="growth-trends" style="min-height:200px;"></div>
+                    <div class="rep-dashboard-grid">
+                        <div class="rep-filters">
+                            <div class="rep-filters__eyebrow">WEATHER</div>
+                            <div class="rep-filters__title">🌤️ 天气/时令</div>
+                            <div id="growth-weather" style="min-height:80px;position:relative;"></div>
+                        </div>
+                        <div class="rep-filters">
+                            <div class="rep-filters__eyebrow">TIMING</div>
+                            <div class="rep-filters__title">📅 最佳触达时段</div>
+                            <div id="growth-active-window" style="min-height:80px;position:relative;"></div>
+                        </div>
                     </div>
-                    <div class="growth-panel" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;margin-top:16px;">
-                        <div class="growth-panel-title" style="font-size:13px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">行动建议</div>
-                         <div id="growth-actions" style="min-height:200px;"></div>
-                      </div>
+                    <div class="rep-dashboard-grid">
+                        <div class="rep-filters">
+                            <div class="rep-filters__eyebrow">REPURCHASE</div>
+                            <div class="rep-filters__title">🔄 复购触发</div>
+                            <div id="growth-repurchase" style="min-height:80px;position:relative;"></div>
+                        </div>
+                        <div class="rep-filters">
+                            <div class="rep-filters__eyebrow">TRENDS</div>
+                            <div class="rep-filters__title">📊 近期指标趋势</div>
+                            <div id="growth-trends" style="min-height:180px;position:relative;"></div>
+                        </div>
+                    </div>
+                    <div class="rep-filters" style="margin-bottom:0;">
+                        <div class="rep-filters__eyebrow">SUGGESTIONS</div>
+                        <div class="rep-filters__title">💡 行动建议</div>
+                        <div id="growth-actions" style="min-height:100px;position:relative;"></div>
+                    </div>
                     </div>
                     <div id="growth-wecom-content" style="display:none;">
                         <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
@@ -14308,27 +14517,29 @@
                         </div>
                     </div>
                     <div id="growth-actions-content" style="display:none;">
-                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
-                            <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">AI建议执行</div>
-                            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-                                <button onclick="loadGrowthActionBoard()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新建议</button>
-                                <select id="growth-action-status-filter" onchange="loadGrowthActionBoard()" style="padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.85);border:1px solid rgba(255,255,255,0.12);font-size:13px;">
+                        <div class="rep-filters">
+                            <div class="rep-filters__eyebrow">AI SUGGESTIONS</div>
+                            <div class="rep-filters__title">AI建议执行</div>
+                            <div class="rep-seg" style="margin-bottom:14px;">
+                                <button onclick="loadGrowthActionBoard()" class="rep-seg-btn rep-seg-btn--active" style="flex:1;">刷新建议</button>
+                                <select id="growth-action-status-filter" onchange="loadGrowthActionBoard()" style="flex:1;min-width:100px;border:none;border-radius:10px;padding:9px 12px;font-size:12px;font-weight:600;background:rgba(0,0,0,0.35);color:var(--rep-text);">
                                     <option value="">全部状态</option>
                                     <option value="proposed">可执行</option>
                                     <option value="executed">已执行</option>
                                     <option value="ignored">已忽略</option>
                                 </select>
                             </div>
-                            <div id="growth-action-board" style="max-height:520px;overflow-y:auto;"></div>
+                            <div id="growth-action-board" class="rep-action-board"></div>
                             <pre id="__growth_actions_cache" style="display:none;"></pre>
                         </div>
                     </div>
                     <div id="growth-exec-logs-content" style="display:none;">
-                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
-                            <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">执行记录</div>
-                            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-                                <button onclick="loadExecutionLogs()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新</button>
-                                <select id="exec-log-decision-filter" onchange="loadExecutionLogs()" style="padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.85);border:1px solid rgba(255,255,255,0.12);font-size:13px;">
+                        <div class="rep-filters">
+                            <div class="rep-filters__eyebrow">EXECUTION LOGS</div>
+                            <div class="rep-filters__title">执行记录</div>
+                            <div class="rep-seg" style="margin-bottom:14px;">
+                                <button onclick="loadExecutionLogs()" class="rep-seg-btn rep-seg-btn--active" style="flex:1;">刷新</button>
+                                <select id="exec-log-decision-filter" onchange="loadExecutionLogs()" style="flex:1;min-width:100px;border:none;border-radius:10px;padding:9px 12px;font-size:12px;font-weight:600;background:rgba(0,0,0,0.35);color:var(--rep-text);">
                                     <option value="">全部决策</option>
                                     <option value="executed">已执行</option>
                                     <option value="ignored">已忽略</option>
@@ -14336,9 +14547,8 @@
                                     <option value="feedback">回填</option>
                                 </select>
                             </div>
-                            <div id="growth-exec-logs-list" style="max-height:520px;overflow-y:auto;"></div>
+                            <div id="growth-exec-logs-list" style="max-height:50vh;overflow-y:auto;"></div>
                         </div>
-                    </div>
                     </div>
                 </div>
             </div>
@@ -46539,10 +46749,10 @@ ${body}
                 { label: '收入(元)', value: (total.revenue / 100).toFixed(2), tag: '收入' }
             ];
             document.getElementById('growth-metrics-cards').innerHTML = cards.map(function(c) {
-                return '<div class="growth-metric-card" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;text-align:center;">'
-                    + '<div class="metric-tag">' + c.tag + '</div>'
-                    + '<div class="metric-value" style="font-size:28px;font-weight:800;color:#fff;">' + c.value + '</div>'
-                    + '<div style="font-size:12px;color:rgba(226,232,240,0.5);">' + c.label + '</div>'
+                return '<div class="rep-metric" style="text-align:center;">'
+                    + '<div class="k" style="text-align:center;">' + c.tag + '</div>'
+                    + '<div class="v" style="text-align:center;font-size:24px;">' + c.value + '</div>'
+                    + '<div style="font-size:11px;color:var(--rep-muted);text-align:center;margin-top:4px;">' + c.label + '</div>'
                     + '</div>';
             }).join('');
         }
