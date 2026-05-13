@@ -9453,7 +9453,8 @@
             box-shadow: 0 24px 48px -32px rgba(0, 0, 0, 0.65);
         }
 
-        #attendance-page .rep-tabs {
+        #attendance-page .rep-tabs,
+        #growth-page .rep-tabs {
             display: flex;
             gap: 4px;
             margin-bottom: 16px;
@@ -9461,11 +9462,16 @@
             border-radius: 16px;
             background: rgba(0, 0, 0, 0.28);
             border: 1px solid var(--rep-border-soft);
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
         }
+        #growth-page .rep-tabs::-webkit-scrollbar { display: none; }
 
-        #attendance-page .rep-tab {
-            flex: 1;
-            padding: 11px 6px;
+        #attendance-page .rep-tab,
+        #growth-page .rep-tab {
+            flex: 0 0 auto;
+            padding: 11px 12px;
             font-size: 12px;
             font-weight: 600;
             letter-spacing: 0.02em;
@@ -9475,9 +9481,11 @@
             color: var(--rep-muted);
             background: transparent;
             transition: color 0.2s, background 0.2s, box-shadow 0.25s;
+            white-space: nowrap;
         }
 
-        #attendance-page .rep-tab--active {
+        #attendance-page .rep-tab--active,
+        #growth-page .rep-tab--active {
             color: #0a0c10 !important;
             background: linear-gradient(135deg, #e8d48b, #c9a227) !important;
             box-shadow: 0 8px 24px -8px rgba(212, 175, 55, 0.45);
@@ -13800,32 +13808,36 @@
                 <button class="btn" id="btn-agents-config-card" style="display:none;" onclick="openAgentConfigModal()">打开配置中心</button>
             </div>
 
-            <div id="growth-page" class="hidden" style="display:none;position:fixed;top:-9999px;left:0;width:1px;height:1px;overflow:hidden;">
-                <div class="growth-shell" style="max-width:1200px;margin:0 auto;padding:20px;">
-                    <div class="growth-hero" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-                        <h2 style="font-size:22px;font-weight:800;">增长看板</h2>
-                        <div class="growth-controls" style="display:flex;gap:8px;">
-                            <select id="growth-store-filter" style="padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
-                                <option value="">全部门店</option>
-                            </select>
-                            <select id="growth-campaign-filter" style="padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
-                                <option value="">全部活动</option>
-                            </select>
-                            <button onclick="refreshGrowthDashboard()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:600;">刷新</button>
-                        </div>
-                    </div>
-                    <div class="growth-tabs" style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;">
-                        <button onclick="showGrowthTab('dashboard')" id="growth-tab-dashboard" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:600;">看板</button>
-                        <button onclick="showGrowthTab('wecom')" id="growth-tab-wecom" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">企微客户</button>
-                        <button onclick="showGrowthTab('campaigns')" id="growth-tab-campaigns" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">活动管理</button>
-                        <button onclick="showGrowthTab('profiles')" id="growth-tab-profiles" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">用户画像</button>
-                        <button onclick="showGrowthTab('constraints')" id="growth-tab-constraints" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">营销约束</button>
-                        <button onclick="showGrowthTab('posters')" id="growth-tab-posters" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">海报</button>
-                        <button onclick="showGrowthTab('public')" id="growth-tab-public" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">公域品宣</button>
-                        <button onclick="showGrowthTab('actions')" id="growth-tab-actions" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">AI建议执行</button>
-                        <button onclick="showGrowthTab('exec-logs')" id="growth-tab-exec-logs" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">执行记录</button>
-                        <button onclick="showGrowthTab('pos')" id="growth-tab-pos" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">POS消费</button>
-                    </div>
+            <div id="growth-page" class="hidden">
+              <div class="dr-shell">
+                <header class="rep-page-head">
+                  <div>
+                    <span class="rep-page-head__eyebrow">GROWTH</span>
+                    <h2>增长看板</h2>
+                    <p class="rep-page-head__sub">私域获客 · 转化 · 执行</p>
+                  </div>
+                  <div class="rep-page-head__actions">
+                    <select id="growth-store-filter" style="padding:8px 12px;border-radius:10px;border:1px solid var(--rep-border-soft);background:rgba(255,255,255,0.04);color:var(--rep-text);font-size:12px;">
+                      <option value="">全部门店</option>
+                    </select>
+                    <select id="growth-campaign-filter" style="padding:8px 12px;border-radius:10px;border:1px solid var(--rep-border-soft);background:rgba(255,255,255,0.04);color:var(--rep-text);font-size:12px;">
+                      <option value="">全部活动</option>
+                    </select>
+                    <button class="btn btn-secondary" type="button" onclick="refreshGrowthDashboard()" style="font-size:12px;">刷新</button>
+                  </div>
+                </header>
+                <nav class="rep-tabs" style="margin-bottom:16px;">
+                  <button class="rep-tab rep-tab--active" onclick="showGrowthTab('dashboard')" id="growth-tab-dashboard">看板</button>
+                  <button class="rep-tab" onclick="showGrowthTab('wecom')" id="growth-tab-wecom">企微客户</button>
+                  <button class="rep-tab" onclick="showGrowthTab('campaigns')" id="growth-tab-campaigns">活动管理</button>
+                  <button class="rep-tab" onclick="showGrowthTab('profiles')" id="growth-tab-profiles">用户画像</button>
+                  <button class="rep-tab" onclick="showGrowthTab('constraints')" id="growth-tab-constraints">营销约束</button>
+                  <button class="rep-tab" onclick="showGrowthTab('posters')" id="growth-tab-posters">海报</button>
+                  <button class="rep-tab" onclick="showGrowthTab('public')" id="growth-tab-public">公域品宣</button>
+                  <button class="rep-tab" onclick="showGrowthTab('actions')" id="growth-tab-actions">AI建议</button>
+                  <button class="rep-tab" onclick="showGrowthTab('exec-logs')" id="growth-tab-exec-logs">执行记录</button>
+                  <button class="rep-tab" onclick="showGrowthTab('pos')" id="growth-tab-pos">POS消费</button>
+                </nav>
                     <div id="growth-dashboard-content">
                     <div id="growth-metrics-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;"></div>
                     <div class="growth-dashboard-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
@@ -45228,8 +45240,8 @@ ${body}
                 var btn = document.getElementById('growth-tab-' + name);
                 if (content) content.style.display = name === tab ? '' : 'none';
                 if (btn) {
-                    btn.style.background = name === tab ? '#0ea5e9' : 'rgba(255,255,255,0.06)';
-                    btn.style.color = name === tab ? '#fff' : 'rgba(226,232,240,0.7)';
+                    if (name === tab) btn.classList.add('rep-tab--active');
+                    else btn.classList.remove('rep-tab--active');
                 }
             });
             if (tab === 'wecom') {
