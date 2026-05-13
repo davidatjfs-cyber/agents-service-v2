@@ -46191,10 +46191,10 @@ ${body}
             try {
                 const r = await fetch('/api/growth/content-library?limit=50', { headers: growthAuthHeaders() });
                 const data = await r.json();
-                var posters = data?.posters || [];
+                var posters = data?.items || data?.posters || [];
                 host.innerHTML = posters.length ? posters.map(function(p) {
-                    var imgUrl = p.output_url || p.thumbnail_url || '';
-                    var title = p.title || p.prompt || '未命名';
+                    var imgUrl = p.image_url || p.output_url || p.thumbnail_url || '';
+                    var title = p.name || p.title || p.prompt || '未命名';
                     return '<div onclick="bindPosterToAction(' + p.id + ')" style="cursor:pointer;border:1px solid rgba(255,255,255,0.08);border-radius:10px;overflow:hidden;background:rgba(255,255,255,0.02);transition:border-color 0.2s;" onmouseover="this.style.borderColor=\'#22c55e\'" onmouseout="this.style.borderColor=\'rgba(255,255,255,0.08)\'">'
                         + (imgUrl ? '<img src="' + escapeHtml(imgUrl) + '" style="width:100%;height:120px;object-fit:cover;border-bottom:1px solid rgba(255,255,255,0.06);">' : '<div style="width:100%;height:120px;background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center;font-size:11px;color:rgba(226,232,240,0.3);">无预览</div>')
                         + '<div style="padding:6px 8px;font-size:11px;color:rgba(226,232,240,0.7);text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">' + escapeHtml(title) + '</div>'
