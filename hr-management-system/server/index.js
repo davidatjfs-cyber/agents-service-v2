@@ -42,7 +42,7 @@ import {
   getExpectedMonthlyPerformancePeriodShanghai,
   countEligibleMonthlyPerformanceUsers
 } from './performance-jobs.js';
-import { startDailyFeishuSync, syncDishLibraryCosts, setFeishuSyncFailureNotifier } from './feishu-sync.js';
+import { startDailyFeishuSync, syncDishLibraryCosts, syncSopSteps, setFeishuSyncFailureNotifier } from './feishu-sync.js';
 import { calculateStoreRating, calculateEmployeeScore } from './new-scoring-model.js';
 import { registerNewScoringRoutes } from './new-scoring-api.js';
 import { registerPerformanceInvalidationRoutes } from './performance-invalidation-api.js';
@@ -52,6 +52,7 @@ import { ensureRAGSchema, ragQuery, ragMultiQuery, ragUpdateScope, ragStats } fr
 import { ensureTaskBoardSchema } from './task-board-api.js';
 import { ensureHRMSApiSchema, registerHRMSApiRoutes } from './hrms-api-tools.js';
 import { ensureSOPDistributionSchema, registerSOPDistributionRoutes } from './sop-distribution.js';
+import { ensureKitchenExecutionSchema, registerKitchenExecutionRoutes } from './kitchen-execution.js';
 import { setDataExecutorPool, purgeExpiredCache, updateMetricVersion } from './data-executor.js';
 import fileRoutes from './file-routes.js';
 import { enforceRuntimeSafetyOrExit, configureDbSessionSafety, isSchemaChangeAllowed, getAppEnv, isWebhookEnabled, isExternalEnabled } from './safety.js';
@@ -16640,6 +16641,24 @@ app.post('/api/feishu/sync-dish-library', authRequired, async (req, res) => {
   }
 });
 
+// 手动触发SOP步骤库同步
+app.post('/api/feishu/sync-sop-steps', authRequired, async (req, res) => {
+  const role = String(req.user?.role || '').trim();
+  if (!['admin', 'hq_manager', 'store_manager', 'store_production_manager'].includes(role)) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  try {
+    const result = await syncSopSteps();
+    if (!result?.ok) {
+      return res.status(500).json({ error: 'sync_failed', message: result?.error });
+    }
+    res.json({ message: 'SOP步骤库同步完成', ...result });
+  } catch (error) {
+    console.error('[SOP Steps Sync] Error:', error);
+    res.status(500).json({ error: 'server_error', message: error?.message || error });
+  }
+});
+
 // 测试飞书连接
 app.post('/api/feishu/test-connection', authRequired, async (req, res) => {
   const role = String(req.user?.role || '').trim();
@@ -17119,6 +17138,7 @@ registerNewScoringRoutes(app, authRequired);
 registerPerformanceInvalidationRoutes(app, authRequired);
 registerHRMSApiRoutes(app, authRequired);
 registerSOPDistributionRoutes(app, authRequired);
+registerKitchenExecutionRoutes(app, authRequired);
 registerUploadStatusRoute(app, { pool, getSharedState, authRequired });
 app.use('/api', authRequired, fileRoutes);
 
@@ -18229,7 +18249,8 @@ app.listen(PORT, HOST, async () => {
     await ensureTaskBoardSchema();
     await ensureHRMSApiSchema();
     await ensureSOPDistributionSchema();
-    console.log('[modules] RAG + TaskBoard + HRMS-API + SOP-Distribution initialized');
+    await ensureKitchenExecutionSchema();
+    console.log('[modules] RAG + TaskBoard + HRMS-API + SOP-Distribution + KitchenExec initialized');
 
 
     // 飞书表格→PG 与 sales_raw 目录入库：失败第一时间通知 admin（见 notifyAdminsDualWriteFailure 注释）

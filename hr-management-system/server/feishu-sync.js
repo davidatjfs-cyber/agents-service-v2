@@ -98,6 +98,13 @@ export const FEISHU_TABLE_CONFIG = {
     type: 'dish_library',
     force_biz_type: 'takeaway'
   },
+  sop_steps: {
+    app_token: 'PTWrbUdcbarCshst0QncMoY7nKe',
+    table_id: 'tblQTKrYjHT5VldI',
+    view_id:  'vewLKxLzbY',
+    name: '厨房SOP步骤库',
+    type: 'sop_steps'
+  },
   
   // 品牌专属表格
   material_reports: {
@@ -619,6 +626,91 @@ export async function syncDishLibraryCosts() {
 }
 
 // ─────────────────────────────────────────────
+// SOP 步骤同步（厨房打点卡数据源）
+// ─────────────────────────────────────────────
+
+function extractSopStepFields(fields, recordId) {
+  // 字段名与飞书表格列名对应
+  const dishName   = pickFieldText(fields, ['菜品名称', 'dish_name', '品名']);
+  const store      = pickFieldText(fields, ['门店', 'store']) || '*';
+  const station    = pickFieldText(fields, ['档口', 'station', '岗位']);
+  const stepSeq    = parseFieldNumber(pickFieldValue(fields, ['步骤序号', 'step_seq', '序号', '步骤']));
+  const action     = pickFieldText(fields, ['操作动作', 'action', '操作']);
+  const timeLimitRaw = pickFieldValue(fields, ['时限秒', 'time_limit_seconds', '时限（秒）', '时限']);
+  const timeLimit  = parseFieldNumber(timeLimitRaw);
+  const quality    = pickFieldText(fields, ['质量标准', 'quality_standard', '标准']);
+  const failure    = pickFieldText(fields, ['常见失败', 'common_failure', '常见问题']);
+  const rescue     = pickFieldText(fields, ['失败补救', 'failure_action', '补救措施']);
+
+  // 飞书复选框字段：值为 true/false 或 1/0
+  const isCriticalRaw = pickFieldValue(fields, ['是否关键步骤', 'is_critical', '关键步骤']);
+  const isCritical = isCriticalRaw === true || isCriticalRaw === 1
+    || String(isCriticalRaw).toLowerCase() === 'true';
+
+  if (!dishName || !station || stepSeq == null || !action) return null;
+
+  return {
+    dish_name: dishName,
+    store: store || '*',
+    station,
+    step_seq: stepSeq,
+    action,
+    time_limit_seconds: timeLimit,
+    quality_standard: quality || null,
+    common_failure: failure || null,
+    failure_action: rescue || null,
+    is_critical: isCritical,
+    feishu_record_id: recordId || null
+  };
+}
+
+export async function syncSopSteps() {
+  try {
+    console.log('[sync] 开始同步SOP步骤库...');
+    const accessToken = await getFeishuAccessToken();
+    const records = await fetchTableRecords(FEISHU_TABLE_CONFIG.sop_steps, accessToken);
+
+    let upserted = 0, skipped = 0;
+    for (const record of records) {
+      const row = extractSopStepFields(record.fields || {}, record.record_id);
+      if (!row) { skipped++; continue; }
+
+      await pool().query(
+        `INSERT INTO kitchen_sop_steps
+           (dish_name, store, station, step_seq, action, time_limit_seconds,
+            quality_standard, common_failure, failure_action, is_critical,
+            feishu_record_id, enabled, synced_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE,NOW())
+         ON CONFLICT (dish_name, store, step_seq) DO UPDATE SET
+           station             = EXCLUDED.station,
+           action              = EXCLUDED.action,
+           time_limit_seconds  = EXCLUDED.time_limit_seconds,
+           quality_standard    = EXCLUDED.quality_standard,
+           common_failure      = EXCLUDED.common_failure,
+           failure_action      = EXCLUDED.failure_action,
+           is_critical         = EXCLUDED.is_critical,
+           feishu_record_id    = EXCLUDED.feishu_record_id,
+           enabled             = TRUE,
+           synced_at           = NOW()`,
+        [
+          row.dish_name, row.store, row.station, row.step_seq, row.action,
+          row.time_limit_seconds, row.quality_standard, row.common_failure,
+          row.failure_action, row.is_critical, row.feishu_record_id
+        ]
+      );
+      upserted++;
+    }
+
+    console.log(`[sync] SOP步骤库同步完成: ${upserted} 条，跳过 ${skipped} 条（字段不完整）`);
+    return { ok: true, total: records.length, upserted, skipped };
+  } catch (error) {
+    console.error('[sync] SOP步骤库同步失败:', error);
+    notifyFeishuSyncFailure('SOP步骤库', error);
+    return { ok: false, error: String(error?.message || error) };
+  }
+}
+
+// ─────────────────────────────────────────────
 // 6. 主同步函数
 // ─────────────────────────────────────────────
 
@@ -642,6 +734,9 @@ export async function syncAllFeishuTables() {
     
     // 5. 同步洪潮原料收货日报
     await syncMaterialReports(FEISHU_TABLE_CONFIG.material_reports.hongchao, accessToken, 'hongchao');
+
+    // 6. 同步SOP步骤库（厨房打点卡数据源）
+    await syncSopSteps();
 
     console.log('[sync] 飞书表格数据同步完成');
     
