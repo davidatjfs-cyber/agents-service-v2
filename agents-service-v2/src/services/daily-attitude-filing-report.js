@@ -110,7 +110,7 @@ function buildAttitudeFilingCard(title, bodyMd, template = 'blue') {
           {
             tag: 'plain_text',
             content:
-              '数据来源：master_tasks。卡片「业务日期」= 上海昨日统计日 bizYmd；昨日条数与「本月累计」均以 dispatched_at（上海）落在对应日期为准（与 SQL 一致）。每条「异常实际营业日」取自任务 source_data / 标题，可与业务日期不同。明细时间戳为 updated_at 仅供参考。 · 每日08:05'
+              '数据来源：master_tasks。业务日期=上海昨日。昨日条数与本月累计均以任务派发日(dispatched_at)计算。异常实际营业日取自任务数据，可与业务日期不同。·每日08:05'
           }
         ]
       }
@@ -168,11 +168,11 @@ async function buildHqBodyMarkdown(byStore, rows, bizYmd, nameMap, monthlyMap) {
     const taskBiz = extractTaskBizYmdFromRow(row);
     const actualBiz = taskBiz || extractFirstYmdFromText(title) || '—';
     md += `· **${st}**｜${sourceLabelZh(row.source)}\n`;
-    md += `  · **异常实际营业日**：**${actualBiz}**（本条「无充值/异常」所指的**营业日历日**；与下方「业务日期 ${bizYmd}」可不同）\n`;
+    md += `  · **异常实际营业日**：**${actualBiz}**\n`;
     md += `  · 摘要：${title}\n`;
     md += `  · 责任人：**${disp}**（\`${un || '—'}\`）｜状态：${row.status || '—'}\n`;
     md += `  · **本条最近更新时间**：${row.filed_at_sh || '—'}（\`updated_at\` 上海时间，仅展示；**纳入本日报**因任务 **\`dispatched_at\`（派发日，上海）= ${bizYmd}** 且已 HR 态度备案）\n`;
-    md += `  · **本月累计（工作态度备案）**：**${monthCnt}** 次（截至 **${bizYmd}**；全门店 distinct task_id）\n\n`;
+    md += `  · **本月累计（工作态度备案）**：**${monthCnt}** 次\n\n`;
   }
   return md;
 }
@@ -212,11 +212,11 @@ async function buildStoreBodyMarkdown(filtered, bizYmd, store, nameMap, monthlyM
     const taskBiz = extractTaskBizYmdFromRow(row);
     const actualBiz = taskBiz || extractFirstYmdFromText(title) || '—';
     md += `· **${sourceLabelZh(row.source)}**\n`;
-    md += `  · **异常实际营业日**：**${actualBiz}**（本条异常所指的**营业日历日**；与业务日期 **${bizYmd}** 可不同）\n`;
+    md += `  · **异常实际营业日**：**${actualBiz}**\n`;
     md += `  · 摘要：${title}\n`;
     md += `  · 责任人：**${disp}**（\`${un || '—'}\`）｜状态：${row.status || '—'}\n`;
     md += `  · **本条最近更新时间**：${row.filed_at_sh || '—'}（\`updated_at\` 上海时间，仅展示；**纳入本日报**因任务 **\`dispatched_at\`（派发日，上海）= ${bizYmd}** 且已 HR 态度备案）\n`;
-    md += `  · **本月累计（工作态度备案）**：**${monthCnt}** 次（截至 **${bizYmd}**；本店 distinct task_id）\n\n`;
+    md += `  · **本月累计（工作态度备案）**：**${monthCnt}** 次\n\n`;
   }
   return md;
 }
