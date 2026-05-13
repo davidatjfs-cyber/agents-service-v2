@@ -11255,76 +11255,11 @@
                                         <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);margin-bottom:10px;">🗓 已排期内容</div>
                                         <div id="public-calendar-list" style="max-height:300px;overflow-y:auto;"></div>
                                     </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-            <!-- 营销草稿执行页 - 全屏模态 -->
-            <div id="growth-action-detail-modal" class="modal hidden">
-                <div class="modal-backdrop" onclick="closeActionDetailModal()"></div>
-                <div style="position:fixed;top:5%;left:5%;right:5%;bottom:5%;background:rgba(18,22,28,0.98);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:24px;z-index:2200;overflow-y:auto;max-width:800px;margin:0 auto;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-                        <h3 id="growth-action-detail-title" style="font-size:18px;font-weight:800;color:#fff;margin:0;">执行草稿</h3>
-                        <button onclick="closeActionDetailModal()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:24px;cursor:pointer;">×</button>
-                    </div>
-                    <div id="growth-action-detail-body" style="min-height:200px;"></div>
-                    <div style="display:flex;gap:12px;margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.08);">
-                        <button id="growth-action-detail-execute" style="padding:10px 20px;border:none;border-radius:10px;background:rgba(34,197,94,0.2);color:#22c55e;font-weight:700;cursor:pointer;">✅ 执行该方案</button>
-                        <button id="growth-action-detail-edit" style="padding:10px 20px;border:none;border-radius:10px;background:rgba(14,165,233,0.2);color:#38bdf8;font-weight:700;cursor:pointer;">✏️ 修改后执行</button>
-                        <button id="growth-action-detail-ignore" style="padding:10px 20px;border:none;border-radius:10px;background:rgba(239,68,68,0.2);color:#ef4444;font-weight:700;cursor:pointer;">⛔ 忽略</button>
-                                <button onclick="closeActionDetailModal()" style="padding:10px 20px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;background:transparent;color:rgba(255,255,255,0.5);cursor:pointer;">关闭</button>
-                            </div>
-                        </div>
-                    </div>
-            <!-- 修改后执行 - 友好表单弹窗 -->
-            <div id="edit-exec-modal" class="modal hidden">
-                <div class="modal-backdrop" onclick="closeEditExecuteForm()"></div>
-                <div style="position:fixed;top:10%;left:10%;right:10%;bottom:auto;background:rgba(18,22,28,0.98);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:24px;z-index:2200;max-width:500px;margin:0 auto;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-                        <h3 style="font-size:18px;font-weight:800;color:#fff;margin:0;">✏️ 修改后执行</h3>
-                        <button onclick="closeEditExecuteForm()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:24px;cursor:pointer;">×</button>
-                    </div>
-                    <div style="margin-bottom:16px;padding:10px;background:rgba(14,165,233,0.06);border-radius:8px;font-size:12px;color:rgba(226,232,240,0.7);">
-                        门店：<span id="edit-exec-store" style="color:#fff;font-weight:600;"></span>
-                        · 标题：<span id="edit-exec-title" style="color:#fff;font-weight:600;"></span>
-                    </div>
-                    <div style="display:flex;flex-direction:column;gap:12px;">
-                        <div>
-                            <label style="font-size:12px;color:rgba(226,232,240,0.6);display:block;margin-bottom:4px;">执行渠道</label>
-                            <select id="edit-exec-channel" style="width:100%;padding:8px;border-radius:8px;background:rgba(255,255,255,0.06);color:#fff;border:1px solid rgba(255,255,255,0.12);font-size:13px;">
-                                <option value="miniprogram">小程序</option>
-                                <option value="wecom">企微</option>
-                                <option value="xiaohongshu">小红书</option>
-                                <option value="douyin">抖音</option>
-                                <option value="dianping">大众点评</option>
-                                <option value="waimai">美团</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style="font-size:12px;color:rgba(226,232,240,0.6);display:block;margin-bottom:4px;">目标人群</label>
-                            <select id="edit-exec-audience" style="width:100%;padding:8px;border-radius:8px;background:rgba(255,255,255,0.06);color:#fff;border:1px solid rgba(255,255,255,0.12);font-size:13px;">
-                                <option value="all">全部</option>
-                                <option value="new">新客</option>
-                                <option value="loyal">老客/忠诚</option>
-                                <option value="churn">流失预警</option>
-                                <option value="birthday">生日</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style="font-size:12px;color:rgba(226,232,240,0.6);display:block;margin-bottom:4px;">预算（元）</label>
-                            <input id="edit-exec-budget" type="number" min="0" placeholder="留空不变" style="width:100%;padding:8px;border-radius:8px;background:rgba(255,255,255,0.06);color:#fff;border:1px solid rgba(255,255,255,0.12);font-size:13px;">
-                        </div>
-                        <div>
-                            <label style="font-size:12px;color:rgba(226,232,240,0.6);display:block;margin-bottom:4px;">修改原因</label>
-                            <input id="edit-exec-reason" type="text" placeholder="已调整后执行" style="width:100%;padding:8px;border-radius:8px;background:rgba(255,255,255,0.06);color:#fff;border:1px solid rgba(255,255,255,0.12);font-size:13px;">
-                        </div>
-                    </div>
-                    <div style="display:flex;gap:12px;margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.08);">
-                        <button onclick="submitEditExecuteForm()" style="flex:1;padding:10px 20px;border:none;border-radius:10px;background:rgba(34,197,94,0.2);color:#22c55e;font-weight:700;cursor:pointer;">✅ 确认修改并执行</button>
-                        <button onclick="closeEditExecuteForm()" style="padding:10px 20px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;background:transparent;color:rgba(255,255,255,0.5);cursor:pointer;">取消</button>
-                    </div>
-                </div>
-            </div>
+                                 </div>
+                             </div>
+                         </div>
+                     </div>
+             <!-- modals moved to after agent-config-modal -->
                                     <div>
                                         <label class="acm-lbl">视觉审核模型（仅 Doubao）</label>
                                         <select id="op-llm-vision" class="acm-inp acm-inp-sm"></select>
@@ -11522,6 +11457,90 @@
                     </div><!-- /.acm-body -->
                 </div><!-- /.acm-sheet -->
             </div><!-- /#agent-config-modal -->
+
+            <!-- 营销草稿执行页 - 全屏模态 -->
+            <div id="growth-action-detail-modal" class="modal hidden">
+                <div class="modal-backdrop" onclick="closeActionDetailModal()"></div>
+                <div style="position:fixed;top:5%;left:5%;right:5%;bottom:5%;background:rgba(18,22,28,0.98);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:24px;z-index:2200;overflow-y:auto;max-width:800px;margin:0 auto;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                        <h3 id="growth-action-detail-title" style="font-size:18px;font-weight:800;color:#fff;margin:0;">执行草稿</h3>
+                        <button onclick="closeActionDetailModal()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:24px;cursor:pointer;">×</button>
+                    </div>
+                    <div id="growth-action-detail-body" style="min-height:200px;"></div>
+                    <div style="display:flex;gap:12px;margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.08);">
+                        <button id="growth-action-detail-execute" style="padding:10px 20px;border:none;border-radius:10px;background:rgba(34,197,94,0.2);color:#22c55e;font-weight:700;cursor:pointer;">✅ 执行该方案</button>
+                        <button id="growth-action-detail-edit" style="padding:10px 20px;border:none;border-radius:10px;background:rgba(14,165,233,0.2);color:#38bdf8;font-weight:700;cursor:pointer;">✏️ 修改后执行</button>
+                        <button id="growth-action-detail-ignore" style="padding:10px 20px;border:none;border-radius:10px;background:rgba(239,68,68,0.2);color:#ef4444;font-weight:700;cursor:pointer;">⛔ 忽略</button>
+                        <button onclick="closeActionDetailModal()" style="padding:10px 20px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;background:transparent;color:rgba(255,255,255,0.5);cursor:pointer;">关闭</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 修改后执行 - 友好表单弹窗 -->
+            <div id="edit-exec-modal" class="modal hidden">
+                <div class="modal-backdrop" onclick="closeEditExecuteForm()"></div>
+                <div style="position:fixed;top:10%;left:10%;right:10%;bottom:auto;background:rgba(18,22,28,0.98);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:24px;z-index:2200;max-width:500px;margin:0 auto;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                        <h3 style="font-size:18px;font-weight:800;color:#fff;margin:0;">✏️ 修改后执行</h3>
+                        <button onclick="closeEditExecuteForm()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:24px;cursor:pointer;">×</button>
+                    </div>
+                    <div style="margin-bottom:16px;padding:10px;background:rgba(14,165,233,0.06);border-radius:8px;font-size:12px;color:rgba(226,232,240,0.7);">
+                        门店：<span id="edit-exec-store" style="color:#fff;font-weight:600;"></span>
+                        · 标题：<span id="edit-exec-title" style="color:#fff;font-weight:600;"></span>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:12px;">
+                        <div>
+                            <label style="font-size:12px;color:rgba(226,232,240,0.6);display:block;margin-bottom:4px;">执行渠道</label>
+                            <select id="edit-exec-channel" style="width:100%;padding:8px;border-radius:8px;background:rgba(255,255,255,0.06);color:#fff;border:1px solid rgba(255,255,255,0.12);font-size:13px;">
+                                <option value="miniprogram">小程序</option>
+                                <option value="wecom">企微</option>
+                                <option value="xiaohongshu">小红书</option>
+                                <option value="douyin">抖音</option>
+                                <option value="dianping">大众点评</option>
+                                <option value="waimai">美团</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size:12px;color:rgba(226,232,240,0.6);display:block;margin-bottom:4px;">目标人群</label>
+                            <select id="edit-exec-audience" style="width:100%;padding:8px;border-radius:8px;background:rgba(255,255,255,0.06);color:#fff;border:1px solid rgba(255,255,255,0.12);font-size:13px;">
+                                <option value="all">全部</option>
+                                <option value="new">新客</option>
+                                <option value="loyal">老客/忠诚</option>
+                                <option value="churn">流失预警</option>
+                                <option value="birthday">生日</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size:12px;color:rgba(226,232,240,0.6);display:block;margin-bottom:4px;">预算（元）</label>
+                            <input id="edit-exec-budget" type="number" min="0" placeholder="留空不变" style="width:100%;padding:8px;border-radius:8px;background:rgba(255,255,255,0.06);color:#fff;border:1px solid rgba(255,255,255,0.12);font-size:13px;">
+                        </div>
+                        <div>
+                            <label style="font-size:12px;color:rgba(226,232,240,0.6);display:block;margin-bottom:4px;">修改原因</label>
+                            <input id="edit-exec-reason" type="text" placeholder="已调整后执行" style="width:100%;padding:8px;border-radius:8px;background:rgba(255,255,255,0.06);color:#fff;border:1px solid rgba(255,255,255,0.12);font-size:13px;">
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:12px;margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.08);">
+                        <button onclick="submitEditExecuteForm()" style="flex:1;padding:10px 20px;border:none;border-radius:10px;background:rgba(34,197,94,0.2);color:#22c55e;font-weight:700;cursor:pointer;">✅ 确认修改并执行</button>
+                        <button onclick="closeEditExecuteForm()" style="padding:10px 20px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;background:transparent;color:rgba(255,255,255,0.5);cursor:pointer;">取消</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 海报选择弹窗 -->
+            <div id="poster-picker-modal" class="modal hidden">
+                <div class="modal-backdrop" onclick="closePosterPicker()"></div>
+                <div style="position:fixed;top:5%;left:5%;right:5%;bottom:5%;background:rgba(18,22,28,0.98);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:24px;z-index:2200;overflow-y:auto;max-width:700px;margin:0 auto;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                        <h3 style="font-size:18px;font-weight:800;color:#fff;margin:0;">🖼️ 选择海报</h3>
+                        <button onclick="closePosterPicker()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:24px;cursor:pointer;">×</button>
+                    </div>
+                    <div style="font-size:12px;color:rgba(226,232,240,0.5);margin-bottom:12px;">选择一张已生成的海报绑定到该执行方案</div>
+                    <div id="poster-picker-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;max-height:60vh;overflow-y:auto;"></div>
+                    <div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);display:flex;gap:8px;">
+                        <button onclick="closePosterPicker()" style="padding:8px 20px;border:1px solid rgba(255,255,255,0.12);border-radius:8px;background:transparent;color:rgba(255,255,255,0.5);cursor:pointer;">取消</button>
+                    </div>
+                </div>
+            </div>
 
             <div id="agent-rule-modal" class="modal">
                 <div class="modal-content" style="max-width:480px;border-radius:16px;padding:0;">
@@ -45959,7 +45978,7 @@ ${body}
                     if (posterUrl) {
                         posterHtml = '<div style="margin-top:8px;display:flex;gap:10px;align-items:center;padding:8px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:10px;"><img src="' + escapeHtml(posterUrl) + '" style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,0.08);"><div style="font-size:11px;color:rgba(226,232,240,0.58);">已绑定海报</div></div>';
                     } else if (x.status === 'proposed' && (x.action_type === 'send_voucher' || x.action_type === 'campaign_activate')) {
-                        posterHtml = '<div style="margin-top:8px;padding:8px 10px;background:rgba(245,158,11,0.06);border:1px dashed rgba(245,158,11,0.3);border-radius:10px;font-size:11px;color:#f59e0b;cursor:pointer;" onclick="showGrowthTab(\'posters\')">🖼️ 未绑定海报 — 点此去生成</div>';
+                        posterHtml = '<div style="margin-top:8px;padding:8px 10px;background:rgba(245,158,11,0.06);border:1px dashed rgba(245,158,11,0.3);border-radius:10px;font-size:11px;color:#f59e0b;cursor:pointer;" onclick="openPosterPicker(\'' + key + '\')">🖼️ 未绑定海报 — 点此选择海报</div>';
                     } else {
                         posterHtml = '';
                     }
@@ -46044,7 +46063,7 @@ ${body}
             if (payload.poster_url || payload.output_url) {
                 host.innerHTML += '<div style="margin-top:16px;padding:12px;background:rgba(255,255,255,0.04);border-radius:10px;border:1px solid rgba(255,255,255,0.06);"><div style="font-size:12px;color:rgba(226,232,240,0.55);margin-bottom:8px;">来源海报</div><img src="' + escapeHtml(payload.poster_url || payload.output_url) + '" style="max-width:100%;max-height:320px;object-fit:contain;border-radius:8px;border:1px solid rgba(255,255,255,0.08);"></div>';
             } else if (x.status === 'proposed' && (actionType === 'send_voucher' || actionType === 'campaign_activate')) {
-                host.innerHTML += '<div style="margin-top:16px;padding:12px;background:rgba(245,158,11,0.06);border:1px dashed rgba(245,158,11,0.3);border-radius:10px;font-size:12px;color:#f59e0b;cursor:pointer;" onclick="closeActionDetailModal();showGrowthTab(\'posters\')">🖼️ 尚未绑定海报 — 点击前往海报模块生成</div>';
+                host.innerHTML += '<div style="margin-top:16px;padding:12px;background:rgba(245,158,11,0.06);border:1px dashed rgba(245,158,11,0.3);border-radius:10px;font-size:12px;color:#f59e0b;cursor:pointer;" onclick="closeActionDetailModal();openPosterPicker(\'' + key + '\')">🖼️ 尚未绑定海报 — 点击选择海报</div>';
             }
             document.getElementById('growth-action-detail-execute').style.display = x.status === 'executed' || x.status === 'ignored' ? 'none' : '';
             document.getElementById('growth-action-detail-execute').textContent = '✅ 批准执行';
@@ -46132,6 +46151,49 @@ ${body}
                 }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无执行记录</div>';
             } catch (e) {
                 document.getElementById('growth-exec-logs-list').innerHTML = '<div style="color:#ef4444;">加载执行记录失败：' + escapeHtml(e.message) + '</div>';
+            }
+        }
+
+        var __posterPickerActionKey = null;
+        async function openPosterPicker(actionKey) {
+            __posterPickerActionKey = actionKey;
+            document.getElementById('poster-picker-modal').classList.remove('hidden');
+            var host = document.getElementById('poster-picker-list');
+            host.innerHTML = '<div style="color:rgba(226,232,240,0.3);grid-column:1/-1;padding:20px;">加载海报列表...</div>';
+            try {
+                const r = await fetch('/api/growth/content-library?limit=50', { headers: growthAuthHeaders() });
+                const data = await r.json();
+                var posters = data?.posters || [];
+                host.innerHTML = posters.length ? posters.map(function(p) {
+                    var imgUrl = p.output_url || p.thumbnail_url || '';
+                    var title = p.title || p.prompt || '未命名';
+                    return '<div onclick="bindPosterToAction(' + p.id + ')" style="cursor:pointer;border:1px solid rgba(255,255,255,0.08);border-radius:10px;overflow:hidden;background:rgba(255,255,255,0.02);transition:border-color 0.2s;" onmouseover="this.style.borderColor=\'#22c55e\'" onmouseout="this.style.borderColor=\'rgba(255,255,255,0.08)\'">'
+                        + (imgUrl ? '<img src="' + escapeHtml(imgUrl) + '" style="width:100%;height:120px;object-fit:cover;border-bottom:1px solid rgba(255,255,255,0.06);">' : '<div style="width:100%;height:120px;background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center;font-size:11px;color:rgba(226,232,240,0.3);">无预览</div>')
+                        + '<div style="padding:6px 8px;font-size:11px;color:rgba(226,232,240,0.7);text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">' + escapeHtml(title) + '</div>'
+                        + '</div>';
+                }).join('') : '<div style="color:rgba(226,232,240,0.4);grid-column:1/-1;padding:20px;text-align:center;">暂无已生成海报，<span style="color:#38bdf8;cursor:pointer;" onclick="closePosterPicker();showGrowthTab(\'posters\')">去生成</span></div>';
+            } catch (e) {
+                host.innerHTML = '<div style="color:#ef4444;grid-column:1/-1;padding:20px;">加载失败：' + escapeHtml(e.message) + '</div>';
+            }
+        }
+        function closePosterPicker() {
+            document.getElementById('poster-picker-modal').classList.add('hidden');
+            __posterPickerActionKey = null;
+        }
+        async function bindPosterToAction(posterId) {
+            var actionKey = __posterPickerActionKey;
+            if (!actionKey) { showNotification('数据异常', 'error'); return; }
+            try {
+                const r = await fetch('/api/growth/actions/' + encodeURIComponent(actionKey) + '/edit-and-execute', {
+                    method: 'POST', headers: growthAuthHeaders(), body: JSON.stringify({ payload: { recommended_poster_id: posterId }, reason: '绑定海报后执行' })
+                });
+                const data = await r.json();
+                if (!data.ok) throw new Error(data.error || 'bind_failed');
+                showNotification('海报已绑定并执行', 'success');
+                closePosterPicker();
+                loadGrowthActionBoard();
+            } catch (e) {
+                showNotification('绑定海报失败：' + (e?.message || e), 'error');
             }
         }
 
