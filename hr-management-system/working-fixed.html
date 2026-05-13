@@ -11734,19 +11734,18 @@
             <!-- 修改后执行 - 友好表单弹窗 -->
             <div id="edit-exec-modal" class="modal hidden">
                 <div class="modal-backdrop" onclick="closeEditExecuteForm()"></div>
-                <div style="position:fixed;top:10%;left:10%;right:10%;bottom:auto;background:rgba(18,22,28,0.98);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:24px;z-index:2200;max-width:500px;margin:0 auto;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-                        <h3 style="font-size:18px;font-weight:800;color:#fff;margin:0;">✏️ 修改后执行</h3>
-                        <button onclick="closeEditExecuteForm()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:24px;cursor:pointer;">×</button>
+                <div style="position:fixed;top:10%;left:10%;right:10%;bottom:auto;background:rgba(18,22,28,0.98);border:1px solid rgba(212,175,55,0.2);border-radius:20px;padding:24px;z-index:2200;max-width:500px;margin:0 auto;box-shadow:0 0 40px -20px rgba(212,175,55,0.25);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.06);">
+                        <h3 style="font-size:16px;font-weight:700;color:#fff;margin:0;letter-spacing:0.02em;">✏️ 修改后执行</h3>
+                        <button onclick="closeEditExecuteForm()" style="background:none;border:none;color:rgba(255,255,255,0.4);font-size:22px;cursor:pointer;padding:0;line-height:1;">×</button>
                     </div>
-                    <div style="margin-bottom:16px;padding:10px;background:rgba(14,165,233,0.06);border-radius:8px;font-size:12px;color:rgba(226,232,240,0.7);">
+                    <div style="margin-bottom:14px;padding:10px 12px;background:rgba(14,165,233,0.06);border-radius:10px;font-size:12px;color:var(--rep-muted);">
                         门店：<span id="edit-exec-store" style="color:#fff;font-weight:600;"></span>
                         · 标题：<span id="edit-exec-title" style="color:#fff;font-weight:600;"></span>
                     </div>
-                    <div style="display:flex;flex-direction:column;gap:12px;">
-                        <div>
-                            <label style="font-size:12px;color:rgba(226,232,240,0.6);display:block;margin-bottom:4px;">执行渠道</label>
-                            <select id="edit-exec-channel" style="width:100%;padding:8px;border-radius:8px;background:rgba(255,255,255,0.06);color:#fff;border:1px solid rgba(255,255,255,0.12);font-size:13px;">
+                    <div style="display:flex;flex-direction:column;gap:10px;">
+                        <div class="rep-field"><label>执行渠道</label>
+                            <select id="edit-exec-channel" class="dr-store-select" style="font-size:13px;">
                                 <option value="miniprogram">小程序</option>
                                 <option value="wecom">企微</option>
                                 <option value="xiaohongshu">小红书</option>
@@ -11755,9 +11754,8 @@
                                 <option value="waimai">美团</option>
                             </select>
                         </div>
-                        <div>
-                            <label style="font-size:12px;color:rgba(226,232,240,0.6);display:block;margin-bottom:4px;">目标人群</label>
-                            <select id="edit-exec-audience" style="width:100%;padding:8px;border-radius:8px;background:rgba(255,255,255,0.06);color:#fff;border:1px solid rgba(255,255,255,0.12);font-size:13px;">
+                        <div class="rep-field"><label>目标人群</label>
+                            <select id="edit-exec-audience" class="dr-store-select" style="font-size:13px;">
                                 <option value="all">全部</option>
                                 <option value="new">新客</option>
                                 <option value="loyal">老客/忠诚</option>
@@ -11765,18 +11763,16 @@
                                 <option value="birthday">生日</option>
                             </select>
                         </div>
-                        <div>
-                            <label style="font-size:12px;color:rgba(226,232,240,0.6);display:block;margin-bottom:4px;">预算（元）</label>
-                            <input id="edit-exec-budget" type="number" min="0" placeholder="留空不变" style="width:100%;padding:8px;border-radius:8px;background:rgba(255,255,255,0.06);color:#fff;border:1px solid rgba(255,255,255,0.12);font-size:13px;">
+                        <div class="rep-field"><label>预算（元）</label>
+                            <input id="edit-exec-budget" type="number" min="0" placeholder="留空不变" class="dr-store-select" style="font-size:13px;">
                         </div>
-                        <div>
-                            <label style="font-size:12px;color:rgba(226,232,240,0.6);display:block;margin-bottom:4px;">修改原因</label>
-                            <input id="edit-exec-reason" type="text" placeholder="已调整后执行" style="width:100%;padding:8px;border-radius:8px;background:rgba(255,255,255,0.06);color:#fff;border:1px solid rgba(255,255,255,0.12);font-size:13px;">
+                        <div class="rep-field"><label>修改原因</label>
+                            <input id="edit-exec-reason" type="text" placeholder="已调整后执行" class="dr-store-select" style="font-size:13px;">
                         </div>
                     </div>
-                    <div style="display:flex;gap:12px;margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.08);">
-                        <button onclick="submitEditExecuteForm()" style="flex:1;padding:10px 20px;border:none;border-radius:10px;background:rgba(34,197,94,0.2);color:#22c55e;font-weight:700;cursor:pointer;">✅ 确认修改并执行</button>
-                        <button onclick="closeEditExecuteForm()" style="padding:10px 20px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;background:transparent;color:rgba(255,255,255,0.5);cursor:pointer;">取消</button>
+                    <div style="display:flex;gap:12px;margin-top:20px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.06);">
+                        <button onclick="submitEditExecuteForm()" style="flex:1;padding:10px 20px;border:none;border-radius:10px;background:linear-gradient(135deg,#e8d48b,#c9a227);color:#0a0c10;font-weight:700;cursor:pointer;font-size:14px;">✅ 确认修改并执行</button>
+                        <button onclick="closeEditExecuteForm()" style="padding:10px 20px;border:1px solid rgba(255,255,255,0.15);border-radius:10px;background:transparent;color:rgba(255,255,255,0.5);cursor:pointer;">取消</button>
                     </div>
                 </div>
             </div>
@@ -11800,18 +11796,18 @@
             <!-- 执行确认预览弹窗 -->
             <div id="exec-confirm-modal" class="modal hidden">
                 <div class="modal-backdrop" onclick="closeExecConfirm()"></div>
-                <div style="position:fixed;top:5%;left:5%;right:5%;bottom:5%;background:rgba(18,22,28,0.98);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:24px;z-index:2300;overflow-y:auto;max-width:720px;margin:0 auto;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                        <h3 style="font-size:18px;font-weight:800;color:#fff;margin:0;">⚠️ 执行确认</h3>
-                        <button onclick="closeExecConfirm()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:24px;cursor:pointer;">×</button>
+                <div style="position:fixed;top:5%;left:5%;right:5%;bottom:5%;background:rgba(18,22,28,0.98);border:1px solid rgba(212,175,55,0.25);border-radius:20px;padding:24px;z-index:2300;overflow-y:auto;max-width:720px;margin:0 auto;box-shadow:0 0 60px -24px rgba(212,175,55,0.2);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.06);">
+                        <h3 style="font-size:16px;font-weight:700;color:#fff;margin:0;letter-spacing:0.03em;">⚠️ 执行确认</h3>
+                        <button onclick="closeExecConfirm()" style="background:none;border:none;color:rgba(255,255,255,0.4);font-size:22px;cursor:pointer;padding:0;line-height:1;">×</button>
                     </div>
-                    <div style="padding:12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:10px;margin-bottom:16px;font-size:13px;color:#f59e0b;line-height:1.6;">
-                        以下内容将自动发送给客户，请仔细核对后再确认执行。
+                    <div style="padding:12px 14px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:10px;margin-bottom:16px;font-size:12px;color:#f59e0b;line-height:1.6;font-weight:600;">
+                        ⚠️ 以下内容将自动发送给客户，请仔细核对后再确认执行。
                     </div>
                     <div id="exec-confirm-body" style="display:flex;flex-direction:column;gap:12px;"></div>
-                    <div style="display:flex;gap:12px;margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.08);">
-                        <button id="exec-confirm-btn" onclick="confirmExecAction()" style="flex:1;padding:12px 20px;border:none;border-radius:10px;background:rgba(34,197,94,0.2);color:#22c55e;font-weight:700;cursor:pointer;font-size:15px;">✅ 确认发送并执行</button>
-                        <button onclick="closeExecConfirm()" style="padding:12px 20px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;background:transparent;color:rgba(255,255,255,0.5);cursor:pointer;">取消</button>
+                    <div style="display:flex;gap:12px;margin-top:20px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.06);">
+                        <button id="exec-confirm-btn" onclick="confirmExecAction()" style="flex:1;padding:12px 20px;border:none;border-radius:10px;background:linear-gradient(135deg,#e8d48b,#c9a227);color:#0a0c10;font-weight:700;cursor:pointer;font-size:15px;box-shadow:0 8px 24px -8px rgba(212,175,55,0.45);">✅ 确认发送并执行</button>
+                        <button onclick="closeExecConfirm()" style="padding:12px 20px;border:1px solid rgba(255,255,255,0.15);border-radius:10px;background:transparent;color:rgba(255,255,255,0.5);cursor:pointer;font-size:13px;">取消</button>
                     </div>
                 </div>
             </div>
@@ -14168,38 +14164,34 @@
                                 <button onclick="showCreateCampaignForm()" class="rep-seg-btn" style="flex:1;">创建活动</button>
                             </div>
                             <div id="campaign-plans-list" style="max-height:50vh;overflow-y:auto;"></div>
-                            <div id="campaign-create-form" style="display:none;margin-top:16px;padding:16px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.08);border-radius:14px;">
-                                <div style="font-size:13px;font-weight:700;color:#38bdf8;margin-bottom:12px;">新建营销活动</div>
-                                <div style="margin-bottom:10px;">
-                                    <select id="camp-template" onchange="applyMarketingTemplate()" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.8);">
+                            <div id="campaign-create-form" style="display:none;margin-top:16px;padding:18px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-radius:16px;">
+                                <div style="font-size:13px;font-weight:700;color:var(--rep-gold);margin-bottom:14px;letter-spacing:0.06em;">新建营销活动</div>
+                                <div style="margin-bottom:12px;">
+                                    <div class="rep-field"><label>营销模板</label>
+                                    <select id="camp-template" class="dr-store-select" onchange="applyMarketingTemplate()">
                                         <option value="">— 从营销模板创建（可选）—</option>
                                     </select>
-                                    <div id="camp-template-hint" style="font-size:11px;color:rgba(226,232,240,0.45);margin-top:4px;display:none;"></div>
+                                    <div id="camp-template-hint" style="font-size:11px;color:var(--rep-muted);margin-top:4px;display:none;"></div>
+                                    </div>
                                 </div>
-                                <div id="camp-matched-poster" style="display:none;margin-bottom:10px;padding:10px;border-radius:8px;border:1px solid rgba(99,102,241,0.3);background:rgba(99,102,241,0.06);">
-                                    <div style="font-size:11px;color:rgba(226,232,240,0.5);margin-bottom:4px;">📋 自动匹配推荐海报</div>
+                                <div id="camp-matched-poster" style="display:none;margin-bottom:12px;padding:10px;border-radius:10px;border:1px solid rgba(99,102,241,0.3);background:rgba(99,102,241,0.06);">
+                                    <div style="font-size:11px;color:var(--rep-muted);margin-bottom:4px;">📋 自动匹配推荐海报</div>
                                     <div id="camp-matched-poster-info" style="font-size:12px;color:#a5b4fc;"></div>
                                 </div>
-                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-                                    <select id="camp-store" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.8);">
-                                        <option value="">选择门店</option>
-                                    </select>
-                                    <input id="camp-title" placeholder="活动标题" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
-                                    <select id="camp-channel" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.8);">
-                                        <option value="miniprogram">小程序</option><option value="wecom">企微</option><option value="xiaohongshu">小红书</option><option value="douyin">抖音</option><option value="dianping">大众点评</option>
-                                    </select>
-                                    <select id="camp-audience" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.8);">
-                                        <option value="all">全部顾客</option><option value="new">新客</option><option value="inactive">沉睡客户</option><option value="active">活跃客户</option><option value="vip">VIP</option><option value="at_risk">临界流失</option>
-                                    </select>
-                                    <input id="camp-budget" placeholder="预算(分) 如 50000" type="number" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
-                                    <input id="camp-coupon-value" placeholder="券面值(分) 如 2000" type="number" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
-                                    <input id="camp-start" type="date" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
-                                    <input id="camp-end" type="date" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
+                                <div class="rep-filters__grid">
+                                    <div class="rep-field"><label>门店</label><select id="camp-store" class="dr-store-select"><option value="">选择门店</option></select></div>
+                                    <div class="rep-field"><label>活动标题</label><input id="camp-title" placeholder="活动标题" class="dr-store-select"></div>
+                                    <div class="rep-field"><label>渠道</label><select id="camp-channel" class="dr-store-select"><option value="miniprogram">小程序</option><option value="wecom">企微</option><option value="xiaohongshu">小红书</option><option value="douyin">抖音</option><option value="dianping">大众点评</option></select></div>
+                                    <div class="rep-field"><label>目标人群</label><select id="camp-audience" class="dr-store-select"><option value="all">全部顾客</option><option value="new">新客</option><option value="inactive">沉睡客户</option><option value="active">活跃客户</option><option value="vip">VIP</option><option value="at_risk">临界流失</option></select></div>
+                                    <div class="rep-field"><label>预算（分）</label><input id="camp-budget" placeholder="如 50000" type="number" class="dr-store-select"></div>
+                                    <div class="rep-field"><label>券面值（分）</label><input id="camp-coupon-value" placeholder="如 2000" type="number" class="dr-store-select"></div>
+                                    <div class="rep-field"><label>开始日期</label><input id="camp-start" type="date" class="dr-store-select"></div>
+                                    <div class="rep-field"><label>结束日期</label><input id="camp-end" type="date" class="dr-store-select"></div>
                                 </div>
-                                <textarea id="camp-detail" placeholder="活动详细描述" style="width:100%;height:60px;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;margin-bottom:10px;"></textarea>
-                                <div style="display:flex;gap:8px;">
-                                    <button onclick="createCampaignFromForm()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">创建活动</button>
-                                    <button onclick="document.getElementById('campaign-create-form').style.display='none'" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">取消</button>
+                                <div class="rep-field" style="margin-top:10px;"><label>活动详情</label><textarea id="camp-detail" placeholder="活动详细描述" class="dr-store-select" style="min-height:60px;resize:vertical;"></textarea></div>
+                                <div class="rep-seg" style="margin-top:14px;">
+                                    <button onclick="createCampaignFromForm()" class="rep-seg-btn rep-seg-btn--active" style="flex:1;">创建活动</button>
+                                    <button onclick="document.getElementById('campaign-create-form').style.display='none'" class="rep-seg-btn" style="flex:1;">取消</button>
                                 </div>
                             </div>
                         </div>
@@ -14326,56 +14318,56 @@
                               <div id="poster-editor-form" style="display:flex;flex-direction:column;gap:8px;">
                                 <div class="rep-poster-step">
                                   <div class="rep-poster-step__title">② 填写内容</div>
-                                 <div style="display:flex;flex-direction:column;gap:8px;">
-                                    <input id="poster-title" placeholder="主标题" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
-                                    <input id="poster-subtitle" placeholder="副标题" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
-                                    <input id="poster-offer" placeholder="利益点/优惠 如: 满100减30" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
-                                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                                      <input id="poster-cta" placeholder="CTA按钮文案" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
-                                      <input id="poster-price" placeholder="价格 如: ¥39" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
-                                   </div>
-                                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                                     <select id="poster-size" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
-                                       <option value="">海报尺寸</option>
-                                       <option value="1080x1920">1080×1920 手机竖版</option>
-                                       <option value="1920x1080">1920×1080 横版</option>
-                                       <option value="1080x1080">1080×1080 正方形</option>
-                                       <option value="800x1200">800×1200 A4海报</option>
-                                     </select>
-                                      <select id="poster-store" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></select>
-                                   </div>
-                                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                                     <select id="poster-clarity" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
-                                       <option value="网络发布72dpi">网络发布72dpi</option>
-                                       <option value="高清可商用">高清可商用</option>
-                                       <option value="印刷级300dpi">印刷级300dpi</option>
-                                       <option value="超清4K">超清4K</option>
-                                     </select>
-                                     <select id="poster-format" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
-                                       <option value="3:4竖版PNG">3:4竖版 PNG</option>
-                                       <option value="1:1正方形PNG">1:1正方形 PNG</option>
-                                       <option value="9:16竖版PNG">9:16竖版PNG 小红书封面</option>
-                                       <option value="16:9横版JPG">16:9横版 JPG</option>
-                                     </select>
-                                   </div>
-                                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                                     <input id="poster-campaign" readonly placeholder="活动ID（自动生成）" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(99,102,241,0.28);background:rgba(99,102,241,0.06);color:#a5b4fc;font-size:12px;box-sizing:border-box;">
-                                     <input id="poster-coupon" placeholder="券模板ID（可选）" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;box-sizing:border-box;">
-                                   </div>
+                                  <div style="display:flex;flex-direction:column;gap:8px;">
+                                     <input id="poster-title" placeholder="主标题" class="dr-store-select" style="font-size:14px;">
+                                     <input id="poster-subtitle" placeholder="副标题" class="dr-store-select" style="font-size:14px;">
+                                     <input id="poster-offer" placeholder="利益点/优惠 如: 满100减30" class="dr-store-select" style="font-size:14px;">
                                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                                      <select id="poster-gen-style-select" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"><option value="">选择视觉风格（从模板继承）</option></select>
-                                      <select id="poster-gen-prompt-select" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"><option value="">选择排版约束（从模板继承）</option></select>
+                                       <input id="poster-cta" placeholder="CTA按钮文案" class="dr-store-select" style="font-size:14px;">
+                                       <input id="poster-price" placeholder="价格 如: ¥39" class="dr-store-select" style="font-size:14px;">
                                     </div>
-                                    <input id="poster-keywords" placeholder="补充卖点/场景关键词" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;box-sizing:border-box;">
-                                 </div>
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                      <select id="poster-size" class="dr-store-select" style="font-size:13px;">
+                                        <option value="">海报尺寸</option>
+                                        <option value="1080x1920">1080×1920 手机竖版</option>
+                                        <option value="1920x1080">1920×1080 横版</option>
+                                        <option value="1080x1080">1080×1080 正方形</option>
+                                        <option value="800x1200">800×1200 A4海报</option>
+                                      </select>
+                                       <select id="poster-store" class="dr-store-select" style="font-size:13px;"></select>
+                                    </div>
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                      <select id="poster-clarity" class="dr-store-select" style="font-size:13px;">
+                                        <option value="网络发布72dpi">网络发布72dpi</option>
+                                        <option value="高清可商用">高清可商用</option>
+                                        <option value="印刷级300dpi">印刷级300dpi</option>
+                                        <option value="超清4K">超清4K</option>
+                                      </select>
+                                      <select id="poster-format" class="dr-store-select" style="font-size:13px;">
+                                        <option value="3:4竖版PNG">3:4竖版 PNG</option>
+                                        <option value="1:1正方形PNG">1:1正方形 PNG</option>
+                                        <option value="9:16竖版PNG">9:16竖版PNG 小红书封面</option>
+                                        <option value="16:9横版JPG">16:9横版 JPG</option>
+                                      </select>
+                                    </div>
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                      <input id="poster-campaign" readonly placeholder="活动ID（自动生成）" class="dr-store-select" style="font-size:12px;color:var(--rep-gold);">
+                                      <input id="poster-coupon" placeholder="券模板ID（可选）" class="dr-store-select" style="font-size:13px;">
+                                    </div>
+                                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                       <select id="poster-gen-style-select" class="dr-store-select" style="font-size:12px;"><option value="">选择视觉风格（从模板继承）</option></select>
+                                       <select id="poster-gen-prompt-select" class="dr-store-select" style="font-size:12px;"><option value="">选择排版约束（从模板继承）</option></select>
+                                     </div>
+                                     <input id="poster-keywords" placeholder="补充卖点/场景关键词" class="dr-store-select" style="font-size:13px;">
+                                  </div>
                                </div>
 
-                                <div class="rep-poster-step">
-                                  <div class="rep-poster-step__title">③ AI辅助生成</div>
-                                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-                                   <button onclick="generatePosterCopy()" style="flex:1;min-width:120px;padding:10px;border-radius:8px;background:rgba(16,185,129,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.25);cursor:pointer;font-size:13px;font-weight:600;">🎯 生成引流卖点</button>
-                                   <button onclick="generatePosterImagePrompt()" style="flex:1;min-width:120px;padding:10px;border-radius:8px;background:#6366f1;color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:600;">✨ 生成Image2提示词</button>
-                                 </div>
+                                 <div class="rep-poster-step">
+                                   <div class="rep-poster-step__title">③ AI辅助生成</div>
+                                  <div class="rep-seg" style="margin-bottom:10px;">
+                                    <button onclick="generatePosterCopy()" class="rep-seg-btn rep-seg-btn--active" style="flex:1;">🎯 生成引流卖点</button>
+                                    <button onclick="generatePosterImagePrompt()" class="rep-seg-btn" style="flex:1;">✨ 生成Image2提示词</button>
+                                  </div>
                                  <div style="position:relative;">
                                    <textarea id="poster-image2-prompt" placeholder="点击上方按钮生成 Image2 提示词，然后复制到 GPT Image 2 生成图片" style="width:100%;height:100px;padding:10px;border-radius:8px;border:1px solid rgba(99,102,241,0.2);background:rgba(99,102,241,0.04);color:#fff;font-size:12px;line-height:1.6;box-sizing:border-box;resize:vertical;"></textarea>
                                    <button onclick="copyImage2Prompt()" style="position:absolute;bottom:8px;right:8px;padding:6px 10px;border-radius:6px;background:rgba(99,102,241,0.3);color:#a5b4fc;border:none;cursor:pointer;font-size:11px;">📋 复制</button>
@@ -14384,57 +14376,49 @@
 
                                 <div class="rep-poster-step">
                                   <div class="rep-poster-step__title">④ 上传成图 + 标记用途</div>
-                                 <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-                                   <input id="poster-final-image-url" readonly placeholder="上传图片自动填充" style="flex:1;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;box-sizing:border-box;">
-                                   <input type="file" id="poster-image-upload-input" accept="image/*" style="display:none;" onchange="uploadPosterImage(event)">
-                                   <button onclick="document.getElementById('poster-image-upload-input').click()" style="padding:10px 16px;border-radius:8px;background:rgba(99,102,241,0.2);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);cursor:pointer;font-size:13px;white-space:nowrap;">上传图片</button>
-                                 </div>
-                                 <div id="poster-upload-preview" style="display:none;margin-bottom:8px;"><img id="poster-upload-preview-img" style="max-height:140px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);width:100%;object-fit:contain;"></div>
-                                 <div style="margin-bottom:6px;">
-                                   <div style="font-size:11px;color:rgba(226,232,240,0.5);margin-bottom:4px;">营销用途（可复选）</div>
-                                   <div id="poster-gen-purposes" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
-                                 </div>
-                                 <div>
-                                   <div style="font-size:11px;color:rgba(226,232,240,0.5);margin-bottom:4px;">投放渠道（可复选）</div>
-                                   <div id="poster-gen-channels" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
-                                 </div>
+                                  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+                                    <input id="poster-final-image-url" readonly placeholder="上传图片自动填充" class="dr-store-select" style="flex:1;font-size:13px;">
+                                    <input type="file" id="poster-image-upload-input" accept="image/*" style="display:none;" onchange="uploadPosterImage(event)">
+                                    <button onclick="document.getElementById('poster-image-upload-input').click()" class="rep-seg-btn rep-seg-btn--active" style="white-space:nowrap;">上传图片</button>
+                                  </div>
+                                  <div id="poster-upload-preview" style="display:none;margin-bottom:8px;"><img id="poster-upload-preview-img" style="max-height:140px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);width:100%;object-fit:contain;"></div>
+                                  <div class="rep-field"><label>营销用途（可复选）</label>
+                                    <div id="poster-gen-purposes" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;"></div>
+                                  </div>
+                                  <div class="rep-field" style="margin-top:8px;"><label>投放渠道（可复选）</label>
+                                    <div id="poster-gen-channels" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;"></div>
+                                  </div>
+                                </div>
+
+                                 <div class="rep-poster-step">
+                                   <div class="rep-poster-step__title">⑤ 发布</div>
+                                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+                                    <select id="poster-public-channel" class="dr-store-select" style="font-size:13px;"></select>
+                                    <input id="poster-public-date" type="date" class="dr-store-select" style="font-size:13px;">
+                                  </div>
+                                  <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
+                                    <span style="font-size:11px;color:var(--rep-muted);font-weight:600;">私域渠道：</span>
+                                    <select id="poster-private-channel" class="dr-store-select" style="flex:1;font-size:13px;"><option value="wecom">企微</option><option value="miniprogram">小程序</option></select>
+                                  </div>
+                                  <div class="rep-seg">
+                                    <button onclick="saveGeneratedPoster()" class="rep-seg-btn rep-seg-btn--active" style="flex:1;">💾 保存</button>
+                                    <button onclick="createPosterPrivateFlow()" class="rep-seg-btn" style="flex:1;">🔒 私域触达</button>
+                                    <button onclick="createPosterPublicFlow()" class="rep-seg-btn" style="flex:1;">📣 公域发布</button>
+                                    <a id="poster-download-link" style="display:none;"></a>
+                                  </div>
+                                  <div style="margin-top:8px;font-size:10px;color:var(--rep-muted);line-height:1.5;opacity:0.6;">操作流程：选模板 → 填内容 → AI生成 → 上传成图并打标签 → 保存 → 选择发布链路</div>
+                                </div>
+
                                </div>
 
+                              <div class="rep-poster-step" style="margin-top:12px;">
+                                <div class="rep-poster-step__title">📸 已生成海报</div>
+                                <div id="poster-history-list" style="max-height:300px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;"></div>
+                              </div>
+
+                              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px;">
                                 <div class="rep-poster-step">
-                                  <div class="rep-poster-step__title">⑤ 发布</div>
-                                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-                                   <select id="poster-public-channel" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></select>
-                                   <input id="poster-public-date" type="date" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;box-sizing:border-box;">
-                                 </div>
-                                 <div style="display:flex;gap:8px;margin-bottom:8px;">
-                                   <span style="font-size:11px;color:rgba(226,232,240,0.5);align-self:center;">私域渠道：</span>
-                                   <select id="poster-private-channel" style="flex:1;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"><option value="wecom">企微</option><option value="miniprogram">小程序</option></select>
-                                 </div>
-                                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                                   <button onclick="saveGeneratedPoster()" style="flex:1;min-width:80px;padding:12px;border-radius:8px;background:#f59e0b;color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:600;">💾 保存</button>
-                                   <button onclick="createPosterPrivateFlow()" style="flex:1;min-width:80px;padding:12px;border-radius:8px;background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.25);cursor:pointer;font-size:13px;font-weight:600;">🔒 私域触达</button>
-                                   <button onclick="createPosterPublicFlow()" style="flex:1;min-width:80px;padding:12px;border-radius:8px;background:rgba(14,165,233,0.15);color:#38bdf8;border:1px solid rgba(14,165,233,0.25);cursor:pointer;font-size:13px;font-weight:600;">📣 公域发布</button>
-                                   <a id="poster-download-link" style="display:none;"></a>
-                                 </div>
-                                 <div style="margin-top:8px;font-size:10px;color:rgba(226,232,240,0.4);line-height:1.5;">操作流程：选模板 → 填内容 → AI生成 → 上传成图并打标签 → 保存 → 选择发布链路</div>
-                               </div>
-
-                               </div>
-
-                             <div style="margin-top:12px;">
-                               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                                 <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.8);">已生成海报</div>
-                                 <button onclick="loadPosterHistory()" style="padding:4px 10px;border-radius:6px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.6);border:1px solid rgba(255,255,255,0.1);cursor:pointer;font-size:11px;">刷新</button>
-                               </div>
-                               <div id="poster-history-list" style="max-height:300px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;"></div>
-                             </div>
-
-                             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px;">
-                               <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;">
-                                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                                   <div style="font-size:13px;font-weight:700;color:rgba(226,232,240,0.85);">🧩 模板资产库</div>
-                                   <button onclick="resetTemplateForm()" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.6);border:1px solid rgba(255,255,255,0.1);cursor:pointer;font-size:11px;">新增模板</button>
-                                 </div>
+                                  <div class="rep-poster-step__title">🧩 模板资产库</div>
                                   <div style="display:flex;flex-direction:column;gap:6px;">
                                     <input id="poster-template-key-input" placeholder="模板key（英文唯一标识，如 summer_sale）" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
                                     <input id="poster-template-name-input" placeholder="模板名称" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;box-sizing:border-box;">
