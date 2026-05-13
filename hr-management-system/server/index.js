@@ -4516,12 +4516,15 @@ app.post('/api/checkin', authRequired, async (req, res) => {
       return res.status(400).json({ error: 'duplicate_checkin', message: `1小时内已${label}打卡，请勿重复操作` });
     }
 
-    // 规则1：超过14:00不允许上班打卡
+    // 规则1：超过17:00不允许上班打卡
     if (type === 'clock_in') {
       const shNow = new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai', hour12: false });
-      const shHour = parseInt(shNow.split(', ')[1]?.split(':')[0] || '0', 10);
-      if (shHour >= 14) {
-        return res.status(400).json({ error: 'late_clock_in', message: '超过14:00不允许上班打卡' });
+      const timeStr = shNow.split(', ')[1] || '';
+      const parts = timeStr.split(':');
+      const shHour = parseInt(parts[0] || '0', 10);
+      const shMin = parseInt(parts[1] || '0', 10);
+      if (shHour >= 17) {
+        return res.status(400).json({ error: 'late_clock_in', message: '超过17:00不允许上班打卡' });
       }
     }
 
