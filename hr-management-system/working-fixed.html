@@ -14047,22 +14047,33 @@
                              <div style="max-width:960px;margin:0 auto;">
                              <div style="font-size:16px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:16px;">海报制作</div>
 
-                             <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;margin-bottom:10px;">
-                               <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.75);margin-bottom:6px;">① 选择模板</div>
-                               <div id="poster-template-selector" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
-                               <div id="poster-template-brief" style="margin-top:6px;padding:8px;border-radius:8px;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.12);color:rgba(226,232,240,0.7);font-size:11px;line-height:1.5;"></div>
-                             </div>
+                              <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;margin-bottom:10px;">
+                                <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.75);margin-bottom:6px;">① 选择模板</div>
+                                <div id="poster-template-selector" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+                                <div id="poster-template-brief" style="margin-top:6px;padding:8px;border-radius:8px;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.12);color:rgba(226,232,240,0.7);font-size:11px;line-height:1.5;"></div>
+                              </div>
+
+                              <!-- 海报实时预览 -->
+                              <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;margin-bottom:10px;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                                  <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.75);">👁 实时预览</div>
+                                  <div style="font-size:10px;color:rgba(226,232,240,0.35);">客户将看到的效果</div>
+                                </div>
+                                <div style="display:flex;justify-content:center;">
+                                  <canvas id="poster-preview-canvas" width="540" height="720" style="max-width:100%;height:auto;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:#1a1a2e;"></canvas>
+                                </div>
+                              </div>
 
                              <div id="poster-editor-form" style="display:flex;flex-direction:column;gap:8px;">
                                <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;">
                                  <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.75);margin-bottom:8px;">② 填写内容</div>
                                  <div style="display:flex;flex-direction:column;gap:8px;">
-                                   <input id="poster-title" placeholder="主标题" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
-                                   <input id="poster-subtitle" placeholder="副标题" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
-                                   <input id="poster-offer" placeholder="利益点/优惠 如: 满100减30" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
+                                    <input id="poster-title" placeholder="主标题" oninput="renderPosterPreview()" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
+                                    <input id="poster-subtitle" placeholder="副标题" oninput="renderPosterPreview()" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
+                                    <input id="poster-offer" placeholder="利益点/优惠 如: 满100减30" oninput="renderPosterPreview()" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                                     <input id="poster-cta" placeholder="CTA按钮文案" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
-                                     <input id="poster-price" placeholder="价格 如: ¥39" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
+                                      <input id="poster-cta" placeholder="CTA按钮文案" oninput="renderPosterPreview()" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
+                                      <input id="poster-price" placeholder="价格 如: ¥39" oninput="renderPosterPreview()" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
                                    </div>
                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                                      <select id="poster-size" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
@@ -14072,7 +14083,7 @@
                                        <option value="1080x1080">1080×1080 正方形</option>
                                        <option value="800x1200">800×1200 A4海报</option>
                                      </select>
-                                     <select id="poster-store" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></select>
+                                      <select id="poster-store" onchange="renderPosterPreview()" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></select>
                                    </div>
                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                                      <select id="poster-clarity" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;">
@@ -45267,6 +45278,7 @@ ${body}
                 renderTagCheckboxes('poster-gen-channels', __CONTENT_CHANNEL_TAGS, []);
                 populatePosterGenStylePrompt();
                 populateTemplateFormSelects();
+                setTimeout(renderPosterPreview, 200);
             } else if (tab === 'public') {
                 refreshPublicContentWorkspace();
             } else if (tab === 'pos') {
@@ -47307,6 +47319,37 @@ ${body}
       if (tpl) {
         setField('poster-gen-style-select', tpl.style || '');
         setField('poster-gen-prompt-select', tpl.promptNotes || '');
+      }
+      renderPosterPreview();
+    }
+
+    function renderPosterPreview() {
+      var canvas = document.getElementById('poster-preview-canvas');
+      if (!canvas) return;
+      var ctx = canvas.getContext('2d');
+      var w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      var tpl = POSTER_TEMPLATES.find(function(t) { return t.key === _selectedPosterTemplate; });
+      if (!tpl || !tpl.draw) {
+        ctx.fillStyle = '#1a1a2e'; ctx.fillRect(0, 0, w, h);
+        ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(226,232,240,0.3)'; ctx.font = '16px sans-serif';
+        ctx.fillText('请先选择模板', w / 2, h / 2);
+        return;
+      }
+      var editor = getPosterEditorData();
+      var data = {
+        title: editor.title || '标题',
+        subtitle: editor.subtitle || '',
+        offer: editor.offer || '',
+        cta: editor.cta || '',
+        price: editor.price || '',
+        store: editor.store || '',
+        qrDataURL: null
+      };
+      try { tpl.draw(ctx, w, h, data); } catch (e) {
+        ctx.fillStyle = '#1a1a2e'; ctx.fillRect(0, 0, w, h);
+        ctx.textAlign = 'center'; ctx.fillStyle = '#ef4444'; ctx.font = '14px sans-serif';
+        ctx.fillText('预览渲染异常', w / 2, h / 2);
       }
     }
 
