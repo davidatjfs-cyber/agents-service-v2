@@ -45955,31 +45955,28 @@ ${body}
                     } else {
                         posterHtml = '<div style="margin-top:8px;font-size:11px;color:rgba(226,232,240,0.35);">暂无关联海报</div>';
                     }
-                    var tplHtml = srcTpl ? '<div style="margin-top:4px;font-size:11px;color:var(--rep-muted);">来源模板：' + escapeHtml(srcTpl.name) + ' | 已用' + (srcTpl.use_count || 0) + '次</div>' : '';
-                    return '<div class="rep-pay-card">'
-                        + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'
-                        + '<div style="flex:1;min-width:0;"><div style="color:#fff;font-weight:700;font-size:14px;letter-spacing:0.02em;">' + escapeHtml(x.title || '未命名活动') + '</div>'
-                        + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">'
-                        + '<span style="font-size:11px;padding:2px 10px;border-radius:999px;background:' + statusColor + '22;color:' + statusColor + ';font-weight:700;">' + statusLabel + '</span>'
-                        + (cid ? '<button onclick="showCampaignFunnelDashboard(\'' + cid.replace(/'/g, '\\\'') + '\')" style="padding:3px 8px;border-radius:6px;background:rgba(14,165,233,0.12);color:#38bdf8;border:1px solid rgba(14,165,233,0.2);cursor:pointer;font-size:10px;">📊 漏斗</button>' : '')
+                    var tplHtml = srcTpl ? '<span style="color:var(--rep-muted);font-size:11px;"> · 模板：' + escapeHtml(srcTpl.name) + ' 已用' + (srcTpl.use_count || 0) + '次</span>' : '';
+                    return '<div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);">'
+                        + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+                        + '<div style="flex:1;min-width:0;"><span style="color:#fff;font-weight:700;font-size:14px;">' + escapeHtml(x.title || '未命名活动') + '</span>'
+                        + '<span style="margin-left:8px;font-size:11px;padding:2px 10px;border-radius:999px;background:' + statusColor + '22;color:' + statusColor + ';font-weight:600;">' + statusLabel + '</span>'
+                        + '</div>'
+                        + '<div style="display:flex;gap:4px;flex-shrink:0;align-items:center;">'
+                        + (cid ? '<button onclick="showCampaignFunnelDashboard(\'' + cid.replace(/'/g, '\\\'') + '\')" style="padding:4px 8px;border-radius:8px;background:rgba(14,165,233,0.1);color:#38bdf8;border:none;cursor:pointer;font-size:10px;font-weight:600;">📊</button>' : '')
+                        + (x.status === 'draft' ? '<button onclick="activateCampaignPlan(\'' + cid.replace(/'/g, '\\\'') + '\')" style="padding:4px 10px;border-radius:8px;background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.25);cursor:pointer;font-size:11px;font-weight:600;">激活</button>'
+                            + '<button onclick="cancelCampaignPlan(\'' + cid.replace(/'/g, '\\\'') + '\')" style="padding:4px 10px;border-radius:8px;background:transparent;color:#f87171;border:1px solid rgba(239,68,68,0.2);cursor:pointer;font-size:11px;">取消</button>' : '')
+                        + (x.status === 'active' ? '<button onclick="completeCampaignPlan(\'' + cid.replace(/'/g, '\\\'') + '\')" style="padding:4px 10px;border-radius:8px;background:rgb(56,189,248,0.12);color:#38bdf8;border:none;cursor:pointer;font-size:11px;font-weight:600;">完结</button>' : '')
                         + '</div></div>'
-                        + '<div style="display:flex;gap:4px;flex-shrink:0;">'
-                        + (x.status === 'draft' ? '<button onclick="cancelCampaignPlan(\'' + cid.replace(/'/g, '\\\'') + '\')" style="padding:4px 10px;border-radius:8px;background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.15);cursor:pointer;font-size:11px;font-weight:600;">取消</button>'
-                            + '<button onclick="activateCampaignPlan(\'' + cid.replace(/'/g, '\\\'') + '\')" style="padding:4px 10px;border-radius:8px;background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.25);cursor:pointer;font-size:11px;font-weight:600;">激活</button>' : '')
-                        + (x.status === 'active' ? '<button onclick="completeCampaignPlan(\'' + cid.replace(/'/g, '\\\'') + '\')" style="padding:4px 10px;border-radius:8px;background:rgba(56,189,248,0.12);color:#38bdf8;border:1px solid rgba(56,189,248,0.2);cursor:pointer;font-size:11px;font-weight:600;">完结</button>' : '')
-                        + '</div></div>'
-                        + '<div style="color:var(--rep-muted);margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;font-size:11px;">'
+                        + '<div style="display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;font-size:12px;color:var(--rep-muted);">'
                         + '<span>' + growthStoreName(x.store_id) + '</span>'
-                        + '<span>·</span>'
                         + '<span>' + growthChannelLabel(x.channel) + '</span>'
-                        + '<span>·</span>'
                         + '<span>' + growthAudienceLabel(x.target_audience) + '</span>'
-                        + (x.budget_fen ? '<span>·</span><span>¥' + Math.round(Number(x.budget_fen) / 100) + '</span>' : '')
-                        + (x.planned_start ? '<span>·</span><span>' + String(x.planned_start).slice(0,10) + '~' + String(x.planned_end || '').slice(0,10) + '</span>' : '')
+                        + (x.budget_fen ? '<span>预算 ¥' + Math.round(Number(x.budget_fen) / 100) + '</span>' : '')
+                        + (x.planned_start ? '<span>' + String(x.planned_start).slice(5,10) + '-' + String(x.planned_end || '').slice(5,10) + '</span>' : '')
+                        + tplHtml
                         + '</div>'
                         + posterHtml
-                        + tplHtml
-                        + '<div style="color:rgba(226,232,240,0.15);margin-top:6px;font-size:10px;">ID: ' + cid + '</div>'
+                        + '<div style="font-size:10px;color:rgba(226,232,240,0.12);margin-top:4px;">' + cid + '</div>'
                         + '</div>';
                 }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无活动计划</div>';
             } catch (e) {
@@ -46244,17 +46241,15 @@ ${body}
                     var channelColor = channel === 'wecom' ? '#22c55e' : channel === 'miniprogram' ? '#38bdf8' : channel === 'xiaohongshu' ? '#ef4444' : '#94a3b8';
                     var typeLabel = actionTypeLabels[x.action_type] || '✅ 触达';
                     var isFinal = x.status === 'executed' || x.status === 'ignored';
-                    var draftPreview = '<div style="margin-top:8px;padding:10px;background:rgba(14,165,233,0.06);border:1px solid rgba(14,165,233,0.2);border-radius:8px;font-size:12px;">'
-                        + '<div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:#38bdf8;font-weight:700;">📋 执行草稿</span>'
-                        + '<span style="font-size:10px;padding:2px 8px;border-radius:999px;background:' + channelColor + '22;color:' + channelColor + ';">' + channelLabel + '</span></div>'
-                        + '<div style="display:flex;flex-direction:column;gap:4px;color:rgba(226,232,240,0.75);">'
-                        + '<div><span style="color:rgba(226,232,240,0.5);">门店</span>：' + (x.store_id || '-') + (confidence ? ' <span style="font-size:10px;padding:1px 6px;border-radius:999px;background:' + confidenceColor + '22;color:' + confidenceColor + ';">' + confidence + '</span>' : '') + '</div>'
-                        + '<div><span style="color:rgba(226,232,240,0.5);">类型</span>：' + typeLabel + '</div>'
-                        + '<div><span style="color:rgba(226,232,240,0.5);">目标</span>：' + (payload.target_audience || payload.audience || '门店活跃客群') + '</div>'
-                        + '<div><span style="color:rgba(226,232,240,0.5);">动作</span>：' + (payload.execution_action || (x.detail || '').slice(0, 100)) + '</div>'
-                        + (payload.budget_fen ? '<div><span style="color:rgba(226,232,240,0.5);">预算</span>：¥' + Math.round(Number(payload.budget_fen) / 100) + '</div>' : '')
-                        + (x.executed_at ? '<div><span style="color:rgba(226,232,240,0.5);">执行时间</span>：' + String(x.executed_at).slice(0, 16) : (x.created_at ? '<div><span style="color:rgba(226,232,240,0.5);">生成</span>：' + String(x.created_at).slice(0, 10) : ''))
-                        + '</div></div>';
+                    var draftPreview = '<div style="margin-top:6px;padding:8px 10px;background:rgba(14,165,233,0.04);border:1px solid rgba(14,165,233,0.12);border-radius:8px;font-size:11px;">'
+                        + '<div style="display:flex;gap:8px;flex-wrap:wrap;color:var(--rep-muted);">'
+                        + '<span>门店 ' + (x.store_id || '-') + (confidence ? ' <span style="font-size:10px;padding:1px 6px;border-radius:999px;background:' + confidenceColor + '22;color:' + confidenceColor + ';">' + confidence + '</span>' : '') + '</span>'
+                        + '<span>目标 ' + (payload.target_audience || payload.audience || '活跃客群') + '</span>'
+                        + (payload.budget_fen ? '<span>预算 ¥' + Math.round(Number(payload.budget_fen) / 100) + '</span>' : '')
+                        + '<span style="color:rgba(226,232,240,0.4);">' + (x.executed_at ? String(x.executed_at).slice(0, 16) : x.created_at ? String(x.created_at).slice(0, 10) : '') + '</span>'
+                        + '</div>'
+                        + '<div style="margin-top:4px;color:rgba(226,232,240,0.6);line-height:1.5;">' + (payload.execution_action || (x.detail || '').slice(0, 120)) + '</div>'
+                        + '</div>';
                     var posterHtml;
                     if (posterUrl) {
                         posterHtml = '<div style="margin-top:8px;display:flex;gap:10px;align-items:center;padding:8px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:10px;"><img src="' + escapeHtml(posterUrl) + '" style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,0.08);"><div style="font-size:11px;color:rgba(226,232,240,0.58);">已绑定海报</div></div>';
@@ -46264,18 +46259,20 @@ ${body}
                         posterHtml = '';
                     }
                     var actionButtons = !isFinal ?
-                        '<button onclick="executeGrowthAction(\'' + key + '\')" style="flex:1;min-width:80px;padding:8px;border:none;border-radius:10px;background:linear-gradient(135deg,#e8d48b,#c9a227);color:#0a0c10;cursor:pointer;font-size:12px;font-weight:700;">批准执行</button>'
-                        + '<button onclick="openEditExecuteForm(\'' + key + '\')" style="flex:1;min-width:60px;padding:8px;border:none;border-radius:10px;background:rgba(14,165,233,0.15);color:#38bdf8;cursor:pointer;font-size:12px;font-weight:600;">修改后执行</button>'
-                        + '<button onclick="ignoreGrowthAction(\'' + key + '\')" style="flex:1;min-width:60px;padding:8px;border:none;border-radius:10px;background:rgba(239,68,68,0.12);color:#ef4444;cursor:pointer;font-size:12px;font-weight:600;">忽略</button>'
+                        '<button onclick="executeGrowthAction(\'' + key + '\')" style="flex:1;padding:6px 12px;border:none;border-radius:8px;background:rgba(34,197,94,0.15);color:#22c55e;cursor:pointer;font-size:11px;font-weight:700;">批准执行</button>'
+                        + '<button onclick="openEditExecuteForm(\'' + key + '\')" style="flex:1;padding:6px 12px;border:none;border-radius:8px;background:rgba(14,165,233,0.12);color:#38bdf8;cursor:pointer;font-size:11px;font-weight:600;">修改后执行</button>'
+                        + '<button onclick="ignoreGrowthAction(\'' + key + '\')" style="flex-shrink:0;padding:6px 10px;border:none;border-radius:8px;background:rgba(239,68,68,0.1);color:#ef4444;cursor:pointer;font-size:11px;">忽略</button>'
                         : '';
-                    return '<div class="rep-pay-card">'
-                        + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">'
-                        + '<div style="font-weight:700;cursor:pointer;flex:1;min-width:0;color:#fff;font-size:14px;letter-spacing:0.02em;" onclick="openActionDetailModal(\'' + key + '\')">' + typeLabel + ' ' + (x.title || '-') + '</div>'
-                        + '<div style="font-size:11px;padding:2px 10px;border-radius:999px;' + (x.status === 'executed' ? 'background:rgba(34,197,94,0.15);color:#22c55e' : x.status === 'ignored' ? 'background:rgba(239,68,68,0.12);color:#ef4444' : 'background:rgba(245,158,11,0.15);color:#f59e0b') + ';white-space:nowrap;font-weight:700;">' + (x.status === 'executed' ? '✅ 已执行' : x.status === 'ignored' ? '⛔ 已忽略' : x.status === 'proposed' ? '⚡ 可执行' : x.status || '-') + '</div>'
+                    return '<div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);">'
+                        + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">'
+                        + '<div style="flex:1;min-width:0;cursor:pointer;" onclick="openActionDetailModal(\'' + key + '\')"><span style="font-weight:700;color:#fff;font-size:14px;">' + typeLabel + ' ' + (x.title || '-') + '</span>'
+                        + '<span style="margin-left:8px;font-size:11px;padding:2px 10px;border-radius:999px;' + (x.status === 'executed' ? 'background:rgba(34,197,94,0.15);color:#22c55e' : x.status === 'ignored' ? 'background:rgba(239,68,68,0.12);color:#ef4444' : 'background:rgba(245,158,11,0.15);color:#f59e0b') + ';font-weight:600;">' + (x.status === 'executed' ? '✅ 已执行' : x.status === 'ignored' ? '⛔ 已忽略' : x.status === 'proposed' ? '⚡ 可执行' : x.status || '-') + '</span>'
+                        + '</div>'
+                        + '<div style="font-size:11px;padding:2px 10px;border-radius:999px;background:' + channelColor + '18;color:' + channelColor + ';font-weight:600;flex-shrink:0;">' + channelLabel + '</div>'
                         + '</div>'
                         + posterHtml
                         + draftPreview
-                        + (actionButtons ? '<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">' + actionButtons + '</div>' : '')
+                        + (actionButtons ? '<div style="margin-top:8px;display:flex;gap:6px;align-items:center;">' + actionButtons + '</div>' : '')
                         + '</div>';
                 }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无AI建议</div>';
             } catch (e) {
