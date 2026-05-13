@@ -14129,6 +14129,7 @@
                             </div>
                         </div>
                     </div>
+                    </div>
                     <div id="growth-pos-content" style="display:none;">
                         <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
@@ -14487,6 +14488,7 @@
 
                 <!-- 员工视图：今日任务清单 -->
                 <div id="kitchen-staff-view">
+                  <div id="kitchen-time-groups" style="display:grid;gap:12px;max-width:760px;margin:0 auto 12px;padding:0 4px;"></div>
                   <div id="kitchen-task-list" style="display:grid;gap:10px;max-width:600px;margin:0 auto;padding:0 4px;"></div>
                   <div id="kitchen-empty-tip" style="display:none;text-align:center;padding:40px 20px;color:rgba(255,255,255,0.4);">
                     <div style="font-size:48px;margin-bottom:12px;">✅</div>
@@ -14504,7 +14506,7 @@
                      <button class="btn btn-secondary" type="button" onclick="showKitchenView('staff')" style="font-size:13px;">👤 员工视图</button>
                      <button class="btn btn-secondary" type="button" onclick="kitchenSyncSopSteps()" style="font-size:13px;">🔄 同步SOP</button>
                    </div>
-                   <div id="kitchen-dashboard-cards" style="display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));margin-bottom:20px;"></div>
+                    <div id="kitchen-dashboard-cards" style="display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));margin-bottom:20px;"></div>
                   <div id="kitchen-unchecked-section" style="display:none;">
                     <h3 style="font-size:14px;color:rgba(255,200,100,0.9);margin-bottom:10px;">⚠️ 今日未确认项</h3>
                     <div id="kitchen-unchecked-list" style="display:grid;gap:6px;"></div>
@@ -14514,8 +14516,9 @@
                 <!-- 管理视图：菜品配置 -->
                 <div id="kitchen-manage-view" style="display:none;">
                   <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px;margin-bottom:16px;">
-                    <h3 style="font-size:14px;font-weight:600;margin-bottom:4px;color:rgba(255,255,255,0.85);">添加岗位负责菜品</h3>
-                    <p style="font-size:11px;color:rgba(255,255,255,0.3);margin-bottom:14px;">选择档口后，从已有SOP菜品库中选择。该岗位所有员工将自动看到此菜。</p>
+                    <h3 id="kitchen-form-title" style="font-size:14px;font-weight:600;margin-bottom:4px;color:rgba(255,255,255,0.85);">添加岗位负责菜品</h3>
+                    <p id="kitchen-form-subtitle" style="font-size:11px;color:rgba(255,255,255,0.3);margin-bottom:14px;">选择档口、具体员工和固定执行时间后，可一次分配多道菜品。</p>
+                    <input id="kitchen-edit-id" type="hidden" value="">
                     <div style="display:grid;gap:10px;">
                       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                         <div>
@@ -14529,21 +14532,35 @@
                           </select>
                         </div>
                         <div>
-                          <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:4px;">② 选择菜品（下拉选择）</label>
-                          <select id="kitchen-add-dish" style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#fff;font-size:13px;">
+                          <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:4px;">② 分配给具体员工</label>
+                          <select id="kitchen-add-employee" style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#fff;font-size:13px;">
                             <option value="">先选择档口</option>
                           </select>
                         </div>
                       </div>
                       <div>
-                        <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:4px;">③ 关键控制点（可选 — 高峰期优先打点的步骤，如"烫皮"）</label>
+                        <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:4px;">③ 选择菜品（可多选）</label>
+                        <select id="kitchen-add-dish" multiple size="8" style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#fff;font-size:13px;">
+                          <option value="">先选择档口</option>
+                        </select>
+                        <div style="font-size:11px;color:rgba(255,255,255,0.32);margin-top:4px;">按住 `Command` 或直接多点选择多道菜。</div>
+                      </div>
+                      <div>
+                        <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:4px;">④ 每日固定执行时间（逗号分隔）</label>
+                        <input id="kitchen-add-times" type="text" placeholder="例：09:00,14:00,17:30" value="09:00" style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#fff;font-size:13px;">
+                      </div>
+                      <div>
+                        <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:4px;">⑤ 关键控制点（可选 — 高峰期优先打点的步骤，如"烫皮"）</label>
                         <input id="kitchen-add-step" type="text" placeholder="例：烫皮15秒、拉油140度" style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#fff;font-size:13px;">
                       </div>
                       <div style="display:flex;align-items:center;gap:8px;">
                         <input id="kitchen-add-isprep" type="checkbox" style="width:16px;height:16px;accent-color:#f59e0b;">
                         <label style="font-size:13px;color:rgba(255,255,255,0.7);">预制料（味水/酱料等半成品，非成品菜品）</label>
                       </div>
-                      <button class="btn" type="button" onclick="kitchenAddDish()" style="width:100%;">+ 添加</button>
+                      <div style="display:flex;gap:8px;">
+                        <button class="btn" id="kitchen-save-btn" type="button" onclick="kitchenSaveDishConfig()" style="flex:1;">+ 添加</button>
+                        <button class="btn btn-secondary" id="kitchen-cancel-edit-btn" type="button" onclick="kitchenResetForm()" style="display:none;">取消编辑</button>
+                      </div>
                     </div>
                   </div>
                   <div style="margin-bottom:16px;display:flex;gap:10px;align-items:center;">
@@ -19753,6 +19770,7 @@ th { background: #f5f5f5; font-weight: 700; }
                 updateUserInfo();
                 restoreSidebarState();
                 try { updateKitchenNavVisibility(); } catch(e) {}
+                try { updateGrowthModuleVisibility(); } catch(e) {}
                 showPage(getHomePageName());
                 maybeOpenSmartAssistantFromRoute();
 
@@ -19769,6 +19787,7 @@ th { background: #f5f5f5; font-weight: 700; }
                         if (empInfo2.department) currentUser.department = empInfo2.department;
                         updateUserInfo();
                         try { updateKitchenNavVisibility(); } catch(e) {}
+                        try { updateGrowthModuleVisibility(); } catch(e) {}
                     } catch (e) {}
                 }).catch(() => {});
                 loadRoleModulesFromServer().catch(() => {});
@@ -20111,6 +20130,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                         if (empInfo2.department) currentUser.department = empInfo2.department;
                         updateUserInfo();
                         try { updateKitchenNavVisibility(); } catch(e) {}
+                        try { updateGrowthModuleVisibility(); } catch(e) {}
                     } catch (e) {}
                 }).catch(() => {});
                 // 保存登录凭据用于自动登录
@@ -20123,6 +20143,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                 document.getElementById('main-app').classList.remove('hidden');
                 updateUserInfo();
                 restoreSidebarState();
+                try { updateGrowthModuleVisibility(); } catch(e) {}
                 showPage(getHomePageName());
                 maybeOpenSmartAssistantFromRoute();
                 showNotification(`欢迎回来，${currentUser.name}！`, 'success');
@@ -45075,7 +45096,13 @@ ${body}
 
         function canAccessGrowthModule() {
             var role = growthRoleCode();
-            return role === 'admin' || role === 'hq_manager';
+            return role === 'admin' || role === 'hq_manager' || role === 'store_manager' || role === 'front_manager';
+        }
+
+        function updateGrowthModuleVisibility() {
+            var canAccess = canAccessGrowthModule();
+            document.querySelectorAll('.growth-mobile-nav').forEach(function(el) { el.style.display = canAccess ? '' : 'none'; });
+            document.querySelectorAll('.growth-nav-link').forEach(function(el) { el.style.display = canAccess ? '' : 'none'; });
         }
 
         function showGrowthTab(tab) {
@@ -45124,17 +45151,12 @@ ${body}
 
     // 增长移动端导航权限
     try {
-      if (canAccessGrowthModule()) {
-        document.querySelectorAll('.growth-mobile-nav').forEach(function(el) { el.style.display = ''; });
-      }
+      updateGrowthModuleVisibility();
     } catch(e) {}
 
     // Phase 8: 增长模块仅管理员/总部可见
     try {
-      var growthNavLinks = document.querySelectorAll('.growth-nav-link');
-      if (canAccessGrowthModule()) {
-        growthNavLinks.forEach(function(el) { el.style.display = ''; });
-      }
+      updateGrowthModuleVisibility();
     } catch(e) {}
 
         function growthCsvList(id) {
@@ -45465,6 +45487,7 @@ ${body}
                     title: document.getElementById('camp-title')?.value || '',
                     channel: document.getElementById('camp-channel')?.value || 'miniprogram',
                     target_audience: document.getElementById('camp-audience')?.value || 'all',
+                    coupon_value_fen: parseInt(document.getElementById('camp-coupon-value')?.value || '0', 10),
                     budget_fen: parseInt(document.getElementById('camp-budget')?.value || '0', 10),
                     planned_start: document.getElementById('camp-start')?.value || null,
                     planned_end: document.getElementById('camp-end')?.value || null,
@@ -45584,7 +45607,8 @@ ${body}
                 });
                 var d = await r.json();
                 if (!d.ok) throw new Error(d.error);
-                showNotification('活动已激活', 'success');
+                var msg = d.execution && d.execution.real_executions && d.execution.real_executions.length ? '活动已激活并执行' : '活动已激活';
+                showNotification(msg, 'success');
                 loadCampaignPlans();
             } catch (e) { showNotification('操作失败: ' + (e?.message||e), 'error'); }
         }
@@ -45807,11 +45831,14 @@ ${body}
 
         async function loadGrowthActionBoard() {
             try {
+                var host = document.getElementById('growth-action-board');
+                if (!host) { console.error('loadGrowthActionBoard: growth-action-board element not found'); return; }
+                host.innerHTML = '<div style="color:rgba(226,232,240,0.3);padding:10px 0;">加载中...</div>';
                 const r = await fetch('/api/growth/actions', { headers: growthAuthHeaders() });
                 const actionsData = await r.json();
+                if (!actionsData.ok) throw new Error(actionsData.error || 'api_error');
                 const rows = actionsData?.actions || [];
                 try { document.getElementById('__growth_actions_cache').textContent = JSON.stringify(rows); } catch (e) {}
-                const host = document.getElementById('growth-action-board');
                 host.innerHTML = rows.length ? rows.map(function(x) {
                     const key = x.action_key || '';
                     var payload = x.payload || {};
@@ -47759,6 +47786,7 @@ ${body}
     let _kitchenCurrentView = 'staff'; // staff | dashboard | manage
     let _kitchenStation = '';
     let _kitchenStore = '';
+    const KITCHEN_VALID_STORES = ['洪潮大宁久光店', '马己仙上海音乐广场店'];
 
     // 进入厨房页面时调用
      // 进入厨房页面时调用
@@ -47803,12 +47831,13 @@ ${body}
       document.getElementById('kitchen-page-sub').textContent   =
         station ? `${station} 岗位 · ${new Date().toLocaleDateString('zh-CN')}` : '未配置岗位';
 
-      if (!station || !store) {
-        document.getElementById('kitchen-no-tasks').style.display = '';
-        document.getElementById('kitchen-task-list').style.display = 'none';
-        document.getElementById('kitchen-page-sub').textContent =
-          !store ? '请先在系统设置中配置门店' : !station ? '请先在员工档案中配置岗位（如：炒锅/烧味）' : '';
-        return;
+        if (!station || !store) {
+          document.getElementById('kitchen-no-tasks').style.display = '';
+          document.getElementById('kitchen-task-list').style.display = 'none';
+          document.getElementById('kitchen-time-groups').innerHTML = '';
+          document.getElementById('kitchen-page-sub').textContent =
+            !store ? '请先在系统设置中配置门店' : !station ? '请先在员工档案中配置岗位（如：炒锅/烧味）' : '';
+          return;
       }
 
       try {
@@ -47823,24 +47852,61 @@ ${body}
         const empty = document.getElementById('kitchen-empty-tip');
         const none  = document.getElementById('kitchen-no-tasks');
 
-        if (!tasks.length) { none.style.display = ''; list.style.display = 'none'; return; }
+        if (!tasks.length) { none.style.display = ''; list.style.display = 'none'; document.getElementById('kitchen-time-groups').innerHTML = ''; return; }
 
         const allDone = tasks.every(t => t.confirmed);
         empty.style.display = allDone ? '' : 'none';
         list.style.display  = '';
+        renderKitchenTaskGroups(tasks);
         list.innerHTML = tasks.map(t => kitchenTaskCard(t, station, store)).join('');
       } catch(e) {
         showNotification('加载任务失败：' + (e?.message || e), 'error');
       }
     }
 
+    function kitchenTaskTimingState(scheduleTime) {
+      var now = new Date();
+      var hhmm = String(scheduleTime || '').split(':');
+      var target = new Date(now);
+      target.setHours(Number(hhmm[0] || 0), Number(hhmm[1] || 0), 0, 0);
+      var diffMs = now.getTime() - target.getTime();
+      if (diffMs > 30 * 60 * 1000) return { label: '超时未完成', color: '#ef4444', overdue: true };
+      if (diffMs > 0) return { label: '已到执行时段', color: '#f59e0b', overdue: false };
+      return { label: '待到时执行', color: '#38bdf8', overdue: false };
+    }
+
+    function renderKitchenTaskGroups(tasks) {
+      var host = document.getElementById('kitchen-time-groups');
+      if (!host) return;
+      if (!tasks.length) { host.innerHTML = ''; return; }
+      var grouped = {};
+      tasks.forEach(function(task) {
+        var key = task.schedule_time || '--:--';
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(task);
+      });
+      host.innerHTML = Object.keys(grouped).sort().map(function(timeKey) {
+        var rows = grouped[timeKey];
+        var doneCount = rows.filter(function(task) { return task.confirmed; }).length;
+        var overdueCount = rows.filter(function(task) { return !task.confirmed && kitchenTaskTimingState(task.schedule_time).overdue; }).length;
+        return '<div style="background:rgba(255,255,255,0.04);border:1px solid ' + (overdueCount ? 'rgba(239,68,68,0.24)' : 'rgba(255,255,255,0.08)') + ';border-radius:14px;padding:12px 14px;">'
+          + '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">'
+          + '<div style="font-size:14px;font-weight:700;color:#fff;">🕒 ' + timeKey + '</div>'
+          + '<div style="font-size:11px;color:' + (overdueCount ? '#fca5a5' : 'rgba(255,255,255,0.45)') + ';">' + doneCount + '/' + rows.length + ' 已完成' + (overdueCount ? ' · ' + overdueCount + ' 项超时' : '') + '</div>'
+          + '</div>'
+          + '</div>';
+      }).join('');
+    }
+
     function kitchenTaskCard(task, station, store) {
       const done = task.confirmed;
       const dishEsc = task.dish_name.replace(/'/g, "\\'");
+      const scheduleEsc = String(task.schedule_time || '').replace(/'/g, "\\'");
+      const timing = kitchenTaskTimingState(task.schedule_time);
       return `
-        <div onclick="openPunchCard('${dishEsc}','${station}','${store}')" style="
-          background: ${done ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.04)'};
-          border: 1.5px solid ${done ? 'rgba(34,197,94,0.35)' : 'rgba(255,255,255,0.10)'};
+        <div onclick="openPunchCard('${dishEsc}','${station}','${store}','${scheduleEsc}')" style="
+          background: ${done ? 'rgba(34,197,94,0.08)' : timing.overdue ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.04)'};
+          border: 1.5px solid ${done ? 'rgba(34,197,94,0.35)' : timing.overdue ? 'rgba(239,68,68,0.35)' : 'rgba(255,255,255,0.10)'};
           border-radius: 14px; padding: 14px 16px;
           display: flex; align-items: center; gap: 14px;
           transition: all .2s; cursor: pointer;
@@ -47849,6 +47915,11 @@ ${body}
           <div style="flex:1;min-width:0;">
             <div style="font-size:15px;font-weight:600;color:${done ? 'rgba(34,197,94,0.9)' : 'rgba(255,255,255,0.9)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
               ${task.is_prep ? '🧂 ' : '🍽 '}${task.dish_name}
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center;">
+              <span style="font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(99,102,241,0.14);color:#a5b4fc;">🕒 ${task.schedule_time || '--:--'}</span>
+              <span style="font-size:11px;padding:2px 8px;border-radius:999px;background:${timing.color}22;color:${timing.color};font-weight:${timing.overdue ? '700' : '500'};">${timing.label}</span>
+              ${task.confirmed_at ? `<span style="font-size:11px;color:rgba(255,255,255,0.42);">完成于 ${String(task.confirmed_at).slice(11,16)}</span>` : ''}
             </div>
             ${task.critical_step_name
               ? `<div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:3px;">⚡ ${task.critical_step_name}</div>`
@@ -47862,19 +47933,19 @@ ${body}
     // ── 打点卡：打开弹层 ────────────────────────────────────
     let _punchCurrent = {};
 
-    async function openPunchCard(dishName, station, store) {
-      _punchCurrent = { dishName, station, store };
+    async function openPunchCard(dishName, station, store, scheduleTime) {
+      _punchCurrent = { dishName, station, store, scheduleTime };
       const modal = document.getElementById('kitchen-punch-modal');
       modal.style.display = 'flex';
       document.getElementById('punch-dish-name').textContent = dishName;
-      document.getElementById('punch-dish-station').textContent = `${station} · ${store}`;
+      document.getElementById('punch-dish-station').textContent = `${station} · ${store} · ${scheduleTime || '--:--'}`;
       document.getElementById('punch-no-sop').style.display = 'none';
       document.getElementById('punch-steps-list').innerHTML =
         '<div style="padding:20px;text-align:center;color:rgba(255,255,255,0.3);font-size:13px;">加载中…</div>';
 
       try {
         const r = await fetch(
-          `/api/kitchen/dish-steps?dishName=${encodeURIComponent(dishName)}&store=${encodeURIComponent(store)}`,
+          `/api/kitchen/dish-steps?dishName=${encodeURIComponent(dishName)}&store=${encodeURIComponent(store)}&scheduleTime=${encodeURIComponent(scheduleTime || '')}`,
           { headers: { 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` } }
         );
         const data = await r.json();
@@ -47907,9 +47978,10 @@ ${body}
       txt.textContent  = `${done} / ${total} 步已完成`;
 
       list.innerHTML = steps.map(s => {
-        const { dishName, station, store } = _punchCurrent;
+        const { dishName, station, store, scheduleTime } = _punchCurrent;
         const dishEsc = dishName.replace(/'/g, "\\'");
         const actEsc  = (s.action || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const scheduleEsc = String(scheduleTime || '').replace(/'/g, "\\'");
         return `
           <div style="
             background: ${s.punched ? 'rgba(34,197,94,0.07)' : 'rgba(255,255,255,0.03)'};
@@ -47935,7 +48007,7 @@ ${body}
                 ${s.common_failure && !s.punched ? `<div style="font-size:11px;color:rgba(245,158,11,0.6);margin-top:3px;">⚠ ${s.common_failure}</div>` : ''}
               </div>
               ${!s.punched ? `
-                <button onclick="punchStep('${dishEsc}','${s.step_seq}','${actEsc}','${station}','${store}')"
+                <button onclick="punchStep('${dishEsc}','${s.step_seq}','${actEsc}','${station}','${store}','${scheduleEsc}')"
                   style="flex-shrink:0;height:40px;padding:0 14px;border-radius:9px;border:none;
                          background:${s.is_critical ? 'linear-gradient(135deg,#f59e0b,#d97706)' : 'rgba(255,255,255,0.1)'};
                          color:#fff;font-size:13px;font-weight:600;cursor:pointer;
@@ -47948,7 +48020,7 @@ ${body}
       }).join('');
     }
 
-    async function punchStep(dishName, stepSeq, stepAction, station, store) {
+    async function punchStep(dishName, stepSeq, stepAction, station, store, scheduleTime) {
       try {
         const r = await fetch('/api/kitchen/punch-step', {
           method: 'POST',
@@ -47956,7 +48028,7 @@ ${body}
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('hrms_token')}`
           },
-          body: JSON.stringify({ dishName, stepSeq: Number(stepSeq), stepAction, station, store })
+          body: JSON.stringify({ dishName, stepSeq: Number(stepSeq), stepAction, station, store, scheduleTime })
         });
         const data = await r.json();
         if (!data.success) throw new Error(data.error);
@@ -47967,8 +48039,8 @@ ${body}
           loadKitchenTasks(); // 刷新主列表
         } else {
           // 局部刷新弹层步骤
-          const res = await fetch(
-            `/api/kitchen/dish-steps?dishName=${encodeURIComponent(dishName)}&store=${encodeURIComponent(store)}`,
+            const res = await fetch(
+            `/api/kitchen/dish-steps?dishName=${encodeURIComponent(dishName)}&store=${encodeURIComponent(store)}&scheduleTime=${encodeURIComponent(scheduleTime || '')}`,
             { headers: { 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` } }
           );
           const d = await res.json();
@@ -47984,7 +48056,7 @@ ${body}
       if (modal) modal.style.display = 'none';
     }
 
-    async function kitchenConfirmTask(dishName, station, store) {
+    async function kitchenConfirmTask(dishName, station, store, scheduleTime) {
       try {
         const r = await fetch('/api/kitchen/confirm', {
           method: 'POST',
@@ -47992,7 +48064,7 @@ ${body}
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('hrms_token')}`
           },
-          body: JSON.stringify({ dishName, station, store })
+          body: JSON.stringify({ dishName, station, store, scheduleTime })
         });
         const data = await r.json();
         if (!data.success) throw new Error(data.error || 'confirm_failed');
@@ -48006,16 +48078,15 @@ ${body}
     // ── 管理：完成率看板 ────────────────────────────────────
       async function loadKitchenDashboard() {
         document.getElementById('kitchen-page-title').textContent = '备料完成率看板';
-        const VALID_STORES = ['洪潮大宁久光店', '马己仙上海音乐广场店'];
         let store = _kitchenStore || currentUser?.store || '';
 
         // 直接显示门店选择（只要不是有效门店名）
-        if (!VALID_STORES.includes(store)) {
+        if (!KITCHEN_VALID_STORES.includes(store)) {
           document.getElementById('kitchen-page-sub').textContent = '[选择门店]';
           document.getElementById('kitchen-dashboard-cards').innerHTML =
             '<div style="padding:20px;text-align:center;">' +
             '<div style="font-size:16px;font-weight:700;margin-bottom:16px;color:rgba(255,255,255,0.8);">请选择门店</div>' +
-            VALID_STORES.map(s => '<button onclick="_kitchenStore=\''+s+'\';loadKitchenDashboard();" style="display:block;width:100%;padding:14px;margin:8px 0;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);border-radius:12px;color:#fff;font-size:15px;font-weight:600;cursor:pointer;">'+s+'</button>').join('') +
+            KITCHEN_VALID_STORES.map(s => '<button onclick="_kitchenStore=\''+s+'\';loadKitchenDashboard();" style="display:block;width:100%;padding:14px;margin:8px 0;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);border-radius:12px;color:#fff;font-size:15px;font-weight:600;cursor:pointer;">'+s+'</button>').join('') +
             '</div>';
           document.getElementById('kitchen-unchecked-section').style.display = 'none';
           return;
@@ -48032,15 +48103,31 @@ ${body}
         const cards = document.getElementById('kitchen-dashboard-cards');
         cards.innerHTML = (data.summary || []).map(s => `
           <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:14px;padding:16px;">
-            <div style="font-size:15px;font-weight:700;margin-bottom:8px;">${s.station}</div>
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:8px;">
+              <div style="font-size:15px;font-weight:700;">${s.station}</div>
+              <div style="font-size:12px;color:rgba(255,255,255,0.45);">${s.confirmed} / ${s.total}</div>
+            </div>
             <div style="font-size:28px;font-weight:800;color:${s.rate===100?'#22c55e':s.rate>=60?'#f59e0b':'#ef4444'};">
               ${s.rate}%
             </div>
             <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;">
-              ${s.confirmed} / ${s.total} 项已确认
+              今日计划 ${s.total} 项，已完成 ${s.confirmed} 项
             </div>
             <div style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px;margin-top:10px;">
               <div style="height:100%;width:${s.rate}%;background:${s.rate===100?'#22c55e':s.rate>=60?'#f59e0b':'#ef4444'};border-radius:2px;transition:width .6s;"></div>
+            </div>
+            <div style="margin-top:12px;display:grid;gap:6px;">
+              <div style="font-size:11px;color:rgba(255,255,255,0.45);">最近完成人员</div>
+              ${(s.completed_details || []).length ? (s.completed_details || []).slice(-4).map(item => `
+                <div style="display:flex;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:8px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.14);font-size:12px;">
+                  <div style="min-width:0;">
+                    <div style="color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.is_prep ? '🧂' : '🍽'} ${item.dish_name}</div>
+                    <div style="color:rgba(255,255,255,0.45);margin-top:2px;">${item.employee_name || item.employee_username || '未记录'} · ${item.schedule_time || '--:--'}</div>
+                  </div>
+                  <div style="flex-shrink:0;color:#86efac;">${String(item.confirmed_at || '').slice(11,16) || '--:--'}</div>
+                </div>
+              `).join('') : '<div style="font-size:12px;color:rgba(255,255,255,0.3);padding:6px 0;">暂无完成记录</div>'}
+              ${(s.unchecked_details || []).some(item => kitchenTaskTimingState(item.schedule_time).overdue) ? `<div style="font-size:11px;color:#fca5a5;padding-top:4px;">⚠ ${s.unchecked_details.filter(item => kitchenTaskTimingState(item.schedule_time).overdue).length} 项已超时未完成</div>` : ''}
             </div>
           </div>
         `).join('') || '<div style="color:rgba(255,255,255,0.3);padding:20px;">暂无数据，请先配置岗位菜品</div>';
@@ -48051,13 +48138,16 @@ ${body}
         const ulist = document.getElementById('kitchen-unchecked-list');
         if (unchecked.length) {
           sec.style.display = '';
-          ulist.innerHTML = unchecked.map(u => `
+          ulist.innerHTML = unchecked.map(u => {
+            const overdue = kitchenTaskTimingState(u.schedule_time).overdue;
+            return `
             <div style="display:flex;justify-content:space-between;align-items:center;
-              background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.18);
+              background:${overdue ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.06)'};border:1px solid ${overdue ? 'rgba(239,68,68,0.35)' : 'rgba(239,68,68,0.18)'};
               border-radius:8px;padding:10px 14px;">
               <span style="font-size:13px;color:rgba(255,255,255,0.8);">${u.is_prep?'🧂':'🍽'} ${u.dish_name}</span>
-              <span style="font-size:11px;color:rgba(255,255,255,0.4);">${u.station}</span>
-            </div>`).join('');
+              <span style="font-size:11px;color:${overdue ? '#fca5a5' : 'rgba(255,255,255,0.4)'};text-align:right;">${u.station} · ${u.schedule_time || '--:--'}${u.assignee_name ? '<br>' + u.assignee_name : ''}${overdue ? '<br>已超时' : ''}</span>
+            </div>`;
+          }).join('');
         } else {
           sec.style.display = 'none';
         }
@@ -48073,75 +48163,163 @@ ${body}
       document.getElementById('kitchen-page-sub').textContent   = '管理各档口负责的菜品及关键步骤';
 
        let store = _kitchenStore || currentUser?.store || '';
-       if (!store || store === '总部' || !VALID_STORES.includes(store)) {
+       if (!store || store === '总部' || !KITCHEN_VALID_STORES.includes(store)) {
          showNotification('请先在看板中选择门店', 'warn');
          showKitchenView('dashboard');
          return;
        }
 
       try {
-        const r = await fetch(`/api/kitchen/dashboard?store=${encodeURIComponent(store)}`, {
+        const r = await fetch(`/api/kitchen/station-dish?store=${encodeURIComponent(store)}`, {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` }
         });
         const data = await r.json();
-        const all = (data.summary || []).flatMap(s =>
-          Array.from({ length: s.total }, (_, i) => s) // placeholder; use real list below
-        );
-        // 直接用 unchecked + confirmed 拼完整列表暂不可行，改用独立 API（见注释）
-        // 当前版本：点"菜品配置"后显示添加表单，列表通过 dashboard 聚合展示
-        document.getElementById('kitchen-mapping-list').innerHTML =
-          `<div style="color:rgba(255,255,255,0.4);font-size:13px;padding:10px 0;">
-            提示：当前已配置的菜品数量可在"完成率看板"各档口卡片中查看。<br>
-            如需查看完整列表，请在飞书多维表中管理 dish_station_mapping 表。
-          </div>`;
-      } catch(e) { /* ignore */ }
+        const mappings = data.rows || [];
+        document.getElementById('kitchen-mapping-list').innerHTML = mappings.length ? mappings.map(m => `
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px;">
+            <div style="min-width:0;">
+              <div style="font-size:13px;color:#fff;font-weight:600;">${m.station} · ${m.dish_name}</div>
+              <div style="font-size:11px;color:rgba(255,255,255,0.45);margin-top:4px;">执行人：${m.assignee_name || m.assignee_username || '未指定'} · 时间：${(m.scheduled_times || []).join(' / ') || '09:00'}</div>
+              ${m.critical_step_name ? `<div style="font-size:11px;color:rgba(255,255,255,0.38);margin-top:4px;">关键点：${m.critical_step_name}</div>` : ''}
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0;">
+              <button class="btn btn-secondary" type="button" onclick='kitchenEditMappingFromJson("${encodeURIComponent(JSON.stringify(m)).replace(/"/g, '&quot;')}")' style="font-size:12px;white-space:nowrap;">编辑</button>
+              <button class="btn btn-secondary" type="button" onclick="kitchenRemoveMapping('${m.id}')" style="font-size:12px;white-space:nowrap;">删除</button>
+            </div>
+          </div>
+        `).join('') : '<div style="color:rgba(255,255,255,0.4);font-size:13px;padding:10px 0;">暂无配置</div>';
+      } catch(e) {
+        document.getElementById('kitchen-mapping-list').innerHTML = '<div style="color:#ef4444;font-size:13px;padding:10px 0;">加载配置失败</div>';
+      }
+    }
+
+    function kitchenResetForm() {
+      document.getElementById('kitchen-edit-id').value = '';
+      document.getElementById('kitchen-form-title').textContent = '添加岗位负责菜品';
+      document.getElementById('kitchen-form-subtitle').textContent = '选择档口、具体员工和固定执行时间后，可一次分配多道菜品。';
+      document.getElementById('kitchen-save-btn').textContent = '+ 添加';
+      document.getElementById('kitchen-cancel-edit-btn').style.display = 'none';
+      document.getElementById('kitchen-add-station').value = '';
+      document.getElementById('kitchen-add-employee').innerHTML = '<option value="">先选择档口</option>';
+      document.getElementById('kitchen-add-dish').innerHTML = '<option value="">先选择档口</option>';
+      document.getElementById('kitchen-add-times').value = '09:00';
+      document.getElementById('kitchen-add-step').value = '';
+      document.getElementById('kitchen-add-isprep').checked = false;
+    }
+
+    async function kitchenEditMappingFromJson(encodedRow) {
+      try {
+        const row = JSON.parse(decodeURIComponent(encodedRow || ''));
+        kitchenResetForm();
+        document.getElementById('kitchen-edit-id').value = String(row.id || '');
+        document.getElementById('kitchen-form-title').textContent = '编辑岗位菜品配置';
+        document.getElementById('kitchen-form-subtitle').textContent = '可调整执行员工、时间、关键控制点和菜品。';
+        document.getElementById('kitchen-save-btn').textContent = '保存修改';
+        document.getElementById('kitchen-cancel-edit-btn').style.display = '';
+        document.getElementById('kitchen-add-station').value = row.station || '';
+        await onKitchenStationChange();
+        document.getElementById('kitchen-add-employee').value = row.assignee_username || '';
+        Array.from(document.getElementById('kitchen-add-dish').options).forEach(function(option) {
+          option.selected = option.value === row.dish_name;
+        });
+        document.getElementById('kitchen-add-times').value = (row.scheduled_times || []).join(',');
+        document.getElementById('kitchen-add-step').value = row.critical_step_name || '';
+        document.getElementById('kitchen-add-isprep').checked = !!row.is_prep;
+      } catch (e) {
+        showNotification('进入编辑失败：' + (e?.message || e), 'error');
+      }
     }
 
     async function onKitchenStationChange() {
       const sel = document.getElementById('kitchen-add-station');
       const dish = document.getElementById('kitchen-add-dish');
-      if (!sel || !dish) return;
+      const emp = document.getElementById('kitchen-add-employee');
+      if (!sel || !dish || !emp) return;
       const station = sel.value;
-      if (!station) { dish.innerHTML = '<option value="">先选择档口</option>'; return; }
+      const store = _kitchenStore || currentUser?.store || '';
+      if (!station) {
+        dish.innerHTML = '<option value="">先选择档口</option>';
+        emp.innerHTML = '<option value="">先选择档口</option>';
+        return;
+      }
       dish.innerHTML = '<option value="">加载中…</option>';
+      emp.innerHTML = '<option value="">加载中…</option>';
       try {
-        const r = await fetch('/api/kitchen/available-dishes', {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` }
-        });
-        const data = await r.json();
+        const [dishRes, empRes] = await Promise.all([
+          fetch('/api/kitchen/available-dishes', {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` }
+          }),
+          fetch(`/api/kitchen/station-employees?store=${encodeURIComponent(store)}&station=${encodeURIComponent(station)}`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` }
+          })
+        ]);
+        const data = await dishRes.json();
+        const empData = await empRes.json();
         const list = (data.dishes || []).filter(d => d.station === station);
-        dish.innerHTML = '<option value="">选择菜品</option>' +
-          list.map(d => `<option value="${d.dish_name.replace(/"/g,'&quot;')}">${d.dish_name}</option>`).join('');
-      } catch(e) { dish.innerHTML = '<option value="">加载失败</option>'; }
+        dish.innerHTML = list.map(d => `<option value="${d.dish_name.replace(/"/g,'&quot;')}">${d.dish_name}</option>`).join('') || '<option value="">暂无菜品</option>';
+        const employees = empData.rows || [];
+        emp.innerHTML = '<option value="">选择员工</option>' + employees.map(item => `<option value="${item.username.replace(/"/g,'&quot;')}" data-name="${(item.name || '').replace(/"/g,'&quot;')}">${item.name || item.username}${item.position ? ' · ' + item.position : ''}</option>`).join('');
+      } catch(e) {
+        dish.innerHTML = '<option value="">加载失败</option>';
+        emp.innerHTML = '<option value="">加载失败</option>';
+      }
     }
 
-    async function kitchenAddDish() {
+    async function kitchenSaveDishConfig() {
       const station       = document.getElementById('kitchen-add-station').value.trim();
-      const dishName      = document.getElementById('kitchen-add-dish').value.trim();
+      const dishSelect    = document.getElementById('kitchen-add-dish');
+      const dishNames     = Array.from(dishSelect?.selectedOptions || []).map(option => option.value.trim()).filter(Boolean);
+      const editId        = document.getElementById('kitchen-edit-id').value.trim();
+      const employeeSel   = document.getElementById('kitchen-add-employee');
+      const assigneeUsername = employeeSel?.value.trim() || '';
+      const assigneeName  = employeeSel?.selectedOptions?.[0]?.dataset?.name || employeeSel?.selectedOptions?.[0]?.textContent?.split(' · ')[0] || '';
+      const scheduledTimes = document.getElementById('kitchen-add-times').value.trim();
       const criticalStep  = document.getElementById('kitchen-add-step').value.trim();
       const isPrep        = document.getElementById('kitchen-add-isprep').checked;
       const store         = _kitchenStore || currentUser?.store || '';
 
-      if (!station || !dishName) {
-        showNotification('请填写档口和菜品名称', 'warning'); return;
+      if (!station || !dishNames.length || !assigneeUsername) {
+        showNotification('请选择档口、员工和至少一道菜品', 'warning'); return;
+      }
+      if (editId && dishNames.length !== 1) {
+        showNotification('编辑模式下仅可保存 1 道菜品', 'warning'); return;
       }
       try {
-        const r = await fetch('/api/kitchen/station-dish', {
-          method: 'POST',
+        const isEdit = !!editId;
+        const r = await fetch(isEdit ? ('/api/kitchen/station-dish/' + encodeURIComponent(editId)) : '/api/kitchen/station-dish', {
+          method: isEdit ? 'PUT' : 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('hrms_token')}`
           },
-          body: JSON.stringify({ store, station, dishName, isPrep, criticalStepName: criticalStep })
+          body: JSON.stringify(isEdit
+            ? { store, station, dishName: dishNames[0], assigneeUsername, assigneeName, scheduledTimes, isPrep, criticalStepName: criticalStep }
+            : { store, station, dishNames, assigneeUsername, assigneeName, scheduledTimes, isPrep, criticalStepName: criticalStep })
         });
         const data = await r.json();
         if (!data.success) throw new Error(data.error);
-        showNotification(`✅ ${dishName} 已添加到 ${station}`, 'success');
-        document.getElementById('kitchen-add-dish').value = '';
-        document.getElementById('kitchen-add-step').value = '';
-        document.getElementById('kitchen-add-isprep').checked = false;
+        showNotification(isEdit ? '✅ 配置已更新' : `✅ 已为 ${assigneeName || assigneeUsername} 添加 ${dishNames.length} 道定时任务`, 'success');
+        kitchenResetForm();
+        loadKitchenMappings();
       } catch(e) {
-        showNotification('添加失败：' + (e?.message || e), 'error');
+        showNotification((editId ? '保存失败：' : '添加失败：') + (e?.message || e), 'error');
+      }
+    }
+
+    async function kitchenRemoveMapping(id) {
+      if (!confirm('确定删除这条厨房配置？')) return;
+      try {
+        const store = _kitchenStore || currentUser?.store || '';
+        const r = await fetch('/api/kitchen/station-dish/' + encodeURIComponent(id) + '?store=' + encodeURIComponent(store), {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` }
+        });
+        const data = await r.json();
+        if (!data.success) throw new Error(data.error || 'delete_failed');
+        showNotification('已删除配置', 'success');
+        loadKitchenMappings();
+      } catch(e) {
+        showNotification('删除失败：' + (e?.message || e), 'error');
       }
     }
 

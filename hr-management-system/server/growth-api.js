@@ -937,7 +937,7 @@ function buildActionMessage(actionRow, payload) {
   return cleanText(actionRow.detail || actionRow.title || '', 1800);
 }
 
-async function executeGrowthActionRecord(pool, before, operator, extraPayload = {}, reason = '') {
+export async function executeGrowthActionRecord(pool, before, operator, extraPayload = {}, reason = '') {
   const basePayload = before.payload && typeof before.payload === 'object' ? before.payload : {};
   const payload = Object.assign({}, basePayload, extraPayload || {});
   const storeId = cleanText(before.store_id || payload.store_id, 128);
@@ -949,7 +949,7 @@ async function executeGrowthActionRecord(pool, before, operator, extraPayload = 
   try {
     if (actionType === 'send_voucher' || actionType === 'campaign_activate') {
       const title = cleanText(before.title, 500);
-      const planId = `exec_plan_${Date.now()}`;
+      const planId = cleanText(payload.plan_id, 128) || `exec_plan_${Date.now()}`;
       const channel = cleanText(payload.channel || 'miniprogram', 80);
       const sourceTemplateId = payload.source_template_id ? Number(payload.source_template_id) : null;
       const recommendedPosterId = payload.recommended_poster_id ? Number(payload.recommended_poster_id) : null;

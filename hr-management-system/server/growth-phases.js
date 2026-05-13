@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { executeGrowthActionRecord } from './growth-api.js';
 
 const PHASE_EVENT_TYPES = new Set([
   'campaign_scan', 'phone_authorized', 'coupon_claimed',
@@ -28,11 +29,11 @@ function authPhaseApi(req) {
   const headerSecret = cleanText(req.headers['x-miniprogram-sync-secret'] || '', 500);
   const auth = cleanText(req.headers.authorization || '', 500);
   const bearer = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
-  if (headerSecret === secret || bearer === secret) return { ok: true };
+  if (headerSecret === secret || bearer === secret) return { ok: true, user: { username: 'system', role: 'system' } };
   if (bearer && process.env.JWT_SECRET) {
     try {
       const decoded = jwt.verify(bearer, process.env.JWT_SECRET);
-      if (decoded && decoded.username) return { ok: true };
+      if (decoded && decoded.username) return { ok: true, user: { username: decoded.username, role: decoded.role || '' } };
     } catch (e) {}
   }
   return { ok: false, status: 401, error: 'unauthorized' };
@@ -77,12 +78,14 @@ export async function ensurePhaseTables(pool) {
       id BIGSERIAL PRIMARY KEY, plan_id TEXT UNIQUE, store_id TEXT,
       campaign_id TEXT, title TEXT NOT NULL, channel TEXT,
       voucher_template_id TEXT, target_audience TEXT DEFAULT 'all',
+      coupon_value_fen INTEGER DEFAULT 0,
       budget_fen INTEGER DEFAULT 0, status TEXT DEFAULT 'draft',
       planned_start TIMESTAMPTZ, planned_end TIMESTAMPTZ,
       created_by TEXT DEFAULT 'admin', created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE growth_campaign_plans ADD COLUMN IF NOT EXISTS coupon_value_fen INTEGER DEFAULT 0`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_plans_store ON growth_campaign_plans (store_id, status, created_at DESC)`);
 
   // Phase 8: content_calendar
@@ -391,12 +394,12 @@ export function registerPhaseRoutes(app, pool) {
     if (!rqa(req, res)) return;
     const b = req.body || {};
     const r = await pool.query(
-      `INSERT INTO growth_campaign_plans(plan_id,store_id,campaign_id,title,channel,voucher_template_id,target_audience,budget_fen,status,planned_start,planned_end,created_by,source_template_id,recommended_poster_id)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-       ON CONFLICT(plan_id) DO UPDATE SET title=EXCLUDED.title,status=EXCLUDED.status,channel=EXCLUDED.channel,target_audience=EXCLUDED.target_audience,budget_fen=EXCLUDED.budget_fen,source_template_id=EXCLUDED.source_template_id,recommended_poster_id=EXCLUDED.recommended_poster_id,updated_at=NOW() RETURNING *`,
+      `INSERT INTO growth_campaign_plans(plan_id,store_id,campaign_id,title,channel,voucher_template_id,target_audience,coupon_value_fen,budget_fen,status,planned_start,planned_end,created_by,source_template_id,recommended_poster_id)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       ON CONFLICT(plan_id) DO UPDATE SET title=EXCLUDED.title,status=EXCLUDED.status,channel=EXCLUDED.channel,target_audience=EXCLUDED.target_audience,coupon_value_fen=EXCLUDED.coupon_value_fen,budget_fen=EXCLUDED.budget_fen,source_template_id=EXCLUDED.source_template_id,recommended_poster_id=EXCLUDED.recommended_poster_id,updated_at=NOW() RETURNING *`,
       [cleanText(b.plan_id,128),cleanText(b.store_id,128),cleanText(b.campaign_id,128),cleanText(b.title,500),
        cleanText(b.channel,80),cleanText(b.voucher_template_id,128),cleanText(b.target_audience||'all',200),
-       Math.max(0,Math.floor(Number(b.budget_fen)||0)),cleanText(b.status||'draft',40),
+       Math.max(0,Math.floor(Number(b.coupon_value_fen)||0)),Math.max(0,Math.floor(Number(b.budget_fen)||0)),cleanText(b.status||'draft',40),
        b.planned_start?parseOccurredAt(b.planned_start):null,b.planned_end?parseOccurredAt(b.planned_end):null,
        cleanText(b.created_by||'admin',80),
        b.source_template_id?Number(b.source_template_id):null,
@@ -438,18 +441,71 @@ export function registerPhaseRoutes(app, pool) {
   });
 
   app.patch('/api/growth/campaign-plans/:id/status', async (req, res) => {
-    if (!rqa(req, res)) return;
+    const auth = authPhaseApi(req);
+    if (!auth.ok) return res.status(auth.status).json({ ok: false, error: auth.error });
     const id = cleanText(req.params.id, 128);
     const status = cleanText(req.body.status, 40);
     if (!['draft','active','completed','cancelled'].includes(status)) {
       return res.status(400).json({ ok: false, error: 'invalid_status' });
     }
+    const before = await pool.query(
+      `SELECT * FROM growth_campaign_plans WHERE (plan_id=$1 OR campaign_id=$1) LIMIT 1`,
+      [id]
+    );
+    if (!before.rows.length) return res.status(404).json({ ok: false, error: 'not_found' });
     const r = await pool.query(
       `UPDATE growth_campaign_plans SET status=$1, updated_at=NOW() WHERE (plan_id=$2 OR campaign_id=$2) RETURNING *`,
       [status, id]
     );
-    if (!r.rows.length) return res.status(404).json({ ok: false, error: 'not_found' });
-    res.json({ ok: true, plan: r.rows[0] });
+    const plan = r.rows[0];
+    let execution = null;
+    if (status === 'active' && before.rows[0].status !== 'active') {
+      const previous = before.rows[0];
+      const actionKey = `manual_activate_${cleanText(plan.plan_id || plan.campaign_id || id, 120)}_${Date.now()}`;
+      const plannedStart = previous.planned_start ? new Date(previous.planned_start) : null;
+      const plannedEnd = previous.planned_end ? new Date(previous.planned_end) : null;
+      const validDays = plannedStart && plannedEnd ? Math.max(1, Math.ceil((plannedEnd.getTime() - plannedStart.getTime()) / 86400000)) : 7;
+      const payload = {
+        store_id: previous.store_id || '',
+        plan_id: previous.plan_id || '',
+        campaign_id: previous.campaign_id || '',
+        channel: previous.channel || 'miniprogram',
+        target_audience: previous.target_audience || 'all',
+        budget_fen: Number(previous.budget_fen || 0),
+        coupon_value_fen: Number(previous.coupon_value_fen || previous.voucher_template_id || 0),
+        valid_days: validDays,
+        source_template_id: previous.source_template_id || null,
+        recommended_poster_id: previous.recommended_poster_id || null,
+        execution_action: '手动激活活动计划'
+      };
+      await pool.query(
+        `INSERT INTO growth_actions (action_key, action_type, status, store_id, campaign_id, title, detail, payload, created_by)
+         VALUES ($1,'campaign_activate','proposed',$2,$3,$4,$5,$6::jsonb,$7)`,
+        [
+          actionKey,
+          previous.store_id || '',
+          previous.campaign_id || '',
+          previous.title || '手动激活活动',
+          `活动 ${previous.title || previous.campaign_id || previous.plan_id || id} 已手动激活`,
+          JSON.stringify(payload),
+          auth.user?.username || previous.created_by || 'admin'
+        ]
+      );
+      const actionRow = {
+        action_key: actionKey,
+        action_type: 'campaign_activate',
+        store_id: previous.store_id || '',
+        campaign_id: previous.campaign_id || '',
+        title: previous.title || '手动激活活动',
+        detail: `活动 ${previous.title || previous.campaign_id || previous.plan_id || id} 已手动激活`,
+        payload
+      };
+      execution = await executeGrowthActionRecord(pool, actionRow, {
+        username: auth.user?.username || previous.created_by || 'admin',
+        role: auth.user?.role || 'admin'
+      }, {}, '手动激活活动');
+    }
+    res.json({ ok: true, plan, execution });
   });
 
   app.delete('/api/growth/marketing-templates/:id', async (req, res) => {

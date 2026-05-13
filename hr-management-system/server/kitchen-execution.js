@@ -3,6 +3,22 @@
 import { pool as getPool } from './utils/database.js';
 function pool() { return getPool(); }
 
+function normalizeStation(value) {
+  return String(value || '').replace(/\/.*/, '').trim();
+}
+
+function parseScheduleTimes(input) {
+  const raw = Array.isArray(input)
+    ? input
+    : String(input || '').split(/[，,\s]+/);
+  const normalized = Array.from(new Set(
+    raw
+      .map((item) => String(item || '').trim())
+      .filter((item) => /^([01]\d|2[0-3]):([0-5]\d)$/.test(item))
+  )).sort();
+  return normalized.length ? normalized : ['09:00'];
+}
+
 // ─── Schema ───────────────────────────────────────────────
 export async function ensureKitchenExecutionSchema() {
   try {
@@ -13,6 +29,9 @@ export async function ensureKitchenExecutionSchema() {
         store VARCHAR(200) NOT NULL,
         station VARCHAR(100) NOT NULL,
         dish_name VARCHAR(255) NOT NULL,
+        assignee_username VARCHAR(120) NOT NULL DEFAULT '',
+        assignee_name VARCHAR(120) NOT NULL DEFAULT '',
+        scheduled_times JSONB NOT NULL DEFAULT '["09:00"]'::jsonb,
         is_prep BOOLEAN DEFAULT false,
         critical_step_name TEXT,
         sop_id TEXT,
@@ -22,9 +41,16 @@ export async function ensureKitchenExecutionSchema() {
         CONSTRAINT uq_dish_station UNIQUE (store, station, dish_name)
       )
     `);
+    await pool().query(`ALTER TABLE dish_station_mapping ADD COLUMN IF NOT EXISTS assignee_username VARCHAR(120) NOT NULL DEFAULT ''`);
+    await pool().query(`ALTER TABLE dish_station_mapping ADD COLUMN IF NOT EXISTS assignee_name VARCHAR(120) NOT NULL DEFAULT ''`);
+    await pool().query(`ALTER TABLE dish_station_mapping ADD COLUMN IF NOT EXISTS scheduled_times JSONB NOT NULL DEFAULT '["09:00"]'::jsonb`);
+    await pool().query(`UPDATE dish_station_mapping SET assignee_username='' WHERE assignee_username IS NULL`);
+    await pool().query(`UPDATE dish_station_mapping SET assignee_name='' WHERE assignee_name IS NULL`);
+    await pool().query(`ALTER TABLE dish_station_mapping DROP CONSTRAINT IF EXISTS uq_dish_station`);
+    await pool().query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_dsm_unique_assignment ON dish_station_mapping (store, station, dish_name, assignee_username)`);
     await pool().query(`
       CREATE INDEX IF NOT EXISTS idx_dsm_lookup
-        ON dish_station_mapping (store, station, enabled)
+        ON dish_station_mapping (store, station, assignee_username, enabled)
     `);
 
     // SOP步骤表（从飞书多维表同步过来，厨房打点卡数据源）
@@ -60,6 +86,7 @@ export async function ensureKitchenExecutionSchema() {
         store VARCHAR(200) NOT NULL,
         station VARCHAR(100) NOT NULL,
         dish_name VARCHAR(255) NOT NULL,
+        schedule_time VARCHAR(20) NOT NULL DEFAULT '',
         employee_username VARCHAR(120) NOT NULL,
         employee_name VARCHAR(120),
         task_date DATE NOT NULL DEFAULT CURRENT_DATE,
@@ -68,13 +95,15 @@ export async function ensureKitchenExecutionSchema() {
         sop_id TEXT
       )
     `);
+    await pool().query(`ALTER TABLE kitchen_exec_logs ADD COLUMN IF NOT EXISTS schedule_time VARCHAR(20) NOT NULL DEFAULT ''`);
     await pool().query(`
       CREATE INDEX IF NOT EXISTS idx_kel_date_station
-        ON kitchen_exec_logs (store, station, task_date)
+        ON kitchen_exec_logs (store, station, task_date, schedule_time)
     `);
+    await pool().query(`DROP INDEX IF EXISTS idx_kel_one_per_day`);
     await pool().query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_kel_one_per_day
-        ON kitchen_exec_logs (store, station, dish_name, employee_username, task_date)
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_kel_one_per_slot
+        ON kitchen_exec_logs (store, station, dish_name, employee_username, task_date, schedule_time)
     `);
 
     // 打点卡记录表（步骤层面：每步打了没）
@@ -84,6 +113,7 @@ export async function ensureKitchenExecutionSchema() {
         store VARCHAR(200) NOT NULL,
         station VARCHAR(100) NOT NULL,
         dish_name VARCHAR(255) NOT NULL,
+        schedule_time VARCHAR(20) NOT NULL DEFAULT '',
         step_seq INT NOT NULL,
         step_action TEXT,
         employee_username VARCHAR(120) NOT NULL,
@@ -93,9 +123,15 @@ export async function ensureKitchenExecutionSchema() {
         CONSTRAINT uq_step_punch UNIQUE (store, dish_name, step_seq, employee_username, task_date)
       )
     `);
+    await pool().query(`ALTER TABLE kitchen_step_logs ADD COLUMN IF NOT EXISTS schedule_time VARCHAR(20) NOT NULL DEFAULT ''`);
+    await pool().query(`ALTER TABLE kitchen_step_logs DROP CONSTRAINT IF EXISTS uq_step_punch`);
     await pool().query(`
       CREATE INDEX IF NOT EXISTS idx_ksl_lookup
-        ON kitchen_step_logs (store, dish_name, employee_username, task_date)
+        ON kitchen_step_logs (store, dish_name, employee_username, task_date, schedule_time)
+    `);
+    await pool().query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_ksl_unique_slot
+        ON kitchen_step_logs (store, dish_name, step_seq, employee_username, task_date, schedule_time)
     `);
 
     console.log('[KitchenExec] Schema ensured');
@@ -111,11 +147,12 @@ export async function getMyTasks({ store, station, username, date }) {
 
     // 取该岗位所有启用菜品
     const mappings = await pool().query(
-      `SELECT id, dish_name, is_prep, critical_step_name, sop_id
+      `SELECT id, dish_name, assignee_username, assignee_name, scheduled_times, is_prep, critical_step_name, sop_id
        FROM dish_station_mapping
        WHERE store=$1 AND station=$2 AND enabled=TRUE
-       ORDER BY is_prep DESC, dish_name ASC`,
-      [store, station]
+         AND (assignee_username='' OR assignee_username=$3)
+       ORDER BY assignee_username ASC, is_prep DESC, dish_name ASC`,
+      [store, station, username]
     );
 
     if (!mappings.rows.length) {
@@ -126,19 +163,30 @@ export async function getMyTasks({ store, station, username, date }) {
 
     // 查今日已确认的记录
     const confirmed = await pool().query(
-      `SELECT dish_name FROM kitchen_exec_logs
+      `SELECT dish_name, schedule_time, confirmed_at, employee_name FROM kitchen_exec_logs
        WHERE store=$1 AND station=$2 AND employee_username=$3 AND task_date=$4`,
       [store, station, username, taskDate]
     );
-    const confirmedSet = new Set(confirmed.rows.map(r => r.dish_name));
+    const confirmedMap = new Map(confirmed.rows.map((r) => [`${r.dish_name}@@${r.schedule_time || ''}`, r]));
 
-    const tasks = mappings.rows.map(r => ({
-      dish_name: r.dish_name,
-      is_prep: r.is_prep,
-      critical_step_name: r.critical_step_name || null,
-      sop_id: r.sop_id || null,
-      confirmed: confirmedSet.has(r.dish_name),
-    }));
+    const tasks = mappings.rows.flatMap((r) => {
+      const scheduledTimes = parseScheduleTimes(r.scheduled_times);
+      return scheduledTimes.map((scheduleTime) => {
+        const confirmedRow = confirmedMap.get(`${r.dish_name}@@${scheduleTime}`);
+        return {
+          dish_name: r.dish_name,
+          schedule_time: scheduleTime,
+          assignee_username: r.assignee_username || '',
+          assignee_name: r.assignee_name || '',
+          is_prep: r.is_prep,
+          critical_step_name: r.critical_step_name || null,
+          sop_id: r.sop_id || null,
+          confirmed: !!confirmedRow,
+          confirmed_at: confirmedRow?.confirmed_at || null,
+          operator_name: confirmedRow?.employee_name || ''
+        };
+      });
+    }).sort((a, b) => String(a.schedule_time).localeCompare(String(b.schedule_time)) || Number(b.is_prep) - Number(a.is_prep) || String(a.dish_name).localeCompare(String(b.dish_name)));
 
     return { success: true, tasks, station, date: taskDate };
   } catch (e) {
@@ -147,15 +195,16 @@ export async function getMyTasks({ store, station, username, date }) {
 }
 
 // ─── 操作：确认一项任务 ────────────────────────────────────
-export async function confirmTask({ store, station, dishName, username, employeeName, note }) {
+export async function confirmTask({ store, station, dishName, username, employeeName, note, scheduleTime }) {
   try {
     const taskDate = new Date().toISOString().slice(0, 10);
+    const normalizedScheduleTime = parseScheduleTimes([scheduleTime || ''])[0] || '';
     await pool().query(
       `INSERT INTO kitchen_exec_logs
-         (store, station, dish_name, employee_username, employee_name, task_date, note)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
-       ON CONFLICT (store, station, dish_name, employee_username, task_date) DO NOTHING`,
-      [store, station, dishName, username, employeeName || null, taskDate, note || null]
+         (store, station, dish_name, schedule_time, employee_username, employee_name, task_date, note)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (store, station, dish_name, employee_username, task_date, schedule_time) DO NOTHING`,
+      [store, station, dishName, normalizedScheduleTime, username, employeeName || null, taskDate, note || null]
     );
     return { success: true };
   } catch (e) {
@@ -167,75 +216,168 @@ export async function confirmTask({ store, station, dishName, username, employee
 export async function getStationDashboard({ store, date }) {
   try {
     const taskDate = date || new Date().toISOString().slice(0, 10);
-
-    // 各岗位菜品总数
-    const totals = await pool().query(
-      `SELECT station, COUNT(*) as total
+    const mappings = await pool().query(
+      `SELECT id, store, station, dish_name, assignee_username, assignee_name, scheduled_times, is_prep, critical_step_name
        FROM dish_station_mapping
        WHERE store=$1 AND enabled=TRUE
-       GROUP BY station`,
+       ORDER BY station, assignee_username, dish_name`,
       [store]
     );
-
-    // 今日已确认数（按岗位）
-    const done = await pool().query(
-      `SELECT station, COUNT(DISTINCT dish_name) as confirmed
+    const logs = await pool().query(
+      `SELECT store, station, dish_name, schedule_time, employee_username, employee_name, confirmed_at
        FROM kitchen_exec_logs
-       WHERE store=$1 AND task_date=$2
-       GROUP BY station`,
+       WHERE store=$1 AND task_date=$2`,
       [store, taskDate]
     );
 
-    const doneMap = {};
-    for (const row of done.rows) doneMap[row.station] = Number(row.confirmed);
+    const expandedTasks = mappings.rows.flatMap((row) => {
+      const scheduledTimes = parseScheduleTimes(row.scheduled_times);
+      return scheduledTimes.map((scheduleTime) => ({
+        station: row.station,
+        dish_name: row.dish_name,
+        schedule_time: scheduleTime,
+        assignee_username: row.assignee_username || '',
+        assignee_name: row.assignee_name || '',
+        is_prep: !!row.is_prep,
+        critical_step_name: row.critical_step_name || ''
+      }));
+    });
 
-    const summary = totals.rows.map(r => ({
-      station: r.station,
-      total: Number(r.total),
-      confirmed: doneMap[r.station] || 0,
-      rate: Number(r.total) > 0
-        ? Math.round(((doneMap[r.station] || 0) / Number(r.total)) * 100)
-        : 0,
-    }));
+    const logMap = new Map();
+    for (const row of logs.rows) {
+      logMap.set(`${row.station}@@${row.dish_name}@@${row.schedule_time || ''}`, row);
+    }
 
-    // 近期未确认的菜品明细（预警用）
-    const unchecked = await pool().query(
-      `SELECT dsm.station, dsm.dish_name, dsm.is_prep
-       FROM dish_station_mapping dsm
-       WHERE dsm.store=$1 AND dsm.enabled=TRUE
-         AND NOT EXISTS (
-           SELECT 1 FROM kitchen_exec_logs kel
-           WHERE kel.store=dsm.store
-             AND kel.station=dsm.station
-             AND kel.dish_name=dsm.dish_name
-             AND kel.task_date=$2
-         )
-       ORDER BY dsm.is_prep DESC, dsm.station, dsm.dish_name`,
-      [store, taskDate]
-    );
+    const stationMap = new Map();
+    for (const task of expandedTasks) {
+      const key = `${task.station}@@${task.dish_name}@@${task.schedule_time}`;
+      const logRow = logMap.get(key);
+      if (!stationMap.has(task.station)) {
+        stationMap.set(task.station, { total: 0, confirmed: 0, completed_details: [], unchecked_details: [] });
+      }
+      const bucket = stationMap.get(task.station);
+      bucket.total += 1;
+      if (logRow) {
+        bucket.confirmed += 1;
+        bucket.completed_details.push({
+          dish_name: task.dish_name,
+          schedule_time: task.schedule_time,
+          employee_username: logRow.employee_username || '',
+          employee_name: logRow.employee_name || task.assignee_name || '',
+          confirmed_at: logRow.confirmed_at,
+          is_prep: task.is_prep
+        });
+      } else {
+        bucket.unchecked_details.push({
+          station: task.station,
+          dish_name: task.dish_name,
+          schedule_time: task.schedule_time,
+          assignee_username: task.assignee_username,
+          assignee_name: task.assignee_name,
+          is_prep: task.is_prep,
+          critical_step_name: task.critical_step_name
+        });
+      }
+    }
 
-    return { success: true, date: taskDate, summary, unchecked: unchecked.rows };
+    const summary = Array.from(stationMap.entries()).map(([station, bucket]) => ({
+      station,
+      total: bucket.total,
+      confirmed: bucket.confirmed,
+      rate: bucket.total > 0 ? Math.round((bucket.confirmed / bucket.total) * 100) : 0,
+      completed_details: bucket.completed_details.sort((a, b) => String(a.schedule_time).localeCompare(String(b.schedule_time)) || String(a.confirmed_at || '').localeCompare(String(b.confirmed_at || ''))),
+      unchecked_details: bucket.unchecked_details.sort((a, b) => String(a.schedule_time).localeCompare(String(b.schedule_time)) || String(a.dish_name).localeCompare(String(b.dish_name)))
+    })).sort((a, b) => String(a.station).localeCompare(String(b.station)));
+
+    const unchecked = summary.flatMap((row) => row.unchecked_details);
+    const completed = summary.flatMap((row) => row.completed_details.map((item) => ({ ...item, station: row.station })));
+
+    return { success: true, date: taskDate, summary, unchecked, completed };
   } catch (e) {
     return { success: false, error: e?.message };
   }
 }
 
 // ─── 管理员：新增菜品岗位映射 ─────────────────────────────
-export async function addStationDish({ store, station, dishName, isPrep, criticalStepName, sopId, createdBy }) {
+export async function addStationDish({ store, station, dishNames, isPrep, criticalStepName, sopId, createdBy, assigneeUsername, assigneeName, scheduledTimes }) {
+  try {
+    const inserted = [];
+    const normalizedDishes = Array.from(new Set((Array.isArray(dishNames) ? dishNames : [dishNames]).map((name) => String(name || '').trim()).filter(Boolean)));
+    const normalizedTimes = parseScheduleTimes(scheduledTimes);
+    for (const dishName of normalizedDishes) {
+      const r = await pool().query(
+        `INSERT INTO dish_station_mapping
+           (store, station, dish_name, assignee_username, assignee_name, scheduled_times, is_prep, critical_step_name, sop_id, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10)
+         ON CONFLICT (store, station, dish_name, assignee_username) DO UPDATE SET
+           assignee_name=EXCLUDED.assignee_name,
+           scheduled_times=EXCLUDED.scheduled_times,
+           is_prep=EXCLUDED.is_prep,
+           critical_step_name=EXCLUDED.critical_step_name,
+           sop_id=EXCLUDED.sop_id,
+           enabled=TRUE
+         RETURNING *`,
+        [store, station, dishName, String(assigneeUsername || '').trim(), String(assigneeName || '').trim(), JSON.stringify(normalizedTimes), !!isPrep, criticalStepName || null, sopId || null, createdBy || null]
+      );
+      inserted.push(r.rows[0]);
+    }
+    return { success: true, rows: inserted };
+  } catch (e) {
+    return { success: false, error: e?.message };
+  }
+}
+
+export async function updateStationDish({ id, store, station, dishName, isPrep, criticalStepName, sopId, assigneeUsername, assigneeName, scheduledTimes }) {
+  try {
+    const normalizedTimes = parseScheduleTimes(scheduledTimes);
+    const r = await pool().query(
+      `UPDATE dish_station_mapping
+       SET station=$3,
+           dish_name=$4,
+           assignee_username=$5,
+           assignee_name=$6,
+           scheduled_times=$7::jsonb,
+           is_prep=$8,
+           critical_step_name=$9,
+           sop_id=$10,
+           enabled=TRUE
+       WHERE id=$1 AND store=$2
+       RETURNING *`,
+      [id, store, station, dishName, String(assigneeUsername || '').trim(), String(assigneeName || '').trim(), JSON.stringify(normalizedTimes), !!isPrep, criticalStepName || null, sopId || null]
+    );
+    if (!r.rows.length) return { success: false, error: 'not_found' };
+    return { success: true, row: r.rows[0] };
+  } catch (e) {
+    return { success: false, error: e?.message };
+  }
+}
+
+export async function listStationDishes({ store }) {
   try {
     const r = await pool().query(
-      `INSERT INTO dish_station_mapping
-         (store, station, dish_name, is_prep, critical_step_name, sop_id, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
-       ON CONFLICT (store, station, dish_name) DO UPDATE SET
-         is_prep=EXCLUDED.is_prep,
-         critical_step_name=EXCLUDED.critical_step_name,
-         sop_id=EXCLUDED.sop_id,
-         enabled=TRUE
-       RETURNING *`,
-      [store, station, dishName, !!isPrep, criticalStepName || null, sopId || null, createdBy || null]
+      `SELECT id, store, station, dish_name, assignee_username, assignee_name, scheduled_times, is_prep, critical_step_name, sop_id, enabled
+       FROM dish_station_mapping
+       WHERE store=$1 AND enabled=TRUE
+       ORDER BY station, assignee_username, dish_name`,
+      [store]
     );
-    return { success: true, row: r.rows[0] };
+    return { success: true, rows: r.rows.map((row) => ({ ...row, scheduled_times: parseScheduleTimes(row.scheduled_times) })) };
+  } catch (e) {
+    return { success: false, error: e?.message };
+  }
+}
+
+export async function listStationEmployees({ store, station }) {
+  try {
+    const r = await pool().query(
+      `SELECT username, name, position, store
+       FROM employees
+       WHERE status='active' AND store=$1
+       ORDER BY name ASC, username ASC`,
+      [store]
+    );
+    const rows = r.rows.filter((row) => normalizeStation(row.position) === normalizeStation(station));
+    return { success: true, rows };
   } catch (e) {
     return { success: false, error: e?.message };
   }
@@ -255,10 +397,11 @@ export async function removeStationDish({ id, store }) {
 }
 
 // ─── 打点卡：查询某道菜的步骤 + 今日打点状态 ──────────────
-export async function getDishSteps({ dishName, store, username, date }) {
+export async function getDishSteps({ dishName, store, username, date, scheduleTime }) {
   try {
     const taskDate = date || new Date().toISOString().slice(0, 10);
     const storeKey = store || '*';
+    const normalizedScheduleTime = parseScheduleTimes([scheduleTime || ''])[0] || '';
 
     // 优先取门店专属，回退到通用（store='*'）
     const steps = await pool().query(
@@ -277,8 +420,8 @@ export async function getDishSteps({ dishName, store, username, date }) {
     // 今日已打点的步骤
     const punched = await pool().query(
       `SELECT step_seq FROM kitchen_step_logs
-       WHERE dish_name=$1 AND store=$2 AND employee_username=$3 AND task_date=$4`,
-      [dishName, storeKey, username, taskDate]
+       WHERE dish_name=$1 AND store=$2 AND employee_username=$3 AND task_date=$4 AND schedule_time=$5`,
+      [dishName, storeKey, username, taskDate, normalizedScheduleTime]
     );
     const punchedSet = new Set(punched.rows.map(r => r.step_seq));
 
@@ -301,15 +444,16 @@ export async function getDishSteps({ dishName, store, username, date }) {
 }
 
 // ─── 打点卡：打一个步骤 ────────────────────────────────────
-export async function punchStep({ store, station, dishName, stepSeq, stepAction, username, employeeName }) {
+export async function punchStep({ store, station, dishName, stepSeq, stepAction, username, employeeName, scheduleTime }) {
   try {
     const taskDate = new Date().toISOString().slice(0, 10);
+    const normalizedScheduleTime = parseScheduleTimes([scheduleTime || ''])[0] || '';
     await pool().query(
       `INSERT INTO kitchen_step_logs
-         (store, station, dish_name, step_seq, step_action, employee_username, employee_name, task_date)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-       ON CONFLICT (store, dish_name, step_seq, employee_username, task_date) DO NOTHING`,
-      [store, station, dishName, stepSeq, stepAction || null, username, employeeName || null, taskDate]
+         (store, station, dish_name, schedule_time, step_seq, step_action, employee_username, employee_name, task_date)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (store, dish_name, step_seq, employee_username, task_date, schedule_time) DO NOTHING`,
+      [store, station, dishName, normalizedScheduleTime, stepSeq, stepAction || null, username, employeeName || null, taskDate]
     );
 
     // 如果该菜品所有步骤都打完了，自动写入整菜确认（kitchen_exec_logs）
@@ -320,18 +464,18 @@ export async function punchStep({ store, station, dishName, stepSeq, stepAction,
     );
     const done = await pool().query(
       `SELECT COUNT(*) as cnt FROM kitchen_step_logs
-       WHERE dish_name=$1 AND store=$2 AND employee_username=$3 AND task_date=$4`,
-      [dishName, store, username, taskDate]
+       WHERE dish_name=$1 AND store=$2 AND employee_username=$3 AND task_date=$4 AND schedule_time=$5`,
+      [dishName, store, username, taskDate, normalizedScheduleTime]
     );
     const allDone = Number(done.rows[0]?.cnt) >= Number(total.rows[0]?.cnt);
 
     if (allDone) {
       await pool().query(
         `INSERT INTO kitchen_exec_logs
-           (store, station, dish_name, employee_username, employee_name, task_date, note)
-         VALUES ($1,$2,$3,$4,$5,$6,'步骤全部打点完成自动确认')
-         ON CONFLICT (store, station, dish_name, employee_username, task_date) DO NOTHING`,
-        [store, station, dishName, username, employeeName || null, taskDate]
+           (store, station, dish_name, schedule_time, employee_username, employee_name, task_date, note)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'步骤全部打点完成自动确认')
+         ON CONFLICT (store, station, dish_name, employee_username, task_date, schedule_time) DO NOTHING`,
+        [store, station, dishName, normalizedScheduleTime, username, employeeName || null, taskDate]
       );
     }
 
@@ -402,7 +546,7 @@ export function registerKitchenExecutionRoutes(app, authMiddleware) {
     const user = req.user;
     if (!user) return res.status(401).json({ error: 'unauthorized' });
 
-    const { dishName, station, store, note } = req.body;
+    const { dishName, station, store, note, scheduleTime } = req.body;
     if (!dishName || !station || !store) {
       return res.status(400).json({ error: 'dishName, station, store required' });
     }
@@ -410,7 +554,8 @@ export function registerKitchenExecutionRoutes(app, authMiddleware) {
       store, station, dishName,
       username: user.username,
       employeeName: user.name || user.realName || '',
-      note
+      note,
+      scheduleTime
     }));
   });
 
@@ -436,14 +581,42 @@ export function registerKitchenExecutionRoutes(app, authMiddleware) {
     if (role !== 'admin') {
       return res.status(403).json({ error: '仅管理员可配置菜品' });
     }
-    const { store, station, dishName, isPrep, criticalStepName, sopId } = req.body;
-    if (!store || !station || !dishName) {
+    const { store, station, dishName, dishNames, isPrep, criticalStepName, sopId, assigneeUsername, assigneeName, scheduledTimes } = req.body;
+    if (!store || !station || !(dishName || (Array.isArray(dishNames) && dishNames.length))) {
       return res.status(400).json({ error: 'store, station, dishName required' });
     }
     res.json(await addStationDish({
-      store, station, dishName, isPrep, criticalStepName, sopId,
+      store, station, dishNames: dishNames || [dishName], isPrep, criticalStepName, sopId,
+      assigneeUsername, assigneeName, scheduledTimes,
       createdBy: req.user?.username
     }));
+  });
+
+  app.put('/api/kitchen/station-dish/:id', auth, async (req, res) => {
+    const role = String(req.user?.role || '');
+    if (role !== 'admin') {
+      return res.status(403).json({ error: '仅管理员可编辑菜品' });
+    }
+    const { store, station, dishName, isPrep, criticalStepName, sopId, assigneeUsername, assigneeName, scheduledTimes } = req.body;
+    if (!store || !station || !dishName) {
+      return res.status(400).json({ error: 'store, station, dishName required' });
+    }
+    res.json(await updateStationDish({
+      id: Number(req.params.id), store, station, dishName, isPrep, criticalStepName, sopId, assigneeUsername, assigneeName, scheduledTimes
+    }));
+  });
+
+  app.get('/api/kitchen/station-dish', auth, async (req, res) => {
+    const store = req.query.store || req.user?.store || '';
+    if (!store) return res.status(400).json({ error: 'store required' });
+    res.json(await listStationDishes({ store }));
+  });
+
+  app.get('/api/kitchen/station-employees', auth, async (req, res) => {
+    const store = req.query.store || req.user?.store || '';
+    const station = req.query.station || '';
+    if (!store || !station) return res.status(400).json({ error: 'store and station required' });
+    res.json(await listStationEmployees({ store, station }));
   });
 
   // 管理员：停用菜品岗位映射
@@ -477,14 +650,15 @@ export function registerKitchenExecutionRoutes(app, authMiddleware) {
       dishName,
       store: store || user?.store || '',
       username: user?.username,
-      date: req.query.date
+      date: req.query.date,
+      scheduleTime: req.query.scheduleTime
     }));
   });
 
   // ── 打点卡：打一个步骤 ────────────────────────────────────
   app.post('/api/kitchen/punch-step', auth, async (req, res) => {
     const user = req.user;
-    const { dishName, station, store, stepSeq, stepAction } = req.body;
+    const { dishName, station, store, stepSeq, stepAction, scheduleTime } = req.body;
     if (!dishName || stepSeq == null) {
       return res.status(400).json({ error: 'dishName and stepSeq required' });
     }
@@ -494,6 +668,7 @@ export function registerKitchenExecutionRoutes(app, authMiddleware) {
       dishName,
       stepSeq: Number(stepSeq),
       stepAction,
+      scheduleTime,
       username: user?.username,
       employeeName: user?.name || user?.realName || ''
     }));

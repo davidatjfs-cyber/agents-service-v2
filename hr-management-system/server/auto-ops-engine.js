@@ -42,6 +42,58 @@ export function setAutoOpsDeps({
 
 function pool() { return _pool || getUnifiedPool(); }
 
+let _autoOpsSchemaEnsured = false;
+
+async function ensureAutoOpsSchema() {
+  if (_autoOpsSchemaEnsured) return;
+  await pool().query(`
+    CREATE TABLE IF NOT EXISTS auto_ops_runs (
+      id BIGSERIAL PRIMARY KEY,
+      job_key TEXT NOT NULL,
+      run_key TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'completed',
+      payload JSONB DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(job_key, run_key)
+    )
+  `);
+  _autoOpsSchemaEnsured = true;
+}
+
+function cstDateString(baseDate = new Date(), dayOffset = 0) {
+  const shifted = new Date(baseDate.getTime() + 8 * 3600000 + dayOffset * 86400000);
+  return shifted.toISOString().slice(0, 10);
+}
+
+async function hasAutoOpsRun(jobKey, runKey) {
+  await ensureAutoOpsSchema();
+  const r = await pool().query(
+    `SELECT 1 FROM auto_ops_runs WHERE job_key=$1 AND run_key=$2 AND status='completed' LIMIT 1`,
+    [jobKey, runKey]
+  );
+  return !!r.rows?.length;
+}
+
+async function markAutoOpsRun(jobKey, runKey, payload = {}) {
+  await ensureAutoOpsSchema();
+  await pool().query(
+    `INSERT INTO auto_ops_runs (job_key, run_key, status, payload, created_at, updated_at)
+     VALUES ($1,$2,'completed',$3::jsonb,NOW(),NOW())
+     ON CONFLICT (job_key, run_key)
+     DO UPDATE SET status='completed', payload=EXCLUDED.payload, updated_at=NOW()`,
+    [jobKey, runKey, JSON.stringify(payload || {})]
+  );
+}
+
+async function appendAutoOpsEvent(eventType, taskId, payload = {}) {
+  await pool().query(
+    `INSERT INTO master_events (task_id, event_type, from_agent, payload)
+     VALUES ($1,$2,'auto_ops',$3::jsonb)`,
+    [taskId, eventType, JSON.stringify(payload || {})]
+  );
+}
+
 // ─────────────────────────────────────────────
 // 1. 巡检闭环自动化
 // ─────────────────────────────────────────────
@@ -272,20 +324,19 @@ const BI_PUSH_THRESHOLDS = {
 export async function biProactivePushTick() {
   const now = new Date();
   const cstHour = (now.getUTCHours() + 8) % 24;
+  const reportDate = cstDateString(now, -1);
+  const runKey = `daily:${reportDate}`;
 
   // 仅在 CST 10:00-23:59 执行 (一天只执行一次，通过dedup防重)
   if (cstHour < 10) return 0;
 
-  // 防重: 检查今天是否已推送
   try {
-    const check = await pool().query(
-      `SELECT 1 FROM master_events WHERE event_type = 'bi_proactive_push' AND created_at > CURRENT_DATE`
-    );
-    if (check.rows?.length) return 0;
+    if (await hasAutoOpsRun('bi_proactive_push', runKey)) return 0;
   } catch (e) {}
 
   let pushed = 0;
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const yesterday = reportDate;
+  const hqSummaries = [];
 
   try {
     // 获取所有门店
@@ -402,26 +453,28 @@ export async function biProactivePushTick() {
           }
         }
 
-        // 同时推送给HQ管理员
-        try {
-          const hqR = await pool().query(
-            `SELECT f.open_id FROM feishu_users f JOIN users u ON f.username = u.username WHERE u.role = 'admin' AND u.is_active = true AND f.registered = true AND f.open_id IS NOT NULL AND trim(f.open_id) <> '' AND f.open_id NOT LIKE '%probe%' ORDER BY f.updated_at DESC LIMIT 1`
-          );
-          if (hqR.rows?.[0]?.open_id) {
-            const hqMsg = `📊 【${storeName}】昨日预警:\n${alerts.join('\n')}`;
-            await _sendLarkMessage?.(hqR.rows[0].open_id, hqMsg);
-          }
-        } catch (e) {}
+        hqSummaries.push(`【${storeName}】\n${alerts.join('\n')}`);
+      }
+    }
+
+    if (hqSummaries.length > 0) {
+      try {
+        const hqR = await pool().query(
+          `SELECT f.open_id FROM feishu_users f JOIN users u ON f.username = u.username WHERE u.role = 'admin' AND u.is_active = true AND f.registered = true AND f.open_id IS NOT NULL AND trim(f.open_id) <> '' AND f.open_id NOT LIKE '%probe%' ORDER BY f.updated_at DESC LIMIT 1`
+        );
+        if (hqR.rows?.[0]?.open_id) {
+          const hqMsg = `📊 昨日经营预警汇总（${yesterday}）\n\n${hqSummaries.join('\n\n')}`;
+          await _sendLarkMessage?.(hqR.rows[0].open_id, hqMsg);
+          pushed++;
+        }
+      } catch (e) {
+        console.error('[auto-ops] HQ BI summary push error:', e?.message);
       }
     }
 
     // 记录推送事件
-    if (pushed > 0 || stores.length > 0) {
-      await pool().query(
-        `INSERT INTO master_events (task_id, event_type, agent_name, data) VALUES ($1, 'bi_proactive_push', 'auto_ops', $2::jsonb)`,
-        [`BI-PUSH-${yesterday}`, JSON.stringify({ date: yesterday, storesChecked: stores.length, alertsPushed: pushed })]
-      );
-    }
+    await appendAutoOpsEvent('bi_proactive_push', `BI-PUSH-${yesterday}`, { date: yesterday, storesChecked: stores.length, alertsPushed: pushed, hqSummaryCount: hqSummaries.length });
+    await markAutoOpsRun('bi_proactive_push', runKey, { date: yesterday, storesChecked: stores.length, alertsPushed: pushed, hqSummaryCount: hqSummaries.length });
     console.log(`[auto-ops] BI proactive push: ${stores.length} stores checked, ${pushed} alerts pushed`);
   } catch (e) {
     console.error('[auto-ops] BI push error:', e?.message);
@@ -439,16 +492,13 @@ export async function laborEfficiencyTick() {
   const now = new Date();
   const cstHour = (now.getUTCHours() + 8) % 24;
   const cstDay = new Date(now.getTime() + 8 * 3600000).getDay(); // 0=Sunday
+  const runKey = `weekly:${cstDateString(now, 0)}`;
 
   // 仅在周一 CST 09:00-09:14 执行
   if (cstDay !== 1 || cstHour !== 9 || now.getMinutes() > 14) return 0;
 
-  // 防重
   try {
-    const check = await pool().query(
-      `SELECT 1 FROM master_events WHERE event_type = 'labor_efficiency_push' AND created_at > CURRENT_DATE`
-    );
-    if (check.rows?.length) return 0;
+    if (await hasAutoOpsRun('labor_efficiency_push', runKey)) return 0;
   } catch (e) {}
 
   let pushed = 0;
@@ -526,11 +576,9 @@ export async function laborEfficiencyTick() {
     }
 
     if (pushed > 0) {
-      await pool().query(
-        `INSERT INTO master_events (task_id, event_type, agent_name, data) VALUES ($1, 'labor_efficiency_push', 'auto_ops', $2::jsonb)`,
-        [`LABOR-${now.toISOString().slice(0, 10)}`, JSON.stringify({ pushed })]
-      );
+      await appendAutoOpsEvent('labor_efficiency_push', `LABOR-${cstDateString(now, 0)}`, { pushed });
     }
+    await markAutoOpsRun('labor_efficiency_push', runKey, { pushed });
     console.log(`[auto-ops] labor efficiency: ${pushed} suggestions pushed`);
   } catch (e) {
     console.error('[auto-ops] labor efficiency error:', e?.message);
@@ -550,16 +598,13 @@ const TRAINING_LOOKBACK_DAYS = 7;
 export async function trainingClosedLoopTick() {
   const now = new Date();
   const cstHour = (now.getUTCHours() + 8) % 24;
+  const runKey = `daily:${cstDateString(now, 0)}`;
 
   // 每天 CST 11:00-11:14 执行
   if (cstHour !== 11 || now.getMinutes() > 14) return 0;
 
-  // 防重
   try {
-    const check = await pool().query(
-      `SELECT 1 FROM master_events WHERE event_type = 'training_closed_loop' AND created_at > CURRENT_DATE`
-    );
-    if (check.rows?.length) return 0;
+    if (await hasAutoOpsRun('training_closed_loop', runKey)) return 0;
   } catch (e) {}
 
   let created = 0;
@@ -676,11 +721,9 @@ export async function trainingClosedLoopTick() {
     } catch (e) {}
 
     if (created > 0) {
-      await pool().query(
-        `INSERT INTO master_events (task_id, event_type, agent_name, data) VALUES ($1, 'training_closed_loop', 'auto_ops', $2::jsonb)`,
-        [`TRAIN-${now.toISOString().slice(0, 10)}`, JSON.stringify({ created })]
-      );
+      await appendAutoOpsEvent('training_closed_loop', `TRAIN-${cstDateString(now, 0)}`, { created });
     }
+    await markAutoOpsRun('training_closed_loop', runKey, { created });
     console.log(`[auto-ops] training closed loop: ${created} training tasks created`);
   } catch (e) {
     console.error('[auto-ops] training closed loop error:', e?.message);
