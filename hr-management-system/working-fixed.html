@@ -14472,58 +14472,74 @@
             <!-- ═══════════════════════════════════════════ -->
             <!-- 厨房备料执行页面                           -->
             <!-- ═══════════════════════════════════════════ -->
-            <div id="kitchen-page" class="hidden">
-              <div class="dr-shell">
-                <header class="rep-page-head">
-                  <div>
-                    <span class="rep-page-head__eyebrow">KITCHEN</span>
-                    <h2 id="kitchen-page-title">今日备料任务</h2>
-                    <p class="rep-page-head__sub" id="kitchen-page-sub">加载中…</p>
+            <div id="kitchen-page" class="hidden" style="padding:0;max-width:100vw;overflow-x:hidden;">
+              <!-- Sticky Header -->
+              <div style="position:sticky;top:0;z-index:100;background:rgba(18,18,22,0.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                  <div style="min-width:0;">
+                    <div id="kitchen-page-title" style="font-size:18px;font-weight:800;color:#fff;line-height:1.3;">今日备料</div>
+                    <div id="kitchen-page-sub" style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:2px;">加载中…</div>
                   </div>
-                   <div class="rep-page-head__actions" id="kitchen-mgr-actions" style="display:none;">
-                     <button class="btn" type="button" onclick="showKitchenView('dashboard')">📊 完成率看板</button>
-                     <button class="btn btn-secondary" type="button" onclick="showKitchenView('manage')" id="kitchen-manage-btn" style="display:none;">⚙️ 菜品配置</button>
-                   </div>
-                </header>
+                  <div style="display:flex;gap:6px;flex-shrink:0;" id="kitchen-mgr-actions">
+                    <button onclick="showKitchenView('dashboard')" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">📊 看板</button>
+                    <button onclick="showKitchenView('manage')" id="kitchen-manage-btn" style="display:none;padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">⚙️ 配置</button>
+                  </div>
+                </div>
+                <!-- 进度环 (staff view) -->
+                <div id="kitchen-progress-ring" style="display:none;margin-top:14px;"></div>
+                <!-- 时段快选 (staff view) -->
+                <div id="kitchen-time-chips" style="display:none;margin-top:12px;overflow-x:auto;white-space:nowrap;padding-bottom:4px;-webkit-overflow-scrolling:touch;"></div>
+              </div>
+
+              <div style="padding:12px 16px 120px;">
 
                 <!-- 员工视图：今日任务清单 -->
                 <div id="kitchen-staff-view">
-                  <div id="kitchen-time-groups" style="display:grid;gap:12px;max-width:760px;margin:0 auto 12px;padding:0 4px;"></div>
-                  <div id="kitchen-task-list" style="display:grid;gap:10px;max-width:600px;margin:0 auto;padding:0 4px;"></div>
-                  <div id="kitchen-empty-tip" style="display:none;text-align:center;padding:40px 20px;color:rgba(255,255,255,0.4);">
-                    <div style="font-size:48px;margin-bottom:12px;">✅</div>
-                    <div style="font-size:15px;">今日任务已全部完成！</div>
+                  <div id="kitchen-task-list" style="display:grid;gap:10px;"></div>
+                  <div id="kitchen-empty-tip" style="display:none;text-align:center;padding:48px 20px;">
+                    <div style="width:72px;height:72px;border-radius:50%;background:rgba(34,197,94,0.12);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:36px;">✅</div>
+                    <div style="font-size:17px;font-weight:700;color:rgba(255,255,255,0.85);">今日任务已全部完成</div>
+                    <div style="font-size:13px;color:rgba(255,255,255,0.35);margin-top:6px;">辛苦了，明天见！</div>
                   </div>
-                  <div id="kitchen-no-tasks" style="display:none;text-align:center;padding:40px 20px;color:rgba(255,255,255,0.4);">
-                    <div style="font-size:48px;margin-bottom:12px;">📋</div>
-                    <div style="font-size:15px;">暂无配置任务，请联系出品经理设置</div>
+                  <div id="kitchen-no-tasks" style="display:none;text-align:center;padding:48px 20px;">
+                    <div style="width:72px;height:72px;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:36px;">📋</div>
+                    <div style="font-size:17px;font-weight:700;color:rgba(255,255,255,0.85);">暂无配置任务</div>
+                    <div style="font-size:13px;color:rgba(255,255,255,0.35);margin-top:6px;" id="kitchen-no-tasks-reason"></div>
                   </div>
                 </div>
 
                 <!-- 出品经理视图：完成率看板 -->
-                 <div id="kitchen-dashboard-view" style="display:none;">
-                   <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
-                     <button class="btn btn-secondary" type="button" onclick="showKitchenView('staff')" style="font-size:13px;">👤 员工视图</button>
-                     <button class="btn btn-secondary" type="button" onclick="kitchenSyncSopSteps()" style="font-size:13px;">🔄 同步SOP</button>
-                   </div>
-                    <div id="kitchen-dashboard-cards" style="display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));margin-bottom:20px;"></div>
-                  <div id="kitchen-unchecked-section" style="display:none;">
-                    <h3 style="font-size:14px;color:rgba(255,200,100,0.9);margin-bottom:10px;">⚠️ 今日未确认项</h3>
+                <div id="kitchen-dashboard-view" style="display:none;">
+                  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+                    <button onclick="showKitchenView('staff')" style="padding:8px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;cursor:pointer;">👤 员工视图</button>
+                    <button onclick="kitchenSyncSopSteps()" style="padding:8px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(99,102,241,0.15);color:#a5b4fc;font-size:12px;cursor:pointer;">🔄 同步SOP</button>
+                  </div>
+                  <!-- 门店选择 -->
+                  <div id="kitchen-dashboard-store-picker" style="display:none;margin-bottom:16px;"></div>
+                  <!-- 整体概览卡片 -->
+                  <div id="kitchen-dashboard-overview" style="margin-bottom:14px;"></div>
+                  <!-- 岗位完成率卡片 -->
+                  <div id="kitchen-dashboard-cards" style="display:grid;gap:10px;"></div>
+                  <!-- 未确认明细 -->
+                  <div id="kitchen-unchecked-section" style="display:none;margin-top:16px;">
+                    <div style="font-size:14px;font-weight:700;color:rgba(255,200,100,0.9);margin-bottom:10px;">⚠️ 今日未确认项</div>
                     <div id="kitchen-unchecked-list" style="display:grid;gap:6px;"></div>
                   </div>
                 </div>
 
                 <!-- 管理视图：菜品配置 -->
                 <div id="kitchen-manage-view" style="display:none;">
-                  <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px;margin-bottom:16px;">
-                    <h3 id="kitchen-form-title" style="font-size:14px;font-weight:600;margin-bottom:4px;color:rgba(255,255,255,0.85);">添加岗位负责菜品</h3>
-                    <p id="kitchen-form-subtitle" style="font-size:11px;color:rgba(255,255,255,0.3);margin-bottom:14px;">选择档口、具体员工和固定执行时间后，可一次分配多道菜品。</p>
+                  <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:14px;padding:16px;margin-bottom:14px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;" onclick="document.getElementById('kitchen-config-form').style.display = document.getElementById('kitchen-config-form').style.display==='none'?'':'none';this.querySelector('span').textContent = document.getElementById('kitchen-config-form').style.display==='none'?'▶ 展开':'▼ 收起';">
+                      <h3 id="kitchen-form-title" style="font-size:15px;font-weight:700;color:rgba(255,255,255,0.85);margin:0;">添加岗位负责菜品</h3>
+                      <span style="font-size:12px;color:rgba(255,255,255,0.3);cursor:pointer;">▼ 收起</span>
+                    </div>
                     <input id="kitchen-edit-id" type="hidden" value="">
-                    <div style="display:grid;gap:10px;">
+                    <div id="kitchen-config-form" style="display:grid;gap:10px;">
                       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                         <div>
-                          <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:4px;">① 选择档口</label>
-                          <select id="kitchen-add-station" onchange="onKitchenStationChange()" style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#fff;font-size:13px;">
+                          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px;">档口</div>
+                          <select id="kitchen-add-station" onchange="onKitchenStationChange()" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:#fff;font-size:14px;appearance:none;-webkit-appearance:none;">
                             <option value="">选择档口</option>
                             <option value="炒锅">炒锅</option>
                             <option value="烧味">烧味</option>
@@ -14532,42 +14548,40 @@
                           </select>
                         </div>
                         <div>
-                          <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:4px;">② 分配给具体员工</label>
-                          <select id="kitchen-add-employee" style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#fff;font-size:13px;">
+                          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px;">分配员工</div>
+                          <select id="kitchen-add-employee" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:#fff;font-size:14px;appearance:none;-webkit-appearance:none;">
                             <option value="">先选择档口</option>
                           </select>
                         </div>
                       </div>
                       <div>
-                        <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:4px;">③ 选择菜品（可多选）</label>
-                        <select id="kitchen-add-dish" multiple size="8" style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#fff;font-size:13px;">
+                        <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px;">菜品（可多选）</div>
+                        <select id="kitchen-add-dish" multiple size="6" style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:#fff;font-size:14px;">
                           <option value="">先选择档口</option>
                         </select>
-                        <div style="font-size:11px;color:rgba(255,255,255,0.32);margin-top:4px;">按住 `Command` 或直接多点选择多道菜。</div>
+                        <div style="font-size:10px;color:rgba(255,255,255,0.25);margin-top:4px;">按住多选或点击逐个选择</div>
                       </div>
                       <div>
-                        <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:4px;">④ 每日固定执行时间（逗号分隔）</label>
-                        <input id="kitchen-add-times" type="text" placeholder="例：09:00,14:00,17:30" value="09:00" style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#fff;font-size:13px;">
+                        <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px;">每日执行时间</div>
+                        <input id="kitchen-add-times" type="text" placeholder="09:00, 14:00, 17:30" value="09:00" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:#fff;font-size:14px;">
                       </div>
                       <div>
-                        <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:4px;">⑤ 关键控制点（可选 — 高峰期优先打点的步骤，如"烫皮"）</label>
-                        <input id="kitchen-add-step" type="text" placeholder="例：烫皮15秒、拉油140度" style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#fff;font-size:13px;">
+                        <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px;">关键控制点（可选）</div>
+                        <input id="kitchen-add-step" type="text" placeholder="如：烫皮15秒" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:#fff;font-size:14px;">
                       </div>
-                      <div style="display:flex;align-items:center;gap:8px;">
-                        <input id="kitchen-add-isprep" type="checkbox" style="width:16px;height:16px;accent-color:#f59e0b;">
-                        <label style="font-size:13px;color:rgba(255,255,255,0.7);">预制料（味水/酱料等半成品，非成品菜品）</label>
+                      <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+                        <input id="kitchen-add-isprep" type="checkbox" style="width:18px;height:18px;accent-color:#f59e0b;">
+                        <span style="font-size:13px;color:rgba(255,255,255,0.65);">预制料（半成品非成品）</span>
                       </div>
                       <div style="display:flex;gap:8px;">
-                        <button class="btn" id="kitchen-save-btn" type="button" onclick="kitchenSaveDishConfig()" style="flex:1;">+ 添加</button>
-                        <button class="btn btn-secondary" id="kitchen-cancel-edit-btn" type="button" onclick="kitchenResetForm()" style="display:none;">取消编辑</button>
+                        <button id="kitchen-save-btn" type="button" onclick="kitchenSaveDishConfig()" style="flex:1;padding:12px;border-radius:10px;border:none;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">+ 添加</button>
+                        <button id="kitchen-cancel-edit-btn" type="button" onclick="kitchenResetForm()" style="display:none;padding:12px 16px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;cursor:pointer;">取消</button>
                       </div>
                     </div>
                   </div>
-                  <div style="margin-bottom:16px;display:flex;gap:10px;align-items:center;">
-                    <button class="btn btn-secondary" type="button" onclick="kitchenSyncSopSteps()" style="font-size:13px;">
-                      🔄 从飞书同步SOP步骤
-                    </button>
-                    <span id="kitchen-sync-status" style="font-size:12px;color:rgba(255,255,255,0.35);"></span>
+                  <div style="margin-bottom:14px;display:flex;gap:10px;align-items:center;">
+                    <button type="button" onclick="kitchenSyncSopSteps()" style="padding:8px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(99,102,241,0.12);color:#a5b4fc;font-size:12px;cursor:pointer;">🔄 从飞书同步SOP步骤</button>
+                    <span id="kitchen-sync-status" style="font-size:11px;color:rgba(255,255,255,0.3);"></span>
                   </div>
                   <div id="kitchen-mapping-list" style="display:grid;gap:8px;"></div>
                 </div>
@@ -47816,6 +47830,8 @@ ${body}
       document.getElementById('kitchen-staff-view').style.display     = view === 'staff'     ? '' : 'none';
       document.getElementById('kitchen-dashboard-view').style.display = view === 'dashboard' ? '' : 'none';
       document.getElementById('kitchen-manage-view').style.display    = view === 'manage'    ? '' : 'none';
+      document.getElementById('kitchen-progress-ring').style.display  = view === 'staff'     ? '' : 'none';
+      document.getElementById('kitchen-time-chips').style.display     = view === 'staff'     ? '' : 'none';
 
       if (view === 'staff')     loadKitchenTasks();
       if (view === 'dashboard') loadKitchenDashboard();
@@ -47827,17 +47843,18 @@ ${body}
       const station = _kitchenStation;
       const store   = _kitchenStore;
 
-      document.getElementById('kitchen-page-title').textContent = `今日备料任务`;
-      document.getElementById('kitchen-page-sub').textContent   =
-        station ? `${station} 岗位 · ${new Date().toLocaleDateString('zh-CN')}` : '未配置岗位';
+      document.getElementById('kitchen-page-title').textContent = '今日备料';
+      document.getElementById('kitchen-page-sub').textContent =
+        station ? `${station} · ${new Date().toLocaleDateString('zh-CN')}` : '未配置岗位';
+      document.getElementById('kitchen-progress-ring').style.display = 'none';
+      document.getElementById('kitchen-time-chips').style.display = 'none';
 
-        if (!station || !store) {
-          document.getElementById('kitchen-no-tasks').style.display = '';
-          document.getElementById('kitchen-task-list').style.display = 'none';
-          document.getElementById('kitchen-time-groups').innerHTML = '';
-          document.getElementById('kitchen-page-sub').textContent =
-            !store ? '请先在系统设置中配置门店' : !station ? '请先在员工档案中配置岗位（如：炒锅/烧味）' : '';
-          return;
+      if (!station || !store) {
+        document.getElementById('kitchen-no-tasks').style.display = '';
+        document.getElementById('kitchen-task-list').style.display = 'none';
+        document.getElementById('kitchen-no-tasks-reason').textContent =
+          !store ? '请先在系统设置中配置门店' : '请先在员工档案中配置岗位（如：炒锅/烧味）';
+        return;
       }
 
       try {
@@ -47852,16 +47869,90 @@ ${body}
         const empty = document.getElementById('kitchen-empty-tip');
         const none  = document.getElementById('kitchen-no-tasks');
 
-        if (!tasks.length) { none.style.display = ''; list.style.display = 'none'; document.getElementById('kitchen-time-groups').innerHTML = ''; return; }
+        if (!tasks.length) {
+          none.style.display = ''; list.style.display = 'none';
+          document.getElementById('kitchen-no-tasks-reason').textContent = '请在「菜品配置」中添加档口负责菜品';
+          return;
+        }
 
         const allDone = tasks.every(t => t.confirmed);
-        empty.style.display = allDone ? '' : 'none';
-        list.style.display  = '';
-        renderKitchenTaskGroups(tasks);
-        list.innerHTML = tasks.map(t => kitchenTaskCard(t, station, store)).join('');
+        if (allDone) { empty.style.display = ''; list.style.display = 'none'; }
+        else { empty.style.display = 'none'; list.style.display = ''; }
+
+        // 渲染顶部完成进度环
+        const done = tasks.filter(t => t.confirmed).length;
+        const total = tasks.length;
+        const pct = Math.round(done / total * 100);
+        document.getElementById('kitchen-progress-ring').style.display = '';
+        document.getElementById('kitchen-progress-ring').innerHTML = `
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div style="position:relative;width:56px;height:56px;flex-shrink:0;">
+              <svg viewBox="0 0 64 64" style="width:56px;height:56px;transform:rotate(-90deg);">
+                <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="5"/>
+                <circle cx="32" cy="32" r="28" fill="none" stroke="${pct===100?'#22c55e':pct>=50?'#f59e0b':'#6366f1'}" stroke-width="5"
+                  stroke-dasharray="${Math.round(pct/100*175.9)} 175.9" stroke-linecap="round"/>
+              </svg>
+              <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#fff;">${pct}%</div>
+            </div>
+            <div>
+              <div style="font-size:14px;font-weight:700;color:#fff;">${done} / ${total} 项完成</div>
+              <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px;">${pct===100?'全部完成 ✓':pct>=50?'进行中，加油':'刚开始，别急'}</div>
+            </div>
+          </div>`;
+
+        // 渲染时段快选 chips
+        var timeSet = new Set(tasks.map(t => t.schedule_time || '--:--').filter(Boolean));
+        var times = Array.from(timeSet).sort();
+        var currentTime = new Date().getHours().toString().padStart(2,'0') + ':' + new Date().getMinutes().toString().padStart(2,'0');
+        var activeTime = '';
+        for (var i = times.length - 1; i >= 0; i--) { if (times[i] <= currentTime) { activeTime = times[i]; break; } }
+        if (!activeTime && times.length) activeTime = times[0];
+
+        document.getElementById('kitchen-time-chips').style.display = '';
+        document.getElementById('kitchen-time-chips').innerHTML = times.map(t => {
+          var tDone = tasks.filter(x => x.schedule_time === t && x.confirmed).length;
+          var tTotal = tasks.filter(x => x.schedule_time === t).length;
+          var isActive = t === activeTime;
+          return `<button onclick="scrollToTimeGroup('${t}')" style="
+            display:inline-flex;align-items:center;gap:6px;margin-right:8px;
+            padding:8px 14px;border-radius:999px;border:1px solid ${isActive ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.08)'};
+            background:${isActive ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.04)'};
+            color:${isActive ? '#fff' : 'rgba(255,255,255,0.6)'};font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;
+            -webkit-tap-highlight-color:transparent;
+          ">🕒 ${t} <span style="opacity:${isActive?'.8':'.5'}">${tDone}/${tTotal}</span></button>`;
+        }).join('');
+
+        // 按时段分组渲染任务卡
+        var grouped = {};
+        tasks.forEach(function(task) {
+          var key = task.schedule_time || '--:--';
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push(task);
+        });
+        list.innerHTML = Object.keys(grouped).sort().map(timeKey => {
+          var rows = grouped[timeKey];
+          var doneCount = rows.filter(t => t.confirmed).length;
+          var overdueCount = rows.filter(t => !t.confirmed && kitchenTaskTimingState(t.schedule_time).overdue).length;
+          return `<div id="kitchen-group-${timeKey.replace(':','')}" style="margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 4px;margin-bottom:6px;">
+              <div style="font-size:12px;font-weight:700;color:${overdueCount?'#fca5a5':'rgba(255,255,255,0.5)'};display:flex;align-items:center;gap:6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                ${timeKey}
+              </div>
+              <div style="font-size:11px;color:${overdueCount?'#fca5a5':'rgba(255,255,255,0.35)'};">${doneCount}/${rows.length}${overdueCount? ' · '+overdueCount+'超时':''}</div>
+            </div>
+            ${rows.map(t => kitchenTaskCard(t, station, store)).join('')}
+          </div>`;
+        }).join('');
+
       } catch(e) {
         showNotification('加载任务失败：' + (e?.message || e), 'error');
       }
+    }
+
+    function scrollToTimeGroup(timeKey) {
+      var el = document.getElementById('kitchen-group-' + timeKey.replace(':',''));
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function kitchenTaskTimingState(scheduleTime) {
@@ -47870,32 +47961,9 @@ ${body}
       var target = new Date(now);
       target.setHours(Number(hhmm[0] || 0), Number(hhmm[1] || 0), 0, 0);
       var diffMs = now.getTime() - target.getTime();
-      if (diffMs > 30 * 60 * 1000) return { label: '超时未完成', color: '#ef4444', overdue: true };
-      if (diffMs > 0) return { label: '已到执行时段', color: '#f59e0b', overdue: false };
-      return { label: '待到时执行', color: '#38bdf8', overdue: false };
-    }
-
-    function renderKitchenTaskGroups(tasks) {
-      var host = document.getElementById('kitchen-time-groups');
-      if (!host) return;
-      if (!tasks.length) { host.innerHTML = ''; return; }
-      var grouped = {};
-      tasks.forEach(function(task) {
-        var key = task.schedule_time || '--:--';
-        if (!grouped[key]) grouped[key] = [];
-        grouped[key].push(task);
-      });
-      host.innerHTML = Object.keys(grouped).sort().map(function(timeKey) {
-        var rows = grouped[timeKey];
-        var doneCount = rows.filter(function(task) { return task.confirmed; }).length;
-        var overdueCount = rows.filter(function(task) { return !task.confirmed && kitchenTaskTimingState(task.schedule_time).overdue; }).length;
-        return '<div style="background:rgba(255,255,255,0.04);border:1px solid ' + (overdueCount ? 'rgba(239,68,68,0.24)' : 'rgba(255,255,255,0.08)') + ';border-radius:14px;padding:12px 14px;">'
-          + '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">'
-          + '<div style="font-size:14px;font-weight:700;color:#fff;">🕒 ' + timeKey + '</div>'
-          + '<div style="font-size:11px;color:' + (overdueCount ? '#fca5a5' : 'rgba(255,255,255,0.45)') + ';">' + doneCount + '/' + rows.length + ' 已完成' + (overdueCount ? ' · ' + overdueCount + ' 项超时' : '') + '</div>'
-          + '</div>'
-          + '</div>';
-      }).join('');
+      if (diffMs > 30 * 60 * 1000) return { label: '超时', color: '#ef4444', overdue: true };
+      if (diffMs > 0) return { label: '进行中', color: '#f59e0b', overdue: false };
+      return { label: '待执行', color: '#38bdf8', overdue: false };
     }
 
     function kitchenTaskCard(task, station, store) {
@@ -47903,30 +47971,39 @@ ${body}
       const dishEsc = task.dish_name.replace(/'/g, "\\'");
       const scheduleEsc = String(task.schedule_time || '').replace(/'/g, "\\'");
       const timing = kitchenTaskTimingState(task.schedule_time);
+      const borderColor = done ? 'rgba(34,197,94,0.25)' : timing.overdue ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.08)';
+      const bgColor = done ? 'rgba(34,197,94,0.05)' : timing.overdue ? 'rgba(239,68,68,0.06)' : 'rgba(255,255,255,0.03)';
       return `
         <div onclick="openPunchCard('${dishEsc}','${station}','${store}','${scheduleEsc}')" style="
-          background: ${done ? 'rgba(34,197,94,0.08)' : timing.overdue ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.04)'};
-          border: 1.5px solid ${done ? 'rgba(34,197,94,0.35)' : timing.overdue ? 'rgba(239,68,68,0.35)' : 'rgba(255,255,255,0.10)'};
-          border-radius: 14px; padding: 14px 16px;
-          display: flex; align-items: center; gap: 14px;
-          transition: all .2s; cursor: pointer;
-          -webkit-tap-highlight-color: transparent;
-        " ontouchstart="this.style.opacity='.75'" ontouchend="this.style.opacity='1'">
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:15px;font-weight:600;color:${done ? 'rgba(34,197,94,0.9)' : 'rgba(255,255,255,0.9)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-              ${task.is_prep ? '🧂 ' : '🍽 '}${task.dish_name}
+          background:${bgColor};border:1.5px solid ${borderColor};border-radius:14px;padding:16px;
+          margin-bottom:8px;cursor:pointer;
+          transition:all .15s;-webkit-tap-highlight-color:transparent;
+          ${done ? 'opacity:0.7;' : ''}
+        " ontouchstart="this.style.transform='scale(.98)'" ontouchend="this.style.transform='scale(1)'">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="
+              width:44px;height:44px;border-radius:50%;flex-shrink:0;
+              background:${done ? '#22c55e' : timing.overdue ? 'rgba(239,68,68,0.15)' : 'rgba(99,102,241,0.12)'};
+              border:2px solid ${done ? '#22c55e' : timing.overdue ? '#ef4444' : 'rgba(99,102,241,0.3)'};
+              display:flex;align-items:center;justify-content:center;font-size:20px;
+              color:${done ? '#fff' : timing.overdue ? '#fca5a5' : '#a5b4fc'};
+            ">${done ? '✓' : task.is_prep ? '🧂' : '🍽'}</div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:16px;font-weight:700;color:${done?'rgba(255,255,255,0.5)':'#fff'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+                ${done?'text-decoration:line-through;':''}">
+                ${task.dish_name}
+              </div>
+              <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+                <span style="font-size:11px;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.5);">${task.schedule_time || '--:--'}</span>
+                ${!done ? `<span style="font-size:11px;padding:3px 8px;border-radius:999px;background:${timing.color}22;color:${timing.color};font-weight:600;">${timing.label}</span>` : ''}
+                ${done && task.confirmed_at ? `<span style="font-size:11px;color:rgba(255,255,255,0.3);">完成 ${String(task.confirmed_at).slice(11,16)}</span>` : ''}
+              </div>
+              ${!done && task.critical_step_name
+                ? `<div style="font-size:11px;color:#f59e0b;margin-top:4px;">⚡ ${task.critical_step_name}</div>`
+                : !done ? `<div style="font-size:11px;color:rgba(255,255,255,0.2);margin-top:4px;">点击逐步骤打点 →</div>` : ''}
             </div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center;">
-              <span style="font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(99,102,241,0.14);color:#a5b4fc;">🕒 ${task.schedule_time || '--:--'}</span>
-              <span style="font-size:11px;padding:2px 8px;border-radius:999px;background:${timing.color}22;color:${timing.color};font-weight:${timing.overdue ? '700' : '500'};">${timing.label}</span>
-              ${task.confirmed_at ? `<span style="font-size:11px;color:rgba(255,255,255,0.42);">完成于 ${String(task.confirmed_at).slice(11,16)}</span>` : ''}
-            </div>
-            ${task.critical_step_name
-              ? `<div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:3px;">⚡ ${task.critical_step_name}</div>`
-              : `<div style="font-size:12px;color:rgba(255,255,255,0.25);margin-top:3px;">点击查看打点步骤 →</div>`
-            }
+            ${!done ? `<div style="flex-shrink:0;font-size:11px;color:rgba(255,255,255,0.2);">▸</div>` : ''}
           </div>
-          <div style="flex-shrink:0;font-size:22px;">${done ? '✅' : '▷'}</div>
         </div>`;
     }
 
@@ -48077,20 +48154,29 @@ ${body}
 
     // ── 管理：完成率看板 ────────────────────────────────────
       async function loadKitchenDashboard() {
-        document.getElementById('kitchen-page-title').textContent = '备料完成率看板';
+        document.getElementById('kitchen-page-title').textContent = '完成率看板';
+        document.getElementById('kitchen-progress-ring').style.display = 'none';
+        document.getElementById('kitchen-time-chips').style.display = 'none';
         let store = _kitchenStore || currentUser?.store || '';
 
-        // 直接显示门店选择（只要不是有效门店名）
         if (!KITCHEN_VALID_STORES.includes(store)) {
-          document.getElementById('kitchen-page-sub').textContent = '[选择门店]';
-          document.getElementById('kitchen-dashboard-cards').innerHTML =
-            '<div style="padding:20px;text-align:center;">' +
-            '<div style="font-size:16px;font-weight:700;margin-bottom:16px;color:rgba(255,255,255,0.8);">请选择门店</div>' +
-            KITCHEN_VALID_STORES.map(s => '<button onclick="_kitchenStore=\''+s+'\';loadKitchenDashboard();" style="display:block;width:100%;padding:14px;margin:8px 0;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);border-radius:12px;color:#fff;font-size:15px;font-weight:600;cursor:pointer;">'+s+'</button>').join('') +
-            '</div>';
+          document.getElementById('kitchen-page-sub').textContent = '请选择门店';
+          document.getElementById('kitchen-dashboard-store-picker').style.display = '';
+          document.getElementById('kitchen-dashboard-store-picker').innerHTML =
+            KITCHEN_VALID_STORES.map(s => `
+              <button onclick="_kitchenStore='${s}';loadKitchenDashboard();" style="
+                display:block;width:100%;padding:16px;margin-bottom:8px;
+                background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);border-radius:14px;
+                color:#fff;font-size:15px;font-weight:600;cursor:pointer;text-align:left;
+              ">📍 ${s}</button>
+            `).join('');
+          document.getElementById('kitchen-dashboard-overview').innerHTML = '';
+          document.getElementById('kitchen-dashboard-cards').innerHTML = '';
           document.getElementById('kitchen-unchecked-section').style.display = 'none';
           return;
         }
+        document.getElementById('kitchen-dashboard-store-picker').style.display = 'none';
+        document.getElementById('kitchen-page-sub').textContent = store + ' · ' + new Date().toLocaleDateString('zh-CN');
 
        try {
         const r = await fetch(`/api/kitchen/dashboard?store=${encodeURIComponent(store)}`, {
@@ -48099,38 +48185,60 @@ ${body}
         const data = await r.json();
         if (!data.success) throw new Error(data.error);
 
-        // 岗位完成率卡片
-        const cards = document.getElementById('kitchen-dashboard-cards');
-        cards.innerHTML = (data.summary || []).map(s => `
-          <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:14px;padding:16px;">
-            <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:8px;">
-              <div style="font-size:15px;font-weight:700;">${s.station}</div>
-              <div style="font-size:12px;color:rgba(255,255,255,0.45);">${s.confirmed} / ${s.total}</div>
+        var summary = data.summary || [];
+        var totalAll = summary.reduce((a,s) => a + (s.total||0), 0);
+        var confirmedAll = summary.reduce((a,s) => a + (s.confirmed||0), 0);
+        var overallRate = totalAll ? Math.round(confirmedAll / totalAll * 100) : 0;
+
+        // 整体概览
+        document.getElementById('kitchen-dashboard-overview').innerHTML = totalAll ? `
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;margin-bottom:14px;">
+            <div style="position:relative;width:52px;height:52px;flex-shrink:0;">
+              <svg viewBox="0 0 64 64" style="width:52px;height:52px;transform:rotate(-90deg);">
+                <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="5"/>
+                <circle cx="32" cy="32" r="28" fill="none" stroke="${overallRate===100?'#22c55e':overallRate>=60?'#f59e0b':'#ef4444'}" stroke-width="5"
+                  stroke-dasharray="${Math.round(overallRate/100*175.9)} 175.9" stroke-linecap="round"/>
+              </svg>
+              <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;">${overallRate}%</div>
             </div>
-            <div style="font-size:28px;font-weight:800;color:${s.rate===100?'#22c55e':s.rate>=60?'#f59e0b':'#ef4444'};">
-              ${s.rate}%
-            </div>
-            <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;">
-              今日计划 ${s.total} 项，已完成 ${s.confirmed} 项
-            </div>
-            <div style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px;margin-top:10px;">
-              <div style="height:100%;width:${s.rate}%;background:${s.rate===100?'#22c55e':s.rate>=60?'#f59e0b':'#ef4444'};border-radius:2px;transition:width .6s;"></div>
-            </div>
-            <div style="margin-top:12px;display:grid;gap:6px;">
-              <div style="font-size:11px;color:rgba(255,255,255,0.45);">最近完成人员</div>
-              ${(s.completed_details || []).length ? (s.completed_details || []).slice(-4).map(item => `
-                <div style="display:flex;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:8px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.14);font-size:12px;">
-                  <div style="min-width:0;">
-                    <div style="color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.is_prep ? '🧂' : '🍽'} ${item.dish_name}</div>
-                    <div style="color:rgba(255,255,255,0.45);margin-top:2px;">${item.employee_name || item.employee_username || '未记录'} · ${item.schedule_time || '--:--'}</div>
-                  </div>
-                  <div style="flex-shrink:0;color:#86efac;">${String(item.confirmed_at || '').slice(11,16) || '--:--'}</div>
-                </div>
-              `).join('') : '<div style="font-size:12px;color:rgba(255,255,255,0.3);padding:6px 0;">暂无完成记录</div>'}
-              ${(s.unchecked_details || []).some(item => kitchenTaskTimingState(item.schedule_time).overdue) ? `<div style="font-size:11px;color:#fca5a5;padding-top:4px;">⚠ ${s.unchecked_details.filter(item => kitchenTaskTimingState(item.schedule_time).overdue).length} 项已超时未完成</div>` : ''}
+            <div>
+              <div style="font-size:15px;font-weight:700;color:#fff;">整体完成率</div>
+              <div style="font-size:12px;color:rgba(255,255,255,0.45);margin-top:2px;">${confirmedAll} / ${totalAll} 项 · ${summary.length} 个档口</div>
             </div>
           </div>
-        `).join('') || '<div style="color:rgba(255,255,255,0.3);padding:20px;">暂无数据，请先配置岗位菜品</div>';
+        ` : '';
+
+        // 岗位卡片
+        var cardsHtml = summary.map(s => `
+          <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <div style="font-size:15px;font-weight:700;">${s.station}</div>
+              <div style="font-size:24px;font-weight:800;color:${s.rate===100?'#22c55e':s.rate>=60?'#f59e0b':'#ef4444'};">${s.rate}%</div>
+            </div>
+            <div style="height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
+              <div style="height:100%;width:${s.rate}%;background:${s.rate===100?'#22c55e':s.rate>=60?'#f59e0b':'#ef4444'};border-radius:3px;transition:width .5s;"></div>
+            </div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:6px;">${s.confirmed}/${s.total} 项完成</div>
+            ${(s.completed_details||[]).length ? `
+              <div style="margin-top:10px;display:grid;gap:4px;">
+                ${(s.completed_details||[]).slice(-3).map(item => `
+                  <div style="display:flex;gap:8px;align-items:center;font-size:11px;padding:6px 10px;border-radius:8px;background:rgba(34,197,94,0.06);">
+                    <span style="color:#86efac;">✓</span>
+                    <span style="color:#fff;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.is_prep?'🧂':'🍽'} ${item.dish_name}</span>
+                    <span style="color:rgba(255,255,255,0.3);flex-shrink:0;">${String(item.confirmed_at||'').slice(11,16)||''}</span>
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
+            ${(s.unchecked_details||[]).some(i => kitchenTaskTimingState(i.schedule_time).overdue) ? `
+              <div style="font-size:11px;color:#fca5a5;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.05);">
+                ⚠ ${s.unchecked_details.filter(i => kitchenTaskTimingState(i.schedule_time).overdue).length} 项超时未完成
+              </div>
+            ` : ''}
+          </div>
+        `).join('');
+
+        document.getElementById('kitchen-dashboard-cards').innerHTML = cardsHtml || '<div style="color:rgba(255,255,255,0.3);padding:24px;text-align:center;">暂无数据，请先配置岗位菜品</div>';
 
         // 未确认明细
         const unchecked = data.unchecked || [];
@@ -48142,10 +48250,10 @@ ${body}
             const overdue = kitchenTaskTimingState(u.schedule_time).overdue;
             return `
             <div style="display:flex;justify-content:space-between;align-items:center;
-              background:${overdue ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.06)'};border:1px solid ${overdue ? 'rgba(239,68,68,0.35)' : 'rgba(239,68,68,0.18)'};
-              border-radius:8px;padding:10px 14px;">
-              <span style="font-size:13px;color:rgba(255,255,255,0.8);">${u.is_prep?'🧂':'🍽'} ${u.dish_name}</span>
-              <span style="font-size:11px;color:${overdue ? '#fca5a5' : 'rgba(255,255,255,0.4)'};text-align:right;">${u.station} · ${u.schedule_time || '--:--'}${u.assignee_name ? '<br>' + u.assignee_name : ''}${overdue ? '<br>已超时' : ''}</span>
+              background:${overdue ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)'};border:1px solid ${overdue ? 'rgba(239,68,68,0.25)' : 'rgba(255,255,255,0.06)'};
+              border-radius:10px;padding:10px 12px;gap:8px;">
+              <span style="font-size:13px;color:rgba(255,255,255,0.8);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${u.is_prep?'🧂':'🍽'} ${u.dish_name}</span>
+              <span style="font-size:11px;color:${overdue?'#fca5a5':'rgba(255,255,255,0.35)'};text-align:right;flex-shrink:0;line-height:1.5;">${u.station} · ${u.schedule_time||'--:--'}${u.assignee_name?'<br>'+u.assignee_name:''}${overdue?'<br>超时':''}</span>
             </div>`;
           }).join('');
         } else {
