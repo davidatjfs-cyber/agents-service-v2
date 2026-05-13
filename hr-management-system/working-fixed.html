@@ -10428,6 +10428,14 @@
                 grid-template-columns: 1fr !important;
             }
 
+            #growth-page #growth-constraints-content .rep-filters__grid {
+                grid-template-columns: 1fr !important;
+            }
+
+            #growth-page [style*="grid-template-columns: 1fr 1fr 1fr"] {
+                grid-template-columns: 1fr !important;
+            }
+
             #growth-metrics-cards {
                 grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
                 gap: 10px !important;
@@ -14133,32 +14141,34 @@
                     </div>
                     </div>
                     <div id="growth-wecom-content" style="display:none;">
-                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
-                            <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">企微客户管理</div>
-                            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-                                <button onclick="loadWecomFullDashboard()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新看板</button>
-                                <button onclick="showImportWechatCsv()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:13px;">CSV/Excel导入</button>
-                                <button onclick="showWechatImportDialog()" style="padding:6px 14px;border-radius:8px;background:rgba(14,165,233,0.15);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);cursor:pointer;font-size:13px;">飞书导入/配置</button>
-                                <button onclick="showWechatManualDialog()" style="padding:6px 14px;border-radius:8px;background:rgba(245,158,11,0.2);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);cursor:pointer;font-size:13px;">手动添加</button>
+                        <div class="rep-filters">
+                            <div class="rep-filters__eyebrow">WECOM</div>
+                            <div class="rep-filters__title">企微客户管理</div>
+                            <div class="rep-seg" style="margin-bottom:14px;">
+                                <button onclick="loadWecomFullDashboard()" class="rep-seg-btn rep-seg-btn--active" style="flex:1;">刷新看板</button>
+                                <button onclick="showImportWechatCsv()" class="rep-seg-btn" style="flex:1;">CSV/Excel导入</button>
+                                <button onclick="showWechatImportDialog()" class="rep-seg-btn" style="flex:1;">飞书导入/配置</button>
+                                <button onclick="showWechatManualDialog()" class="rep-seg-btn" style="flex:1;">手动添加</button>
                             </div>
-                            <div id="wecom-stats" style="margin-bottom:16px;"></div>
-                            <div id="wecom-dashboard" style="margin-bottom:16px;"></div>
-                            <div id="wecom-customers-list" style="max-height:400px;overflow-y:auto;"></div>
-                            <div id="wecom-unbound-section" style="margin-top:16px;display:none;">
+                            <div id="wecom-stats" style="margin-bottom:14px;"></div>
+                            <div id="wecom-dashboard" style="margin-bottom:14px;"></div>
+                            <div id="wecom-customers-list" style="max-height:50vh;overflow-y:auto;"></div>
+                            <div id="wecom-unbound-section" style="margin-top:14px;display:none;">
                                 <div style="font-size:13px;font-weight:700;color:#f59e0b;margin-bottom:8px;">⚠️ 未绑定客户（需推入会）</div>
                                 <div id="wecom-unbound-list" style="max-height:200px;overflow-y:auto;"></div>
                             </div>
                         </div>
                     </div>
                     <div id="growth-campaigns-content" style="display:none;">
-                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
-                            <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">活动管理</div>
-                            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-                                <button onclick="loadCampaignPlans()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新列表</button>
-                                <button onclick="showCreateCampaignForm()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:13px;">创建活动</button>
+                        <div class="rep-filters">
+                            <div class="rep-filters__eyebrow">CAMPAIGNS</div>
+                            <div class="rep-filters__title">活动管理</div>
+                            <div class="rep-seg" style="margin-bottom:14px;">
+                                <button onclick="loadCampaignPlans()" class="rep-seg-btn rep-seg-btn--active" style="flex:1;">刷新列表</button>
+                                <button onclick="showCreateCampaignForm()" class="rep-seg-btn" style="flex:1;">创建活动</button>
                             </div>
-                            <div id="campaign-plans-list" style="max-height:500px;overflow-y:auto;"></div>
-                            <div id="campaign-create-form" style="display:none;margin-top:16px;padding:16px;background:rgba(14,165,233,0.06);border:1px solid rgba(14,165,233,0.2);border-radius:12px;">
+                            <div id="campaign-plans-list" style="max-height:50vh;overflow-y:auto;"></div>
+                            <div id="campaign-create-form" style="display:none;margin-top:16px;padding:16px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.08);border-radius:14px;">
                                 <div style="font-size:13px;font-weight:700;color:#38bdf8;margin-bottom:12px;">新建营销活动</div>
                                 <div style="margin-bottom:10px;">
                                     <select id="camp-template" onchange="applyMarketingTemplate()" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.8);">
@@ -14195,72 +14205,72 @@
                         </div>
                     </div>
                     <div id="growth-profiles-content" style="display:none;">
-                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
-                            <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">用户画像</div>
-                            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-                                <button onclick="loadGrowthProfiles()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新画像</button>
-                                <button onclick="recomputeGrowthProfiles()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:13px;">重算画像</button>
+                        <div class="rep-filters">
+                            <div class="rep-filters__eyebrow">PROFILES</div>
+                            <div class="rep-filters__title">用户画像</div>
+                            <div class="rep-seg" style="margin-bottom:14px;">
+                                <button onclick="loadGrowthProfiles()" class="rep-seg-btn rep-seg-btn--active" style="flex:1;">刷新画像</button>
+                                <button onclick="recomputeGrowthProfiles()" class="rep-seg-btn" style="flex:1;">重算画像</button>
                             </div>
-                             <div id="growth-profiles-list" style="max-height:500px;overflow-y:auto;"></div>
+                            <div id="growth-profiles-list" style="max-height:50vh;overflow-y:auto;"></div>
                         </div>
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
-                            <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
-                                <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">📊 生命周期分群</div>
-                                <div id="growth-clusters" style="min-height:80px;"></div>
-                            </div>
+                        <div class="rep-filters" style="margin-top:14px;">
+                            <div class="rep-filters__eyebrow">SEGMENTS</div>
+                            <div class="rep-filters__title">📊 生命周期分群</div>
+                            <div id="growth-clusters" style="min-height:80px;position:relative;"></div>
                         </div>
                     </div>
                     <div id="growth-constraints-content" style="display:none;">
-                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
-                            <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">门店营销约束</div>
-                            <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
-                                <select id="constraint-brand-template" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.8);font-size:13px;" onchange="applyBrandTemplate()">
+                        <div class="rep-filters">
+                            <div class="rep-filters__eyebrow">CONSTRAINTS</div>
+                            <div class="rep-filters__title">门店营销约束</div>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;position:relative;">
+                                <select id="constraint-brand-template" class="dr-store-select" style="max-width:300px;" onchange="applyBrandTemplate()">
                                     <option value="">品牌默认模板</option>
                                     <option value="majixian">马己仙广东小馆</option>
                                     <option value="hongchao">洪潮</option>
                                     <option value="custom">自定义品牌</option>
                                 </select>
                             </div>
-                            <div style="display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:12px;">
-                                <input id="constraint-store-id" placeholder="门店ID *" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
-                                <input id="constraint-brand" placeholder="品牌" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
-                                <input id="constraint-min-discount" placeholder="最低折扣 如 0.9" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
-                                <input id="constraint-max-coupon" placeholder="最大券面值(分)" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
-                                <input id="constraint-budget" placeholder="月预算(分)" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
-                                <input id="constraint-touch" placeholder="72小时最大触达次数" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
-                                <input id="constraint-cooldown" placeholder="支付后冷静期(小时)" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
-                                <select id="constraint-voice" style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.8);">
+                            <div class="rep-filters__grid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;position:relative;">
+                                <div class="rep-field"><label>门店ID</label><input id="constraint-store-id" placeholder="门店ID *" class="dr-store-select" style="padding:10px;color:var(--rep-text);"></div>
+                                <div class="rep-field"><label>品牌</label><input id="constraint-brand" placeholder="品牌" class="dr-store-select" style="padding:10px;color:var(--rep-text);"></div>
+                                <div class="rep-field"><label>最低折扣</label><input id="constraint-min-discount" placeholder="如 0.9" class="dr-store-select" style="padding:10px;color:var(--rep-text);"></div>
+                                <div class="rep-field"><label>最大券面值(分)</label><input id="constraint-max-coupon" placeholder="最大券面值(分)" class="dr-store-select" style="padding:10px;color:var(--rep-text);"></div>
+                                <div class="rep-field"><label>月预算(分)</label><input id="constraint-budget" placeholder="月预算(分)" class="dr-store-select" style="padding:10px;color:var(--rep-text);"></div>
+                                <div class="rep-field"><label>72h最大触达</label><input id="constraint-touch" placeholder="72小时最大触达次数" class="dr-store-select" style="padding:10px;color:var(--rep-text);"></div>
+                                <div class="rep-field"><label>冷静期(小时)</label><input id="constraint-cooldown" placeholder="支付后冷静期(小时)" class="dr-store-select" style="padding:10px;color:var(--rep-text);"></div>
+                                <div class="rep-field"><label>品牌语气</label><select id="constraint-voice" class="dr-store-select">
                                     <option value="">选择品牌语气</option>
                                     <option value="接地气">接地气</option>
                                     <option value="精致">精致</option>
                                     <option value="年轻潮流">年轻潮流</option>
                                     <option value="豪迈">豪迈</option>
                                     <option value="商务专业">商务专业</option>
-                                </select>
+                                </select></div>
                             </div>
-                            <div style="margin-top:12px;">
-                                <label style="font-size:12px;color:rgba(226,232,240,0.5);display:block;margin-bottom:6px;">允许渠道（可多选）</label>
-                                <div style="display:flex;gap:10px;flex-wrap:wrap;" id="constraint-channels-checkboxes">...</div>
+                            <div class="rep-field" style="margin-top:12px;"><label>允许渠道（可多选）</label>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;" id="constraint-channels-checkboxes">...</div>
                             </div>
-                            <div style="margin-top:12px;">
-                                <label style="font-size:12px;color:rgba(226,232,240,0.5);display:block;margin-bottom:6px;">禁用活动类型（可多选）</label>
-                                <div style="display:flex;gap:10px;flex-wrap:wrap;" id="constraint-campaign-checkboxes">...</div>
+                            <div class="rep-field" style="margin-top:12px;"><label>禁用活动类型（可多选）</label>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;" id="constraint-campaign-checkboxes">...</div>
                             </div>
-                            <textarea id="constraint-disallowed-dishes" placeholder="禁用菜品，逗号分隔" style="margin-top:12px;width:100%;height:70px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;"></textarea>
-                            <textarea id="constraint-notes" placeholder="执行备注" style="margin-top:12px;width:100%;height:80px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;"></textarea>
-                            <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
-                                <button onclick="saveGrowthConstraint()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">保存约束</button>
-                                <button onclick="loadGrowthConstraints()" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.08);color:#fff;border:none;cursor:pointer;font-size:13px;">加载列表</button>
+                            <textarea id="constraint-disallowed-dishes" placeholder="禁用菜品，逗号分隔" class="dr-store-select" style="margin-top:12px;width:100%;min-height:60px;padding:10px;color:var(--rep-text);resize:vertical;"></textarea>
+                            <textarea id="constraint-notes" placeholder="执行备注" class="dr-store-select" style="margin-top:12px;width:100%;min-height:70px;padding:10px;color:var(--rep-text);resize:vertical;"></textarea>
+                            <div class="rep-seg" style="margin-top:14px;">
+                                <button onclick="saveGrowthConstraint()" class="rep-seg-btn rep-seg-btn--active" style="flex:1;">保存约束</button>
+                                <button onclick="loadGrowthConstraints()" class="rep-seg-btn" style="flex:1;">加载列表</button>
                             </div>
                             <div id="growth-constraints-list" style="max-height:260px;overflow-y:auto;margin-top:16px;"></div>
                         </div>
                     </div>
                     <div id="growth-public-content" style="display:none;">
-                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
-                            <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">公域品宣管理</div>
-                            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-                                <button onclick="refreshPublicContentWorkspace()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新全部</button>
-                                <button onclick="loadChannelEffects()" style="padding:6px 14px;border-radius:8px;background:rgba(16,185,129,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.3);cursor:pointer;font-size:13px;">渠道效果</button>
+                        <div class="rep-filters">
+                            <div class="rep-filters__eyebrow">PUBLIC</div>
+                            <div class="rep-filters__title">公域品宣管理</div>
+                            <div class="rep-seg" style="margin-bottom:14px;">
+                                <button onclick="refreshPublicContentWorkspace()" class="rep-seg-btn rep-seg-btn--active" style="flex:1;">刷新全部</button>
+                                <button onclick="loadChannelEffects()" class="rep-seg-btn" style="flex:1;">渠道效果</button>
                             </div>
                             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;align-items:start;">
                                 <div style="background:linear-gradient(180deg,rgba(148,163,184,0.08),rgba(30,41,59,0.14));border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px;">
@@ -14302,19 +14312,20 @@
                         </div>
                     </div>
                     <div id="growth-posters-content" style="display:none;">
-                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
-                             <div style="max-width:960px;margin:0 auto;">
-                             <div style="font-size:16px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:16px;">海报制作</div>
+                        <div class="rep-filters">
+                             <div style="max-width:960px;margin:0 auto;position:relative;">
+                             <div class="rep-filters__eyebrow">POSTERS</div>
+                             <div class="rep-filters__title">海报制作</div>
 
-                              <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;margin-bottom:10px;">
-                                <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.75);margin-bottom:6px;">① 选择模板</div>
+                               <div class="rep-poster-step">
+                                 <div class="rep-poster-step__title">① 选择模板</div>
                                 <div id="poster-template-selector" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
                                 <div id="poster-template-brief" style="margin-top:6px;padding:8px;border-radius:8px;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.12);color:rgba(226,232,240,0.7);font-size:11px;line-height:1.5;"></div>
                               </div>
 
-                             <div id="poster-editor-form" style="display:flex;flex-direction:column;gap:8px;">
-                               <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;">
-                                 <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.75);margin-bottom:8px;">② 填写内容</div>
+                              <div id="poster-editor-form" style="display:flex;flex-direction:column;gap:8px;">
+                                <div class="rep-poster-step">
+                                  <div class="rep-poster-step__title">② 填写内容</div>
                                  <div style="display:flex;flex-direction:column;gap:8px;">
                                     <input id="poster-title" placeholder="主标题" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
                                     <input id="poster-subtitle" placeholder="副标题" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;box-sizing:border-box;">
@@ -14359,8 +14370,8 @@
                                  </div>
                                </div>
 
-                               <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;">
-                                 <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.75);margin-bottom:8px;">③ AI辅助生成</div>
+                                <div class="rep-poster-step">
+                                  <div class="rep-poster-step__title">③ AI辅助生成</div>
                                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
                                    <button onclick="generatePosterCopy()" style="flex:1;min-width:120px;padding:10px;border-radius:8px;background:rgba(16,185,129,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.25);cursor:pointer;font-size:13px;font-weight:600;">🎯 生成引流卖点</button>
                                    <button onclick="generatePosterImagePrompt()" style="flex:1;min-width:120px;padding:10px;border-radius:8px;background:#6366f1;color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:600;">✨ 生成Image2提示词</button>
@@ -14371,8 +14382,8 @@
                                  </div>
                                </div>
 
-                               <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;">
-                                 <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.75);margin-bottom:8px;">④ 上传成图 + 标记用途</div>
+                                <div class="rep-poster-step">
+                                  <div class="rep-poster-step__title">④ 上传成图 + 标记用途</div>
                                  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
                                    <input id="poster-final-image-url" readonly placeholder="上传图片自动填充" style="flex:1;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;box-sizing:border-box;">
                                    <input type="file" id="poster-image-upload-input" accept="image/*" style="display:none;" onchange="uploadPosterImage(event)">
@@ -14389,8 +14400,8 @@
                                  </div>
                                </div>
 
-                               <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;">
-                                 <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.75);margin-bottom:8px;">⑤ 发布</div>
+                                <div class="rep-poster-step">
+                                  <div class="rep-poster-step__title">⑤ 发布</div>
                                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
                                    <select id="poster-public-channel" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;"></select>
                                    <input id="poster-public-date" type="date" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:13px;box-sizing:border-box;">
@@ -14489,60 +14500,59 @@
                     </div>
                     </div>
                     <div id="growth-pos-content" style="display:none;">
-                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
-                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                                <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);">POS消费分析</div>
-                                <div style="display:flex;gap:6px;align-items:center;">
-                                    <select id="pos-stats-days" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.08);color:#fff;border:1px solid rgba(255,255,255,0.15);font-size:12px;">
-                                        <option value="7">近7天</option>
-                                        <option value="30" selected>近30天</option>
-                                        <option value="90">近90天</option>
-                                    </select>
-                                    <button onclick="loadPosStats()" style="padding:5px 12px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:12px;">刷新</button>
-                                </div>
+                        <div class="rep-filters">
+                            <div class="rep-filters__eyebrow">POS</div>
+                            <div class="rep-filters__title">POS消费分析</div>
+                            <div class="rep-seg" style="margin-bottom:14px;">
+                                <select id="pos-stats-days" class="dr-store-select" style="flex:1;max-width:200px;padding:9px 12px;">
+                                    <option value="7">近7天</option>
+                                    <option value="30" selected>近30天</option>
+                                    <option value="90">近90天</option>
+                                </select>
+                                <button onclick="loadPosStats()" class="rep-seg-btn rep-seg-btn--active" style="flex:1;">刷新</button>
                             </div>
-                            <div id="pos-stats-loading" style="display:none;text-align:center;padding:40px;color:rgba(226,232,240,0.5);">加载中...</div>
-                            <div id="pos-stats-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;"></div>
-                            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;margin-bottom:12px;">
-                                <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">👥 客户画像</div>
+                            <div id="pos-stats-loading" style="display:none;text-align:center;padding:40px;color:var(--rep-muted);">加载中...</div>
+                            <div id="pos-stats-kpis" class="rep-grid" style="margin-bottom:14px;"></div>
+                            <div class="rep-poster-step">
+                                <div class="rep-poster-step__title">👥 客户画像</div>
                                 <div id="pos-stats-profile" style="min-height:100px;"></div>
                             </div>
-                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
-                                <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;">
-                                    <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">🔁 复购分布</div>
+                            <div class="rep-dashboard-grid" style="margin-top:14px;">
+                                <div class="rep-poster-step">
+                                    <div class="rep-poster-step__title">🔁 复购分布</div>
                                     <div id="pos-stats-repeat" style="min-height:100px;"></div>
                                 </div>
-                                <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;">
-                                    <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">🔥 菜品TOP15</div>
+                                <div class="rep-poster-step">
+                                    <div class="rep-poster-step__title">🔥 菜品TOP15</div>
                                     <div id="pos-stats-dishes" style="min-height:180px;"></div>
                                 </div>
                             </div>
-                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                                <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;">
-                                    <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">📊 时段分布</div>
+                            <div class="rep-dashboard-grid">
+                                <div class="rep-poster-step">
+                                    <div class="rep-poster-step__title">📊 时段分布</div>
                                     <div id="pos-stats-hour" style="min-height:180px;"></div>
                                 </div>
-                                <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;">
-                                    <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">💳 支付方式</div>
+                                <div class="rep-poster-step">
+                                    <div class="rep-poster-step__title">💳 支付方式</div>
                                     <div id="pos-stats-pay" style="min-height:80px;"></div>
                                 </div>
                             </div>
                             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px;">
-                                <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;">
-                                    <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">🍽 订单类型</div>
+                                <div class="rep-poster-step">
+                                    <div class="rep-poster-step__title">🍽 订单类型</div>
                                     <div id="pos-stats-order-type" style="min-height:80px;"></div>
                                 </div>
-                                <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;">
-                                    <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">📲 订单来源</div>
+                                <div class="rep-poster-step">
+                                    <div class="rep-poster-step__title">📲 订单来源</div>
                                     <div id="pos-stats-order-source" style="min-height:80px;"></div>
                                 </div>
-                                <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;">
-                                    <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">👨‍🍳 出品部门</div>
+                                <div class="rep-poster-step">
+                                    <div class="rep-poster-step__title">👨‍🍳 出品部门</div>
                                     <div id="pos-stats-dept" style="min-height:80px;"></div>
                                 </div>
                             </div>
-                            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;margin-top:12px;">
-                                <div style="font-size:12px;font-weight:700;color:rgba(226,232,240,0.7);margin-bottom:10px;">🏪 门店对比</div>
+                            <div class="rep-poster-step" style="margin-top:12px;">
+                                <div class="rep-poster-step__title">🏪 门店对比</div>
                                 <div id="pos-stats-stores" style="min-height:100px;"></div>
                             </div>
                         </div>
