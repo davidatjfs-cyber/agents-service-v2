@@ -1495,8 +1495,41 @@ export function registerGrowthRoutes(app, pool) {
 
   app.get('/api/growth/actions', async (req, res) => {
     if (!requireGrowthAuth(req, res)) return;
-    const r = await pool.query(`SELECT * FROM growth_actions ORDER BY created_at DESC LIMIT 200`);
-    return res.json({ ok: true, actions: r.rows });
+    const status = cleanText(req.query.status || '', 40);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+    let sql = `SELECT * FROM growth_actions`;
+    const params = [];
+    if (status) {
+      sql += ` WHERE status = $1`;
+      params.push(status);
+    }
+    sql += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit, offset);
+    const r = await pool.query(sql, params);
+    let countSql = `SELECT COUNT(*) as total FROM growth_actions`;
+    const countParams = [];
+    if (status) { countSql += ` WHERE status = $1`; countParams.push(status); }
+    const c = await pool.query(countSql, countParams);
+    return res.json({ ok: true, actions: r.rows, total: Number(c.rows[0]?.total || 0), limit, offset });
+  });
+
+  app.get('/api/growth/execution-logs', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+    const storeId = cleanText(req.query.store_id || '', 128);
+    const decision = cleanText(req.query.decision || '', 40);
+    let sql = `SELECT * FROM growth_execution_logs`;
+    const params = [];
+    const conds = [];
+    if (storeId) { conds.push(`store_id = $${params.length + 1}`); params.push(storeId); }
+    if (decision) { conds.push(`decision = $${params.length + 1}`); params.push(decision); }
+    if (conds.length) sql += ` WHERE ` + conds.join(' AND ');
+    sql += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit, offset);
+    const r = await pool.query(sql, params);
+    return res.json({ ok: true, logs: r.rows, limit, offset });
   });
 
   app.post('/api/growth/actions', async (req, res) => {

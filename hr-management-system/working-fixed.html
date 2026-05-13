@@ -11272,7 +11272,56 @@
                         <button id="growth-action-detail-execute" style="padding:10px 20px;border:none;border-radius:10px;background:rgba(34,197,94,0.2);color:#22c55e;font-weight:700;cursor:pointer;">✅ 执行该方案</button>
                         <button id="growth-action-detail-edit" style="padding:10px 20px;border:none;border-radius:10px;background:rgba(14,165,233,0.2);color:#38bdf8;font-weight:700;cursor:pointer;">✏️ 修改后执行</button>
                         <button id="growth-action-detail-ignore" style="padding:10px 20px;border:none;border-radius:10px;background:rgba(239,68,68,0.2);color:#ef4444;font-weight:700;cursor:pointer;">⛔ 忽略</button>
-                        <button onclick="closeActionDetailModal()" style="padding:10px 20px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;background:transparent;color:rgba(255,255,255,0.5);cursor:pointer;">关闭</button>
+                                <button onclick="closeActionDetailModal()" style="padding:10px 20px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;background:transparent;color:rgba(255,255,255,0.5);cursor:pointer;">关闭</button>
+                            </div>
+                        </div>
+                    </div>
+            <!-- 修改后执行 - 友好表单弹窗 -->
+            <div id="edit-exec-modal" class="modal hidden">
+                <div class="modal-backdrop" onclick="closeEditExecuteForm()"></div>
+                <div style="position:fixed;top:10%;left:10%;right:10%;bottom:auto;background:rgba(18,22,28,0.98);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:24px;z-index:2200;max-width:500px;margin:0 auto;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                        <h3 style="font-size:18px;font-weight:800;color:#fff;margin:0;">✏️ 修改后执行</h3>
+                        <button onclick="closeEditExecuteForm()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:24px;cursor:pointer;">×</button>
+                    </div>
+                    <div style="margin-bottom:16px;padding:10px;background:rgba(14,165,233,0.06);border-radius:8px;font-size:12px;color:rgba(226,232,240,0.7);">
+                        门店：<span id="edit-exec-store" style="color:#fff;font-weight:600;"></span>
+                        · 标题：<span id="edit-exec-title" style="color:#fff;font-weight:600;"></span>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:12px;">
+                        <div>
+                            <label style="font-size:12px;color:rgba(226,232,240,0.6);display:block;margin-bottom:4px;">执行渠道</label>
+                            <select id="edit-exec-channel" style="width:100%;padding:8px;border-radius:8px;background:rgba(255,255,255,0.06);color:#fff;border:1px solid rgba(255,255,255,0.12);font-size:13px;">
+                                <option value="miniprogram">小程序</option>
+                                <option value="wecom">企微</option>
+                                <option value="xiaohongshu">小红书</option>
+                                <option value="douyin">抖音</option>
+                                <option value="dianping">大众点评</option>
+                                <option value="waimai">美团</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size:12px;color:rgba(226,232,240,0.6);display:block;margin-bottom:4px;">目标人群</label>
+                            <select id="edit-exec-audience" style="width:100%;padding:8px;border-radius:8px;background:rgba(255,255,255,0.06);color:#fff;border:1px solid rgba(255,255,255,0.12);font-size:13px;">
+                                <option value="all">全部</option>
+                                <option value="new">新客</option>
+                                <option value="loyal">老客/忠诚</option>
+                                <option value="churn">流失预警</option>
+                                <option value="birthday">生日</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size:12px;color:rgba(226,232,240,0.6);display:block;margin-bottom:4px;">预算（元）</label>
+                            <input id="edit-exec-budget" type="number" min="0" placeholder="留空不变" style="width:100%;padding:8px;border-radius:8px;background:rgba(255,255,255,0.06);color:#fff;border:1px solid rgba(255,255,255,0.12);font-size:13px;">
+                        </div>
+                        <div>
+                            <label style="font-size:12px;color:rgba(226,232,240,0.6);display:block;margin-bottom:4px;">修改原因</label>
+                            <input id="edit-exec-reason" type="text" placeholder="已调整后执行" style="width:100%;padding:8px;border-radius:8px;background:rgba(255,255,255,0.06);color:#fff;border:1px solid rgba(255,255,255,0.12);font-size:13px;">
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:12px;margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.08);">
+                        <button onclick="submitEditExecuteForm()" style="flex:1;padding:10px 20px;border:none;border-radius:10px;background:rgba(34,197,94,0.2);color:#22c55e;font-weight:700;cursor:pointer;">✅ 确认修改并执行</button>
+                        <button onclick="closeEditExecuteForm()" style="padding:10px 20px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;background:transparent;color:rgba(255,255,255,0.5);cursor:pointer;">取消</button>
                     </div>
                 </div>
             </div>
@@ -13737,6 +13786,7 @@
                         <button onclick="showGrowthTab('posters')" id="growth-tab-posters" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">海报</button>
                         <button onclick="showGrowthTab('public')" id="growth-tab-public" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">公域品宣</button>
                         <button onclick="showGrowthTab('actions')" id="growth-tab-actions" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">AI建议执行</button>
+                        <button onclick="showGrowthTab('exec-logs')" id="growth-tab-exec-logs" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">执行记录</button>
                         <button onclick="showGrowthTab('pos')" id="growth-tab-pos" style="padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.7);border:none;cursor:pointer;font-size:13px;">POS消费</button>
                     </div>
                     <div id="growth-dashboard-content">
@@ -14194,9 +14244,31 @@
                             <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">AI建议执行</div>
                             <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
                                 <button onclick="loadGrowthActionBoard()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新建议</button>
+                                <select id="growth-action-status-filter" onchange="loadGrowthActionBoard()" style="padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.85);border:1px solid rgba(255,255,255,0.12);font-size:13px;">
+                                    <option value="">全部状态</option>
+                                    <option value="proposed">可执行</option>
+                                    <option value="executed">已执行</option>
+                                    <option value="ignored">已忽略</option>
+                                </select>
                             </div>
                             <div id="growth-action-board" style="max-height:520px;overflow-y:auto;"></div>
                             <pre id="__growth_actions_cache" style="display:none;"></pre>
+                        </div>
+                    </div>
+                    <div id="growth-exec-logs-content" style="display:none;">
+                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;">
+                            <div style="font-size:14px;font-weight:800;color:rgba(226,232,240,0.92);margin-bottom:14px;">执行记录</div>
+                            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+                                <button onclick="loadExecutionLogs()" style="padding:6px 14px;border-radius:8px;background:#0ea5e9;color:#fff;border:none;cursor:pointer;font-size:13px;">刷新</button>
+                                <select id="exec-log-decision-filter" onchange="loadExecutionLogs()" style="padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.85);border:1px solid rgba(255,255,255,0.12);font-size:13px;">
+                                    <option value="">全部决策</option>
+                                    <option value="executed">已执行</option>
+                                    <option value="ignored">已忽略</option>
+                                    <option value="edited_then_executed">修改后执行</option>
+                                    <option value="feedback">回填</option>
+                                </select>
+                            </div>
+                            <div id="growth-exec-logs-list" style="max-height:520px;overflow-y:auto;"></div>
                         </div>
                     </div>
                     </div>
@@ -45121,7 +45193,7 @@ ${body}
         }
 
         function showGrowthTab(tab) {
-            ['dashboard', 'wecom', 'campaigns', 'profiles', 'constraints', 'posters', 'public', 'actions', 'pos'].forEach(function(name) {
+            ['dashboard', 'wecom', 'campaigns', 'profiles', 'constraints', 'posters', 'public', 'actions', 'pos', 'exec-logs'].forEach(function(name) {
                 var content = document.getElementById('growth-' + name + '-content');
                 var btn = document.getElementById('growth-tab-' + name);
                 if (content) content.style.display = name === tab ? '' : 'none';
@@ -45157,6 +45229,8 @@ ${body}
                 refreshPublicContentWorkspace();
             } else if (tab === 'pos') {
                 loadPosStats();
+            } else if (tab === 'exec-logs') {
+                loadExecutionLogs();
             } else {
                 refreshGrowthDashboard();
             }
@@ -45849,40 +45923,59 @@ ${body}
                 var host = document.getElementById('growth-action-board');
                 if (!host) { console.error('loadGrowthActionBoard: growth-action-board element not found'); return; }
                 host.innerHTML = '<div style="color:rgba(226,232,240,0.3);padding:10px 0;">加载中...</div>';
-                const r = await fetch('/api/growth/actions', { headers: growthAuthHeaders() });
+                var statusFilter = document.getElementById('growth-action-status-filter')?.value || '';
+                var url = '/api/growth/actions?limit=200';
+                if (statusFilter) url += '&status=' + encodeURIComponent(statusFilter);
+                const r = await fetch(url, { headers: growthAuthHeaders() });
                 const actionsData = await r.json();
                 if (!actionsData.ok) throw new Error(actionsData.error || 'api_error');
                 const rows = actionsData?.actions || [];
                 try { document.getElementById('__growth_actions_cache').textContent = JSON.stringify(rows); } catch (e) {}
+                var channelLabels = { 'miniprogram': '小程序', 'wecom': '企微', 'xiaohongshu': '小红书', 'douyin': '抖音', 'dianping': '大众点评', 'waimai': '美团' };
+                var actionTypeLabels = { 'send_voucher': '🎫 发券', 'campaign_activate': '🚀 激活活动', 'create_content': '📝 创建内容', 'promo_task': '📋 推广任务', 'generate_poster': '🖼️ 生成海报' };
                 host.innerHTML = rows.length ? rows.map(function(x) {
                     const key = x.action_key || '';
                     var payload = x.payload || {};
                     var posterUrl = payload.poster_url || payload.output_url || '';
                     var confidence = payload.confidence_level || '';
                     var confidenceColor = confidence === '高置信' ? '#22c55e' : confidence === '试验性' ? '#f59e0b' : confidence === '需人工判断' ? '#ef4444' : '#64748b';
+                    var channel = payload.channel || '';
+                    var channelLabel = channelLabels[channel] || channel || '-';
+                    var channelColor = channel === 'wecom' ? '#22c55e' : channel === 'miniprogram' ? '#38bdf8' : channel === 'xiaohongshu' ? '#ef4444' : '#94a3b8';
+                    var typeLabel = actionTypeLabels[x.action_type] || '✅ 触达';
+                    var isFinal = x.status === 'executed' || x.status === 'ignored';
                     var draftPreview = '<div style="margin-top:8px;padding:10px;background:rgba(14,165,233,0.06);border:1px solid rgba(14,165,233,0.2);border-radius:8px;font-size:12px;">'
-                        + '<div style="color:#38bdf8;font-weight:700;margin-bottom:6px;">📋 执行草稿</div>'
+                        + '<div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:#38bdf8;font-weight:700;">📋 执行草稿</span>'
+                        + '<span style="font-size:10px;padding:2px 8px;border-radius:999px;background:' + channelColor + '22;color:' + channelColor + ';">' + channelLabel + '</span></div>'
                         + '<div style="display:flex;flex-direction:column;gap:4px;color:rgba(226,232,240,0.75);">'
                         + '<div><span style="color:rgba(226,232,240,0.5);">门店</span>：' + (x.store_id || '-') + (confidence ? ' <span style="font-size:10px;padding:1px 6px;border-radius:999px;background:' + confidenceColor + '22;color:' + confidenceColor + ';">' + confidence + '</span>' : '') + '</div>'
-                        + '<div><span style="color:rgba(226,232,240,0.5);">渠道</span>：' + (payload.channel || '-') + '</div>'
+                        + '<div><span style="color:rgba(226,232,240,0.5);">类型</span>：' + typeLabel + '</div>'
                         + '<div><span style="color:rgba(226,232,240,0.5);">目标</span>：' + (payload.target_audience || payload.audience || '门店活跃客群') + '</div>'
                         + '<div><span style="color:rgba(226,232,240,0.5);">动作</span>：' + (payload.execution_action || (x.detail || '').slice(0, 100)) + '</div>'
                         + (payload.budget_fen ? '<div><span style="color:rgba(226,232,240,0.5);">预算</span>：¥' + Math.round(Number(payload.budget_fen) / 100) + '</div>' : '')
-                        + (x.created_at ? '<div><span style="color:rgba(226,232,240,0.5);">生成</span>：' + String(x.created_at).slice(0, 10) : '')
+                        + (x.executed_at ? '<div><span style="color:rgba(226,232,240,0.5);">执行时间</span>：' + String(x.executed_at).slice(0, 16) : (x.created_at ? '<div><span style="color:rgba(226,232,240,0.5);">生成</span>：' + String(x.created_at).slice(0, 10) : ''))
                         + '</div></div>';
-                    var posterThumb = posterUrl ? '<div style="margin-top:8px;display:flex;gap:10px;align-items:center;padding:8px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:10px;"><img src="' + escapeHtml(posterUrl) + '" style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,0.08);"><div style="font-size:11px;color:rgba(226,232,240,0.58);">已绑定海报</div></div>' : '';
+                    var posterHtml;
+                    if (posterUrl) {
+                        posterHtml = '<div style="margin-top:8px;display:flex;gap:10px;align-items:center;padding:8px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:10px;"><img src="' + escapeHtml(posterUrl) + '" style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,0.08);"><div style="font-size:11px;color:rgba(226,232,240,0.58);">已绑定海报</div></div>';
+                    } else if (x.status === 'proposed' && (x.action_type === 'send_voucher' || x.action_type === 'campaign_activate')) {
+                        posterHtml = '<div style="margin-top:8px;padding:8px 10px;background:rgba(245,158,11,0.06);border:1px dashed rgba(245,158,11,0.3);border-radius:10px;font-size:11px;color:#f59e0b;cursor:pointer;" onclick="showGrowthTab(\'posters\')">🖼️ 未绑定海报 — 点此去生成</div>';
+                    } else {
+                        posterHtml = '';
+                    }
+                    var actionButtons = !isFinal ?
+                        '<button onclick="executeGrowthAction(\'' + key + '\')" style="flex:1;min-width:80px;padding:8px;border:none;border-radius:6px;background:rgba(34,197,94,0.2);color:#22c55e;cursor:pointer;font-size:12px;font-weight:600;">批准执行</button>'
+                        + '<button onclick="openEditExecuteForm(\'' + key + '\')" style="flex:1;min-width:60px;padding:8px;border:none;border-radius:6px;background:rgba(14,165,233,0.2);color:#38bdf8;cursor:pointer;font-size:12px;">修改后执行</button>'
+                        + '<button onclick="ignoreGrowthAction(\'' + key + '\')" style="flex:1;min-width:60px;padding:8px;border:none;border-radius:6px;background:rgba(239,68,68,0.2);color:#ef4444;cursor:pointer;font-size:12px;">忽略</button>'
+                        : '';
                     return '<div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;">'
                         + '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">'
-                        + '<div style="color:#fff;font-weight:600;cursor:pointer;flex:1;" onclick="openActionDetailModal(\'' + key + '\')">📄 ' + (x.title || '-') + '</div>'
-                        + '<div style="font-size:11px;color:' + (x.status === 'executed' ? '#22c55e' : x.status === 'ignored' ? '#ef4444' : '#f59e0b') + ';white-space:nowrap;">' + (x.status === 'executed' ? '已执行' : x.status === 'ignored' ? '已忽略' : x.status === 'proposed' ? '可执行' : x.status || '-') + '</div>'
+                        + '<div style="color:#fff;font-weight:600;cursor:pointer;flex:1;" onclick="openActionDetailModal(\'' + key + '\')">' + typeLabel + ' ' + (x.title || '-') + '</div>'
+                        + '<div style="font-size:11px;color:' + (x.status === 'executed' ? '#22c55e' : x.status === 'ignored' ? '#ef4444' : '#f59e0b') + ';white-space:nowrap;">' + (x.status === 'executed' ? '✅ 已执行' : x.status === 'ignored' ? '⛔ 已忽略' : x.status === 'proposed' ? '⚡ 可执行' : x.status || '-') + '</div>'
                         + '</div>'
-                        + posterThumb
+                        + posterHtml
                         + draftPreview
-                        + '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">'
-                        + '<button onclick="executeGrowthAction(\'' + key + '\')" style="flex:1;min-width:80px;padding:8px;border:none;border-radius:6px;background:rgba(34,197,94,0.2);color:#22c55e;cursor:pointer;font-size:12px;font-weight:600;">批准执行</button>'
-                        + '<button onclick="editExecuteGrowthAction(\'' + key + '\')" style="flex:1;min-width:60px;padding:8px;border:none;border-radius:6px;background:rgba(14,165,233,0.2);color:#38bdf8;cursor:pointer;font-size:12px;">修改后执行</button>'
-                        + '<button onclick="ignoreGrowthAction(\'' + key + '\')" style="flex:1;min-width:60px;padding:8px;border:none;border-radius:6px;background:rgba(239,68,68,0.2);color:#ef4444;cursor:pointer;font-size:12px;">忽略</button>'
-                        + '</div>'
+                        + (actionButtons ? '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">' + actionButtons + '</div>' : '')
                         + '</div>';
                 }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无AI建议</div>';
             } catch (e) {
@@ -45919,56 +46012,126 @@ ${body}
             var payload = x.payload || {};
             var key = x.action_key || '';
             var actionType = x.action_type || '';
+            var channelLabels = { 'miniprogram': '小程序', 'wecom': '企微', 'xiaohongshu': '小红书', 'douyin': '抖音', 'dianping': '大众点评', 'waimai': '美团' };
+            var channelColors = { 'wecom': '#22c55e', 'miniprogram': '#38bdf8', 'xiaohongshu': '#ef4444', 'douyin': '#f59e0b', 'dianping': '#a78bfa', 'waimai': '#f97316' };
+            var channel = payload.channel || '';
+            var channelLabel = channelLabels[channel] || channel || '-';
+            var channelColor = channelColors[channel] || '#94a3b8';
             var actionTypeLabel = '';
-            if (actionType === 'send_voucher' || actionType === 'campaign_activate') actionTypeLabel = '🎫 将激活活动 + 创建券记录';
-            else if (actionType === 'create_content' || actionType === 'promo_task') actionTypeLabel = '📝 将创建内容日历任务';
-            else if (actionType === 'generate_poster') actionTypeLabel = '🖼️ 将生成海报任务';
-            else actionTypeLabel = '✅ 将标记为已执行';
+            if (actionType === 'send_voucher' || actionType === 'campaign_activate') actionTypeLabel = '🎫 发券/激活活动 — 将创建券记录+计划';
+            else if (actionType === 'create_content' || actionType === 'promo_task') actionTypeLabel = '📝 创建内容 — 将写入内容日历';
+            else if (actionType === 'generate_poster') actionTypeLabel = '🖼️ 生成海报 — 将创建海报任务';
+            else actionTypeLabel = '✅ 触达动作';
             document.getElementById('growth-action-detail-modal').classList.remove('hidden');
             document.getElementById('growth-action-detail-title').textContent = x.title || '执行草稿';
             var host = document.getElementById('growth-action-detail-body');
-            host.innerHTML = '<div style="margin-bottom:12px;padding:10px;border-radius:8px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);color:#22c55e;font-weight:700;font-size:13px;">' + actionTypeLabel + '</div>'
+            host.innerHTML = '<div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
+                + '<span style="padding:6px 12px;border-radius:8px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);color:#22c55e;font-weight:700;font-size:12px;">' + actionTypeLabel + '</span>'
+                + '<span style="padding:4px 10px;border-radius:999px;background:' + channelColor + '22;color:' + channelColor + ';font-size:12px;font-weight:600;">📡 ' + channelLabel + '</span>'
+                + '</div>'
                 + '<div style="display:flex;flex-direction:column;gap:8px;">'
                 + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
                 + '<div><span style="color:rgba(226,232,240,0.5);font-size:12px;">门店</span><div style="color:#fff;font-weight:600;margin-top:2px;">' + (x.store_id || '-') + '</div></div>'
-                + '<div><span style="color:rgba(226,232,240,0.5);font-size:12px;">状态</span><div style="color:' + (x.status === 'executed' ? '#22c55e' : x.status === 'ignored' ? '#ef4444' : '#f59e0b') + ';font-weight:600;margin-top:2px;">' + (x.status === 'executed' ? '已执行' : x.status === 'ignored' ? '已忽略' : x.status === 'proposed' ? '可一键执行' : x.status || '-') + '</div></div>'
-                + '<div><span style="color:rgba(226,232,240,0.5);font-size:12px;">渠道</span><div style="color:#fff;margin-top:2px;">' + (payload.channel || '-') + '</div></div>'
+                + '<div><span style="color:rgba(226,232,240,0.5);font-size:12px;">状态</span><div style="color:' + (x.status === 'executed' ? '#22c55e' : x.status === 'ignored' ? '#ef4444' : '#f59e0b') + ';font-weight:600;margin-top:2px;">' + (x.status === 'executed' ? '✅ 已执行' : x.status === 'ignored' ? '⛔ 已忽略' : x.status === 'proposed' ? '⚡ 可一键执行' : x.status || '-') + '</div></div>'
+                + '<div><span style="color:rgba(226,232,240,0.5);font-size:12px;">渠道</span><div style="color:' + channelColor + ';margin-top:2px;font-weight:600;">' + channelLabel + '</div></div>'
                 + '<div><span style="color:rgba(226,232,240,0.5);font-size:12px;">预算</span><div style="color:#fff;margin-top:2px;">' + (payload.budget_fen ? '¥' + Math.round(Number(payload.budget_fen) / 100) : '-') + '</div></div>'
                 + '</div>'
                 + '<div><span style="color:rgba(226,232,240,0.5);font-size:12px;">目标人群</span><div style="color:#fff;margin-top:2px;">' + (payload.target_audience || payload.audience || '门店活跃客群') + '</div></div>'
                 + '<div><span style="color:rgba(226,232,240,0.5);font-size:12px;">执行动作</span><div style="color:' + (x.status === 'executed' ? 'rgba(34,197,94,0.8)' : 'rgba(226,232,240,0.8)') + ';margin-top:2px;font-size:13px;line-height:1.5;">' + (payload.execution_action || x.detail || '-') + '</div></div>'
-                + (x.status === 'executed' && payload.real_executions ? '<div style="padding:10px;background:rgba(34,197,94,0.08);border-radius:8px;"><div style="color:#22c55e;font-weight:700;margin-bottom:4px;">✅ 执行结果</div><div style="color:rgba(226,232,240,0.7);font-size:12px;line-height:1.5;">' + payload.real_executions.map(function(e) { return Object.entries(e).map(function(kv) { return kv[0] + ': ' + kv[1]; }).join(' · '); }).join('\n') + '</div></div>' : '')
+                + (x.status === 'executed' && payload.real_executions ? '<div style="padding:12px;background:rgba(34,197,94,0.08);border-radius:8px;"><div style="color:#22c55e;font-weight:700;margin-bottom:6px;">✅ 执行结果</div><div style="color:rgba(226,232,240,0.75);font-size:12px;line-height:1.6;">' + payload.real_executions.map(function(e) { return '• ' + Object.entries(e).map(function(kv) { return kv[0] + ': <span style="color:#fff;">' + kv[1] + '</span>'; }).join(' · '); }).join('<br>') + '</div></div>' : '')
                 + '<div style="padding:10px;background:rgba(14,165,233,0.08);border-radius:8px;"><div style="color:rgba(226,232,240,0.5);font-size:12px;margin-bottom:4px;">📊 说明</div><div style="color:rgba(226,232,240,0.7);font-size:12px;line-height:1.5;">基于门店增长数据与营销约束生成。</div></div>'
                 + '</div>';
             if (payload.poster_url || payload.output_url) {
                 host.innerHTML += '<div style="margin-top:16px;padding:12px;background:rgba(255,255,255,0.04);border-radius:10px;border:1px solid rgba(255,255,255,0.06);"><div style="font-size:12px;color:rgba(226,232,240,0.55);margin-bottom:8px;">来源海报</div><img src="' + escapeHtml(payload.poster_url || payload.output_url) + '" style="max-width:100%;max-height:320px;object-fit:contain;border-radius:8px;border:1px solid rgba(255,255,255,0.08);"></div>';
+            } else if (x.status === 'proposed' && (actionType === 'send_voucher' || actionType === 'campaign_activate')) {
+                host.innerHTML += '<div style="margin-top:16px;padding:12px;background:rgba(245,158,11,0.06);border:1px dashed rgba(245,158,11,0.3);border-radius:10px;font-size:12px;color:#f59e0b;cursor:pointer;" onclick="closeActionDetailModal();showGrowthTab(\'posters\')">🖼️ 尚未绑定海报 — 点击前往海报模块生成</div>';
             }
-            document.getElementById('growth-action-detail-execute').style.display = x.status === 'executed' ? 'none' : '';
+            document.getElementById('growth-action-detail-execute').style.display = x.status === 'executed' || x.status === 'ignored' ? 'none' : '';
             document.getElementById('growth-action-detail-execute').textContent = '✅ 批准执行';
             document.getElementById('growth-action-detail-execute').setAttribute('onclick', "closeActionDetailModal();executeGrowthAction('" + key + "')");
-            document.getElementById('growth-action-detail-edit').setAttribute('onclick', "closeActionDetailModal();editExecuteGrowthAction('" + key + "')");
+            document.getElementById('growth-action-detail-edit').style.display = x.status === 'executed' || x.status === 'ignored' ? 'none' : '';
+            document.getElementById('growth-action-detail-edit').setAttribute('onclick', "closeActionDetailModal();openEditExecuteForm('" + key + "')");
+            document.getElementById('growth-action-detail-ignore').style.display = x.status === 'executed' || x.status === 'ignored' ? 'none' : '';
             document.getElementById('growth-action-detail-ignore').setAttribute('onclick', "closeActionDetailModal();ignoreGrowthAction('" + key + "')");
         }
         function closeActionDetailModal() {
             document.getElementById('growth-action-detail-modal').classList.add('hidden');
         }
 
-        async function editExecuteGrowthAction(actionKey) {
-            const patch = prompt('请输入 JSON patch，例如 {"channel":"wecom"}', '{}');
-            if (patch == null) return;
-            const reason = prompt('修改原因', '已调整后执行');
-            if (reason === null) return;
+        var __editingActionKey = null;
+        function openEditExecuteForm(actionKey) {
+            __editingActionKey = actionKey;
+            var actions = JSON.parse(document.getElementById('__growth_actions_cache')?.textContent || '[]');
+            var x = actions.find(function(a) { return a.action_key === actionKey; });
+            if (!x) { showNotification('动作数据未缓存', 'warning'); return; }
+            var payload = x.payload || {};
+            document.getElementById('edit-exec-modal').classList.remove('hidden');
+            document.getElementById('edit-exec-store').textContent = x.store_id || '-';
+            document.getElementById('edit-exec-title').textContent = x.title || '-';
+            var channelEl = document.getElementById('edit-exec-channel');
+            if (channelEl) channelEl.value = payload.channel || 'miniprogram';
+            var audienceEl = document.getElementById('edit-exec-audience');
+            if (audienceEl) audienceEl.value = payload.target_audience || payload.audience || 'all';
+            var budgetEl = document.getElementById('edit-exec-budget');
+            if (budgetEl) budgetEl.value = payload.budget_fen ? String(Math.round(Number(payload.budget_fen) / 100)) : '';
+            var reasonEl = document.getElementById('edit-exec-reason');
+            if (reasonEl) reasonEl.value = '已调整后执行';
+        }
+        function closeEditExecuteForm() {
+            document.getElementById('edit-exec-modal').classList.add('hidden');
+            __editingActionKey = null;
+        }
+        async function submitEditExecuteForm() {
+            var actionKey = __editingActionKey;
+            if (!actionKey) { showNotification('数据异常', 'error'); return; }
+            var channel = document.getElementById('edit-exec-channel')?.value || 'miniprogram';
+            var audience = document.getElementById('edit-exec-audience')?.value || 'all';
+            var budgetYuan = document.getElementById('edit-exec-budget')?.value || '';
+            var reason = document.getElementById('edit-exec-reason')?.value || '已调整后执行';
+            var payload = { channel: channel, target_audience: audience };
+            if (budgetYuan) payload.budget_fen = Math.round(Number(budgetYuan) * 100);
             try {
-                const payload = JSON.parse(patch || '{}');
                 const r = await fetch('/api/growth/actions/' + encodeURIComponent(actionKey) + '/edit-and-execute', {
                     method: 'POST', headers: growthAuthHeaders(), body: JSON.stringify({ payload: payload, reason: reason || '' })
                 });
                 const data = await r.json();
                 if (!data.ok) throw new Error(data.error || 'edit_execute_failed');
                 showNotification('动作已修改并执行', 'success');
+                closeEditExecuteForm();
                 loadGrowthActionBoard();
             } catch (e) {
                 showNotification('修改执行失败：' + (e?.message || e), 'error');
+            }
+        }
+
+        async function loadExecutionLogs() {
+            try {
+                var host = document.getElementById('growth-exec-logs-list');
+                if (!host) return;
+                host.innerHTML = '<div style="color:rgba(226,232,240,0.3);padding:10px 0;">加载中...</div>';
+                var decision = document.getElementById('exec-log-decision-filter')?.value || '';
+                var url = '/api/growth/execution-logs?limit=100';
+                if (decision) url += '&decision=' + encodeURIComponent(decision);
+                const r = await fetch(url, { headers: growthAuthHeaders() });
+                const data = await r.json();
+                if (!data.ok) throw new Error(data.error || 'api_error');
+                const logs = data?.logs || [];
+                var decisionLabels = { 'executed': '✅ 已执行', 'ignored': '⛔ 已忽略', 'edited_then_executed': '✏️ 修改后执行', 'feedback': '📝 回填' };
+                host.innerHTML = logs.length ? logs.map(function(l) {
+                    var dLabel = decisionLabels[l.decision] || l.decision || '-';
+                    var dColor = l.decision === 'executed' || l.decision === 'edited_then_executed' ? '#22c55e' : l.decision === 'ignored' ? '#ef4444' : '#f59e0b';
+                    return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12px;">'
+                        + '<div style="display:flex;justify-content:space-between;align-items:center;">'
+                        + '<span style="color:#fff;font-weight:600;">' + (l.action_key || '').slice(0, 40) + '</span>'
+                        + '<span style="color:' + dColor + ';font-size:11px;">' + dLabel + '</span>'
+                        + '</div>'
+                        + '<div style="color:rgba(226,232,240,0.5);margin-top:4px;">门店：' + (l.store_id || '-') + ' · 类型：' + (l.action_type || '-') + ' · 操作人：' + (l.operator_username || '-') + ' · ' + (l.created_at ? String(l.created_at).slice(0, 16) : '') + '</div>'
+                        + (l.decision_reason ? '<div style="color:rgba(226,232,240,0.6);margin-top:2px;">原因：' + escapeHtml(l.decision_reason) + '</div>' : '')
+                        + (l.result_summary ? '<div style="color:rgba(226,232,240,0.6);margin-top:2px;">结果：' + escapeHtml(l.result_summary) + '</div>' : '')
+                        + '</div>';
+                }).join('') : '<div style="color:rgba(226,232,240,0.4);padding:10px 0;">暂无执行记录</div>';
+            } catch (e) {
+                document.getElementById('growth-exec-logs-list').innerHTML = '<div style="color:#ef4444;">加载执行记录失败：' + escapeHtml(e.message) + '</div>';
             }
         }
 
