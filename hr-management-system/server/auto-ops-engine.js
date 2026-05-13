@@ -264,7 +264,7 @@ async function escalateTask(task, hoursWaiting) {
 // 配置: 各指标阈值
 const BI_PUSH_THRESHOLDS = {
   revenue_miss_pct: 10,       // 营收达成率偏差 > 10%
-  bad_review_spike: 3,        // 差评数 > 3条/天
+  bad_review_spike: 1,        // 差评数 ≥ 1条/天即推送
   material_anomaly_count: 2,  // 原料异常 > 2次/天
   inspection_fail_rate: 30,   // 巡检不合格率 > 30%
 };
@@ -273,8 +273,8 @@ export async function biProactivePushTick() {
   const now = new Date();
   const cstHour = (now.getUTCHours() + 8) % 24;
 
-  // 仅在 CST 10:00-10:14 执行 (配合15分钟间隔)
-  if (cstHour !== 10 || now.getMinutes() > 14) return 0;
+  // 仅在 CST 10:00-23:59 执行 (一天只执行一次，通过dedup防重)
+  if (cstHour < 10) return 0;
 
   // 防重: 检查今天是否已推送
   try {
@@ -294,29 +294,52 @@ export async function biProactivePushTick() {
     );
     const stores = (storesR.rows || []).map(r => r.store);
 
+    // 一次性查询昨日所有差评（按差评门店分组）
+    let badReviewByStore = {};
+    try {
+      const badAllR = await pool().query(
+        `SELECT fields->>'差评门店' as store_name, COUNT(*) as cnt
+         FROM feishu_generic_records
+         WHERE config_key = 'bad_review' AND created_at::date = $1::date
+         GROUP BY fields->>'差评门店'`,
+        [yesterday]
+      );
+      for (const row of (badAllR.rows || [])) {
+        badReviewByStore[row.store_name] = parseInt(row.cnt || 0);
+      }
+    } catch (e) { console.error('[auto-ops] bad review aggregate error:', e?.message); }
+
+    // 将差评门店名映射到系统门店名（支持模糊匹配）
+    function matchBadReviewStore(badStoreName) {
+      if (!badStoreName) return null;
+      for (const sysStore of stores) {
+        if (badStoreName.includes(sysStore) || sysStore.includes(badStoreName)) return sysStore;
+        // 提取公共关键词匹配（如"马己仙"匹配"马己仙上海音乐广场店"和"马己仙大宁店"）
+        const commonWords = ['洪潮', '马己仙', '大宁', '久光'];
+        for (const w of commonWords) {
+          if (badStoreName.includes(w) && sysStore.includes(w)) return sysStore;
+        }
+      }
+      return null;
+    }
+
     for (const storeName of stores) {
       const alerts = [];
 
       // ── 差评数 ──
-      try {
-        const badR = await pool().query(
-          `SELECT COUNT(*) as cnt FROM feishu_generic_records
-           WHERE table_key = 'bad_reviews' AND (record_data->>'门店' = $1 OR record_data->>'store' = $1)
-             AND created_at::date = $2::date`,
-          [storeName, yesterday]
-        );
-        const badCount = parseInt(badR.rows?.[0]?.cnt || 0);
-        if (badCount >= BI_PUSH_THRESHOLDS.bad_review_spike) {
-          alerts.push(`📢 差评: 昨日${badCount}条 (阈值${BI_PUSH_THRESHOLDS.bad_review_spike}条)`);
-        }
-      } catch (e) {}
+      const badCount = Object.entries(badReviewByStore).reduce((sum, [badStore, cnt]) => {
+        return matchBadReviewStore(badStore) === storeName ? sum + cnt : sum;
+      }, 0);
+      if (badCount >= BI_PUSH_THRESHOLDS.bad_review_spike) {
+        alerts.push(`📢 差评: 昨日${badCount}条 (阈值${BI_PUSH_THRESHOLDS.bad_review_spike}条)`);
+      }
 
       // ── 原料异常 ──
       try {
         const matR = await pool().query(
           `SELECT COUNT(*) as cnt FROM feishu_generic_records
-           WHERE table_key = 'raw_material_orders' AND (record_data->>'门店' = $1 OR record_data->>'store' = $1)
-             AND record_data->>'异常' IS NOT NULL AND record_data->>'异常' != ''
+           WHERE config_key = 'raw_material_orders' AND (fields->>'门店' = $1 OR fields->>'store' = $1)
+             AND fields->>'异常' IS NOT NULL AND fields->>'异常' != ''
              AND created_at::date = $2::date`,
           [storeName, yesterday]
         );
@@ -343,10 +366,10 @@ export async function biProactivePushTick() {
       try {
         const inspR = await pool().query(
           `SELECT
-             COUNT(*) FILTER (WHERE record_data->>'status' = 'fail') as fail_cnt,
+             COUNT(*) FILTER (WHERE fields->>'status' = 'fail') as fail_cnt,
              COUNT(*) as total
            FROM feishu_generic_records
-           WHERE table_key = 'ops_checklists' AND (record_data->>'store' = $1 OR record_data->>'门店' = $1)
+           WHERE config_key = 'ops_checklists' AND (fields->>'store' = $1 OR fields->>'门店' = $1)
              AND created_at > NOW() - INTERVAL '7 days'`,
           [storeName]
         );
@@ -452,9 +475,9 @@ export async function laborEfficiencyTick() {
         pool().query(
           `SELECT
              COUNT(*) as total,
-             COUNT(*) FILTER (WHERE record_data->>'status' = 'fail') as fail_cnt
+             COUNT(*) FILTER (WHERE fields->>'status' = 'fail') as fail_cnt
            FROM feishu_generic_records
-           WHERE table_key = 'ops_checklists' AND (record_data->>'store' = $1)
+           WHERE config_key = 'ops_checklists' AND (fields->>'store' = $1)
              AND created_at > NOW() - INTERVAL '7 days'`,
           [storeName]
         )

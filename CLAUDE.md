@@ -62,4 +62,16 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ---
 
+## 5. Deployment & Server Info
+
+- **Server**: root@47.100.96.30 (passwordless SSH)
+- **Nginx serves from**: `/opt/hrms` (NOT `/root/hr-management-system/`)
+- **HRMS deploy**: `scp` files to `root@47.100.96.30:/opt/hrms/` then `ssh root@47.100.96.30 "pm2 restart hrms-service"`
+- **Agents-service-v2 deploy**: `scp` to `root@47.100.96.30:/root/agents-service-v2/` then `pm2 restart agents-service-v2`
+- **Local code**: `/Users/magainze/HRMS/hr-management-system/`
+- **PM2 processes**: `hrms-service` (port 3000), `agents-service-v2` (port 3101)
+- **DB**: `postgres://hrms:Abc1234567!@127.0.0.1:5432/hrms`
+- **Auth token**: localStorage key `hrms_token`
+- **Server files**: working-fixed.html, sw.js → `/opt/hrms/`; server/*.js → `/opt/hrms/server/`
+
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.

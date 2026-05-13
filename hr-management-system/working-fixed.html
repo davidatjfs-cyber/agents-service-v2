@@ -15956,6 +15956,16 @@
                     <label style="color: #666; font-size: 12px;">选择门店</label>
                     <select id="announcement-scope-store" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px;"></select>
                 </div>
+                <div class="form-group" style="margin-bottom: 12px; display:flex; align-items:center; gap: 12px; flex-wrap: wrap;">
+                    <label style="display:flex; align-items:center; gap: 6px; cursor:pointer;">
+                        <input type="checkbox" id="announcement-pinned" onchange="syncAnnouncementPinFields()" style="accent-color:#f59e0b; width:16px; height:16px;">
+                        <span style="color:#666; font-size:12px;">置顶</span>
+                    </label>
+                    <div id="announcement-pin-until-box" style="display:none;">
+                        <input type="datetime-local" id="announcement-pin-until" style="padding:6px 10px; border:1px solid #ddd; border-radius:8px; font-size:12px;">
+                        <span style="color:#999; font-size:11px; margin-left:4px;">截止时间（到期自动取消置顶）</span>
+                    </div>
+                </div>
                 <div style="display:flex; justify-content:flex-end; gap: 10px; flex-wrap: wrap;">
                     <button class="btn btn-secondary" type="button" onclick="closeAnnouncementModal()">取消</button>
                     <button class="btn" type="button" onclick="confirmAnnouncementPublish()">发布</button>
@@ -22344,6 +22354,12 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             if (box) box.style.display = t === 'store' ? '' : 'none';
         }
 
+        function syncAnnouncementPinFields() {
+            const pinned = document.getElementById('announcement-pinned')?.checked || false;
+            const box = document.getElementById('announcement-pin-until-box');
+            if (box) box.style.display = pinned ? '' : 'none';
+        }
+
         async function confirmAnnouncementPublish() {
             if (!isAdminUser()) {
                 showNotification('仅管理员可发布公告', 'warning');
@@ -22353,6 +22369,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             const content = String(document.getElementById('announcement-content')?.value || '').trim();
             const scopeType = String(document.getElementById('announcement-scope-type')?.value || 'all').trim();
             const store = String(document.getElementById('announcement-scope-store')?.value || '').trim();
+            const pinned = document.getElementById('announcement-pinned')?.checked || false;
+            const pinUntilVal = String(document.getElementById('announcement-pin-until')?.value || '').trim();
 
             if (!title) {
                 showNotification('请输入标题', 'warning');
@@ -22366,10 +22384,14 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 showNotification('请选择门店', 'warning');
                 return;
             }
+            if (pinned && !pinUntilVal) {
+                showNotification('置顶公告需设置截止时间', 'warning');
+                return;
+            }
 
             const data = HRMS_STORE.ensure();
             data.announcements = Array.isArray(data.announcements) ? data.announcements : [];
-            data.announcements.push({
+            const ann = {
                 id: 'ANN' + Date.now(),
                 title,
                 level: 'important',
@@ -22378,7 +22400,12 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 createdAt: hrmsNowISO(),
                 createdBy: currentUser?.username || 'admin',
                 createdByName: currentUser?.name || ''
-            });
+            };
+            if (pinned) {
+                ann.pinned = true;
+                ann.pin_until = pinUntilVal ? new Date(pinUntilVal).toISOString() : null;
+            }
+            data.announcements.push(ann);
             HRMS_STORE.set(data);
             try { await HRMS_API.saveState(HRMS_STORE.ensure()); } catch (e) { console.warn('state save after announcement publish failed', e); }
             closeAnnouncementModal();
@@ -36923,7 +36950,20 @@ tr:nth-child(even) td { background: #fafafa; }
                 })
                 .map(a => ({ ...a, _src: 'announcement', _id: a.id || '' }));
             const visible = uniqueDbNotifs.concat(sysNotifs).concat(anns);
-            visible.sort((a, b) => String(b?.createdAt || '').localeCompare(String(a?.createdAt || '')));
+            // 置顶公告优先显示（检查是否过期）
+            const nowISO = new Date().toISOString();
+            const isPinned = (a) => {
+                if (!a?.pinned) return false;
+                if (a?.pin_until && a.pin_until < nowISO) return false; // 过期自动取消置顶
+                return true;
+            };
+            visible.sort((a, b) => {
+                const aPinned = isPinned(a);
+                const bPinned = isPinned(b);
+                if (aPinned && !bPinned) return -1;
+                if (!aPinned && bPinned) return 1;
+                return String(b?.createdAt || '').localeCompare(String(a?.createdAt || ''));
+            });
 
             // Update header badge & subtitle
             const todayDate = new Date().toISOString().slice(0, 10);
@@ -36981,8 +37021,12 @@ tr:nth-child(even) td { background: #fafafa; }
                 if (String(a?.title || '').includes('排班')) typeIcon = '📅';
 
                 // Badge
+                const nowISO = new Date().toISOString();
+                const isPinned = a?.pinned && (!a?.pin_until || a.pin_until >= nowISO);
                 let badge = '';
-                if (isToday) {
+                if (isPinned) {
+                    badge = '<span style="display:inline-block; font-size:10px; font-weight:700; padding:2px 7px; border-radius:6px; background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; margin-left:8px; letter-spacing:0.3px;">📌 置顶</span>';
+                } else if (isToday) {
                     badge = '<span style="display:inline-block; font-size:10px; font-weight:700; padding:2px 7px; border-radius:6px; background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; margin-left:8px; letter-spacing:0.3px;">NEW</span>';
                 } else if (isImportant) {
                     badge = '<span style="display:inline-block; font-size:10px; font-weight:700; padding:2px 7px; border-radius:6px; background:rgba(239,68,68,0.2); color:rgba(239,68,68,0.95); margin-left:8px;">重要</span>';
