@@ -391,15 +391,20 @@ export function registerPhaseRoutes(app, pool) {
     if (!rqa(req, res)) return;
     const b = req.body || {};
     const r = await pool.query(
-      `INSERT INTO growth_campaign_plans(plan_id,store_id,campaign_id,title,channel,voucher_template_id,target_audience,budget_fen,status,planned_start,planned_end,created_by)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-       ON CONFLICT(plan_id) DO UPDATE SET title=EXCLUDED.title,status=EXCLUDED.status,updated_at=NOW() RETURNING *`,
+      `INSERT INTO growth_campaign_plans(plan_id,store_id,campaign_id,title,channel,voucher_template_id,target_audience,budget_fen,status,planned_start,planned_end,created_by,source_template_id,recommended_poster_id)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+       ON CONFLICT(plan_id) DO UPDATE SET title=EXCLUDED.title,status=EXCLUDED.status,channel=EXCLUDED.channel,target_audience=EXCLUDED.target_audience,budget_fen=EXCLUDED.budget_fen,source_template_id=EXCLUDED.source_template_id,recommended_poster_id=EXCLUDED.recommended_poster_id,updated_at=NOW() RETURNING *`,
       [cleanText(b.plan_id,128),cleanText(b.store_id,128),cleanText(b.campaign_id,128),cleanText(b.title,500),
        cleanText(b.channel,80),cleanText(b.voucher_template_id,128),cleanText(b.target_audience||'all',200),
        Math.max(0,Math.floor(Number(b.budget_fen)||0)),cleanText(b.status||'draft',40),
        b.planned_start?parseOccurredAt(b.planned_start):null,b.planned_end?parseOccurredAt(b.planned_end):null,
-       cleanText(b.created_by||'admin',80)]
+       cleanText(b.created_by||'admin',80),
+       b.source_template_id?Number(b.source_template_id):null,
+       b.recommended_poster_id?Number(b.recommended_poster_id):null]
     );
+    if (b.source_template_id) {
+      pool.query('UPDATE marketing_templates SET use_count = use_count + 1 WHERE id = $1', [Number(b.source_template_id)]).catch(() => {});
+    }
     res.json({ok:true,plan:r.rows[0]});
   });
 
@@ -409,6 +414,33 @@ export function registerPhaseRoutes(app, pool) {
     const st = cleanText(req.query.status||'',40);
     const r = await pool.query(`SELECT * FROM growth_campaign_plans WHERE ($1='' OR store_id=$1) AND ($2='' OR status=$2) ORDER BY created_at DESC LIMIT 200`,[sid,st]);
     res.json({ok:true,plans:r.rows});
+  });
+
+  app.get('/api/growth/marketing-templates', async (req, res) => {
+    if (!rqa(req, res)) return;
+    const r = await pool.query('SELECT id, name, category, description, actions, expected_roi, budget_range, duration_days, success_rate, use_count, channel, target_audience, payload_template FROM marketing_templates ORDER BY success_rate DESC NULLS LAST, use_count DESC');
+    res.json({ok:true,templates:r.rows});
+  });
+
+  app.post('/api/growth/marketing-templates', async (req, res) => {
+    if (!rqa(req, res)) return;
+    const b = req.body || {};
+    const r = await pool.query(
+      `INSERT INTO marketing_templates(name,category,description,actions,expected_roi,budget_range,duration_days,success_rate,channel,target_audience,payload_template)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [cleanText(b.name,200),cleanText(b.category,80),cleanText(b.description,1000),
+       JSON.stringify(b.actions||[]),Number(b.expected_roi)||0,cleanText(b.budget_range,100),
+       Math.max(1,Math.floor(Number(b.duration_days)||7)),Number(b.success_rate)||0,
+       cleanText(b.channel,80),cleanText(b.target_audience||'all',200),
+       JSON.stringify(b.payload_template||{})]
+    );
+    res.json({ok:true,template:r.rows[0]});
+  });
+
+  app.delete('/api/growth/marketing-templates/:id', async (req, res) => {
+    if (!rqa(req, res)) return;
+    await pool.query('DELETE FROM marketing_templates WHERE id = $1', [Number(req.params.id)]);
+    res.json({ok:true});
   });
 
   app.get('/api/growth/store-rankings', async (req, res) => {

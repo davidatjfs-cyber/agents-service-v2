@@ -951,14 +951,19 @@ async function executeGrowthActionRecord(pool, before, operator, extraPayload = 
       const title = cleanText(before.title, 500);
       const planId = `exec_plan_${Date.now()}`;
       const channel = cleanText(payload.channel || 'miniprogram', 80);
+      const sourceTemplateId = payload.source_template_id ? Number(payload.source_template_id) : null;
+      const recommendedPosterId = payload.recommended_poster_id ? Number(payload.recommended_poster_id) : null;
       const planResult = await pool.query(
-        `INSERT INTO growth_campaign_plans (plan_id, store_id, campaign_id, title, channel, status, planned_start, planned_end, created_by)
-         VALUES ($1,$2,$3,$4,$5,'active',NOW(),NOW() + ($6::int || ' days')::interval,$7)
+        `INSERT INTO growth_campaign_plans (plan_id, store_id, campaign_id, title, channel, status, planned_start, planned_end, created_by, source_template_id, recommended_poster_id)
+         VALUES ($1,$2,$3,$4,$5,'active',NOW(),NOW() + ($6::int || ' days')::interval,$7,$8,$9)
          ON CONFLICT (plan_id) DO UPDATE SET status='active', updated_at=NOW()
          RETURNING plan_id, status`,
-        [planId, storeId, campaignId || `camp_${Date.now()}`, title, channel, Math.max(1, Math.floor(Number(payload.valid_days) || 7)), operator.username]
+        [planId, storeId, campaignId || `camp_${Date.now()}`, title, channel, Math.max(1, Math.floor(Number(payload.valid_days) || 7)), operator.username, sourceTemplateId, recommendedPosterId]
       );
       executionResults.real_executions.push({ type: 'campaign_plan', plan_id: planResult.rows[0]?.plan_id, status: 'active' });
+      if (sourceTemplateId) {
+        pool.query('UPDATE marketing_templates SET use_count = use_count + 1 WHERE id = $1', [sourceTemplateId]).catch(() => {});
+      }
       if (campaignId) {
         await pool.query(
           `INSERT INTO growth_campaigns (campaign_id, name, channel, store_id, status)

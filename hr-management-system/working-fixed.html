@@ -13802,6 +13802,16 @@
                             <div id="campaign-plans-list" style="max-height:500px;overflow-y:auto;"></div>
                             <div id="campaign-create-form" style="display:none;margin-top:16px;padding:16px;background:rgba(14,165,233,0.06);border:1px solid rgba(14,165,233,0.2);border-radius:12px;">
                                 <div style="font-size:13px;font-weight:700;color:#38bdf8;margin-bottom:12px;">新建营销活动</div>
+                                <div style="margin-bottom:10px;">
+                                    <select id="camp-template" onchange="applyMarketingTemplate()" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(226,232,240,0.8);">
+                                        <option value="">— 从营销模板创建（可选）—</option>
+                                    </select>
+                                    <div id="camp-template-hint" style="font-size:11px;color:rgba(226,232,240,0.45);margin-top:4px;display:none;"></div>
+                                </div>
+                                <div id="camp-matched-poster" style="display:none;margin-bottom:10px;padding:10px;border-radius:8px;border:1px solid rgba(99,102,241,0.3);background:rgba(99,102,241,0.06);">
+                                    <div style="font-size:11px;color:rgba(226,232,240,0.5);margin-bottom:4px;">📋 自动匹配推荐海报</div>
+                                    <div id="camp-matched-poster-info" style="font-size:12px;color:#a5b4fc;"></div>
+                                </div>
                                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
                                     <input id="camp-store" placeholder="门店ID" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
                                     <input id="camp-title" placeholder="活动标题" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;">
@@ -45324,11 +45334,98 @@ ${body}
             }
         }
 
+        var _marketingTemplates = [];
+        var _matchedPosterId = null;
+
+        async function loadMarketingTemplates() {
+            try {
+                var r = await fetch('/api/growth/marketing-templates', { headers: growthAuthHeaders() });
+                var data = await r.json();
+                _marketingTemplates = data.templates || [];
+                var sel = document.getElementById('camp-template');
+                if (sel) {
+                    sel.innerHTML = '<option value="">— 从营销模板创建（可选）—</option>';
+                    _marketingTemplates.forEach(function(t) {
+                        var opt = document.createElement('option');
+                        opt.value = t.id;
+                        opt.textContent = t.name + '（' + (t.category || '') + ' · ROI ' + (t.expected_roi || '?') + ' · 成功率 ' + Math.round((t.success_rate || 0) * 100) + '% · 已用' + (t.use_count || 0) + '次）';
+                        sel.appendChild(opt);
+                    });
+                }
+            } catch (e) { console.error('loadMarketingTemplates:', e); }
+        }
+
+        async function matchPosterForTemplate(channel) {
+            _matchedPosterId = null;
+            var posterDiv = document.getElementById('camp-matched-poster');
+            var posterInfo = document.getElementById('camp-matched-poster-info');
+            if (!posterDiv || !posterInfo) return;
+            try {
+                var purposeMap = { 'miniprogram': '拉新', 'wecom': '召回', 'xiaohongshu': '品宣', 'douyin': '拉新', 'dianping': '促销', 'waimai': '促销' };
+                var channelMap = { 'miniprogram': '企微', 'wecom': '企微', 'xiaohongshu': '小红书', 'douyin': '抖音', 'dianping': '大众点评', 'waimai': '美团' };
+                var purpose = purposeMap[channel] || '品宣';
+                var ch = channelMap[channel] || '';
+                var url = '/api/growth/content-library?purpose=' + encodeURIComponent(purpose);
+                if (ch) url += '&channel=' + encodeURIComponent(ch);
+                url += '&limit=5';
+                var r = await fetch(url, { headers: growthAuthHeaders() });
+                var data = await r.json();
+                var posters = data.posters || [];
+                if (posters.length > 0) {
+                    _matchedPosterId = posters[0].id;
+                    posterDiv.style.display = 'block';
+                    posterInfo.innerHTML = '✅ 匹配到 <b>' + posters.length + '</b> 张海报，推荐：「' + escapeHtml(posters[0].title || '未命名') + '」';
+                } else {
+                    posterDiv.style.display = 'none';
+                }
+            } catch (e) {
+                posterDiv.style.display = 'none';
+            }
+        }
+
+        function applyMarketingTemplate() {
+            var sel = document.getElementById('camp-template');
+            var hint = document.getElementById('camp-template-hint');
+            var id = sel ? sel.value : '';
+            if (!id) {
+                if (hint) hint.style.display = 'none';
+                document.getElementById('camp-matched-poster').style.display = 'none';
+                _matchedPosterId = null;
+                return;
+            }
+            var tpl = _marketingTemplates.find(function(t) { return String(t.id) === String(id); });
+            if (!tpl) return;
+            var pt = tpl.payload_template || {};
+            var fields = {
+                'camp-title': tpl.name || '',
+                'camp-channel': tpl.channel || 'miniprogram',
+                'camp-audience': tpl.target_audience || 'all',
+                'camp-budget': pt.budget_fen ? String(pt.budget_fen) : '',
+                'camp-coupon-value': pt.coupon_value_fen ? String(pt.coupon_value_fen) : '',
+                'camp-detail': (tpl.description || '') + (tpl.actions ? '\n执行步骤：' + (Array.isArray(tpl.actions) ? tpl.actions.join(' → ') : '') : '')
+            };
+            Object.keys(fields).forEach(function(fid) {
+                var el = document.getElementById(fid);
+                if (el && fields[fid]) el.value = fields[fid];
+            });
+            var endDate = new Date(Date.now() + (tpl.duration_days || 7) * 86400000);
+            var endEl = document.getElementById('camp-end');
+            if (endEl && !endEl.value) endEl.value = endDate.toISOString().slice(0, 10);
+            var startEl = document.getElementById('camp-start');
+            if (startEl && !startEl.value) startEl.value = new Date().toISOString().slice(0, 10);
+            if (hint) {
+                hint.innerHTML = '📋 ' + escapeHtml(tpl.name) + '：' + escapeHtml(tpl.description || '') + ' | 预算' + escapeHtml(tpl.budget_range || '?') + '元 · ' + (tpl.duration_days || 7) + '天 · ROI ' + (tpl.expected_roi || '?') + ' · 成功率 ' + Math.round((tpl.success_rate || 0) * 100) + '% · 已用' + (tpl.use_count || 0) + '次';
+                hint.style.display = 'block';
+            }
+            matchPosterForTemplate(tpl.channel || 'miniprogram');
+        }
+
         function showCreateCampaignForm() {
             var form = document.getElementById('campaign-create-form');
             if (form) {
                 form.style.display = form.style.display === 'none' ? 'block' : 'none';
                 if (form.style.display !== 'none') {
+                    loadMarketingTemplates();
                     var list = document.getElementById('campaign-plans-list');
                     if (list && form.parentElement === list.parentElement && form.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_PRECEDING) {
                         list.parentElement.insertBefore(form, list);
@@ -45352,7 +45449,9 @@ ${body}
                     planned_end: document.getElementById('camp-end')?.value || null,
                     status: 'draft',
                     voucher_template_id: '',
-                    created_by: 'admin'
+                    created_by: 'admin',
+                    source_template_id: document.getElementById('camp-template')?.value || null,
+                    recommended_poster_id: _matchedPosterId || null
                 };
                 if (!payload.store_id || !payload.title) {
                     showNotification('请填写门店ID和活动标题', 'warning');
