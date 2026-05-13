@@ -14088,6 +14088,7 @@
                 <nav class="rep-tabs" style="margin-bottom:16px;">
                   <button class="rep-tab rep-tab--active" onclick="showGrowthTab('dashboard')" id="growth-tab-dashboard">看板</button>
                   <button class="rep-tab" onclick="showGrowthTab('wecom')" id="growth-tab-wecom">企微客户</button>
+                  <button class="rep-tab" onclick="showGrowthTab('wecomconfig')" id="growth-tab-wecomconfig">企微配置</button>
                   <button class="rep-tab" onclick="showGrowthTab('campaigns')" id="growth-tab-campaigns">活动管理</button>
                   <button class="rep-tab" onclick="showGrowthTab('profiles')" id="growth-tab-profiles">用户画像</button>
                   <button class="rep-tab" onclick="showGrowthTab('constraints')" id="growth-tab-constraints">营销约束</button>
@@ -14157,6 +14158,32 @@
                             <div id="wecom-unbound-section" style="margin-top:14px;display:none;">
                                 <div style="font-size:13px;font-weight:700;color:#f59e0b;margin-bottom:8px;">⚠️ 未绑定客户（需推入会）</div>
                                 <div id="wecom-unbound-list" style="max-height:200px;overflow-y:auto;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="growth-wecomconfig-content" style="display:none;">
+                        <div class="rep-filters">
+                            <div class="rep-filters__eyebrow">WECOM CONFIG</div>
+                            <div class="rep-filters__title">门店企微配置</div>
+                            <div class="rep-seg" style="margin-bottom:14px;">
+                                <button onclick="loadStoreWecomConfigs()" class="rep-seg-btn rep-seg-btn--active" style="flex:1;">刷新</button>
+                                <button onclick="showAddStoreWecomConfig()" class="rep-seg-btn" style="flex:1;">新增配置</button>
+                                <button onclick="triggerSyncAllWecomContacts()" class="rep-seg-btn" style="flex:1;">同步企微客户</button>
+                            </div>
+                            <div id="store-wecom-configs-list" style="max-height:60vh;overflow-y:auto;"></div>
+                        </div>
+                        <div id="store-wecom-config-modal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;flex-direction:column;" onclick="if(event.target===this)closeStoreWecomConfigModal()">
+                            <div style="background:#0f0f14;border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:24px;width:400px;max-width:90vw;">
+                                <div style="font-size:14px;font-weight:700;color:var(--rep-gold);margin-bottom:16px;" id="wecom-config-modal-title">新增门店企微配置</div>
+                                <div class="rep-field"><label>门店ID</label><input id="wecom-store-id" class="dr-store-select" placeholder="例如：store_maijixian"></div>
+                                <div class="rep-field"><label>企业ID (CorpID)</label><input id="wecom-corp-id" class="dr-store-select" placeholder="wwxxxxxxxxxxxxxx"></div>
+                                <div class="rep-field"><label>应用Secret</label><input id="wecom-corp-secret" class="dr-store-select" type="password" placeholder="应用密钥"></div>
+                                <div class="rep-field"><label>应用ID (AgentID)</label><input id="wecom-agent-id" class="dr-store-select" placeholder="1000004"></div>
+                                <div class="rep-field"><label>发送员工账号 (sender_userid)</label><input id="wecom-sender-userid" class="dr-store-select" placeholder="员工UserID"></div>
+                                <div style="display:flex;gap:8px;margin-top:16px;">
+                                    <button onclick="saveStoreWecomConfig()" style="flex:1;padding:10px;border:none;border-radius:12px;background:linear-gradient(135deg,var(--rep-gold),#b8860b);color:#000;font-weight:700;cursor:pointer;">保存</button>
+                                    <button onclick="closeStoreWecomConfigModal()" style="flex:1;padding:10px;border:1px solid rgba(255,255,255,0.15);border-radius:12px;background:transparent;color:var(--rep-text);cursor:pointer;">取消</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -45494,7 +45521,7 @@ ${body}
         }
 
         function showGrowthTab(tab) {
-            ['dashboard', 'wecom', 'campaigns', 'profiles', 'constraints', 'posters', 'public', 'actions', 'pos', 'exec-logs'].forEach(function(name) {
+            ['dashboard', 'wecom', 'wecomconfig', 'campaigns', 'profiles', 'constraints', 'posters', 'public', 'actions', 'pos', 'exec-logs'].forEach(function(name) {
                 var content = document.getElementById('growth-' + name + '-content');
                 var btn = document.getElementById('growth-tab-' + name);
                 if (content) content.style.display = name === tab ? '' : 'none';
@@ -45532,6 +45559,8 @@ ${body}
                 loadPosStats();
             } else if (tab === 'exec-logs') {
                 loadExecutionLogs();
+            } else if (tab === 'wecomconfig') {
+                loadStoreWecomConfigs();
             } else {
                 refreshGrowthDashboard();
             }
@@ -45673,8 +45702,6 @@ ${body}
                         }).then(function(r) { return r.json(); }).then(function(data) {
                             if (!data.ok) throw new Error(data.error || 'import_failed');
                             showNotification('导入成功：' + (data.imported || 0) + ' 条，匹配 ' + (data.matched || 0) + ' 条', 'success');
-                            loadWechatWorkStats();
-                            loadWechatWorkCustomers();
                         }).catch(function(e) {
                             showNotification('导入失败：' + (e?.message || e), 'error');
                         });
@@ -45867,6 +45894,144 @@ ${body}
              var mainStore = document.getElementById('growth-store-filter')?.value;
              if (mainStore && !sel.value) sel.value = mainStore;
          }
+
+        /* ── Store WeCom Config ── */
+        let __editWecomStoreId = '';
+
+        async function loadStoreWecomConfigs() {
+            try {
+                var host = document.getElementById('store-wecom-configs-list');
+                host.innerHTML = '<div style="color:var(--rep-muted);padding:12px;">加载中...</div>';
+                var r = await fetch('/api/growth/store-wecom-configs', { headers: growthAuthHeaders() });
+                var data = await r.json();
+                var configs = data?.configs || [];
+                if (!configs.length) {
+                    host.innerHTML = '<div style="color:var(--rep-muted);padding:12px;">暂无门店企微配置，点击上方「新增配置」添加</div>';
+                    return;
+                }
+                var html = configs.map(function(c) {
+                    return '<div style="padding:12px 14px;margin-bottom:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;display:flex;align-items:center;justify-content:space-between;">'
+                        + '<div><strong style="color:var(--rep-gold);">' + escHtml(c.store_id) + '</strong>'
+                        + '<div style="font-size:12px;color:var(--rep-muted);margin-top:2px;">CorpID: ' + escHtml(c.corp_id) + ' | AgentID: ' + escHtml(c.agent_id || '-') + '</div></div>'
+                        + '<div style="display:flex;gap:6px;">'
+                        + '<button onclick="editStoreWecomConfig(\'' + escHtml(c.store_id) + '\')" style="padding:6px 12px;border:1px solid rgba(255,255,255,0.15);border-radius:8px;background:transparent;color:var(--rep-text);cursor:pointer;">编辑</button>'
+                        + '<button onclick="deleteStoreWecomConfig(\'' + escHtml(c.store_id) + '\')" style="padding:6px 12px;border:1px solid rgba(239,68,68,0.4);border-radius:8px;background:transparent;color:#ef4444;cursor:pointer;">删除</button>'
+                        + '</div></div>';
+                }).join('');
+                host.innerHTML = html;
+            } catch (e) {
+                document.getElementById('store-wecom-configs-list').innerHTML = '<div style="color:#ef4444;padding:12px;">加载失败: ' + (e.message || e) + '</div>';
+            }
+        }
+
+        function showAddStoreWecomConfig() {
+            __editWecomStoreId = '';
+            document.getElementById('wecom-config-modal-title').textContent = '新增门店企微配置';
+            ['wecom-store-id','wecom-corp-id','wecom-corp-secret','wecom-agent-id','wecom-sender-userid'].forEach(function(id) {
+                document.getElementById(id).value = '';
+            });
+            document.getElementById('store-wecom-config-modal').style.display = 'flex';
+        }
+
+        function editStoreWecomConfig(storeId) {
+            __editWecomStoreId = storeId;
+            document.getElementById('wecom-config-modal-title').textContent = '编辑门店企微配置 - ' + storeId;
+            fetch('/api/growth/store-wecom-configs', { headers: growthAuthHeaders() })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var configs = data?.configs || [];
+                    var c = configs.find(function(x) { return x.store_id === storeId; });
+                    if (!c) return;
+                    document.getElementById('wecom-store-id').value = c.store_id;
+                    document.getElementById('wecom-corp-id').value = c.corp_id;
+                    document.getElementById('wecom-corp-secret').value = c.corp_secret;
+                    document.getElementById('wecom-agent-id').value = c.agent_id || '';
+                    document.getElementById('wecom-sender-userid').value = c.sender_userid || '';
+                    document.getElementById('store-wecom-config-modal').style.display = 'flex';
+                })
+                .catch(function() {});
+        }
+
+        function closeStoreWecomConfigModal() {
+            document.getElementById('store-wecom-config-modal').style.display = 'none';
+        }
+
+        async function saveStoreWecomConfig() {
+            var payload = {
+                store_id: document.getElementById('wecom-store-id').value.trim(),
+                corp_id: document.getElementById('wecom-corp-id').value.trim(),
+                corp_secret: document.getElementById('wecom-corp-secret').value.trim(),
+                agent_id: document.getElementById('wecom-agent-id').value.trim(),
+                sender_userid: document.getElementById('wecom-sender-userid').value.trim()
+            };
+            if (!payload.store_id || !payload.corp_id || !payload.corp_secret) {
+                alert('门店ID、企业ID和Secret为必填项');
+                return;
+            }
+            try {
+                var r = await fetch('/api/growth/store-wecom-configs', {
+                    method: 'POST',
+                    headers: Object.assign({ 'Content-Type': 'application/json' }, growthAuthHeaders()),
+                    body: JSON.stringify(payload)
+                });
+                var data = await r.json();
+                if (data.ok) {
+                    closeStoreWecomConfigModal();
+                    loadStoreWecomConfigs();
+                } else {
+                    alert('保存失败: ' + (data.error || ''));
+                }
+            } catch (e) {
+                alert('保存失败: ' + (e.message || e));
+            }
+        }
+
+        async function deleteStoreWecomConfig(storeId) {
+            if (!confirm('确定删除门店 ' + storeId + ' 的企微配置？')) return;
+            try {
+                var r = await fetch('/api/growth/store-wecom-configs/' + encodeURIComponent(storeId), {
+                    method: 'DELETE',
+                    headers: growthAuthHeaders()
+                });
+                var data = await r.json();
+                if (data.ok) {
+                    loadStoreWecomConfigs();
+                } else {
+                    alert('删除失败: ' + (data.error || ''));
+                }
+            } catch (e) {
+                alert('删除失败: ' + (e.message || e));
+            }
+        }
+
+        async function triggerSyncAllWecomContacts() {
+            if (!confirm('确定要同步所有门店的企微客户列表？此操作可能需要几分钟。')) return;
+            try {
+                var host = document.getElementById('store-wecom-configs-list');
+                host.innerHTML = '<div style="color:var(--rep-muted);padding:12px;">同步中...</div>';
+                var r = await fetch('/api/growth/sync-wecom-contacts', {
+                    method: 'POST',
+                    headers: growthAuthHeaders()
+                });
+                var data = await r.json();
+                if (data.ok) {
+                    var summary = (data.results || []).map(function(x) {
+                        return x.store_id + ': 同步' + x.synced + '人';
+                    }).join('<br>');
+                    host.innerHTML = '<div style="color:#22c55e;padding:12px;">同步完成！<br>' + summary + '</div>';
+                    setTimeout(loadStoreWecomConfigs, 2000);
+                } else {
+                    host.innerHTML = '<div style="color:#ef4444;padding:12px;">同步失败: ' + (data.error || '') + '</div>';
+                }
+            } catch (e) {
+                document.getElementById('store-wecom-configs-list').innerHTML = '<div style="color:#ef4444;padding:12px;">同步失败: ' + (e.message || e) + '</div>';
+            }
+        }
+
+        function escHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
 
         async function createCampaignFromForm() {
             try {

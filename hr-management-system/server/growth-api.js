@@ -352,6 +352,19 @@ export async function ensureGrowthTables(pool) {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_growth_delivery_logs_msg ON growth_delivery_logs (provider_msg_id, created_at DESC)`);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS store_wecom_configs (
+      id BIGSERIAL PRIMARY KEY,
+      store_id TEXT UNIQUE NOT NULL,
+      corp_id TEXT NOT NULL,
+      corp_secret TEXT NOT NULL,
+      agent_id TEXT DEFAULT '',
+      sender_userid TEXT DEFAULT '',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS public_channels (
       id BIGSERIAL PRIMARY KEY,
       channel_key TEXT UNIQUE NOT NULL,
@@ -871,40 +884,81 @@ async function upsertDeliveryLog(pool, payload) {
   return r.rows[0] || null;
 }
 
-let __growthWecomTokenCache = { token: '', expiresAt: 0 };
+let __growthWecomTokenCache = { token: '', expiresAt: 0, store_id: '' };
+let __storeWecomTokenCaches = {};
 
 async function getWecomConfig(pool) {
   const config = await getStateValue(pool, 'growth_wecom_config');
   return config && typeof config === 'object' ? config : null;
 }
 
-async function getWecomAccessToken(pool) {
+async function getStoreWecomConfig(pool, storeId) {
+  if (!storeId) return null;
+  const r = await pool.query('SELECT * FROM store_wecom_configs WHERE store_id = $1 LIMIT 1', [storeId]);
+  return r.rows[0] || null;
+}
+
+async function getAllStoreWecomConfigs(pool) {
+  const r = await pool.query('SELECT * FROM store_wecom_configs ORDER BY store_id');
+  return r.rows;
+}
+
+async function getWecomAccessToken(pool, storeId) {
   const now = Date.now();
-  if (__growthWecomTokenCache.token && __growthWecomTokenCache.expiresAt > now + 10000) return __growthWecomTokenCache.token;
-  const config = await getWecomConfig(pool);
-  const corpId = cleanText(config?.corp_id, 200);
-  const corpSecret = cleanText(config?.corp_secret, 500);
+  let corpId, corpSecret;
+
+  if (storeId) {
+    const cached = __storeWecomTokenCaches[storeId];
+    if (cached && cached.token && cached.expiresAt > now + 10000) return cached.token;
+    const storeConfig = await getStoreWecomConfig(pool, storeId);
+    if (storeConfig) {
+      corpId = cleanText(storeConfig.corp_id, 200);
+      corpSecret = cleanText(storeConfig.corp_secret, 500);
+    } else {
+      const globalConfig = await getWecomConfig(pool);
+      corpId = cleanText(globalConfig?.corp_id, 200);
+      corpSecret = cleanText(globalConfig?.corp_secret, 500);
+    }
+  } else {
+    if (__growthWecomTokenCache.token && __growthWecomTokenCache.expiresAt > now + 10000) return __growthWecomTokenCache.token;
+    const config = await getWecomConfig(pool);
+    corpId = cleanText(config?.corp_id, 200);
+    corpSecret = cleanText(config?.corp_secret, 500);
+  }
+
   if (!corpId || !corpSecret) throw new Error('missing_wecom_config');
   const url = `https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=${encodeURIComponent(corpId)}&corpsecret=${encodeURIComponent(corpSecret)}`;
   const resp = await fetch(url, { method: 'GET' });
   const data = await resp.json();
   if (!resp.ok || Number(data?.errcode) !== 0 || !data?.access_token) throw new Error(data?.errmsg || 'wecom_token_failed');
-  __growthWecomTokenCache = {
-    token: cleanText(data.access_token, 500),
-    expiresAt: now + Math.max(300, Number(data.expires_in) || 7200) * 1000
-  };
-  return __growthWecomTokenCache.token;
+
+  const token = cleanText(data.access_token, 500);
+  const expiresAt = now + Math.max(300, Number(data.expires_in) || 7200) * 1000;
+
+  if (storeId) {
+    __storeWecomTokenCaches[storeId] = { token, expiresAt };
+  } else {
+    __growthWecomTokenCache = { token, expiresAt, store_id: '' };
+  }
+  return token;
 }
 
 async function sendWecomExternalMessage(pool, payload) {
-  const config = await getWecomConfig(pool);
+  const storeId = cleanText(payload.store_id, 128);
+  let config;
+  if (storeId) {
+    config = await getStoreWecomConfig(pool, storeId);
+  }
+  if (!config) {
+    config = await getWecomConfig(pool);
+  }
   const senderUserId = cleanText(payload.sender_userid || config?.sender_userid, 128);
   const externalUserId = cleanText(payload.external_userid, 128);
   const content = cleanText(payload.content, 1800);
   if (!senderUserId) throw new Error('missing_wecom_sender_userid');
   if (!externalUserId) throw new Error('missing_external_userid');
   if (!content) throw new Error('missing_message_content');
-  const accessToken = await getWecomAccessToken(pool);
+  const accessToken = await getWecomAccessToken(pool, storeId);
   const resp = await fetch(`https://qyapi.weixin.qq.com/cgi-bin/externalcontact/add_msg_template?access_token=${encodeURIComponent(accessToken)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1018,6 +1072,7 @@ export async function executeGrowthActionRecord(pool, before, operator, extraPay
       const messageContent = buildActionMessage(before, payload);
       try {
         const sent = await sendWecomExternalMessage(pool, {
+          store_id: storeId,
           external_userid: cleanText(payload.external_userid, 128),
           sender_userid: cleanText(payload.sender_userid, 128),
           content: messageContent
@@ -2399,6 +2454,124 @@ export function registerGrowthRoutes(app, pool) {
     return res.json({ ok: true, status: newStatus });
   });
 
+  // ── Store WeCom config CRUD ──
+  app.get('/api/growth/store-wecom-configs', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const configs = await getAllStoreWecomConfigs(pool);
+    return res.json({ ok: true, configs });
+  });
+
+  app.post('/api/growth/store-wecom-configs', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const b = req.body || {};
+    const storeId = cleanText(b.store_id, 128);
+    const corpId = cleanText(b.corp_id, 200);
+    const corpSecret = cleanText(b.corp_secret, 500);
+    const agentId = cleanText(b.agent_id, 64);
+    const senderUserId = cleanText(b.sender_userid, 128);
+    if (!storeId || !corpId || !corpSecret) return res.status(400).json({ ok: false, error: 'missing store_id/corp_id/corp_secret' });
+    await pool.query(
+      `INSERT INTO store_wecom_configs (store_id, corp_id, corp_secret, agent_id, sender_userid)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (store_id) DO UPDATE SET
+         corp_id = EXCLUDED.corp_id, corp_secret = EXCLUDED.corp_secret,
+         agent_id = EXCLUDED.agent_id, sender_userid = EXCLUDED.sender_userid,
+         updated_at = NOW()`,
+      [storeId, corpId, corpSecret, agentId, senderUserId]
+    );
+    delete __storeWecomTokenCaches[storeId];
+    return res.json({ ok: true });
+  });
+
+  app.delete('/api/growth/store-wecom-configs/:storeId', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const storeId = cleanText(req.params.storeId, 128);
+    await pool.query('DELETE FROM store_wecom_configs WHERE store_id = $1', [storeId]);
+    delete __storeWecomTokenCaches[storeId];
+    return res.json({ ok: true });
+  });
+
+  // ── WeCom contact auto-sync from store configs ──
+  async function syncWecomContactsForStore(pool, storeConfig) {
+    try {
+      const storeId = storeConfig.store_id;
+      const token = await getWecomAccessToken(pool, storeId);
+      const listResp = await fetch(`https://qyapi.weixin.qq.com/cgi-bin/externalcontact/list?access_token=${encodeURIComponent(token)}&userid=${encodeURIComponent(storeConfig.sender_userid || '')}`, { method: 'GET' });
+      const listData = await listResp.json();
+      if (Number(listData?.errcode) !== 0 || !Array.isArray(listData?.external_userid)) {
+        console.warn(`[wecom] list contacts failed for store=${storeId}:`, listData?.errmsg);
+        return 0;
+      }
+      const eids = listData.external_userid.filter(Boolean);
+      let synced = 0;
+      for (const eid of eids) {
+        const detailResp = await fetch(`https://qyapi.weixin.qq.com/cgi-bin/externalcontact/get?access_token=${encodeURIComponent(token)}&external_userid=${encodeURIComponent(eid)}`, { method: 'GET' });
+        const detailData = await detailResp.json();
+        if (Number(detailData?.errcode) !== 0 || !detailData?.external_contact) continue;
+        const c = detailData.external_contact;
+        const phone = (c.corpid || c.corp_name || ''); // fallback, try from other fields
+        const externalUserid = cleanText(c.external_userid || eid, 128);
+        const name = cleanText(c.name || '', 128);
+        let contactPhone = '';
+        if (Array.isArray(detailData.follow_info) && detailData.follow_info.length) {
+          const fi = detailData.follow_info[0];
+          if (fi.description) {
+            const m = fi.description.match(/1[3-9]\d{9}/);
+            if (m) contactPhone = m[0];
+          }
+          if (!contactPhone && fi.tag_id && Array.isArray(fi.tag_id)) {
+          }
+        }
+        if (Array.isArray(detailData.wechat_channels)) {
+          const wc = detailData.wechat_channels.find(ch => ch.phone);
+          if (wc) contactPhone = wc.phone;
+        }
+        await pool.query(
+          `INSERT INTO wechat_work_customers (external_userid, name, phone, store_id, bind_customer_id)
+           VALUES ($1,$2,NULLIF($3,''),$4,NULL)
+           ON CONFLICT (external_userid) WHERE external_userid IS NOT NULL AND external_userid <> '' DO UPDATE SET
+             name = COALESCE(NULLIF(EXCLUDED.name,''), wechat_work_customers.name),
+             phone = COALESCE(NULLIF(EXCLUDED.phone,''), wechat_work_customers.phone),
+             store_id = COALESCE(NULLIF(EXCLUDED.store_id,''), wechat_work_customers.store_id),
+             updated_at = NOW()`,
+          [externalUserid, name, contactPhone, storeId]
+        );
+        if (contactPhone) {
+          await pool.query(
+            `UPDATE wechat_work_customers SET bind_customer_id = (
+              SELECT id FROM growth_customers WHERE phone = $1 LIMIT 1
+            ), updated_at = NOW()
+            WHERE external_userid = $2 AND bind_customer_id IS NULL`,
+            [contactPhone, externalUserid]
+          );
+        }
+        synced++;
+      }
+      return synced;
+    } catch (e) {
+      console.warn(`[wecom] sync contacts failed for store=${storeConfig.store_id}:`, e?.message);
+      return 0;
+    }
+  }
+
+  app.post('/api/growth/sync-wecom-contacts', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const storeId = cleanText(req.body?.store_id, 128);
+    let configs;
+    if (storeId) {
+      const cfg = await getStoreWecomConfig(pool, storeId);
+      configs = cfg ? [cfg] : [];
+    } else {
+      configs = await getAllStoreWecomConfigs(pool);
+    }
+    const results = [];
+    for (const cfg of configs) {
+      const synced = await syncWecomContactsForStore(pool, cfg);
+      results.push({ store_id: cfg.store_id, synced });
+    }
+    return res.json({ ok: true, results, total: results.reduce((s, r) => s + r.synced, 0) });
+  });
+
   // ── Phase 2: Feishu config persistence for WeChat customer auto-sync ──
   app.get('/api/growth/feishu-config', async (req, res) => {
     if (!requireGrowthAuth(req, res)) return;
@@ -2449,6 +2622,29 @@ export function registerGrowthRoutes(app, pool) {
     setTimeout(() => {
       runTouchRuleEngine(pool, { limit_per_rule: 100 }).catch((e) => console.warn('[growth] initial rule engine run failed:', e?.message));
     }, 10000);
+  }
+
+  if (!globalThis.__wecomContactSyncTimer) {
+    globalThis.__wecomContactSyncTimer = setInterval(async () => {
+      try {
+        const configs = await getAllStoreWecomConfigs(pool);
+        for (const cfg of configs) {
+          await syncWecomContactsForStore(pool, cfg);
+        }
+      } catch (e) {
+        console.warn('[growth] wecom contact sync failed:', e?.message);
+      }
+    }, 6 * 60 * 60 * 1000);
+    setTimeout(async () => {
+      try {
+        const configs = await getAllStoreWecomConfigs(pool);
+        for (const cfg of configs) {
+          await syncWecomContactsForStore(pool, cfg);
+        }
+      } catch (e) {
+        console.warn('[growth] initial wecom contact sync failed:', e?.message);
+      }
+    }, 30000);
   }
 
   app.post('/api/growth/generate-selling-point', async (req, res) => {

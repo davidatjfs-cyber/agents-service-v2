@@ -71,6 +71,7 @@ export async function ensurePhaseTables(pool) {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_ww_store ON wechat_work_customers (store_id, created_at DESC)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_ww_phone ON wechat_work_customers (phone) WHERE phone IS NOT NULL AND phone <> ''`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ww_external_userid ON wechat_work_customers (external_userid) WHERE external_userid IS NOT NULL AND external_userid <> ''`);
 
   // Phase 3: campaign_plans
   await pool.query(`
