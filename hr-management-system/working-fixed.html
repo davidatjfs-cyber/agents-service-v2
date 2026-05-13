@@ -9471,17 +9471,22 @@
         #attendance-page .rep-tab,
         #growth-page .rep-tab {
             flex: 0 0 auto;
-            padding: 11px 12px;
-            font-size: 12px;
-            font-weight: 600;
-            letter-spacing: 0.02em;
+            padding: 11px 14px;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
             border: none;
             border-radius: 12px;
             cursor: pointer;
-            color: var(--rep-muted);
+            color: var(--rep-text);
             background: transparent;
             transition: color 0.2s, background 0.2s, box-shadow 0.25s;
             white-space: nowrap;
+            opacity: 0.65;
+        }
+        #growth-page .rep-tab:hover {
+            opacity: 0.9;
+            background: rgba(255,255,255,0.04);
         }
 
         #attendance-page .rep-tab--active,
