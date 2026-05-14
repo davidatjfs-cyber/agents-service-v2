@@ -10758,6 +10758,7 @@
 
     <!-- 主应用界面 -->
     <div id="main-app" class="main-app hidden">
+        <div id="login-as-banner" style="display:none; position:fixed; top:0; left:0; right:0; z-index:99999; background:linear-gradient(135deg,#6366f1,#4f46e5); color:#fff; text-align:center; padding:8px 16px; font-size:13px; font-weight:700; cursor:pointer; box-shadow:0 2px 12px rgba(99,102,241,0.4);" onclick="exitLoginAs()">⚠️ 代登录模式 — 点击此处退出恢复管理员账号</div>
         <div id="mobile-overlay" class="mobile-overlay hidden" onclick="closeMobileSidebar()"></div>
         <div class="sidebar" id="main-sidebar">
             <button class="sidebar-toggle" onclick="toggleSidebarCollapse()" title="折叠/展开">◀</button>
@@ -34119,6 +34120,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                             <button class="btn btn-secondary" style="padding:6px 10px;font-size:12px;" onclick="viewEmployee('${escapeJsString(empKey)}')">查看</button>
                             ${isAdminUser() ? `<button class="btn" style="padding:6px 10px;font-size:12px;" onclick="editEmployee('${escapeJsString(empKey)}')">编辑</button>` : ''}
                             ${isAdminUser() ? `<button class="btn btn-secondary" style="padding:6px 10px;font-size:12px;color:#ef4444;" onclick="deleteEmployee('${escapeJsString(empKey)}')">删除</button>` : ''}
+                            ${isAdminUser() && isInactiveEmp(emp) ? `<button class="btn btn-secondary" style="padding:6px 10px;font-size:12px;color:#6366f1;border-color:rgba(99,102,241,0.35);background:rgba(99,102,241,0.08);" onclick="loginAsEmployee('${escapeJsString(empKey)}','${escapeJsString(emp.name || empKey)}')">代登录</button>` : ''}
                         </div>
                     </td>
                 </tr>`;
@@ -34177,6 +34179,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                             <button class="btn btn-secondary" type="button" onclick="try{event.stopPropagation();}catch(e){};viewEmployee('${escapeJsString(empKey)}');">查看</button>
                             ${isAdminUser() ? `<button class="btn btn-secondary" type="button" onclick="try{event.stopPropagation();}catch(e){};editEmployee('${escapeJsString(empKey)}');">编辑</button>` : ''}
                             ${isAdminUser() ? `<button class="btn btn-secondary" type="button" style="color:#fca5a5;border-color:rgba(248,113,113,0.35);" onclick="try{event.stopPropagation();}catch(e){};deleteEmployee('${escapeJsString(empKey)}');">删除</button>` : ''}
+                            ${isAdminUser() && isInactiveEmp(emp) ? `<button class="btn btn-secondary" type="button" style="color:#6366f1;border-color:rgba(99,102,241,0.35);background:rgba(99,102,241,0.08);" onclick="try{event.stopPropagation();}catch(e){};loginAsEmployee('${escapeJsString(empKey)}','${escapeJsString(emp.name || empKey)}');">代登录</button>` : ''}
                         `;
 
                         const stCls = emp.status === 'active' ? 'st-active' : (emp.status === 'inactive' ? 'st-inactive' : 'st-pending');
@@ -35443,6 +35446,74 @@ ${knowledgeContent.slice(0, 30000)}`;
             HRMS_STORE.setEmployees(employees);
             loadEmployeesData();
             showNotification('状态已更新', 'success');
+        }
+
+        async function loginAsEmployee(username, displayName) {
+            if (!isAdminUser()) {
+                showNotification('仅管理员可代登录', 'warning');
+                return;
+            }
+            const reason = prompt('代登录：' + (displayName || username) + '\n\n请输入代登录原因（仅管理员可见，记录在日志中）：');
+            if (!reason) return;
+            try {
+                const resp = await HRMS_API.request('/api/auth/login-as', {
+                    method: 'POST',
+                    body: JSON.stringify({ username, reason })
+                });
+                if (!resp || !resp.token) {
+                    showNotification(resp?.error || resp?.message || '代登录失败', 'error');
+                    return;
+                }
+                const prevAdminToken = HRMS_API.token();
+                const prevAdminUser = { ...currentUser };
+                sessionStorage.setItem('hrms_login_as_admin_token', prevAdminToken);
+                sessionStorage.setItem('hrms_login_as_admin_user', JSON.stringify(prevAdminUser));
+                HRMS_API.setToken(resp.token);
+                currentUser = resp.user;
+                isLoggedIn = true;
+                const loginAsBanner = document.getElementById('login-as-banner');
+                if (loginAsBanner) {
+                    loginAsBanner.textContent = '⚠️ 代登录：' + (resp.user?.name || resp.user?.username || username) + '（点击退出恢复管理员）';
+                    loginAsBanner.style.display = '';
+                }
+                showNotification('已切换为 ' + (resp.user?.name || username) + ' 的账号（代登录模式）', 'success');
+                hrmsLoadStateFromServer().then(() => {
+                    try { loadProfileData(); } catch (e) {}
+                }).catch(() => {});
+                showPage(getHomePageName());
+                try { updateKitchenNavVisibility(); } catch (e) {}
+                try { updateGrowthModuleVisibility(); } catch (e) {}
+            } catch (e) {
+                showNotification('代登录失败：' + (e?.message || '网络错误'), 'error');
+            }
+        }
+
+        async function exitLoginAs() {
+            const savedToken = sessionStorage.getItem('hrms_login_as_admin_token');
+            const savedUser = sessionStorage.getItem('hrms_login_as_admin_user');
+            if (!savedToken) {
+                showNotification('未找到管理员凭证，请重新登录', 'warning');
+                return;
+            }
+            try {
+                HRMS_API.setToken(savedToken);
+                const prevUser = JSON.parse(savedUser || '{}');
+                currentUser = prevUser;
+                isLoggedIn = true;
+                sessionStorage.removeItem('hrms_login_as_admin_token');
+                sessionStorage.removeItem('hrms_login_as_admin_user');
+                const loginAsBanner = document.getElementById('login-as-banner');
+                if (loginAsBanner) loginAsBanner.style.display = 'none';
+                showNotification('已恢复管理员账号', 'success');
+                hrmsLoadStateFromServer().then(() => {
+                    try { loadProfileData(); } catch (e) {}
+                }).catch(() => {});
+                showPage(getHomePageName());
+                try { updateKitchenNavVisibility(); } catch (e) {}
+                try { updateGrowthModuleVisibility(); } catch (e) {}
+            } catch (e) {
+                showNotification('恢复失败：' + (e?.message || '未知错误'), 'error');
+            }
         }
 
         async function deleteEmployee(empId) {

@@ -15305,6 +15305,59 @@ app.post('/api/auth/login', handleLogin);
 // compatibility alias
 app.post('/api/login', handleLogin);
 
+app.post('/api/auth/login-as', authRequired, async (req, res) => {
+  if (normalizeRoleForJwt(String(req.user?.role || '')) !== 'admin') {
+    return res.status(403).json({ error: 'forbidden', message: '仅管理员可代登录' });
+  }
+  const targetUsername = String(req.body?.username || '').trim();
+  if (!targetUsername) return res.status(400).json({ error: 'missing_username' });
+  const reason = String(req.body?.reason || '').trim();
+  if (!reason) return res.status(400).json({ error: 'missing_reason', message: '请填写代登录原因' });
+
+  const adminUsername = String(req.user?.username || '').trim();
+  const sn = randomUUID().replace(/-/g, '').slice(0, 16);
+
+  try {
+    const r = await pool.query(
+      'SELECT id, username, real_name, role, is_active FROM users WHERE lower(username) = lower($1) LIMIT 1',
+      [targetUsername]
+    );
+    const u = r.rows?.[0];
+    if (!u) return res.status(404).json({ error: 'user_not_found', message: '目标用户不存在' });
+
+    let finalRole = normalizeRoleForJwt(u.role);
+    let finalName = u.real_name || u.username;
+    try {
+      const sr = await pool.query('SELECT data FROM hrms_state WHERE key = $1 LIMIT 1', ['default']);
+      const sd = sr.rows?.[0]?.data;
+      if (sd && typeof sd === 'object') {
+        const allState = (Array.isArray(sd.employees) ? sd.employees : []).concat(Array.isArray(sd.users) ? sd.users : []);
+        const stateUser = allState.find(x => String(x?.username || '').trim().toLowerCase() === targetUsername.toLowerCase());
+        if (stateUser) {
+          const stateRole = normalizeRoleForJwt(stateUser.role);
+          if (stateRole) finalRole = stateRole;
+          if (stateUser.name) finalName = String(stateUser.name).trim() || finalName;
+        }
+      }
+    } catch (e) {}
+
+    const persisted = await storeSessionNonce(u.username, sn);
+    if (!persisted) return res.status(503).json({ error: 'session_persist_failed' });
+
+    const token = jwt.sign(
+      { id: u.id, username: u.username, name: finalName, role: finalRole, sn, loginAs: true, loginAsBy: adminUsername },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    recordLogin(u.username, sn, req);
+    console.log(`[login-as] admin=${adminUsername} logged in as ${u.username} (reason: ${reason})`);
+    return res.json({ token, user: { id: u.id, username: u.username, name: finalName, role: finalRole }, loginAs: true, loginAsBy: adminUsername });
+  } catch (e) {
+    console.error('[login-as] error:', e?.message || e);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
 app.get('/api/stores', authRequired, async (req, res) => {
   try {
     // Read from hrms_state table (where actual data is stored)
