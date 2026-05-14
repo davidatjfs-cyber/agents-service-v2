@@ -35454,15 +35454,19 @@ ${knowledgeContent.slice(0, 30000)}`;
                 return;
             }
             const reason = prompt('代登录：' + (displayName || username) + '\n\n请输入代登录原因（仅管理员可见，记录在日志中）：');
-            if (!reason) return;
+            if (reason === null) return;
+            if (!reason.trim()) {
+                showNotification('请输入代登录原因', 'warning');
+                return;
+            }
             try {
                 const resp = await HRMS_API.request('/api/auth/login-as', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, reason })
+                    body: JSON.stringify({ username: username, reason: reason.trim() })
                 });
                 if (!resp || !resp.token) {
-                    showNotification(resp?.error || resp?.message || '代登录失败', 'error');
+                    showNotification((resp && (resp.error || resp.message)) || '代登录失败', 'error');
                     return;
                 }
                 const prevAdminToken = HRMS_API.token();
@@ -35485,7 +35489,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 try { updateKitchenNavVisibility(); } catch (e) {}
                 try { updateGrowthModuleVisibility(); } catch (e) {}
             } catch (e) {
-                showNotification('代登录失败：' + (e?.message || '网络错误'), 'error');
+                showNotification('代登录失败：' + (e?.message || e || '网络错误'), 'error');
             }
         }
 
