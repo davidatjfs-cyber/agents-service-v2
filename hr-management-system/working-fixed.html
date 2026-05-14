@@ -48804,6 +48804,12 @@ ${body}
       }
     }
 
+    // ── 打点卡倒计时状态 ──────────────────────────────────────
+    let _punchCountdownTimer = null;   // setInterval handle
+    let _punchCountingStep   = null;   // 正在倒计时的 step_seq
+    let _punchCountdownSecs  = 0;      // 剩余秒数
+    let _punchStepsCache     = [];     // 当前步骤列表缓存（供倒计时结束后使用）
+
     function renderPunchSteps(steps, hasData) {
       const list = document.getElementById('punch-steps-list');
       const noSop = document.getElementById('punch-no-sop');
@@ -48819,52 +48825,118 @@ ${body}
       }
 
       noSop.style.display = 'none';
+      _punchStepsCache = steps;
+
       const done  = steps.filter(s => s.punched).length;
       const total = steps.length;
       bar.style.width = `${Math.round(done/total*100)}%`;
       txt.textContent  = `${done} / ${total} 步已完成`;
 
-      list.innerHTML = steps.map(s => {
+      // 第一个未完成步骤 = 当前激活步骤
+      const activeIdx = steps.findIndex(s => !s.punched);
+
+      list.innerHTML = steps.map((s, idx) => {
         const { dishName, station, store, scheduleTime } = _punchCurrent;
-        const dishEsc = dishName.replace(/'/g, "\\'");
-        const actEsc  = (s.action || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const dishEsc     = dishName.replace(/'/g, "\\'");
+        const actEsc      = (s.action || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
         const scheduleEsc = String(scheduleTime || '').replace(/'/g, "\\'");
+
+        const isDone      = s.punched;
+        const isActive    = !isDone && idx === activeIdx;
+        const isLocked    = !isDone && !isActive;
+        const isCounting  = isActive && _punchCountingStep === s.step_seq;
+
+        // 圆形序号样式
+        const circleStyle = isDone
+          ? 'background:#22c55e;border-color:#22c55e;color:#fff;'
+          : isActive
+            ? 'background:rgba(99,102,241,0.2);border-color:#6366f1;color:#a5b4fc;'
+            : 'background:rgba(255,255,255,0.04);border-color:rgba(255,255,255,0.1);color:rgba(255,255,255,0.2);';
+
+        // 卡片整体样式
+        const cardStyle = isDone
+          ? 'background:rgba(34,197,94,0.07);border-color:rgba(34,197,94,0.25);'
+          : isActive
+            ? 'background:rgba(99,102,241,0.06);border-color:rgba(99,102,241,0.35);'
+            : 'background:rgba(255,255,255,0.02);border-color:rgba(255,255,255,0.05);opacity:0.45;';
+
+        // 按钮区
+        let btnHtml = '';
+        if (isDone) {
+          btnHtml = `<div style="font-size:18px;color:#22c55e;flex-shrink:0;">✓</div>`;
+        } else if (isActive) {
+          if (isCounting) {
+            btnHtml = `
+              <div id="punch-countdown-${s.step_seq}" style="
+                flex-shrink:0;width:44px;height:44px;border-radius:50%;
+                border:2.5px solid #6366f1;
+                display:flex;align-items:center;justify-content:center;
+                font-size:16px;font-weight:700;color:#a5b4fc;
+                background:rgba(99,102,241,0.12);
+              ">${_punchCountdownSecs}</div>`;
+          } else {
+            btnHtml = `
+              <button onclick="startStepCountdown('${dishEsc}','${s.step_seq}','${actEsc}','${station}','${store}','${scheduleEsc}')"
+                style="flex-shrink:0;height:40px;padding:0 16px;border-radius:9px;border:none;
+                       background:linear-gradient(135deg,#6366f1,#4f46e5);
+                       color:#fff;font-size:13px;font-weight:600;cursor:pointer;
+                       box-shadow:0 3px 10px rgba(99,102,241,0.35);">
+                开始
+              </button>`;
+          }
+        } else {
+          btnHtml = `<div style="font-size:16px;color:rgba(255,255,255,0.12);flex-shrink:0;">🔒</div>`;
+        }
+
         return `
-          <div style="
-            background: ${s.punched ? 'rgba(34,197,94,0.07)' : 'rgba(255,255,255,0.03)'};
-            border: 1px solid ${s.punched ? 'rgba(34,197,94,0.25)' : s.is_critical ? 'rgba(245,158,11,0.3)' : 'rgba(255,255,255,0.08)'};
-            border-radius: 12px; padding: 12px 14px;
-          ">
+          <div style="border:1px solid;border-radius:12px;padding:12px 14px;transition:all 0.2s;${cardStyle}">
             <div style="display:flex;align-items:flex-start;gap:12px;">
               <div style="
                 width:28px;height:28px;border-radius:50%;flex-shrink:0;
-                background:${s.punched ? '#22c55e' : s.is_critical ? 'rgba(245,158,11,0.15)' : 'rgba(255,255,255,0.06)'};
-                border:1.5px solid ${s.punched ? '#22c55e' : s.is_critical ? '#f59e0b' : 'rgba(255,255,255,0.15)'};
-                display:flex;align-items:center;justify-content:center;
-                font-size:12px;font-weight:700;
-                color:${s.punched ? '#fff' : s.is_critical ? '#f59e0b' : 'rgba(255,255,255,0.4)'};
-              ">${s.punched ? '✓' : s.step_seq}</div>
+                border:1.5px solid;display:flex;align-items:center;justify-content:center;
+                font-size:12px;font-weight:700;${circleStyle}
+              ">${isDone ? '✓' : s.step_seq}</div>
               <div style="flex:1;min-width:0;">
-                <div style="font-size:13px;color:${s.punched ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.9)'};line-height:1.5;
-                  ${s.punched ? 'text-decoration:line-through;' : ''}">
+                <div style="font-size:13px;line-height:1.5;
+                  color:${isDone ? 'rgba(255,255,255,0.4)' : isActive ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.3)'};
+                  ${isDone ? 'text-decoration:line-through;' : ''}">
                   ${s.is_critical ? '⚡ ' : ''}${s.action}
                 </div>
-                ${s.time_limit_seconds ? `<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">⏱ ${s.time_limit_seconds >= 60 ? Math.round(s.time_limit_seconds/60)+'分钟' : s.time_limit_seconds+'秒'}</div>` : ''}
-                ${s.quality_standard ? `<div style="font-size:11px;color:rgba(100,200,100,0.6);margin-top:3px;">✓ ${s.quality_standard}</div>` : ''}
-                ${s.common_failure && !s.punched ? `<div style="font-size:11px;color:rgba(245,158,11,0.6);margin-top:3px;">⚠ ${s.common_failure}</div>` : ''}
+                ${s.time_limit_seconds ? `<div style="font-size:11px;color:rgba(255,255,255,0.25);margin-top:4px;">⏱ ${s.time_limit_seconds >= 60 ? Math.round(s.time_limit_seconds/60)+'分钟' : s.time_limit_seconds+'秒'}</div>` : ''}
+                ${s.quality_standard && !isDone ? `<div style="font-size:11px;color:rgba(100,200,100,0.55);margin-top:3px;">✓ ${s.quality_standard}</div>` : ''}
+                ${s.common_failure && isActive ? `<div style="font-size:11px;color:rgba(245,158,11,0.6);margin-top:3px;">⚠ ${s.common_failure}</div>` : ''}
               </div>
-              ${!s.punched ? `
-                <button onclick="punchStep('${dishEsc}','${s.step_seq}','${actEsc}','${station}','${store}','${scheduleEsc}')"
-                  style="flex-shrink:0;height:40px;padding:0 14px;border-radius:9px;border:none;
-                         background:${s.is_critical ? 'linear-gradient(135deg,#f59e0b,#d97706)' : 'rgba(255,255,255,0.1)'};
-                         color:#fff;font-size:13px;font-weight:600;cursor:pointer;
-                         box-shadow:${s.is_critical ? '0 3px 10px rgba(245,158,11,0.3)' : 'none'};">
-                  打点
-                </button>` : ''
-              }
+              ${btnHtml}
             </div>
           </div>`;
       }).join('');
+    }
+
+    // 点击"开始"→启动10秒倒计时
+    function startStepCountdown(dishName, stepSeq, stepAction, station, store, scheduleTime) {
+      // 防重复
+      if (_punchCountingStep !== null) return;
+
+      _punchCountingStep  = Number(stepSeq);
+      _punchCountdownSecs = 10;
+
+      // 重渲染，显示倒计时圆圈
+      renderPunchSteps(_punchStepsCache, true);
+
+      _punchCountdownTimer = setInterval(() => {
+        _punchCountdownSecs--;
+        // 更新圆圈数字（避免重渲染整个列表）
+        const el = document.getElementById(`punch-countdown-${stepSeq}`);
+        if (el) el.textContent = _punchCountdownSecs;
+
+        if (_punchCountdownSecs <= 0) {
+          clearInterval(_punchCountdownTimer);
+          _punchCountdownTimer = null;
+          _punchCountingStep   = null;
+          // 倒计时结束 → 调用服务端打点
+          punchStep(dishName, stepSeq, stepAction, station, store, scheduleTime);
+        }
+      }, 1000);
     }
 
     async function punchStep(dishName, stepSeq, stepAction, station, store, scheduleTime) {
@@ -48883,10 +48955,10 @@ ${body}
         if (data.allDone) {
           showNotification(`✅ ${dishName} 所有步骤完成，已自动确认`, 'success');
           closePunchCard();
-          loadKitchenTasks(); // 刷新主列表
+          loadKitchenTasks();
         } else {
-          // 局部刷新弹层步骤
-            const res = await fetch(
+          // 从服务端拉最新状态，重渲染
+          const res = await fetch(
             `/api/kitchen/dish-steps?dishName=${encodeURIComponent(dishName)}&store=${encodeURIComponent(store)}&scheduleTime=${encodeURIComponent(scheduleTime || '')}`,
             { headers: { 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` } }
           );
@@ -48899,6 +48971,13 @@ ${body}
     }
 
     function closePunchCard() {
+      // 关闭时清除倒计时，防止后台继续跑
+      if (_punchCountdownTimer) {
+        clearInterval(_punchCountdownTimer);
+        _punchCountdownTimer = null;
+      }
+      _punchCountingStep  = null;
+      _punchCountdownSecs = 0;
       const modal = document.getElementById('kitchen-punch-modal');
       if (modal) modal.style.display = 'none';
     }
