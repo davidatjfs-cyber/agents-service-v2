@@ -15318,40 +15318,89 @@ app.post('/api/auth/login-as', authRequired, async (req, res) => {
   const sn = randomUUID().replace(/-/g, '').slice(0, 16);
 
   try {
+    let targetId, targetUsernameNorm, finalRole, finalName, needCreateUser = false;
+
+    // 1) Try users table first
     const r = await pool.query(
       'SELECT id, username, real_name, role, is_active FROM users WHERE lower(username) = lower($1) LIMIT 1',
       [targetUsername]
     );
     const u = r.rows?.[0];
-    if (!u) return res.status(404).json({ error: 'user_not_found', message: '目标用户不存在' });
 
-    let finalRole = normalizeRoleForJwt(u.role);
-    let finalName = u.real_name || u.username;
-    try {
+    if (u) {
+      targetId = String(u.id || u.username);
+      targetUsernameNorm = String(u.username).trim();
+      finalRole = normalizeRoleForJwt(u.role);
+      finalName = u.real_name || u.username;
+    } else {
+      // 2) Fallback: find in hrms_state.employees / users
       const sr = await pool.query('SELECT data FROM hrms_state WHERE key = $1 LIMIT 1', ['default']);
       const sd = sr.rows?.[0]?.data;
-      if (sd && typeof sd === 'object') {
-        const allState = (Array.isArray(sd.employees) ? sd.employees : []).concat(Array.isArray(sd.users) ? sd.users : []);
-        const stateUser = allState.find(x => String(x?.username || '').trim().toLowerCase() === targetUsername.toLowerCase());
-        if (stateUser) {
-          const stateRole = normalizeRoleForJwt(stateUser.role);
-          if (stateRole) finalRole = stateRole;
-          if (stateUser.name) finalName = String(stateUser.name).trim() || finalName;
-        }
-      }
-    } catch (e) {}
+      if (!sd || typeof sd !== 'object') return res.status(404).json({ error: 'user_not_found', message: '目标用户不存在' });
 
-    const persisted = await storeSessionNonce(u.username, sn);
+      const allState = (Array.isArray(sd.employees) ? sd.employees : []).concat(Array.isArray(sd.users) ? sd.users : []);
+      const stateUser = allState.find(x => String(x?.username || '').trim().toLowerCase() === targetUsername.toLowerCase());
+      if (!stateUser) return res.status(404).json({ error: 'user_not_found', message: '目标用户不存在' });
+
+      targetId = String(stateUser.id || stateUser.username).trim();
+      targetUsernameNorm = String(stateUser.username).trim();
+      finalRole = normalizeRoleForJwt(stateUser.role);
+      finalName = String(stateUser.name || stateUser.username).trim();
+
+      // Create user in users table so session nonce and JWT have a row
+      try {
+        const empPassword = String(stateUser.password || '123456');
+        const hash = await bcrypt.hash(empPassword, 10);
+        await pool.query(
+          `INSERT INTO users (id, username, password_hash, real_name, role, is_active)
+           VALUES ($1, $2, $3, $4, $5, TRUE)
+           ON CONFLICT (lower(username)) DO UPDATE SET is_active = TRUE, password_hash = EXCLUDED.password_hash, updated_at = NOW()`,
+          [targetId, targetUsernameNorm, hash, finalName, finalRole]
+        );
+      } catch (createErr) {
+        console.error('[login-as] create user failed:', createErr?.message || createErr);
+        // If create fails, try to just reactivate
+        try {
+          await pool.query(
+            `UPDATE users SET is_active = TRUE, updated_at = NOW() WHERE lower(username) = lower($1)`,
+            [targetUsernameNorm]
+          );
+        } catch (e2) {}
+      }
+      needCreateUser = true;
+    }
+
+    // 3) Merge role/name from state (authoritative) regardless of source
+    if (!needCreateUser) {
+      try {
+        const sr = await pool.query('SELECT data FROM hrms_state WHERE key = $1 LIMIT 1', ['default']);
+        const sd = sr.rows?.[0]?.data;
+        if (sd && typeof sd === 'object') {
+          const allState = (Array.isArray(sd.employees) ? sd.employees : []).concat(Array.isArray(sd.users) ? sd.users : []);
+          const stateUser = allState.find(x => String(x?.username || '').trim().toLowerCase() === targetUsername.toLowerCase());
+          if (stateUser) {
+            const stateRole = normalizeRoleForJwt(stateUser.role);
+            if (stateRole) finalRole = stateRole;
+            if (stateUser.name) finalName = String(stateUser.name).trim() || finalName;
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 4) Ensure user is active for login
+    await pool.query('UPDATE users SET is_active = TRUE, updated_at = NOW() WHERE lower(username) = lower($1)', [targetUsernameNorm]);
+
+    const persisted = await storeSessionNonce(targetUsernameNorm, sn);
     if (!persisted) return res.status(503).json({ error: 'session_persist_failed' });
 
     const token = jwt.sign(
-      { id: u.id, username: u.username, name: finalName, role: finalRole, sn, loginAs: true, loginAsBy: adminUsername },
+      { id: targetId, username: targetUsernameNorm, name: finalName, role: finalRole, sn, loginAs: true, loginAsBy: adminUsername },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
-    recordLogin(u.username, sn, req);
-    console.log(`[login-as] admin=${adminUsername} logged in as ${u.username} (reason: ${reason})`);
-    return res.json({ token, user: { id: u.id, username: u.username, name: finalName, role: finalRole }, loginAs: true, loginAsBy: adminUsername });
+    recordLogin(targetUsernameNorm, sn, req);
+    console.log(`[login-as] admin=${adminUsername} logged in as ${targetUsernameNorm} (reason: ${reason})`);
+    return res.json({ token, user: { id: targetId, username: targetUsernameNorm, name: finalName, role: finalRole }, loginAs: true, loginAsBy: adminUsername });
   } catch (e) {
     console.error('[login-as] error:', e?.message || e);
     return res.status(500).json({ error: 'server_error' });
