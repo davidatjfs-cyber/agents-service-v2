@@ -35458,6 +35458,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             try {
                 const resp = await HRMS_API.request('/api/auth/login-as', {
                     method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, reason })
                 });
                 if (!resp || !resp.token) {
