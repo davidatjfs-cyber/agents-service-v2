@@ -112,7 +112,7 @@ function roleLabelZh(role) {
 
 /** 判断是否已完成 */
 function isCompleted(status) {
-  return ['closed', 'resolved', 'hr_filed'].includes(status);
+  return ['closed', 'resolved'].includes(status);
 }
 
 function canonicalTaskIdentity(task) {
