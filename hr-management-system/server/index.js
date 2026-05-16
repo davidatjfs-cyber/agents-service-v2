@@ -13421,6 +13421,8 @@ function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
   // Approved leave: only count days NOT already covered by daily report rest (避免重复)
   const leaveRecords = Array.isArray(state?.leaveRecords) ? state.leaveRecords : [];
   const uLower = uname.toLowerCase();
+  const restDaySet = new Set(Object.keys(restStats?.byDay || {}));
+
   leaveRecords.forEach((lr) => {
     if (String(lr?.applicant || '').toLowerCase() !== uLower) return;
     if (String(lr?.status || '') !== 'approved') return;
@@ -13429,28 +13431,60 @@ function calcEmployeeMonthlyLeaveBalance(state, employee, month) {
     const rawDays = lr?.days != null && lr?.days !== '' ? Number(lr.days) : null;
     const overlapDays = calcOverlapDaysWithinMonth(sd, ed, m);
 
-    let days = 0;
     if (overlapDays > 0) {
-      const sameMonthRange = sd.startsWith(m) && ed.startsWith(m);
-      days = (sameMonthRange && rawDays != null && Number.isFinite(rawDays) && rawDays > 0)
-        ? rawDays
-        : overlapDays;
-    } else if (rawDays != null && Number.isFinite(rawDays) && rawDays > 0 && sd.startsWith(m)) {
-      days = rawDays;
-    }
-    if (!(Number.isFinite(days) && days > 0) || (rawDays !== null && rawDays === 0)) return;
-    usedLeave += days;
-    usedLeaveDetails.push({ date: `${sd}~${ed}`, days, type: '休假', source: '已批休假' });
+      // 逐日计算休假区间与日报休息的重叠，扣除已被日报统计的休息日
+      const mStart = m + '-01';
+      const mEnd = m + '-' + String(new Date(yr, mo, 0).getDate()).padStart(2, '0');
+      const segStart = sd > mStart ? sd : mStart;
+      const segEnd   = ed < mEnd   ? ed : mEnd;
 
-    if (overlapDays > 0) {
+      let newDaysInMonth = 0;
+      let overlappedDays = 0;
+      try {
+        const cur = new Date(segStart + 'T00:00:00');
+        const last = new Date(segEnd + 'T00:00:00');
+        while (cur <= last) {
+          const ymd = cur.toISOString().slice(0, 10);
+          if (restDaySet.has(ymd)) {
+            overlappedDays++;
+          } else {
+            newDaysInMonth++;
+          }
+          cur.setDate(cur.getDate() + 1);
+        }
+      } catch (_) {
+        newDaysInMonth = overlapDays;
+      }
+
+      if (newDaysInMonth > 0) {
+        usedLeave = Number((usedLeave + newDaysInMonth).toFixed(2));
+        usedLeaveDetails.push({ date: `${sd}~${ed}`, days: Number(newDaysInMonth.toFixed(2)), type: '休假', source: '已批休假' });
+      }
+
+      // Week details: only count non-overlapping leave days per week segment
       weekDetails.forEach((wk) => {
         const [ws, we] = String(wk?.range || '').split('~');
-        const ov = calcDateSpanDaysInclusive(
-          (sd > ws ? sd : ws),
-          (ed < we ? ed : we)
-        );
-        if (ov && ov > 0) wk.used = Number((Number(wk.used || 0) + ov).toFixed(2));
+        if (!ws || !we) return;
+        const wkStart = ws > segStart ? ws : segStart;
+        const wkEnd   = we < segEnd   ? we : segEnd;
+        if (wkStart > wkEnd) return;
+        let wkNewDays = 0;
+        try {
+          const cur = new Date(wkStart + 'T00:00:00');
+          const last = new Date(wkEnd + 'T00:00:00');
+          while (cur <= last) {
+            const ymd = cur.toISOString().slice(0, 10);
+            if (!restDaySet.has(ymd)) wkNewDays++;
+            cur.setDate(cur.getDate() + 1);
+          }
+        } catch (_) {}
+        if (wkNewDays > 0) wk.used = Number((Number(wk.used || 0) + wkNewDays).toFixed(2));
       });
+    } else if (rawDays != null && Number.isFinite(rawDays) && rawDays > 0 && sd.startsWith(m)) {
+      if (!restDaySet.has(sd)) {
+        usedLeave = Number((usedLeave + rawDays).toFixed(2));
+        usedLeaveDetails.push({ date: `${sd}`, days: Number(rawDays.toFixed(2)), type: '休假', source: '已批休假' });
+      }
     }
   });
 
