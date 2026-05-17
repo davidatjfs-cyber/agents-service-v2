@@ -4974,6 +4974,40 @@ const knowledgeUpload = multer({
   limits: { fileSize: 50 * 1024 * 1024 } // M4-FIX: 从300MB降到50MB
 });
 
+// 配方工艺步骤媒体上传（图片 + 视频）
+const RECIPE_MEDIA_EXTS = new Set(['.jpg','.jpeg','.png','.gif','.webp','.mp4','.mov','.webm','.heic']);
+const recipeMediaUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const st = ensureUploadsDir();
+      if (!st.ok) return cb(new Error('uploads_dir_not_writable'));
+      return cb(null, uploadsDir);
+    },
+    filename: (req, file, cb) => {
+      const ext = path.extname(String(file?.originalname || 'file')).toLowerCase().slice(0, 16);
+      if (!RECIPE_MEDIA_EXTS.has(ext)) return cb(new Error(`blocked_file_type: ${ext}`));
+      cb(null, `recipe-step-${randomUUID()}${ext}`);
+    }
+  }),
+  limits: { fileSize: 200 * 1024 * 1024 } // 200MB max for video
+});
+
+app.post('/api/recipes/upload-step-media', authRequired, recipeMediaUpload.single('file'), async (req, res) => {
+  const role = String(req.user?.role || '').trim();
+  if (!['admin','hq_manager','store_manager','store_production_manager'].includes(role)) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  try {
+    if (!req.file?.filename) return res.status(400).json({ error: 'missing_file' });
+    const ext = path.extname(req.file.filename).toLowerCase();
+    const videoExts = new Set(['.mp4','.mov','.webm']);
+    const mediaType = videoExts.has(ext) ? 'video' : 'image';
+    return res.json({ ok: true, url: `/uploads/${req.file.filename}`, type: mediaType });
+  } catch (e) {
+    return res.status(500).json({ error: e?.message });
+  }
+});
+
 app.post('/api/uploads/daily-report', authRequired, upload.array('files', 9), async (req, res) => {
   const role = String(req.user?.role || '').trim();
   if (!canWriteDailyReports(role)) {

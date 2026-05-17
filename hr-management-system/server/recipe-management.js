@@ -124,8 +124,11 @@ export async function ensureRecipeSchema() {
       CREATE INDEX IF NOT EXISTS idx_rcs_component
         ON recipe_component_steps (component_id, step_seq)
     `);
+    // v3 migrations: media support for steps
+    await pool().query(`ALTER TABLE recipe_component_steps ADD COLUMN IF NOT EXISTS media_url VARCHAR(500)`);
+    await pool().query(`ALTER TABLE recipe_component_steps ADD COLUMN IF NOT EXISTS media_type VARCHAR(20)`);
 
-    console.log('[Recipe] Schema ensured (v2: categories + ingredient_library + components + ingredients + steps)');
+    console.log('[Recipe] Schema ensured (v3: steps media_url + media_type)');
   } catch (e) {
     console.error('[Recipe] schema error:', e?.message);
   }
@@ -246,10 +249,11 @@ async function saveRecipe({ id, dishName, brand, store, station, version, status
         if (!step.instruction?.trim()) continue;
         await client.query(
           `INSERT INTO recipe_component_steps
-             (component_id, step_seq, instruction, notes, sort_order)
-           VALUES ($1,$2,$3,$4,$5)`,
+             (component_id, step_seq, instruction, notes, sort_order, media_url, media_type)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
           [compId, si + 1, step.instruction.trim(),
-           step.notes?.trim() || null, si]
+           step.notes?.trim() || null, si,
+           step.media_url?.trim() || null, step.media_type?.trim() || null]
         );
       }
     }
@@ -335,14 +339,15 @@ export function registerRecipeRoutes(app, authMiddleware) {
       const dish = req.query.dish;
       if (!dish) return res.json({ success: false, error: 'dish参数必填' });
       const rows = await pool().query(
-        `SELECT rc.name, rc.notes
+        `SELECT rc.name, rc.notes, r.id AS recipe_id
          FROM recipe_components rc
          JOIN recipes r ON r.id = rc.recipe_id
          WHERE r.dish_name = $1 AND r.status = 'active'
          ORDER BY rc.sort_order, rc.id`,
         [dish]
       );
-      res.json({ success: true, components: rows.rows });
+      const recipeId = rows.rows[0]?.recipe_id || null;
+      res.json({ success: true, components: rows.rows, recipe_id: recipeId });
     } catch (e) {
       res.json({ success: false, error: e?.message });
     }

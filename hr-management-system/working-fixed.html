@@ -48803,7 +48803,10 @@ ${body}
           </div>
           <!-- 半成品组成：仅出品经理及以上可见 -->
           <div id="punch-components" style="display:none;margin:0 16px 10px;padding:10px 14px;background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.18);border-radius:10px;">
-            <div style="font-size:11px;font-weight:700;color:#6ee7b7;letter-spacing:.05em;margin-bottom:7px;">📋 配方组成</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
+              <div style="font-size:11px;font-weight:700;color:#6ee7b7;letter-spacing:.05em;">📋 配方组成</div>
+              <button id="punch-view-steps-btn" style="display:none;padding:4px 10px;border-radius:16px;border:1px solid rgba(251,191,36,0.35);background:rgba(251,191,36,0.1);color:#fcd34d;font-size:11px;cursor:pointer;" onclick="openRecipeStepViewerFromPunch()">👁 查看工艺</button>
+            </div>
             <div id="punch-components-list" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
           </div>
           <div id="punch-steps-list" style="padding:4px 16px 24px;display:grid;gap:8px;"></div>
@@ -48816,6 +48819,136 @@ ${body}
       document.body.appendChild(el);
       el.addEventListener('click', e => { if (e.target === el) closePunchCard(); });
     })();
+
+    // ─── 配方工艺查看器（步骤 + 媒体）───────────────────────────
+    (function injectRecipeStepViewer() {
+      const el = document.createElement('div');
+      el.id = 'recipe-step-viewer-modal';
+      el.style.cssText = 'display:none;position:fixed;inset:0;z-index:3500;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);align-items:center;justify-content:center;';
+      el.innerHTML = `
+        <div style="width:min(540px,96vw);max-height:88vh;display:flex;flex-direction:column;background:linear-gradient(135deg,rgba(22,22,40,0.98),rgba(14,14,28,0.98));border:1px solid rgba(255,255,255,0.1);border-radius:20px;overflow:hidden;">
+          <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+            <div>
+              <div id="rsv-dish-name" style="font-size:16px;font-weight:700;color:#e2e8f0;"></div>
+              <div id="rsv-comp-name" style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:2px;"></div>
+            </div>
+            <button onclick="closeRecipeStepViewer()" style="width:32px;height:32px;border-radius:8px;border:none;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.6);cursor:pointer;font-size:18px;">×</button>
+          </div>
+          <!-- comp tabs -->
+          <div id="rsv-comp-tabs" style="display:flex;gap:6px;padding:10px 16px 0;overflow-x:auto;flex-shrink:0;"></div>
+          <!-- steps list -->
+          <div id="rsv-steps-list" style="flex:1;overflow-y:auto;padding:12px 16px 24px;display:flex;flex-direction:column;gap:10px;"></div>
+        </div>`;
+      document.body.appendChild(el);
+      el.addEventListener('click', e => { if (e.target === el) closeRecipeStepViewer(); });
+
+      // lightbox
+      const lb = document.createElement('div');
+      lb.id = 'media-lightbox';
+      lb.style.cssText = 'display:none;position:fixed;inset:0;z-index:4000;background:rgba(0,0,0,0.92);align-items:center;justify-content:center;';
+      lb.innerHTML = `
+        <button onclick="document.getElementById(\'media-lightbox\').style.display=\'none\'" style="position:absolute;top:16px;right:20px;background:none;border:none;color:#fff;font-size:32px;cursor:pointer;line-height:1;">×</button>
+        <img id="lightbox-img" src="" style="max-width:94vw;max-height:90vh;border-radius:10px;object-fit:contain;display:none;">
+        <video id="lightbox-vid" src="" controls style="max-width:94vw;max-height:90vh;border-radius:10px;display:none;"></video>`;
+      document.body.appendChild(lb);
+      lb.addEventListener('click', e => { if (e.target === lb) lb.style.display = 'none'; });
+    })();
+
+    function openMediaLightbox(url, type) {
+      const lb = document.getElementById('media-lightbox');
+      const img = document.getElementById('lightbox-img');
+      const vid = document.getElementById('lightbox-vid');
+      if (type === 'video') {
+        img.style.display = 'none'; vid.src = url; vid.style.display = '';
+      } else {
+        vid.style.display = 'none'; img.src = url; img.style.display = '';
+      }
+      lb.style.display = 'flex';
+    }
+
+    let _rsvRecipe = null;
+    let _rsvCompIdx = 0;
+
+    async function openRecipeStepViewer(recipeId, dishName) {
+      const modal = document.getElementById('recipe-step-viewer-modal');
+      modal.style.display = 'flex';
+      document.getElementById('rsv-dish-name').textContent = dishName || '配方工艺';
+      document.getElementById('rsv-comp-name').textContent = '加载中…';
+      document.getElementById('rsv-comp-tabs').innerHTML = '';
+      document.getElementById('rsv-steps-list').innerHTML = '<div style="text-align:center;color:rgba(255,255,255,0.3);padding:32px;">加载中…</div>';
+      try {
+        const r = await fetch(`/api/recipes/${recipeId}`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` } });
+        const data = await r.json();
+        if (!data.success) throw new Error(data.error);
+        _rsvRecipe = data.recipe;
+        _rsvCompIdx = 0;
+        _renderRsvTabs();
+        _renderRsvSteps(0);
+      } catch(e) {
+        document.getElementById('rsv-steps-list').innerHTML = `<div style="color:#f87171;padding:20px;">${e.message}</div>`;
+      }
+    }
+
+    function _renderRsvTabs() {
+      const comps = _rsvRecipe?.components || [];
+      const tabs = document.getElementById('rsv-comp-tabs');
+      tabs.innerHTML = comps.map((c, i) => `
+        <button id="rsv-tab-${i}" onclick="_renderRsvSteps(${i})"
+          style="padding:6px 14px;border-radius:20px;border:1px solid rgba(99,102,241,0.3);background:${i===0?'rgba(99,102,241,0.18)':'rgba(255,255,255,0.04)'};color:${i===0?'#a5b4fc':'rgba(255,255,255,0.5)'};font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0;">
+          ${c.name}
+        </button>`).join('');
+    }
+
+    function _renderRsvSteps(compIdx) {
+      _rsvCompIdx = compIdx;
+      const comp = (_rsvRecipe?.components || [])[compIdx];
+      if (!comp) return;
+      // update tab styles
+      (_rsvRecipe?.components || []).forEach((_, i) => {
+        const t = document.getElementById(`rsv-tab-${i}`);
+        if (!t) return;
+        t.style.background = i === compIdx ? 'rgba(99,102,241,0.18)' : 'rgba(255,255,255,0.04)';
+        t.style.color      = i === compIdx ? '#a5b4fc' : 'rgba(255,255,255,0.5)';
+      });
+      document.getElementById('rsv-comp-name').textContent = `${comp.name} · ${(comp.steps||[]).length} 步`;
+      const list = document.getElementById('rsv-steps-list');
+      if (!comp.steps?.length) {
+        list.innerHTML = '<div style="text-align:center;color:rgba(255,255,255,0.3);padding:32px;">该半成品暂无工艺步骤</div>';
+        return;
+      }
+      list.innerHTML = comp.steps.map((s, i) => {
+        const mediaHtml = s.media_url ? `
+          <div style="margin-top:8px;">
+            ${s.media_type === 'video'
+              ? `<video src="${s.media_url}" controls preload="metadata" style="width:100%;max-height:200px;border-radius:10px;display:block;"></video>`
+              : `<img src="${s.media_url}" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;cursor:pointer;" onclick="openMediaLightbox('${s.media_url}','image')">`
+            }
+          </div>` : '';
+        return `
+          <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px 14px;">
+            <div style="display:flex;gap:10px;align-items:flex-start;">
+              <div style="width:26px;height:26px;border-radius:50%;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${i+1}</div>
+              <div style="font-size:13px;color:#e2e8f0;line-height:1.6;flex:1;">${s.instruction}</div>
+              ${s.media_url ? `<button onclick="openMediaLightbox('${s.media_url}','${s.media_type||'image'}')" title="查看${s.media_type==='video'?'视频':'图片'}"
+                style="width:30px;height:30px;border-radius:8px;border:none;background:rgba(99,102,241,0.15);color:#a5b4fc;cursor:pointer;font-size:14px;flex-shrink:0;">${s.media_type==='video'?'▶':'🔍'}</button>` : ''}
+            </div>
+            ${mediaHtml}
+          </div>`;
+      }).join('');
+    }
+
+    function closeRecipeStepViewer() {
+      document.getElementById('recipe-step-viewer-modal').style.display = 'none';
+      const vid = document.getElementById('lightbox-vid');
+      if (vid) vid.pause();
+    }
+
+    function openRecipeStepViewerFromPunch() {
+      const compEl = document.getElementById('punch-components');
+      const recipeId = compEl?.dataset?.recipeId;
+      const dishName = document.getElementById('punch-dish-name')?.textContent || '';
+      if (recipeId) openRecipeStepViewer(recipeId, dishName);
+    }
 
     // ═══════════════════════════════════════════════════════
     // 厨房备料执行模块 JS
@@ -49060,9 +49193,14 @@ ${body}
             if (data.success && data.components?.length) {
               const compEl = document.getElementById('punch-components');
               const listEl = document.getElementById('punch-components-list');
+              const viewBtn = document.getElementById('punch-view-steps-btn');
               listEl.innerHTML = data.components.map(c =>
                 `<span style="padding:4px 10px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.25);border-radius:16px;font-size:12px;color:#6ee7b7;">${c.name}</span>`
               ).join('');
+              if (data.recipe_id) {
+                compEl.dataset.recipeId = data.recipe_id;
+                if (viewBtn) viewBtn.style.display = '';
+              }
               compEl.style.display = '';
             }
           }).catch(() => {});
@@ -49878,6 +50016,8 @@ ${body}
             <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">
               ${r.status !== 'active' ? `<button type="button" onclick="approveRecipe(${r.id},this)"
                 style="font-size:12px;padding:6px 12px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.35);border-radius:8px;color:#86efac;cursor:pointer;">✓ 生效</button>` : ''}
+              <button type="button" onclick="openRecipeStepViewer(${r.id},'${r.dish_name.replace(/'/g,"\\'")}')"
+                style="font-size:12px;padding:6px 12px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);border-radius:8px;color:#fcd34d;cursor:pointer;">👁 工艺</button>
               <button type="button" onclick="openRecipeEditor(${r.id})"
                 style="font-size:12px;padding:6px 12px;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);border-radius:8px;color:#a5b4fc;cursor:pointer;">编辑</button>
               <button type="button" onclick="confirmDeleteRecipe(${r.id},'${r.dish_name.replace(/'/g,"\\'")}',this)"
@@ -50070,14 +50210,83 @@ ${body}
     // ── 工艺步骤行 ────────────────────────────────────────────
     function addProcessStepRow(container, step = {}) {
       const row = document.createElement('div');
-      row.style.cssText = 'display:grid;grid-template-columns:1fr 28px;gap:4px;align-items:center;';
-      const s = 'width:100%;padding:7px 8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:8px;color:var(--rep-text);font-size:12px;box-sizing:border-box;';
+      row.style.cssText = 'display:flex;flex-direction:column;gap:5px;padding:8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;';
+      if (step.media_url) row.dataset.mediaUrl = step.media_url;
+      if (step.media_type) row.dataset.mediaType = step.media_type;
+
       const instrVal = (step.instruction || '').replace(/"/g, '&quot;');
+      const inputStyle = 'width:100%;padding:7px 8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:8px;color:var(--rep-text);font-size:12px;box-sizing:border-box;';
+
+      // 媒体预览 HTML
+      const mediaHtml = step.media_url ? _buildStepMediaPreview(step.media_url, step.media_type) : '';
+
       row.innerHTML = `
-        <input type="text" placeholder="工艺步骤，如：顺时针搅拌至均匀" value="${instrVal}" style="${s}" class="rs-instruction">
-        <button type="button" onclick="this.closest('div').remove()"
-          style="width:26px;height:26px;border-radius:6px;border:none;background:rgba(239,68,68,0.1);color:#f87171;cursor:pointer;font-size:14px;line-height:1;">×</button>`;
+        <div style="display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;">
+          <input type="text" placeholder="工艺步骤，如：顺时针搅拌至均匀" value="${instrVal}" style="${inputStyle}" class="rs-instruction">
+          <label title="上传图片或视频" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(99,102,241,0.4);background:rgba(99,102,241,0.08);color:#a5b4fc;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">
+            📷<input type="file" accept="image/*,video/*" style="display:none;" onchange="uploadStepMedia(this)">
+          </label>
+          <button type="button" onclick="this.closest('div').parentElement.remove()"
+            style="width:32px;height:32px;border-radius:8px;border:none;background:rgba(239,68,68,0.1);color:#f87171;cursor:pointer;font-size:14px;flex-shrink:0;">×</button>
+        </div>
+        <div class="rs-media-preview" style="${step.media_url ? '' : 'display:none;'}">${mediaHtml}</div>`;
       container.appendChild(row);
+    }
+
+    function _buildStepMediaPreview(url, type) {
+      if (type === 'video') {
+        return `<div style="position:relative;display:inline-block;">
+          <video src="${url}" style="max-height:120px;max-width:100%;border-radius:8px;display:block;" controls preload="metadata"></video>
+          <button onclick="_removeStepMedia(this)" title="移除视频"
+            style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;border:none;background:rgba(0,0,0,0.6);color:#fff;font-size:12px;cursor:pointer;line-height:22px;text-align:center;padding:0;">×</button>
+        </div>`;
+      }
+      return `<div style="position:relative;display:inline-block;">
+        <img src="${url}" style="max-height:120px;max-width:100%;border-radius:8px;display:block;cursor:pointer;" onclick="openMediaLightbox('${url}','image')" title="点击查看大图">
+        <button onclick="_removeStepMedia(this)" title="移除图片"
+          style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;border:none;background:rgba(0,0,0,0.6);color:#fff;font-size:12px;cursor:pointer;line-height:22px;text-align:center;padding:0;">×</button>
+      </div>`;
+    }
+
+    function _removeStepMedia(btn) {
+      const row = btn.closest('div[style*="flex-direction:column"]') || btn.closest('.rs-media-preview')?.parentElement;
+      if (!row) return;
+      delete row.dataset.mediaUrl;
+      delete row.dataset.mediaType;
+      const preview = row.querySelector('.rs-media-preview');
+      if (preview) { preview.innerHTML = ''; preview.style.display = 'none'; }
+    }
+
+    async function uploadStepMedia(input) {
+      if (!input.files?.length) return;
+      const file = input.files[0];
+      const row = input.closest('div[style*="flex-direction:column"]');
+      if (!row) return;
+      const label = input.parentElement;
+      const origText = label.childNodes[0]?.textContent || '📷';
+      label.childNodes[0].textContent = '⏳';
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const r = await fetch('/api/recipes/upload-step-media', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` },
+          body: fd
+        });
+        const data = await r.json();
+        if (!data.ok) throw new Error(data.error || '上传失败');
+        row.dataset.mediaUrl = data.url;
+        row.dataset.mediaType = data.type;
+        const preview = row.querySelector('.rs-media-preview');
+        preview.innerHTML = _buildStepMediaPreview(data.url, data.type);
+        preview.style.display = '';
+        label.childNodes[0].textContent = '✅';
+        setTimeout(() => { label.childNodes[0].textContent = '📷'; }, 1500);
+      } catch(e) {
+        label.childNodes[0].textContent = origText;
+        showNotification('上传失败：' + e.message, 'error');
+      }
+      input.value = '';
     }
 
     // ── 保存配方 ──────────────────────────────────────────────
@@ -50107,7 +50316,11 @@ ${body}
         card.querySelectorAll('.comp-steps > div').forEach(row => {
           const instr = row.querySelector('.rs-instruction')?.value?.trim();
           if (!instr) return;
-          steps.push({ instruction: instr });
+          steps.push({
+            instruction: instr,
+            media_url:   row.dataset.mediaUrl  || null,
+            media_type:  row.dataset.mediaType || null,
+          });
         });
         components.push({
           name,
