@@ -45,9 +45,10 @@ export async function ensureRecipeSchema() {
         created_at   TIMESTAMPTZ DEFAULT NOW()
       )
     `);
-    // 迁移：为已有表补充 brand / spec 列
+    // 迁移：为已有表补充列
     await pool().query(`ALTER TABLE ingredient_library ADD COLUMN IF NOT EXISTS brand VARCHAR(100)`);
     await pool().query(`ALTER TABLE ingredient_library ADD COLUMN IF NOT EXISTS spec  VARCHAR(200)`);
+    await pool().query(`ALTER TABLE recipes            ADD COLUMN IF NOT EXISTS brand VARCHAR(100)`);
     await pool().query(`
       CREATE INDEX IF NOT EXISTS idx_ing_lib_name ON ingredient_library (name)
     `);
@@ -57,6 +58,7 @@ export async function ensureRecipeSchema() {
       CREATE TABLE IF NOT EXISTS recipes (
         id          BIGSERIAL PRIMARY KEY,
         dish_name   VARCHAR(255) NOT NULL,
+        brand       VARCHAR(100),
         store       VARCHAR(200) NOT NULL DEFAULT '*',
         station     VARCHAR(100),
         version     VARCHAR(20)  NOT NULL DEFAULT '1.0',
@@ -137,7 +139,7 @@ function isRecipeAdmin(role) {
 // ─── 配方列表 ──────────────────────────────────────────────
 async function listRecipes({ store }) {
   const rows = await pool().query(
-    `SELECT r.id, r.dish_name, r.store, r.station, r.version, r.status,
+    `SELECT r.id, r.dish_name, r.brand, r.store, r.station, r.version, r.status,
             r.notes, r.created_by, r.updated_at,
             COUNT(rc.id) AS component_count
      FROM recipes r
@@ -180,7 +182,7 @@ async function getFullRecipe(id) {
 
 // ─── 保存配方（新建 or 更新）─────────────────────────────────
 // components: [{ name, notes, ingredients:[{...}], steps:[{...}] }]
-async function saveRecipe({ id, dishName, store, station, version, status, notes, components, username }) {
+async function saveRecipe({ id, dishName, brand, store, station, version, status, notes, components, username }) {
   const client = await pool().connect();
   try {
     await client.query('BEGIN');
@@ -190,27 +192,25 @@ async function saveRecipe({ id, dishName, store, station, version, status, notes
     if (recipeId) {
       await client.query(
         `UPDATE recipes
-         SET dish_name=$1, store=$2, station=$3, version=$4,
-             status=$5, notes=$6, updated_by=$7, updated_at=NOW()
-         WHERE id=$8`,
-        [dishName, store || '*', station || null, version || '1.0',
-         status || 'active', notes || null, username, recipeId]
+         SET dish_name=$1, brand=$2, store=$3, station=$4, version=$5,
+             status=$6, notes=$7, updated_by=$8, updated_at=NOW()
+         WHERE id=$9`,
+        [dishName, brand || null, store || '*', station || null, version || '1.0',
+         status || 'draft', notes || null, username, recipeId]
       );
-      // 清空半成品（级联删除 ingredients + steps）
       await client.query(`DELETE FROM recipe_components WHERE recipe_id=$1`, [recipeId]);
     } else {
       const res = await client.query(
-        `INSERT INTO recipes (dish_name, store, station, version, status, notes, created_by, updated_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$7)
+        `INSERT INTO recipes (dish_name, brand, store, station, version, status, notes, created_by, updated_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)
          ON CONFLICT (dish_name, store, version) DO UPDATE
-           SET status=EXCLUDED.status, notes=EXCLUDED.notes,
+           SET brand=EXCLUDED.brand, status=EXCLUDED.status, notes=EXCLUDED.notes,
                updated_by=EXCLUDED.updated_by, updated_at=NOW()
          RETURNING id`,
-        [dishName, store || '*', station || null, version || '1.0',
-         status || 'active', notes || null, username]
+        [dishName, brand || null, store || '*', station || null, version || '1.0',
+         status || 'draft', notes || null, username]
       );
       recipeId = res.rows[0].id;
-      // 如果是 upsert 命中冲突，也清空旧半成品
       await client.query(`DELETE FROM recipe_components WHERE recipe_id=$1`, [recipeId]);
     }
 
@@ -306,10 +306,10 @@ export function registerRecipeRoutes(app, authMiddleware) {
   // 新建 / 更新配方
   app.post('/api/recipes', authMiddleware, requireRecipeAdmin, async (req, res) => {
     try {
-      const { id, dishName, store, station, version, status, notes, components } = req.body;
+      const { id, dishName, brand, store, station, version, status, notes, components } = req.body;
       if (!dishName?.trim()) return res.json({ success: false, error: '菜品名称必填' });
       const result = await saveRecipe({
-        id, dishName, store: store || req.user?.store,
+        id, dishName, brand, store: store || req.user?.store,
         station, version, status, notes, components,
         username: req.user?.username
       });

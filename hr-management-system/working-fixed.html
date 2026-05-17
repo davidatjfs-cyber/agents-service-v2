@@ -15038,10 +15038,14 @@
                     <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px;margin-bottom:12px;">
                       <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--rep-muted);margin-bottom:10px;">基本信息</div>
                       <div style="display:grid;gap:10px;">
+                        <div>
+                          <label style="font-size:11px;color:var(--rep-muted);display:block;margin-bottom:4px;">菜品名称 *</label>
+                          <input id="recipe-dish-name" type="text" placeholder="如：荔枝木烧鹅" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;box-sizing:border-box;">
+                        </div>
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                           <div>
-                            <label style="font-size:11px;color:var(--rep-muted);display:block;margin-bottom:4px;">菜品名称 *</label>
-                            <input id="recipe-dish-name" type="text" placeholder="如：荔枝木烧鹅" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;">
+                            <label style="font-size:11px;color:var(--rep-muted);display:block;margin-bottom:4px;">所属品牌</label>
+                            <input id="recipe-brand" type="text" placeholder="如：荔枝木烧鹅品牌" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;box-sizing:border-box;">
                           </div>
                           <div>
                             <label style="font-size:11px;color:var(--rep-muted);display:block;margin-bottom:4px;">档口</label>
@@ -49847,12 +49851,12 @@ ${body}
             <div style="flex:1;min-width:0;">
               <div style="font-size:14px;font-weight:600;color:var(--rep-text);">${r.dish_name}</div>
               <div style="font-size:11px;color:var(--rep-muted);margin-top:3px;">
-                ${r.station ? r.station + ' · ' : ''}v${r.version} · ${statusLabel[r.status]||r.status} · ${r.component_count} 个半成品
+                ${r.brand ? `<span style="color:#a5b4fc;">${r.brand}</span> · ` : ''}${r.station ? r.station + ' · ' : ''}v${r.version} · ${statusLabel[r.status]||r.status} · ${r.component_count} 个半成品
               </div>
             </div>
             <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">
-              ${r.status === 'draft' ? `<button type="button" onclick="approveRecipe(${r.id},this)"
-                style="font-size:12px;padding:6px 12px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.35);border-radius:8px;color:#86efac;cursor:pointer;">✓ 审核通过</button>` : ''}
+              ${r.status !== 'active' ? `<button type="button" onclick="approveRecipe(${r.id},this)"
+                style="font-size:12px;padding:6px 12px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.35);border-radius:8px;color:#86efac;cursor:pointer;">✓ 生效</button>` : ''}
               <button type="button" onclick="openRecipeEditor(${r.id})"
                 style="font-size:12px;padding:6px 12px;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);border-radius:8px;color:#a5b4fc;cursor:pointer;">编辑</button>
               <button type="button" onclick="confirmDeleteRecipe(${r.id},'${r.dish_name.replace(/'/g,"\\'")}',this)"
@@ -49897,9 +49901,10 @@ ${body}
         document.getElementById('recipe-editor-title').textContent = '新建配方';
         document.getElementById('recipe-version-badge').textContent = '';
         document.getElementById('recipe-dish-name').value = '';
+        document.getElementById('recipe-brand').value = '';
         document.getElementById('recipe-station').value = '';
         document.getElementById('recipe-version').value = '1.0';
-        document.getElementById('recipe-status').value = 'active';
+        document.getElementById('recipe-status').value = 'draft';  // 新建默认草稿
         document.getElementById('recipe-notes').value = '';
         addComponentCard(); // 默认一个半成品
         return;
@@ -49914,6 +49919,7 @@ ${body}
         document.getElementById('recipe-editor-title').textContent = `编辑配方：${recipe.dish_name}`;
         document.getElementById('recipe-version-badge').textContent = `v${recipe.version}`;
         document.getElementById('recipe-dish-name').value = recipe.dish_name;
+        document.getElementById('recipe-brand').value = recipe.brand || '';
         document.getElementById('recipe-station').value = recipe.station || '';
         document.getElementById('recipe-version').value = recipe.version;
         document.getElementById('recipe-status').value = recipe.status;
@@ -50105,6 +50111,7 @@ ${body}
       const store = _kitchenStore || currentUser?.store || '*';
       const body = {
         id, dishName, store,
+        brand:   document.getElementById('recipe-brand').value.trim() || null,
         station: document.getElementById('recipe-station').value,
         version: document.getElementById('recipe-version').value || '1.0',
         status:  document.getElementById('recipe-status').value,
