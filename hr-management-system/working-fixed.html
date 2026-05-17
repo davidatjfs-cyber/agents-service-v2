@@ -15045,7 +15045,7 @@
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                           <div>
                             <label style="font-size:11px;color:var(--rep-muted);display:block;margin-bottom:4px;">所属品牌</label>
-                            <input id="recipe-brand" type="text" placeholder="如：荔枝木烧鹅品牌" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;box-sizing:border-box;">
+                            <select id="recipe-brand" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;appearance:none;box-sizing:border-box;"><option value="">-- 选择品牌 --</option></select>
                           </div>
                           <div>
                             <label style="font-size:11px;color:var(--rep-muted);display:block;margin-bottom:4px;">档口</label>
@@ -49827,6 +49827,27 @@ ${body}
       }
     }
 
+    // ── 品牌 select 填充 ─────────────────────────────────────────
+    async function loadBrandsSelect(currentBrand) {
+      const sel = document.getElementById('recipe-brand');
+      if (!sel) return;
+      try {
+        const r = await fetch('/api/brands', { headers: { 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` } });
+        const data = await r.json();
+        const brands = Array.isArray(data.items) ? data.items : (Array.isArray(data) ? data : []);
+        sel.innerHTML = '<option value="">-- 选择品牌 --</option>';
+        brands.forEach(b => {
+          const opt = document.createElement('option');
+          opt.value = b.name || b.id;
+          opt.textContent = b.name || b.id;
+          sel.appendChild(opt);
+        });
+        if (currentBrand) sel.value = currentBrand;
+      } catch(e) {
+        console.warn('加载品牌失败', e);
+      }
+    }
+
     // ── 配方列表（同时预热原料库 + 分类）────────────────────────
     async function loadRecipeList() {
       loadIngredientLib(); // 预热 datalist，不阻塞
@@ -49901,11 +49922,11 @@ ${body}
         document.getElementById('recipe-editor-title').textContent = '新建配方';
         document.getElementById('recipe-version-badge').textContent = '';
         document.getElementById('recipe-dish-name').value = '';
-        document.getElementById('recipe-brand').value = '';
         document.getElementById('recipe-station').value = '';
         document.getElementById('recipe-version').value = '1.0';
         document.getElementById('recipe-status').value = 'draft';  // 新建默认草稿
         document.getElementById('recipe-notes').value = '';
+        loadBrandsSelect(''); // 加载品牌 select
         addComponentCard(); // 默认一个半成品
         return;
       }
@@ -49919,8 +49940,8 @@ ${body}
         document.getElementById('recipe-editor-title').textContent = `编辑配方：${recipe.dish_name}`;
         document.getElementById('recipe-version-badge').textContent = `v${recipe.version}`;
         document.getElementById('recipe-dish-name').value = recipe.dish_name;
-        document.getElementById('recipe-brand').value = recipe.brand || '';
         document.getElementById('recipe-station').value = recipe.station || '';
+        loadBrandsSelect(recipe.brand || ''); // 加载品牌 select 并选中当前值
         document.getElementById('recipe-version').value = recipe.version;
         document.getElementById('recipe-status').value = recipe.status;
         document.getElementById('recipe-notes').value = recipe.notes || '';
