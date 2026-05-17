@@ -15120,8 +15120,12 @@
                     <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px;margin-bottom:12px;">
                       <div style="font-size:11px;font-weight:700;color:var(--rep-muted);letter-spacing:.05em;margin-bottom:10px;">新增 / 更新原料</div>
                       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-                        <input id="ing-lib-name"     type="text" placeholder="原料名称 *"
-                          style="padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--rep-text);font-size:13px;">
+                        <div>
+                          <input id="ing-lib-name" type="text" placeholder="原料名称 *"
+                            oninput="checkIngLibDuplicate(this)"
+                            style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--rep-text);font-size:13px;box-sizing:border-box;">
+                          <div id="ing-lib-dup-warn" style="display:none;font-size:11px;color:#fbbf24;margin-top:4px;padding:0 4px;"></div>
+                        </div>
                         <select id="ing-lib-category"
                           style="padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--rep-text);font-size:13px;appearance:none;">
                           <option value="">-- 选择分类 --</option>
@@ -49748,10 +49752,28 @@ ${body}
         </div>`).join('');
     }
 
+    // ── 原料库：去重实时检查 ──────────────────────────────────
+    function checkIngLibDuplicate(input) {
+      const warn = document.getElementById('ing-lib-dup-warn');
+      if (!warn) return;
+      const name = input.value.trim();
+      if (!name) { warn.style.display = 'none'; return; }
+      const hit = _ingredientLibCache.find(i => i.name.toLowerCase() === name.toLowerCase());
+      if (hit) {
+        warn.textContent = `⚠️ 「${hit.name}」已存在（${hit.category || '未分类'}${hit.brand ? ' · ' + hit.brand : ''}），保存将覆盖现有数据`;
+        warn.style.display = '';
+      } else {
+        warn.style.display = 'none';
+      }
+    }
+
     // ── 原料库：新增 ─────────────────────────────────────────
     async function saveIngredientLibItem() {
       const name = document.getElementById('ing-lib-name')?.value?.trim();
       if (!name) { showNotification('请填写原料名称', 'warning'); return; }
+      // 去重确认
+      const hit = _ingredientLibCache.find(i => i.name.toLowerCase() === name.toLowerCase());
+      if (hit && !confirm(`「${name}」已存在，是否覆盖更新现有数据？`)) return;
       try {
         const r = await fetch('/api/ingredients', {
           method: 'POST',
@@ -49770,7 +49792,9 @@ ${body}
         document.getElementById('ing-lib-brand').value = '';
         document.getElementById('ing-lib-spec').value = '';
         document.getElementById('ing-lib-unit').value = '';
-        showNotification(`✅ 已添加原料：${name}`, 'success');
+        const w = document.getElementById('ing-lib-dup-warn');
+        if (w) w.style.display = 'none';
+        showNotification(hit ? `✅ 已更新原料：${name}` : `✅ 已添加原料：${name}`, 'success');
         await loadIngredientLib();
         renderIngredientLibList();
       } catch(e) {
@@ -49862,7 +49886,7 @@ ${body}
 
     // ── 打开编辑器 ────────────────────────────────────────────
     async function openRecipeEditor(id) {
-      if (!_ingredientLibCache.length) await loadIngredientLib(); // 确保 datalist 已填充
+      await loadIngredientLib(); // 每次打开都刷新，确保下拉列表最新
       document.getElementById('recipe-tab-bar').style.display = 'none'; // 编辑时隐藏 tab
       document.getElementById('recipe-list-panel').style.display = 'none';
       document.getElementById('recipe-editor-panel').style.display = '';
@@ -49947,32 +49971,73 @@ ${body}
       (comp.steps || []).forEach(step => addProcessStepRow(stepContainer, step));
     }
 
-    // ── 原料行（从原料库选择，datalist 自动补全）────────────────
+    // ── 原料行（自定义下拉，兼容 iOS Safari）─────────────────────
     function addIngredientRow(container, ing = {}) {
       const row = document.createElement('div');
-      row.style.cssText = 'display:grid;grid-template-columns:1fr 70px 55px 60px 28px;gap:4px;align-items:center;';
+      // align-items:start 以免下拉撑开行高时其他列跟着移位
+      row.style.cssText = 'display:grid;grid-template-columns:1fr 70px 55px 60px 28px;gap:4px;align-items:start;';
       const s = 'width:100%;padding:7px 8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:8px;color:var(--rep-text);font-size:12px;box-sizing:border-box;';
       const nameVal = (ing.ingredient_name || '').replace(/"/g, '&quot;');
       const unitVal = (ing.unit || '').replace(/"/g, '&quot;');
       row.innerHTML = `
-        <input type="text" list="ingredient-datalist" placeholder="选择或输入原料名称"
-          value="${nameVal}" style="${s}" class="ri-name" autocomplete="off">
+        <div style="position:relative;">
+          <input type="text" placeholder="搜索原料…" value="${nameVal}"
+            style="${s}width:100%;" class="ri-name" autocomplete="off">
+          <div class="ri-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;
+            max-height:160px;overflow-y:auto;background:#1e1e2a;
+            border:1px solid rgba(255,255,255,0.15);border-radius:8px;
+            z-index:999;margin-top:3px;box-shadow:0 8px 24px rgba(0,0,0,0.4);"></div>
+        </div>
         <input type="number" placeholder="用量" step="0.01" min="0" value="${ing.quantity||''}" style="${s}text-align:right;" class="ri-qty">
         <input type="text"   placeholder="单位" value="${unitVal}" style="${s}text-align:center;" class="ri-unit">
-        <label style="display:flex;align-items:center;justify-content:center;gap:3px;cursor:pointer;">
+        <label style="display:flex;align-items:center;justify-content:center;gap:3px;cursor:pointer;padding-top:7px;">
           <input type="checkbox" ${ing.is_pack?'checked':''} style="accent-color:#6366f1;" class="ri-pack">
           <span style="font-size:10px;color:var(--rep-muted);">料包</span>
         </label>
-        <button type="button" onclick="this.closest('div').remove()"
-          style="width:26px;height:26px;border-radius:6px;border:none;background:rgba(239,68,68,0.1);color:#f87171;cursor:pointer;font-size:14px;line-height:1;">×</button>`;
+        <button type="button" onclick="this.closest('[style*=grid]').remove()"
+          style="width:26px;height:26px;margin-top:2px;border-radius:6px;border:none;background:rgba(239,68,68,0.1);color:#f87171;cursor:pointer;font-size:14px;line-height:1;">×</button>`;
       container.appendChild(row);
-      // 选中原料后自动填充默认单位
+
       const nameInput = row.querySelector('.ri-name');
       const unitInput = row.querySelector('.ri-unit');
-      nameInput.addEventListener('input', () => {
-        const match = _ingredientLibCache.find(i => i.name === nameInput.value);
-        if (match?.default_unit && !unitInput.value) unitInput.value = match.default_unit;
-      });
+      const dropdown  = row.querySelector('.ri-dropdown');
+
+      function showDropdown(q) {
+        const list = q
+          ? _ingredientLibCache.filter(i => i.name.toLowerCase().includes(q.toLowerCase()))
+          : _ingredientLibCache;
+        const hits = list.slice(0, 12);
+        if (!hits.length) { dropdown.style.display = 'none'; return; }
+        dropdown.innerHTML = hits.map(i => `
+          <div class="ri-opt"
+            style="padding:8px 12px;font-size:12px;color:var(--rep-text);cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.05);"
+            data-name="${i.name.replace(/"/g,'&quot;')}"
+            data-unit="${(i.default_unit||'').replace(/"/g,'&quot;')}">
+            <span style="font-weight:500;">${i.name}</span>
+            ${i.brand  ? `<span style="color:var(--rep-muted);font-size:10px;"> · ${i.brand}</span>` : ''}
+            ${i.spec   ? `<span style="color:var(--rep-muted);font-size:10px;"> ${i.spec}</span>` : ''}
+            ${i.default_unit ? `<span style="float:right;color:rgba(255,255,255,0.3);font-size:10px;">${i.default_unit}</span>` : ''}
+          </div>`).join('');
+        dropdown.querySelectorAll('.ri-opt').forEach(opt => {
+          opt.addEventListener('mousedown', e => {
+            e.preventDefault(); // 阻止 blur 先触发
+            nameInput.value = opt.dataset.name;
+            if (!unitInput.value) unitInput.value = opt.dataset.unit || '';
+            dropdown.style.display = 'none';
+          });
+          // 移动端 touchstart
+          opt.addEventListener('touchstart', e => {
+            nameInput.value = opt.dataset.name;
+            if (!unitInput.value) unitInput.value = opt.dataset.unit || '';
+            dropdown.style.display = 'none';
+          }, { passive: true });
+        });
+        dropdown.style.display = '';
+      }
+
+      nameInput.addEventListener('focus', () => { showDropdown(nameInput.value); });
+      nameInput.addEventListener('input', () => { showDropdown(nameInput.value); });
+      nameInput.addEventListener('blur',  () => { setTimeout(() => { dropdown.style.display = 'none'; }, 200); });
     }
 
     // ── 工艺步骤行 ────────────────────────────────────────────
@@ -50000,6 +50065,7 @@ ${body}
         const name = card.querySelector('.comp-name')?.value?.trim();
         if (!name) return;
         const ingredients = [];
+        // .comp-ingredients > div 选中 row div；.ri-name 穿透 wrapper 找到 input
         card.querySelectorAll('.comp-ingredients > div').forEach(row => {
           const ingName = row.querySelector('.ri-name')?.value?.trim();
           if (!ingName) return;
@@ -50024,7 +50090,17 @@ ${body}
         });
       });
 
-      if (!components.length) { showNotification('请至少添加一个半成品', 'warning'); return; }
+      // ── 前端数据验证 ──
+      if (!components.length) {
+        showNotification('请至少添加一个半成品', 'warning'); return;
+      }
+      const emptyComp = components.find(c => !c.ingredients.length);
+      if (emptyComp) {
+        showNotification(`「${emptyComp.name}」没有填写任何原料，请检查`, 'warning'); return;
+      }
+
+      const totalIngs  = components.reduce((s, c) => s + c.ingredients.length, 0);
+      const totalSteps = components.reduce((s, c) => s + c.steps.length, 0);
 
       const store = _kitchenStore || currentUser?.store || '*';
       const body = {
@@ -50036,6 +50112,12 @@ ${body}
         components,
       };
 
+      // ── 调试日志（生产环境可关注此输出确认结构完整） ──
+      console.log('[Recipe Save]', JSON.stringify({
+        dishName, components: components.length, totalIngs, totalSteps,
+        detail: components.map(c => ({ name: c.name, ings: c.ingredients.length, steps: c.steps.length }))
+      }));
+
       try {
         const r = await fetch('/api/recipes', {
           method: 'POST',
@@ -50044,8 +50126,10 @@ ${body}
         });
         const data = await r.json();
         if (!data.success) throw new Error(data.error);
-        const totalIngs = components.reduce((s, c) => s + c.ingredients.length, 0);
-        showNotification(`✅ 已保存（${components.length} 个半成品，${totalIngs} 条原料）`, 'success');
+        showNotification(
+          `✅ 已存入数据库：${components.length} 个半成品 / ${totalIngs} 条原料 / ${totalSteps} 个步骤`,
+          'success'
+        );
         closeRecipeEditor();
       } catch(e) {
         showNotification('保存失败：' + e.message, 'error');
