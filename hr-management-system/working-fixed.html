@@ -14989,13 +14989,13 @@
                   <div id="kitchen-mapping-list" style="display:grid;gap:8px;"></div>
                 </div>
 
-                <!-- 配方管理视图（管理员） -->
+                <!-- 配方管理视图（仅管理员） -->
                 <div id="kitchen-recipe-view" style="display:none;">
 
                   <!-- 配方列表 -->
                   <div id="recipe-list-panel">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-                      <h3 style="font-size:15px;font-weight:700;color:var(--rep-text);margin:0;">配方库</h3>
+                      <h3 style="font-size:15px;font-weight:700;color:var(--rep-text);margin:0;">🔐 配方库</h3>
                       <button class="btn" type="button" onclick="openRecipeEditor(null)" style="font-size:12px;padding:7px 14px;">+ 新建配方</button>
                     </div>
                     <div id="recipe-list" style="display:grid;gap:8px;">
@@ -15003,68 +15003,70 @@
                     </div>
                   </div>
 
-                  <!-- 配方编辑器（覆盖列表） -->
+                  <!-- 配方编辑器 -->
                   <div id="recipe-editor-panel" style="display:none;">
+                    <!-- 顶部导航 -->
                     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
-                      <button type="button" onclick="closeRecipeEditor()" style="background:none;border:none;color:var(--rep-muted);font-size:20px;cursor:pointer;padding:0;">←</button>
-                      <h3 id="recipe-editor-title" style="font-size:15px;font-weight:700;color:var(--rep-text);margin:0;">新建配方</h3>
-                      <span id="recipe-version-badge" style="font-size:11px;padding:2px 8px;background:rgba(99,102,241,0.15);border-radius:20px;color:#a5b4fc;margin-left:auto;"></span>
+                      <button type="button" onclick="closeRecipeEditor()" style="background:none;border:none;color:var(--rep-muted);font-size:22px;cursor:pointer;padding:0;line-height:1;">←</button>
+                      <h3 id="recipe-editor-title" style="font-size:15px;font-weight:700;color:var(--rep-text);margin:0;flex:1;">新建配方</h3>
+                      <span id="recipe-version-badge" style="font-size:11px;padding:2px 8px;background:rgba(99,102,241,0.15);border-radius:20px;color:#a5b4fc;flex-shrink:0;"></span>
                     </div>
 
                     <input id="recipe-edit-id" type="hidden" value="">
-                    <div style="display:grid;gap:10px;margin-bottom:16px;">
-                      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                        <div>
-                          <label style="font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--rep-muted);display:block;margin-bottom:4px;">菜品名称</label>
-                          <input id="recipe-dish-name" type="text" placeholder="如：荔枝木烧鹅" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;">
+
+                    <!-- 基本信息 -->
+                    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px;margin-bottom:12px;">
+                      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--rep-muted);margin-bottom:10px;">基本信息</div>
+                      <div style="display:grid;gap:10px;">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                          <div>
+                            <label style="font-size:11px;color:var(--rep-muted);display:block;margin-bottom:4px;">菜品名称 *</label>
+                            <input id="recipe-dish-name" type="text" placeholder="如：荔枝木烧鹅" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;">
+                          </div>
+                          <div>
+                            <label style="font-size:11px;color:var(--rep-muted);display:block;margin-bottom:4px;">档口</label>
+                            <select id="recipe-station" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;appearance:none;">
+                              <option value="">不限</option>
+                              <option value="炒锅">炒锅</option>
+                              <option value="烧味">烧味</option>
+                              <option value="打荷">打荷</option>
+                              <option value="切配">切配</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                          <div>
+                            <label style="font-size:11px;color:var(--rep-muted);display:block;margin-bottom:4px;">版本号</label>
+                            <input id="recipe-version" type="text" placeholder="1.0" value="1.0" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;">
+                          </div>
+                          <div>
+                            <label style="font-size:11px;color:var(--rep-muted);display:block;margin-bottom:4px;">状态</label>
+                            <select id="recipe-status" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;appearance:none;">
+                              <option value="active">✅ 生效中</option>
+                              <option value="draft">📝 草稿</option>
+                              <option value="archived">📦 已归档</option>
+                            </select>
+                          </div>
                         </div>
                         <div>
-                          <label style="font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--rep-muted);display:block;margin-bottom:4px;">档口</label>
-                          <select id="recipe-station" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;appearance:none;">
-                            <option value="">选择档口</option>
-                            <option value="炒锅">炒锅</option>
-                            <option value="烧味">烧味</option>
-                            <option value="打荷">打荷</option>
-                            <option value="切配">切配</option>
-                          </select>
+                          <label style="font-size:11px;color:var(--rep-muted);display:block;margin-bottom:4px;">备注</label>
+                          <textarea id="recipe-notes" rows="2" placeholder="如：总厨审定，2026-05生效" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;resize:vertical;"></textarea>
                         </div>
-                      </div>
-                      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                        <div>
-                          <label style="font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--rep-muted);display:block;margin-bottom:4px;">版本号</label>
-                          <input id="recipe-version" type="text" placeholder="1.0" value="1.0" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;">
-                        </div>
-                        <div>
-                          <label style="font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--rep-muted);display:block;margin-bottom:4px;">状态</label>
-                          <select id="recipe-status" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;appearance:none;">
-                            <option value="active">✅ 生效中</option>
-                            <option value="draft">📝 草稿</option>
-                            <option value="archived">📦 已归档</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div>
-                        <label style="font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--rep-muted);display:block;margin-bottom:4px;">备注</label>
-                        <textarea id="recipe-notes" rows="2" placeholder="如：适用广州门店，总厨2026-05审定" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--rep-border-soft);border-radius:10px;color:var(--rep-text);font-size:13px;resize:vertical;"></textarea>
                       </div>
                     </div>
 
-                    <!-- 原料明细 -->
+                    <!-- 半成品列表 -->
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-                      <h4 style="font-size:13px;font-weight:700;color:var(--rep-text);margin:0;">原料明细</h4>
-                      <button type="button" onclick="addRecipeIngredientRow()" style="font-size:12px;padding:5px 12px;background:rgba(255,255,255,0.07);border:1px solid var(--rep-border-soft);border-radius:8px;color:var(--rep-text);cursor:pointer;">+ 添加原料</button>
+                      <div style="font-size:13px;font-weight:700;color:var(--rep-text);">半成品组成</div>
+                      <button type="button" onclick="addComponentCard()"
+                        style="font-size:12px;padding:6px 14px;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);border-radius:8px;color:#a5b4fc;cursor:pointer;">
+                        + 添加半成品
+                      </button>
                     </div>
-                    <div style="margin-bottom:6px;display:grid;grid-template-columns:28px 1fr 70px 50px 60px 32px;gap:4px;padding:0 2px;">
-                      <span style="font-size:10px;color:var(--rep-muted);">步骤</span>
-                      <span style="font-size:10px;color:var(--rep-muted);">原料名称</span>
-                      <span style="font-size:10px;color:var(--rep-muted);">用量</span>
-                      <span style="font-size:10px;color:var(--rep-muted);">单位</span>
-                      <span style="font-size:10px;color:var(--rep-muted);">料包</span>
-                      <span></span>
-                    </div>
-                    <div id="recipe-ingredients-list" style="display:grid;gap:6px;"></div>
+                    <div id="recipe-components-list" style="display:grid;gap:10px;margin-bottom:14px;"></div>
 
-                    <div style="display:flex;gap:8px;margin-top:16px;">
+                    <!-- 保存 -->
+                    <div style="display:flex;gap:8px;">
                       <button class="btn" type="button" onclick="saveRecipe()" style="flex:1;">💾 保存配方</button>
                       <button class="btn btn-secondary" type="button" onclick="closeRecipeEditor()">取消</button>
                     </div>
@@ -49085,40 +49087,6 @@ ${body}
 
     // 点击"开始"→启动10秒倒计时
     // 异步拉取当前步骤用料并注入到激活卡片中
-    async function injectStepIngredients(dishName, store, stepSeq) {
-      try {
-        const r = await fetch(
-          `/api/recipes/step-hint?dishName=${encodeURIComponent(dishName)}&store=${encodeURIComponent(store)}&stepSeq=${stepSeq}`,
-          { headers: { 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` } }
-        );
-        const data = await r.json();
-        if (!data.success || !data.ingredients?.length) return;
-
-        // 找到当前激活步骤的卡片，注入用料提示
-        const allCards = document.querySelectorAll('#punch-steps-list > div');
-        // 找对应 stepSeq 的卡片（按顺序）
-        const stepsCache = _punchStepsCache || [];
-        const idx = stepsCache.findIndex(s => s.step_seq === Number(stepSeq));
-        const card = allCards[idx];
-        if (!card) return;
-
-        // 避免重复注入
-        if (card.querySelector('.recipe-hint-block')) return;
-
-        const hint = document.createElement('div');
-        hint.className = 'recipe-hint-block';
-        hint.style.cssText = 'margin-top:10px;padding:8px 10px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:8px;';
-        hint.innerHTML = `
-          <div style="font-size:10px;font-weight:700;letter-spacing:.1em;color:#a5b4fc;margin-bottom:6px;">📦 本步骤用料</div>
-          ${data.ingredients.map(ing => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-              <span style="font-size:12px;color:rgba(255,255,255,0.8);">${ing.is_pack ? '📦 ' : ''}${ing.ingredient_name}</span>
-              <span style="font-size:12px;font-weight:600;color:#c7d2fe;">${ing.quantity != null ? ing.quantity : ''}${ing.unit || ''}</span>
-            </div>`).join('')}`;
-        card.appendChild(hint);
-      } catch(e) { /* 拉不到用料不影响打点流程 */ }
-    }
-
     function startStepCountdown(dishName, stepSeq, stepAction, station, store, scheduleTime) {
       // 防重复
       if (_punchCountingStep !== null) return;
@@ -49128,9 +49096,6 @@ ${body}
 
       // 重渲染，显示倒计时圆圈
       renderPunchSteps(_punchStepsCache, true);
-
-      // 异步注入当前步骤用料（不阻塞倒计时）
-      injectStepIngredients(dishName, store, stepSeq);
 
       _punchCountdownTimer = setInterval(() => {
         _punchCountdownSecs--;
@@ -49528,7 +49493,7 @@ ${body}
     }
 
     // ═══════════════════════════════════════════════════════
-    // 配方管理模块 JS
+    // 配方管理模块 JS  v2 — 半成品 + 原料 + 工艺步骤
     // ═══════════════════════════════════════════════════════
 
     // ── 配方列表 ─────────────────────────────────────────────
@@ -49552,7 +49517,7 @@ ${body}
             <div style="flex:1;min-width:0;">
               <div style="font-size:14px;font-weight:600;color:var(--rep-text);">${r.dish_name}</div>
               <div style="font-size:11px;color:var(--rep-muted);margin-top:3px;">
-                ${r.station || ''}${r.station ? ' · ' : ''}v${r.version} · ${statusLabel[r.status]||r.status} · ${r.ingredient_count} 条原料
+                ${r.station ? r.station + ' · ' : ''}v${r.version} · ${statusLabel[r.status]||r.status} · ${r.component_count} 个半成品
               </div>
             </div>
             <div style="display:flex;gap:6px;flex-shrink:0;">
@@ -49571,11 +49536,10 @@ ${body}
     async function openRecipeEditor(id) {
       document.getElementById('recipe-list-panel').style.display = 'none';
       document.getElementById('recipe-editor-panel').style.display = '';
-      document.getElementById('recipe-ingredients-list').innerHTML = '';
+      document.getElementById('recipe-components-list').innerHTML = '';
       document.getElementById('recipe-edit-id').value = id || '';
 
       if (!id) {
-        // 新建
         document.getElementById('recipe-editor-title').textContent = '新建配方';
         document.getElementById('recipe-version-badge').textContent = '';
         document.getElementById('recipe-dish-name').value = '';
@@ -49583,11 +49547,10 @@ ${body}
         document.getElementById('recipe-version').value = '1.0';
         document.getElementById('recipe-status').value = 'active';
         document.getElementById('recipe-notes').value = '';
-        addRecipeIngredientRow(); // 默认一行
+        addComponentCard(); // 默认一个半成品
         return;
       }
 
-      // 编辑已有
       try {
         const r = await fetch(`/api/recipes/${id}`,
           { headers: { 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` } });
@@ -49601,9 +49564,9 @@ ${body}
         document.getElementById('recipe-version').value = recipe.version;
         document.getElementById('recipe-status').value = recipe.status;
         document.getElementById('recipe-notes').value = recipe.notes || '';
-        // 填入原料行
-        (recipe.ingredients || []).forEach(item => addRecipeIngredientRow(item));
-        if (!recipe.ingredients?.length) addRecipeIngredientRow();
+        const comps = recipe.components || [];
+        comps.forEach(comp => addComponentCard(comp));
+        if (!comps.length) addComponentCard();
       } catch(e) {
         showNotification('加载配方失败：' + e.message, 'error');
         closeRecipeEditor();
@@ -49616,24 +49579,74 @@ ${body}
       loadRecipeList();
     }
 
+    // ── 半成品卡片 ────────────────────────────────────────────
+    function addComponentCard(comp = {}) {
+      const compList = document.getElementById('recipe-components-list');
+      const card = document.createElement('div');
+      card.className = 'recipe-comp-card';
+      card.style.cssText = 'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;';
+      const inputS = 'width:100%;padding:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--rep-text);font-size:13px;box-sizing:border-box;';
+      const nameVal = (comp.name || '').replace(/"/g, '&quot;');
+      const notesVal = (comp.notes || '').replace(/"/g, '&quot;');
+      card.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="text" placeholder="半成品名称，如：烧鹅皮水" value="${nameVal}"
+            style="${inputS}flex:1;font-weight:600;" class="comp-name">
+          <button type="button" onclick="this.closest('.recipe-comp-card').remove()"
+            style="flex-shrink:0;width:30px;height:30px;border-radius:8px;border:none;background:rgba(239,68,68,0.12);color:#f87171;cursor:pointer;font-size:16px;line-height:1;">×</button>
+        </div>
+        <input type="text" placeholder="备注（选填）" value="${notesVal}" style="${inputS}" class="comp-notes">
+
+        <div style="font-size:12px;color:var(--rep-muted);font-weight:600;letter-spacing:.5px;margin-bottom:2px;">原料配比</div>
+        <div class="comp-ingredients" style="display:flex;flex-direction:column;gap:5px;"></div>
+        <button type="button" onclick="addIngredientRow(this.previousElementSibling)"
+          style="align-self:flex-start;font-size:12px;padding:5px 12px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.25);border-radius:8px;color:#a5b4fc;cursor:pointer;">+ 添加原料</button>
+
+        <div style="font-size:12px;color:var(--rep-muted);font-weight:600;letter-spacing:.5px;margin-top:4px;margin-bottom:2px;">工艺步骤</div>
+        <div class="comp-steps" style="display:flex;flex-direction:column;gap:5px;"></div>
+        <button type="button" onclick="addProcessStepRow(this.previousElementSibling)"
+          style="align-self:flex-start;font-size:12px;padding:5px 12px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.25);border-radius:8px;color:#6ee7b7;cursor:pointer;">+ 添加工艺步骤</button>
+      `;
+      compList.appendChild(card);
+
+      const ingContainer  = card.querySelector('.comp-ingredients');
+      const stepContainer = card.querySelector('.comp-steps');
+      (comp.ingredients || []).forEach(ing => addIngredientRow(ingContainer, ing));
+      if (!(comp.ingredients || []).length) addIngredientRow(ingContainer);
+      (comp.steps || []).forEach(step => addProcessStepRow(stepContainer, step));
+    }
+
     // ── 原料行 ────────────────────────────────────────────────
-    function addRecipeIngredientRow(item = {}) {
-      const list = document.getElementById('recipe-ingredients-list');
+    function addIngredientRow(container, ing = {}) {
       const row = document.createElement('div');
-      row.style.cssText = 'display:grid;grid-template-columns:28px 1fr 70px 50px 60px 32px;gap:4px;align-items:center;';
-      const inputStyle = 'width:100%;padding:8px 8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--rep-text);font-size:12px;';
+      row.style.cssText = 'display:grid;grid-template-columns:1fr 70px 55px 60px 28px;gap:4px;align-items:center;';
+      const s = 'width:100%;padding:7px 8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:8px;color:var(--rep-text);font-size:12px;box-sizing:border-box;';
+      const nameVal = (ing.ingredient_name || '').replace(/"/g, '&quot;');
+      const unitVal = (ing.unit || '').replace(/"/g, '&quot;');
       row.innerHTML = `
-        <input type="number" placeholder="步" min="1" value="${item.step_seq_ref||''}" style="${inputStyle}text-align:center;" class="ri-step">
-        <input type="text"   placeholder="原料名称" value="${(item.ingredient_name||'').replace(/"/g,'&quot;')}" style="${inputStyle}" class="ri-name">
-        <input type="number" placeholder="用量" step="0.1" min="0" value="${item.quantity||''}" style="${inputStyle}text-align:right;" class="ri-qty">
-        <input type="text"   placeholder="g/ml/个" value="${(item.unit||'').replace(/"/g,'&quot;')}" style="${inputStyle}text-align:center;" class="ri-unit">
-        <label style="display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer;">
-          <input type="checkbox" ${item.is_pack?'checked':''} style="accent-color:#6366f1;" class="ri-pack">
+        <input type="text"   placeholder="原料名称" value="${nameVal}" style="${s}" class="ri-name">
+        <input type="number" placeholder="用量" step="0.01" min="0" value="${ing.quantity||''}" style="${s}text-align:right;" class="ri-qty">
+        <input type="text"   placeholder="g/ml/个" value="${unitVal}" style="${s}text-align:center;" class="ri-unit">
+        <label style="display:flex;align-items:center;justify-content:center;gap:3px;cursor:pointer;">
+          <input type="checkbox" ${ing.is_pack?'checked':''} style="accent-color:#6366f1;" class="ri-pack">
           <span style="font-size:10px;color:var(--rep-muted);">料包</span>
         </label>
         <button type="button" onclick="this.closest('div').remove()"
-          style="width:28px;height:28px;border-radius:6px;border:none;background:rgba(239,68,68,0.1);color:#f87171;cursor:pointer;font-size:14px;">×</button>`;
-      list.appendChild(row);
+          style="width:26px;height:26px;border-radius:6px;border:none;background:rgba(239,68,68,0.1);color:#f87171;cursor:pointer;font-size:14px;line-height:1;">×</button>`;
+      container.appendChild(row);
+    }
+
+    // ── 工艺步骤行 ────────────────────────────────────────────
+    function addProcessStepRow(container, step = {}) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:grid;grid-template-columns:1fr 28px;gap:4px;align-items:center;';
+      const s = 'width:100%;padding:7px 8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:8px;color:var(--rep-text);font-size:12px;box-sizing:border-box;';
+      const instrVal = (step.instruction || '').replace(/"/g, '&quot;');
+      row.innerHTML = `
+        <input type="text" placeholder="工艺步骤，如：顺时针搅拌至均匀" value="${instrVal}" style="${s}" class="rs-instruction">
+        <button type="button" onclick="this.closest('div').remove()"
+          style="width:26px;height:26px;border-radius:6px;border:none;background:rgba(239,68,68,0.1);color:#f87171;cursor:pointer;font-size:14px;line-height:1;">×</button>`;
+      container.appendChild(row);
     }
 
     // ── 保存配方 ──────────────────────────────────────────────
@@ -49642,20 +49655,37 @@ ${body}
       const dishName = document.getElementById('recipe-dish-name').value.trim();
       if (!dishName) { showNotification('请填写菜品名称', 'warning'); return; }
 
-      // 收集原料行
-      const rows = document.querySelectorAll('#recipe-ingredients-list > div');
-      const ingredients = [];
-      rows.forEach(row => {
-        const name = row.querySelector('.ri-name')?.value?.trim();
+      // 收集半成品 → 原料 + 工艺步骤
+      const components = [];
+      document.querySelectorAll('.recipe-comp-card').forEach(card => {
+        const name = card.querySelector('.comp-name')?.value?.trim();
         if (!name) return;
-        ingredients.push({
-          step_seq_ref:    parseInt(row.querySelector('.ri-step')?.value) || null,
-          ingredient_name: name,
-          quantity:        parseFloat(row.querySelector('.ri-qty')?.value) || null,
-          unit:            row.querySelector('.ri-unit')?.value?.trim() || null,
-          is_pack:         row.querySelector('.ri-pack')?.checked || false,
+        const ingredients = [];
+        card.querySelectorAll('.comp-ingredients > div').forEach(row => {
+          const ingName = row.querySelector('.ri-name')?.value?.trim();
+          if (!ingName) return;
+          ingredients.push({
+            ingredient_name: ingName,
+            quantity:        parseFloat(row.querySelector('.ri-qty')?.value) || null,
+            unit:            row.querySelector('.ri-unit')?.value?.trim() || null,
+            is_pack:         row.querySelector('.ri-pack')?.checked || false,
+          });
+        });
+        const steps = [];
+        card.querySelectorAll('.comp-steps > div').forEach(row => {
+          const instr = row.querySelector('.rs-instruction')?.value?.trim();
+          if (!instr) return;
+          steps.push({ instruction: instr });
+        });
+        components.push({
+          name,
+          notes: card.querySelector('.comp-notes')?.value?.trim() || null,
+          ingredients,
+          steps,
         });
       });
+
+      if (!components.length) { showNotification('请至少添加一个半成品', 'warning'); return; }
 
       const store = _kitchenStore || currentUser?.store || '*';
       const body = {
@@ -49664,7 +49694,7 @@ ${body}
         version: document.getElementById('recipe-version').value || '1.0',
         status:  document.getElementById('recipe-status').value,
         notes:   document.getElementById('recipe-notes').value.trim(),
-        ingredients,
+        components,
       };
 
       try {
@@ -49675,7 +49705,8 @@ ${body}
         });
         const data = await r.json();
         if (!data.success) throw new Error(data.error);
-        showNotification(`✅ 配方已保存（${ingredients.length} 条原料）`, 'success');
+        const totalIngs = components.reduce((s, c) => s + c.ingredients.length, 0);
+        showNotification(`✅ 已保存（${components.length} 个半成品，${totalIngs} 条原料）`, 'success');
         closeRecipeEditor();
       } catch(e) {
         showNotification('保存失败：' + e.message, 'error');
