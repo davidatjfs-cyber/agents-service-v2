@@ -329,6 +329,38 @@ export function registerRecipeRoutes(app, authMiddleware) {
     }
   });
 
+  // ── 配方：出品经理可见的半成品组成（名称，不含原料和工艺）──
+  app.get('/api/recipes/components/by-dish', authMiddleware, requireRecipeAdmin, async (req, res) => {
+    try {
+      const dish = req.query.dish;
+      if (!dish) return res.json({ success: false, error: 'dish参数必填' });
+      const rows = await pool().query(
+        `SELECT rc.name, rc.notes
+         FROM recipe_components rc
+         JOIN recipes r ON r.id = rc.recipe_id
+         WHERE r.dish_name = $1 AND r.status = 'active'
+         ORDER BY rc.sort_order, rc.id`,
+        [dish]
+      );
+      res.json({ success: true, components: rows.rows });
+    } catch (e) {
+      res.json({ success: false, error: e?.message });
+    }
+  });
+
+  // ── 配方：审核通过 ────────────────────────────────────────
+  app.post('/api/recipes/:id/approve', authMiddleware, requireRecipeAdmin, async (req, res) => {
+    try {
+      await pool().query(
+        `UPDATE recipes SET status='active', updated_by=$1, updated_at=NOW() WHERE id=$2`,
+        [req.user?.username, req.params.id]
+      );
+      res.json({ success: true });
+    } catch (e) {
+      res.json({ success: false, error: e?.message });
+    }
+  });
+
   // ── 原料分类：列表 ────────────────────────────────────────
   app.get('/api/ingredient-categories', authMiddleware, requireRecipeAdmin, async (req, res) => {
     try {
