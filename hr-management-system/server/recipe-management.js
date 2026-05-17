@@ -13,6 +13,7 @@
  */
 
 import { pool as getPool } from './utils/database.js';
+import XLSX from 'xlsx';
 function pool() { return getPool(); }
 
 // ─── Schema ───────────────────────────────────────────────
@@ -275,6 +276,120 @@ async function deleteRecipe({ id, store }) {
     [id, store]
   );
   return { success: true };
+}
+
+// ─── Excel 模版生成 ────────────────────────────────────────
+export function generateRecipeTemplate() {
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: 配方信息（key-value 对）
+  const infoSheet = XLSX.utils.aoa_to_sheet([
+    ['字段', '值（请填写）'],
+    ['菜品名称', ''],
+    ['所属品牌', ''],
+    ['档口', ''],
+    ['版本', '1.0'],
+    ['备注', ''],
+  ]);
+  infoSheet['!cols'] = [{ wch: 18 }, { wch: 30 }];
+  XLSX.utils.book_append_sheet(wb, infoSheet, '配方信息');
+
+  // Sheet 2: 半成品列表
+  const compSheet = XLSX.utils.aoa_to_sheet([
+    ['半成品名称（必填）', '备注'],
+    ['示例：烧鹅皮水', ''],
+    ['示例：烧鹅腌料', ''],
+  ]);
+  compSheet['!cols'] = [{ wch: 24 }, { wch: 30 }];
+  XLSX.utils.book_append_sheet(wb, compSheet, '半成品列表');
+
+  // Sheet 3: 原料配比
+  const ingSheet = XLSX.utils.aoa_to_sheet([
+    ['半成品名称（需与半成品列表一致）', '原料名称', '用量', '单位', '是否料包（是/否）'],
+    ['示例：烧鹅皮水', '麦芽糖', 500, 'g', '否'],
+    ['示例：烧鹅皮水', '白醋', 200, 'ml', '否'],
+    ['示例：烧鹅腌料', '五香粉', 50, 'g', '否'],
+  ]);
+  ingSheet['!cols'] = [{ wch: 28 }, { wch: 18 }, { wch: 8 }, { wch: 8 }, { wch: 16 }];
+  XLSX.utils.book_append_sheet(wb, ingSheet, '原料配比');
+
+  // Sheet 4: 工艺步骤
+  const stepSheet = XLSX.utils.aoa_to_sheet([
+    ['半成品名称（需与半成品列表一致）', '步骤序号', '步骤说明（必填）'],
+    ['示例：烧鹅皮水', 1, '将麦芽糖、白醋放入锅中，小火加热搅拌至融化'],
+    ['示例：烧鹅皮水', 2, '放凉后装瓶备用'],
+    ['示例：烧鹅腌料', 1, '将所有腌料按比例混合均匀即可'],
+  ]);
+  stepSheet['!cols'] = [{ wch: 28 }, { wch: 10 }, { wch: 50 }];
+  XLSX.utils.book_append_sheet(wb, stepSheet, '工艺步骤');
+
+  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+}
+
+// ─── Excel 配方导入 ────────────────────────────────────────
+export async function importRecipeFromExcel(buffer, username, store) {
+  const wb = XLSX.read(buffer, { type: 'buffer' });
+
+  // 配方信息
+  const infoSheet = wb.Sheets['配方信息'];
+  if (!infoSheet) throw new Error('找不到工作表「配方信息」');
+  const infoRows = XLSX.utils.sheet_to_json(infoSheet, { header: 1 });
+  const infoMap = {};
+  infoRows.slice(1).forEach(row => {
+    const key = String(row[0] || '').trim();
+    const val = String(row[1] !== undefined ? row[1] : '').trim();
+    if (key) infoMap[key] = val;
+  });
+  const dishName = infoMap['菜品名称'];
+  if (!dishName) throw new Error('「配方信息」中「菜品名称」不能为空');
+
+  // 半成品列表
+  const compSheet = wb.Sheets['半成品列表'];
+  if (!compSheet) throw new Error('找不到工作表「半成品列表」');
+  const compRows = XLSX.utils.sheet_to_json(compSheet, { header: 1 }).slice(1);
+  const compDefs = compRows
+    .filter(r => r[0] && !String(r[0]).startsWith('示例'))
+    .map(r => ({ name: String(r[0]).trim(), notes: String(r[1] || '').trim() }));
+  if (!compDefs.length) throw new Error('「半成品列表」不能为空（请删除「示例」行，填入真实数据）');
+
+  // 原料配比
+  const ingSheet = wb.Sheets['原料配比'];
+  const ingRows = ingSheet ? XLSX.utils.sheet_to_json(ingSheet, { header: 1 }).slice(1) : [];
+
+  // 工艺步骤
+  const stepSheet = wb.Sheets['工艺步骤'];
+  const stepRows = stepSheet ? XLSX.utils.sheet_to_json(stepSheet, { header: 1 }).slice(1) : [];
+
+  // 组装 components
+  const components = compDefs.map(comp => {
+    const ingredients = ingRows
+      .filter(r => String(r[0] || '').trim() === comp.name && r[1] && !String(r[1]).startsWith('示例'))
+      .map(r => ({
+        ingredient_name: String(r[1]).trim(),
+        quantity:        parseFloat(r[2]) || null,
+        unit:            String(r[3] || '').trim() || null,
+        is_pack:         String(r[4] || '').trim() === '是',
+      }));
+
+    const steps = stepRows
+      .filter(r => String(r[0] || '').trim() === comp.name && r[2] && !String(r[2]).startsWith('示例'))
+      .sort((a, b) => (Number(a[1]) || 0) - (Number(b[1]) || 0))
+      .map(r => ({ instruction: String(r[2]).trim() }));
+
+    return { ...comp, ingredients, steps };
+  });
+
+  return saveRecipe({
+    dishName,
+    brand:   infoMap['所属品牌'] || null,
+    store:   store || '*',
+    station: infoMap['档口'] || null,
+    version: infoMap['版本'] || '1.0',
+    status:  'draft',
+    notes:   infoMap['备注'] || null,
+    components,
+    username,
+  });
 }
 
 // ─── 路由注册 ──────────────────────────────────────────────

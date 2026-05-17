@@ -53,7 +53,7 @@ import { ensureTaskBoardSchema } from './task-board-api.js';
 import { ensureHRMSApiSchema, registerHRMSApiRoutes } from './hrms-api-tools.js';
 import { ensureSOPDistributionSchema, registerSOPDistributionRoutes } from './sop-distribution.js';
 import { ensureKitchenExecutionSchema, registerKitchenExecutionRoutes } from './kitchen-execution.js';
-import { ensureRecipeSchema, registerRecipeRoutes } from './recipe-management.js';
+import { ensureRecipeSchema, registerRecipeRoutes, generateRecipeTemplate, importRecipeFromExcel } from './recipe-management.js';
 import { setDataExecutorPool, purgeExpiredCache, updateMetricVersion } from './data-executor.js';
 import fileRoutes from './file-routes.js';
 import { enforceRuntimeSafetyOrExit, configureDbSessionSafety, isSchemaChangeAllowed, getAppEnv, isWebhookEnabled, isExternalEnabled } from './safety.js';
@@ -5005,6 +5005,36 @@ app.post('/api/recipes/upload-step-media', authRequired, recipeMediaUpload.singl
     return res.json({ ok: true, url: `/uploads/${req.file.filename}`, type: mediaType });
   } catch (e) {
     return res.status(500).json({ error: e?.message });
+  }
+});
+
+// 配方 Excel 模版下载
+const RECIPE_ADMIN_ROLES = new Set(['admin','hq_manager','store_manager','store_production_manager']);
+app.get('/api/recipes/template', authRequired, (req, res) => {
+  if (!RECIPE_ADMIN_ROLES.has(req.user?.role)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    const buf = generateRecipeTemplate();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename*=UTF-8\'\'%E9%85%8D%E6%96%B9%E5%AF%BC%E5%85%A5%E6%A8%A1%E7%89%88.xlsx');
+    res.send(buf);
+  } catch(e) {
+    res.status(500).json({ error: e?.message });
+  }
+});
+
+// 配方 Excel 导入
+app.post('/api/recipes/import', authRequired, upload.single('file'), async (req, res) => {
+  if (!RECIPE_ADMIN_ROLES.has(req.user?.role)) return res.status(403).json({ error: 'forbidden' });
+  try {
+    if (!req.file?.path) return res.status(400).json({ error: 'missing_file' });
+    const buffer = fs.readFileSync(req.file.path);
+    const result = await importRecipeFromExcel(buffer, req.user.username, req.user?.store || '*');
+    if (!result.success) return res.json({ success: false, error: result.error });
+    // Read back dish name from the import for the response
+    const row = await import('./utils/database.js').then(m => m.pool().query('SELECT dish_name FROM recipes WHERE id=$1', [result.id]));
+    return res.json({ success: true, id: result.id, dishName: row.rows[0]?.dish_name || '' });
+  } catch(e) {
+    return res.status(500).json({ success: false, error: e?.message });
   }
 });
 

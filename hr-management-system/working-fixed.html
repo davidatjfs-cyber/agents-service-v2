@@ -15014,9 +15014,15 @@
 
                   <!-- 配方列表 -->
                   <div id="recipe-list-panel">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
                       <h3 style="font-size:15px;font-weight:700;color:var(--rep-text);margin:0;">🔐 配方库</h3>
-                      <button class="btn" type="button" onclick="openRecipeEditor(null)" style="font-size:12px;padding:7px 14px;">+ 新建配方</button>
+                      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                        <button type="button" onclick="downloadRecipeTemplate()" style="font-size:12px;padding:6px 12px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);border-radius:8px;color:#6ee7b7;cursor:pointer;">⬇ 模版</button>
+                        <label style="font-size:12px;padding:6px 12px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:8px;color:#fcd34d;cursor:pointer;">
+                          📂 导入<input type="file" accept=".xlsx,.xls" style="display:none;" onchange="importRecipeTemplate(this)">
+                        </label>
+                        <button class="btn" type="button" onclick="openRecipeEditor(null)" style="font-size:12px;padding:6px 14px;">+ 新建配方</button>
+                      </div>
                     </div>
                     <div id="recipe-list" style="display:grid;gap:8px;">
                       <div style="text-align:center;padding:30px;color:rgba(255,255,255,0.25);font-size:13px;">加载中…</div>
@@ -50016,6 +50022,8 @@ ${body}
             <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">
               ${r.status !== 'active' ? `<button type="button" onclick="approveRecipe(${r.id},this)"
                 style="font-size:12px;padding:6px 12px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.35);border-radius:8px;color:#86efac;cursor:pointer;">✓ 生效</button>` : ''}
+              <button type="button" onclick="downloadRecipePdf(${r.id},'${r.dish_name.replace(/'/g,"\\'")}')"
+                style="font-size:12px;padding:6px 12px;background:rgba(148,163,184,0.1);border:1px solid rgba(148,163,184,0.25);border-radius:8px;color:#94a3b8;cursor:pointer;">⬇ PDF</button>
               <button type="button" onclick="openRecipeStepViewer(${r.id},'${r.dish_name.replace(/'/g,"\\'")}')"
                 style="font-size:12px;padding:6px 12px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);border-radius:8px;color:#fcd34d;cursor:pointer;">👁 工艺</button>
               <button type="button" onclick="openRecipeEditor(${r.id})"
@@ -50027,6 +50035,140 @@ ${body}
       } catch(e) {
         list.innerHTML = `<div style="text-align:center;padding:20px;color:#f87171;font-size:13px;">加载失败：${e.message}</div>`;
       }
+    }
+
+    // ── 下载 Excel 模版 ───────────────────────────────────────
+    function downloadRecipeTemplate() {
+      fetch('/api/recipes/template', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` }
+      })
+      .then(r => {
+        if (!r.ok) throw new Error('下载失败');
+        return r.blob();
+      })
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '配方导入模版.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      })
+      .catch(e => showNotification('下载失败：' + e.message, 'error'));
+    }
+
+    // ── 导入 Excel 配方 ────────────────────────────────────────
+    async function importRecipeTemplate(input) {
+      if (!input.files?.length) return;
+      const file = input.files[0];
+      input.value = '';
+      showNotification('正在导入…', 'info');
+      const fd = new FormData();
+      fd.append('file', file);
+      try {
+        const r = await fetch('/api/recipes/import', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` },
+          body: fd
+        });
+        const data = await r.json();
+        if (data.success) {
+          showNotification(`✅ 已导入「${data.dishName}」（草稿，请检查后生效）`, 'success');
+          loadRecipeList();
+        } else {
+          showNotification('导入失败：' + (data.error || '未知错误'), 'error');
+        }
+      } catch(e) {
+        showNotification('导入失败：' + e.message, 'error');
+      }
+    }
+
+    // ── 下载 PDF ──────────────────────────────────────────────
+    async function downloadRecipePdf(id, dishName) {
+      showNotification('正在生成 PDF…', 'info');
+      try {
+        const r = await fetch(`/api/recipes/${id}`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` }
+        });
+        const data = await r.json();
+        if (!data.success) throw new Error(data.error);
+        const html = _buildRecipePdfHtml(data.recipe);
+        const win = window.open('', '_blank', 'width=820,height=900,scrollbars=yes');
+        if (!win) { showNotification('请允许弹出窗口后重试', 'warning'); return; }
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => { try { win.print(); } catch(e) {} }, 600);
+      } catch(e) {
+        showNotification('生成失败：' + e.message, 'error');
+      }
+    }
+
+    function _buildRecipePdfHtml(recipe) {
+      const statusLabel = { active: '已生效', draft: '草稿', archived: '已归档' };
+      const compsHtml = (recipe.components || []).map(comp => {
+        const ingRows = (comp.ingredients || []).map(ing =>
+          `<tr><td>${ing.ingredient_name}</td><td>${ing.quantity ?? ''}</td><td>${ing.unit || ''}</td><td>${ing.is_pack ? '✓' : ''}</td></tr>`
+        ).join('');
+        const ingsHtml = ingRows ? `
+          <h3>原料配比</h3>
+          <table><thead><tr><th>原料名称</th><th>用量</th><th>单位</th><th>料包</th></tr></thead><tbody>${ingRows}</tbody></table>` : '';
+
+        const stepsHtml = (comp.steps || []).length ? `
+          <h3>工艺步骤</h3>
+          <ol>${comp.steps.map(s => `
+            <li>
+              <div>${s.instruction}</div>
+              ${s.media_url && s.media_type !== 'video' ? `<img src="${location.origin}${s.media_url}" class="step-img">` : ''}
+              ${s.media_url && s.media_type === 'video' ? `<div class="step-vid-note">📹 视频参考：${location.origin}${s.media_url}</div>` : ''}
+            </li>`).join('')}</ol>` : '';
+
+        return `<div class="comp">
+          <h2>🔹 ${comp.name}${comp.notes ? ` <small>${comp.notes}</small>` : ''}</h2>
+          ${ingsHtml}${stepsHtml}
+        </div>`;
+      }).join('');
+
+      return `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8">
+<title>${recipe.dish_name} 配方</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-size:12px;color:#1a1a1a;padding:24px 28px;}
+.hd{border-bottom:2.5px solid #1a1a1a;padding-bottom:12px;margin-bottom:18px;}
+.hd h1{font-size:22px;font-weight:800;letter-spacing:-.02em;}
+.hd .meta{margin-top:5px;font-size:11px;color:#555;}
+.hd .meta span{margin-right:16px;}
+.comp{margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #e5e7eb;}
+.comp:last-child{border-bottom:none;}
+h2{font-size:14px;font-weight:700;border-left:4px solid #6366f1;padding-left:10px;margin-bottom:10px;}
+h2 small{font-size:11px;color:#888;font-weight:400;}
+h3{font-size:11px;font-weight:700;color:#444;margin:10px 0 5px;text-transform:uppercase;letter-spacing:.04em;}
+table{width:100%;border-collapse:collapse;margin-bottom:8px;font-size:11px;}
+th,td{border:1px solid #d1d5db;padding:4px 8px;text-align:left;}
+th{background:#f3f4f6;font-weight:600;}
+ol{padding-left:18px;}
+li{margin-bottom:8px;line-height:1.65;}
+.step-img{max-width:220px;max-height:160px;border-radius:6px;margin-top:6px;display:block;object-fit:cover;}
+.step-vid-note{font-size:10px;color:#6366f1;margin-top:4px;}
+.footer{margin-top:18px;padding-top:10px;border-top:1px solid #e5e7eb;font-size:10px;color:#aaa;text-align:center;}
+@media print{body{padding:10mm 15mm;}@page{margin:12mm 15mm;}li{page-break-inside:avoid;}}
+</style></head><body>
+<div class="hd">
+  <h1>${recipe.dish_name}</h1>
+  <div class="meta">
+    ${recipe.brand ? `<span>品牌：${recipe.brand}</span>` : ''}
+    ${recipe.station ? `<span>档口：${recipe.station}</span>` : ''}
+    <span>版本：v${recipe.version}</span>
+    <span>状态：${statusLabel[recipe.status] || recipe.status}</span>
+    ${recipe.notes ? `<span>备注：${recipe.notes}</span>` : ''}
+  </div>
+</div>
+${compsHtml || '<p style="color:#888;">暂无半成品数据</p>'}
+<div class="footer">生成时间：${new Date().toLocaleString('zh-CN')} · HRMS 配方管理</div>
+</body></html>`;
     }
 
     // ── 配方审核通过 ──────────────────────────────────────────
