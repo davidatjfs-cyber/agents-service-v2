@@ -21,18 +21,33 @@ export async function ensureRecipeSchema() {
     // 迁移：如果存在旧的单层 recipe_ingredients 表则删除（建立初期无数据）
     await pool().query(`DROP TABLE IF EXISTS recipe_ingredients`);
 
+    // 原料分类
+    await pool().query(`
+      CREATE TABLE IF NOT EXISTS ingredient_categories (
+        id         BIGSERIAL PRIMARY KEY,
+        name       VARCHAR(100) NOT NULL UNIQUE,
+        sort_order INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
     // 原料库
     await pool().query(`
       CREATE TABLE IF NOT EXISTS ingredient_library (
         id           BIGSERIAL PRIMARY KEY,
         name         VARCHAR(255) NOT NULL UNIQUE,
         category     VARCHAR(100),
+        brand        VARCHAR(100),
+        spec         VARCHAR(200),
         default_unit VARCHAR(50),
         notes        TEXT,
         created_by   VARCHAR(120),
         created_at   TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+    // 迁移：为已有表补充 brand / spec 列
+    await pool().query(`ALTER TABLE ingredient_library ADD COLUMN IF NOT EXISTS brand VARCHAR(100)`);
+    await pool().query(`ALTER TABLE ingredient_library ADD COLUMN IF NOT EXISTS spec  VARCHAR(200)`);
     await pool().query(`
       CREATE INDEX IF NOT EXISTS idx_ing_lib_name ON ingredient_library (name)
     `);
@@ -108,7 +123,7 @@ export async function ensureRecipeSchema() {
         ON recipe_component_steps (component_id, step_seq)
     `);
 
-    console.log('[Recipe] Schema ensured (v2: ingredient_library + components + ingredients + steps)');
+    console.log('[Recipe] Schema ensured (v2: categories + ingredient_library + components + ingredients + steps)');
   } catch (e) {
     console.error('[Recipe] schema error:', e?.message);
   }
@@ -314,11 +329,50 @@ export function registerRecipeRoutes(app, authMiddleware) {
     }
   });
 
+  // ── 原料分类：列表 ────────────────────────────────────────
+  app.get('/api/ingredient-categories', authMiddleware, requireRecipeAdmin, async (req, res) => {
+    try {
+      const rows = await pool().query(
+        `SELECT id, name, sort_order FROM ingredient_categories ORDER BY sort_order, name`
+      );
+      res.json({ success: true, categories: rows.rows });
+    } catch (e) {
+      res.json({ success: false, error: e?.message });
+    }
+  });
+
+  // ── 原料分类：新建 ────────────────────────────────────────
+  app.post('/api/ingredient-categories', authMiddleware, requireRecipeAdmin, async (req, res) => {
+    try {
+      const { name, sort_order } = req.body;
+      if (!name?.trim()) return res.json({ success: false, error: '分类名称必填' });
+      const result = await pool().query(
+        `INSERT INTO ingredient_categories (name, sort_order) VALUES ($1,$2)
+         ON CONFLICT (name) DO UPDATE SET sort_order=EXCLUDED.sort_order
+         RETURNING id`,
+        [name.trim(), Number(sort_order) || 0]
+      );
+      res.json({ success: true, id: result.rows[0].id });
+    } catch (e) {
+      res.json({ success: false, error: e?.message });
+    }
+  });
+
+  // ── 原料分类：删除 ────────────────────────────────────────
+  app.delete('/api/ingredient-categories/:id', authMiddleware, requireRecipeAdmin, async (req, res) => {
+    try {
+      await pool().query(`DELETE FROM ingredient_categories WHERE id=$1`, [req.params.id]);
+      res.json({ success: true });
+    } catch (e) {
+      res.json({ success: false, error: e?.message });
+    }
+  });
+
   // ── 原料库：列表 ──────────────────────────────────────────
   app.get('/api/ingredients', authMiddleware, requireRecipeAdmin, async (req, res) => {
     try {
       const rows = await pool().query(
-        `SELECT id, name, category, default_unit, notes, created_by, created_at
+        `SELECT id, name, category, brand, spec, default_unit, notes, created_by, created_at
          FROM ingredient_library ORDER BY category NULLS LAST, name`
       );
       res.json({ success: true, ingredients: rows.rows });
@@ -327,19 +381,20 @@ export function registerRecipeRoutes(app, authMiddleware) {
     }
   });
 
-  // ── 原料库：新建 ──────────────────────────────────────────
+  // ── 原料库：新建 / 更新 ────────────────────────────────────
   app.post('/api/ingredients', authMiddleware, requireRecipeAdmin, async (req, res) => {
     try {
-      const { name, category, default_unit, notes } = req.body;
+      const { name, category, brand, spec, default_unit, notes } = req.body;
       if (!name?.trim()) return res.json({ success: false, error: '原料名称必填' });
       const result = await pool().query(
-        `INSERT INTO ingredient_library (name, category, default_unit, notes, created_by)
-         VALUES ($1,$2,$3,$4,$5)
+        `INSERT INTO ingredient_library (name, category, brand, spec, default_unit, notes, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
          ON CONFLICT (name) DO UPDATE
-           SET category=EXCLUDED.category, default_unit=EXCLUDED.default_unit,
-               notes=EXCLUDED.notes
+           SET category=EXCLUDED.category, brand=EXCLUDED.brand, spec=EXCLUDED.spec,
+               default_unit=EXCLUDED.default_unit, notes=EXCLUDED.notes
          RETURNING id`,
-        [name.trim(), category?.trim() || null, default_unit?.trim() || null,
+        [name.trim(), category?.trim() || null, brand?.trim() || null,
+         spec?.trim() || null, default_unit?.trim() || null,
          notes?.trim() || null, req.user?.username]
       );
       res.json({ success: true, id: result.rows[0].id });
@@ -358,5 +413,5 @@ export function registerRecipeRoutes(app, authMiddleware) {
     }
   });
 
-  console.log('[Recipe] Routes registered (admin-only, with ingredient library)');
+  console.log('[Recipe] Routes registered (admin-only, with categories + ingredient library)');
 }
