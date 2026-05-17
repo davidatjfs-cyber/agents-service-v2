@@ -14992,6 +14992,26 @@
                 <!-- 配方管理视图（仅管理员） -->
                 <div id="kitchen-recipe-view" style="display:none;">
 
+                  <!-- 隐藏 datalist：原料库自动补全 -->
+                  <datalist id="ingredient-datalist"></datalist>
+
+                  <!-- 顶部 Tab 切换 -->
+                  <div id="recipe-tab-bar" style="display:flex;gap:6px;margin-bottom:14px;">
+                    <button id="recipe-tab-recipes" type="button"
+                      onclick="switchRecipeTab('recipes')"
+                      style="flex:1;padding:8px;border-radius:10px;border:1px solid rgba(99,102,241,0.5);background:rgba(99,102,241,0.2);color:#a5b4fc;font-size:13px;font-weight:600;cursor:pointer;">
+                      📖 配方库
+                    </button>
+                    <button id="recipe-tab-ingredients" type="button"
+                      onclick="switchRecipeTab('ingredients')"
+                      style="flex:1;padding:8px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:var(--rep-muted);font-size:13px;font-weight:600;cursor:pointer;">
+                      🧂 原料库
+                    </button>
+                  </div>
+
+                  <!-- 配方库面板 -->
+                  <div id="recipe-panel-wrap">
+
                   <!-- 配方列表 -->
                   <div id="recipe-list-panel">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
@@ -15069,6 +15089,31 @@
                     <div style="display:flex;gap:8px;">
                       <button class="btn" type="button" onclick="saveRecipe()" style="flex:1;">💾 保存配方</button>
                       <button class="btn btn-secondary" type="button" onclick="closeRecipeEditor()">取消</button>
+                    </div>
+                  </div>
+
+                  </div><!-- /recipe-panel-wrap -->
+
+                  <!-- 原料库面板 -->
+                  <div id="ingredient-lib-panel" style="display:none;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                      <h3 style="font-size:15px;font-weight:700;color:var(--rep-text);margin:0;">🧂 原料库</h3>
+                    </div>
+
+                    <!-- 添加原料表单 -->
+                    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px;margin-bottom:14px;">
+                      <div style="font-size:11px;font-weight:700;color:var(--rep-muted);letter-spacing:.05em;margin-bottom:10px;">新增原料</div>
+                      <div style="display:grid;grid-template-columns:1fr 1fr 80px;gap:8px;margin-bottom:8px;">
+                        <input id="ing-lib-name" type="text" placeholder="原料名称 *" style="padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--rep-text);font-size:13px;">
+                        <input id="ing-lib-category" type="text" placeholder="分类（如：调料、蔬菜）" style="padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--rep-text);font-size:13px;">
+                        <input id="ing-lib-unit" type="text" placeholder="默认单位" style="padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--rep-text);font-size:13px;text-align:center;">
+                      </div>
+                      <button class="btn" type="button" onclick="saveIngredientLibItem()" style="width:100%;font-size:13px;padding:9px;">+ 添加到原料库</button>
+                    </div>
+
+                    <!-- 原料列表 -->
+                    <div id="ingredient-lib-list" style="display:grid;gap:6px;">
+                      <div style="text-align:center;padding:20px;color:rgba(255,255,255,0.25);font-size:13px;">加载中…</div>
                     </div>
                   </div>
 
@@ -48778,7 +48823,7 @@ ${body}
       if (view === 'staff')     loadKitchenTasks();
       if (view === 'dashboard') loadKitchenDashboard();
       if (view === 'manage')    loadKitchenMappings();
-      if (view === 'recipe')    loadRecipeList();
+      if (view === 'recipe')    { switchRecipeTab('recipes'); loadRecipeList(); }
     }
 
     // ── 员工：加载今日任务 ──────────────────────────────────
@@ -49493,11 +49538,130 @@ ${body}
     }
 
     // ═══════════════════════════════════════════════════════
-    // 配方管理模块 JS  v2 — 半成品 + 原料 + 工艺步骤
+    // 配方管理模块 JS  v2 — 原料库 + 半成品 + 工艺步骤
     // ═══════════════════════════════════════════════════════
 
-    // ── 配方列表 ─────────────────────────────────────────────
+    // ── 原料库缓存（供 datalist 使用）────────────────────────
+    let _ingredientLibCache = []; // [{id, name, category, default_unit}]
+
+    async function loadIngredientLib() {
+      try {
+        const r = await fetch('/api/ingredients',
+          { headers: { 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` } });
+        const data = await r.json();
+        if (!data.success) return;
+        _ingredientLibCache = data.ingredients;
+        // 更新 datalist
+        const dl = document.getElementById('ingredient-datalist');
+        if (dl) {
+          dl.innerHTML = data.ingredients.map(i =>
+            `<option value="${i.name.replace(/"/g,'&quot;')}" data-unit="${(i.default_unit||'').replace(/"/g,'&quot;')}"></option>`
+          ).join('');
+        }
+        return data.ingredients;
+      } catch(e) { return []; }
+    }
+
+    // ── Tab 切换 ──────────────────────────────────────────────
+    function switchRecipeTab(tab) {
+      const isRecipes = tab === 'recipes';
+      document.getElementById('recipe-panel-wrap').style.display   = isRecipes ? '' : 'none';
+      document.getElementById('ingredient-lib-panel').style.display = isRecipes ? 'none' : '';
+      // 高亮 active tab
+      const tR = document.getElementById('recipe-tab-recipes');
+      const tI = document.getElementById('recipe-tab-ingredients');
+      if (tR) {
+        tR.style.background = isRecipes ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.03)';
+        tR.style.borderColor = isRecipes ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.1)';
+        tR.style.color = isRecipes ? '#a5b4fc' : 'var(--rep-muted)';
+      }
+      if (tI) {
+        tI.style.background = !isRecipes ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.03)';
+        tI.style.borderColor = !isRecipes ? 'rgba(16,185,129,0.4)' : 'rgba(255,255,255,0.1)';
+        tI.style.color = !isRecipes ? '#6ee7b7' : 'var(--rep-muted)';
+      }
+      if (!isRecipes) renderIngredientLibList();
+    }
+
+    // ── 原料库列表渲染 ────────────────────────────────────────
+    function renderIngredientLibList() {
+      const list = document.getElementById('ingredient-lib-list');
+      if (!list) return;
+      if (!_ingredientLibCache.length) {
+        list.innerHTML = '<div style="text-align:center;padding:30px;color:rgba(255,255,255,0.25);font-size:13px;">原料库为空，请先添加原料</div>';
+        return;
+      }
+      // 按分类分组
+      const groups = {};
+      _ingredientLibCache.forEach(i => {
+        const cat = i.category || '未分类';
+        if (!groups[cat]) groups[cat] = [];
+        groups[cat].push(i);
+      });
+      list.innerHTML = Object.entries(groups).map(([cat, items]) => `
+        <div style="margin-bottom:8px;">
+          <div style="font-size:11px;font-weight:700;color:var(--rep-muted);letter-spacing:.05em;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.06);margin-bottom:6px;">${cat}</div>
+          <div style="display:grid;gap:5px;">
+            ${items.map(i => `
+              <div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:8px 12px;">
+                <div style="flex:1;font-size:13px;color:var(--rep-text);">${i.name}</div>
+                <div style="font-size:11px;color:var(--rep-muted);flex-shrink:0;">${i.default_unit || ''}</div>
+                <button type="button" onclick="deleteIngredientLibItem(${i.id},'${i.name.replace(/'/g,"\\'")}',this)"
+                  style="flex-shrink:0;font-size:11px;padding:3px 8px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;color:#f87171;cursor:pointer;">删</button>
+              </div>`).join('')}
+          </div>
+        </div>`).join('');
+    }
+
+    // ── 原料库：新增 ─────────────────────────────────────────
+    async function saveIngredientLibItem() {
+      const name = document.getElementById('ing-lib-name')?.value?.trim();
+      if (!name) { showNotification('请填写原料名称', 'warning'); return; }
+      try {
+        const r = await fetch('/api/ingredients', {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` },
+          body: JSON.stringify({
+            name,
+            category:     document.getElementById('ing-lib-category')?.value?.trim() || null,
+            default_unit: document.getElementById('ing-lib-unit')?.value?.trim() || null,
+          })
+        });
+        const data = await r.json();
+        if (!data.success) throw new Error(data.error);
+        document.getElementById('ing-lib-name').value = '';
+        showNotification(`✅ 已添加原料：${name}`, 'success');
+        await loadIngredientLib();
+        renderIngredientLibList();
+      } catch(e) {
+        showNotification('添加失败：' + e.message, 'error');
+      }
+    }
+
+    // ── 原料库：删除 ─────────────────────────────────────────
+    async function deleteIngredientLibItem(id, name, btn) {
+      if (btn._confirming) {
+        btn._confirming = false; btn.textContent = '删';
+        try {
+          const r = await fetch(`/api/ingredients/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` }
+          });
+          const data = await r.json();
+          if (!data.success) throw new Error(data.error);
+          showNotification(`已删除：${name}`, 'success');
+          await loadIngredientLib();
+          renderIngredientLibList();
+        } catch(e) { showNotification('删除失败：' + e.message, 'error'); }
+      } else {
+        btn._confirming = true; btn.textContent = '确认?';
+        setTimeout(() => { if (btn._confirming) { btn._confirming = false; btn.textContent = '删'; } }, 3000);
+      }
+    }
+
+    // ── 配方列表（同时刷新原料库 datalist）──────────────────────
     async function loadRecipeList() {
+      loadIngredientLib(); // 预热 datalist，不阻塞
       const store = _kitchenStore || currentUser?.store || '';
       const list = document.getElementById('recipe-list');
       if (!list) return;
@@ -49534,6 +49698,8 @@ ${body}
 
     // ── 打开编辑器 ────────────────────────────────────────────
     async function openRecipeEditor(id) {
+      if (!_ingredientLibCache.length) await loadIngredientLib(); // 确保 datalist 已填充
+      document.getElementById('recipe-tab-bar').style.display = 'none'; // 编辑时隐藏 tab
       document.getElementById('recipe-list-panel').style.display = 'none';
       document.getElementById('recipe-editor-panel').style.display = '';
       document.getElementById('recipe-components-list').innerHTML = '';
@@ -49576,6 +49742,7 @@ ${body}
     function closeRecipeEditor() {
       document.getElementById('recipe-editor-panel').style.display = 'none';
       document.getElementById('recipe-list-panel').style.display = '';
+      document.getElementById('recipe-tab-bar').style.display = ''; // 恢复 tab
       loadRecipeList();
     }
 
@@ -49616,7 +49783,7 @@ ${body}
       (comp.steps || []).forEach(step => addProcessStepRow(stepContainer, step));
     }
 
-    // ── 原料行 ────────────────────────────────────────────────
+    // ── 原料行（从原料库选择，datalist 自动补全）────────────────
     function addIngredientRow(container, ing = {}) {
       const row = document.createElement('div');
       row.style.cssText = 'display:grid;grid-template-columns:1fr 70px 55px 60px 28px;gap:4px;align-items:center;';
@@ -49624,9 +49791,10 @@ ${body}
       const nameVal = (ing.ingredient_name || '').replace(/"/g, '&quot;');
       const unitVal = (ing.unit || '').replace(/"/g, '&quot;');
       row.innerHTML = `
-        <input type="text"   placeholder="原料名称" value="${nameVal}" style="${s}" class="ri-name">
+        <input type="text" list="ingredient-datalist" placeholder="选择或输入原料名称"
+          value="${nameVal}" style="${s}" class="ri-name" autocomplete="off">
         <input type="number" placeholder="用量" step="0.01" min="0" value="${ing.quantity||''}" style="${s}text-align:right;" class="ri-qty">
-        <input type="text"   placeholder="g/ml/个" value="${unitVal}" style="${s}text-align:center;" class="ri-unit">
+        <input type="text"   placeholder="单位" value="${unitVal}" style="${s}text-align:center;" class="ri-unit">
         <label style="display:flex;align-items:center;justify-content:center;gap:3px;cursor:pointer;">
           <input type="checkbox" ${ing.is_pack?'checked':''} style="accent-color:#6366f1;" class="ri-pack">
           <span style="font-size:10px;color:var(--rep-muted);">料包</span>
@@ -49634,6 +49802,13 @@ ${body}
         <button type="button" onclick="this.closest('div').remove()"
           style="width:26px;height:26px;border-radius:6px;border:none;background:rgba(239,68,68,0.1);color:#f87171;cursor:pointer;font-size:14px;line-height:1;">×</button>`;
       container.appendChild(row);
+      // 选中原料后自动填充默认单位
+      const nameInput = row.querySelector('.ri-name');
+      const unitInput = row.querySelector('.ri-unit');
+      nameInput.addEventListener('input', () => {
+        const match = _ingredientLibCache.find(i => i.name === nameInput.value);
+        if (match?.default_unit && !unitInput.value) unitInput.value = match.default_unit;
+      });
     }
 
     // ── 工艺步骤行 ────────────────────────────────────────────

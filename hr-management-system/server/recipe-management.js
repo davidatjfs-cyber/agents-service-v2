@@ -2,9 +2,10 @@
  * 配方管理模块 v2
  *
  * 层级结构：
+ *   ingredient_library（原料库）
  *   recipes（产品配方）
  *     └── recipe_components（半成品，如：烧鹅皮水、烧鹅腌料）
- *           ├── recipe_component_ingredients（半成品原料）
+ *           ├── recipe_component_ingredients（半成品原料，name 引用原料库）
  *           └── recipe_component_steps（半成品工艺步骤）
  *
  * 保密原则：所有接口严格限 admin / hq_manager / store_manager / store_production_manager
@@ -19,6 +20,22 @@ export async function ensureRecipeSchema() {
   try {
     // 迁移：如果存在旧的单层 recipe_ingredients 表则删除（建立初期无数据）
     await pool().query(`DROP TABLE IF EXISTS recipe_ingredients`);
+
+    // 原料库
+    await pool().query(`
+      CREATE TABLE IF NOT EXISTS ingredient_library (
+        id           BIGSERIAL PRIMARY KEY,
+        name         VARCHAR(255) NOT NULL UNIQUE,
+        category     VARCHAR(100),
+        default_unit VARCHAR(50),
+        notes        TEXT,
+        created_by   VARCHAR(120),
+        created_at   TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await pool().query(`
+      CREATE INDEX IF NOT EXISTS idx_ing_lib_name ON ingredient_library (name)
+    `);
 
     // 产品配方头
     await pool().query(`
@@ -91,7 +108,7 @@ export async function ensureRecipeSchema() {
         ON recipe_component_steps (component_id, step_seq)
     `);
 
-    console.log('[Recipe] Schema ensured (v2: components + ingredients + steps)');
+    console.log('[Recipe] Schema ensured (v2: ingredient_library + components + ingredients + steps)');
   } catch (e) {
     console.error('[Recipe] schema error:', e?.message);
   }
@@ -297,5 +314,49 @@ export function registerRecipeRoutes(app, authMiddleware) {
     }
   });
 
-  console.log('[Recipe] Routes registered (admin-only)');
+  // ── 原料库：列表 ──────────────────────────────────────────
+  app.get('/api/ingredients', authMiddleware, requireRecipeAdmin, async (req, res) => {
+    try {
+      const rows = await pool().query(
+        `SELECT id, name, category, default_unit, notes, created_by, created_at
+         FROM ingredient_library ORDER BY category NULLS LAST, name`
+      );
+      res.json({ success: true, ingredients: rows.rows });
+    } catch (e) {
+      res.json({ success: false, error: e?.message });
+    }
+  });
+
+  // ── 原料库：新建 ──────────────────────────────────────────
+  app.post('/api/ingredients', authMiddleware, requireRecipeAdmin, async (req, res) => {
+    try {
+      const { name, category, default_unit, notes } = req.body;
+      if (!name?.trim()) return res.json({ success: false, error: '原料名称必填' });
+      const result = await pool().query(
+        `INSERT INTO ingredient_library (name, category, default_unit, notes, created_by)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (name) DO UPDATE
+           SET category=EXCLUDED.category, default_unit=EXCLUDED.default_unit,
+               notes=EXCLUDED.notes
+         RETURNING id`,
+        [name.trim(), category?.trim() || null, default_unit?.trim() || null,
+         notes?.trim() || null, req.user?.username]
+      );
+      res.json({ success: true, id: result.rows[0].id });
+    } catch (e) {
+      res.json({ success: false, error: e?.message });
+    }
+  });
+
+  // ── 原料库：删除 ──────────────────────────────────────────
+  app.delete('/api/ingredients/:id', authMiddleware, requireRecipeAdmin, async (req, res) => {
+    try {
+      await pool().query(`DELETE FROM ingredient_library WHERE id=$1`, [req.params.id]);
+      res.json({ success: true });
+    } catch (e) {
+      res.json({ success: false, error: e?.message });
+    }
+  });
+
+  console.log('[Recipe] Routes registered (admin-only, with ingredient library)');
 }
