@@ -53,6 +53,7 @@ import { ensureTaskBoardSchema } from './task-board-api.js';
 import { ensureHRMSApiSchema, registerHRMSApiRoutes } from './hrms-api-tools.js';
 import { ensureSOPDistributionSchema, registerSOPDistributionRoutes } from './sop-distribution.js';
 import { ensureKitchenExecutionSchema, registerKitchenExecutionRoutes } from './kitchen-execution.js';
+import { ensureRecipeSchema, registerRecipeRoutes } from './recipe-management.js';
 import { setDataExecutorPool, purgeExpiredCache, updateMetricVersion } from './data-executor.js';
 import fileRoutes from './file-routes.js';
 import { enforceRuntimeSafetyOrExit, configureDbSessionSafety, isSchemaChangeAllowed, getAppEnv, isWebhookEnabled, isExternalEnabled } from './safety.js';
@@ -17278,6 +17279,7 @@ registerPerformanceInvalidationRoutes(app, authRequired);
 registerHRMSApiRoutes(app, authRequired);
 registerSOPDistributionRoutes(app, authRequired);
 registerKitchenExecutionRoutes(app, authRequired);
+registerRecipeRoutes(app, authRequired);
 registerUploadStatusRoute(app, { pool, getSharedState, authRequired });
 app.use('/api', authRequired, fileRoutes);
 
@@ -18389,7 +18391,8 @@ app.listen(PORT, HOST, async () => {
     await ensureHRMSApiSchema();
     await ensureSOPDistributionSchema();
     await ensureKitchenExecutionSchema();
-    console.log('[modules] RAG + TaskBoard + HRMS-API + SOP-Distribution + KitchenExec initialized');
+    await ensureRecipeSchema();
+    console.log('[modules] RAG + TaskBoard + HRMS-API + SOP-Distribution + KitchenExec + Recipe initialized');
 
 
     // 飞书表格→PG 与 sales_raw 目录入库：失败第一时间通知 admin（见 notifyAdminsDualWriteFailure 注释）
