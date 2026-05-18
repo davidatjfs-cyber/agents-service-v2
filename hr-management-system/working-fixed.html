@@ -49867,7 +49867,7 @@ ${body}
       if (!isRecipes) { loadCategories(); loadIngredientLib().then(renderIngredientLibList); }
     }
 
-    // ── 原料库列表渲染（含品牌、规格） ───────────────────────
+    // ── 原料库列表渲染（含品牌、规格、编辑） ──────────────────
     function renderIngredientLibList() {
       const list = document.getElementById('ingredient-lib-list');
       if (!list) return;
@@ -49886,18 +49886,97 @@ ${body}
           <div style="font-size:11px;font-weight:700;color:var(--rep-muted);letter-spacing:.05em;padding:4px 0 6px;border-bottom:1px solid rgba(255,255,255,0.06);margin-bottom:6px;">${cat}</div>
           <div style="display:grid;gap:5px;">
             ${items.map(i => `
-              <div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:8px 12px;">
-                <div style="flex:1;min-width:0;">
-                  <div style="font-size:13px;color:var(--rep-text);font-weight:500;">${i.name}</div>
-                  <div style="font-size:11px;color:var(--rep-muted);margin-top:2px;">
-                    ${[i.brand, i.spec, i.default_unit ? '单位：'+i.default_unit : ''].filter(Boolean).join(' · ')}
+              <div id="ing-row-${i.id}" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:8px;overflow:hidden;">
+                <!-- 显示行 -->
+                <div class="ing-display-row" style="display:flex;align-items:center;gap:8px;padding:8px 12px;">
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-size:13px;color:var(--rep-text);font-weight:500;">${i.name}</div>
+                    <div style="font-size:11px;color:var(--rep-muted);margin-top:2px;">
+                      ${[i.category, i.brand, i.spec, i.default_unit ? '单位：'+i.default_unit : ''].filter(Boolean).join(' · ')}
+                    </div>
+                  </div>
+                  <button type="button" onclick="toggleIngredientEdit(${i.id})"
+                    style="flex-shrink:0;font-size:11px;padding:4px 9px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.25);border-radius:6px;color:#a5b4fc;cursor:pointer;">编辑</button>
+                  <button type="button" onclick="deleteIngredientLibItem(${i.id},'${i.name.replace(/'/g,"\\'")}',this)"
+                    style="flex-shrink:0;font-size:11px;padding:4px 9px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;color:#f87171;cursor:pointer;">删</button>
+                </div>
+                <!-- 编辑行（默认隐藏）-->
+                <div class="ing-edit-row" style="display:none;padding:10px 12px;border-top:1px solid rgba(255,255,255,0.07);background:rgba(99,102,241,0.04);">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+                    <div>
+                      <label style="font-size:10px;color:var(--rep-muted);display:block;margin-bottom:3px;">原料名称</label>
+                      <input class="ing-e-name" value="${i.name.replace(/"/g,'&quot;')}" style="width:100%;padding:6px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:var(--rep-text);font-size:12px;box-sizing:border-box;">
+                    </div>
+                    <div>
+                      <label style="font-size:10px;color:var(--rep-muted);display:block;margin-bottom:3px;">分类</label>
+                      <select class="ing-e-cat" style="width:100%;padding:6px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:var(--rep-text);font-size:12px;box-sizing:border-box;">
+                        <option value="">-- 无分类 --</option>
+                        ${_categoryCache.map(c => `<option value="${c.name}" ${c.name === i.category ? 'selected' : ''}>${c.name}</option>`).join('')}
+                      </select>
+                    </div>
+                    <div>
+                      <label style="font-size:10px;color:var(--rep-muted);display:block;margin-bottom:3px;">品牌</label>
+                      <input class="ing-e-brand" value="${(i.brand||'').replace(/"/g,'&quot;')}" placeholder="如：福临门" style="width:100%;padding:6px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:var(--rep-text);font-size:12px;box-sizing:border-box;">
+                    </div>
+                    <div>
+                      <label style="font-size:10px;color:var(--rep-muted);display:block;margin-bottom:3px;">规格</label>
+                      <input class="ing-e-spec" value="${(i.spec||'').replace(/"/g,'&quot;')}" placeholder="如：500ml/瓶" style="width:100%;padding:6px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:var(--rep-text);font-size:12px;box-sizing:border-box;">
+                    </div>
+                    <div>
+                      <label style="font-size:10px;color:var(--rep-muted);display:block;margin-bottom:3px;">默认单位</label>
+                      <input class="ing-e-unit" value="${(i.default_unit||'').replace(/"/g,'&quot;')}" placeholder="g / ml / 个" style="width:100%;padding:6px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:var(--rep-text);font-size:12px;box-sizing:border-box;">
+                    </div>
+                  </div>
+                  <div style="display:flex;gap:6px;justify-content:flex-end;">
+                    <button type="button" onclick="toggleIngredientEdit(${i.id})"
+                      style="font-size:12px;padding:5px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:var(--rep-muted);cursor:pointer;">取消</button>
+                    <button type="button" onclick="saveIngredientLibEdit(${i.id},this)"
+                      style="font-size:12px;padding:5px 14px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.4);border-radius:7px;color:#a5b4fc;cursor:pointer;">保存</button>
                   </div>
                 </div>
-                <button type="button" onclick="deleteIngredientLibItem(${i.id},'${i.name.replace(/'/g,"\\'")}',this)"
-                  style="flex-shrink:0;font-size:11px;padding:4px 9px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;color:#f87171;cursor:pointer;">删</button>
               </div>`).join('')}
           </div>
         </div>`).join('');
+    }
+
+    function toggleIngredientEdit(id) {
+      const row = document.getElementById(`ing-row-${id}`);
+      if (!row) return;
+      const display = row.querySelector('.ing-display-row');
+      const edit    = row.querySelector('.ing-edit-row');
+      const isOpen  = edit.style.display !== 'none';
+      display.style.display = isOpen ? 'flex' : 'none';
+      edit.style.display    = isOpen ? 'none' : '';
+      if (!isOpen) row.querySelector('.ing-e-name')?.focus();
+    }
+
+    async function saveIngredientLibEdit(id, btn) {
+      const row = document.getElementById(`ing-row-${id}`);
+      if (!row) return;
+      const name = row.querySelector('.ing-e-name')?.value?.trim();
+      if (!name) { showNotification('原料名称不能为空', 'warning'); return; }
+      btn.disabled = true; btn.textContent = '保存中…';
+      try {
+        const r = await fetch(`/api/ingredients/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${localStorage.getItem('hrms_token')}` },
+          body: JSON.stringify({
+            name,
+            category:     row.querySelector('.ing-e-cat')?.value  || null,
+            brand:        row.querySelector('.ing-e-brand')?.value?.trim() || null,
+            spec:         row.querySelector('.ing-e-spec')?.value?.trim()  || null,
+            default_unit: row.querySelector('.ing-e-unit')?.value?.trim()  || null,
+          })
+        });
+        const data = await r.json();
+        if (!data.success) throw new Error(data.error);
+        showNotification(`✅ 已更新：${name}`, 'success');
+        await loadIngredientLib();
+        renderIngredientLibList();
+      } catch(e) {
+        showNotification('保存失败：' + e.message, 'error');
+        btn.disabled = false; btn.textContent = '保存';
+      }
     }
 
     // ── 原料库：去重实时检查 ──────────────────────────────────

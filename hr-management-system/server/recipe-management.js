@@ -556,6 +556,25 @@ export function registerRecipeRoutes(app, authMiddleware) {
   });
 
   // ── 原料库：删除 ──────────────────────────────────────────
+  // 原料库：编辑
+  app.put('/api/ingredients/:id', authMiddleware, requireRecipeAdmin, async (req, res) => {
+    try {
+      const { name, category, brand, spec, default_unit, notes } = req.body;
+      if (!name?.trim()) return res.json({ success: false, error: '原料名称必填' });
+      await pool().query(
+        `UPDATE ingredient_library
+         SET name=$1, category=$2, brand=$3, spec=$4, default_unit=$5, notes=$6
+         WHERE id=$7`,
+        [name.trim(), category?.trim() || null, brand?.trim() || null,
+         spec?.trim() || null, default_unit?.trim() || null,
+         notes?.trim() || null, req.params.id]
+      );
+      res.json({ success: true });
+    } catch (e) {
+      res.json({ success: false, error: e?.message });
+    }
+  });
+
   app.delete('/api/ingredients/:id', authMiddleware, requireRecipeAdmin, async (req, res) => {
     try {
       await pool().query(`DELETE FROM ingredient_library WHERE id=$1`, [req.params.id]);
