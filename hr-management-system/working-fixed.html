@@ -13533,63 +13533,71 @@
 
             <!-- 培训认证页面 -->
             <div id="training-page" class="hidden">
-                <div class="dr-shell">
-                    <div class="kb-dc-hero">
-                        <div class="kb-dc-eyebrow">TRAINING & CERTIFICATION</div>
-                        <div class="kb-dc-hero-title">培训认证</div>
-                        <p class="kb-dc-hero-sub">岗位培训、AI 辅助学习、实操认证</p>
+                <div class="dr-shell" style="padding-bottom:24px;">
+                    <!-- 页面标题 (手机上精简) -->
+                    <div style="padding:16px 0 12px;display:flex;align-items:center;gap:10px;">
+                        <span style="font-size:24px;">🎓</span>
+                        <div>
+                            <div style="font-size:18px;font-weight:700;color:#fff;line-height:1.2;">培训认证</div>
+                            <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:2px;">岗位培训 · AI学习 · 实操认证</div>
+                        </div>
                     </div>
 
                     <!-- 管理端面板 -->
                     <div id="training-admin-panel" style="display:none;">
-                        <div class="kb-dc-tab-bar" style="margin-bottom:16px;">
-                            <button class="btn" id="training-tab-topics" type="button" onclick="switchTrainingAdminTab('topics')">知识点大纲</button>
-                            <button class="btn btn-secondary" id="training-tab-assignments" type="button" onclick="switchTrainingAdminTab('assignments')">培训计划</button>
-                            <button class="btn btn-secondary" id="training-tab-dashboard" type="button" onclick="switchTrainingAdminTab('dashboard')">进度看板</button>
-                            <button class="btn btn-secondary" id="training-tab-pending" type="button" onclick="switchTrainingAdminTab('pending')">待审核</button>
+                        <!-- 可横向滚动的tab条 -->
+                        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:16px;padding-bottom:4px;">
+                            <div style="display:flex;gap:8px;width:max-content;padding:2px;">
+                                <button id="training-tab-topics" type="button" onclick="switchTrainingAdminTab('topics')"
+                                    style="padding:8px 18px;border-radius:20px;border:none;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;background:rgba(99,102,241,0.9);color:#fff;">📚 知识点</button>
+                                <button id="training-tab-assignments" type="button" onclick="switchTrainingAdminTab('assignments')"
+                                    style="padding:8px 18px;border-radius:20px;border:1px solid rgba(255,255,255,0.15);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.7);">📋 培训计划</button>
+                                <button id="training-tab-dashboard" type="button" onclick="switchTrainingAdminTab('dashboard')"
+                                    style="padding:8px 18px;border-radius:20px;border:1px solid rgba(255,255,255,0.15);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.7);">📊 进度看板</button>
+                                <button id="training-tab-pending" type="button" onclick="switchTrainingAdminTab('pending')"
+                                    style="padding:8px 18px;border-radius:20px;border:1px solid rgba(255,255,255,0.15);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.7);">⏳ 待审核</button>
+                            </div>
                         </div>
 
                         <!-- 知识点大纲 -->
-                        <div id="training-topics-panel" class="card">
-                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                                <h3 style="margin:0;">📚 知识点管理</h3>
-                                <button class="btn" onclick="openTrainingTopicModal()">+ 新建知识点</button>
+                        <div id="training-topics-panel" class="card" style="padding:16px;">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                                <span style="font-size:15px;font-weight:700;color:#fff;">知识点管理</span>
+                                <button onclick="openTrainingTopicModal()" style="padding:8px 14px;border-radius:10px;background:rgba(99,102,241,0.9);border:none;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">＋ 新建</button>
                             </div>
-                            <div style="display:flex;gap:8px;margin-bottom:12px;">
-                                <select id="training-filter-position" onchange="loadTrainingTopics()" style="padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#fff;">
-                                    <option value="">全部岗位</option>
-                                    <option value="cook">后厨</option>
-                                    <option value="waiter">前厅</option>
-                                    <option value="cashier">收银</option>
-                                    <option value="store_manager">店长</option>
-                                </select>
-                            </div>
-                            <div id="training-topics-list" style="max-height:500px;overflow-y:auto;"></div>
+                            <select id="training-filter-position" onchange="loadTrainingTopics()" style="width:100%;padding:10px 12px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);color:#fff;font-size:14px;margin-bottom:12px;">
+                                <option value="">全部岗位</option>
+                                <option value="cook">后厨</option>
+                                <option value="waiter">前厅</option>
+                                <option value="cashier">收银</option>
+                                <option value="store_manager">店长</option>
+                            </select>
+                            <div id="training-topics-list"></div>
                         </div>
 
                         <!-- 培训计划 -->
-                        <div id="training-assignments-panel" class="card" style="display:none;">
-                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                                <h3 style="margin:0;">📋 培训指派</h3>
-                                <button class="btn" onclick="openTrainingAssignmentModal()">+ 指派培训</button>
+                        <div id="training-assignments-panel" class="card" style="display:none;padding:16px;">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                                <span style="font-size:15px;font-weight:700;color:#fff;">培训指派</span>
+                                <button onclick="openTrainingAssignmentModal()" style="padding:8px 14px;border-radius:10px;background:rgba(99,102,241,0.9);border:none;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">＋ 指派</button>
                             </div>
                             <div style="display:flex;gap:8px;margin-bottom:12px;">
-                                <input type="text" id="training-filter-username" placeholder="员工账号" style="padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#fff;width:150px;">
-                                <button class="btn btn-secondary" onclick="loadTrainingAssignments()">搜索</button>
+                                <input type="text" id="training-filter-username" placeholder="输入员工账号搜索" style="flex:1;padding:10px 12px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);color:#fff;font-size:14px;">
+                                <button onclick="loadTrainingAssignments()" style="padding:10px 16px;border-radius:10px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:#fff;font-size:13px;cursor:pointer;">搜索</button>
                             </div>
-                            <div id="training-assignments-list" style="max-height:500px;overflow-y:auto;"></div>
+                            <div id="training-assignments-list"></div>
                         </div>
 
                         <!-- 进度看板 -->
-                        <div id="training-dashboard-panel" class="card" style="display:none;">
-                            <h3 style="margin:0 0 16px 0;">📊 团队通过率</h3>
+                        <div id="training-dashboard-panel" class="card" style="display:none;padding:16px;">
+                            <div style="font-size:15px;font-weight:700;color:#fff;margin-bottom:14px;">📊 团队通过率</div>
                             <div id="training-dashboard-content"></div>
                         </div>
 
                         <!-- 待审核 -->
-                        <div id="training-pending-panel" class="card" style="display:none;">
-                            <h3 style="margin:0 0 16px 0;">⏳ 待审核实操</h3>
-                            <div id="training-pending-list" style="max-height:500px;overflow-y:auto;"></div>
+                        <div id="training-pending-panel" class="card" style="display:none;padding:16px;">
+                            <div style="font-size:15px;font-weight:700;color:#fff;margin-bottom:14px;">⏳ 待审核实操</div>
+                            <div id="training-pending-list"></div>
                         </div>
                     </div>
 
@@ -13597,60 +13605,69 @@
                     <div id="training-employee-panel">
                         <!-- 培训首页 -->
                         <div id="training-home-screen">
-                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                                <h3 style="margin:0;">我的培训任务</h3>
-                            </div>
+                            <div style="font-size:15px;font-weight:700;color:#fff;margin-bottom:14px;">我的培训任务</div>
                             <div id="training-my-topics-list" style="display:grid;gap:12px;"></div>
-                            <div id="training-my-topics-empty" style="display:none;text-align:center;padding:40px;color:rgba(255,255,255,0.5);">
-                                暂无培训任务
+                            <div id="training-my-topics-empty" style="display:none;text-align:center;padding:48px 20px;color:rgba(255,255,255,0.4);">
+                                <div style="font-size:48px;margin-bottom:12px;">📋</div>
+                                <div>暂无培训任务<br><span style="font-size:12px;">管理员指派后将在此显示</span></div>
                             </div>
                         </div>
 
-                        <!-- 学习界面 -->
+                        <!-- 学习界面 (对话式) -->
                         <div id="training-learn-screen" style="display:none;">
-                            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-                                <button class="btn btn-secondary" onclick="backToTrainingHome()">← 返回</button>
-                                <h3 id="training-learn-title" style="margin:0;">学习</h3>
+                            <!-- 顶栏 -->
+                            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                                <button onclick="backToTrainingHome()" style="padding:8px 14px;border-radius:20px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.8);font-size:13px;cursor:pointer;">← 返回</button>
+                                <span id="training-learn-title" style="font-size:15px;font-weight:700;color:#fff;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
                             </div>
-                            <div id="training-chat-container" style="background:rgba(0,0,0,0.3);border-radius:12px;padding:16px;min-height:300px;max-height:400px;overflow-y:auto;margin-bottom:16px;">
+                            <!-- 对话区域：自适应高度 -->
+                            <div id="training-chat-container" style="background:rgba(0,0,0,0.25);border-radius:14px;padding:14px;height:calc(100vh - 340px);min-height:220px;max-height:460px;overflow-y:auto;margin-bottom:12px;-webkit-overflow-scrolling:touch;">
                                 <div id="training-chat-messages"></div>
                             </div>
-                            <div style="display:flex;gap:8px;">
-                                <input type="text" id="training-chat-input" placeholder="输入问题..." style="flex:1;padding:12px;border-radius:8px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#fff;" onkeypress="if(event.key==='Enter')sendTrainingChat()">
-                                <button class="btn" onclick="sendTrainingChat()">发送</button>
+                            <!-- 输入区 -->
+                            <div style="display:flex;gap:8px;align-items:flex-end;">
+                                <input type="text" id="training-chat-input" placeholder="问培训助手…" autocomplete="off"
+                                    style="flex:1;padding:12px 14px;border-radius:12px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);color:#fff;font-size:15px;-webkit-appearance:none;"
+                                    onkeypress="if(event.key==='Enter')sendTrainingChat()">
+                                <button onclick="sendTrainingChat()" style="padding:12px 18px;border-radius:12px;background:rgba(99,102,241,0.9);border:none;color:#fff;font-size:15px;font-weight:600;cursor:pointer;flex-shrink:0;">发送</button>
                             </div>
-                            <div style="margin-top:16px;text-align:center;">
-                                <button class="btn" id="training-start-quiz-btn" onclick="startTrainingQuiz()" style="display:none;">开始测验</button>
+                            <!-- 开始测验按钮 -->
+                            <div style="margin-top:14px;">
+                                <button id="training-start-quiz-btn" onclick="startTrainingQuiz()" style="display:none;width:100%;padding:14px;border-radius:12px;background:linear-gradient(135deg,rgba(234,179,8,0.9),rgba(245,158,11,0.9));border:none;color:#fff;font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.5px;">✍️ 开始知识测验</button>
                             </div>
                         </div>
 
                         <!-- 测验界面 -->
                         <div id="training-quiz-screen" style="display:none;">
-                            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-                                <button class="btn btn-secondary" onclick="backToTrainingHome()">← 返回</button>
-                                <h3 style="margin:0;">测验</h3>
+                            <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+                                <button onclick="backToTrainingHome()" style="padding:8px 14px;border-radius:20px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.8);font-size:13px;cursor:pointer;">← 返回</button>
+                                <span style="font-size:15px;font-weight:700;color:#fff;">知识测验</span>
                             </div>
                             <div id="training-quiz-questions"></div>
-                            <div style="margin-top:16px;text-align:center;">
-                                <button class="btn" onclick="submitTrainingQuiz()">提交答案</button>
-                            </div>
+                            <button onclick="submitTrainingQuiz()" style="width:100%;padding:15px;border-radius:12px;background:rgba(99,102,241,0.9);border:none;color:#fff;font-size:15px;font-weight:700;cursor:pointer;margin-top:8px;">提交答案</button>
                         </div>
 
                         <!-- 实操上传界面 -->
                         <div id="training-practice-screen" style="display:none;">
-                            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-                                <button class="btn btn-secondary" onclick="backToTrainingHome()">← 返回</button>
-                                <h3 style="margin:0;">实操认证</h3>
+                            <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+                                <button onclick="backToTrainingHome()" style="padding:8px 14px;border-radius:20px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.8);font-size:13px;cursor:pointer;">← 返回</button>
+                                <span style="font-size:15px;font-weight:700;color:#fff;">实操认证</span>
                             </div>
-                            <div class="card" style="margin-bottom:16px;">
-                                <h4 style="margin:0 0 12px 0;">实操要求</h4>
-                                <p id="training-practice-task" style="color:rgba(255,255,255,0.7);margin:0;"></p>
+                            <!-- 任务要求卡 -->
+                            <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.25);border-radius:14px;padding:16px;margin-bottom:16px;">
+                                <div style="font-size:12px;color:#fbbf24;font-weight:700;margin-bottom:8px;letter-spacing:.5px;">📋 拍摄要求</div>
+                                <p id="training-practice-task" style="color:rgba(255,255,255,0.85);margin:0;font-size:14px;line-height:1.7;"></p>
                             </div>
-                            <div class="card">
-                                <h4 style="margin:0 0 12px 0;">上传视频或图片</h4>
-                                <input type="file" id="training-practice-file" accept="image/*,video/*" style="margin-bottom:12px;">
-                                <button class="btn" onclick="uploadTrainingPractice()">上传并提交</button>
+                            <!-- 大点击区上传 -->
+                            <input type="file" id="training-practice-file" accept="image/*,video/*" capture="environment" style="display:none;" onchange="trainingFileSelected(this)">
+                            <div onclick="document.getElementById('training-practice-file').click()" id="training-upload-area"
+                                style="border:2px dashed rgba(255,255,255,0.2);border-radius:14px;padding:32px 20px;text-align:center;cursor:pointer;background:rgba(255,255,255,0.03);margin-bottom:14px;-webkit-tap-highlight-color:rgba(99,102,241,0.15);">
+                                <div style="font-size:48px;margin-bottom:10px;">📹</div>
+                                <div style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.85);">点击拍摄 / 选择文件</div>
+                                <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:6px;">支持视频 MP4/MOV 或图片 JPG/PNG<br>最大 200MB</div>
                             </div>
+                            <div id="training-file-preview" style="display:none;margin-bottom:14px;"></div>
+                            <button onclick="uploadTrainingPractice()" id="training-upload-btn" style="display:none;width:100%;padding:15px;border-radius:12px;background:rgba(99,102,241,0.9);border:none;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">上传并提交 AI 审核</button>
                             <div id="training-practice-result" style="display:none;margin-top:16px;"></div>
                         </div>
                     </div>
@@ -24351,7 +24368,12 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             ['topics', 'assignments', 'dashboard', 'pending'].forEach(t => {
                 const btn = document.getElementById('training-tab-' + t);
                 const panel = document.getElementById('training-' + t + '-panel');
-                if (btn) btn.className = t === tab ? 'btn' : 'btn btn-secondary';
+                if (btn) {
+                    const isActive = t === tab;
+                    btn.style.background = isActive ? 'rgba(99,102,241,0.9)' : 'rgba(255,255,255,0.06)';
+                    btn.style.color = isActive ? '#fff' : 'rgba(255,255,255,0.7)';
+                    btn.style.border = isActive ? 'none' : '1px solid rgba(255,255,255,0.15)';
+                }
                 if (panel) panel.style.display = t === tab ? '' : 'none';
             });
             if (tab === 'topics') loadTrainingTopics();
@@ -24374,14 +24396,14 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     return;
                 }
                 list.innerHTML = data.topics.map(t => `
-                    <div style="background:rgba(0,0,0,0.2);border-radius:12px;padding:16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:start;">
-                        <div>
-                            <div style="font-weight:600;color:#fff;margin-bottom:4px;">${escapeHtml(t.title)}</div>
-                            <div style="font-size:12px;color:rgba(255,255,255,0.5);">岗位：${escapeHtml(t.position)} | 要点：${(t.key_points||[]).length}个</div>
+                    <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.08);">
+                        <div style="margin-bottom:10px;">
+                            <div style="font-weight:700;color:#fff;font-size:14px;margin-bottom:3px;">${escapeHtml(t.title)}</div>
+                            <div style="font-size:12px;color:rgba(255,255,255,0.45);">岗位：${escapeHtml(t.position)} &nbsp;·&nbsp; ${(t.key_points||[]).length} 个要点</div>
                         </div>
                         <div style="display:flex;gap:8px;">
-                            <button class="btn btn-secondary" style="padding:6px 12px;font-size:12px;" onclick="editTrainingTopic(${t.id})">编辑</button>
-                            <button class="btn btn-danger" style="padding:6px 12px;font-size:12px;" onclick="deleteTrainingTopic(${t.id})">删除</button>
+                            <button onclick="editTrainingTopic(${t.id})" style="flex:1;padding:9px;border-radius:8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);color:#fff;font-size:13px;cursor:pointer;">✏️ 编辑</button>
+                            <button onclick="deleteTrainingTopic(${t.id})" style="flex:1;padding:9px;border-radius:8px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);color:#f87171;font-size:13px;cursor:pointer;">🗑 删除</button>
                         </div>
                     </div>
                 `).join('');
@@ -24495,17 +24517,24 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     list.innerHTML = '<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.5);">暂无指派记录</div>';
                     return;
                 }
-                list.innerHTML = data.assignments.map(a => `
-                    <div style="background:rgba(0,0,0,0.2);border-radius:12px;padding:16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:start;">
-                        <div>
-                            <div style="font-weight:600;color:#fff;">${escapeHtml(a.employee_username)} - ${escapeHtml(a.title)}</div>
-                            <div style="font-size:12px;color:rgba(255,255,255,0.5);">
-                                状态：${a.session_status || '未开始'} | ${a.quiz_passed ? '测验通过' : '未通过测验'} ${a.quiz_score !== null ? '(' + a.quiz_score + '/3)' : ''}
-                            </div>
+                const sMap = {learning:'学习中',quiz_passed:'待认证',certified:'已认证',failed:'未通过'};
+                const sColor = {learning:'#60a5fa',quiz_passed:'#fbbf24',certified:'#34d399',failed:'#f87171'};
+                list.innerHTML = data.assignments.map(a => {
+                    const st = a.session_status || 'learning';
+                    const color = sColor[st] || '#94a3b8';
+                    return `
+                    <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.08);">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                            <span style="font-weight:700;color:#fff;font-size:14px;">${escapeHtml(a.employee_username)}</span>
+                            <span style="font-size:11px;padding:3px 10px;border-radius:10px;background:rgba(255,255,255,0.07);color:${color};">${sMap[st]||'未开始'}</span>
                         </div>
-                        <button class="btn btn-danger" style="padding:6px 12px;font-size:12px;" onclick="deleteTrainingAssignment(${a.id})">撤销</button>
-                    </div>
-                `).join('');
+                        <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:10px;">
+                            📚 ${escapeHtml(a.title)} &nbsp;·&nbsp; 截止 ${a.due_date || '无期限'}
+                            ${a.quiz_score !== null ? ' &nbsp;·&nbsp; 测验 '+a.quiz_score+'/3' : ''}
+                        </div>
+                        <button onclick="deleteTrainingAssignment(${a.id})" style="width:100%;padding:8px;border-radius:8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#f87171;font-size:13px;cursor:pointer;">撤销指派</button>
+                    </div>`;
+                }).join('');
             } catch (e) {
                 showNotification('加载指派记录失败', 'error');
             }
@@ -24584,35 +24613,21 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     content.innerHTML = '<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.5);">暂无数据</div>';
                     return;
                 }
-                content.innerHTML = `
-                    <table style="width:100%;border-collapse:collapse;">
-                        <thead>
-                            <tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
-                                <th style="text-align:left;padding:12px;color:rgba(255,255,255,0.6);">知识点</th>
-                                <th style="text-align:left;padding:12px;color:rgba(255,255,255,0.6);">岗位</th>
-                                <th style="text-align:center;padding:12px;color:rgba(255,255,255,0.6);">已指派</th>
-                                <th style="text-align:center;padding:12px;color:rgba(255,255,255,0.6);">已认证</th>
-                                <th style="text-align:center;padding:12px;color:rgba(255,255,255,0.6);">通过率</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${data.dashboard.map(d => {
-                                const rate = d.assigned_count > 0 ? Math.round(d.certified_count / d.assigned_count * 100) : 0;
-                                return `
-                                    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-                                        <td style="padding:12px;color:#fff;">${escapeHtml(d.title)}</td>
-                                        <td style="padding:12px;color:rgba(255,255,255,0.7);">${escapeHtml(d.position)}</td>
-                                        <td style="padding:12px;color:#fff;text-align:center;">${d.assigned_count}</td>
-                                        <td style="padding:12px;color:#fff;text-align:center;">${d.certified_count}</td>
-                                        <td style="padding:12px;text-align:center;">
-                                            <span style="padding:4px 12px;border-radius:12px;font-size:12px;background:${rate >= 80 ? 'rgba(34,197,94,0.2)' : rate >= 50 ? 'rgba(234,179,8,0.2)' : 'rgba(239,68,68,0.2)'};color:${rate >= 80 ? '#22c55e' : rate >= 50 ? '#eab308' : '#ef4444'};">${rate}%</span>
-                                        </td>
-                                    </tr>
-                                `;
-                            }).join('')}
-                        </tbody>
-                    </table>
-                `;
+                content.innerHTML = data.dashboard.map(d => {
+                    const rate = d.assigned_count > 0 ? Math.round(d.certified_count / d.assigned_count * 100) : 0;
+                    const barColor = rate >= 80 ? '#34d399' : rate >= 50 ? '#fbbf24' : '#f87171';
+                    return `
+                    <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.08);">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                            <span style="font-weight:700;color:#fff;font-size:14px;">${escapeHtml(d.title)}</span>
+                            <span style="font-size:13px;font-weight:700;color:${barColor};">${rate}%</span>
+                        </div>
+                        <div style="font-size:12px;color:rgba(255,255,255,0.45);margin-bottom:10px;">岗位：${escapeHtml(d.position)} &nbsp;·&nbsp; 已指派 ${d.assigned_count} 人 &nbsp;·&nbsp; 已认证 ${d.certified_count} 人</div>
+                        <div style="height:6px;border-radius:3px;background:rgba(255,255,255,0.1);overflow:hidden;">
+                            <div style="height:100%;width:${rate}%;background:${barColor};border-radius:3px;transition:width .4s;"></div>
+                        </div>
+                    </div>`;
+                }).join('');
             } catch (e) {
                 showNotification('加载看板失败', 'error');
             }
@@ -24630,20 +24645,22 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     list.innerHTML = '<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.5);">暂无待审核记录</div>';
                     return;
                 }
+                const aiLabel = {passed:'AI：合格',review:'AI：建议复核',failed:'AI：不合格'};
+                const aiColor = {passed:'#34d399',review:'#fbbf24',failed:'#f87171'};
                 list.innerHTML = data.pending.map(c => `
-                    <div style="background:rgba(0,0,0,0.2);border-radius:12px;padding:16px;margin-bottom:12px;">
-                        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px;">
-                            <div>
-                                <div style="font-weight:600;color:#fff;">${escapeHtml(c.employee_name || c.employee_username)}</div>
-                                <div style="font-size:12px;color:rgba(255,255,255,0.5);">${escapeHtml(c.title)} | ${escapeHtml(c.position)}</div>
-                            </div>
-                            <div style="font-size:12px;color:rgba(255,255,255,0.4);">${c.created_at || ''}</div>
+                    <div style="background:rgba(255,255,255,0.05);border-radius:14px;padding:14px;margin-bottom:12px;border:1px solid rgba(255,255,255,0.08);">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                            <span style="font-weight:700;color:#fff;font-size:14px;">${escapeHtml(c.employee_name || c.employee_username)}</span>
+                            <span style="font-size:11px;color:${aiColor[c.ai_verdict]||'#94a3b8'};">${aiLabel[c.ai_verdict]||''}</span>
                         </div>
-                        ${c.media_type === 'video' ? `<video src="${c.media_url}" controls style="max-width:100%;border-radius:8px;margin-bottom:12px;"></video>` : `<img src="${c.media_url}" style="max-width:100%;border-radius:8px;margin-bottom:12px;">`}
-                        <div style="font-size:13px;color:rgba(255,255,255,0.7);margin-bottom:12px;">AI 反馈：${escapeHtml(c.ai_feedback || '无')}</div>
-                        <div style="display:flex;gap:8px;">
-                            <button class="btn" style="padding:8px 16px;" onclick="reviewCertification(${c.id}, 'passed')">✓ 通过</button>
-                            <button class="btn btn-danger" style="padding:8px 16px;" onclick="reviewCertification(${c.id}, 'failed')">✗ 不通过</button>
+                        <div style="font-size:12px;color:rgba(255,255,255,0.45);margin-bottom:10px;">📚 ${escapeHtml(c.title)} &nbsp;·&nbsp; ${escapeHtml(c.position)}</div>
+                        ${c.media_url ? (c.media_type === 'video'
+                            ? `<video src="${c.media_url}" controls playsinline style="width:100%;border-radius:10px;margin-bottom:10px;max-height:200px;object-fit:cover;"></video>`
+                            : `<img src="${c.media_url}" style="width:100%;border-radius:10px;margin-bottom:10px;max-height:200px;object-fit:cover;">`) : ''}
+                        ${c.ai_feedback ? `<div style="background:rgba(0,0,0,0.25);border-radius:8px;padding:10px;font-size:13px;color:rgba(255,255,255,0.7);margin-bottom:10px;line-height:1.5;">💬 ${escapeHtml(c.ai_feedback)}</div>` : ''}
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                            <button onclick="reviewCertification(${c.id},'passed')" style="padding:12px;border-radius:10px;background:rgba(52,211,153,0.15);border:1px solid rgba(52,211,153,0.3);color:#34d399;font-size:14px;font-weight:600;cursor:pointer;">✓ 通过</button>
+                            <button onclick="reviewCertification(${c.id},'failed')" style="padding:12px;border-radius:10px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);color:#f87171;font-size:14px;font-weight:600;cursor:pointer;">✗ 不通过</button>
                         </div>
                     </div>
                 `).join('');
@@ -24701,18 +24718,32 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 if (empty) empty.style.display = 'none';
 
                 list.innerHTML = data.topics.map(t => {
-                    const statusMap = { 'learning': '学习中', 'quiz': '测验中', 'practice': '实操中', 'certified': '已认证' };
-                    const statusColor = { 'learning': '#3b82f6', 'quiz': '#eab308', 'practice': '#f97316', 'certified': '#22c55e' };
+                    const sMap = {'learning':'学习中','quiz_passed':'去上传实操','practice':'实操审核中','certified':'已认证'};
+                    const sIcon = {'learning':'📖','quiz_passed':'🎥','practice':'⏳','certified':'✅'};
+                    const sBg   = {'learning':'rgba(96,165,250,0.12)','quiz_passed':'rgba(251,191,36,0.12)','practice':'rgba(249,115,22,0.12)','certified':'rgba(52,211,153,0.12)'};
+                    const sBorder = {'learning':'rgba(96,165,250,0.3)','quiz_passed':'rgba(251,191,36,0.3)','practice':'rgba(249,115,22,0.3)','certified':'rgba(52,211,153,0.3)'};
+                    const sColor = {'learning':'#60a5fa','quiz_passed':'#fbbf24','practice':'#fb923c','certified':'#34d399'};
+                    const st = t.session_status || 'learning';
+                    const isDone = st === 'certified';
+                    const isPending = st === 'practice';
+                    const btnLabel = isDone ? '✅ 已完成' : isPending ? '等待审核' : '开始学习 →';
+                    const btnDisabled = isDone || isPending;
                     return `
-                        <div style="background:rgba(0,0,0,0.2);border-radius:16px;padding:20px;display:flex;justify-content:space-between;align-items:center;">
-                            <div>
-                                <div style="font-weight:600;color:#fff;font-size:15px;margin-bottom:4px;">${escapeHtml(t.title)}</div>
-                                <div style="font-size:12px;color:rgba(255,255,255,0.5);">岗位：${escapeHtml(t.position)} | 截止：${t.due_date || '无'}</div>
+                        <div style="background:rgba(255,255,255,0.05);border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);">
+                            <div style="padding:16px;">
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                                    <span style="font-weight:700;color:#fff;font-size:15px;">${escapeHtml(t.title)}</span>
+                                    <span style="font-size:12px;padding:4px 10px;border-radius:10px;background:${sBg[st]};border:1px solid ${sBorder[st]};color:${sColor[st]};">${sIcon[st]} ${sMap[st]||'未开始'}</span>
+                                </div>
+                                <div style="font-size:12px;color:rgba(255,255,255,0.4);">
+                                    ${escapeHtml(t.position)} &nbsp;·&nbsp; 截止 ${t.due_date || '无期限'}
+                                    ${t.quiz_score !== null ? ' &nbsp;·&nbsp; 测验 '+t.quiz_score+'/3' : ''}
+                                </div>
                             </div>
-                            <div style="display:flex;align-items:center;gap:12px;">
-                                <span style="padding:4px 12px;border-radius:12px;font-size:12px;background:rgba(${statusColor[t.session_status || 'learning']},0.2);color:${statusColor[t.session_status || 'learning']};">${statusMap[t.session_status || 'learning']}</span>
-                                <button class="btn" style="padding:8px 16px;" onclick="openTrainingSession(${t.topic_id})">${t.session_status === 'certified' ? '查看' : '继续'}</button>
-                            </div>
+                            <button onclick="${btnDisabled ? '' : 'openTrainingSession('+t.topic_id+')'}"
+                                style="width:100%;padding:13px;border:none;border-top:1px solid rgba(255,255,255,0.06);background:${btnDisabled ? 'rgba(255,255,255,0.03)' : 'rgba(99,102,241,0.8)'};color:${btnDisabled ? 'rgba(255,255,255,0.3)' : '#fff'};font-size:14px;font-weight:600;cursor:${btnDisabled ? 'default' : 'pointer'};letter-spacing:.3px;">
+                                ${btnLabel}
+                            </button>
                         </div>
                     `;
                 }).join('');
@@ -24781,10 +24812,16 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             const messagesDiv = document.getElementById('training-chat-messages');
             const isUser = role === 'user';
             const div = document.createElement('div');
-            div.style.cssText = `margin-bottom:12px;text-align:${isUser ? 'right' : 'left'};`;
-            div.innerHTML = `<span style="display:inline-block;max-width:80%;padding:10px 14px;border-radius:12px;background:${isUser ? 'rgba(59,130,246,0.3)' : 'rgba(255,255,255,0.1)'};color:#fff;font-size:14px;">${escapeHtml(content)}</span>`;
+            div.style.cssText = `margin-bottom:14px;display:flex;flex-direction:column;align-items:${isUser ? 'flex-end' : 'flex-start'};`;
+            div.innerHTML = isUser
+                ? `<div style="max-width:82%;padding:11px 15px;border-radius:18px 18px 4px 18px;background:rgba(99,102,241,0.8);color:#fff;font-size:14px;line-height:1.55;word-break:break-word;">${escapeHtml(content)}</div>`
+                : `<div style="display:flex;align-items:flex-start;gap:8px;max-width:90%;">
+                     <div style="width:28px;height:28px;border-radius:50%;background:rgba(245,158,11,0.2);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-top:2px;">🤖</div>
+                     <div style="padding:11px 15px;border-radius:4px 18px 18px 18px;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.9);font-size:14px;line-height:1.6;word-break:break-word;">${escapeHtml(content)}</div>
+                   </div>`;
             messagesDiv.appendChild(div);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            const container = document.getElementById('training-chat-container');
+            if (container) container.scrollTop = container.scrollHeight;
         }
 
         async function sendTrainingChat() {
@@ -24842,13 +24879,13 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             const questions = _trainingCurrentSession?.quiz_questions || [];
             const container = document.getElementById('training-quiz-questions');
             container.innerHTML = questions.map((q, i) => `
-                <div style="background:rgba(0,0,0,0.2);border-radius:12px;padding:16px;margin-bottom:16px;">
-                    <div style="font-weight:600;color:#fff;margin-bottom:12px;">${i + 1}. ${escapeHtml(q.q)}</div>
-                    <div style="display:flex;flex-direction:column;gap:8px;">
+                <div style="background:rgba(255,255,255,0.05);border-radius:14px;padding:16px;margin-bottom:14px;border:1px solid rgba(255,255,255,0.08);">
+                    <div style="font-weight:700;color:#fff;font-size:15px;margin-bottom:14px;line-height:1.5;">第 ${i+1} 题 &nbsp;·&nbsp; ${escapeHtml(q.q)}</div>
+                    <div style="display:flex;flex-direction:column;gap:10px;">
                         ${(q.options || []).map((opt, j) => `
-                            <label style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:rgba(255,255,255,0.05);border-radius:8px;cursor:pointer;">
-                                <input type="radio" name="quiz-q${i}" value="${j}" style="width:16px;height:16px;">
-                                <span style="color:rgba(255,255,255,0.9);">${String.fromCharCode(65 + j)}. ${escapeHtml(opt)}</span>
+                            <label style="display:flex;align-items:center;gap:12px;padding:14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;cursor:pointer;-webkit-tap-highlight-color:rgba(99,102,241,0.15);" ontouchstart="this.style.background='rgba(99,102,241,0.12)'" ontouchend="this.style.background='rgba(255,255,255,0.04)'">
+                                <input type="radio" name="quiz-q${i}" value="${j}" style="width:20px;height:20px;flex-shrink:0;accent-color:#6366f1;">
+                                <span style="color:rgba(255,255,255,0.9);font-size:14px;line-height:1.5;"><span style="color:#a5b4fc;font-weight:600;">${String.fromCharCode(65+j)}.</span> ${escapeHtml(opt)}</span>
                             </label>
                         `).join('')}
                     </div>
@@ -24899,6 +24936,39 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
 
             document.getElementById('training-practice-task').textContent = _trainingCurrentTopic?.practice_task || '按要求完成实操任务';
             document.getElementById('training-practice-result').style.display = 'none';
+            // 重置上传区
+            const fileInput = document.getElementById('training-practice-file');
+            if (fileInput) fileInput.value = '';
+            const preview = document.getElementById('training-file-preview');
+            if (preview) { preview.style.display = 'none'; preview.innerHTML = ''; }
+            const uploadBtn = document.getElementById('training-upload-btn');
+            if (uploadBtn) uploadBtn.style.display = 'none';
+            const uploadArea = document.getElementById('training-upload-area');
+            if (uploadArea) uploadArea.style.display = '';
+        }
+
+        function trainingFileSelected(input) {
+            const file = input.files?.[0];
+            if (!file) return;
+            const preview = document.getElementById('training-file-preview');
+            const uploadBtn = document.getElementById('training-upload-btn');
+            const uploadArea = document.getElementById('training-upload-area');
+            if (!preview || !uploadBtn) return;
+
+            const isVideo = file.type.startsWith('video/');
+            const url = URL.createObjectURL(file);
+            preview.style.display = '';
+            if (isVideo) {
+                preview.innerHTML = `
+                    <video src="${url}" controls playsinline style="width:100%;border-radius:12px;max-height:240px;object-fit:cover;"></video>
+                    <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:6px;text-align:center;">📹 ${escapeHtml(file.name)}</div>`;
+            } else {
+                preview.innerHTML = `
+                    <img src="${url}" style="width:100%;border-radius:12px;max-height:240px;object-fit:cover;">
+                    <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:6px;text-align:center;">🖼 ${escapeHtml(file.name)}</div>`;
+            }
+            if (uploadArea) uploadArea.style.display = 'none';
+            uploadBtn.style.display = '';
         }
 
         async function uploadTrainingPractice() {
