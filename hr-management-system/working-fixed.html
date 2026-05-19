@@ -13563,7 +13563,7 @@
                         <div id="training-topics-panel" class="card" style="padding:16px;">
                             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                                 <span style="font-size:15px;font-weight:700;color:#fff;">知识点管理</span>
-                                <button onclick="openTrainingTopicModal()" style="padding:8px 14px;border-radius:10px;background:rgba(99,102,241,0.9);border:none;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">＋ 新建</button>
+                                <button id="training-topic-create-btn" onclick="openTrainingTopicModal()" style="padding:8px 14px;border-radius:10px;background:rgba(99,102,241,0.9);border:none;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">＋ 新建</button>
                             </div>
                             <select id="training-filter-position" onchange="loadTrainingTopics()" style="width:100%;padding:10px 12px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);color:#fff;font-size:14px;margin-bottom:12px;">
                                 <option value="">全部岗位</option>
@@ -13588,7 +13588,7 @@
                         <div id="training-assignments-panel" class="card" style="display:none;padding:16px;">
                             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                                 <span style="font-size:15px;font-weight:700;color:#fff;">培训指派</span>
-                                <button onclick="openTrainingAssignmentModal()" style="padding:8px 14px;border-radius:10px;background:rgba(99,102,241,0.9);border:none;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">＋ 指派</button>
+                                <button id="training-assign-create-btn" onclick="openTrainingAssignmentModal()" style="padding:8px 14px;border-radius:10px;background:rgba(99,102,241,0.9);border:none;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">＋ 指派</button>
                             </div>
                             <div style="display:flex;gap:8px;margin-bottom:12px;">
                                 <input type="text" id="training-filter-name" placeholder="输入员工姓名搜索" style="flex:1;padding:10px 12px;border-radius:10px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);color:#fff;font-size:14px;">
@@ -13640,11 +13640,18 @@
                         <!-- 测验界面 -->
                         <div id="training-quiz-screen" style="display:none;">
                             <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
-                                <button onclick="backToTrainingHome()" style="padding:8px 14px;border-radius:20px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.8);font-size:13px;cursor:pointer;">← 返回</button>
+                                <button onclick="backToTrainingStudy()" style="padding:8px 14px;border-radius:20px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.8);font-size:13px;cursor:pointer;">← 返回学习</button>
                                 <span style="font-size:15px;font-weight:700;color:#fff;">知识测验</span>
                             </div>
+                            <!-- 加载中遮罩 -->
+                            <div id="training-quiz-loading" style="display:none;text-align:center;padding:60px 20px;">
+                                <div style="font-size:40px;margin-bottom:16px;">⏳</div>
+                                <div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px;">AI 正在生成测验题目</div>
+                                <div id="training-quiz-loading-count" style="font-size:28px;font-weight:900;color:#a78bfa;margin-bottom:8px;">30</div>
+                                <div style="font-size:13px;color:rgba(255,255,255,0.5);">请稍候，题目生成后自动显示…</div>
+                            </div>
                             <div id="training-quiz-questions"></div>
-                            <button onclick="submitTrainingQuiz()" style="width:100%;padding:15px;border-radius:12px;background:rgba(99,102,241,0.9);border:none;color:#fff;font-size:15px;font-weight:700;cursor:pointer;margin-top:8px;">提交答案</button>
+                            <button onclick="submitTrainingQuiz()" id="training-quiz-submit-btn" style="width:100%;padding:15px;border-radius:12px;background:rgba(99,102,241,0.9);border:none;color:#fff;font-size:15px;font-weight:700;cursor:pointer;margin-top:8px;">提交答案</button>
                         </div>
 
                         <!-- 实操上传界面 -->
@@ -24411,15 +24418,27 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
         function isTrainingManager() {
             return _trainingManagerRoles.includes(currentUser?.role);
         }
+        // 仅管理员和总部营运可新建/编辑/删除知识点
+        function isAdminOrHQ() {
+            return ['admin', 'hq_manager'].includes(currentUser?.role);
+        }
+        // 可以指派任务的角色：管理员、总部营运、店长、出品经理
+        function canAssignTraining() {
+            return ['admin', 'hq_manager', 'store_manager', 'store_production_manager'].includes(currentUser?.role);
+        }
 
         function loadTrainingPage() {
             const adminPanel = document.getElementById('training-admin-panel');
             const employeePanel = document.getElementById('training-employee-panel');
+            const topicCreateBtn = document.getElementById('training-topic-create-btn');
+            const assignCreateBtn = document.getElementById('training-assign-create-btn');
+            if (topicCreateBtn) topicCreateBtn.style.display = isAdminOrHQ() ? '' : 'none';
+            if (assignCreateBtn) assignCreateBtn.style.display = canAssignTraining() ? '' : 'none';
             if (isTrainingManager()) {
                 if (adminPanel) adminPanel.style.display = '';
                 if (employeePanel) employeePanel.style.display = '';
                 switchTrainingAdminTab('topics');
-                loadMyTrainingTopics(); // 管理员也可能被指派培训任务
+                loadMyTrainingTopics();
             } else {
                 if (adminPanel) adminPanel.style.display = 'none';
                 if (employeePanel) employeePanel.style.display = '';
@@ -24459,20 +24478,21 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     list.innerHTML = '<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.5);">暂无知识点</div>';
                     return;
                 }
+                const canEdit = isAdminOrHQ();
                 list.innerHTML = data.topics.map(t => {
                     const posArr = (t.position || '').split(',').map(s => s.trim()).filter(Boolean);
                     const posTags = posArr.map(p => `<span style="display:inline-block;padding:2px 8px;border-radius:10px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.35);font-size:11px;color:#a5b4fc;margin-right:3px;">${escapeHtml(p)}</span>`).join('');
                     const storeBadge = t.store ? `<span style="font-size:11px;color:rgba(255,255,255,0.35);margin-left:6px;">🏪 ${escapeHtml(t.store)}</span>` : '';
-                    return `
-                    <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.08);">
-                        <div style="margin-bottom:10px;">
-                            <div style="font-weight:700;color:#fff;font-size:14px;margin-bottom:6px;">${escapeHtml(t.title)}${storeBadge}</div>
-                            <div style="display:flex;flex-wrap:wrap;gap:3px;">${posTags || '<span style="font-size:12px;color:rgba(255,255,255,0.35);">未设置岗位</span>'}</div>
-                        </div>
-                        <div style="display:flex;gap:8px;">
+                    const editBtns = canEdit ? `
+                        <div style="display:flex;gap:8px;margin-top:10px;">
                             <button onclick="editTrainingTopic(${t.id})" style="flex:1;padding:9px;border-radius:8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);color:#fff;font-size:13px;cursor:pointer;">✏️ 编辑</button>
                             <button onclick="deleteTrainingTopic(${t.id})" style="flex:1;padding:9px;border-radius:8px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);color:#f87171;font-size:13px;cursor:pointer;">🗑 删除</button>
-                        </div>
+                        </div>` : '';
+                    return `
+                    <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.08);">
+                        <div style="font-weight:700;color:#fff;font-size:14px;margin-bottom:6px;">${escapeHtml(t.title)}${storeBadge}</div>
+                        <div style="display:flex;flex-wrap:wrap;gap:3px;">${posTags || '<span style="font-size:12px;color:rgba(255,255,255,0.35);">未设置岗位</span>'}</div>
+                        ${editBtns}
                     </div>`;
                 }).join('');
                 // 更新指派弹窗的下拉框
@@ -24747,24 +24767,26 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     list.innerHTML = '<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.5);">暂无指派记录</div>';
                     return;
                 }
-                const sMap = {learning:'学习中',quiz_passed:'待认证',certified:'已认证',failed:'未通过',not_started:'未开始'};
-                const sColor = {learning:'#60a5fa',quiz_passed:'#fbbf24',certified:'#34d399',failed:'#f87171',not_started:'#94a3b8'};
+                const sMap = {not_started:'未开始',learning:'学习中',quiz:'待测验',practice:'待实操认证',certified:'已认证',failed:'未通过'};
+                const sColor = {not_started:'#94a3b8',learning:'#60a5fa',quiz:'#a78bfa',practice:'#fb923c',certified:'#34d399',failed:'#f87171'};
                 list.innerHTML = data.assignments.map(a => {
                     const st = a.session_status || 'not_started';
                     const color = sColor[st] || '#94a3b8';
                     const displayName = escapeHtml(a.employee_name || a.employee_username);
+                    const canRevoke = isAdminOrHQ() || a.assigned_by === currentUser?.username;
+                    const revokeBtn = canRevoke ? `<button onclick="deleteTrainingAssignment(${a.id})" style="width:100%;padding:8px;border-radius:8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#f87171;font-size:13px;cursor:pointer;">撤销指派</button>` : '';
                     return `
                     <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.08);">
                         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
                             <span style="font-weight:700;color:#fff;font-size:14px;">${displayName}</span>
                             <span style="font-size:11px;padding:3px 10px;border-radius:10px;background:rgba(255,255,255,0.07);color:${color};">${sMap[st]||'未开始'}</span>
                         </div>
-                        <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:10px;">
+                        <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:${canRevoke ? '10px' : '0'};">
                             📚 ${escapeHtml(a.title)} &nbsp;·&nbsp; ${escapeHtml(a.position||'')}
                             &nbsp;·&nbsp; 截止 ${a.due_date ? a.due_date.slice(0,10) : '无期限'}
-                            ${a.quiz_score !== null ? ' &nbsp;·&nbsp; 测验 '+a.quiz_score+'/3' : ''}
+                            ${a.quiz_score !== null ? ' &nbsp;·&nbsp; 测验 '+a.quiz_score+'/20' : ''}
                         </div>
-                        <button onclick="deleteTrainingAssignment(${a.id})" style="width:100%;padding:8px;border-radius:8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#f87171;font-size:13px;cursor:pointer;">撤销指派</button>
+                        ${revokeBtn}
                     </div>`;
                 }).join('');
             } catch (e) {
@@ -25202,11 +25224,23 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     <div>暂无培训资料</div>
                 </div>`;
             } else {
+                function renderArticleContent(text) {
+                    return text.split(/\n{2,}/).map(para => {
+                        const p = para.trim();
+                        if (!p) return '';
+                        // Detect heading lines (short lines ending with colon, or starting with number+dot)
+                        const isHeading = /^[\d一二三四五六七八九十]+[.、．]\s/.test(p) || (/[:：]$/.test(p) && p.length < 30);
+                        if (isHeading) {
+                            return `<div style="font-size:15px;font-weight:700;color:#e2e8f0;margin:18px 0 8px;letter-spacing:.3px;">${escapeHtml(p)}</div>`;
+                        }
+                        return `<p style="color:rgba(255,255,255,0.85);font-size:15px;line-height:1.9;margin:0 0 14px;word-break:break-word;">${escapeHtml(p).replace(/\n/g,'<br>')}</p>`;
+                    }).join('');
+                }
                 articlesDiv.innerHTML = articles.map((a, idx) => `
-                    <div style="margin-bottom:${idx < articles.length - 1 ? '20px' : '0'};">
-                        ${articles.length > 1 ? `<div style="font-size:13px;font-weight:700;color:#fbbf24;margin-bottom:8px;letter-spacing:.5px;">📖 ${escapeHtml(a.title)}</div>` : ''}
-                        <div style="color:rgba(255,255,255,0.88);font-size:14px;line-height:1.8;white-space:pre-wrap;word-break:break-word;">${escapeHtml(a.content)}</div>
-                        ${idx < articles.length - 1 ? `<div style="border-top:1px solid rgba(255,255,255,0.08);margin-top:20px;"></div>` : ''}
+                    <div style="margin-bottom:${idx < articles.length - 1 ? '24px' : '0'};">
+                        ${articles.length > 1 ? `<div style="font-size:14px;font-weight:700;color:#fbbf24;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid rgba(251,191,36,0.2);letter-spacing:.5px;">📖 ${escapeHtml(a.title)}</div>` : ''}
+                        <div>${renderArticleContent(a.content)}</div>
+                        ${idx < articles.length - 1 ? `<div style="border-top:1px solid rgba(255,255,255,0.08);margin-top:24px;"></div>` : ''}
                     </div>
                 `).join('');
             }
@@ -25215,7 +25249,36 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             if (area) area.scrollTop = 0;
         }
 
+        let _quizLoadingTimer = null;
         async function startTrainingQuiz() {
+            const btn = document.getElementById('training-start-quiz-btn');
+            if (btn) { btn.disabled = true; btn.textContent = '正在生成测验…'; }
+
+            // Switch to quiz screen showing loading state
+            document.getElementById('training-home-screen').style.display = 'none';
+            document.getElementById('training-learn-screen').style.display = 'none';
+            document.getElementById('training-quiz-screen').style.display = '';
+            document.getElementById('training-practice-screen').style.display = 'none';
+            const cs = document.getElementById('training-certified-screen');
+            if (cs) cs.style.display = 'none';
+
+            const loadingDiv = document.getElementById('training-quiz-loading');
+            const questionsDiv = document.getElementById('training-quiz-questions');
+            const submitBtn = document.getElementById('training-quiz-submit-btn');
+            if (loadingDiv) loadingDiv.style.display = '';
+            if (questionsDiv) questionsDiv.innerHTML = '';
+            if (submitBtn) submitBtn.style.display = 'none';
+
+            // Countdown timer
+            let count = 30;
+            const countEl = document.getElementById('training-quiz-loading-count');
+            if (countEl) countEl.textContent = count;
+            if (_quizLoadingTimer) clearInterval(_quizLoadingTimer);
+            _quizLoadingTimer = setInterval(() => {
+                count = Math.max(0, count - 1);
+                if (countEl) countEl.textContent = count;
+            }, 1000);
+
             try {
                 const resp = await fetch('/api/training/sessions/' + _trainingCurrentSession.id + '/start-quiz', {
                     method: 'POST',
@@ -25226,11 +25289,24 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     _trainingCurrentSession.quiz_questions = data.questions;
                     showTrainingQuizScreen();
                 } else {
+                    if (loadingDiv) loadingDiv.style.display = 'none';
                     showNotification(data.error || '生成测验失败', 'error');
+                    backToTrainingStudy();
                 }
             } catch (e) {
+                if (loadingDiv) loadingDiv.style.display = 'none';
                 showNotification('生成测验失败', 'error');
+                backToTrainingStudy();
+            } finally {
+                if (_quizLoadingTimer) { clearInterval(_quizLoadingTimer); _quizLoadingTimer = null; }
+                if (btn) { btn.disabled = false; btn.textContent = '✍️ 完成阅读，开始测验'; }
             }
+        }
+
+        function backToTrainingStudy() {
+            // Clear quiz questions so next time re-generates
+            if (_trainingCurrentSession) _trainingCurrentSession.quiz_questions = null;
+            showTrainingLearnScreen();
         }
 
         function showTrainingQuizScreen() {
@@ -25238,6 +25314,11 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             document.getElementById('training-learn-screen').style.display = 'none';
             document.getElementById('training-quiz-screen').style.display = '';
             document.getElementById('training-practice-screen').style.display = 'none';
+
+            const loadingDiv = document.getElementById('training-quiz-loading');
+            const submitBtn = document.getElementById('training-quiz-submit-btn');
+            if (loadingDiv) loadingDiv.style.display = 'none';
+            if (submitBtn) submitBtn.style.display = '';
 
             const questions = _trainingCurrentSession?.quiz_questions || [];
             const container = document.getElementById('training-quiz-questions');

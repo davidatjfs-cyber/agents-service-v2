@@ -125,6 +125,8 @@ export async function ensureTrainingSchema() {
     await pool().query(`ALTER TABLE training_topics ADD COLUMN IF NOT EXISTS kb_article_ids UUID[] DEFAULT '{}'`);
     // 门店归属（空=全部门店可见）
     await pool().query(`ALTER TABLE training_topics ADD COLUMN IF NOT EXISTS store VARCHAR(100) DEFAULT ''`);
+    // 允许同一员工对同一知识点有多次指派（移除唯一约束）
+    await pool().query(`ALTER TABLE training_assignments DROP CONSTRAINT IF EXISTS training_assignments_employee_username_topic_id_key`);
 
     console.log('[Training] Schema ensured');
   } catch (e) {
@@ -171,8 +173,8 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
   // POST /api/training/topics - 创建知识点
   app.post('/api/training/topics', authMiddleware, async (req, res) => {
     try {
-      if (!isManager(req.user?.role)) {
-        return res.status(403).json({ error: '无权限访问' });
+      if (!['admin', 'hq_manager'].includes(req.user?.role)) {
+        return res.status(403).json({ error: '仅管理员和总部营运可新建知识点' });
       }
       const { title, positions, position, description, key_points, practice_task, sort_order, kb_article_ids, store } = req.body;
       // positions 优先（新格式：数组），position 备用（旧格式：字符串）
@@ -203,8 +205,8 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
   // PUT /api/training/topics/:id - 更新知识点
   app.put('/api/training/topics/:id', authMiddleware, async (req, res) => {
     try {
-      if (!isManager(req.user?.role)) {
-        return res.status(403).json({ error: '无权限访问' });
+      if (!['admin', 'hq_manager'].includes(req.user?.role)) {
+        return res.status(403).json({ error: '仅管理员和总部营运可编辑知识点' });
       }
       const { id } = req.params;
       const { title, positions, position, description, key_points, practice_task, sort_order, kb_article_ids, store } = req.body;
@@ -243,8 +245,8 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
   // DELETE /api/training/topics/:id - 软删除知识点
   app.delete('/api/training/topics/:id', authMiddleware, async (req, res) => {
     try {
-      if (!isManager(req.user?.role)) {
-        return res.status(403).json({ error: '无权限访问' });
+      if (!['admin', 'hq_manager'].includes(req.user?.role)) {
+        return res.status(403).json({ error: '仅管理员和总部营运可删除知识点' });
       }
       await pool().query(`UPDATE training_topics SET is_active = false WHERE id = $1`, [req.params.id]);
       res.json({ success: true });
@@ -350,7 +352,10 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
   // GET /api/training/assignments - 列出指派
   app.get('/api/training/assignments', authMiddleware, async (req, res) => {
     try {
-      if (!isManager(req.user?.role)) {
+      const role = req.user?.role;
+      const username = req.user?.username;
+      const _canAssign = ['admin', 'hq_manager', 'store_manager', 'store_production_manager'];
+      if (!_canAssign.includes(role)) {
         return res.status(403).json({ error: '无权限访问' });
       }
       const name = (req.query.name || '').trim();
@@ -365,9 +370,14 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
         LEFT JOIN employees e ON e.username = a.employee_username
         WHERE 1=1
       `;
+      // 非管理员/总部营运只能看自己指派的任务
+      if (!['admin', 'hq_manager'].includes(role)) {
+        params.push(username);
+        sql += ` AND a.assigned_by = $${params.length}`;
+      }
       if (name) {
-        sql += ` AND (e.name ILIKE $1 OR a.employee_username ILIKE $1)`;
         params.push('%' + name + '%');
+        sql += ` AND (e.name ILIKE $${params.length} OR a.employee_username ILIKE $${params.length})`;
       }
       sql += ` ORDER BY a.created_at DESC`;
       const result = await pool().query(sql, params);
@@ -380,8 +390,9 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
   // POST /api/training/assignments - 批量指派知识点给员工（支持多员工）
   app.post('/api/training/assignments', authMiddleware, async (req, res) => {
     try {
-      if (!isManager(req.user?.role)) {
-        return res.status(403).json({ error: '无权限访问' });
+      const _canAssign = ['admin', 'hq_manager', 'store_manager', 'store_production_manager'];
+      if (!_canAssign.includes(req.user?.role)) {
+        return res.status(403).json({ error: '仅店长及以上角色可指派培训任务' });
       }
       // 支持旧格式 employee_username（字符串）和新格式 employee_usernames（数组）
       const { employee_username, employee_usernames, topic_id, due_date, note } = req.body;
@@ -412,9 +423,6 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
         const r = await pool().query(
           `INSERT INTO training_assignments (employee_username, topic_id, assigned_by, due_date, note, require_practice)
            VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT (employee_username, topic_id) DO UPDATE
-           SET due_date = EXCLUDED.due_date, note = EXCLUDED.note, assigned_by = EXCLUDED.assigned_by,
-               require_practice = EXCLUDED.require_practice
            RETURNING *`,
           [username, topic_id, req.user?.username, due_date || null, note || '', requirePractice]
         );
@@ -451,11 +459,22 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
     }
   });
 
-  // DELETE /api/training/assignments/:id - 撤销指派
+  // DELETE /api/training/assignments/:id - 撤销指派（仅自己指派的，或管理员/总部营运）
   app.delete('/api/training/assignments/:id', authMiddleware, async (req, res) => {
     try {
-      if (!isManager(req.user?.role)) {
-        return res.status(403).json({ error: '无权限访问' });
+      const role = req.user?.role;
+      const username = req.user?.username;
+      const _canAssign = ['admin', 'hq_manager', 'store_manager', 'store_production_manager'];
+      if (!_canAssign.includes(role)) {
+        return res.status(403).json({ error: '无权限操作' });
+      }
+      // 非管理员/总部营运只能撤销自己指派的
+      if (!['admin', 'hq_manager'].includes(role)) {
+        const check = await pool().query(`SELECT assigned_by FROM training_assignments WHERE id = $1`, [req.params.id]);
+        if (check.rows.length === 0) return res.json({ success: false, error: '记录不存在' });
+        if (check.rows[0].assigned_by !== username) {
+          return res.status(403).json({ error: '只能撤销自己指派的任务' });
+        }
       }
       await pool().query(`DELETE FROM training_assignments WHERE id = $1`, [req.params.id]);
       res.json({ success: true });
@@ -593,14 +612,14 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       }
 
       const result = await pool().query(`
-        SELECT a.id AS assignment_id, a.due_date, a.note, a.require_practice,
+        SELECT a.id AS assignment_id, a.due_date, a.note, a.require_practice, a.assigned_by,
                t.id AS topic_id, t.title, t.position, t.description, t.key_points,
                s.id AS session_id, s.status AS session_status, s.quiz_passed, s.quiz_score
         FROM training_assignments a
         JOIN training_topics t ON t.id = a.topic_id
         LEFT JOIN training_sessions s ON s.topic_id = a.topic_id AND s.employee_username = a.employee_username
         WHERE a.employee_username = $1 AND t.is_active = true
-        ORDER BY a.due_date NULLS LAST, a.created_at DESC
+        ORDER BY a.created_at DESC
       `, [username]);
 
       res.json({ success: true, topics: result.rows });
