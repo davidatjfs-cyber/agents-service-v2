@@ -13670,6 +13670,17 @@
                             <button onclick="uploadTrainingPractice()" id="training-upload-btn" style="display:none;width:100%;padding:15px;border-radius:12px;background:rgba(99,102,241,0.9);border:none;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">上传并提交 AI 审核</button>
                             <div id="training-practice-result" style="display:none;margin-top:16px;"></div>
                         </div>
+
+                        <!-- 认证完成界面（无实操要求时） -->
+                        <div id="training-certified-screen" style="display:none;text-align:center;padding:40px 20px;">
+                            <div style="font-size:72px;margin-bottom:20px;">🏆</div>
+                            <div style="font-size:20px;font-weight:800;color:#34d399;margin-bottom:10px;">培训认证通过！</div>
+                            <div id="training-certified-topic-name" style="font-size:14px;color:rgba(255,255,255,0.6);margin-bottom:28px;"></div>
+                            <div style="background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.25);border-radius:14px;padding:16px;margin-bottom:24px;font-size:13px;color:rgba(255,255,255,0.7);line-height:1.7;">
+                                你已完成全部培训内容并通过知识测验，<br>本次培训认证已记录。
+                            </div>
+                            <button onclick="backToTrainingHome()" style="width:100%;padding:14px;border-radius:12px;background:linear-gradient(135deg,rgba(52,211,153,0.8),rgba(16,185,129,0.8));border:none;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">返回培训列表</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -13784,6 +13795,18 @@
                             <div>
                                 <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px;font-weight:600;">备注</label>
                                 <input type="text" id="training-assign-note" style="width:100%;padding:10px 12px;border-radius:8px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:14px;box-sizing:border-box;" placeholder="选填">
+                            </div>
+                        </div>
+                        <!-- 实操验证开关 -->
+                        <div style="margin-top:14px;padding:14px;border-radius:10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);">
+                            <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="toggleRequirePractice()">
+                                <div>
+                                    <div style="font-size:13px;font-weight:700;color:#fbbf24;">📹 需要实操验证</div>
+                                    <div style="font-size:11px;color:rgba(255,255,255,0.45);margin-top:3px;">开启后，员工完成测验还需上传实操视频/照片才算认证</div>
+                                </div>
+                                <div id="training-assign-practice-toggle" style="width:44px;height:24px;border-radius:12px;background:rgba(255,255,255,0.15);position:relative;transition:background .2s;flex-shrink:0;">
+                                    <div id="training-assign-practice-knob" style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:3px;left:3px;transition:left .2s;"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -24749,10 +24772,25 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             }
         }
 
+        let _trainingRequirePractice = false;
+        function toggleRequirePractice() {
+            _trainingRequirePractice = !_trainingRequirePractice;
+            const toggle = document.getElementById('training-assign-practice-toggle');
+            const knob = document.getElementById('training-assign-practice-knob');
+            if (toggle) toggle.style.background = _trainingRequirePractice ? 'rgba(245,158,11,0.8)' : 'rgba(255,255,255,0.15)';
+            if (knob) knob.style.left = _trainingRequirePractice ? '23px' : '3px';
+        }
+
         async function openTrainingAssignmentModal() {
             document.getElementById('training-assign-topic').value = '';
             document.getElementById('training-assign-duedate').value = '';
             document.getElementById('training-assign-note').value = '';
+            // 重置实操验证开关
+            _trainingRequirePractice = false;
+            const toggle = document.getElementById('training-assign-practice-toggle');
+            const knob = document.getElementById('training-assign-practice-knob');
+            if (toggle) toggle.style.background = 'rgba(255,255,255,0.15)';
+            if (knob) knob.style.left = '3px';
             // 渲染岗位多选复选框
             renderPositionCheckboxes('training-assign-positions', []);
             // 清空员工列表
@@ -24882,7 +24920,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         'Content-Type': 'application/json',
                         'Authorization': 'Bearer ' + localStorage.getItem('hrms_token')
                     },
-                    body: JSON.stringify({ employee_usernames, topic_id, due_date, note })
+                    body: JSON.stringify({ employee_usernames, topic_id, due_date, note, require_practice: _trainingRequirePractice })
                 });
                 const data = await resp.json();
                 if (data.success) {
@@ -25049,6 +25087,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             document.getElementById('training-learn-screen').style.display = 'none';
             document.getElementById('training-quiz-screen').style.display = 'none';
             document.getElementById('training-practice-screen').style.display = 'none';
+            const cs = document.getElementById('training-certified-screen');
+            if (cs) cs.style.display = 'none';
             loadMyTrainingTopics();
         }
 
@@ -25070,26 +25110,27 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 if (empty) empty.style.display = 'none';
 
                 list.innerHTML = data.topics.map(t => {
-                    const sMap = {'learning':'学习中','quiz_passed':'去上传实操','practice':'实操审核中','certified':'已认证'};
-                    const sIcon = {'learning':'📖','quiz_passed':'🎥','practice':'⏳','certified':'✅'};
-                    const sBg   = {'learning':'rgba(96,165,250,0.12)','quiz_passed':'rgba(251,191,36,0.12)','practice':'rgba(249,115,22,0.12)','certified':'rgba(52,211,153,0.12)'};
-                    const sBorder = {'learning':'rgba(96,165,250,0.3)','quiz_passed':'rgba(251,191,36,0.3)','practice':'rgba(249,115,22,0.3)','certified':'rgba(52,211,153,0.3)'};
-                    const sColor = {'learning':'#60a5fa','quiz_passed':'#fbbf24','practice':'#fb923c','certified':'#34d399'};
-                    const st = t.session_status || 'learning';
+                    const sMap = {'learning':'学习中','quiz':'待测验','practice':'实操审核中','certified':'已认证','not_started':'未开始'};
+                    const sIcon = {'learning':'📖','quiz':'📝','practice':'⏳','certified':'✅','not_started':'🔔'};
+                    const sBg   = {'learning':'rgba(96,165,250,0.12)','quiz':'rgba(139,92,246,0.12)','practice':'rgba(249,115,22,0.12)','certified':'rgba(52,211,153,0.12)','not_started':'rgba(148,163,184,0.1)'};
+                    const sBorder = {'learning':'rgba(96,165,250,0.3)','quiz':'rgba(139,92,246,0.3)','practice':'rgba(249,115,22,0.3)','certified':'rgba(52,211,153,0.3)','not_started':'rgba(148,163,184,0.2)'};
+                    const sColor = {'learning':'#60a5fa','quiz':'#a78bfa','practice':'#fb923c','certified':'#34d399','not_started':'#94a3b8'};
+                    const st = t.session_status || 'not_started';
                     const isDone = st === 'certified';
                     const isPending = st === 'practice';
-                    const btnLabel = isDone ? '✅ 已完成' : isPending ? '等待审核' : '开始学习 →';
+                    const btnLabel = isDone ? '✅ 已完成' : isPending ? '⏳ 等待审核' : '开始学习 →';
                     const btnDisabled = isDone || isPending;
+                    const practiceTag = t.require_practice === false ? '<span style="font-size:10px;padding:2px 6px;border-radius:6px;background:rgba(96,165,250,0.12);color:#60a5fa;margin-left:6px;">无需实操</span>' : '';
                     return `
                         <div style="background:rgba(255,255,255,0.05);border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);">
                             <div style="padding:16px;">
                                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-                                    <span style="font-weight:700;color:#fff;font-size:15px;">${escapeHtml(t.title)}</span>
+                                    <span style="font-weight:700;color:#fff;font-size:15px;">${escapeHtml(t.title)}${practiceTag}</span>
                                     <span style="font-size:12px;padding:4px 10px;border-radius:10px;background:${sBg[st]};border:1px solid ${sBorder[st]};color:${sColor[st]};">${sIcon[st]} ${sMap[st]||'未开始'}</span>
                                 </div>
                                 <div style="font-size:12px;color:rgba(255,255,255,0.4);">
-                                    ${escapeHtml(t.position)} &nbsp;·&nbsp; 截止 ${t.due_date || '无期限'}
-                                    ${t.quiz_score !== null ? ' &nbsp;·&nbsp; 测验 '+t.quiz_score+'/3' : ''}
+                                    ${escapeHtml(t.position)} &nbsp;·&nbsp; 截止 ${t.due_date ? t.due_date.slice(0,10) : '无期限'}
+                                    ${t.quiz_score !== null && t.quiz_score !== undefined ? ' &nbsp;·&nbsp; 测验 '+t.quiz_score+'分' : ''}
                                 </div>
                             </div>
                             <button onclick="${btnDisabled ? '' : 'openTrainingSession('+t.topic_id+')'}"
@@ -25147,6 +25188,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             document.getElementById('training-learn-screen').style.display = '';
             document.getElementById('training-quiz-screen').style.display = 'none';
             document.getElementById('training-practice-screen').style.display = 'none';
+            const cs = document.getElementById('training-certified-screen');
+            if (cs) cs.style.display = 'none';
 
             document.getElementById('training-learn-title').textContent = _trainingCurrentTopic?.title || '学习';
 
@@ -25235,10 +25278,16 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 });
                 const data = await resp.json();
                 if (data.success) {
-                    showNotification(`测验完成：${data.score}/${data.total}，${data.passed ? '通过' : '未通过'}`, data.passed ? 'success' : 'warning');
                     if (data.passed) {
-                        _trainingCurrentSession.status = 'practice';
-                        showTrainingPracticeScreen();
+                        _trainingCurrentSession.status = data.next_status;
+                        if (data.next_status === 'certified') {
+                            showTrainingCertifiedScreen();
+                        } else {
+                            showTrainingPracticeScreen();
+                        }
+                    } else {
+                        const need = Math.ceil(data.total * 0.9);
+                        showNotification(`测验未通过：答对 ${data.score}/${data.total}，需至少答对 ${need} 题（90%）`, 'warning');
                     }
                 } else {
                     showNotification(data.error || '提交失败', 'error');
@@ -25265,6 +25314,17 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             if (uploadBtn) uploadBtn.style.display = 'none';
             const uploadArea = document.getElementById('training-upload-area');
             if (uploadArea) uploadArea.style.display = '';
+        }
+
+        function showTrainingCertifiedScreen() {
+            document.getElementById('training-home-screen').style.display = 'none';
+            document.getElementById('training-learn-screen').style.display = 'none';
+            document.getElementById('training-quiz-screen').style.display = 'none';
+            document.getElementById('training-practice-screen').style.display = 'none';
+            document.getElementById('training-certified-screen').style.display = '';
+
+            const nameEl = document.getElementById('training-certified-topic-name');
+            if (nameEl) nameEl.textContent = _trainingCurrentTopic?.title || '';
         }
 
         function trainingFileSelected(input) {

@@ -77,6 +77,7 @@ export async function ensureTrainingSchema() {
     `);
     await pool().query(`CREATE INDEX IF NOT EXISTS idx_ta_employee ON training_assignments (employee_username)`);
     await pool().query(`CREATE INDEX IF NOT EXISTS idx_ta_topic ON training_assignments (topic_id)`);
+    await pool().query(`ALTER TABLE training_assignments ADD COLUMN IF NOT EXISTS require_practice BOOLEAN DEFAULT false`);
 
     // 学习会话表
     await pool().query(`
@@ -397,6 +398,7 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
 
       const assignableRoles = getAssignableRoles(req.user?.role);
       const assignerName = req.user?.name || req.user?.username;
+      const requirePractice = req.body.require_practice === true || req.body.require_practice === 'true';
       const created = [];
 
       for (const username of usernames) {
@@ -408,12 +410,13 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
           if (!assignableRoles.includes(empCheck.rows[0].role)) continue;
         }
         const r = await pool().query(
-          `INSERT INTO training_assignments (employee_username, topic_id, assigned_by, due_date, note)
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO training_assignments (employee_username, topic_id, assigned_by, due_date, note, require_practice)
+           VALUES ($1, $2, $3, $4, $5, $6)
            ON CONFLICT (employee_username, topic_id) DO UPDATE
-           SET due_date = EXCLUDED.due_date, note = EXCLUDED.note, assigned_by = EXCLUDED.assigned_by
+           SET due_date = EXCLUDED.due_date, note = EXCLUDED.note, assigned_by = EXCLUDED.assigned_by,
+               require_practice = EXCLUDED.require_practice
            RETURNING *`,
-          [username, topic_id, req.user?.username, due_date || null, note || '']
+          [username, topic_id, req.user?.username, due_date || null, note || '', requirePractice]
         );
         if (r.rows.length) created.push(r.rows[0]);
 
@@ -590,7 +593,7 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       }
 
       const result = await pool().query(`
-        SELECT a.id AS assignment_id, a.due_date, a.note,
+        SELECT a.id AS assignment_id, a.due_date, a.note, a.require_practice,
                t.id AS topic_id, t.title, t.position, t.description, t.key_points,
                s.id AS session_id, s.status AS session_status, s.quiz_passed, s.quiz_score
         FROM training_assignments a
@@ -852,6 +855,13 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       const session = sessionResult.rows[0];
       const questions = session.quiz_questions || [];
 
+      // 查询 assignment 的 require_practice 标志
+      const assignmentRes = await pool().query(
+        `SELECT require_practice FROM training_assignments WHERE employee_username = $1 AND topic_id = $2`,
+        [username, session.topic_id]
+      );
+      const requirePractice = assignmentRes.rows[0]?.require_practice ?? true; // 默认需要实操
+
       // 计算得分
       let score = 0;
       const results = questions.map((q, i) => {
@@ -869,18 +879,24 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
         };
       });
 
-      const passed = score >= Math.ceil(questions.length * 0.7); // 70% 即通过
+      const passed = score >= Math.ceil(questions.length * 0.9); // 90% 即通过
+
+      // 通过且不需要实操 → 直接 certified；通过且需要实操 → practice；未通过 → 留在 quiz
+      let nextStatus = 'quiz';
+      if (passed) {
+        nextStatus = requirePractice ? 'practice' : 'certified';
+      }
 
       // 更新 session
       await pool().query(
         `UPDATE training_sessions
          SET quiz_answers = $1, quiz_score = $2, quiz_passed = $3, quiz_passed_at = CASE WHEN $3 THEN NOW() ELSE quiz_passed_at END,
-             status = CASE WHEN $3 THEN 'practice' ELSE 'quiz' END
-         WHERE id = $4`,
-        [JSON.stringify(answers), score, passed, id]
+             status = $4, certified_at = CASE WHEN $5 THEN NOW() ELSE certified_at END
+         WHERE id = $6`,
+        [JSON.stringify(answers), score, passed, nextStatus, nextStatus === 'certified', id]
       );
 
-      res.json({ success: true, score, passed, total: questions.length, results });
+      res.json({ success: true, score, passed, total: questions.length, results, require_practice: requirePractice, next_status: nextStatus });
     } catch (e) {
       console.error('[Training] Submit quiz error:', e?.message);
       res.json({ success: false, error: e?.message });
