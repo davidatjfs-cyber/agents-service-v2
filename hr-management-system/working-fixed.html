@@ -20664,13 +20664,13 @@ th { background: #f5f5f5; font-weight: 700; }
         let _serverRoleModules = null;
         // 8个管理模块：员工管理/营业日报/待审批/请款/知识库/奖惩管理/分析报表/智能助手
         const _defaultRoleModules = {
-            [ROLES.EMPLOYEE]:           ['profile', 'attendance', 'exam', 'points', 'knowledge', 'kitchen'],
-            [ROLES.STORE_MANAGER]:      ['profile', 'attendance', 'exam', 'points', 'employees', 'daily-report', 'approvals', 'payment', 'knowledge', 'rewards', 'reports', 'agents', 'kitchen'],
-            [ROLES.PRODUCTION_MANAGER]: ['profile', 'attendance', 'exam', 'points', 'knowledge', 'rewards', 'forecast', 'kitchen'],
-            [ROLES.HQ_MANAGER]:         ['profile', 'attendance', 'exam', 'points', 'employees', 'daily-report', 'approvals', 'payment', 'knowledge', 'rewards', 'reports', 'kitchen'],
-            [ROLES.HR_MANAGER]:         ['profile', 'attendance', 'exam', 'points', 'employees', 'approvals', 'payment', 'knowledge', 'rewards', 'reports'],
-            [ROLES.FRONT_MANAGER]:      ['profile', 'attendance', 'exam', 'points', 'daily-report', 'approvals', 'knowledge'],
-            [ROLES.CASHIER]:            ['profile', 'attendance', 'exam', 'points', 'payment', 'knowledge']
+            [ROLES.EMPLOYEE]:           ['profile', 'attendance', 'exam', 'points', 'knowledge', 'kitchen', 'training'],
+            [ROLES.STORE_MANAGER]:      ['profile', 'attendance', 'exam', 'points', 'employees', 'daily-report', 'approvals', 'payment', 'knowledge', 'rewards', 'reports', 'agents', 'kitchen', 'training'],
+            [ROLES.PRODUCTION_MANAGER]: ['profile', 'attendance', 'exam', 'points', 'knowledge', 'rewards', 'forecast', 'kitchen', 'training'],
+            [ROLES.HQ_MANAGER]:         ['profile', 'attendance', 'exam', 'points', 'employees', 'daily-report', 'approvals', 'payment', 'knowledge', 'rewards', 'reports', 'kitchen', 'training'],
+            [ROLES.HR_MANAGER]:         ['profile', 'attendance', 'exam', 'points', 'employees', 'approvals', 'payment', 'knowledge', 'rewards', 'reports', 'training'],
+            [ROLES.FRONT_MANAGER]:      ['profile', 'attendance', 'exam', 'points', 'daily-report', 'approvals', 'knowledge', 'training'],
+            [ROLES.CASHIER]:            ['profile', 'attendance', 'exam', 'points', 'payment', 'knowledge', 'training']
         };
         async function loadRoleModulesFromServer() {
             try {
@@ -45361,6 +45361,7 @@ ${body}
                 { icon:'✅', label:'待审批', page:'approvals', roles:['admin','hr_manager','hq_manager','store_manager','front_manager'] },
                 { icon:'💰', label:'请款', page:'payment', roles:['admin','hq_manager','store_manager','cashier'] },
                 { icon:'📚', label:'知识库', page:'knowledge' },
+                { icon:'🎓', label:'培训认证', page:'training' },
                 { icon:'📁', label:'文件中心', page:'files', roles:['admin'] },
                 { icon:'📊', label:'数据中心', page:'agents', roles:['admin'] },
                 { icon:'📈', label:'增长看板', page:'growth', roles:['admin','hq_manager','store_manager','front_manager'] },
