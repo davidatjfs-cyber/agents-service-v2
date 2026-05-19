@@ -54,6 +54,7 @@ import { ensureHRMSApiSchema, registerHRMSApiRoutes } from './hrms-api-tools.js'
 import { ensureSOPDistributionSchema, registerSOPDistributionRoutes } from './sop-distribution.js';
 import { ensureKitchenExecutionSchema, registerKitchenExecutionRoutes } from './kitchen-execution.js';
 import { ensureRecipeSchema, registerRecipeRoutes, generateRecipeTemplate, importRecipeFromExcel } from './recipe-management.js';
+import { ensureTrainingSchema, registerTrainingRoutes } from './training.js';
 import { setDataExecutorPool, purgeExpiredCache, updateMetricVersion } from './data-executor.js';
 import fileRoutes from './file-routes.js';
 import { enforceRuntimeSafetyOrExit, configureDbSessionSafety, isSchemaChangeAllowed, getAppEnv, isWebhookEnabled, isExternalEnabled } from './safety.js';
@@ -4990,6 +4991,24 @@ const recipeMediaUpload = multer({
     }
   }),
   limits: { fileSize: 200 * 1024 * 1024 } // 200MB max for video
+});
+
+// 培训实操上传（图片 + 视频）
+const TRAINING_MEDIA_EXTS = new Set(['.jpg','.jpeg','.png','.mp4','.mov','.webm','.heic']);
+const trainingPracticeUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const trainingDir = path.join(uploadsDir, 'training');
+      fs.mkdirSync(trainingDir, { recursive: true });
+      cb(null, trainingDir);
+    },
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      if (!TRAINING_MEDIA_EXTS.has(ext)) return cb(new Error('blocked_file_type'));
+      cb(null, `training-${randomUUID()}${ext}`);
+    }
+  }),
+  limits: { fileSize: 200 * 1024 * 1024 }
 });
 
 app.post('/api/recipes/upload-step-media', authRequired, recipeMediaUpload.single('file'), async (req, res) => {
@@ -17344,6 +17363,7 @@ registerHRMSApiRoutes(app, authRequired);
 registerSOPDistributionRoutes(app, authRequired);
 registerKitchenExecutionRoutes(app, authRequired);
 registerRecipeRoutes(app, authRequired);
+registerTrainingRoutes(app, authRequired, trainingPracticeUpload);
 registerUploadStatusRoute(app, { pool, getSharedState, authRequired });
 app.use('/api', authRequired, fileRoutes);
 
@@ -18456,7 +18476,8 @@ app.listen(PORT, HOST, async () => {
     await ensureSOPDistributionSchema();
     await ensureKitchenExecutionSchema();
     await ensureRecipeSchema();
-    console.log('[modules] RAG + TaskBoard + HRMS-API + SOP-Distribution + KitchenExec + Recipe initialized');
+    await ensureTrainingSchema();
+    console.log('[modules] RAG + TaskBoard + HRMS-API + SOP-Distribution + KitchenExec + Recipe + Training initialized');
 
 
     // 飞书表格→PG 与 sales_raw 目录入库：失败第一时间通知 admin（见 notifyAdminsDualWriteFailure 注释）
