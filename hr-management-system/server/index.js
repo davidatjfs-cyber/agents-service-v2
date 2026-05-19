@@ -4833,7 +4833,16 @@ app.use(
 app.get('/api/role-modules', authRequired, async (req, res) => {
   try {
     const state = (await getSharedState()) || {};
-    return res.json({ config: state.roleModules || null });
+    const config = state.roleModules || null;
+    // 确保 training 模块对所有已配置角色可见
+    if (config && typeof config === 'object') {
+      for (const role of Object.keys(config)) {
+        if (Array.isArray(config[role]) && !config[role].includes('training')) {
+          config[role].push('training');
+        }
+      }
+    }
+    return res.json({ config });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
