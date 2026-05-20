@@ -127,6 +127,10 @@ export async function ensureTrainingSchema() {
     await pool().query(`ALTER TABLE training_topics ADD COLUMN IF NOT EXISTS store VARCHAR(100) DEFAULT ''`);
     // 允许同一员工对同一知识点有多次指派（移除唯一约束）
     await pool().query(`ALTER TABLE training_assignments DROP CONSTRAINT IF EXISTS training_assignments_employee_username_topic_id_key`);
+    // AI 智能解析缓存（生成一次，全员复用）
+    await pool().query(`ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS ai_explanation TEXT`);
+    // 考试历史记录（每次提交均追加）
+    await pool().query(`ALTER TABLE training_sessions ADD COLUMN IF NOT EXISTS quiz_history JSONB DEFAULT '[]'`);
 
     console.log('[Training] Schema ensured');
   } catch (e) {
@@ -516,7 +520,8 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
                      'username', a.employee_username,
                      'name', COALESCE(e.name, a.employee_username),
                      'status', COALESCE(s.status, 'not_started'),
-                     'quiz_score', s.quiz_score
+                     'quiz_score', s.quiz_score,
+                     'quiz_history', COALESCE(s.quiz_history, '[]'::jsonb)
                    ) ORDER BY e.name
                  ) FILTER (WHERE a.employee_username IS NOT NULL),
                  '[]'::json
@@ -700,6 +705,82 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       return res.sendFile(abs);
     } catch (e) {
       console.error('[Training] kb-file error:', e?.message);
+      res.status(500).json({ error: e?.message });
+    }
+  });
+
+  // GET /api/training/kb/:articleId/explanation - AI智能解析（首次生成后缓存，全员共用）
+  app.get('/api/training/kb/:articleId/explanation', authMiddleware, async (req, res) => {
+    const articleId = String(req.params.articleId || '').trim();
+    if (!articleId) return res.status(400).json({ error: 'missing_id' });
+    try {
+      const check = await pool().query(
+        `SELECT id FROM training_topics WHERE $1 = ANY(kb_article_ids) AND is_active = true LIMIT 1`,
+        [articleId]
+      );
+      if (check.rows.length === 0) return res.status(403).json({ error: 'forbidden' });
+
+      const r = await pool().query(
+        `SELECT title, content, file_type, ai_explanation FROM knowledge_base WHERE id = $1 AND enabled = true LIMIT 1`,
+        [articleId]
+      );
+      const row = r.rows[0];
+      if (!row) return res.status(404).json({ error: 'not_found' });
+
+      // 已有缓存直接返回
+      if (row.ai_explanation && row.ai_explanation.trim().length > 50) {
+        return res.json({ success: true, explanation: row.ai_explanation, cached: true });
+      }
+
+      const rawContent = String(row.content || '').trim();
+      if (!rawContent || rawContent.length < 20) {
+        return res.json({ success: false, error: 'no_content', message: '此文章暂无文字内容，无法生成AI解析' });
+      }
+
+      const prompt = `你是一名餐饮培训导师。以下是一篇培训文章，请为员工生成一份详细易懂的学习解析。
+
+文章标题：${row.title}
+文章内容：
+${rawContent}
+
+请按以下结构输出：
+
+## 📌 核心要点
+（3-5条最重要的知识点，每条简短清晰）
+
+## 📖 详细解读
+（逐步解释文章中的关键内容，用通俗的语言，结合实际餐饮工作场景举例）
+
+## ⚠️ 注意事项
+（实际操作中容易出错或被忽视的地方）
+
+## 💡 学以致用
+（2-3个具体的实际应用场景或操作小贴士）
+
+## ❓ 考前自测
+（3道思考题帮助员工自我检验理解程度）
+
+请使用简体中文，语言通俗易懂，适合餐饮一线员工阅读。`;
+
+      const aiResp = await callLLM([
+        { role: 'system', content: '你是专业的餐饮培训导师，擅长把复杂的操作规程用简单易懂的语言解释给一线员工。' },
+        { role: 'user', content: prompt }
+      ], { max_tokens: 3000, temperature: 0.5 });
+
+      const explanation = String(aiResp?.content || '').trim();
+      if (!explanation || explanation.length < 100) {
+        return res.json({ success: false, error: 'ai_failed', message: 'AI生成失败，请稍后重试' });
+      }
+
+      // 缓存到数据库，后续所有员工直接读缓存无需重新生成
+      await pool().query(
+        `UPDATE knowledge_base SET ai_explanation = $1, updated_at = NOW() WHERE id = $2`,
+        [explanation, articleId]
+      );
+
+      res.json({ success: true, explanation, cached: false });
+    } catch (e) {
+      console.error('[Training] explanation error:', e?.message);
       res.status(500).json({ error: e?.message });
     }
   });
@@ -977,14 +1058,21 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
         nextStatus = requirePractice ? 'practice' : 'certified';
       }
 
-      // 更新 session；通过后清空题目，失败后也清空题目（下次必须重新生成）
+      // 追加本次考试到 quiz_history（保留完整历史记录）
       await pool().query(
         `UPDATE training_sessions
-         SET quiz_answers = $1, quiz_score = $2, quiz_passed = $3, quiz_passed_at = CASE WHEN $3 THEN NOW() ELSE quiz_passed_at END,
-             status = $4, certified_at = CASE WHEN $5 THEN NOW() ELSE certified_at END,
-             quiz_questions = NULL
-         WHERE id = $6`,
-        [JSON.stringify(answers), score, passed, nextStatus, nextStatus === 'certified', id]
+         SET quiz_answers = $1, quiz_score = $2, quiz_passed = $3,
+             quiz_passed_at = CASE WHEN $3 THEN NOW() ELSE quiz_passed_at END,
+             status = $4,
+             certified_at = CASE WHEN $5 THEN NOW() ELSE certified_at END,
+             quiz_questions = NULL,
+             quiz_history = COALESCE(quiz_history, '[]'::jsonb) || $6::jsonb
+         WHERE id = $7`,
+        [
+          JSON.stringify(answers), score, passed, nextStatus, nextStatus === 'certified',
+          JSON.stringify([{ score, passed, at: new Date().toISOString() }]),
+          id
+        ]
       );
 
       res.json({ success: true, score, passed, total: questions.length, results, require_practice: requirePractice, next_status: nextStatus });

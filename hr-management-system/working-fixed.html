@@ -25025,17 +25025,41 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     const barColor = rate >= 80 ? '#34d399' : rate >= 50 ? '#fbbf24' : '#f87171';
                     const members = Array.isArray(d.members) ? d.members : [];
                     const assignerLine = d.assigner_name ? `<span style="font-size:11px;color:rgba(251,191,36,0.7);margin-left:6px;">派发人：${escapeHtml(d.assigner_name)}</span>` : '';
-                    const membersHtml = members.length ? members.map(m => {
+                    const membersHtml = members.length ? members.map((m, mi) => {
                         const st = m.status || 'not_started';
-                        // If status=quiz but there's already a failed score, show "需补考" instead of "待测验"
                         const needsRetake = st === 'quiz' && m.quiz_score !== null && m.quiz_score !== undefined;
                         const label = needsRetake ? '需补考' : (stMap[st] || st);
                         const bg = needsRetake ? 'rgba(239,68,68,0.18)' : (stBg[st] || 'rgba(71,85,105,0.5)');
                         const color = needsRetake ? '#fca5a5' : (stColor[st] || '#94a3b8');
                         const scoreNote = (m.quiz_score !== null && m.quiz_score !== undefined) ? ` · ${m.quiz_score}分` : '';
-                        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px;border-bottom:1px solid rgba(255,255,255,0.05);">
-                            <span style="font-size:13px;color:#e2e8f0;">${escapeHtml(m.name||m.username)}</span>
-                            <span style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px;background:${bg};color:${color};">${label}${scoreNote}</span>
+                        // 考试历史
+                        const history = Array.isArray(m.quiz_history) ? m.quiz_history : [];
+                        const attemptCount = history.length;
+                        const historyBadge = attemptCount > 0
+                            ? `<span style="font-size:10px;color:rgba(255,255,255,0.4);margin-left:6px;">考${attemptCount}次</span>`
+                            : '';
+                        const historyHtml = attemptCount > 0 ? history.map((h, hi) => {
+                            const sc = h.score ?? '?';
+                            const ok = h.passed;
+                            const dt = h.at ? h.at.slice(0,10) : '';
+                            return `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;background:rgba(255,255,255,0.03);border-radius:6px;margin-bottom:3px;">
+                                <span style="font-size:11px;color:rgba(255,255,255,0.4);">第${hi+1}次 ${dt}</span>
+                                <span style="font-size:12px;font-weight:700;color:${ok ? '#34d399' : '#f87171'};">${sc}分 ${ok ? '✓通过' : '✗未通过'}</span>
+                            </div>`;
+                        }).join('') : '';
+                        const historyId = `dash-hist-${idx}-${mi}`;
+                        const toggleBtn = attemptCount > 0
+                            ? `<button onclick="(function(e){e.stopPropagation();var d=document.getElementById('${historyId}');d.style.display=d.style.display==='none'?'':'none';})(event)" style="font-size:10px;padding:2px 7px;border-radius:8px;border:none;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.5);cursor:pointer;margin-left:6px;">历史</button>`
+                            : '';
+                        return `<div style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px;">
+                                <div style="display:flex;align-items:center;gap:4px;">
+                                    <span style="font-size:13px;color:#e2e8f0;">${escapeHtml(m.name||m.username)}</span>
+                                    ${historyBadge}${toggleBtn}
+                                </div>
+                                <span style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px;background:${bg};color:${color};">${label}${scoreNote}</span>
+                            </div>
+                            ${historyHtml ? `<div id="${historyId}" style="display:none;padding:0 4px 8px;">${historyHtml}</div>` : ''}
                         </div>`;
                     }).join('') : '<div style="padding:8px 0;font-size:13px;color:rgba(255,255,255,0.3);">暂无指派成员</div>';
                     return `
@@ -25362,6 +25386,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                                     您的浏览器不支持视频播放
                                 </video>
                             </div>`;
+                        // 视频的 AI 解析来自管理员填写的摘要
+                        loadTrainingAiExplanation(a.id, articlesDiv);
                         return;
                     }
 
@@ -25432,6 +25458,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                             articlesDiv.appendChild(canvas);
                             articlesDiv.appendChild(pageInfo);
                             await renderPage(1);
+                            // PDF 文章追加 AI 解析（内容来自 pdftotext 提取的文字）
+                            loadTrainingAiExplanation(a.id, articlesDiv);
                         } catch (e) {
                             console.error('training pdf error', e);
                             articlesDiv.innerHTML = `<div style="text-align:center;padding:24px 16px;">
@@ -25448,6 +25476,72 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     // Plain text fallback
                     const content = a.content || '';
                     articlesDiv.innerHTML = `<div style="padding:16px;color:rgba(255,255,255,0.82);font-size:14px;line-height:1.85;white-space:pre-wrap;word-break:break-word;">${escapeHtml(content)}</div>`;
+
+                    // 加载 AI 解析（文本类文章直接追加）
+                    if (content.length >= 20) loadTrainingAiExplanation(a.id, articlesDiv);
+                };
+
+                // 为培训文章加载/生成 AI 智能解析（缓存后全员共用）
+                window.loadTrainingAiExplanation = async function(articleId, container) {
+                    // 插入解析容器
+                    const expCard = document.createElement('div');
+                    expCard.id = 'training-ai-exp-' + articleId;
+                    expCard.style.cssText = 'margin-top:16px;border-radius:16px;overflow:hidden;border:1px solid rgba(99,102,241,0.35);background:rgba(99,102,241,0.07);';
+                    const header = document.createElement('div');
+                    header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer;user-select:none;';
+                    header.innerHTML = `<div style="display:flex;align-items:center;gap:8px;">
+                        <span style="font-size:18px;">✨</span>
+                        <span style="font-size:14px;font-weight:700;color:#a5b4fc;">AI智能解析</span>
+                        <span id="training-ai-badge-${articleId}" style="font-size:10px;padding:2px 7px;border-radius:8px;background:rgba(99,102,241,0.25);color:#c4b5fd;">加载中…</span>
+                    </div>
+                    <span id="training-ai-chevron-${articleId}" style="color:rgba(255,255,255,0.4);font-size:13px;transition:transform .25s;">▼</span>`;
+                    const body = document.createElement('div');
+                    body.id = 'training-ai-body-' + articleId;
+                    body.style.cssText = 'display:none;padding:0 16px 16px;';
+                    expCard.appendChild(header);
+                    expCard.appendChild(body);
+                    container.appendChild(expCard);
+
+                    // 折叠/展开
+                    let expanded = false;
+                    header.onclick = () => {
+                        expanded = !expanded;
+                        body.style.display = expanded ? '' : 'none';
+                        const chev = document.getElementById('training-ai-chevron-' + articleId);
+                        if (chev) chev.style.transform = expanded ? 'rotate(180deg)' : '';
+                    };
+
+                    try {
+                        const resp = await fetch(`/api/training/kb/${encodeURIComponent(articleId)}/explanation`, {
+                            headers: { 'Authorization': 'Bearer ' + token }
+                        });
+                        const data = await resp.json();
+                        const badge = document.getElementById('training-ai-badge-' + articleId);
+
+                        if (data.success && data.explanation) {
+                            if (badge) {
+                                badge.textContent = data.cached ? '已缓存' : '新生成';
+                                badge.style.background = data.cached ? 'rgba(52,211,153,0.18)' : 'rgba(251,191,36,0.18)';
+                                badge.style.color = data.cached ? '#6ee7b7' : '#fde68a';
+                            }
+                            // 渲染 Markdown（简易版：处理 ## 标题 和 换行）
+                            const html = data.explanation
+                                .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                                .replace(/^## (.+)$/gm, '<div style="font-size:14px;font-weight:700;color:#a5b4fc;margin:14px 0 6px;">$1</div>')
+                                .replace(/^### (.+)$/gm, '<div style="font-size:13px;font-weight:600;color:#c4b5fd;margin:10px 0 4px;">$1</div>')
+                                .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#fff;">$1</strong>')
+                                .replace(/\n/g, '<br>');
+                            body.innerHTML = `<div style="font-size:13px;color:rgba(255,255,255,0.8);line-height:1.9;">${html}</div>`;
+                            // 自动展开
+                            header.click();
+                        } else {
+                            if (badge) { badge.textContent = data.error === 'no_content' ? '无文字内容' : '生成失败'; badge.style.color = '#f87171'; badge.style.background = 'rgba(248,113,113,0.15)'; }
+                            body.innerHTML = `<div style="font-size:13px;color:rgba(255,255,255,0.4);padding:8px 0;">${escapeHtml(data.message || '暂无解析')}</div>`;
+                        }
+                    } catch (e) {
+                        const badge = document.getElementById('training-ai-badge-' + articleId);
+                        if (badge) { badge.textContent = '网络错误'; badge.style.color = '#f87171'; }
+                    }
                 };
 
                 showTrainingArticle(0);
@@ -46353,7 +46447,8 @@ ${body}
                 reports: { icon: '📊', label: '报表' },
                 employees: { icon: '👥', label: '员工管理' },
                 points: { icon: '💎', label: '积分' },
-                rewards: { icon: '🏆', label: '奖惩' }
+                rewards: { icon: '🏆', label: '奖惩' },
+                training: { icon: '🎓', label: '培训' }
             };
 
             let roleMenu = getRoleBottomNavPages(role).slice(0, 4);
