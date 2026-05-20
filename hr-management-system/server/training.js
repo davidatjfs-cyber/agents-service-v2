@@ -860,7 +860,8 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       const kpSection = Array.isArray(topic.key_points) && topic.key_points.length > 0
         ? `\n核心要点：${JSON.stringify(topic.key_points)}` : '';
       const randomSeed = Math.random().toString(36).slice(2, 8);
-      const quizPrompt = `根据以下培训内容，生成20道单选题，JSON格式返回（随机种子:${randomSeed}）：
+      // 用 username + seed 双重保证多人同时考试题目不同
+      const quizPrompt = `根据以下培训内容，为员工[${username}]生成20道单选题，JSON格式返回（随机种子:${randomSeed}）：
 {"questions":[{"q":"题目","options":["选项A","选项B","选项C","选项D"],"answer":2,"explanation":"解析"}]}
 重要要求：
 1. answer 为正确选项的 index（0-3），每道题的正确答案位置必须随机分布，不能总是0或固定位置。

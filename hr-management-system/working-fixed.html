@@ -12986,6 +12986,13 @@
                                 <div class="ui-file-hint" style="margin-top: 4px;">可选，用于文件版本管理</div>
                             </div>
 
+                            <!-- 视频专属：内容摘要（供AI出题使用） -->
+                            <div id="knowledge-upload-video-summary-box" class="ui-form-group" style="display:none;">
+                                <label class="ui-label">视频内容摘要 <span class="req">*</span></label>
+                                <textarea id="knowledge-upload-video-summary" rows="5" placeholder="请描述视频的核心知识点，例如：&#10;1. 炒锅开档步骤：先煎虾汤，再煎浓汤…&#10;2. 注意事项：油温控制在…&#10;（此摘要将作为AI出题的依据）" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;padding:10px;font-size:13px;resize:vertical;min-height:100px;box-sizing:border-box;"></textarea>
+                                <div class="ui-file-hint" style="margin-top:4px;">⚠️ 视频无法自动提取文字，此摘要是AI出题的唯一依据，请填写完整</div>
+                            </div>
+
                             <div class="ui-form-group">
                                 <label class="ui-label">分发范围 <span class="req">*</span></label>
                                 <select id="knowledge-upload-audience-type" onchange="syncKnowledgeUploadFields()">
@@ -20766,15 +20773,15 @@ th { background: #f5f5f5; font-weight: 700; }
 
         // 服务端加载的角色模块配置（登录后从API获取）
         let _serverRoleModules = null;
-        // 8个管理模块：员工管理/营业日报/待审批/请款/知识库/奖惩管理/分析报表/智能助手
+        // 知识库模块仅 admin 可见（用于上传培训资料），其他角色一律不显示
         const _defaultRoleModules = {
-            [ROLES.EMPLOYEE]:           ['profile', 'attendance', 'exam', 'points', 'knowledge', 'kitchen', 'training'],
-            [ROLES.STORE_MANAGER]:      ['profile', 'attendance', 'exam', 'points', 'employees', 'daily-report', 'approvals', 'payment', 'knowledge', 'rewards', 'reports', 'agents', 'kitchen', 'training'],
-            [ROLES.PRODUCTION_MANAGER]: ['profile', 'attendance', 'exam', 'points', 'knowledge', 'rewards', 'forecast', 'kitchen', 'training'],
-            [ROLES.HQ_MANAGER]:         ['profile', 'attendance', 'exam', 'points', 'employees', 'daily-report', 'approvals', 'payment', 'knowledge', 'rewards', 'reports', 'kitchen', 'training'],
-            [ROLES.HR_MANAGER]:         ['profile', 'attendance', 'exam', 'points', 'employees', 'approvals', 'payment', 'knowledge', 'rewards', 'reports', 'training'],
-            [ROLES.FRONT_MANAGER]:      ['profile', 'attendance', 'exam', 'points', 'daily-report', 'approvals', 'knowledge', 'training'],
-            [ROLES.CASHIER]:            ['profile', 'attendance', 'exam', 'points', 'payment', 'knowledge', 'training']
+            [ROLES.EMPLOYEE]:           ['profile', 'attendance', 'exam', 'points', 'kitchen', 'training'],
+            [ROLES.STORE_MANAGER]:      ['profile', 'attendance', 'exam', 'points', 'employees', 'daily-report', 'approvals', 'payment', 'rewards', 'reports', 'agents', 'kitchen', 'training'],
+            [ROLES.PRODUCTION_MANAGER]: ['profile', 'attendance', 'exam', 'points', 'rewards', 'forecast', 'kitchen', 'training'],
+            [ROLES.HQ_MANAGER]:         ['profile', 'attendance', 'exam', 'points', 'employees', 'daily-report', 'approvals', 'payment', 'rewards', 'reports', 'kitchen', 'training'],
+            [ROLES.HR_MANAGER]:         ['profile', 'attendance', 'exam', 'points', 'employees', 'approvals', 'payment', 'rewards', 'reports', 'training'],
+            [ROLES.FRONT_MANAGER]:      ['profile', 'attendance', 'exam', 'points', 'daily-report', 'approvals', 'training'],
+            [ROLES.CASHIER]:            ['profile', 'attendance', 'exam', 'points', 'payment', 'training']
         };
         async function loadRoleModulesFromServer() {
             try {
@@ -20798,6 +20805,11 @@ th { background: #f5f5f5; font-weight: 700; }
             const page = String(pageName || '').trim();
             if (!currentUser && page !== 'profile') return false;
             if (hrmsIsAlwaysAllowedPage(page)) return true;
+            // 知识库仅 admin 可访问（用于上传培训资料，其他角色不可见）
+            if (page === 'knowledge') {
+                const r = String(role == null ? currentUser?.role : role || '').trim();
+                return r === ROLES.ADMIN;
+            }
             if (page === 'users' || page === 'stores' || page === 'roles' || page === 'settings') {
                 return hrmsIsRoleAdmin(role == null ? currentUser?.role : role);
             }
@@ -20821,12 +20833,12 @@ th { background: #f5f5f5; font-weight: 700; }
             const r = String(role || '').trim();
             if (r === ROLES.ADMIN) return ['profile', 'growth', 'reports', 'agent-tasks'];
             if (r === ROLES.STORE_MANAGER) return ['profile', 'attendance', 'payment', 'approvals'];
-            if (r === ROLES.PRODUCTION_MANAGER) return ['profile', 'attendance', 'kitchen', 'knowledge'];
+            if (r === ROLES.PRODUCTION_MANAGER) return ['profile', 'attendance', 'kitchen', 'training'];
             if (r === ROLES.HQ_MANAGER) return ['profile', 'approvals', 'growth', 'reports'];
             if (r === ROLES.HR_MANAGER) return ['profile', 'employees', 'approvals', 'reports'];
             if (r === ROLES.CASHIER) return ['profile', 'attendance', 'payment', 'exam'];
             if (r === ROLES.FRONT_MANAGER) return ['profile', 'daily-report', 'attendance', 'exam'];
-            return ['profile', 'attendance', 'kitchen', 'knowledge'];
+            return ['profile', 'attendance', 'kitchen', 'training'];
         }
 
         function getHomePageName() {
@@ -32081,6 +32093,10 @@ ${knowledgeContent.slice(0, 30000)}`;
                 tagsEl.textContent = tags.length ? tags.join(' / ') : '请选择投喂Agent后自动带出标签';
             }
 
+            // 视频摘要框仅视频类型显示
+            const videoSummaryBox = document.getElementById('knowledge-upload-video-summary-box');
+            if (videoSummaryBox) videoSummaryBox.style.display = type === 'video' ? '' : 'none';
+
             const hint = document.getElementById('knowledge-upload-file-hint');
             const fileEl = document.getElementById('knowledge-upload-file');
             if (hint) {
@@ -32255,6 +32271,12 @@ ${knowledgeContent.slice(0, 30000)}`;
                 showNotification('请选择文件', 'warning');
                 return;
             }
+            // 视频类型必须填写内容摘要（供AI出题使用）
+            const videoSummary = type === 'video' ? (document.getElementById('knowledge-upload-video-summary')?.value || '').trim() : '';
+            if (type === 'video' && !videoSummary) {
+                showNotification('上传视频时必须填写"视频内容摘要"，这是AI出题的依据', 'warning');
+                return;
+            }
             if (!['all', 'store', 'position'].includes(audType)) {
                 showNotification('请选择分发范围', 'warning');
                 return;
@@ -32408,6 +32430,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                             scope: kbScope,
                             version: version || undefined,
                             audienceType: audience.type,
+                            ...(videoSummary ? { videoSummary } : {}),
                             ...(audience.type === 'store' && audience.stores?.length ? { audienceStores: audience.stores } : {}),
                             ...(audience.type === 'position' && audience.positions?.length ? { audiencePositions: audience.positions } : {})
                         });
@@ -32439,6 +32462,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                             fd.append('audiencePositions', JSON.stringify(audience.positions || []));
                             if (audience.position) fd.append('audiencePosition', String(audience.position));
                         }
+                        if (videoSummary) fd.append('videoSummary', videoSummary);
                         fd.append('file', file, file.name);
                         await HRMS_API.uploadKnowledge(fd);
 
@@ -32471,6 +32495,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                         fd.append('audiencePositions', JSON.stringify(audience.positions || []));
                         if (audience.position) fd.append('audiencePosition', String(audience.position));
                     }
+                    if (videoSummary) fd.append('videoSummary', videoSummary);
                     fd.append('file', file, file.name);
 
                     await HRMS_API.uploadKnowledge(fd);

@@ -16110,6 +16110,7 @@ app.post('/api/knowledge/direct', authRequired, async (req, res) => {
   const filePath = String(req.body?.filePath || '').trim();
   const size = Number(req.body?.size || 0);
   const version = String(req.body?.version || '').trim() || null;
+  const videoSummary = fileType === 'video' ? String(req.body?.videoSummary || '').trim() : '';
 
   if (!title) return res.status(400).json({ error: 'missing_title' });
   if (!category) return res.status(400).json({ error: 'missing_category' });
@@ -16123,7 +16124,7 @@ app.post('/api/knowledge/direct', authRequired, async (req, res) => {
       `insert into knowledge_base (title, content, category, tags, file_path, file_type, file_size, access_roles, access_departments, created_by, scope, version, audience)
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)
        returning id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience`,
-      [title, '', category || null, tags, filePath, fileType || null, size || null, null, null, createdBy, kbScope, version, audienceObj]
+      [title, videoSummary, category || null, tags, filePath, fileType || null, size || null, null, null, createdBy, kbScope, version, audienceObj]
     );
     return res.json({ item: r.rows?.[0] || null });
   } catch (e) {
@@ -16144,6 +16145,8 @@ app.post('/api/knowledge', authRequired, knowledgeUpload.single('file'), async (
   const fileType = String(req.body?.type || '').trim() || String(req.file?.mimetype || '').trim();
   const size = Number(req.file?.size || 0);
   const version = String(req.body?.version || '').trim() || null;
+  // 视频类型：使用管理员填写的内容摘要作为 content（供AI出题）
+  const videoSummary = fileType === 'video' ? String(req.body?.videoSummary || '').trim() : '';
   if (!title) return res.status(400).json({ error: 'missing_title' });
   if (!category) return res.status(400).json({ error: 'missing_category' });
   if (!req.file) return res.status(400).json({ error: 'missing_file' });
@@ -16161,7 +16164,7 @@ app.post('/api/knowledge', authRequired, knowledgeUpload.single('file'), async (
       `insert into knowledge_base (title, content, category, tags, file_path, file_type, file_size, access_roles, access_departments, created_by, scope, version, audience)
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)
        returning id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience`,
-      [title, '', category || null, tags, filePath, fileType || null, size || null, null, null, createdBy, kbScope, version, audienceObj]
+      [title, videoSummary, category || null, tags, filePath, fileType || null, size || null, null, null, createdBy, kbScope, version, audienceObj]
     );
     inserted = r.rows?.[0] || null;
   } catch (e) {
