@@ -881,13 +881,13 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       );
       const requirePractice = assignmentRes.rows[0]?.require_practice ?? true; // 默认需要实操
 
-      // 计算得分
-      let score = 0;
+      // 计算得分（百分制）
+      let correctCount = 0;
       const results = questions.map((q, i) => {
         const userAnswer = answers[i];
         const correct = q.answer;
         const isCorrect = userAnswer === correct;
-        if (isCorrect) score++;
+        if (isCorrect) correctCount++;
         return {
           q: q.q,
           options: q.options,
@@ -898,7 +898,8 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
         };
       });
 
-      const passed = score >= Math.ceil(questions.length * 0.9); // 90% 即通过
+      const score = Math.round(correctCount / questions.length * 100); // 0-100分
+      const passed = score >= 90; // 90分即通过
 
       // 通过且不需要实操 → 直接 certified；通过且需要实操 → practice；未通过 → 留在 quiz
       let nextStatus = 'quiz';

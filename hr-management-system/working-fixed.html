@@ -13630,7 +13630,7 @@
                                 <span id="training-learn-title" style="font-size:15px;font-weight:700;color:#fff;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
                             </div>
                             <!-- 培训内容区 -->
-                            <div id="training-content-area" style="background:rgba(0,0,0,0.25);border-radius:14px;padding:16px;height:calc(100vh - 300px);min-height:240px;max-height:500px;overflow-y:auto;margin-bottom:14px;-webkit-overflow-scrolling:touch;">
+                            <div id="training-content-area" style="background:rgba(0,0,0,0.3);border-radius:16px;padding:20px 18px;height:calc(100vh - 230px);min-height:300px;overflow-y:auto;margin-bottom:14px;-webkit-overflow-scrolling:touch;">
                                 <div id="training-content-articles"></div>
                             </div>
                             <!-- 开始测验按钮 -->
@@ -24784,7 +24784,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:${canRevoke ? '10px' : '0'};">
                             📚 ${escapeHtml(a.title)} &nbsp;·&nbsp; ${escapeHtml(a.position||'')}
                             &nbsp;·&nbsp; 截止 ${a.due_date ? a.due_date.slice(0,10) : '无期限'}
-                            ${a.quiz_score !== null ? ' &nbsp;·&nbsp; 测验 '+a.quiz_score+'/20' : ''}
+                            ${a.quiz_score !== null ? ' &nbsp;·&nbsp; 测验 '+a.quiz_score+'分' : ''}
                         </div>
                         ${revokeBtn}
                     </div>`;
@@ -25224,23 +25224,109 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     <div>暂无培训资料</div>
                 </div>`;
             } else {
+                // Strip KB article metadata header (title repeat, 创建时间, 最后更新 lines at top)
+                function stripKbMetadata(content, articleTitle) {
+                    if (!content) return '';
+                    const lines = content.split('\n');
+                    let skipUntil = 0;
+                    for (let i = 0; i < Math.min(lines.length, 8); i++) {
+                        const l = lines[i].trim();
+                        if (!l) continue;
+                        // Skip repeated title line
+                        if (articleTitle && l === articleTitle.trim()) { skipUntil = i + 1; continue; }
+                        // Skip metadata lines
+                        if (/^(创建时间|最后更新)[：:]\s/.test(l) || /^\d{4}-\d{2}-\d{2}/.test(l)) { skipUntil = i + 1; continue; }
+                    }
+                    // Skip trailing blank lines after metadata
+                    let start = skipUntil;
+                    while (start < lines.length && !lines[start].trim()) start++;
+                    return lines.slice(start).join('\n');
+                }
+
+                // Detect if a line is a "heading" that starts a new section
+                function isHeadingLine(line) {
+                    if (!line || line.length > 40) return false;
+                    if (/^[【★▶◆■◉]/.test(line) || /[】]$/.test(line)) return true;
+                    if ((line.endsWith('：') || line.endsWith(':')) && line.length <= 32) return true;
+                    if (/^(第[一二三四五六七八九十\d]+[章节条点]|[一二三四五六七八九十]+、)/.test(line)) return true;
+                    if (/^SOP|SOP$|规范$|流程$|要求$|标准$|原则$/.test(line)) return true;
+                    return false;
+                }
+
+                // Render a single content line (non-heading)
+                function renderLine(line) {
+                    if (!line.trim()) return '';
+                    const t = line.trim();
+                    // Numbered: 1. 1、（1）
+                    if (/^[\d]+[.、．]\s/.test(t) || /^[（(][\d]+[）)]\s?/.test(t)) {
+                        const numMatch = t.match(/^([（(]?[\d]+[.、．）)])\s*/);
+                        const num = numMatch ? numMatch[1] : '';
+                        const rest = t.slice(numMatch ? numMatch[0].length : 0);
+                        return `<div style="display:flex;gap:10px;margin:10px 0;align-items:flex-start;">
+                            <span style="color:#a78bfa;font-weight:700;font-size:14px;flex-shrink:0;min-width:22px;padding-top:1px;">${escapeHtml(num)}</span>
+                            <span style="color:rgba(255,255,255,0.88);font-size:14px;line-height:1.8;flex:1;word-break:break-word;">${escapeHtml(rest)}</span>
+                        </div>`;
+                    }
+                    // Bullet: - · • ✓ ✗ →
+                    if (/^[-·•✓✗→]\s/.test(t)) {
+                        return `<div style="display:flex;gap:10px;margin:8px 0;align-items:flex-start;padding-left:4px;">
+                            <span style="color:#34d399;font-size:13px;flex-shrink:0;margin-top:3px;">▸</span>
+                            <span style="color:rgba(255,255,255,0.82);font-size:14px;line-height:1.8;flex:1;word-break:break-word;">${escapeHtml(t.slice(2))}</span>
+                        </div>`;
+                    }
+                    // Highlight lines with key emphasis words
+                    if (/注意|重要|禁止|必须|严禁/.test(t)) {
+                        return `<div style="margin:10px 0;padding:10px 12px;background:rgba(239,68,68,0.08);border-left:2px solid rgba(239,68,68,0.5);border-radius:0 8px 8px 0;color:rgba(255,200,200,0.9);font-size:14px;line-height:1.8;word-break:break-word;">${escapeHtml(t)}</div>`;
+                    }
+                    // Normal line
+                    return `<div style="color:rgba(255,255,255,0.82);font-size:14px;line-height:1.85;margin:8px 0;word-break:break-word;">${escapeHtml(t)}</div>`;
+                }
+
                 function renderArticleContent(text) {
-                    return text.split(/\n{2,}/).map(para => {
-                        const p = para.trim();
-                        if (!p) return '';
-                        // Detect heading lines (short lines ending with colon, or starting with number+dot)
-                        const isHeading = /^[\d一二三四五六七八九十]+[.、．]\s/.test(p) || (/[:：]$/.test(p) && p.length < 30);
-                        if (isHeading) {
-                            return `<div style="font-size:15px;font-weight:700;color:#e2e8f0;margin:18px 0 8px;letter-spacing:.3px;">${escapeHtml(p)}</div>`;
+                    const lines = text.split('\n');
+                    // Group lines into sections: [{heading, lines[]}]
+                    const sections = [];
+                    let cur = { heading: null, lines: [] };
+                    for (const raw of lines) {
+                        const line = raw.trim();
+                        if (!line) continue;
+                        if (isHeadingLine(line)) {
+                            if (cur.heading !== null || cur.lines.length > 0) sections.push(cur);
+                            cur = { heading: line, lines: [] };
+                        } else {
+                            cur.lines.push(raw);
                         }
-                        return `<p style="color:rgba(255,255,255,0.85);font-size:15px;line-height:1.9;margin:0 0 14px;word-break:break-word;">${escapeHtml(p).replace(/\n/g,'<br>')}</p>`;
+                    }
+                    if (cur.heading !== null || cur.lines.length > 0) sections.push(cur);
+
+                    // If no headings detected at all, render as plain lines with spacing
+                    if (sections.length === 1 && !sections[0].heading) {
+                        return sections[0].lines.map(renderLine).join('');
+                    }
+
+                    // Render as section cards
+                    const colors = [
+                        { bg: 'rgba(99,102,241,0.08)', border: 'rgba(99,102,241,0.35)', head: '#a5b4fc' },
+                        { bg: 'rgba(245,158,11,0.07)', border: 'rgba(245,158,11,0.35)', head: '#fbbf24' },
+                        { bg: 'rgba(16,185,129,0.07)', border: 'rgba(16,185,129,0.3)',  head: '#6ee7b7' },
+                        { bg: 'rgba(236,72,153,0.07)', border: 'rgba(236,72,153,0.3)',  head: '#f9a8d4' },
+                        { bg: 'rgba(59,130,246,0.08)', border: 'rgba(59,130,246,0.35)', head: '#93c5fd' },
+                    ];
+                    return sections.map((sec, si) => {
+                        const c = colors[si % colors.length];
+                        const headHtml = sec.heading
+                            ? `<div style="font-size:14px;font-weight:700;color:${c.head};margin-bottom:${sec.lines.length ? '12px' : '0'};letter-spacing:.3px;">${escapeHtml(sec.heading)}</div>`
+                            : '';
+                        const bodyHtml = sec.lines.map(renderLine).join('');
+                        return `<div style="background:${c.bg};border:1px solid ${c.border};border-radius:14px;padding:14px 16px;margin-bottom:12px;">${headHtml}${bodyHtml}</div>`;
                     }).join('');
                 }
+
                 articlesDiv.innerHTML = articles.map((a, idx) => `
                     <div style="margin-bottom:${idx < articles.length - 1 ? '24px' : '0'};">
-                        ${articles.length > 1 ? `<div style="font-size:14px;font-weight:700;color:#fbbf24;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid rgba(251,191,36,0.2);letter-spacing:.5px;">📖 ${escapeHtml(a.title)}</div>` : ''}
-                        <div>${renderArticleContent(a.content)}</div>
-                        ${idx < articles.length - 1 ? `<div style="border-top:1px solid rgba(255,255,255,0.08);margin-top:24px;"></div>` : ''}
+                        ${articles.length > 1 ? `<div style="font-size:14px;font-weight:700;color:#fbbf24;margin-bottom:12px;padding:10px 14px;background:rgba(251,191,36,0.07);border-radius:10px;letter-spacing:.5px;">📖 ${escapeHtml(a.title)}</div>` : ''}
+                        <div>${renderArticleContent(stripKbMetadata(a.content, a.title))}</div>
+                        ${idx < articles.length - 1 ? `<div style="border-top:1px solid rgba(255,255,255,0.06);margin-top:24px;"></div>` : ''}
                     </div>
                 `).join('');
             }
@@ -25359,6 +25445,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 });
                 const data = await resp.json();
                 if (data.success) {
+                    _trainingCurrentSession.quiz_score = data.score;
                     if (data.passed) {
                         _trainingCurrentSession.status = data.next_status;
                         if (data.next_status === 'certified') {
@@ -25366,9 +25453,9 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         } else {
                             showTrainingPracticeScreen();
                         }
+                        showNotification(`🎉 测验通过！得分 ${data.score}/100`, 'success');
                     } else {
-                        const need = Math.ceil(data.total * 0.9);
-                        showNotification(`测验未通过：答对 ${data.score}/${data.total}，需至少答对 ${need} 题（90%）`, 'warning');
+                        showNotification(`测验未通过：得分 ${data.score}/100，需达到90分`, 'warning');
                     }
                 } else {
                     showNotification(data.error || '提交失败', 'error');
