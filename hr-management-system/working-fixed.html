@@ -25379,25 +25379,19 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
 
                 // AI 解析作为主培训内容直接渲染（缓存后全员共用，无需查看原文件）
                 window.loadTrainingAiExplanation = async function(articleId, container) {
-                    // 加载中占位
-                    container.innerHTML = `
-                        <div style="text-align:center;padding:52px 0;color:rgba(255,255,255,0.4);">
-                            <div style="font-size:34px;margin-bottom:14px;opacity:0.7;">✨</div>
-                            <div style="font-size:13px;">AI 正在整理培训内容，请稍候…</div>
-                        </div>`;
+                    container.innerHTML = '<div style="text-align:center;padding:52px 0;color:rgba(255,255,255,0.4);"><div style="font-size:34px;margin-bottom:14px;opacity:0.7;">✨</div><div style="font-size:13px;">AI 正在整理培训内容，请稍候…</div></div>';
 
                     try {
-                        const resp = await fetch(\`/api/training/kb/\${encodeURIComponent(articleId)}/explanation\`, {
+                        const resp = await fetch('/api/training/kb/' + encodeURIComponent(articleId) + '/explanation', {
                             headers: { 'Authorization': 'Bearer ' + token }
                         });
                         const data = await resp.json();
 
                         if (data.success && data.explanation) {
                             const cacheBadge = data.cached
-                                ? \`<span style="font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(52,211,153,0.15);color:#6ee7b7;margin-left:6px;">已缓存</span>\`
-                                : \`<span style="font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(251,191,36,0.15);color:#fde68a;margin-left:6px;">✨ 新生成</span>\`;
+                                ? '<span style="font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(52,211,153,0.15);color:#6ee7b7;margin-left:6px;">已缓存</span>'
+                                : '<span style="font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(251,191,36,0.15);color:#fde68a;margin-left:6px;">✨ 新生成</span>';
 
-                            // Markdown 渲染：标题 / 列表 / 加粗
                             const html = data.explanation
                                 .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
                                 .replace(/^## (.+)$/gm,
@@ -25412,36 +25406,24 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                                     '<strong style="color:#fff;font-weight:600;">$1</strong>')
                                 .replace(/\n/g, '<br>');
 
-                            container.innerHTML = \`
-                                <div style="padding:0 0 28px;">
-                                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.08);">
-                                        <span style="font-size:22px;">✨</span>
-                                        <div>
-                                            <div style="font-size:13px;font-weight:700;color:#a5b4fc;">AI 培训解析\${cacheBadge}</div>
-                                            <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:3px;">由 AI 精心整理，通俗易懂，助你快速掌握</div>
-                                        </div>
-                                    </div>
-                                    <div style="font-size:14px;color:rgba(255,255,255,0.82);line-height:1.95;">\${html}</div>
-                                </div>\`;
+                            container.innerHTML =
+                                '<div style="padding:0 0 28px;">' +
+                                    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.08);">' +
+                                        '<span style="font-size:22px;">✨</span>' +
+                                        '<div>' +
+                                            '<div style="font-size:13px;font-weight:700;color:#a5b4fc;">AI 培训解析' + cacheBadge + '</div>' +
+                                            '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:3px;">由 AI 精心整理，通俗易懂，助你快速掌握</div>' +
+                                        '</div>' +
+                                    '</div>' +
+                                    '<div style="font-size:14px;color:rgba(255,255,255,0.82);line-height:1.95;">' + html + '</div>' +
+                                '</div>';
                         } else if (data.error === 'no_content') {
-                            container.innerHTML = \`
-                                <div style="text-align:center;padding:44px 0;">
-                                    <div style="font-size:32px;margin-bottom:12px;">📄</div>
-                                    <div style="color:rgba(255,255,255,0.45);font-size:13px;line-height:1.7;">该培训资料暂无文字内容<br>管理员需填写「视频内容摘要」后方可生成解析</div>
-                                </div>\`;
+                            container.innerHTML = '<div style="text-align:center;padding:44px 0;"><div style="font-size:32px;margin-bottom:12px;">📄</div><div style="color:rgba(255,255,255,0.45);font-size:13px;line-height:1.7;">该培训资料暂无文字内容<br>管理员需填写「视频内容摘要」后方可生成解析</div></div>';
                         } else {
-                            container.innerHTML = \`
-                                <div style="text-align:center;padding:44px 0;">
-                                    <div style="font-size:32px;margin-bottom:12px;">⚠️</div>
-                                    <div style="color:rgba(255,255,255,0.45);font-size:13px;">\${escapeHtml(data.message || 'AI 解析生成失败，请稍后重试')}</div>
-                                </div>\`;
+                            container.innerHTML = '<div style="text-align:center;padding:44px 0;"><div style="font-size:32px;margin-bottom:12px;">⚠️</div><div style="color:rgba(255,255,255,0.45);font-size:13px;">' + escapeHtml(data.message || 'AI 解析生成失败，请稍后重试') + '</div></div>';
                         }
                     } catch (e) {
-                        container.innerHTML = \`
-                            <div style="text-align:center;padding:44px 0;">
-                                <div style="font-size:32px;margin-bottom:12px;">📡</div>
-                                <div style="color:rgba(255,255,255,0.45);font-size:13px;">网络错误，请检查连接后重试</div>
-                            </div>\`;
+                        container.innerHTML = '<div style="text-align:center;padding:44px 0;"><div style="font-size:32px;margin-bottom:12px;">📡</div><div style="color:rgba(255,255,255,0.45);font-size:13px;">网络错误，请检查连接后重试</div></div>';
                     }
                 };
 
