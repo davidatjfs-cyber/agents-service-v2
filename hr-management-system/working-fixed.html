@@ -10835,7 +10835,7 @@
                         <i>🧭</i> <span>Agent任务</span>
                     </a>
                 </div>
-                <div class="nav-item" data-page="exam">
+                <div class="nav-item" data-page="exam" style="display:none;">
                     <a href="#" class="nav-link" onclick="showPage('exam')">
                         <i>📝</i> <span>考试测评</span>
                         <span class="nav-badge" id="nav-badge-exam" style="display:none;">0</span>
@@ -13614,11 +13614,26 @@
                     <div id="training-employee-panel">
                         <!-- 培训首页 -->
                         <div id="training-home-screen">
-                            <div style="font-size:15px;font-weight:700;color:#fff;margin-bottom:14px;">我的培训任务</div>
-                            <div id="training-my-topics-list" style="display:grid;gap:12px;"></div>
-                            <div id="training-my-topics-empty" style="display:none;text-align:center;padding:48px 20px;color:rgba(255,255,255,0.4);">
-                                <div style="font-size:48px;margin-bottom:12px;">📋</div>
-                                <div>暂无培训任务<br><span style="font-size:12px;">管理员指派后将在此显示</span></div>
+                            <!-- 员工端tab切换 -->
+                            <div style="display:flex;gap:8px;margin-bottom:16px;">
+                                <button id="emp-tab-tasks" onclick="switchEmpTab('tasks')" style="flex:1;padding:10px;border-radius:12px;background:rgba(99,102,241,0.9);border:none;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">📋 我的培训</button>
+                                <button id="emp-tab-certs" onclick="switchEmpTab('certs')" style="flex:1;padding:10px;border-radius:12px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.7);font-size:14px;font-weight:600;cursor:pointer;">🏆 我的认证</button>
+                            </div>
+                            <!-- 我的培训任务 -->
+                            <div id="emp-tasks-panel">
+                                <div id="training-my-topics-list" style="display:grid;gap:12px;"></div>
+                                <div id="training-my-topics-empty" style="display:none;text-align:center;padding:48px 20px;color:rgba(255,255,255,0.4);">
+                                    <div style="font-size:48px;margin-bottom:12px;">📋</div>
+                                    <div>暂无培训任务<br><span style="font-size:12px;">管理员指派后将在此显示</span></div>
+                                </div>
+                            </div>
+                            <!-- 我的认证 -->
+                            <div id="emp-certs-panel" style="display:none;">
+                                <div id="emp-certs-list" style="display:grid;gap:12px;"></div>
+                                <div id="emp-certs-empty" style="display:none;text-align:center;padding:48px 20px;color:rgba(255,255,255,0.4);">
+                                    <div style="font-size:48px;margin-bottom:12px;">🏆</div>
+                                    <div>暂无认证记录<br><span style="font-size:12px;">通过培训测验后将在此显示</span></div>
+                                </div>
                             </div>
                         </div>
 
@@ -25103,7 +25118,67 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             }
         }
 
-        // 员工端
+        // 员工端 tab 切换
+        function switchEmpTab(tab) {
+            const tasksBtn = document.getElementById('emp-tab-tasks');
+            const certsBtn = document.getElementById('emp-tab-certs');
+            const tasksPanel = document.getElementById('emp-tasks-panel');
+            const certsPanel = document.getElementById('emp-certs-panel');
+            const active = 'flex:1;padding:10px;border-radius:12px;background:rgba(99,102,241,0.9);border:none;color:#fff;font-size:14px;font-weight:700;cursor:pointer;';
+            const inactive = 'flex:1;padding:10px;border-radius:12px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.7);font-size:14px;font-weight:600;cursor:pointer;';
+            if (tab === 'tasks') {
+                if (tasksBtn) tasksBtn.style.cssText = active;
+                if (certsBtn) certsBtn.style.cssText = inactive;
+                if (tasksPanel) tasksPanel.style.display = '';
+                if (certsPanel) certsPanel.style.display = 'none';
+                loadMyTrainingTopics();
+            } else {
+                if (tasksBtn) tasksBtn.style.cssText = inactive;
+                if (certsBtn) certsBtn.style.cssText = active;
+                if (tasksPanel) tasksPanel.style.display = 'none';
+                if (certsPanel) certsPanel.style.display = '';
+                loadMyCertifications();
+            }
+        }
+
+        async function loadMyCertifications() {
+            try {
+                const resp = await fetch('/api/training/my-certifications', {
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('hrms_token') }
+                });
+                const data = await resp.json();
+                const list = document.getElementById('emp-certs-list');
+                const empty = document.getElementById('emp-certs-empty');
+                if (!list) return;
+                if (!data.success || !data.certifications?.length) {
+                    list.innerHTML = '';
+                    if (empty) empty.style.display = '';
+                    return;
+                }
+                if (empty) empty.style.display = 'none';
+                list.innerHTML = data.certifications.map(c => {
+                    const certDate = c.certified_at ? c.certified_at.slice(0, 10) : '—';
+                    const score = c.quiz_score !== null && c.quiz_score !== undefined ? c.quiz_score + '分' : '—';
+                    const posArr = (c.position || '').split(',').map(s => s.trim()).filter(Boolean);
+                    const posTags = posArr.map(p => `<span style="font-size:11px;padding:2px 8px;border-radius:8px;background:rgba(99,102,241,0.2);color:#a5b4fc;">${escapeHtml(p)}</span>`).join('');
+                    return `
+                    <div style="background:rgba(52,211,153,0.07);border:1px solid rgba(52,211,153,0.25);border-radius:14px;padding:16px;">
+                        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;">
+                            <div style="font-size:15px;font-weight:700;color:#fff;flex:1;margin-right:8px;">${escapeHtml(c.title)}</div>
+                            <span style="font-size:11px;padding:3px 10px;border-radius:10px;background:rgba(52,211,153,0.15);color:#34d399;white-space:nowrap;">✓ 已认证</span>
+                        </div>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">${posTags}</div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <div style="font-size:12px;color:rgba(255,255,255,0.5);">认证日期：${certDate}</div>
+                            <div style="font-size:13px;font-weight:700;color:#fbbf24;">测验 ${score}</div>
+                        </div>
+                    </div>`;
+                }).join('');
+            } catch (e) {
+                showNotification('加载认证记录失败', 'error');
+            }
+        }
+
         function backToTrainingHome() {
             document.getElementById('training-home-screen').style.display = '';
             document.getElementById('training-learn-screen').style.display = 'none';
@@ -25111,7 +25186,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             document.getElementById('training-practice-screen').style.display = 'none';
             const cs = document.getElementById('training-certified-screen');
             if (cs) cs.style.display = 'none';
-            loadMyTrainingTopics();
+            switchEmpTab('tasks');
         }
 
         async function loadMyTrainingTopics() {

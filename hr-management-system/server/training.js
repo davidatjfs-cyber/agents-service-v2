@@ -667,6 +667,27 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
     }
   });
 
+  // GET /api/training/my-certifications - 我的认证记录
+  app.get('/api/training/my-certifications', authMiddleware, async (req, res) => {
+    try {
+      const username = req.user?.username;
+      if (!username) return res.status(401).json({ error: '未登录' });
+      const result = await pool().query(`
+        SELECT s.id, t.id AS topic_id, t.title, t.position,
+               s.quiz_score, s.certified_at, s.quiz_passed_at,
+               a.require_practice
+        FROM training_sessions s
+        JOIN training_topics t ON t.id = s.topic_id
+        LEFT JOIN training_assignments a ON a.employee_username = s.employee_username AND a.topic_id = s.topic_id
+        WHERE s.employee_username = $1 AND s.status = 'certified'
+        ORDER BY s.certified_at DESC NULLS LAST
+      `, [username]);
+      res.json({ success: true, certifications: result.rows });
+    } catch (e) {
+      res.json({ success: false, error: e?.message });
+    }
+  });
+
   // POST /api/training/sessions/:id/chat - AI 对话
   app.post('/api/training/sessions/:id/chat', authMiddleware, async (req, res) => {
     try {
