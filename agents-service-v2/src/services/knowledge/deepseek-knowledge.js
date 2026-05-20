@@ -1,5 +1,5 @@
 /**
- * Wiki / MemPalace 检索排序：优先 DeepSeek，失败或无 Key 时用本地 Ollama，再失败则回退由调用方本地启发式顺序。
+ * Wiki / MemPalace 检索排序：优先 Qwen（callLLM 含自动降级链），失败后用 DeepSeek，再失败用 Ollama。
  */
 import { callDeepSeek, callOllamaLLM, callLLM } from '../llm-provider.js';
 import { logger } from '../../utils/logger.js';
@@ -69,8 +69,23 @@ export async function rankKnowledgeCandidatesWithLlm(p) {
     JSON.stringify(candidates.map((c) => ({ i: c.i, fn: c.filename || '', preview: String(c.preview || '').slice(0, 600) })))
   ].join('\n');
 
-  const hasDsKey = !!String(process.env.DEEPSEEK_API_KEY || '').trim();
+  // 优先 Qwen（callLLM 含 Qwen → DeepSeek 自动降级链）
+  try {
+    const apiRes = await callLLM(buildRankMessages(sys, userBody), {
+      temperature: 0.1,
+      max_tokens: 512,
+      skipCache: true
+    });
+    if (apiRes?.ok && apiRes.content) {
+      const indices = normalizeIndices(apiRes.content, candidates.length, limit);
+      return { indices, provider: 'api' };
+    }
+  } catch (e) {
+    logger.warn({ err: e?.message }, 'knowledge-rank: Qwen/API 失败');
+  }
 
+  // 降级：DeepSeek 直连
+  const hasDsKey = !!String(process.env.DEEPSEEK_API_KEY || '').trim();
   if (hasDsKey) {
     try {
       const raw = await callDeepSeek(userBody, {
@@ -99,20 +114,6 @@ export async function rankKnowledgeCandidatesWithLlm(p) {
     logger.warn({ err: ores?.error }, 'knowledge-rank: Ollama 未返回有效内容');
   } catch (e) {
     logger.warn({ err: e?.message }, 'knowledge-rank: Ollama 调用异常');
-  }
-
-  try {
-    const apiRes = await callLLM(buildRankMessages(sys, userBody), {
-      temperature: 0.1,
-      max_tokens: 512,
-      skipCache: true
-    });
-    if (apiRes?.ok && apiRes.content) {
-      const indices = normalizeIndices(apiRes.content, candidates.length, limit);
-      return { indices, provider: 'api' };
-    }
-  } catch (e) {
-    logger.warn({ err: e?.message }, 'knowledge-rank: API fallback failed');
   }
 
   return { indices: [], provider: 'none' };

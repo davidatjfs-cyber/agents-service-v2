@@ -13644,9 +13644,11 @@
                                 <button onclick="backToTrainingHome()" style="padding:8px 14px;border-radius:20px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.8);font-size:13px;cursor:pointer;">← 返回</button>
                                 <span id="training-learn-title" style="font-size:15px;font-weight:700;color:#fff;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
                             </div>
+                            <!-- 文章切换器（多篇时显示） -->
+                            <div id="training-article-tabs" style="display:none;display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;"></div>
                             <!-- 培训内容区 -->
-                            <div id="training-content-area" style="background:rgba(0,0,0,0.3);border-radius:16px;padding:20px 18px;height:calc(100vh - 230px);min-height:300px;overflow-y:auto;margin-bottom:14px;-webkit-overflow-scrolling:touch;">
-                                <div id="training-content-articles"></div>
+                            <div id="training-content-area" style="background:rgba(0,0,0,0.15);border-radius:16px;height:calc(100vh - 250px);min-height:320px;overflow:hidden;margin-bottom:14px;position:relative;">
+                                <div id="training-content-articles" style="height:100%;overflow-y:auto;"></div>
                             </div>
                             <!-- 开始测验按钮 -->
                             <button id="training-start-quiz-btn" onclick="startTrainingQuiz()" style="width:100%;padding:14px;border-radius:12px;background:linear-gradient(135deg,rgba(234,179,8,0.9),rgba(245,158,11,0.9));border:none;color:#fff;font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.5px;">✍️ 完成阅读，开始测验</button>
@@ -25013,9 +25015,11 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     const assignerLine = d.assigner_name ? `<span style="font-size:11px;color:rgba(251,191,36,0.7);margin-left:6px;">派发人：${escapeHtml(d.assigner_name)}</span>` : '';
                     const membersHtml = members.length ? members.map(m => {
                         const st = m.status || 'not_started';
-                        const label = stMap[st] || st;
-                        const bg = stBg[st] || 'rgba(71,85,105,0.5)';
-                        const color = stColor[st] || '#94a3b8';
+                        // If status=quiz but there's already a failed score, show "需补考" instead of "待测验"
+                        const needsRetake = st === 'quiz' && m.quiz_score !== null && m.quiz_score !== undefined;
+                        const label = needsRetake ? '需补考' : (stMap[st] || st);
+                        const bg = needsRetake ? 'rgba(239,68,68,0.18)' : (stBg[st] || 'rgba(71,85,105,0.5)');
+                        const color = needsRetake ? '#fca5a5' : (stColor[st] || '#94a3b8');
                         const scoreNote = (m.quiz_score !== null && m.quiz_score !== undefined) ? ` · ${m.quiz_score}分` : '';
                         return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px;border-bottom:1px solid rgba(255,255,255,0.05);">
                             <span style="font-size:13px;color:#e2e8f0;">${escapeHtml(m.name||m.username)}</span>
@@ -25280,6 +25284,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             }
         }
 
+        let _trainingCurrentArticleIdx = 0;
+
         function showTrainingLearnScreen() {
             document.getElementById('training-home-screen').style.display = 'none';
             document.getElementById('training-learn-screen').style.display = '';
@@ -25292,118 +25298,147 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
 
             const articlesDiv = document.getElementById('training-content-articles');
             const articles = _trainingCurrentKbArticles || [];
+            _trainingCurrentArticleIdx = 0;
+
+            const tabsDiv = document.getElementById('training-article-tabs');
 
             if (articles.length === 0) {
+                if (tabsDiv) tabsDiv.style.display = 'none';
                 articlesDiv.innerHTML = `<div style="text-align:center;padding:40px 0;color:rgba(255,255,255,0.45);">
                     <div style="font-size:36px;margin-bottom:10px;">📄</div>
                     <div>暂无培训资料</div>
                 </div>`;
             } else {
-                // Strip KB article metadata header (title repeat, 创建时间, 最后更新 lines at top)
-                function stripKbMetadata(content, articleTitle) {
-                    if (!content) return '';
-                    const lines = content.split('\n');
-                    let skipUntil = 0;
-                    for (let i = 0; i < Math.min(lines.length, 8); i++) {
-                        const l = lines[i].trim();
-                        if (!l) continue;
-                        // Skip repeated title line
-                        if (articleTitle && l === articleTitle.trim()) { skipUntil = i + 1; continue; }
-                        // Skip metadata lines
-                        if (/^(创建时间|最后更新)[：:]\s/.test(l) || /^\d{4}-\d{2}-\d{2}/.test(l)) { skipUntil = i + 1; continue; }
+                // Build article tabs if more than one article
+                if (tabsDiv) {
+                    if (articles.length > 1) {
+                        tabsDiv.style.display = 'flex';
+                        tabsDiv.innerHTML = articles.map((a, i) => `
+                            <button id="training-article-tab-${i}" onclick="showTrainingArticle(${i})"
+                                style="padding:6px 14px;border-radius:20px;border:1px solid rgba(255,255,255,0.18);
+                                       background:${i === 0 ? 'rgba(167,139,250,0.25)' : 'rgba(255,255,255,0.06)'};
+                                       color:${i === 0 ? '#c4b5fd' : 'rgba(255,255,255,0.6)'};
+                                       font-size:13px;cursor:pointer;white-space:nowrap;transition:all .2s;">
+                                📖 ${escapeHtml(a.title)}
+                            </button>`).join('');
+                    } else {
+                        tabsDiv.style.display = 'none';
                     }
-                    // Skip trailing blank lines after metadata
-                    let start = skipUntil;
-                    while (start < lines.length && !lines[start].trim()) start++;
-                    return lines.slice(start).join('\n');
                 }
 
-                // Detect if a line is a "heading" that starts a new section
-                function isHeadingLine(line) {
-                    if (!line || line.length > 40) return false;
-                    if (/^[【★▶◆■◉]/.test(line) || /[】]$/.test(line)) return true;
-                    if ((line.endsWith('：') || line.endsWith(':')) && line.length <= 32) return true;
-                    if (/^(第[一二三四五六七八九十\d]+[章节条点]|[一二三四五六七八九十]+、)/.test(line)) return true;
-                    if (/^SOP|SOP$|规范$|流程$|要求$|标准$|原则$/.test(line)) return true;
-                    return false;
-                }
+                const token = localStorage.getItem('hrms_token') || '';
 
-                // Render a single content line (non-heading)
-                function renderLine(line) {
-                    if (!line.trim()) return '';
-                    const t = line.trim();
-                    // Numbered: 1. 1、（1）
-                    if (/^[\d]+[.、．]\s/.test(t) || /^[（(][\d]+[）)]\s?/.test(t)) {
-                        const numMatch = t.match(/^([（(]?[\d]+[.、．）)])\s*/);
-                        const num = numMatch ? numMatch[1] : '';
-                        const rest = t.slice(numMatch ? numMatch[0].length : 0);
-                        return `<div style="display:flex;gap:10px;margin:10px 0;align-items:flex-start;">
-                            <span style="color:#a78bfa;font-weight:700;font-size:14px;flex-shrink:0;min-width:22px;padding-top:1px;">${escapeHtml(num)}</span>
-                            <span style="color:rgba(255,255,255,0.88);font-size:14px;line-height:1.8;flex:1;word-break:break-word;">${escapeHtml(rest)}</span>
-                        </div>`;
-                    }
-                    // Bullet: - · • ✓ ✗ →
-                    if (/^[-·•✓✗→]\s/.test(t)) {
-                        return `<div style="display:flex;gap:10px;margin:8px 0;align-items:flex-start;padding-left:4px;">
-                            <span style="color:#34d399;font-size:13px;flex-shrink:0;margin-top:3px;">▸</span>
-                            <span style="color:rgba(255,255,255,0.82);font-size:14px;line-height:1.8;flex:1;word-break:break-word;">${escapeHtml(t.slice(2))}</span>
-                        </div>`;
-                    }
-                    // Highlight lines with key emphasis words
-                    if (/注意|重要|禁止|必须|严禁/.test(t)) {
-                        return `<div style="margin:10px 0;padding:10px 12px;background:rgba(239,68,68,0.08);border-left:2px solid rgba(239,68,68,0.5);border-radius:0 8px 8px 0;color:rgba(255,200,200,0.9);font-size:14px;line-height:1.8;word-break:break-word;">${escapeHtml(t)}</div>`;
-                    }
-                    // Normal line
-                    return `<div style="color:rgba(255,255,255,0.82);font-size:14px;line-height:1.85;margin:8px 0;word-break:break-word;">${escapeHtml(t)}</div>`;
-                }
+                window.showTrainingArticle = async function(idx) {
+                    _trainingCurrentArticleIdx = idx;
+                    articles.forEach((_, i) => {
+                        const tab = document.getElementById(`training-article-tab-${i}`);
+                        if (!tab) return;
+                        tab.style.background = i === idx ? 'rgba(167,139,250,0.25)' : 'rgba(255,255,255,0.06)';
+                        tab.style.color = i === idx ? '#c4b5fd' : 'rgba(255,255,255,0.6)';
+                    });
+                    const a = articles[idx];
+                    articlesDiv.innerHTML = '';
+                    const ft = (a.file_type || '').toLowerCase();
 
-                function renderArticleContent(text) {
-                    const lines = text.split('\n');
-                    // Group lines into sections: [{heading, lines[]}]
-                    const sections = [];
-                    let cur = { heading: null, lines: [] };
-                    for (const raw of lines) {
-                        const line = raw.trim();
-                        if (!line) continue;
-                        if (isHeadingLine(line)) {
-                            if (cur.heading !== null || cur.lines.length > 0) sections.push(cur);
-                            cur = { heading: line, lines: [] };
-                        } else {
-                            cur.lines.push(raw);
+                    if (ft === 'video' && a.file_path) {
+                        // Video player
+                        articlesDiv.innerHTML = `
+                            <div style="width:100%;background:#000;border-radius:12px;overflow:hidden;">
+                                <video controls preload="metadata" playsinline
+                                    style="width:100%;max-height:60vh;display:block;"
+                                    src="/api/training/kb-file/${encodeURIComponent(a.id)}?token=${encodeURIComponent(token)}">
+                                    您的浏览器不支持视频播放
+                                </video>
+                            </div>`;
+                        return;
+                    }
+
+                    if (ft === 'pdf' && a.file_path) {
+                        const pdfUrl = `/api/training/kb-file/${encodeURIComponent(a.id)}`;
+                        const pdfUrlWithToken = `${pdfUrl}?token=${encodeURIComponent(token)}`;
+                        articlesDiv.innerHTML = `<div style="text-align:center;padding:30px 0;color:rgba(255,255,255,0.5);">📄 PDF 加载中…</div>`;
+                        try {
+                            const ok = await ensurePdfJsLoaded();
+                            if (!ok || typeof pdfjsLib === 'undefined') throw new Error('pdfjs not loaded');
+                            pdfjsLib.GlobalWorkerOptions.workerSrc = '/assets/vendor/pdfjs/pdf.worker.min.js';
+
+                            // First verify the file is accessible
+                            const testResp = await fetch(pdfUrl, { headers: { 'Authorization': `Bearer ${token}` } });
+                            if (!testResp.ok) throw new Error(`文件获取失败 HTTP ${testResp.status}`);
+                            const buf = await testResp.arrayBuffer();
+                            if (!buf || buf.byteLength < 10) throw new Error('文件为空或损坏');
+
+                            const pdfDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+                            const total = pdfDoc.numPages;
+                            let cur = 1;
+
+                            const canvas = document.createElement('canvas');
+                            canvas.style.cssText = 'width:100%;max-width:100%;display:block;background:#fff;border-radius:8px;';
+
+                            const pageInfo = document.createElement('div');
+                            pageInfo.style.cssText = 'color:rgba(255,255,255,0.6);font-size:13px;text-align:center;padding:6px 0;';
+
+                            const btnRow = document.createElement('div');
+                            btnRow.style.cssText = 'display:flex;gap:12px;justify-content:center;padding:12px 0 8px;';
+
+                            const mkBtn = (label) => {
+                                const b = document.createElement('button');
+                                b.textContent = label;
+                                b.style.cssText = 'padding:11px 32px;border-radius:22px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.1);color:#fff;font-size:14px;cursor:pointer;';
+                                return b;
+                            };
+                            const btnPrev = mkBtn('上一页');
+                            const btnNext = mkBtn('下一页');
+                            btnRow.appendChild(btnPrev);
+                            btnRow.appendChild(btnNext);
+
+                            const renderPage = async (n) => {
+                                cur = Math.max(1, Math.min(total, n));
+                                const page = await pdfDoc.getPage(cur);
+                                const dpr = Math.min(window.devicePixelRatio || 1, 2);
+                                const vp1 = page.getViewport({ scale: 1 });
+                                const w = Math.max(articlesDiv.clientWidth - 16, 280);
+                                const scale = (w / vp1.width) * dpr;
+                                const vp = page.getViewport({ scale });
+                                canvas.width = Math.floor(vp.width);
+                                canvas.height = Math.floor(vp.height);
+                                canvas.style.width = Math.floor(vp.width / dpr) + 'px';
+                                canvas.style.height = Math.floor(vp.height / dpr) + 'px';
+                                const ctx = canvas.getContext('2d');
+                                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                                await page.render({ canvasContext: ctx, viewport: vp }).promise;
+                                pageInfo.textContent = `第 ${cur} / ${total} 页`;
+                                btnPrev.disabled = cur <= 1;
+                                btnNext.disabled = cur >= total;
+                            };
+
+                            btnPrev.onclick = () => renderPage(cur - 1);
+                            btnNext.onclick = () => renderPage(cur + 1);
+
+                            articlesDiv.innerHTML = '';
+                            articlesDiv.appendChild(btnRow);
+                            articlesDiv.appendChild(canvas);
+                            articlesDiv.appendChild(pageInfo);
+                            await renderPage(1);
+                        } catch (e) {
+                            console.error('training pdf error', e);
+                            articlesDiv.innerHTML = `<div style="text-align:center;padding:24px 16px;">
+                                <div style="color:#f87171;font-size:12px;margin-bottom:12px;word-break:break-all;">⚠ ${escapeHtml(e?.message || String(e))}</div>
+                                <a href="${pdfUrlWithToken}" target="_blank"
+                                   style="display:inline-block;padding:12px 28px;background:#7c3aed;color:#fff;border-radius:22px;text-decoration:none;font-size:14px;font-weight:600;">
+                                   📄 在浏览器中打开 PDF
+                                </a>
+                            </div>`;
                         }
-                    }
-                    if (cur.heading !== null || cur.lines.length > 0) sections.push(cur);
-
-                    // If no headings detected at all, render as plain lines with spacing
-                    if (sections.length === 1 && !sections[0].heading) {
-                        return sections[0].lines.map(renderLine).join('');
+                        return;
                     }
 
-                    // Render as section cards
-                    const colors = [
-                        { bg: 'rgba(99,102,241,0.08)', border: 'rgba(99,102,241,0.35)', head: '#a5b4fc' },
-                        { bg: 'rgba(245,158,11,0.07)', border: 'rgba(245,158,11,0.35)', head: '#fbbf24' },
-                        { bg: 'rgba(16,185,129,0.07)', border: 'rgba(16,185,129,0.3)',  head: '#6ee7b7' },
-                        { bg: 'rgba(236,72,153,0.07)', border: 'rgba(236,72,153,0.3)',  head: '#f9a8d4' },
-                        { bg: 'rgba(59,130,246,0.08)', border: 'rgba(59,130,246,0.35)', head: '#93c5fd' },
-                    ];
-                    return sections.map((sec, si) => {
-                        const c = colors[si % colors.length];
-                        const headHtml = sec.heading
-                            ? `<div style="font-size:14px;font-weight:700;color:${c.head};margin-bottom:${sec.lines.length ? '12px' : '0'};letter-spacing:.3px;">${escapeHtml(sec.heading)}</div>`
-                            : '';
-                        const bodyHtml = sec.lines.map(renderLine).join('');
-                        return `<div style="background:${c.bg};border:1px solid ${c.border};border-radius:14px;padding:14px 16px;margin-bottom:12px;">${headHtml}${bodyHtml}</div>`;
-                    }).join('');
-                }
+                    // Plain text fallback
+                    const content = a.content || '';
+                    articlesDiv.innerHTML = `<div style="padding:16px;color:rgba(255,255,255,0.82);font-size:14px;line-height:1.85;white-space:pre-wrap;word-break:break-word;">${escapeHtml(content)}</div>`;
+                };
 
-                articlesDiv.innerHTML = articles.map((a, idx) => `
-                    <div style="margin-bottom:${idx < articles.length - 1 ? '24px' : '0'};">
-                        ${articles.length > 1 ? `<div style="font-size:14px;font-weight:700;color:#fbbf24;margin-bottom:12px;padding:10px 14px;background:rgba(251,191,36,0.07);border-radius:10px;letter-spacing:.5px;">📖 ${escapeHtml(a.title)}</div>` : ''}
-                        <div>${renderArticleContent(stripKbMetadata(a.content, a.title))}</div>
-                        ${idx < articles.length - 1 ? `<div style="border-top:1px solid rgba(255,255,255,0.06);margin-top:24px;"></div>` : ''}
-                    </div>
-                `).join('');
+                showTrainingArticle(0);
             }
 
             const area = document.getElementById('training-content-area');
@@ -25521,23 +25556,99 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 const data = await resp.json();
                 if (data.success) {
                     _trainingCurrentSession.quiz_score = data.score;
-                    if (data.passed) {
-                        _trainingCurrentSession.status = data.next_status;
-                        if (data.next_status === 'certified') {
-                            showTrainingCertifiedScreen();
-                        } else {
-                            showTrainingPracticeScreen();
-                        }
-                        showNotification(`🎉 测验通过！得分 ${data.score}/100`, 'success');
-                    } else {
-                        showNotification(`测验未通过：得分 ${data.score}/100，需达到90分`, 'warning');
-                    }
+                    showTrainingQuizResults(data);
+                    _trainingCurrentSession.quiz_questions = null; // cleared server-side after render
                 } else {
                     showNotification(data.error || '提交失败', 'error');
                 }
             } catch (e) {
                 showNotification('提交失败', 'error');
             }
+        }
+
+        function showTrainingQuizResults(data) {
+            const { score, passed, total, results } = data;
+            const quizBody = document.getElementById('training-quiz-questions');
+            if (!quizBody) return;
+            const submitBar = document.getElementById('training-quiz-submit-btn');
+            if (submitBar) submitBar.style.display = 'none';
+
+            const correctCount = results.filter(r => r.isCorrect).length;
+            const scoreColor = passed ? '#34d399' : '#f87171';
+            const scoreBg = passed ? 'rgba(52,211,153,0.1)' : 'rgba(248,113,113,0.1)';
+            const scoreBorder = passed ? 'rgba(52,211,153,0.3)' : 'rgba(248,113,113,0.3)';
+
+            const questionsHtml = results.map((r, i) => {
+                const optLetters = ['A','B','C','D'];
+                const optionsHtml = r.options.map((opt, oi) => {
+                    let bg = 'rgba(255,255,255,0.04)';
+                    let border = 'rgba(255,255,255,0.1)';
+                    let color = 'rgba(255,255,255,0.75)';
+                    let badge = '';
+                    if (oi === r.correct) {
+                        bg = 'rgba(52,211,153,0.12)';
+                        border = 'rgba(52,211,153,0.4)';
+                        color = '#6ee7b7';
+                        badge = `<span style="margin-left:6px;font-size:11px;background:rgba(52,211,153,0.2);color:#6ee7b7;padding:1px 6px;border-radius:8px;">✓ 正确</span>`;
+                    } else if (oi === r.userAnswer && !r.isCorrect) {
+                        bg = 'rgba(248,113,113,0.1)';
+                        border = 'rgba(248,113,113,0.35)';
+                        color = '#fca5a5';
+                        badge = `<span style="margin-left:6px;font-size:11px;background:rgba(248,113,113,0.2);color:#fca5a5;padding:1px 6px;border-radius:8px;">✗ 你的答案</span>`;
+                    }
+                    return `<div style="padding:8px 12px;margin:5px 0;border-radius:10px;border:1px solid ${border};background:${bg};color:${color};font-size:13px;display:flex;align-items:center;gap:4px;">
+                        <span style="font-weight:600;flex-shrink:0;">${optLetters[oi]}.</span> ${escapeHtml(opt)}${badge}
+                    </div>`;
+                }).join('');
+                const explanationHtml = (!r.isCorrect && r.explanation)
+                    ? `<div style="margin-top:8px;padding:8px 12px;background:rgba(251,191,36,0.08);border-left:2px solid rgba(251,191,36,0.5);border-radius:0 8px 8px 0;font-size:12px;color:#fde68a;line-height:1.6;">💡 ${escapeHtml(r.explanation)}</div>`
+                    : '';
+                const qStatus = r.isCorrect
+                    ? `<span style="font-size:12px;color:#34d399;">✓ 答对</span>`
+                    : `<span style="font-size:12px;color:#f87171;">✗ 答错</span>`;
+                return `<div style="margin-bottom:14px;padding:14px;background:rgba(255,255,255,0.04);border-radius:14px;border:1px solid rgba(255,255,255,0.08);">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+                        <div style="font-size:14px;color:rgba(255,255,255,0.9);line-height:1.6;flex:1;padding-right:8px;">${i+1}. ${escapeHtml(r.q)}</div>
+                        ${qStatus}
+                    </div>
+                    ${optionsHtml}
+                    ${explanationHtml}
+                </div>`;
+            }).join('');
+
+            const actionBtn = passed
+                ? `<button onclick="(function(){
+                        if('${data.next_status}'==='certified'){showTrainingCertifiedScreen();}
+                        else{showTrainingPracticeScreen();}
+                   })()" style="width:100%;padding:14px;border-radius:12px;background:linear-gradient(135deg,rgba(52,211,153,0.9),rgba(16,185,129,0.9));border:none;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">
+                        🎉 继续
+                   </button>`
+                : `<button onclick="startTrainingQuiz()" style="width:100%;padding:14px;border-radius:12px;background:linear-gradient(135deg,rgba(99,102,241,0.9),rgba(139,92,246,0.9));border:none;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">
+                        🔄 重新生成题目再考一次
+                   </button>`;
+
+            const retakeWarning = !passed ? `
+                <div style="margin-bottom:16px;padding:14px 16px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);border-radius:14px;display:flex;align-items:flex-start;gap:10px;">
+                    <span style="font-size:20px;flex-shrink:0;">⚠️</span>
+                    <div>
+                        <div style="font-size:14px;font-weight:700;color:#fca5a5;margin-bottom:4px;">需要重新补考</div>
+                        <div style="font-size:13px;color:rgba(255,255,255,0.6);line-height:1.5;">本次测验未达到90分，<strong style="color:#fca5a5;">此培训任务未完成</strong>。请仔细查看错题解析后，重新生成题目进行补考，直到达到90分及以上方可完成认证。</div>
+                    </div>
+                </div>` : '';
+
+            quizBody.innerHTML = `
+                <div style="text-align:center;padding:20px 0 16px;margin-bottom:16px;background:${scoreBg};border:1px solid ${scoreBorder};border-radius:16px;">
+                    <div style="font-size:48px;font-weight:800;color:${scoreColor};line-height:1;">${score}</div>
+                    <div style="font-size:13px;color:rgba(255,255,255,0.5);margin-top:2px;">/ 100分</div>
+                    <div style="font-size:15px;font-weight:600;color:${scoreColor};margin-top:8px;">
+                        ${passed ? '🎉 恭喜通过！' : '❌ 未通过，需达到90分'}
+                    </div>
+                    <div style="font-size:13px;color:rgba(255,255,255,0.5);margin-top:4px;">答对 ${correctCount} / ${total} 题</div>
+                </div>
+                ${retakeWarning}
+                <div style="margin-bottom:16px;">${questionsHtml}</div>
+                ${actionBtn}`;
+            try { quizBody.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
         }
 
         function showTrainingPracticeScreen() {
@@ -46059,7 +46170,7 @@ ${body}
                 { icon:'📊', label:'数据中心', page:'agents', roles:['admin'] },
                 { icon:'📈', label:'增长看板', page:'growth', roles:['admin','hq_manager','store_manager','front_manager'] },
                 { icon:'🧭', label:'Agent任务', page:'agent-tasks', roles:['admin','hq_manager','hr_manager'] },
-                { icon:'📝', label:'考试测评', page:'exam' },
+                // 考试测评已停用
                 // 奖惩管理：管理员/HR/总部营运/店长/出品经理 可见
                 { icon:'🏆', label:'奖惩管理', page:'rewards', roles:['admin','hr_manager','hq_manager','store_manager','store_production_manager'] },
                 { icon:'💎', label:'员工积分', page:'points' },
@@ -52190,7 +52301,7 @@ ${compsHtml || '<p style="color:#888;">暂无半成品数据</p>'}
             <span class="mobile-nav-icon">📚</span>
             <span class="mobile-nav-label">知识库</span>
         </div>
-        <div class="mobile-nav-item" id="mobile-nav-slot-4" data-page="exam" onclick="mobileNavigateTo(this.dataset.page, event, this)">
+        <div class="mobile-nav-item" id="mobile-nav-slot-4" data-page="exam" onclick="mobileNavigateTo(this.dataset.page, event, this)" style="display:none;">
             <span class="mobile-nav-icon">📝</span>
             <span class="mobile-nav-label">考试</span>
         </div>

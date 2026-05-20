@@ -16,18 +16,18 @@ import {
 export const ENHANCED_MODEL_CONFIG = {
   // 主模型配置
   primary: {
-    deepseek: {
-      chat: 'deepseek-chat',
-      coder: 'deepseek-chat',
-      reasoner: 'deepseek-reasoner'
+    qwen: {
+      chat: 'qwen-max',
+      coder: 'qwen-max',
+      reasoner: 'qwen-max'
     }
   },
   
   // 备用模型配置（降级策略）
   fallback: {
     // 当主要模型不可用时使用 - 按优先级排序
-    level1: 'deepseek-chat',      // 首选降级
-    level2: 'qwen-turbo',         // 阿里云Qwen备用
+    level1: 'qwen-max',      // 首选降级
+    level2: 'deepseek-chat',         // DeepSeek备用
     level3: 'doubao-lite',        // 字节跳动Doubao备用
     level4: null                  // 最终降级：使用规则引擎
   },
@@ -52,35 +52,35 @@ export const ENHANCED_MODEL_CONFIG = {
   taskRouting: {
     // 复杂推理任务
     complex_reasoning: {
-      models: ['deepseek-reasoner', 'deepseek-chat'],
+      models: ['qwen-max', 'deepseek-chat'],
       temperature: 0.3,
       maxTokens: 4096,
       timeout: 60000
     },
     // 代码生成/分析
     code_analysis: {
-      models: ['deepseek-chat', 'deepseek-chat'],
+      models: ['qwen-max', 'deepseek-chat'],
       temperature: 0.2,
       maxTokens: 8192,
       timeout: 45000
     },
     // 数据分析
     data_analysis: {
-      models: ['deepseek-chat', 'deepseek-reasoner'],
+      models: ['qwen-max', 'deepseek-chat'],
       temperature: 0.1,
       maxTokens: 2048,
       timeout: 30000
     },
     // 简单问答
     simple_qa: {
-      models: ['deepseek-chat'],
+      models: ['qwen-max'],
       temperature: 0.1,
       maxTokens: 1024,
       timeout: 15000
     },
     // 创意生成
     creative: {
-      models: ['deepseek-chat'],
+      models: ['qwen-max'],
       temperature: 0.7,
       maxTokens: 2048,
       timeout: 30000
@@ -193,7 +193,7 @@ export class ModelPerformanceMonitor {
     });
 
     scored.sort((a, b) => b.score - a.score);
-    return scored[0]?.model || preferredModels?.[0] || 'deepseek-chat';
+    return scored[0]?.model || preferredModels?.[0] || 'qwen-max';
   }
 
   /**

@@ -235,7 +235,7 @@ async function callOpenAICompatibleChain(messages, options, primaryModel) {
   if (!isExternalEnabled()) {
     return { ok: false, error: 'external_disabled', content: '' };
   }
-  const model = String(primaryModel || PROVIDERS.deepseek.defaultModel).trim();
+  const model = String(primaryModel || PROVIDERS.qwen.defaultModel).trim();
   const temp = Number(options.temperature ?? 0.1);
   const maxTok = Number(options.max_tokens ?? 1500);
   const hasTools = !!(options.tools?.length);
@@ -330,7 +330,7 @@ export async function callLLM(messages, options = {}) {
     }
     if (o.ok && o.content) return o;
     // 本地失败，记录警告并继续走 API 兜底
-    logger.warn({ err: o.error, fallbackTo: PROVIDERS.deepseek.defaultModel }, `Ollama (${localModel}) 失败，自动降级到 API`);
+    logger.warn({ err: o.error, fallbackTo: PROVIDERS.qwen.defaultModel }, `Ollama (${localModel}) 失败，自动降级到 API`);
     try {
       const { notifyAdminsDataIssue } = await import('./admin-data-alert.js');
       await notifyAdminsDataIssue({
@@ -341,7 +341,7 @@ export async function callLLM(messages, options = {}) {
         priority: 'A',
         lines: [
           `错误：${String(o.error || 'unknown').slice(0, 280)}`,
-          `已自动降级：${PROVIDERS.deepseek.defaultModel}`,
+          `已自动降级：${PROVIDERS.qwen.defaultModel}`,
           '说明：该告警已同步到公司通知（管理员）。'
         ]
       }).catch(() => {});
@@ -350,14 +350,13 @@ export async function callLLM(messages, options = {}) {
     }
   }
 
-  // 确定主模型（优先使用路由结果，其次 API 默认）
+  // 确定主模型（优先使用路由结果，其次 Qwen Turbo，再兜底至 DeepSeek）
   let primaryModel = options.model;
   if (!primaryModel) {
     if (!routerCtx || routedModel === localModel) {
-      // 本地失败或不适用，走 API 兜底
-      primaryModel = PROVIDERS.deepseek.defaultModel;
+      primaryModel = PROVIDERS.qwen.defaultModel;
     } else {
-      primaryModel = routedModel || PROVIDERS.deepseek.defaultModel;
+      primaryModel = routedModel || PROVIDERS.qwen.defaultModel;
     }
   }
 

@@ -27,8 +27,8 @@ const ENV_DEFAULTS = {
   /** LLM 决策桩：不调用 DeepSeek/Ollama，直接返回固定决策 */
   testMode: process.env.PROACTIVE_TEST_MODE === 'true',
 
-  /** Proactive 决策首选模型提供方：deepseek | ollama（仅影响第一跳，仍保留自动降级链） */
-  proactiveLLMProvider: String(process.env.PROACTIVE_LLM_PROVIDER || 'deepseek')
+  /** Proactive 决策首选模型提供方：qwen | deepseek | ollama（仅影响第一跳，仍保留自动降级链） */
+  proactiveLLMProvider: String(process.env.PROACTIVE_LLM_PROVIDER || 'qwen')
     .trim()
     .toLowerCase(),
 
@@ -73,7 +73,7 @@ function normalizeDbConfig(raw) {
     useLLM: src.useLLM !== false,
     mockBridge: src.mockBridge === true,
     testMode: src.testMode === true,
-    proactiveLLMProvider: String(src.proactiveLLMProvider || ENV_DEFAULTS.proactiveLLMProvider || 'deepseek').trim().toLowerCase(),
+    proactiveLLMProvider: String(src.proactiveLLMProvider || ENV_DEFAULTS.proactiveLLMProvider).trim().toLowerCase(),
     log: src.log !== false,
     intervalMs: Math.max(60000, Number(src.intervalMs || ENV_DEFAULTS.intervalMs || 300000)),
     immediateFirstRun: src.immediateFirstRun !== false,

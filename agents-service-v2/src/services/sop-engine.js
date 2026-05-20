@@ -211,9 +211,12 @@ ${content}
 只输出 JSON，不要其他文字。`;
 
   try {
-    const { callDeepSeek } = await import('./llm-provider.js');
-    const resp = await callDeepSeek(prompt, { temperature: 0.7, maxTokens: 4096 });
-    const text = typeof resp === 'string' ? resp : (resp?.text || resp?.content || '');
+    const { callLLM } = await import('./llm-provider.js');
+    const resp = await callLLM(
+      [{ role: 'user', content: prompt }],
+      { temperature: 0.7, max_tokens: 4096, skipCache: true }
+    );
+    const text = resp?.content || '';
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) throw new Error('No JSON array found in LLM response');
     const questions = JSON.parse(jsonMatch[0]);

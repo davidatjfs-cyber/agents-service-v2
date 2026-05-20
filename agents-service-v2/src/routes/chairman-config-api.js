@@ -89,7 +89,7 @@ function getDefaultConfig() {
       useLLM: true,
       mockBridge: false,
       testMode: false,
-      proactiveLLMProvider: 'deepseek',
+      proactiveLLMProvider: 'qwen',
       log: true,
       intervalMs: 300000,
       immediateFirstRun: true,

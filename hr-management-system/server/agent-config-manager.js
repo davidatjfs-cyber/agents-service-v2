@@ -16,8 +16,8 @@ export const AGENT_FEATURE_FLAGS = {
   enable_rule_engine: process.env.FEATURE_DISABLE_RULE_ENGINE !== 'true',
 };
 
-const ALLOWED_MODEL_PREFIXES = ['deepseek', 'qwen', 'doubao'];
-const FALLBACK_MODEL = 'deepseek-chat';
+const ALLOWED_MODEL_PREFIXES = ['qwen', 'deepseek', 'doubao'];
+const FALLBACK_MODEL = 'qwen-max';
 
 function normalizeModelName(v, fallback = FALLBACK_MODEL) {
   const model = String(v || '').trim();
@@ -46,7 +46,7 @@ const DEFAULT_AGENTS = [
     name: 'Master Agent (调度中枢)',
     description: '作为唯一的飞书 API 入口，负责消息路由、任务状态流转和全局上下文管理',
     system_prompt: '你是 HRMS 系统的 Master Agent，负责调度和任务流转。',
-    model_name: 'deepseek-chat',
+    model_name: 'qwen-max',
     temperature: 0.1,
     enabled: true,
     schedule_interval: 1
@@ -56,7 +56,7 @@ const DEFAULT_AGENTS = [
     name: 'Data Auditor Agent (数据审计)',
     description: '核对来源数据，对异常情况触发预警',
     system_prompt: '你是数据审计 Agent，负责从业务报表和客诉数据中发现异常。',
-    model_name: 'deepseek-chat',
+    model_name: 'qwen-max',
     temperature: 0.1,
     enabled: true,
     schedule_interval: 30
@@ -66,7 +66,7 @@ const DEFAULT_AGENTS = [
     name: 'Ops Agent (营运督导)',
     description: '负责飞书端的任务分派、到点提醒、以及利用 Vision 能力审核员工上传的照片',
     system_prompt: '你是营运督导 Agent，负责跟进异常任务的整改并审核照片。',
-    model_name: 'deepseek-chat',
+    model_name: 'qwen-max',
     temperature: 0.2,
     enabled: true,
     schedule_interval: 1
@@ -76,7 +76,7 @@ const DEFAULT_AGENTS = [
     name: 'SOP Agent (标准库)',
     description: '管理所有运营标准，提供 RAG 知识检索，支撑其他 Agent 的判罚依据',
     system_prompt: '你是 SOP 顾问 Agent，负责解答运营标准相关问题。',
-    model_name: 'deepseek-chat',
+    model_name: 'qwen-max',
     temperature: 0.1,
     enabled: true,
     schedule_interval: 0
@@ -86,7 +86,7 @@ const DEFAULT_AGENTS = [
     name: 'Chief Evaluator (绩效考核)',
     description: '根据行为和数据结果，自动计算奖金，评分，评级的功能',
     system_prompt: '你是绩效考核 Agent，负责根据任务解决情况进行扣分和结算。',
-    model_name: 'deepseek-chat',
+    model_name: 'qwen-max',
     temperature: 0.1,
     enabled: true,
     schedule_interval: 60
@@ -96,7 +96,7 @@ const DEFAULT_AGENTS = [
     name: 'Appeal Agent (申诉处理)',
     description: '处理员工反馈，核实证据，并具备人工介入仲裁的逻辑',
     system_prompt: '你是申诉处理 Agent，负责处理员工对扣分或处罚的异议。',
-    model_name: 'deepseek-chat',
+    model_name: 'qwen-max',
     temperature: 0.2,
     enabled: true,
     schedule_interval: 0
@@ -336,7 +336,7 @@ export const DEFAULT_BI_AGENT_CONFIG = {
 export const DEFAULT_OPS_AGENT_CONFIG = {
   dispatchers: ['store_manager', 'store_production_manager'], // 派单人员角色
   llmModels: {
-    reasoningModel: 'deepseek-chat',
+    reasoningModel: 'qwen-max',
     visionModel: 'ep-20260424183833-7lr9g'
   },
   scheduledTasks: {

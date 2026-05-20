@@ -9,7 +9,7 @@
  */
 import { query } from '../utils/db.js';
 import { logger } from '../utils/logger.js';
-import { callDeepSeek } from './llm-provider.js';
+import { callLLM } from './llm-provider.js';
 
 const FEEDBACK_KEYWORDS = [
   '不对', '错了', '错误', '不对吧', '完全不对',
@@ -107,8 +107,11 @@ AI回答：${(answer || '').slice(0, 300)}
 只输出一句话摘要，不要解释。`;
 
   try {
-    const res = await callDeepSeek(prompt, { timeoutMs: 10000 });
-    const pattern = String(res?.content || res || '').trim().replace(/^["']|["']$/g, '').slice(0, 100);
+    const res = await callLLM(
+      [{ role: 'user', content: prompt }],
+      { temperature: 0.1, max_tokens: 200, skipCache: true }
+    );
+    const pattern = String(res?.content || '').trim().replace(/^["']|["']$/g, '').slice(0, 100);
     if (!pattern) return;
 
     await query(

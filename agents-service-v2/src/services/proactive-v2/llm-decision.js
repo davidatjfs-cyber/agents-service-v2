@@ -1,9 +1,9 @@
 /**
- * LLM Decision — Proactive 专用：DeepSeek → Ollama → 规则兜底（静态 import llm-provider，无循环依赖）
+ * LLM Decision — Proactive 专用：Qwen(首选) → DeepSeek → Ollama → 规则兜底
  */
 
 import { getProactiveConfig } from './config.js';
-import { callDeepSeek, callOllamaLLM } from '../llm-provider.js';
+import { callDeepSeek, callOllamaLLM, callLLM } from '../llm-provider.js';
 import { formatProactiveLlmPromptHints } from '../agent-memory.js';
 
 export function safeParseJSON(text) {
@@ -189,12 +189,43 @@ export async function decideWithLLM(anomaly) {
   const historyBlock = await formatProactiveLlmPromptHints(anomaly.store || '');
   const prompt = buildPrompt(anomaly, historyBlock);
   const timeoutMs = config.llm.timeout || 4000;
-  const preferDeepSeek = config.proactiveLLMProvider === 'deepseek';
+  const provider = config.proactiveLLMProvider;
 
   let raw = '';
   let source = 'unknown';
 
-  if (preferDeepSeek) {
+  const callQwenProactiveJson = async (p, t) => {
+    const messages = [
+      { role: 'system', content: '你是餐饮经营分析AI，只返回JSON，不要输出 Markdown 或其它说明。' },
+      { role: 'user', content: p }
+    ];
+    const resp = await callLLM(messages, { temperature: 0.2, max_tokens: 800, skipCache: true, model: 'qwen-max' });
+    if (!resp?.ok || !resp?.content) throw new Error(resp?.error || 'qwen_empty');
+    return resp.content.trim();
+  };
+
+  if (provider === 'qwen') {
+    try {
+      raw = await callQwenProactiveJson(prompt, timeoutMs);
+      source = 'qwen';
+    } catch (e1) {
+      console.warn('[LLM] Qwen failed → fallback to DeepSeek', e1?.message || e1);
+      try {
+        raw = await callDeepSeek(prompt, { timeoutMs });
+        source = 'deepseek';
+      } catch (e2) {
+        console.warn('[LLM] DeepSeek failed → fallback to Ollama', e2?.message || e2);
+        try {
+          raw = await callOllamaProactiveJson(prompt, timeoutMs);
+          source = 'ollama';
+        } catch (e3) {
+          console.warn('[LLM] Ollama failed → fallback to rule', e3?.message || e3);
+          console.log('[LLM SOURCE]', 'rule');
+          return fallbackDecision(anomaly, config);
+        }
+      }
+    }
+  } else if (provider === 'deepseek') {
     try {
       raw = await callDeepSeek(prompt, { timeoutMs });
       source = 'deepseek';

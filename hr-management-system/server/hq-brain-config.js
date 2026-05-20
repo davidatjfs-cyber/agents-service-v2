@@ -17,8 +17,8 @@ const MODEL_TIERS = {
   // 总部决策大脑 — 深度推理与跨域分析
   hq_brain: {
     label: '总部决策大脑',
-    reasoningModel: 'deepseek-chat',         // 深度推理 (策略生成/因果分析)
-    analysisModel: 'deepseek-chat',         // 通用分析 (数据解读/报表)
+    reasoningModel: 'qwen-max',
+    analysisModel: 'qwen-max',
     temperature: 0.3,                        // 较低温度保证稳定性
     maxTokens: 8192,                         // 允许长输出 (行动计划书)
     costBudgetDaily: 100,                    // 日预算上限 (元)
@@ -28,8 +28,8 @@ const MODEL_TIERS = {
   // 门店执行四肢 — 快速响应与流程执行
   store_limb: {
     label: '门店执行端',
-    reasoningModel: 'deepseek-chat',        // 快速推理 (SOP问答/任务确认)
-    analysisModel: 'deepseek-chat',         // 同上
+    reasoningModel: 'qwen-max',        // 快速推理 (SOP问答/任务确认)
+    analysisModel: 'qwen-max',         // 同上
     temperature: 0.1,                        // 极低温度保证确定性
     maxTokens: 2048,                         // 短输出 (确认/通知)
     costBudgetDaily: 50,                     // 日预算上限 (元)
@@ -39,8 +39,8 @@ const MODEL_TIERS = {
   // 合规审查 — 零容忍审查
   compliance: {
     label: '合规审查',
-    reasoningModel: 'deepseek-chat',
-    analysisModel: 'deepseek-chat',
+    reasoningModel: 'qwen-max',
+    analysisModel: 'qwen-max',
     temperature: 0,                          // 零温度: 确定性审查
     maxTokens: 4096,
     costBudgetDaily: 20,

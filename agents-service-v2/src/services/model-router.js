@@ -3,7 +3,7 @@
  *
  * 策略说明：
  * - 默认全部走本地 Ollama（gemma4:26b），最大化利用免费资源
- * - 本地故障时自动降级到 API（DeepSeek），确保系统不中断
+ * - 本地故障时自动降级到 API（Qwen Turbo），再兜底 DeepSeek
  * - 可通过环境变量精细控制每个场景的模型选择
  *
  * 环境变量：
@@ -13,7 +13,7 @@
  * - OLLAMA_HEALTH_CHECK_INTERVAL：健康检查间隔 ms（默认 30000）
  */
 const LOCAL_MODEL = process.env.OLLAMA_OPERATIONS_MODEL || 'gemma4:26b';
-const DEEPSEEK_FALLBACK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+const API_FALLBACK_MODEL = process.env.QWEN_MODEL || 'qwen-max';
 const LOCAL_ONLY = process.env.OLLAMA_USE_LOCAL_ONLY !== 'false'; // 默认 true
 const LOCAL_FALLBACK = process.env.OLLAMA_LOCAL_FALLBACK !== 'false'; // 默认 true
 
@@ -65,33 +65,32 @@ export function getOllamaHealthStatus() {
 /**
  * 选择模型
  *
- * 策略（2026-05-03 更新）：
- * - analysis/action: DeepSeek（分析/动作需要高质量推理）
- * - query: 简单查数走 Ollama，复杂分析走 DeepSeek
- * - workflow: DeepSeek
- * - 默认兜底: Ollama
+ * 策略（2026-05-20 更新）：
+ * - analysis/action: Qwen Turbo（分析/动作需要高质量推理）
+ * - query: 简单查数走 Ollama，复杂分析走 Qwen Turbo
+ * - workflow: Qwen Turbo
+ * - 默认兜底: Ollama → Qwen Turbo
  */
 export function selectModel({ intent, complexity, mode }) {
   const m = String(mode || 'single');
 
   // workflow 模式始终走 API
-  if (m === 'workflow') return DEEPSEEK_FALLBACK_MODEL;
+  if (m === 'workflow') return API_FALLBACK_MODEL;
 
-  // 分析类/动作类 → DeepSeek（需要高质量推理）
+  // 分析类/动作类 → Qwen Turbo（需要高质量推理）
   if (intent === 'analysis' || intent === 'action') {
-    return DEEPSEEK_FALLBACK_MODEL;
+    return API_FALLBACK_MODEL;
   }
 
   // 查询类：简单查询走 Ollama，复杂查询走 API
   if (intent === 'query') {
     const c = String(complexity || 'low').toLowerCase();
     if (c === 'low' && isOllamaHealthy()) return LOCAL_MODEL;
-    // high/medium complexity or Ollama unhealthy → DeepSeek
-    if (isOllamaHealthy()) return DEEPSEEK_FALLBACK_MODEL;
-    return DEEPSEEK_FALLBACK_MODEL;
+    if (isOllamaHealthy()) return API_FALLBACK_MODEL;
+    return API_FALLBACK_MODEL;
   }
 
   // 兜底：简单对话走 Ollama
   if (isOllamaHealthy()) return LOCAL_MODEL;
-  return DEEPSEEK_FALLBACK_MODEL;
+  return API_FALLBACK_MODEL;
 }

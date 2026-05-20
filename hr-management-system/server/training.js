@@ -644,7 +644,7 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       let kbArticles = [];
       if (Array.isArray(topic.kb_article_ids) && topic.kb_article_ids.length > 0) {
         const kbResult = await pool().query(
-          `SELECT id, title, content FROM knowledge_base WHERE id = ANY($1) AND enabled = true ORDER BY title`,
+          `SELECT id, title, content, file_path, file_type FROM knowledge_base WHERE id = ANY($1) AND enabled = true ORDER BY title`,
           [topic.kb_article_ids]
         );
         kbArticles = kbResult.rows;
@@ -664,6 +664,43 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       res.json({ success: true, topic, session: sessionResult.rows[0], kb_articles: kbArticles });
     } catch (e) {
       res.json({ success: false, error: e?.message });
+    }
+  });
+
+  // GET /api/training/kb-file/:articleId - 直接提供培训文章文件（绕过知识库受众权限检查）
+  app.get('/api/training/kb-file/:articleId', authMiddleware, async (req, res) => {
+    const articleId = String(req.params.articleId || '').trim();
+    if (!articleId) return res.status(400).json({ error: 'missing_id' });
+    try {
+      const check = await pool().query(
+        `SELECT id FROM training_topics WHERE $1 = ANY(kb_article_ids) AND is_active = true LIMIT 1`,
+        [articleId]
+      );
+      if (check.rows.length === 0) return res.status(403).json({ error: 'forbidden' });
+
+      const r = await pool().query(
+        `SELECT file_path, file_type FROM knowledge_base WHERE id = $1 AND enabled = true LIMIT 1`,
+        [articleId]
+      );
+      const row = r.rows[0];
+      if (!row?.file_path) return res.status(404).json({ error: 'not_found' });
+
+      const kbUploadsDir = path.resolve(path.join(__dirname, '..', 'uploads'));
+      const raw = String(row.file_path || '').trim();
+      const rel = raw.replace(/^\/uploads\//, '').replace(/^uploads\//, '');
+      const normalized = path.posix.normalize(rel).replace(/^\/+/, '');
+      if (!normalized || normalized.includes('..')) return res.status(400).json({ error: 'invalid_path' });
+      const abs = path.join(kbUploadsDir, normalized);
+      if (!fs.existsSync(abs)) return res.status(404).json({ error: 'file_not_found' });
+
+      const ft = String(row.file_type || '').toLowerCase();
+      const ctMap = { pdf: 'application/pdf', video: 'video/mp4', img: 'image/jpeg', image: 'image/jpeg' };
+      if (ctMap[ft]) res.setHeader('Content-Type', ctMap[ft]);
+      res.setHeader('Content-Disposition', 'inline');
+      return res.sendFile(abs);
+    } catch (e) {
+      console.error('[Training] kb-file error:', e?.message);
+      res.status(500).json({ error: e?.message });
     }
   });
 
@@ -786,8 +823,9 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       }
 
       const session = sessionResult.rows[0];
-      if (session.quiz_passed) {
-        return res.json({ success: false, error: '已通过测验，无需重复测试' });
+      // Only block retake if already certified (passed and certified)
+      if (session.status === 'certified') {
+        return res.json({ success: false, error: '已完成认证，无需重复测试' });
       }
 
       const topic = {
@@ -796,6 +834,14 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
         description: session.description,
         kb_article_ids: session.kb_article_ids || []
       };
+
+      // Collect previous questions to avoid repetition (70%+ variety)
+      let prevQuestionsSection = '';
+      const prevQs = session.quiz_questions || [];
+      if (prevQs.length > 0) {
+        const prevTexts = prevQs.map((q, i) => `${i + 1}. ${q.q}`).join('\n');
+        prevQuestionsSection = `\n\n【重要】以下是上次已出过的题目，本次必须避免重复，至少70%以上题目要全新不同：\n${prevTexts}`;
+      }
 
       // 拼接关联知识库内容用于出题
       let kbQuizContext = '';
@@ -813,13 +859,15 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       // 生成测验题目（key_points 为空时纯靠知识库内容出题）
       const kpSection = Array.isArray(topic.key_points) && topic.key_points.length > 0
         ? `\n核心要点：${JSON.stringify(topic.key_points)}` : '';
-      const quizPrompt = `根据以下培训内容，生成20道单选题，JSON格式返回：
+      const randomSeed = Math.random().toString(36).slice(2, 8);
+      const quizPrompt = `根据以下培训内容，生成20道单选题，JSON格式返回（随机种子:${randomSeed}）：
 {"questions":[{"q":"题目","options":["选项A","选项B","选项C","选项D"],"answer":2,"explanation":"解析"}]}
 重要要求：
 1. answer 为正确选项的 index（0-3），每道题的正确答案位置必须随机分布，不能总是0或固定位置。
 2. 20道题中正确答案在选项0、1、2、3位置各约5道，随机打散。
 3. 题目要贴近实际操作场景，测试真实理解，避免纯记忆题。
-培训主题：${topic.title}（岗位：${topic.position}）${kpSection}${kbQuizContext}`;
+4. 从培训内容的不同角度、不同知识点出题，确保题目多样性。
+培训主题：${topic.title}（岗位：${topic.position}）${kpSection}${kbQuizContext}${prevQuestionsSection}`;
 
       const aiResponse = await callLLM([
         { role: 'system', content: '你是一个专业的餐饮培训出题专家。请严格按照JSON格式返回题目，不要添加任何其他文字。确保每道题正确答案的位置（answer字段）在0-3之间均匀随机分布。' },
@@ -928,11 +976,12 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
         nextStatus = requirePractice ? 'practice' : 'certified';
       }
 
-      // 更新 session
+      // 更新 session；通过后清空题目，失败后也清空题目（下次必须重新生成）
       await pool().query(
         `UPDATE training_sessions
          SET quiz_answers = $1, quiz_score = $2, quiz_passed = $3, quiz_passed_at = CASE WHEN $3 THEN NOW() ELSE quiz_passed_at END,
-             status = $4, certified_at = CASE WHEN $5 THEN NOW() ELSE certified_at END
+             status = $4, certified_at = CASE WHEN $5 THEN NOW() ELSE certified_at END,
+             quiz_questions = NULL
          WHERE id = $6`,
         [JSON.stringify(answers), score, passed, nextStatus, nextStatus === 'certified', id]
       );
