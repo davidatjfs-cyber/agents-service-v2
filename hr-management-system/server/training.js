@@ -765,7 +765,7 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       let kbContext = '';
       if (topic.kb_article_ids.length > 0) {
         const kbResult = await pool().query(
-          `SELECT title, LEFT(content, 2000) AS content FROM knowledge_base WHERE id = ANY($1) AND enabled = true`,
+          `SELECT title, LEFT(content, 6000) AS content FROM knowledge_base WHERE id = ANY($1) AND enabled = true`,
           [topic.kb_article_ids]
         );
         if (kbResult.rows.length > 0) {
@@ -847,7 +847,7 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       let kbQuizContext = '';
       if (topic.kb_article_ids.length > 0) {
         const kbResult = await pool().query(
-          `SELECT title, LEFT(content, 1500) AS content FROM knowledge_base WHERE id = ANY($1) AND enabled = true`,
+          `SELECT title, LEFT(content, 6000) AS content FROM knowledge_base WHERE id = ANY($1) AND enabled = true`,
           [topic.kb_article_ids]
         );
         if (kbResult.rows.length > 0) {
