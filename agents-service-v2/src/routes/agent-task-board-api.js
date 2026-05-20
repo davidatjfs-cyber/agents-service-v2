@@ -169,7 +169,7 @@ router.post('/tasks/:taskId/quality-score', ...adminOnly, async (req, res) => {
   }
 });
 
-router.post('/claim', authRequired, async (req, res) => {
+router.post('/claim', ...adminOnly, async (req, res) => {
   try {
     const result = await claimNextTask(req.body?.agent || req.user?.username);
     res.json(result);

@@ -252,7 +252,9 @@ export async function logEvent(taskId, eventType, fromAgent, toAgent, statusBefo
       `INSERT INTO master_events (task_id, event_type, from_agent, to_agent, status_before, status_after, payload) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)`,
       [taskId, eventType, fromAgent, toAgent, statusBefore, statusAfter, JSON.stringify(payload || {})]
     );
-  } catch (e) { /* silent */ }
+  } catch (e) {
+    logger.error({ err: e?.message, taskId, eventType }, 'logEvent failed — task history may be incomplete');
+  }
 }
 
 export { STATUS_FLOW };
