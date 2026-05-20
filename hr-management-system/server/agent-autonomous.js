@@ -121,26 +121,55 @@ export class AgentAutonomousScheduler {
 
   /**
    * 判断任务是否应该执行
+   * 支持标准5字段cron：minute hour dayOfMonth month dayOfWeek
+   * 例：'*/30 * * * *'  '0 8 * * *'  '0 1 * * 1'
    */
   shouldRunTask(task, now) {
     if (!task.lastRun) return true;
-    
-    // 解析cron表达式（简化版，仅支持 */n 格式）
-    const [minute] = task.schedule.split(' ');
-    
-    if (minute.startsWith('*/')) {
-      const interval = parseInt(minute.replace('*/', ''));
-      const minutesSinceLastRun = (now - task.lastRun) / 60000;
-      return minutesSinceLastRun >= interval;
+
+    const parts = task.schedule.split(' ');
+    const minuteField = parts[0] || '*';
+    const hourField   = parts[1] || '*';
+    const dowField    = parts[4] || '*'; // day-of-week
+
+    // 每 N 分钟执行一次：*/N
+    if (minuteField.startsWith('*/')) {
+      const interval = parseInt(minuteField.slice(2), 10);
+      if (!isNaN(interval) && interval > 0) {
+        const minutesSinceLastRun = (now - task.lastRun) / 60000;
+        return minutesSinceLastRun >= interval;
+      }
     }
-    
-    // 对于固定时间的任务，检查是否到了执行时间且今天未执行过
+
+    // 每 N 小时执行一次：0 */N * * *
+    if (minuteField === '0' && hourField.startsWith('*/')) {
+      const interval = parseInt(hourField.slice(2), 10);
+      if (!isNaN(interval) && interval > 0) {
+        const hoursSinceLastRun = (now - task.lastRun) / 3600000;
+        return hoursSinceLastRun >= interval;
+      }
+    }
+
+    // 固定时间任务（今天还没跑过则检查时间窗口）
     if (task.lastRun.toDateString() !== now.toDateString()) {
-      const [taskMin, taskHour] = minute.split(' ').map(Number);
-      return now.getHours() > taskHour || 
-             (now.getHours() === taskHour && now.getMinutes() >= taskMin);
+      const taskMin  = parseInt(minuteField, 10);
+      const taskHour = parseInt(hourField, 10);
+
+      if (isNaN(taskMin) || isNaN(taskHour)) return false; // 无法解析，保守不执行
+
+      const timeOk = now.getHours() > taskHour ||
+                     (now.getHours() === taskHour && now.getMinutes() >= taskMin);
+      if (!timeOk) return false;
+
+      // 若指定了星期几（0=Sun … 6=Sat），还需匹配
+      if (dowField !== '*') {
+        const requiredDow = parseInt(dowField, 10);
+        if (!isNaN(requiredDow) && now.getDay() !== requiredDow) return false;
+      }
+
+      return true;
     }
-    
+
     return false;
   }
 
@@ -304,35 +333,100 @@ export class AgentCollaborationOrchestrator {
   }
 
   /**
-   * Data Auditor消息处理
+   * Data Auditor 消息处理：检查指定数据源近期是否有新记录
    */
   async handleDataAuditorMessage(sessionId, message) {
     console.log(`[AgentCollaboration] Data Auditor processing message in ${sessionId}`);
-    // 实现数据审计相关的消息处理逻辑
+    const dataSource = message?.metadata?.dataSource || message?.content;
+    if (!dataSource) return;
+
+    const ALLOWED = ['daily_reports','table_visit_records','sales_raw','master_tasks'];
+    const table = ALLOWED.find(t => t === String(dataSource).trim());
+    if (!table) return;
+
+    try {
+      const db = pool();
+      const r = await db.query(
+        `SELECT COUNT(*) AS cnt FROM ${table} WHERE created_at > NOW() - INTERVAL '24 hours'`
+      );
+      const count = parseInt(r.rows?.[0]?.cnt || 0);
+      await this.sendMessage(sessionId, 'data_auditor', 'master',
+        `[数据审计] ${table} 近24h记录数：${count}`,
+        { dataSource: table, recordCount: count, checkedAt: new Date().toISOString() }
+      );
+    } catch (e) {
+      console.error('[AgentCollaboration] Data Auditor query failed:', e?.message);
+    }
   }
 
   /**
-   * Ops Supervisor消息处理
+   * Ops Supervisor 消息处理：统计当前积压任务数
    */
   async handleOpsSupervisorMessage(sessionId, message) {
     console.log(`[AgentCollaboration] Ops Supervisor processing message in ${sessionId}`);
-    // 实现运营管理相关的消息处理逻辑
+    try {
+      const db = pool();
+      const r = await db.query(
+        `SELECT status, COUNT(*) AS cnt FROM master_tasks
+         WHERE status IN ('pending','pending_response','dispatched','in_progress')
+         GROUP BY status`
+      );
+      const summary = (r.rows || []).map(row => `${row.status}:${row.cnt}`).join(', ');
+      await this.sendMessage(sessionId, 'ops_supervisor', 'master',
+        `[运营监控] 当前积压任务：${summary || '无'}`,
+        { taskSummary: r.rows, checkedAt: new Date().toISOString() }
+      );
+    } catch (e) {
+      console.error('[AgentCollaboration] Ops Supervisor query failed:', e?.message);
+    }
   }
 
   /**
-   * Chief Evaluator消息处理
+   * Chief Evaluator 消息处理：统计近7天评分任务完成率
    */
   async handleChiefEvaluatorMessage(sessionId, message) {
     console.log(`[AgentCollaboration] Chief Evaluator processing message in ${sessionId}`);
-    // 实现评分评估相关的消息处理逻辑
+    try {
+      const db = pool();
+      const r = await db.query(
+        `SELECT COUNT(*) AS total,
+                COUNT(CASE WHEN status IN ('settled','closed') THEN 1 END) AS done
+         FROM master_tasks
+         WHERE category = 'scoring' AND created_at > NOW() - INTERVAL '7 days'`
+      );
+      const row = r.rows?.[0];
+      const total = parseInt(row?.total || 0);
+      const done  = parseInt(row?.done  || 0);
+      const rate  = total > 0 ? ((done / total) * 100).toFixed(1) : 'N/A';
+      await this.sendMessage(sessionId, 'chief_evaluator', 'master',
+        `[评分审计] 近7天评分完成率：${rate}%（${done}/${total}）`,
+        { total, done, completionRate: rate, checkedAt: new Date().toISOString() }
+      );
+    } catch (e) {
+      console.error('[AgentCollaboration] Chief Evaluator query failed:', e?.message);
+    }
   }
 
   /**
-   * Train Advisor消息处理
+   * Train Advisor 消息处理：返回知识库启用文章数
    */
   async handleTrainAdvisorMessage(sessionId, message) {
     console.log(`[AgentCollaboration] Train Advisor processing message in ${sessionId}`);
-    // 实现培训建议相关的消息处理逻辑
+    try {
+      const db = pool();
+      const r = await db.query(
+        `SELECT COUNT(*) AS total,
+                COUNT(CASE WHEN enabled = TRUE THEN 1 END) AS enabled_cnt
+         FROM knowledge_base`
+      );
+      const row = r.rows?.[0];
+      await this.sendMessage(sessionId, 'train_advisor', 'master',
+        `[培训顾问] 知识库文章：共${row?.total || 0}篇，已启用${row?.enabled_cnt || 0}篇`,
+        { total: row?.total, enabled: row?.enabled_cnt, checkedAt: new Date().toISOString() }
+      );
+    } catch (e) {
+      console.error('[AgentCollaboration] Train Advisor query failed:', e?.message);
+    }
   }
 
   /**
@@ -456,7 +550,7 @@ export class AgentSelfOptimizationEngine {
   }
 
   /**
-   * 生成优化建议
+   * 生成优化建议（每条附带唯一 id 供 applyRecommendation 查找）
    */
   async generateOptimizationRecommendations() {
     const recommendations = [];
@@ -465,10 +559,10 @@ export class AgentSelfOptimizationEngine {
     try {
       const db = pool();
       const dataQualityResult = await db.query(
-        `SELECT data_source, 
+        `SELECT data_source,
           COUNT(*) as total_records,
           COUNT(CASE WHEN data_quality_score < 0.8 THEN 1 END) as low_quality_count
-         FROM data_quality_logs 
+         FROM data_quality_logs
          WHERE created_at > NOW() - INTERVAL '7d'
          GROUP BY data_source`
       );
@@ -480,6 +574,7 @@ export class AgentSelfOptimizationEngine {
 
         if (rate > 0.1) {
           recommendations.push({
+            id: `rec-dq-${row.data_source}-${Date.now()}`,  // ← 补充 id 字段
             type: 'data_quality',
             priority: rate > 0.3 ? 'high' : 'medium',
             target: row.data_source,

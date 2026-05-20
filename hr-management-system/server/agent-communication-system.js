@@ -107,14 +107,20 @@ export class AgentCommunicationSystem {
    * Agent 向 Master 报告问题
    */
   static async reportIssue(agentType, issueType, details, context = {}) {
+    // 校验 issueType 合法性，避免 undefined.severity 抛 TypeError
+    if (!AGENT_ISSUE_TYPES[issueType]) {
+      console.error(`[communication] Unknown issueType: ${issueType}`);
+      return { success: false, error: `unknown_issue_type: ${issueType}` };
+    }
+
     const issueId = this.generateIssueId();
     const timestamp = new Date().toISOString();
-    
+
     try {
       // 记录问题到数据库
       await pool().query(`
         INSERT INTO agent_issues_reports (
-          issue_id, agent_type, issue_type, details, context, 
+          issue_id, agent_type, issue_type, details, context,
           status, severity, created_at, updated_at
         ) VALUES ($1, $2, $3, $4, $5::jsonb, 'pending', $6, $7, $7)
       `, [
@@ -509,6 +515,7 @@ export class AgentCommunicationHelper {
       // 限流检查失败不阻断主流程
     }
 
+    const currentStatus = await this.getDataSourceStatus(source);  // await async method
     return await AgentCommunicationSystem.reportIssue(
       'data_auditor',
       'DATA_SOURCE_INSUFFICIENT',
@@ -517,7 +524,7 @@ export class AgentCommunicationHelper {
         problem,
         impact,
         suggestedFix,
-        currentStatus: this.getDataSourceStatus(source)
+        currentStatus,
       },
       {
         timestamp: new Date().toISOString(),
@@ -532,112 +539,141 @@ export class AgentCommunicationHelper {
    * Ops Agent 报告任务执行问题
    */
   static async reportTaskExecutionIssue(taskType, bottleneck, failureRate, suggestedImprovement) {
+    const currentMetrics = await this.getTaskExecutionMetrics(taskType);
     return await AgentCommunicationSystem.reportIssue(
       'ops_supervisor',
       'TASK_EXECUTION_BOTTLENECK',
-      {
-        taskType,
-        bottleneck,
-        failureRate,
-        suggestedImprovement,
-        currentMetrics: this.getTaskExecutionMetrics(taskType)
-      },
-      {
-        timestamp: new Date().toISOString(),
-        agent: 'ops_supervisor'
-      }
+      { taskType, bottleneck, failureRate, suggestedImprovement, currentMetrics },
+      { timestamp: new Date().toISOString(), agent: 'ops_supervisor' }
     );
   }
-  
+
   /**
    * Train Agent 报告知识库问题
    */
   static async reportKnowledgeBaseIssue(knowledgeArea, missingTopics, outdatedContent, suggestedUpdates) {
+    const currentCoverage = await this.getKnowledgeCoverage(knowledgeArea);
     return await AgentCommunicationSystem.reportIssue(
       'train_advisor',
       'KNOWLEDGE_BASE_OUTDATED',
-      {
-        knowledgeArea,
-        missingTopics,
-        outdatedContent,
-        suggestedUpdates,
-        currentCoverage: this.getKnowledgeCoverage(knowledgeArea)
-      },
-      {
-        timestamp: new Date().toISOString(),
-        agent: 'train_advisor'
-      }
+      { knowledgeArea, missingTopics, outdatedContent, suggestedUpdates, currentCoverage },
+      { timestamp: new Date().toISOString(), agent: 'train_advisor' }
     );
   }
-  
+
   /**
    * Chief Evaluator 报告评分规则问题
    */
   static async reportScoringRuleIssue(ruleType, conflict, incompleteness, suggestedRules) {
+    const currentRules = await this.getCurrentScoringRules(ruleType);
     return await AgentCommunicationSystem.reportIssue(
       'chief_evaluator',
       'SCORING_RULE_INCOMPLETE',
-      {
-        ruleType,
-        conflict,
-        incompleteness,
-        suggestedRules,
-        currentRules: this.getCurrentScoringRules(ruleType)
-      },
-      {
-        timestamp: new Date().toISOString(),
-        agent: 'chief_evaluator'
-      }
+      { ruleType, conflict, incompleteness, suggestedRules, currentRules },
+      { timestamp: new Date().toISOString(), agent: 'chief_evaluator' }
     );
   }
   
   /**
-   * 获取数据源状态
+   * 获取数据源状态（查近24h记录数）
    */
-  static getDataSourceStatus(dataSourceType) {
-    // 这里可以集成实际的数据源状态检查逻辑
-    return {
-      lastSync: new Date().toISOString(),
-      status: 'active',
-      recordCount: 1000,
-      errorRate: 0.01
+  static async getDataSourceStatus(dataSourceType) {
+    // 白名单防止注入
+    const ALLOWED_TABLES = {
+      daily_reports: 'daily_reports',
+      table_visit_records: 'table_visit_records',
+      sales_raw: 'sales_raw',
+      master_tasks: 'master_tasks',
     };
+    const table = ALLOWED_TABLES[dataSourceType];
+    if (!table) return { status: 'unknown', dataSourceType };
+    try {
+      const r = await pool().query(
+        `SELECT COUNT(*) AS cnt, MAX(created_at) AS last_record FROM ${table} WHERE created_at > NOW() - INTERVAL '24 hours'`
+      );
+      const row = r.rows?.[0];
+      return {
+        lastSync: row?.last_record || null,
+        status: parseInt(row?.cnt || 0) > 0 ? 'active' : 'no_recent_data',
+        recordCount: parseInt(row?.cnt || 0),
+      };
+    } catch (e) {
+      return { status: 'query_error', error: e?.message };
+    }
   }
-  
+
   /**
-   * 获取任务执行指标
+   * 获取任务执行指标（近7天 master_tasks 统计）
    */
-  static getTaskExecutionMetrics(taskType) {
-    return {
-      successRate: 0.95,
-      avgExecutionTime: 300,
-      dailyVolume: 50,
-      errorRate: 0.05
-    };
+  static async getTaskExecutionMetrics(taskType) {
+    try {
+      const r = await pool().query(
+        `SELECT
+           COUNT(*) AS total,
+           COUNT(CASE WHEN status IN ('closed','resolved','settled') THEN 1 END) AS done,
+           AVG(EXTRACT(EPOCH FROM (COALESCE(closed_at, updated_at) - created_at))) AS avg_secs
+         FROM master_tasks
+         WHERE created_at > NOW() - INTERVAL '7 days'
+           AND ($1::text IS NULL OR category = $1)`,
+        [taskType || null]
+      );
+      const row = r.rows?.[0];
+      const total = parseInt(row?.total || 0);
+      const done  = parseInt(row?.done  || 0);
+      return {
+        dailyVolume: Math.round(total / 7),
+        successRate: total > 0 ? +(done / total).toFixed(3) : null,
+        avgExecutionTimeSecs: row?.avg_secs ? +parseFloat(row.avg_secs).toFixed(1) : null,
+        errorRate: total > 0 ? +((total - done) / total).toFixed(3) : null,
+      };
+    } catch (e) {
+      return { error: e?.message };
+    }
   }
-  
+
   /**
-   * 获取知识库覆盖率
+   * 获取知识库覆盖率（查 knowledge_base 表）
    */
-  static getKnowledgeCoverage(knowledgeArea) {
-    return {
-      totalTopics: 100,
-      coveredTopics: 85,
-      outdatedCount: 15,
-      lastUpdate: new Date().toISOString()
-    };
+  static async getKnowledgeCoverage(knowledgeArea) {
+    try {
+      const r = await pool().query(
+        `SELECT
+           COUNT(*) AS total,
+           COUNT(CASE WHEN enabled = TRUE THEN 1 END) AS enabled_cnt,
+           MAX(updated_at) AS last_update
+         FROM knowledge_base
+         WHERE ($1::text IS NULL OR category = $1)`,
+        [knowledgeArea || null]
+      );
+      const row = r.rows?.[0];
+      return {
+        totalTopics: parseInt(row?.total || 0),
+        coveredTopics: parseInt(row?.enabled_cnt || 0),
+        lastUpdate: row?.last_update || null,
+      };
+    } catch (e) {
+      return { error: e?.message };
+    }
   }
-  
+
   /**
-   * 获取当前评分规则
+   * 获取当前评分规则数量（查 hrms_state 中的 scoringRules）
    */
-  static getCurrentScoringRules(ruleType) {
-    return {
-      ruleCount: 10,
-      lastUpdate: new Date().toISOString(),
-      conflicts: [],
-      completeness: 0.8
-    };
+  static async getCurrentScoringRules(ruleType) {
+    try {
+      const r = await pool().query(
+        `SELECT data->'scoringRules' AS rules FROM hrms_state WHERE key = 'default' LIMIT 1`
+      );
+      const rules = r.rows?.[0]?.rules;
+      const ruleList = Array.isArray(rules) ? rules : [];
+      const filtered = ruleType ? ruleList.filter(r => r?.type === ruleType) : ruleList;
+      return {
+        ruleCount: filtered.length,
+        lastUpdate: null, // hrms_state 无单独时间戳
+      };
+    } catch (e) {
+      return { ruleCount: 0, error: e?.message };
+    }
   }
 }
 
