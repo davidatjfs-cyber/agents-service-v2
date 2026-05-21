@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
@@ -61,6 +62,7 @@ import { enforceRuntimeSafetyOrExit, configureDbSessionSafety, isSchemaChangeAll
 import { expandAgentStoreLabels, resolveAgentCanonicalStore } from './v2-store-alignment.js';
 import { ensureGrowthTables, registerGrowthRoutes } from './growth-api.js';
 import { ensurePhaseTables, registerPhaseRoutes } from './growth-phases.js';
+import { setPayrollHistoryPool, appendSalaryChange, appendPayrollAdjustment, appendPayrollAudit } from './payroll-history.js';
 import {
   reconcileDailyReportAttendanceRegister,
   backfillDailyAttendanceRegisterMissing,
@@ -88,6 +90,40 @@ app.use(cors(CORS_WHITELIST.length > 0 ? {
   credentials: true
 } : undefined));
 app.use(express.json({ limit: '5mb' }));
+
+// nginx/ALB 反代后必须设 trust proxy，否则 rate-limit 会按 nginx 内网 IP 统一计数 → 真实 IP 失效
+app.set('trust proxy', 1);
+
+// ── Rate limit（仅生产生效；本地/开发禁用，避免 IDE 频繁热重启被锁） ───
+const _rlEnabled = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+const _loginLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'too_many_attempts', message: '登录尝试过于频繁，请稍后再试' },
+  skip: () => !_rlEnabled
+});
+const _passwordLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'too_many_attempts', message: '密码操作过于频繁，请稍后再试' },
+  skip: () => !_rlEnabled
+});
+const _agentLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'rate_limited', message: 'Agent 接口调用过于频繁' },
+  skip: () => !_rlEnabled
+});
+app.use('/api/login', _loginLimiter);
+app.use('/api/change-password', _passwordLimiter);
+app.use('/api/agent', _agentLimiter);
+app.use('/api/agents', _agentLimiter);
 
 // ── Security headers ─────────────────────────────────
 app.use((req, res, next) => {
@@ -3712,6 +3748,8 @@ app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
             const historyRows = Array.isArray(state.salaryChangeHistory) ? state.salaryChangeHistory.slice() : [];
             historyRows.unshift(rec);
             state = { ...state, salaryChangeHistory: historyRows };
+            // 同步 append-only 审计表(防 JSON 被覆盖丢数据；失败不阻塞业务)
+            appendSalaryChange({ rec, operatorUsername: username, operatorRole: role }).catch(() => {});
           }
 
           // Notify applicant + direct supervisor (正式晋升通过)
@@ -5134,6 +5172,7 @@ app.post('/api/uploads/promotion-evidence', authRequired, upload.array('files', 
 
 const pool = new Pool({ connectionString: DATABASE_URL });
 setAgentPool(pool);
+setPayrollHistoryPool(pool);
 configureDbSessionSafety(pool, { serviceName: 'hrms-server' });
 const __ALLOW_SCHEMA_CHANGES__ = isSchemaChangeAllowed();
 registerGrowthRoutes(app, pool);
@@ -11029,6 +11068,8 @@ app.post('/api/reports/payroll/audit', authRequired, async (req, res) => {
       auditedAt: hrmsNowISO()
     };
     await mergeSharedStateFields({ payrollAudits: auditMap });
+    // append-only 审计表(防 JSON 被覆盖丢数据；失败不阻塞业务)
+    appendPayrollAudit({ audit: auditMap[auditKey], operatorUsername: username, operatorRole: role }).catch(() => {});
     return res.json({ ok: true, audit: auditMap[auditKey] });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: 'internal_error' });
@@ -11069,6 +11110,12 @@ app.post('/api/reports/payroll/adjustment', authRequired, async (req, res) => {
     };
     // 原子合并，避免整包 saveSharedState 覆盖由积分审批写入的 pointRecords/payrollAdjustments
     await mergeSharedStateFields({ payrollAdjustments: { [key]: item } });
+    // append-only 审计表(防 JSON 被覆盖丢数据；失败不阻塞业务)
+    appendPayrollAdjustment({
+      key, before: existing, after: item,
+      operatorUsername: username, operatorRole: role,
+      reason: '人工调整(补贴/基薪)'
+    }).catch(() => {});
     return res.json({ ok: true, item });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: 'internal_error' });
@@ -15307,42 +15354,11 @@ async function handleLogin(req, res) {
     }
   }
 
-  // Fallback to server-side saved state (hrms_state), so newly created employees can login.
-  try {
-    const r = await pool.query('select data from hrms_state where key = $1 limit 1', ['default']);
-    const data = r.rows?.[0]?.data;
-    if (data && typeof data === 'object') {
-      const users = Array.isArray(data.users) ? data.users : [];
-      const employees = Array.isArray(data.employees) ? data.employees : [];
-      // employees first – real users live there
-      const all = employees.concat(users);
-      const found = all.find(u => String(u?.username || '').trim().toLowerCase() === username.toLowerCase());
-      if (found) {
-        if (employeeAccountShouldDisable(found)) return res.status(403).json({ error: 'user_inactive' });
-        const pwd = String(found.password || '');
-        if (pwd !== password) return res.status(401).json({ error: 'invalid_credentials' });
-
-        const role = normalizeRoleForJwt(found.role);
-        const canonicalUsername = String(found.username || '').trim() || username;
-        const id = String(found.id || canonicalUsername);
-        const name = String(found.name || found.real_name || found.realName || canonicalUsername);
-        if (!JWT_SECRET) return res.status(500).json({ error: 'server_config_error' });
-        const persistedState = await storeSessionNonce(canonicalUsername, sn);
-        if (!persistedState) {
-          return res.status(503).json({
-            error: 'session_persist_failed',
-            message:
-              '无法写入登录会话（请确认数据库可写且已建表 user_sessions；生产需 ENABLE_DB_WRITE=true）。'
-          });
-        }
-        const token = jwt.sign({ id, username: canonicalUsername, name, role, sn }, JWT_SECRET, { expiresIn: '7d' });
-        recordLogin(canonicalUsername, sn, req);
-        return res.json({ token, user: { id, username: canonicalUsername, name, role } });
-      }
-    }
-  } catch (e) {
-    console.log('State login failed:', e?.message || e);
-  }
+  // C4-FIX (2026-05-21): 已删除 hrms_state 明文密码回退登录路径。
+  // 历史背景：旧实现会从 hrms_state.employees / hrms_state.users 读 password 字段做明文比对，
+  // 等于在 JSON 备份和快照里到处暴露明文口令。
+  // 迁移完成后(scripts/migrate-plaintext-passwords.mjs)，所有账号的 bcrypt hash 都在 users 表，
+  // hrms_state 中的 password 字段已清空。所有登录必须走上方 users 表 + bcrypt 主链路。
 
   // H4-FIX: 本地测试账号仅在开发环境可用
   if (process.env.NODE_ENV !== 'production') {
@@ -17585,6 +17601,37 @@ app.listen(PORT, HOST, async () => {
       console.log('[startup] hrms_leave_domain table ready');
     } catch (e) {
       console.error('[startup] hrms_leave_domain table init failed (non-fatal):', e?.message);
+    }
+
+    // 薪资审计 append-only 表:与 032_hrms_payroll_history.sql 一致,启动时兜底建表
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS hrms_payroll_history (
+          id              BIGSERIAL PRIMARY KEY,
+          record_type     VARCHAR(40) NOT NULL,
+          username        VARCHAR(100),
+          month           VARCHAR(7),
+          store           VARCHAR(100),
+          before_amount   NUMERIC(12, 2),
+          after_amount    NUMERIC(12, 2),
+          delta_amount    NUMERIC(12, 2) GENERATED ALWAYS AS (
+            COALESCE(after_amount, 0) - COALESCE(before_amount, 0)
+          ) STORED,
+          before_value    JSONB,
+          after_value     JSONB,
+          reason          TEXT,
+          source          VARCHAR(60),
+          operator_username VARCHAR(100),
+          operator_role     VARCHAR(60),
+          created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+          idempotency_key VARCHAR(200) UNIQUE
+        )
+      `);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_payroll_history_user_month ON hrms_payroll_history (username, month, created_at DESC)`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_payroll_history_type_created ON hrms_payroll_history (record_type, created_at DESC)`);
+      console.log('[startup] hrms_payroll_history table ready');
+    } catch (e) {
+      console.error('[startup] hrms_payroll_history table init failed (non-fatal):', e?.message);
     }
 
     // 启动时权威重建：每次启动都从 daily_reports 表完整重建 hrms_state.dailyReports

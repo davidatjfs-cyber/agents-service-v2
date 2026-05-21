@@ -2171,8 +2171,12 @@ export function registerGrowthRoutes(app, pool) {
     const text = cleanText(req.body.text, 4000);
     if (!text) return res.status(400).json({ ok: false, error: 'missing_text' });
     try {
+      if (!process.env.JWT_SECRET) {
+        // 关键安全位:绝不允许跨服务 token 用已知字符串作密钥
+        throw new Error('JWT_SECRET not configured');
+      }
       const { default: jwt } = await import('jsonwebtoken');
-      const admToken = jwt.sign({ username: 'growth_semantic', role: 'admin' }, process.env.JWT_SECRET || 'dev', { expiresIn: '30s' });
+      const admToken = jwt.sign({ username: 'growth_semantic', role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '30s' });
       const agentResp = await fetch((process.env.AGENTS_SERVICE_URL || 'http://127.0.0.1:3101') + '/api/growth/semantic-parse', {
         method: 'POST', headers: { 'Authorization': 'Bearer ' + admToken, 'Content-Type': 'application/json' },
         body: JSON.stringify({ text })

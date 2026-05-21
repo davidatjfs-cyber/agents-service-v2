@@ -20,6 +20,7 @@ import { estimateCostAndProfitForStore } from './margin-from-sales.js';
 import { analyzeDailyBusiness } from './report-handler.js';
 import { buildBusinessPrompt } from './llm-provider.js';
 import { createTask, transitionTask } from './task-state-machine.js';
+import { buildMemoryContextBlock } from './agent-memory.js';
 
 /**
  * 从 LLM 响应中去除意外输出的 JSON 块，确保飞书消息里只有自然语言。
@@ -271,11 +272,12 @@ export async function planAndExecute(text, ctx, llmContextOverride) {
 
     let suggestionsText = '';
     try {
+      const memoryContext = await buildMemoryContextBlock('master_planner', store, '', 3);
       const prompt = `
 你是餐饮运营助理。用户提出排班调整请求，需要你输出可审批的“建议文本”，供审批人快速判断。
 用户请求：${String(text || '').trim()}
 门店：${store}
-
+${memoryContext ? `\n你过去对该门店的判断与执行效果（用于参考，避免重复同类问题）：${memoryContext}` : ''}
 要求输出（必须包含下列分区）：
 【经营总结】
 【问题分析】
@@ -370,7 +372,8 @@ export async function planAndExecute(text, ctx, llmContextOverride) {
   const fallbackActions = buildFallbackActions(analysis.anomalies);
   let suggestionsText = '';
   try {
-    const prompt = buildBusinessPrompt(
+    const memoryContext = await buildMemoryContextBlock('master_planner', store, '', 3);
+    const basePrompt = buildBusinessPrompt(
       {
         revenue: analysis.revenue,
         profitRate: analysis.profitRate,
@@ -380,6 +383,9 @@ export async function planAndExecute(text, ctx, llmContextOverride) {
       },
       tone
     );
+    const prompt = memoryContext
+      ? `${basePrompt}\n\n你过去对该门店的判断与执行效果（用于参考，避免重复同类失败建议）：${memoryContext}`
+      : basePrompt;
     const r = await callLLM(
       [
         {

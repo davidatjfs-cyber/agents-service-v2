@@ -198,17 +198,17 @@ export async function getOutcomeStats(agentId, store) {
  *
  * @param {string} agentId
  * @param {string} store
- * @param {string} query
+ * @param {string} keywords  传入用户问题/场景关键词，会用于 recallMemories ILIKE 过滤
  * @param {number} [limit=3]
  * @returns {Promise<string>} 拼好的文本块，空则返回 ''
  */
-export async function buildMemoryContextBlock(agentId, store, query, limit = 3) {
+export async function buildMemoryContextBlock(agentId, store, keywords = '', limit = 3) {
   const s = String(store || '').trim();
   if (!s) return '';
   try {
     const [outcomes, memories, errorPatterns] = await Promise.all([
       getOutcomeStats(agentId, s).catch(() => ({ total: 0, avg_score: null, success_count: 0 })),
-      recallMemories(agentId, s, '', limit),
+      recallMemories(agentId, s, String(keywords || ''), limit),
       // 读取该Agent+门店的近期错误模式（限3条最新的），用于注入"需避免"预警
       (async () => {
         try {

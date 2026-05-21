@@ -12,6 +12,7 @@ import { logger } from '../utils/logger.js';
 import { callLLM } from './llm-provider.js';
 import { pushAnomalyAlert, sendText, lookupUserByUsername } from './feishu-client.js';
 import { createUnifiedTask } from './task-orchestrator.js';
+import { buildMemoryContextBlock } from './agent-memory.js';
 
 // ─── 营收类异常 → 自动触发营销策划 ───
 const REVENUE_ANOMALIES = new Set([
@@ -96,12 +97,15 @@ async function generateMarketingProposal(store, anomalyKey, severity, detail, va
     }
   } catch (e) { /* silent */ }
 
+  // 注入该门店历史营销方案的执行效果，避免重复同类低效建议
+  const memoryContext = await buildMemoryContextBlock('marketing_planner', store, '', 3);
+
   const prompt = `你是餐饮连锁品牌的市场总监AI。门店"${store}"触发了${anomalyKey}异常(${severity}级):
 ${detail || ''}
 
 门店数据:
 ${context || '暂无数据'}
-
+${memoryContext ? `\n你过去给该门店的营销方案与效果（高分可参考，低分需换思路）：${memoryContext}` : ''}
 请输出一个JSON格式的营销方案(不要markdown包裹):
 {
   "title": "方案标题(20字内)",

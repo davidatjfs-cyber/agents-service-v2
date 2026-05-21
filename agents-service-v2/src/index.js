@@ -108,7 +108,15 @@ app.use(helmet({
     }
   }
 }));
-app.use(cors());
+// CORS：生产环境通过 CORS_ORIGINS 白名单（与 HRMS 主服务一致）；未设置时回退全开放仅供本地开发
+const _CORS_WHITELIST = (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+app.use(cors(_CORS_WHITELIST.length > 0 ? {
+  origin: (origin, cb) => {
+    if (!origin || _CORS_WHITELIST.includes(origin)) cb(null, true);
+    else cb(new Error('CORS not allowed'));
+  },
+  credentials: true
+} : undefined));
 app.use('/api/', apiLimiter);
 
 /** 飞书 webhook 必须用 raw 再 JSON.parse（加密包、charset 变体等）；且须始终 HTTP 200，否则客户端报 200671
