@@ -7112,196 +7112,335 @@
             text-align: right;
         }
 
-        /* ── 待审批：与请款/营业日报同系（简洁、拇指友好） ── */
+        /* ── 待审批：Glass Aurora ── */
         #approvals-page {
-            --ap-bg0: #06080c;
-            --ap-bg1: #0b0f16;
-            --ap-border: rgba(212, 175, 55, 0.14);
-            --ap-border-soft: rgba(255, 255, 255, 0.08);
-            --ap-gold: #d4af37;
-            --ap-gold-glow: rgba(212, 175, 55, 0.2);
-            --ap-text: #e9eef6;
-            --ap-muted: rgba(186, 198, 215, 0.62);
-            --ap-sans: "IBM Plex Sans", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
-            background:
-                radial-gradient(720px 420px at 100% 0%, rgba(212, 175, 55, 0.07), transparent 52%),
-                radial-gradient(640px 380px at 0% 30%, rgba(94, 234, 212, 0.05), transparent 48%),
-                linear-gradient(165deg, var(--ap-bg0) 0%, var(--ap-bg1) 55%, #070a10 100%);
+            --iris: #6D7CFF;
+            --iris-dim: #4754D6;
+            --mint: #5EEAD4;
+            --coral: #FF7A90;
+            --amber: #FFC46B;
+            --text: #EEF1FA;
+            --dim: #9AA3C7;
+            --faint: #5B6597;
+            --ink: #141A30;
+            --bg: #0B0F1E;
+            --stroke: rgba(255,255,255,0.08);
+            --stroke-hi: rgba(255,255,255,0.16);
+            --glass: rgba(20,26,48,0.55);
+            --sans: "IBM Plex Sans", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+            --mono: "IBM Plex Mono", "SF Mono", monospace;
+            --radius-btn: 10px;
+            --radius-card: 14px;
+            background: #0B0F1E;
             min-height: calc(100vh - 120px);
-            padding-top: 6px;
-            color: var(--ap-text);
-            font-family: var(--ap-sans);
+            padding-top: 0;
+            color: var(--text);
+            font-family: var(--sans);
+            position: relative;
+            overflow-x: hidden;
         }
-
+        /* 噪点纹理（Grain） */
+        .ap-grain {
+            position: fixed; inset: 0; z-index: 0;
+            pointer-events: none; opacity: 0.06;
+            mix-blend-mode: overlay;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+            background-repeat: repeat; background-size: 256px 256px;
+        }
+        /* 极光光斑 */
+        .ap-aurora {
+            position: fixed; inset: 0; z-index: 0;
+            pointer-events: none; overflow: hidden;
+        }
+        .ap-aurora__blob {
+            position: absolute; border-radius: 50%; filter: blur(80px);
+        }
+        .ap-aurora__blob--1 {
+            width: 55vw; height: 55vw; top: -15%; left: -10%;
+            background: rgba(109,124,255,0.32);
+        }
+        .ap-aurora__blob--2 {
+            width: 45vw; height: 45vw; top: -8%; right: -12%;
+            background: rgba(255,122,144,0.22);
+        }
+        .ap-aurora__blob--3 {
+            width: 60vw; height: 50vw; bottom: -15%; left: 25%;
+            background: rgba(94,234,212,0.14);
+        }
         #approvals-page .ap-shell {
-            max-width: min(960px, 100%);
-            margin: 0 auto;
+            position: relative; z-index: 1;
+            max-width: 780px; margin: 0 auto;
             padding: 14px 14px 110px;
         }
-
-        #approvals-page .ap-page-head {
-            margin-bottom: 14px;
-            padding-bottom: 12px;
-            border-bottom: 1px solid var(--ap-border-soft);
-        }
-
+        /* 页头 */
+        #approvals-page .ap-page-head { margin-bottom: 20px; }
         #approvals-page .ap-page-head__eyebrow {
-            display: block;
-            font-size: 10px;
-            font-weight: 600;
-            letter-spacing: 0.22em;
-            color: var(--ap-gold);
-            opacity: 0.88;
-            margin-bottom: 4px;
+            display: flex; align-items: center; gap: 8px;
+            font-family: "IBM Plex Sans", sans-serif;
+            font-size: 10px; font-weight: 600;
+            letter-spacing: 0.12em; color: var(--faint);
+            text-transform: uppercase; margin-bottom: 8px;
         }
-
+        #approvals-page .ap-page-head__eyebrow::before {
+            content: ''; width: 7px; height: 7px; border-radius: 50%;
+            background: var(--iris); box-shadow: 0 0 10px var(--iris);
+            flex-shrink: 0;
+        }
         #approvals-page .ap-page-head h2 {
-            margin: 0;
-            font-size: 1.35rem;
-            font-weight: 700;
-            letter-spacing: 0.04em;
+            margin: 0; font-size: 1.35rem; font-weight: 700;
+            letter-spacing: -0.02em; color: #fff; line-height: 1.15;
         }
-
         #approvals-page .ap-page-head__desc {
-            margin: 8px 0 0;
-            font-size: 13px;
-            line-height: 1.45;
-            color: var(--ap-muted);
+            margin: 8px 0 0; font-size: 13px; color: var(--dim);
         }
-
+        /* 按钮 */
+        #approvals-page .ga-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            gap: 6px; height: 42px; padding: 0 16px;
+            border-radius: var(--radius-btn); font-size: 13px; font-weight: 600;
+            font-family: var(--sans); cursor: pointer; border: none;
+            transition: all 0.15s; -webkit-tap-highlight-color: transparent;
+        }
+        #approvals-page .ga-btn--primary {
+            background: var(--iris); color: #fff;
+            box-shadow: 0 8px 22px rgba(109,124,255,0.35);
+        }
+        #approvals-page .ga-btn--primary:hover { background: #7f8cff; }
+        #approvals-page .ga-btn--primary:active { transform: scale(0.97); }
+        #approvals-page .ga-btn--ghost {
+            background: rgba(255,255,255,0.06); color: var(--dim);
+            border: 1px solid var(--stroke);
+        }
+        #approvals-page .ga-btn--ghost:hover { background: rgba(255,255,255,0.10); color: var(--text); }
+        #approvals-page .ga-btn--sm { height: 34px; padding: 0 14px; font-size: 12px; }
+        #approvals-page .ga-btn--danger {
+            background: rgba(255,122,144,0.15); color: var(--coral);
+            border: 1px solid rgba(255,122,144,0.2);
+        }
+        #approvals-page .ga-btn--danger:hover { background: rgba(255,122,144,0.25); }
+        /* 筛选面板 */
         #approvals-page .ap-filters {
             position: relative;
-            border-radius: 18px;
-            padding: 16px 14px 14px;
+            border-radius: 14px;
+            padding: 14px 14px 12px;
             margin-bottom: 16px;
-            background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
-            border: 1px solid var(--ap-border);
-            box-shadow:
-                0 0 0 1px rgba(0, 0, 0, 0.35) inset,
-                0 18px 36px -26px rgba(0, 0, 0, 0.55);
-            backdrop-filter: blur(12px);
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--stroke);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
         }
-
         #approvals-page .ap-filters__grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 10px 12px;
         }
-
         @media (max-width: 520px) {
             #approvals-page .ap-filters__grid {
                 grid-template-columns: 1fr;
             }
         }
-
         #approvals-page .ap-filters label.ap-lab {
             display: block;
             font-size: 11px;
-            font-weight: 700;
+            font-weight: 600;
             letter-spacing: 0.06em;
             text-transform: uppercase;
-            color: var(--ap-muted);
-            margin-bottom: 6px;
+            color: var(--faint);
+            margin-bottom: 5px;
         }
-
         #approvals-page .ap-filters select,
         #approvals-page .ap-filters input[type="date"],
         #approvals-page .ap-filters input[type="text"] {
             width: 100%;
-            min-height: 46px;
-            padding: 10px 12px;
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            background: rgba(255, 255, 255, 0.05);
-            color: rgba(255, 255, 255, 0.92);
+            height: 44px;
+            padding: 0 12px;
+            border-radius: var(--radius-btn);
+            border: 1px solid var(--stroke);
+            background: rgba(255,255,255,0.05);
+            color: var(--text);
             font-size: 14px;
+            font-family: var(--sans);
+            outline: none;
             box-sizing: border-box;
         }
-
+        #approvals-page .ap-filters select:hover { border-color: var(--stroke-hi); }
+        #approvals-page .ap-filters select:focus,
+        #approvals-page .ap-filters input[type="date"]:focus,
+        #approvals-page .ap-filters input[type="text"]:focus {
+            border-color: rgba(109,124,255,0.5);
+            box-shadow: 0 0 0 3px rgba(109,124,255,0.12);
+        }
+        #approvals-page .ap-filters input::placeholder { color: var(--faint); }
         #approvals-page .ap-filters__row-actions {
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
             align-items: center;
-            margin-top: 4px;
+            margin-top: 6px;
         }
-
         #approvals-page .ap-filters__row-actions .btn,
         #approvals-page .ap-filters__row-actions .btn-secondary {
-            min-height: 46px;
-            padding: 0 16px;
-            border-radius: 12px;
-            font-weight: 700;
-            font-size: 13px;
-        }
-
-        #approvals-page .ap-list-card {
-            border-radius: 18px;
-            padding: 14px 14px 12px;
-            border: 1px solid var(--ap-border-soft);
-            background: rgba(255, 255, 255, 0.03);
-        }
-
-        #approvals-page .ap-list-card h4 {
-            margin: 0 0 4px;
-            font-size: 15px;
-            font-weight: 800;
-        }
-
-        #approvals-page .ap-hint {
-            margin-top: 6px;
-            font-size: 12px;
-            line-height: 1.45;
-            color: var(--ap-muted);
-        }
-
-        #approvals-page .ap-row {
-            padding: 14px 14px;
-            border-radius: 14px;
-            margin-bottom: 10px;
-            display: flex;
-            justify-content: space-between;
-            gap: 12px;
-            flex-wrap: wrap;
-            align-items: center;
-            border: 1px solid rgba(255, 255, 255, 0.06);
-        }
-
-        #approvals-page .ap-row__title {
-            font-weight: 900;
-            font-size: 15px;
-            letter-spacing: 0.02em;
-        }
-
-        #approvals-page .ap-row__meta {
-            margin-top: 6px;
-            font-size: 12px;
-            line-height: 1.45;
-            color: var(--ap-muted);
-        }
-
-        #approvals-page .ap-row__actions {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            flex-shrink: 0;
-        }
-
-        #approvals-page .ap-row__actions .btn-secondary {
             min-height: 44px;
             padding: 0 16px;
             border-radius: 12px;
             font-weight: 700;
-        }
-
-        #approvals-page .ap-type-group {
-            margin: 18px 0 8px;
             font-size: 13px;
-            font-weight: 800;
-            letter-spacing: 0.04em;
-            color: rgba(233, 238, 246, 0.95);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-            padding-bottom: 6px;
+        }
+        /* 列表区 */
+        #approvals-page .ap-list-card {
+            display: flex; flex-direction: column;
+            border: none; background: transparent; padding: 0;
+        }
+        #approvals-page .ap-list-card h4 { display: none; }
+        #approvals-page .ap-hint {
+            margin-top: 6px; font-size: 12px; color: var(--dim);
+            text-align: center; padding: 8px 0;
+        }
+        /* 审批卡片：磨砂玻璃 */
+        #approvals-page .ap-card {
+            position: relative; padding: 14px 14px;
+            border-radius: var(--radius-card); margin-bottom: 8px;
+            background: rgba(20,26,48,0.52);
+            backdrop-filter: blur(20px) saturate(1.4);
+            -webkit-backdrop-filter: blur(20px) saturate(1.4);
+            border: 1px solid var(--stroke);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 4px 24px rgba(0,0,0,0.35);
+            cursor: pointer; overflow: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
+        #approvals-page .ap-card:active {
+            background: rgba(20,26,48,0.65); transform: none;
+        }
+        /* 逾期 / 高优 */
+        #approvals-page .ap-card.ap-card--overdue::before {
+            content: ''; position: absolute;
+            top: -24px; right: -24px; width: 80px; height: 80px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255,122,144,0.2), transparent 70%);
+            filter: blur(8px); pointer-events: none;
+        }
+        #approvals-page .ap-card.ap-card--urgent {
+            background: rgba(20,22,60,0.58);
+            border-color: rgba(109,124,255,0.3);
+            box-shadow:
+                inset 0 1px 0 rgba(109,124,255,0.10),
+                0 0 0 1px rgba(109,124,255,0.08),
+                0 4px 24px rgba(109,124,255,0.12);
+        }
+        #approvals-page .ap-card.ap-card--urgent::after {
+            content: ''; position: absolute;
+            top: 12px; bottom: 12px; left: 0; width: 3px;
+            border-radius: 0 3px 3px 0;
+            background: linear-gradient(180deg, #8b9aff, var(--iris));
+        }
+        #approvals-page .ap-card.ap-card--done { opacity: 0.65; }
+        /* 卡片头部 */
+        #approvals-page .ap-card__top {
+            display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px;
+        }
+        #approvals-page .ap-card__icon {
+            width: 32px; height: 32px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; flex-shrink: 0;
+        }
+        #approvals-page .ap-card__icon--leave           { background: rgba(109,124,255,0.15); color: var(--iris); }
+        #approvals-page .ap-card__icon--payment         { background: rgba(255,196,107,0.15); color: var(--amber); }
+        #approvals-page .ap-card__icon--onboarding      { background: rgba(94,234,212,0.12); color: var(--mint); }
+        #approvals-page .ap-card__icon--offboarding     { background: rgba(255,122,144,0.12); color: var(--coral); }
+        #approvals-page .ap-card__icon--reward_punishment { background: rgba(109,124,255,0.12); color: var(--iris); }
+        #approvals-page .ap-card__icon--points          { background: rgba(255,196,107,0.12); color: var(--amber); }
+        #approvals-page .ap-card__icon--promotion       { background: rgba(94,234,212,0.12); color: var(--mint); }
+        #approvals-page .ap-card__icon--monthly_confirm { background: rgba(109,124,255,0.10); color: var(--iris); }
+        #approvals-page .ap-card__info { flex: 1; min-width: 0; }
+        #approvals-page .ap-card__title {
+            font-size: 13px; font-weight: 600; color: #fff;
+            line-height: 1.35; margin-bottom: 2px;
+        }
+        #approvals-page .ap-card__title .amount {
+            font-family: var(--mono); font-weight: 700; color: var(--amber);
+        }
+        #approvals-page .ap-card__meta {
+            display: flex; flex-wrap: wrap; gap: 3px 10px;
+            font-size: 11px; color: var(--dim);
+        }
+        #approvals-page .ap-card__meta span {
+            display: inline-flex; align-items: center; gap: 4px;
+        }
+        /* 状态徽章 */
+        #approvals-page .ap-badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 2px 8px; border-radius: 99px;
+            font-size: 10px; font-weight: 600; line-height: 1;
+            white-space: nowrap; flex-shrink: 0;
+        }
+        #approvals-page .ap-badge--pending {
+            background: rgba(255,196,107,0.15);
+            border: 1px solid rgba(255,196,107,0.25); color: var(--amber);
+        }
+        #approvals-page .ap-badge--approved {
+            background: rgba(94,234,212,0.12);
+            border: 1px solid rgba(94,234,212,0.2); color: var(--mint);
+        }
+        #approvals-page .ap-badge--rejected {
+            background: rgba(255,122,144,0.12);
+            border: 1px solid rgba(255,122,144,0.2); color: var(--coral);
+        }
+        #approvals-page .ap-badge--paid {
+            background: rgba(109,124,255,0.12);
+            border: 1px solid rgba(109,124,255,0.2); color: var(--iris);
+        }
+        #approvals-page .ap-badge--returned {
+            background: rgba(90,100,130,0.15);
+            border: 1px solid rgba(90,100,130,0.2); color: var(--dim);
+        }
+        #approvals-page .ap-badge--urgent {
+            background: rgba(255,122,144,0.18);
+            border: 1px solid rgba(255,122,144,0.3); color: var(--coral);
+            font-weight: 700;
+        }
+        .ap-pulse-dot {
+            width: 5px; height: 5px; border-radius: 50%;
+            background: var(--coral);
+            box-shadow: 0 0 8px var(--coral);
+            animation: ga-pulse 1.6s ease-in-out infinite;
+        }
+        @keyframes ga-pulse { 0%,100% {opacity:1} 50% {opacity:0.3} }
+        /* 卡片底部 + 操作 */
+        #approvals-page .ap-card__bottom {
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        #approvals-page .ap-card__time {
+            font-size: 10px; font-family: var(--mono); color: var(--faint);
+            text-align: left;
+        }
+        #approvals-page .ap-card__actions {
+            display: flex; gap: 6px; align-self: stretch;
+        }
+        #approvals-page .ap-card__actions .ga-btn {
+            flex: 1; height: 40px; font-size: 13px; border-radius: 10px; min-width: 0;
+        }
+        #approvals-page .ap-card__checkbox-wrap {
+            display: flex; align-items: center; gap: 7px;
+            font-size: 12px; color: var(--dim); padding-top: 6px;
+        }
+        #approvals-page .ap-card__checkbox-wrap input[type="checkbox"] {
+            width: 16px; height: 16px;
+            accent-color: var(--iris); cursor: pointer;
+        }
+        /* 分组 */
+        #approvals-page .ap-type-group {
+            margin: 18px 0 8px; font-size: 11px; font-weight: 700;
+            letter-spacing: 0.08em; text-transform: uppercase;
+            color: var(--faint);
+            display: flex; align-items: center; gap: 8px;
+            padding: 0 2px;
+        }
+        #approvals-page .ap-type-group::after {
+            content: ''; flex: 1; height: 1px; background: var(--stroke);
+        }
+        #approvals-page #approvals-bulk-approve-btn {
+            background: rgba(109,124,255,0.2); color: var(--iris);
+            border: 1px solid rgba(109,124,255,0.3);
+            border-radius: 10px; font-weight: 600;
         }
 
         /* ── 请款管理：与分析报表同系金融面板 ── */
@@ -8423,6 +8562,73 @@
             #reports-page .rep-grid {
                 grid-template-columns: 1fr;
             }
+        }
+
+        /* ── 我的档案：Glass Aurora 风格覆盖 ── */
+        #profile-page {
+            --iris: #6D7CFF;
+            --iris-dim: #4754D6;
+            --mint: #5EEAD4;
+            --coral: #FF7A90;
+            --amber: #FFC46B;
+            --text: #EEF1FA;
+            --dim: #9AA3C7;
+            --faint: #5B6597;
+            --stroke: rgba(255,255,255,0.08);
+            --stroke-hi: rgba(255,255,255,0.16);
+            --glass: rgba(20,26,48,0.55);
+            background: #0B0F1E !important;
+            position: relative; overflow-x: hidden;
+            color: var(--text) !important;
+        }
+        #profile-page .ap-aurora { position:fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden; }
+        #profile-page .ap-aurora__blob { position:absolute; border-radius:50%; filter:blur(80px); }
+        #profile-page .ap-aurora__blob--1 { width:55vw; height:55vw; top:-15%; left:-10%; background:rgba(109,124,255,0.32); }
+        #profile-page .ap-aurora__blob--2 { width:45vw; height:45vw; top:-8%; right:-12%; background:rgba(255,122,144,0.22); }
+        #profile-page .ap-aurora__blob--3 { width:60vw; height:50vw; bottom:-15%; left:25%; background:rgba(94,234,212,0.14); }
+        #profile-page .ap-grain { position:fixed; inset:0; z-index:0; pointer-events:none; opacity:0.06; mix-blend-mode:overlay; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); background-repeat:repeat; background-size:256px 256px; }
+        #profile-page .dr-shell { position:relative; z-index:1; padding-bottom:110px; }
+        #profile-page .card {
+            background: rgba(20,26,48,0.52) !important;
+            backdrop-filter: blur(20px) saturate(1.4) !important;
+            -webkit-backdrop-filter: blur(20px) saturate(1.4) !important;
+            border: 1px solid var(--stroke) !important;
+            border-radius: 18px;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 4px 24px rgba(0,0,0,0.35) !important;
+        }
+        #profile-page .rep-page-head { border-bottom-color: var(--stroke); }
+        #profile-page .rep-page-head__eyebrow { color: var(--faint); letter-spacing: 0.10em; display: flex; align-items: center; gap: 8px; }
+        #profile-page .rep-page-head__eyebrow::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--iris); box-shadow: 0 0 10px var(--iris); flex-shrink: 0; }
+        #profile-page .rep-page-head h2 { color: #fff; letter-spacing: -0.02em; }
+        #profile-page .rep-page-head__sub { color: var(--dim); }
+        #profile-page .ga-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 40px; padding: 0 16px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all 0.15s; -webkit-tap-highlight-color: transparent; }
+        #profile-page .ga-btn--primary { background: var(--iris); color: #fff; box-shadow: 0 8px 22px rgba(109,124,255,0.35); }
+        #profile-page .ga-btn--ghost { background: rgba(255,255,255,0.06); color: var(--dim); border: 1px solid var(--stroke); }
+        #profile-page .ga-btn--sm { height: 32px; padding: 0 12px; font-size: 12px; }
+        #profile-page .ga-btn--danger { background: rgba(255,122,144,0.15); color: var(--coral); border: 1px solid rgba(255,122,144,0.2); }
+        #profile-page .ga-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 99px; font-size: 10px; font-weight: 600; line-height: 1; }
+        #profile-page .ga-badge--iris { background: rgba(109,124,255,0.15); border: 1px solid rgba(109,124,255,0.25); color: var(--iris); }
+        #profile-page .ga-badge--mint { background: rgba(94,234,212,0.12); border: 1px solid rgba(94,234,212,0.2); color: var(--mint); }
+        #profile-page .ga-badge--amber { background: rgba(255,196,107,0.15); border: 1px solid rgba(255,196,107,0.25); color: var(--amber); }
+        #profile-page .ga-badge--coral { background: rgba(255,122,144,0.15); border: 1px solid rgba(255,122,144,0.25); color: var(--coral); }
+        #profile-page .pf-notif-card { background: rgba(20,26,48,0.42); border: 1px solid var(--stroke); border-radius: 14px; padding: 12px; margin-bottom: 8px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+        #profile-page .pf-notif-card .pf-notif-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 99px; font-size: 10px; font-weight: 600; }
+        #profile-page .pf-notif-badge--announcement { background: rgba(109,124,255,0.15); color: var(--iris); }
+        #profile-page .pf-notif-badge--warning { background: rgba(255,122,144,0.15); color: var(--coral); }
+        #profile-page .pf-approval-item { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--stroke); margin-bottom: 6px; }
+        #profile-page .profile-metrics-grid > div { background: rgba(255,255,255,0.04); border-color: var(--stroke); border-radius: 12px; }
+        #profile-page .pf-quick-card { background: rgba(20,26,48,0.52); backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4); border: 1px solid var(--stroke); border-radius: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 4px 24px rgba(0,0,0,0.35); padding: 14px 10px; cursor: pointer; text-align: center; min-height: 76px; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: border-color 0.15s; }
+        #profile-page .pf-quick-card .pf-quick-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; margin-bottom: 6px; }
+        #profile-page .pf-quick-icon--leave { background: rgba(109,124,255,0.15); }
+        #profile-page .pf-quick-icon--promote { background: rgba(94,234,212,0.12); }
+        #profile-page .pf-quick-icon--mailbox { background: rgba(255,196,107,0.12); }
+        #profile-page .pf-quick-icon--password { background: rgba(255,122,144,0.10); }
+        #profile-page .pf-quick-icon--resign { background: rgba(90,100,130,0.15); opacity: 0.55; }
+        @media (max-width: 480px) {
+            #profile-page .card { border-radius: 14px; }
+            #profile-page .profile-metrics-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+            #profile-page .rep-page-head h2 { font-size: 1.15rem; }
+            #profile-page .dr-shell { padding: 10px 10px 100px; }
         }
 
         /* ── 我的档案 / 员工管理 / 考勤打卡 / 奖惩管理：与#reports-page 同系金融面板 ── */
@@ -10981,11 +11187,19 @@
             </div>
 
             <div id="approvals-page" class="hidden">
+                <!-- Glass Aurora 视觉效果层 -->
+                <div class="ap-grain"></div>
+                <div class="ap-aurora">
+                    <div class="ap-aurora__blob ap-aurora__blob--1"></div>
+                    <div class="ap-aurora__blob ap-aurora__blob--2"></div>
+                    <div class="ap-aurora__blob ap-aurora__blob--3"></div>
+                </div>
+
                 <div class="ap-shell">
                     <header class="ap-page-head">
                         <span class="ap-page-head__eyebrow">WORKFLOW</span>
                         <h2>待审批</h2>
-                        <p class="ap-page-head__desc">待我处理、我发起的与历史记录；筛选器为大触控目标，便于单手操作。</p>
+                        <p class="ap-page-head__desc">待我处理、我发起的与审批历史记录</p>
                     </header>
 
                     <section class="ap-filters" aria-label="审批筛选">
@@ -11012,7 +11226,7 @@
                             </div>
                             <div>
                                 <label class="ap-lab" for="approvals-type-filter">类型</label>
-                                <select id="approvals-type-filter" onchange="loadApprovalsData()" title="按审批类型筛选">
+                                <select id="approvals-type-filter" onchange="loadApprovalsData()">
                                     <option value="">全部类型</option>
                                     <option value="onboarding">入职</option>
                                     <option value="offboarding">离职</option>
@@ -11026,35 +11240,33 @@
                             </div>
                             <div>
                                 <label class="ap-lab" for="approvals-date-field">日期含义</label>
-                                <select id="approvals-date-field" onchange="loadApprovalsData()" title="日期筛选含义">
+                                <select id="approvals-date-field" onchange="loadApprovalsData()">
                                     <option value="created">按申请日</option>
                                     <option value="updated">按最后更新（含审批）</option>
                                 </select>
                             </div>
                             <div>
                                 <label class="ap-lab" for="approvals-approved-start">开始日期</label>
-                                <input id="approvals-approved-start" type="date" onchange="loadApprovalsData()" style="color-scheme: dark;" placeholder="开始日期" />
+                                <input id="approvals-approved-start" type="date" onchange="loadApprovalsData()" style="color-scheme:dark;" placeholder="开始日期">
                             </div>
                             <div>
                                 <label class="ap-lab" for="approvals-approved-end">结束日期</label>
-                                <input id="approvals-approved-end" type="date" onchange="loadApprovalsData()" style="color-scheme: dark;" placeholder="结束日期" />
+                                <input id="approvals-approved-end" type="date" onchange="loadApprovalsData()" style="color-scheme:dark;" placeholder="结束日期">
                             </div>
-                            <div style="grid-column: 1 / -1;">
+                            <div style="grid-column:1/-1;">
                                 <label class="ap-lab" for="approvals-search">搜索</label>
-                                <input id="approvals-search" type="text" onkeydown="if(event.key==='Enter') loadApprovalsData()" placeholder="申请人 / 关键字" />
+                                <input id="approvals-search" type="text" onkeydown="if(event.key==='Enter')loadApprovalsData()" placeholder="申请人 / 关键字">
                             </div>
                         </div>
                         <div class="ap-filters__row-actions">
-                            <button class="btn btn-secondary" id="approvals-bulk-approve-btn" type="button" onclick="bulkApproveSelectedApprovals()" style="display:none;">批量通过</button>
-                            <button class="btn btn-secondary" type="button" onclick="loadApprovalsData()">刷新</button>
+                            <button class="ga-btn ga-btn--primary" id="approvals-bulk-approve-btn" type="button" onclick="bulkApproveSelectedApprovals()" style="display:none;">批量通过</button>
+                            <button class="ga-btn ga-btn--ghost" type="button" onclick="loadApprovalsData()">刷新</button>
                         </div>
                     </section>
 
                     <section class="ap-list-card" aria-label="审批列表">
-                        <h4>审批列表</h4>
-                        <div id="approvals-hint" class="ap-hint">进入记录即视为已读；未读数量显示在导航。「按申请日」为提交时间；「按最后更新」含审批操作时间。管理层「全部」按类型分组。</div>
-                        <div id="approvals-list" style="margin-top: 12px;"></div>
-                        <div id="approvals-empty" class="ap-hint" style="display:none; text-align:center; padding: 24px 8px;">暂无审批记录。</div>
+                        <div id="approvals-list"></div>
+                        <div id="approvals-empty" class="ap-hint" style="display:none; text-align:center; padding: 32px 8px;">暂无审批记录</div>
                     </section>
                 </div>
             </div>
@@ -12106,6 +12318,12 @@
             
             <!-- 个人信息页面 -->
             <div id="profile-page" class="hidden">
+                <div class="ap-grain"></div>
+                <div class="ap-aurora">
+                    <div class="ap-aurora__blob ap-aurora__blob--1"></div>
+                    <div class="ap-aurora__blob ap-aurora__blob--2"></div>
+                    <div class="ap-aurora__blob ap-aurora__blob--3"></div>
+                </div>
                 <div class="dr-shell">
                 <header class="rep-page-head">
                     <div>
@@ -12302,27 +12520,27 @@
                     </div>
                 </div>
 
-                <!-- 快捷操作 - 弹窗式 -->
+                <!-- 快捷操作 -->
                 <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 14px;">
-                    <div class="card" style="padding: 16px; cursor:pointer; text-align:center; transition: all 0.2s; min-height: 90px; display:flex; flex-direction:column; align-items:center; justify-content:center;" onclick="openLeaveApplyModal()">
-                        <div style="font-size: 26px; margin-bottom: 6px;">🌿</div>
-                        <div style="font-weight: 700; font-size: 13px;">休假申请</div>
-                        <div style="font-size: 11px; color: rgba(200,215,230,0.6); margin-top: 4px;">提交休假审批</div>
+                    <div class="pf-quick-card" onclick="openLeaveApplyModal()">
+                        <div class="pf-quick-icon pf-quick-icon--leave">🌿</div>
+                        <div style="font-weight:700;font-size:13px;">休假申请</div>
+                        <div style="font-size:11px;color:var(--dim);margin-top:4px;">提交休假审批</div>
                     </div>
-                    <div class="card" style="padding: 16px; cursor:pointer; text-align:center; transition: all 0.2s; min-height: 90px; display:flex; flex-direction:column; align-items:center; justify-content:center;" onclick="showPage('promotion')">
-                        <div style="font-size: 26px; margin-bottom: 6px;">📈</div>
-                        <div style="font-weight: 700; font-size: 13px;">升职申请</div>
-                        <div style="font-size: 11px; color: rgba(200,215,230,0.6); margin-top: 4px;">发起晋升流程</div>
+                    <div class="pf-quick-card" onclick="showPage('promotion')">
+                        <div class="pf-quick-icon pf-quick-icon--promote">📈</div>
+                        <div style="font-weight:700;font-size:13px;">升职申请</div>
+                        <div style="font-size:11px;color:var(--dim);margin-top:4px;">发起晋升流程</div>
                     </div>
-                    <div class="card" style="padding: 16px; cursor:pointer; text-align:center; transition: all 0.2s; min-height: 90px; display:flex; flex-direction:column; align-items:center; justify-content:center;" onclick="openGmMailboxModal()">
-                        <div style="font-size: 26px; margin-bottom: 6px;">📮</div>
-                        <div style="font-weight: 700; font-size: 13px;">总经理信箱</div>
-                        <div style="font-size: 11px; color: rgba(200,215,230,0.6); margin-top: 4px;">匿名反馈不公与违规</div>
+                    <div class="pf-quick-card" onclick="openGmMailboxModal()">
+                        <div class="pf-quick-icon pf-quick-icon--mailbox">📮</div>
+                        <div style="font-weight:700;font-size:13px;">总经理信箱</div>
+                        <div style="font-size:11px;color:var(--dim);margin-top:4px;">匿名反馈不公与违规</div>
                     </div>
-                    <div class="card" style="padding: 16px; cursor:pointer; text-align:center; transition: all 0.2s; min-height: 90px; display:flex; flex-direction:column; align-items:center; justify-content:center; opacity: 0.55;" onclick="openResignationModal()">
-                        <div style="font-size: 26px; margin-bottom: 6px;">📋</div>
-                        <div style="font-weight: 700; font-size: 13px; color: rgba(200,215,230,0.7);">离职申请</div>
-                        <div style="font-size: 11px; color: rgba(200,215,230,0.4); margin-top: 4px;">提交离职审批</div>
+                    <div class="pf-quick-card" onclick="openResignationModal()" style="opacity:0.55;">
+                        <div class="pf-quick-icon pf-quick-icon--resign">📋</div>
+                        <div style="font-weight:700;font-size:13px;color:var(--dim);">离职申请</div>
+                        <div style="font-size:11px;color:var(--faint);margin-top:4px;">提交离职审批</div>
                     </div>
                 </div>
 
@@ -14618,36 +14836,68 @@
             const approvalCardHtml = (it) => {
                 const id = String(it?.id || '').trim();
                 const type = approvalTypeText(it?.type);
+                const rawType = String(it?.type || '').trim();
                 const rawStatus = String(it?.status || '').trim();
-                const st = (String(it?.type || '') === 'payment' && rawStatus === 'approved') ? '已审核' : approvalStatusText(rawStatus);
+                const st = (rawType === 'payment' && rawStatus === 'approved') ? '已审核' : approvalStatusText(rawStatus);
                 const who = String(it?.applicant_name || '').trim() || hrmsDisplayName(it?.applicant_username);
                 const assignee = String(it?.current_assignee_name || '').trim() || hrmsDisplayName(it?.current_assignee_username);
-                const createdAt = String(it?.created_at || it?.createdAt || '').slice(0, 19).replace('T', ' ');
+                const createdAt = String(it?.created_at || it?.createdAt || '').slice(0, 16).replace('T', ' ');
+                const timeStr = createdAt ? createdAt.slice(5) : '';
 
-                const statusColor = st === '待处理' ? 'rgba(245,158,11,0.12)' : (st === '已付款' ? 'rgba(59,130,246,0.10)' : (st === '已通过' ? 'rgba(34,197,94,0.10)' : (st === '已退回' ? 'rgba(148,163,184,0.12)' : 'rgba(239,68,68,0.10)')));
-                const borderColor = st === '待处理' ? '#f59e0b' : (st === '已付款' ? '#3b82f6' : (st === '已通过' ? '#22c55e' : (st === '已退回' ? '#94a3b8' : '#ef4444')));
+                // overdue detection (> 48h for pending items)
+                const isOverdue = rawStatus === 'pending' && createdAt && (Date.now() - new Date(createdAt.replace(' ', 'T') + ':00').getTime()) > 48 * 3600 * 1000;
+
                 const rawAssignee = String(it?.current_assignee_username || '').trim();
                 const myUn = String(currentUser?.username || '').toLowerCase();
                 const chainMatch = Array.isArray(it?.chain) && it.chain.some(s => String(s?.assignee || '').toLowerCase() === myUn && String(s?.status || '') === 'pending');
                 const canAct = String(it?.status || '') === 'pending' && myUn && (rawAssignee.toLowerCase() === myUn || chainMatch);
-                const meta = [createdAt, who !== '-' ? ('申请人 ' + who) : '', assignee !== '-' ? ('当前审批人 ' + assignee) : ''].filter(Boolean).join(' · ');
+
+                // type icon
+                const ICON_MAP = { leave: '✈', payment: '¥', onboarding: '+', offboarding: '←', reward_punishment: '★', points: '₽', promotion: '↑', monthly_confirm: '✓' };
+                const iconChar = ICON_MAP[rawType] || '●';
+
+                // status badge class
+                const badgeClass = rawStatus === 'pending' ? 'ap-badge--pending'
+                    : rawStatus === 'approved' ? 'ap-badge--approved'
+                    : rawStatus === 'paid'     ? 'ap-badge--paid'
+                    : rawStatus === 'rejected' ? 'ap-badge--rejected'
+                    : rawStatus === 'returned' ? 'ap-badge--returned'
+                    : 'ap-badge--returned';
+
+                // urgent/overdue badge
+                const urgentBadge = isOverdue
+                    ? '<span class="ap-badge ap-badge--urgent"><span class="ap-pulse-dot"></span>逾期</span>'
+                    : (canAct ? '<span class="ap-badge ap-badge--urgent">待处理</span>' : '');
+
+                const cardClasses = ['ap-card'];
+                if (isOverdue) cardClasses.push('ap-card--overdue');
+                if (canAct) cardClasses.push('ap-card--urgent');
+                if (rawStatus !== 'pending') cardClasses.push('ap-card--done');
+
+                const titleText = who && who !== '-' ? who + ' · ' + type : type;
+                const metaParts = [];
+                if (assignee && assignee !== '-') metaParts.push('<span>审批人 ' + escapeHtml(assignee) + '</span>');
                 const canBulk = canAct && canBulkApproveType(it);
                 const checked = canBulk && __APPROVALS_SELECTED.has(id);
-                const checkbox = canBulk
-                    ? `<label style="display:flex; align-items:center; gap:6px; font-size:12px; color:rgba(200,215,230,0.78);"><input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleApprovalSelection('${escapeHtml(id)}', this.checked)">批量</label>`
-                    : '';
-                const btn = `<button class="btn btn-secondary" type="button" onclick="openApprovalDetailModal('${escapeHtml(id)}')">查看</button>`;
-                const act = canAct ? '<span style="color: rgba(245,158,11,0.95); font-weight: 800; font-size: 12px; margin-left:6px;">待你处理</span>' : '';
 
-                return `
-                    <div class="ap-row" style="background: ${statusColor}; border-left: 4px solid ${borderColor};">
-                        <div style="min-width:0; flex: 1;">
-                            <div class="ap-row__title" style="color: rgba(226,232,240,0.96);">${escapeHtml(type)} · ${escapeHtml(st)}${act}</div>
-                            <div class="ap-row__meta">${escapeHtml(meta || '')}</div>
-                        </div>
-                        <div class="ap-row__actions">${checkbox}${btn}</div>
-                    </div>
-                `;
+                return '<div class="' + cardClasses.join(' ') + '" onclick="openApprovalDetailModal(\'' + escapeHtml(id) + '\')">'
+                    + '<div class="ap-card__top">'
+                    +   '<div class="ap-card__icon ap-card__icon--' + escapeHtml(rawType) + '">' + iconChar + '</div>'
+                    +   '<div class="ap-card__info">'
+                    +     '<div class="ap-card__title">' + escapeHtml(titleText) + '</div>'
+                    +     (metaParts.length ? '<div class="ap-card__meta">' + metaParts.join('') + '</div>' : '')
+                    +   '</div>'
+                    +   '<span class="ap-badge ' + badgeClass + '">' + escapeHtml(st) + '</span>'
+                    +   urgentBadge
+                    + '</div>'
+                    + '<div class="ap-card__bottom">'
+                    +   '<span class="ap-card__time">' + escapeHtml(timeStr) + '</span>'
+                    +   '<div class="ap-card__actions">'
+                    +     (canBulk ? '<label class="ap-card__checkbox-wrap"><input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleApprovalSelection(\'' + escapeHtml(id) + '\', this.checked)">批量</label>' : '')
+                    +     '<button class="ga-btn ga-btn--ghost ga-btn--sm" type="button" onclick="event.stopPropagation();openApprovalDetailModal(\'' + escapeHtml(id) + '\')">查看详情</button>'
+                    +   '</div>'
+                    + '</div>'
+                    + '</div>';
             };
 
             const viewNow = String(document.getElementById('approvals-view')?.value || 'assigned').trim();
@@ -14663,7 +14913,7 @@
                 const emitType = (tk) => {
                     const sub = buckets.get(tk);
                     if (!sub || !sub.length) return;
-                    parts.push(`<div class="ap-type-group">${escapeHtml(approvalTypeText(tk))} <span style="opacity:0.65;font-weight:600;">（${sub.length}）</span></div>`);
+                    parts.push('<div class="ap-type-group">' + escapeHtml(approvalTypeText(tk)) + ' <span style="opacity:0.65;font-weight:600;">' + sub.length + '</span></div>');
                     sub.forEach((row) => parts.push(approvalCardHtml(row)));
                     buckets.delete(tk);
                 };
@@ -28233,56 +28483,42 @@ tr:nth-child(even) td { background: #fafafa; }
                 const isToday = notifDate === todayDate;
                 const isImportant = String(a?.level || '') === 'important';
 
-                let typeClass = 'notif-type-announcement';
-                if (isToday) typeClass = 'notif-type-new';
-                else if (isImportant) typeClass = 'notif-type-important';
-                else if (isSys) typeClass = 'notif-type-system';
-
-                let typeIcon = '📣';
-                if (isSys) typeIcon = '🔔';
-                if (isToday) typeIcon = '🆕';
-                if (isImportant) typeIcon = '🔴';
+                let typeIcon = isSys ? '🔔' : isToday ? '🆕' : isImportant ? '🔴' : '📣';
                 if (String(a?.title || '').includes('排班')) typeIcon = '📅';
 
                 let badge = '';
                 if (isToday) {
-                    badge = '<span style="display:inline-block; font-size:10px; font-weight:700; padding:2px 7px; border-radius:6px; background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; margin-left:8px; letter-spacing:0.3px;">NEW</span>';
+                    badge = '<span class="pf-notif-badge pf-notif-badge--warning">NEW</span>';
                 } else if (isImportant) {
-                    badge = '<span style="display:inline-block; font-size:10px; font-weight:700; padding:2px 7px; border-radius:6px; background:rgba(239,68,68,0.2); color:rgba(239,68,68,0.95); margin-left:8px;">重要</span>';
+                    badge = '<span class="pf-notif-badge pf-notif-badge--warning">重要</span>';
                 } else if (!isSys) {
-                    badge = '<span style="display:inline-block; font-size:10px; font-weight:600; padding:2px 7px; border-radius:6px; background:rgba(139,92,246,0.15); color:rgba(167,139,250,0.9); margin-left:8px;">公告</span>';
+                    badge = '<span class="pf-notif-badge pf-notif-badge--announcement">公告</span>';
                 }
 
                 const delBtn = isAdmin
-                    ? `<button type="button" onclick="event.stopPropagation();deleteProfileNotification(${idx})" style="background:rgba(239,68,68,0.1); border:none; color:rgba(239,68,68,0.8); cursor:pointer; font-size:11px; padding:3px 8px; border-radius:8px; white-space:nowrap; font-weight:600;" title="删除">删除</button>`
+                    ? '<button type="button" onclick="event.stopPropagation();deleteProfileNotification(' + idx + ')" class="ga-btn ga-btn--danger ga-btn--sm" style="height:26px;font-size:11px;">删除</button>'
                     : '';
 
                 const isLong = rawMsg.length > 80;
                 const preview = isLong ? escapeHtml(rawMsg.slice(0, 80)) + '…' : msg;
 
-                return `
-                    <div class="notif-card-item ${typeClass} notif-card-anim" style="animation-delay:${animDelay}ms; padding-left:20px;"${isLong ? ` onclick="this.querySelector('.notif-full-msg').classList.toggle('notif-msg-show')"` : ''}>
-                        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px;">
-                            <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">
-                                <span style="font-size:15px; flex-shrink:0;">${typeIcon}</span>
-                                <div style="min-width:0; flex:1;">
-                                    <div style="display:flex; align-items:center; flex-wrap:wrap; gap:2px;">
-                                        <span style="font-weight:800; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;">${title}</span>
-                                        ${badge}
-                                    </div>
-                                    <div style="font-size:11px; color:rgba(200,215,230,0.5); margin-top:2px; display:flex; align-items:center; gap:6px;">
-                                        <span>${escapeHtml(relTime)}</span>
-                                        <span style="opacity:0.4;">·</span>
-                                        <span>${escapeHtml(fullDt)}</span>
-                                    </div>
-                                </div>
-                            </div>
-                            ${delBtn}
-                        </div>
-                        <div style="margin-top:8px; color:rgba(226,232,240,0.88); font-size:13px; line-height:1.6; white-space:pre-line;">${preview}</div>
-                        ${isLong ? `<div class="notif-full-msg" style="display:none; margin-top:4px; color:rgba(226,232,240,0.88); font-size:13px; line-height:1.6; white-space:pre-line;">${msg}</div><div style="margin-top:4px; font-size:11px; color:rgba(200,215,230,0.4); text-align:right;">点击展开全文</div>` : ''}
-                    </div>
-                `;
+                return '<div class="pf-notif-card"' + (isLong ? ' onclick="this.querySelector(\'.notif-full-msg\').classList.toggle(\'notif-msg-show\')"' : '') + '>'
+                    + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">'
+                    +   '<div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">'
+                    +     '<span style="font-size:15px;flex-shrink:0;">' + typeIcon + '</span>'
+                    +     '<div style="min-width:0;flex:1;">'
+                    +       '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">'
+                    +         '<span style="font-weight:700;font-size:13px;color:#fff;">' + title + '</span>'
+                    +         badge
+                    +       '</div>'
+                    +       '<div style="font-size:11px;color:var(--faint);margin-top:2px;">' + escapeHtml(relTime) + ' · ' + escapeHtml(fullDt) + '</div>'
+                    +     '</div>'
+                    +   '</div>'
+                    +   delBtn
+                    + '</div>'
+                    + '<div style="margin-top:8px;color:var(--dim);font-size:12px;line-height:1.55;white-space:pre-line;">' + preview + '</div>'
+                    + (isLong ? '<div class="notif-full-msg" style="display:none;margin-top:4px;color:var(--dim);font-size:12px;line-height:1.55;white-space:pre-line;">' + msg + '</div><div style="margin-top:4px;font-size:11px;color:var(--faint);text-align:right;">点击展开全文</div>' : '')
+                    + '</div>';
             };
 
             const expandFooter = document.getElementById('profile-notif-expand-footer');
@@ -28336,7 +28572,7 @@ tr:nth-child(even) td { background: #fafafa; }
                     return chain.some(s => String(s?.assignee || '').toLowerCase() === myUn && String(s?.status || '') === 'pending');
                 });
                 if (!pending.length) {
-                    list.innerHTML = '<div style="font-size:12px; color:rgba(200,215,230,0.5); text-align:center; padding:8px;">暂无待审批</div>';
+                    list.innerHTML = '<div style="font-size:12px;color:var(--faint);text-align:center;padding:8px;">暂无待审批</div>';
                     if (countEl) countEl.textContent = '0';
                     return;
                 }
@@ -28348,7 +28584,6 @@ tr:nth-child(even) td { background: #fafafa; }
                     const who = hrmsDisplayName(it?.applicant_username);
                     const time = String(it?.created_at || it?.createdAt || '').slice(0, 16).replace('T', ' ');
                     const payload = it?.payload && typeof it.payload === 'object' ? it.payload : {};
-                    // Build brief summary based on type
                     let summary = '';
                     const tp = String(it?.type || '');
                     if (tp === 'onboarding') {
@@ -28372,23 +28607,21 @@ tr:nth-child(even) td { background: #fafafa; }
                     } else if (tp === 'payment') {
                         summary = `金额：¥${escapeHtml(String(payload?.amount || '-'))}`;
                     }
-                    return `<div style="border-bottom:1px solid rgba(255,255,255,0.06); padding:10px 0;">
-                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                            <div style="flex:1; min-width:0;">
-                                <div style="font-weight:700; font-size:13px;">${escapeHtml(type)}</div>
-                                <div style="font-size:11px; color:rgba(200,215,230,0.7); margin-top:2px;">申请人：${escapeHtml(who)} · ${escapeHtml(time)}</div>
-                                ${summary ? `<div style="font-size:11px; color:rgba(200,215,230,0.55); margin-top:3px;">${summary}</div>` : ''}
-                            </div>
-                            <div style="display:flex; gap:6px; flex-shrink:0;">
-                                <button class="btn" style="padding:5px 10px; font-size:12px; background:linear-gradient(135deg,rgba(34,197,94,0.8),rgba(22,163,74,0.8)); border:none; color:#fff; border-radius:8px;" onclick="profileQuickApprove('${id}', true)">通过</button>
-                                <button class="btn" style="padding:5px 10px; font-size:12px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); color:rgba(239,68,68,0.9); border-radius:8px;" onclick="profileQuickApprove('${id}', false)">拒绝</button>
-                                <button class="btn btn-secondary" style="padding:5px 8px; font-size:11px; border-radius:8px;" onclick="openApprovalDetailModal('${id}')">详情</button>
-                            </div>
-                        </div>
-                    </div>`;
-                }).join('') + (pending.length > 5 ? `<div style="text-align:center; margin-top:8px; font-size:12px; color:rgba(200,215,230,0.6);">还有 ${pending.length - 5} 条待处理...</div>` : '');
+                    return '<div class="pf-approval-item">'
+                        + '<div style="flex:1;min-width:0;">'
+                        +   '<div style="font-weight:600;font-size:13px;color:#fff;">' + escapeHtml(type) + '</div>'
+                        +   '<div style="font-size:11px;color:var(--faint);margin-top:2px;">申请人：' + escapeHtml(who) + ' · ' + escapeHtml(time) + '</div>'
+                        +   (summary ? '<div style="font-size:11px;color:var(--dim);margin-top:2px;">' + summary + '</div>' : '')
+                        + '</div>'
+                        + '<div style="display:flex;gap:5px;flex-shrink:0;">'
+                        +   '<button class="ga-btn ga-btn--primary ga-btn--sm" style="height:28px;font-size:11px;border-radius:8px;" onclick="profileQuickApprove(\'' + id + '\', true)">通过</button>'
+                        +   '<button class="ga-btn ga-btn--danger ga-btn--sm" style="height:28px;font-size:11px;border-radius:8px;" onclick="profileQuickApprove(\'' + id + '\', false)">拒绝</button>'
+                        +   '<button class="ga-btn ga-btn--ghost ga-btn--sm" style="height:28px;font-size:11px;border-radius:8px;" onclick="openApprovalDetailModal(\'' + id + '\')">详情</button>'
+                        + '</div>'
+                        + '</div>';
+                }).join('') + (pending.length > 5 ? '<div style="text-align:center;margin-top:8px;font-size:12px;color:var(--dim);">还有 ' + (pending.length - 5) + ' 条待处理…</div>' : '');
             } catch (e) {
-                list.innerHTML = '<div style="font-size:12px; color:rgba(239,68,68,0.6); text-align:center; padding:8px;">加载待审批失败</div>';
+                list.innerHTML = '<div style="font-size:12px;color:var(--coral);text-align:center;padding:8px;">加载待审批失败</div>';
             }
         }
 
