@@ -2828,14 +2828,14 @@
                 white-space: nowrap;
             }
 
-            /* 系统设置页面移动端 */
+            /* 系统设置页面移动端 — Glass Aurora */
             #settings-page .settings-report-shell {
-                padding: 4px 0 0;
+                padding: 4px 0 28px;
             }
 
             #settings-page .settings-rep-head {
-                padding: 16px 14px 14px;
-                margin-bottom: 12px;
+                padding: 14px 14px 12px;
+                margin-bottom: 10px;
             }
 
             #settings-page .settings-rep-toc {
@@ -2875,10 +2875,11 @@
                 -webkit-overflow-scrolling: touch;
                 margin: 12px -12px -12px;
                 padding: 10px 12px;
-                background: rgba(10, 10, 11, 0.94);
+                background: rgba(20, 26, 48, 0.85);
                 backdrop-filter: blur(14px);
-                border-top: 1px solid rgba(192, 132, 252, 0.22);
-                border-radius: 0 0 12px 12px;
+                -webkit-backdrop-filter: blur(14px);
+                border-top: 1px solid var(--stroke);
+                border-radius: 0 0 18px 18px;
                 scrollbar-width: none;
             }
 
@@ -2886,12 +2887,8 @@
                 display: none;
             }
 
-            #settings-page .settings-rep-mtoolbar .btn,
-            #settings-page .settings-rep-mtoolbar .btn-secondary {
+            #settings-page .settings-rep-mtoolbar .ga-btn {
                 flex: 0 0 auto;
-                padding: 10px 14px;
-                font-size: 12px;
-                border-radius: 10px;
                 white-space: nowrap;
             }
 
@@ -3637,47 +3634,131 @@
             }
         }
 
-        /* 系统设置 · 分析报表式（与 working-fixed 对齐） */
+        /* 系统设置 · Glass Aurora 风格 */
+        #settings-page {
+            --iris: #6D7CFF;
+            --iris-dim: #4754D6;
+            --mint: #5EEAD4;
+            --coral: #FF7A90;
+            --amber: #FFC46B;
+            --text: #EEF1FA;
+            --dim: #9AA3C7;
+            --faint: #5B6597;
+            --stroke: rgba(255,255,255,0.08);
+            --stroke-hi: rgba(255,255,255,0.16);
+            --glass: rgba(20,26,48,0.55);
+            background: #0B0F1E !important;
+            position: relative;
+            overflow-x: hidden;
+            color: var(--text) !important;
+            min-height: calc(100vh - 120px);
+        }
+
+        #settings-page .settings-aurora {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        #settings-page .settings-aurora__blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+        }
+
+        #settings-page .settings-aurora__blob--1 {
+            width: 55vw;
+            height: 55vw;
+            top: -15%;
+            left: -10%;
+            background: rgba(109,124,255,0.32);
+        }
+
+        #settings-page .settings-aurora__blob--2 {
+            width: 45vw;
+            height: 45vw;
+            top: -8%;
+            right: -12%;
+            background: rgba(255,122,144,0.22);
+        }
+
+        #settings-page .settings-aurora__blob--3 {
+            width: 60vw;
+            height: 50vw;
+            bottom: -15%;
+            left: 25%;
+            background: rgba(94,234,212,0.14);
+        }
+
+        #settings-page .settings-grain {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            opacity: 0.06;
+            mix-blend-mode: overlay;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+            background-repeat: repeat;
+            background-size: 256px 256px;
+        }
+
         #settings-page .settings-report-shell {
+            position: relative;
+            z-index: 1;
             max-width: 1080px;
             margin: 0 auto;
             padding: 8px 4px 28px;
-            font-family: 'IBM Plex Sans', 'Noto Sans SC Local', system-ui, sans-serif;
+            font-family: 'Noto Sans SC', system-ui, sans-serif;
         }
 
         #settings-page .settings-rep-head {
-            border: 1px solid rgba(192, 132, 252, 0.28);
-            border-radius: var(--radius-lg);
+            background: rgba(20,26,48,0.52);
+            backdrop-filter: blur(20px) saturate(1.4);
+            -webkit-backdrop-filter: blur(20px) saturate(1.4);
+            border: 1px solid var(--stroke);
+            border-radius: 18px;
             padding: 20px 22px 18px;
             margin-bottom: 18px;
-            background:
-                linear-gradient(135deg, rgba(88, 28, 135, 0.22) 0%, rgba(9, 9, 11, 0.92) 48%, rgba(9, 9, 11, 0.98) 100%),
-                repeating-linear-gradient(0deg, transparent, transparent 22px, rgba(255, 255, 255, 0.02) 22px, rgba(255, 255, 255, 0.02) 23px);
-            box-shadow: 0 18px 48px -28px rgba(0, 0, 0, 0.75);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 4px 24px rgba(0,0,0,0.35);
         }
 
         #settings-page .settings-rep-head__eyebrow {
-            font-family: 'IBM Plex Mono', ui-monospace, monospace;
-            font-size: 11px;
+            font-family: 'Geist Mono', 'SF Mono', monospace;
+            font-size: 10px;
+            font-weight: 600;
             letter-spacing: 0.22em;
-            text-transform: uppercase;
-            color: #e9d5ff;
+            color: var(--faint);
             margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #settings-page .settings-rep-head__eyebrow::before {
+            content: '';
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--iris);
+            box-shadow: 0 0 10px var(--iris);
+            flex-shrink: 0;
         }
 
         #settings-page .settings-rep-head__title {
-            font-family: 'IBM Plex Sans', sans-serif;
+            font-family: 'Noto Sans SC', system-ui, sans-serif;
             font-size: clamp(22px, 3.2vw, 28px);
             font-weight: 700;
-            color: #fafafa;
+            color: #fff;
             margin: 0 0 6px 0;
             letter-spacing: -0.02em;
         }
 
         #settings-page .settings-rep-head__desc {
             margin: 0;
-            font-size: var(--type-sm);
-            color: rgba(226, 232, 240, 0.72);
+            font-size: 13px;
+            color: var(--dim);
             line-height: 1.55;
         }
 
@@ -3690,21 +3771,31 @@
         }
 
         #settings-page .settings-rep-toc__link {
-            font-family: 'IBM Plex Mono', ui-monospace, monospace;
+            font-family: 'Geist Mono', 'SF Mono', monospace;
             font-size: 11px;
-            padding: 7px 12px;
+            font-weight: 600;
+            padding: 7px 14px;
             border-radius: 999px;
-            border: 1px solid rgba(251, 191, 36, 0.35);
-            color: #fde68a;
+            border: 1px solid var(--stroke);
+            color: var(--dim);
             text-decoration: none;
-            background: rgba(15, 15, 18, 0.85);
-            transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+            background: rgba(255,255,255,0.04);
+            transition: all 0.15s;
+            -webkit-tap-highlight-color: transparent;
         }
 
-        #settings-page .settings-rep-toc__link:hover {
-            background: rgba(245, 158, 11, 0.12);
-            border-color: rgba(251, 191, 36, 0.55);
-            transform: translateY(-1px);
+        #settings-page .settings-rep-toc__link:active {
+            transform: scale(0.96);
+        }
+
+        #settings-page .settings-rep-toc__link[href*="llm"] {
+            border-color: rgba(109,124,255,0.25);
+            color: var(--iris);
+        }
+
+        #settings-page .settings-rep-toc__link[href*="stores"] {
+            border-color: rgba(255,196,107,0.25);
+            color: var(--amber);
         }
 
         #settings-page .settings-rep-stack {
@@ -3714,11 +3805,50 @@
         }
 
         #settings-page .settings-rep-sec {
-            border: 1px solid rgba(255, 255, 255, 0.09);
-            border-radius: var(--radius-lg);
+            background: rgba(20,26,48,0.52);
+            backdrop-filter: blur(20px) saturate(1.4);
+            -webkit-backdrop-filter: blur(20px) saturate(1.4);
+            border: 1px solid var(--stroke);
+            border-radius: 18px;
             padding: 18px 20px 20px;
-            background: rgba(16, 16, 20, 0.88);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 4px 24px rgba(0,0,0,0.35);
             scroll-margin-top: 88px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #settings-page .settings-rep-sec::after {
+            content: '';
+            position: absolute;
+            top: -30px;
+            right: -30px;
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            filter: blur(18px);
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        #settings-page #llm-settings-card::after,
+        #settings-page #approval-flow-settings-card::after {
+            background: radial-gradient(circle, rgba(109,124,255,0.25), transparent 70%);
+        }
+
+        #settings-page #org-dict-settings-card::after {
+            background: radial-gradient(circle, rgba(94,234,212,0.2), transparent 70%);
+        }
+
+        #settings-page #stores-settings-card::after {
+            background: radial-gradient(circle, rgba(255,196,107,0.2), transparent 70%);
+        }
+
+        #settings-page #monthly-target-settings-card::after {
+            background: radial-gradient(circle, rgba(94,234,212,0.2), transparent 70%);
+        }
+
+        #settings-page #points-rule-settings-card::after {
+            background: radial-gradient(circle, rgba(255,196,107,0.2), transparent 70%);
         }
 
         #settings-page .settings-rep-sec__bar {
@@ -3727,7 +3857,7 @@
             gap: 14px;
             margin-bottom: 14px;
             padding-bottom: 12px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+            border-bottom: 1px solid var(--stroke);
         }
 
         #settings-page .settings-rep-sec__no {
@@ -3738,26 +3868,26 @@
             align-items: center;
             justify-content: center;
             border-radius: 10px;
-            font-family: 'IBM Plex Mono', ui-monospace, monospace;
+            font-family: 'Geist Mono', 'SF Mono', monospace;
             font-size: 12px;
-            font-weight: 600;
-            color: #fbbf24;
-            border: 1px solid rgba(251, 191, 36, 0.35);
-            background: rgba(245, 158, 11, 0.08);
+            font-weight: 700;
+            color: var(--iris);
+            border: 1px solid rgba(109,124,255,0.25);
+            background: rgba(109,124,255,0.1);
         }
 
         #settings-page .settings-rep-sec__title {
             margin: 0 0 4px 0;
-            font-size: var(--type-lg);
+            font-size: 16px;
             font-weight: 700;
-            color: #f8fafc;
+            color: #fff;
             letter-spacing: -0.01em;
         }
 
         #settings-page .settings-rep-sec__lede {
             margin: 0;
-            font-size: var(--type-xs);
-            color: rgba(200, 215, 230, 0.65);
+            font-size: 12px;
+            color: var(--dim);
             line-height: 1.45;
         }
 
@@ -3776,34 +3906,53 @@
         }
 
         #settings-page .settings-label {
-            font-size: var(--type-sm);
+            font-size: 12px;
             font-weight: 500;
-            color: rgba(255, 255, 255, 0.6);
-            margin-bottom: 8px;
+            color: var(--dim);
+            margin-bottom: 6px;
             display: block;
         }
 
         #settings-page .settings-input {
             width: 100%;
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255,255,255,0.06);
+            border: 1px solid var(--stroke);
             border-radius: 10px;
             padding: 12px 14px;
-            color: #fff;
-            font-size: var(--type-sm);
+            color: var(--text);
+            font-size: 14px;
+            font-family: 'Noto Sans SC', system-ui, sans-serif;
             transition: all 0.2s ease;
         }
 
         #settings-page .settings-input:focus {
-            border-color: rgba(245, 158, 11, 0.5);
-            background: rgba(255, 255, 255, 0.08);
+            border-color: var(--iris);
+            background: rgba(255,255,255,0.08);
             outline: none;
-            box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+            box-shadow: 0 0 0 3px rgba(109,124,255,0.15);
+        }
+
+        #settings-page .settings-input::placeholder {
+            color: var(--faint);
+        }
+
+        #settings-page .settings-input[readonly] {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        #settings-page select.settings-input {
+            -webkit-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239AA3C7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 36px;
         }
 
         #settings-page .settings-hint {
-            font-size: var(--type-xs);
-            color: rgba(255, 255, 255, 0.4);
+            font-size: 12px;
+            color: var(--faint);
             margin-top: 12px;
             grid-column: 1 / -1;
         }
@@ -3811,8 +3960,106 @@
         #settings-page .settings-actions {
             display: flex;
             gap: 12px;
-            margin-top: 20px;
+            margin-top: 16px;
             grid-column: 1 / -1;
+        }
+
+        #settings-page .ga-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            height: 40px;
+            padding: 0 16px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.15s;
+            -webkit-tap-highlight-color: transparent;
+            font-family: 'Noto Sans SC', system-ui, sans-serif;
+        }
+
+        #settings-page .ga-btn--primary {
+            background: var(--iris);
+            color: #fff;
+            box-shadow: 0 8px 22px rgba(109,124,255,0.35);
+        }
+
+        #settings-page .ga-btn--primary:active {
+            transform: scale(0.97);
+        }
+
+        #settings-page .ga-btn--ghost {
+            background: rgba(255,255,255,0.06);
+            color: var(--dim);
+            border: 1px solid var(--stroke);
+        }
+
+        #settings-page .ga-btn--ghost:active {
+            background: rgba(255,255,255,0.1);
+        }
+
+        #settings-page .ga-btn--sm {
+            height: 32px;
+            padding: 0 12px;
+            font-size: 12px;
+        }
+
+        #settings-page .ga-btn--danger {
+            background: rgba(255,122,144,0.15);
+            color: var(--coral);
+            border: 1px solid rgba(255,122,144,0.2);
+        }
+
+        #settings-page .ga-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            border-radius: 99px;
+            font-size: 10px;
+            font-weight: 600;
+            line-height: 1;
+            font-family: 'Geist Mono', 'SF Mono', monospace;
+        }
+
+        #settings-page .ga-badge--iris {
+            background: rgba(109,124,255,0.15);
+            border: 1px solid rgba(109,124,255,0.25);
+            color: var(--iris);
+        }
+
+        #settings-page .ga-badge--mint {
+            background: rgba(94,234,212,0.12);
+            border: 1px solid rgba(94,234,212,0.2);
+            color: var(--mint);
+        }
+
+        #settings-page .ga-badge--amber {
+            background: rgba(255,196,107,0.15);
+            border: 1px solid rgba(255,196,107,0.25);
+            color: var(--amber);
+        }
+
+        #settings-page .ga-badge--coral {
+            background: rgba(255,122,144,0.15);
+            border: 1px solid rgba(255,122,144,0.25);
+            color: var(--coral);
+        }
+
+        #settings-page code {
+            background: rgba(255,255,255,0.06);
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-family: 'Geist Mono', 'SF Mono', monospace;
+            font-size: 0.9em;
+            color: var(--mint);
+        }
+
+        #settings-page .settings-rep-sec__body .settings-actions:first-child {
+            margin-top: 0;
         }
 
         /* Employees page — clean minimal mobile-first */
@@ -12086,6 +12333,12 @@
 
             <!-- 系统设置页面 · 分析报表式（移动端无品牌弹窗，略去品牌分区） -->
             <div id="settings-page" class="hidden">
+                <div class="settings-grain"></div>
+                <div class="settings-aurora">
+                    <div class="settings-aurora__blob settings-aurora__blob--1"></div>
+                    <div class="settings-aurora__blob settings-aurora__blob--2"></div>
+                    <div class="settings-aurora__blob settings-aurora__blob--3"></div>
+                </div>
                 <div class="settings-report-shell">
                     <header class="settings-rep-head">
                         <div class="settings-rep-head__eyebrow">SYSTEM · CONFIG</div>
@@ -12101,13 +12354,14 @@
                         <a class="settings-rep-toc__link" href="#points-rule-settings-card">06 积分</a>
                     </nav>
                     <div class="settings-rep-stack">
+
                     <div class="settings-rep-hidden" style="display:none!important" aria-hidden="true">
                         <div class="settings-actions" style="margin-top: 0; margin-bottom: 12px;">
-                            <button type="button" class="btn" onclick="exportSystemData()">导出数据(JSON)</button>
-                            <button type="button" class="btn btn-secondary" onclick="triggerImportSystemData()">导入数据(JSON)</button>
+                            <button type="button" class="ga-btn ga-btn--ghost" onclick="exportSystemData()">导出数据(JSON)</button>
+                            <button type="button" class="ga-btn ga-btn--ghost" onclick="triggerImportSystemData()">导入数据(JSON)</button>
                             <input id="import-system-data" type="file" accept="application/json" style="display:none" onchange="handleImportSystemData(event)">
                         </div>
-                        <div class="settings-hint" style="margin:0 0 8px;font-weight:600;color:rgba(226,232,240,0.88)">基础设置</div>
+                        <div class="settings-hint" style="margin:0 0 8px;font-weight:600;color:var(--text)">基础设置</div>
                         <div class="settings-form">
                             <div>
                                 <label class="settings-label">系统名称</label>
@@ -12122,10 +12376,10 @@
                                 <input id="settings-system-version" type="text" class="settings-input" value="v2.0.0" readonly style="opacity: 0.6;">
                             </div>
                             <div class="settings-actions">
-                                <button class="btn" type="button" onclick="saveBasicSettings()">保存设置</button>
+                                <button class="ga-btn ga-btn--primary" type="button" onclick="saveBasicSettings()">保存设置</button>
                             </div>
                         </div>
-                        <div class="settings-hint" style="margin:16px 0 8px;font-weight:600;color:rgba(226,232,240,0.88)">安全设置</div>
+                        <div class="settings-hint" style="margin:16px 0 8px;font-weight:600;color:var(--text)">安全设置</div>
                         <div class="settings-form">
                             <div class="settings-form-full">
                                 <label class="settings-label">密码复杂度</label>
@@ -12153,10 +12407,10 @@
                                 </select>
                             </div>
                             <div class="settings-actions">
-                                <button class="btn" type="button" onclick="saveSecuritySettings()">保存设置</button>
+                                <button class="ga-btn ga-btn--primary" type="button" onclick="saveSecuritySettings()">保存设置</button>
                             </div>
                         </div>
-                        <div class="settings-hint" style="margin:16px 0 8px;font-weight:600;color:rgba(226,232,240,0.88)">通知设置</div>
+                        <div class="settings-hint" style="margin:16px 0 8px;font-weight:600;color:var(--text)">通知设置</div>
                         <div class="settings-form">
                             <div>
                                 <label class="settings-label">邮件通知</label>
@@ -12201,12 +12455,12 @@
                                 示例：BaseURL 填 <code>https://dashscope.aliyuncs.com/compatible-mode/v1</code>，Model 填 <code>qwen-turbo</code>
                             </div>
                             <div class="settings-actions">
-                                <button class="btn" onclick="saveLlmSettings()">保存配置</button>
-                                <button class="btn btn-secondary" onclick="testLlmConnection()">连接校验</button>
+                                <button class="ga-btn ga-btn--primary" onclick="saveLlmSettings()">保存配置</button>
+                                <button class="ga-btn ga-btn--ghost" onclick="testLlmConnection()">连接校验</button>
                             </div>
                             <div class="settings-form-full" style="margin-top: 8px;">
                                 <label class="settings-label">最近错误日志</label>
-                                <textarea id="llm-last-error" readonly class="settings-input" style="min-height: 80px; font-family: ui-monospace, monospace; font-size: 12px;"></textarea>
+                                <textarea id="llm-last-error" readonly class="settings-input" style="min-height: 80px; font-family: 'Geist Mono', 'SF Mono', monospace; font-size: 12px;"></textarea>
                             </div>
                         </div>
                         </div>
@@ -12222,7 +12476,7 @@
                         </div>
                         <div class="settings-rep-sec__body">
                             <div class="settings-actions" style="margin-top: 0;">
-                                <button class="btn" type="button" onclick="openOrgDictModal()">打开字典维护</button>
+                                <button class="ga-btn ga-btn--primary" type="button" onclick="openOrgDictModal()">打开字典维护</button>
                             </div>
                         </div>
                     </section>
@@ -12237,7 +12491,7 @@
                         </div>
                         <div class="settings-rep-sec__body">
                             <div class="settings-actions" style="margin-top: 0;">
-                                <button class="btn" type="button" onclick="showPage('stores')">进入门店管理</button>
+                                <button class="ga-btn ga-btn--ghost" type="button" onclick="showPage('stores')">进入门店管理</button>
                             </div>
                         </div>
                     </section>
@@ -12252,7 +12506,7 @@
                         </div>
                         <div class="settings-rep-sec__body">
                             <div class="settings-actions" style="margin-top: 0;">
-                                <button class="btn" type="button" onclick="openMonthlyTargetsModal()">维护目标</button>
+                                <button class="ga-btn ga-btn--primary" type="button" onclick="openMonthlyTargetsModal()">维护目标</button>
                             </div>
                         </div>
                     </section>
@@ -12266,9 +12520,9 @@
                             </div>
                         </div>
                         <div class="settings-rep-sec__body">
-                            <div id="approval-flow-summary" style="margin-bottom: 12px; font-size: 12px; color: rgba(200,215,230,0.85);"></div>
+                            <div id="approval-flow-summary" style="margin-bottom: 12px; font-size: 12px; color: var(--dim);"></div>
                             <div class="settings-actions" style="margin-top: 0;">
-                                <button class="btn" type="button" onclick="openApprovalFlowModal()">配置流程</button>
+                                <button class="ga-btn ga-btn--primary" type="button" onclick="openApprovalFlowModal()">配置流程</button>
                             </div>
                         </div>
                     </section>
@@ -12297,22 +12551,23 @@
                                 </div>
                             </div>
                             <div class="settings-actions" style="margin-top:10px;">
-                                <button class="btn" type="button" onclick="addPointRuleItem()">新增事项</button>
-                                <button class="btn btn-secondary" type="button" onclick="loadPointRulesSettings()">刷新列表</button>
+                                <button class="ga-btn ga-btn--primary" type="button" onclick="addPointRuleItem()">新增事项</button>
+                                <button class="ga-btn ga-btn--ghost" type="button" onclick="loadPointRulesSettings()">刷新列表</button>
                             </div>
                             <div id="points-rule-list" style="margin-top:10px;"></div>
                         </div>
                     </section>
+
                     </div>
                 </div>
 
                 <div id="settings-mobile-toolbar" class="settings-rep-mtoolbar" style="display:none;">
-                    <button class="btn btn-secondary" type="button" onclick="hrmsScrollToSettingsCard('llm-settings-card')">AI</button>
-                    <button class="btn btn-secondary" type="button" onclick="hrmsScrollToSettingsCard('org-dict-settings-card')">字典</button>
-                    <button class="btn btn-secondary" type="button" onclick="showPage('stores')">门店</button>
-                    <button class="btn btn-secondary" type="button" onclick="openMonthlyTargetsModal()">目标</button>
-                    <button class="btn btn-secondary" type="button" onclick="openApprovalFlowModal()">审批</button>
-                    <button class="btn" type="button" onclick="hrmsScrollToSettingsCard('points-rule-settings-card')">积分</button>
+                    <button class="ga-btn ga-btn--primary" type="button" onclick="hrmsScrollToSettingsCard('llm-settings-card')">AI</button>
+                    <button class="ga-btn ga-btn--ghost" type="button" onclick="hrmsScrollToSettingsCard('org-dict-settings-card')">字典</button>
+                    <button class="ga-btn ga-btn--ghost" type="button" onclick="showPage('stores')">门店</button>
+                    <button class="ga-btn ga-btn--ghost" type="button" onclick="openMonthlyTargetsModal()">目标</button>
+                    <button class="ga-btn ga-btn--ghost" type="button" onclick="openApprovalFlowModal()">审批</button>
+                    <button class="ga-btn ga-btn--ghost" type="button" onclick="hrmsScrollToSettingsCard('points-rule-settings-card')">积分</button>
                 </div>
             </div>
             

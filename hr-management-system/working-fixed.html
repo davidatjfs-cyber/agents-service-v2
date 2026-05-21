@@ -7973,6 +7973,787 @@
             text-align: right;
         }
 
+        /* ══════════════════════════════════════════
+           知识库培训联动样式
+           ══════════════════════════════════════════ */
+        .kb-training-link-box {
+            background: rgba(99,102,241,0.08);
+            border: 1px solid rgba(99,102,241,0.22);
+            border-radius: 12px;
+            padding: 14px;
+            margin: 4px 0;
+        }
+        .kb-training-link-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .kb-training-link-icon { font-size: 16px; }
+        .kb-training-link-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #a5b4fc;
+            flex: 1;
+        }
+        .kb-training-link-badge {
+            font-size: 10px;
+            font-weight: 700;
+            background: rgba(99,102,241,0.25);
+            color: #a5b4fc;
+            padding: 2px 7px;
+            border-radius: 20px;
+            letter-spacing: .04em;
+        }
+        .kb-training-link-row {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .kb-training-link-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+        .kb-training-toggle-label {
+            position: relative;
+            width: 40px;
+            height: 22px;
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+        .kb-training-toggle-input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute;
+        }
+        .kb-training-toggle-knob {
+            position: absolute;
+            inset: 0;
+            background: rgba(255,255,255,0.12);
+            border-radius: 11px;
+            border: 1px solid rgba(255,255,255,0.15);
+            transition: background .2s;
+        }
+        .kb-training-toggle-knob::after {
+            content: '';
+            position: absolute;
+            width: 16px; height: 16px;
+            border-radius: 50%;
+            background: #fff;
+            top: 2px; left: 2px;
+            transition: left .2s;
+        }
+        .kb-training-toggle-input:checked + .kb-training-toggle-knob {
+            background: rgba(99,102,241,0.7);
+            border-color: rgba(99,102,241,0.5);
+        }
+        .kb-training-toggle-input:checked + .kb-training-toggle-knob::after {
+            left: 18px;
+        }
+        .kb-training-opt-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: rgba(248,250,252,0.9);
+            line-height: 1.3;
+        }
+        .kb-training-opt-sub {
+            font-size: 11px;
+            color: rgba(148,163,184,0.7);
+            margin-top: 2px;
+            line-height: 1.4;
+        }
+
+        /* ══════════════════════════════════════════
+           知识库列表 - 分类分组卡片样式
+           ══════════════════════════════════════════ */
+        .kb-list-empty-msg { text-align:center; color:rgba(200,215,230,0.5); padding:40px 16px; font-size:14px; }
+        /* 分类组 */
+        .kb-cat-group { margin-bottom: 8px; border-radius: 14px; overflow: hidden; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); }
+        .kb-cat-group-hdr {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 14px;
+            cursor: pointer;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .kb-cat-group-hdr:active { background: rgba(255,255,255,0.04); }
+        .kb-cat-group-icon { font-size: 16px; flex-shrink: 0; }
+        .kb-cat-group-name { font-size: 14px; font-weight: 700; color: rgba(255,255,255,0.85); flex: 1; }
+        .kb-cat-group-count {
+            font-size: 11px; font-weight: 600; min-width: 22px; height: 22px;
+            border-radius: 11px; background: rgba(99,102,241,0.2); color: #a5b4fc;
+            display: flex; align-items: center; justify-content: center; padding: 0 7px;
+        }
+        .kb-cat-group-chevron { font-size: 18px; color: rgba(255,255,255,0.3); transition: transform 0.2s; }
+        .kb-cat-group.kb-cat-collapsed .kb-cat-group-chevron { transform: rotate(90deg); }
+        .kb-cat-group.kb-cat-collapsed .kb-cat-group-body { display: none; }
+        .kb-cat-group-body { padding: 0 10px 10px; display: flex; flex-direction: column; gap: 4px; }
+        /* 列表单项 */
+        .kb-list-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 11px 10px;
+            border-radius: 10px;
+            cursor: pointer;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid transparent;
+            transition: background 0.15s, border-color 0.15s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .kb-list-item:active { background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.2); }
+        .kb-list-item-icon {
+            width: 38px; height: 38px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px; flex-shrink: 0;
+            background: rgba(255,255,255,0.06);
+        }
+        .kb-list-item-icon[data-type="video"] { background: rgba(239,68,68,0.15); }
+        .kb-list-item-icon[data-type="pdf"] { background: rgba(239,68,68,0.1); }
+        .kb-list-item-icon[data-type="img"] { background: rgba(52,211,153,0.1); }
+        .kb-list-item-body { flex: 1; min-width: 0; }
+        .kb-list-item-title {
+            font-size: 14px; font-weight: 600; color: rgba(248,250,252,0.9);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .kb-list-item-meta { display: flex; align-items: center; gap: 5px; margin-top: 4px; flex-wrap: wrap; }
+        .kb-list-type-chip {
+            font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 5px;
+            background: rgba(99,102,241,0.2); color: #a5b4fc;
+        }
+        .kb-item-tag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 5px; }
+        .kb-item-tag-req { background: rgba(251,191,36,0.15); color: #fde68a; }
+        .kb-item-tag-quiz { background: rgba(52,211,153,0.12); color: #6ee7b7; }
+        .kb-list-date, .kb-list-size { font-size: 11px; color: rgba(148,163,184,0.5); }
+        .kb-list-item-arrow { font-size: 18px; color: rgba(255,255,255,0.2); flex-shrink: 0; }
+
+        /* ── AI 知识解析卡片 ── */
+        .kb-ai-card {
+            background: linear-gradient(135deg, rgba(15,17,35,0.8) 0%, rgba(20,14,40,0.8) 100%);
+            border: 1px solid rgba(99,102,241,0.2);
+            border-radius: 16px;
+            padding: 18px;
+        }
+        .kb-ai-card-hdr {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            margin-bottom: 16px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+        }
+        .kb-ai-card-title { font-size: 14px; font-weight: 700; color: #a5b4fc; }
+        .kb-ai-card-sub { font-size: 11px; color: rgba(255,255,255,0.35); margin-top: 3px; }
+        .kb-ai-content { font-size: 14px; color: rgba(255,255,255,0.82); line-height: 1.95; }
+        .kb-ai-h2 { font-size:15px; font-weight:700; color:#a5b4fc; margin:20px 0 8px; padding-bottom:7px; border-bottom:1px solid rgba(165,180,252,0.15); }
+        .kb-ai-h3 { font-size:13px; font-weight:600; color:#c4b5fd; margin:12px 0 4px; }
+        .kb-ai-bullet { display:flex; gap:8px; margin:5px 0; }
+        .kb-ai-dot { color:#a5b4fc; flex-shrink:0; margin-top:2px; }
+        .kb-ai-num { margin:5px 0; padding-left:4px; }
+        .kb-ai-empty { text-align:center; padding:48px 16px; }
+
+        /* ══════════════════════════════════════════
+           知识库上传弹窗 - 移动优先重设计
+           ══════════════════════════════════════════ */
+        .kb-upload-modal-wrap {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            align-items: flex-end;
+            justify-content: center;
+        }
+        .kb-upload-modal-wrap.active { display: flex; }
+        @media (min-width: 640px) {
+            .kb-upload-modal-wrap { align-items: center; }
+        }
+        .kb-upload-sheet {
+            width: 100%;
+            max-width: 560px;
+            max-height: 92dvh;
+            max-height: 92vh;
+            background: linear-gradient(160deg, rgba(15,17,35,0.98) 0%, rgba(10,12,28,0.99) 100%);
+            border: 1px solid rgba(99,102,241,0.18);
+            border-radius: 24px 24px 0 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 -8px 40px rgba(0,0,0,0.5);
+        }
+        @media (min-width: 640px) {
+            .kb-upload-sheet {
+                border-radius: 20px;
+                max-height: 88dvh;
+            }
+        }
+        .kb-upload-sheet-handle {
+            width: 40px;
+            height: 4px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 2px;
+            margin: 10px auto 0;
+            flex-shrink: 0;
+        }
+        @media (min-width: 640px) { .kb-upload-sheet-handle { display: none; } }
+        .kb-upload-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px 14px;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+            flex-shrink: 0;
+        }
+        .kb-upload-title {
+            font-size: 17px;
+            font-weight: 700;
+            color: #f1f5f9;
+        }
+        .kb-upload-subtitle {
+            font-size: 12px;
+            color: rgba(148,163,184,0.6);
+            margin-top: 2px;
+        }
+        .kb-upload-close {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255,255,255,0.07);
+            color: rgba(255,255,255,0.7);
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .kb-upload-body {
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 16px 20px 0;
+        }
+        /* 文件选择区 */
+        .kb-upload-file-zone {
+            border: 2px dashed rgba(99,102,241,0.35);
+            border-radius: 16px;
+            padding: 20px 16px;
+            text-align: center;
+            cursor: pointer;
+            background: rgba(99,102,241,0.05);
+            margin-bottom: 14px;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .kb-upload-file-zone:active { border-color: rgba(99,102,241,0.7); background: rgba(99,102,241,0.12); }
+        .kb-upload-file-icon { font-size: 28px; margin-bottom: 6px; }
+        .kb-upload-file-label { font-size: 14px; font-weight: 600; color: #a5b4fc; margin-bottom: 4px; }
+        .kb-upload-file-hint { font-size: 11px; color: rgba(148,163,184,0.5); }
+        .kb-upload-file-status { font-size: 12px; color: #6ee7b7; margin-top: 6px; min-height: 16px; }
+        /* 批量切换 */
+        .kb-upload-toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            background: rgba(255,255,255,0.04);
+            border-radius: 12px;
+            margin-bottom: 14px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .kb-upload-toggle-txt { font-size: 13px; color: rgba(255,255,255,0.75); }
+        .kb-upload-pill-toggle {
+            width: 40px; height: 22px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 11px;
+            position: relative;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+        .kb-upload-pill-toggle:has(input:checked) { background: rgba(99,102,241,0.7); }
+        .kb-pill-knob {
+            display: block;
+            width: 18px; height: 18px;
+            border-radius: 50%;
+            background: #fff;
+            position: absolute;
+            top: 2px; left: 2px;
+            transition: left 0.2s;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+        }
+        .kb-upload-pill-toggle:has(input:checked) .kb-pill-knob { left: 20px; }
+        /* 分节标签 */
+        .kb-upload-section-label {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: rgba(99,102,241,0.8);
+            margin: 18px 0 10px;
+        }
+        /* 字段 */
+        .kb-upload-field { margin-bottom: 14px; }
+        .kb-upload-field-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+        .kb-upload-field-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: rgba(203,213,225,0.8);
+            margin-bottom: 6px;
+        }
+        .kb-upload-input {
+            width: 100%;
+            padding: 11px 13px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.05);
+            color: rgba(248,250,252,0.92);
+            font-size: 14px;
+            box-sizing: border-box;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        .kb-upload-input:focus { border-color: rgba(99,102,241,0.5); background: rgba(99,102,241,0.07); }
+        .kb-upload-select {
+            width: 100%;
+            padding: 11px 13px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.05);
+            color: rgba(248,250,252,0.92);
+            font-size: 14px;
+            outline: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='rgba(148,163,184,0.6)' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 32px;
+            cursor: pointer;
+        }
+        .kb-upload-select:focus { border-color: rgba(99,102,241,0.5); }
+        .kb-upload-textarea {
+            width: 100%;
+            padding: 11px 13px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.05);
+            color: rgba(248,250,252,0.92);
+            font-size: 14px;
+            box-sizing: border-box;
+            resize: vertical;
+            min-height: 90px;
+            outline: none;
+        }
+        /* 底部操作栏 */
+        .kb-upload-footer {
+            display: flex;
+            gap: 10px;
+            padding: 14px 20px;
+            border-top: 1px solid rgba(255,255,255,0.07);
+            background: rgba(10,12,28,0.9);
+            flex-shrink: 0;
+            padding-bottom: max(14px, env(safe-area-inset-bottom));
+        }
+        .kb-upload-btn-cancel {
+            flex: 0 0 auto;
+            padding: 12px 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: transparent;
+            color: rgba(255,255,255,0.6);
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .kb-upload-btn-confirm {
+            flex: 1;
+            padding: 13px;
+            border-radius: 12px;
+            border: none;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: #fff;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(99,102,241,0.35);
+        }
+        .kb-upload-btn-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* ══════════════════════════════════════════
+           知识库 V2 移动端重构样式
+           ══════════════════════════════════════════ */
+        #knowledge-page { height: 100%; display: flex; flex-direction: column; }
+        #kb-panel-knowledge { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+
+        /* 列表视图 */
+        .kb-v2-list-view { display: flex; flex-direction: column; height: 100%; overflow: hidden; background: #0a0f1e; }
+        .kb-v2-list-view.kb-v2-hidden { display: none; }
+
+        /* 顶栏 */
+        .kb-v2-topbar { padding: 14px 16px 0; background: linear-gradient(180deg, #0d1225 0%, #0a0f1e 100%); flex-shrink: 0; }
+        .kb-v2-topbar-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .kb-v2-title { font-size: 20px; font-weight: 800; color: #f1f5f9; letter-spacing: -0.3px; }
+        .kb-v2-upload-btn { padding: 8px 16px; border-radius: 20px; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; font-size: 13px; font-weight: 700; border: none; cursor: pointer; letter-spacing: 0.3px; }
+        .kb-v2-upload-btn:active { opacity: 0.85; }
+
+        /* 搜索栏 */
+        .kb-v2-search-wrap { position: relative; margin-bottom: 10px; }
+        .kb-v2-search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 14px; pointer-events: none; }
+        .kb-v2-search-input { width: 100%; padding: 10px 14px 10px 36px; border-radius: 12px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1); color: rgba(248,250,252,0.95); font-size: 14px; box-sizing: border-box; outline: none; transition: border-color 0.2s; }
+        .kb-v2-search-input:focus { border-color: rgba(99,102,241,0.6); background: rgba(255,255,255,0.09); }
+        .kb-v2-search-input::placeholder { color: rgba(148,163,184,0.5); }
+
+        /* 类型 Tab */
+        .kb-v2-type-tabs { display: flex; gap: 6px; margin-bottom: 10px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+        .kb-v2-type-tabs::-webkit-scrollbar { display: none; }
+        .kb-v2-ttab { padding: 6px 14px; border-radius: 20px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1); color: rgba(148,163,184,0.8); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: all 0.15s; flex-shrink: 0; }
+        .kb-v2-ttab.active { background: rgba(99,102,241,0.2); border-color: rgba(99,102,241,0.5); color: #a5b4fc; }
+
+        /* 高级筛选 */
+        .kb-v2-adv-filters { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 10px; }
+        .kb-v2-sel { flex: 1; min-width: 100px; padding: 6px 10px; border-radius: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: rgba(226,232,240,0.9); font-size: 12px; outline: none; }
+        .kb-v2-reset-btn { padding: 6px 12px; border-radius: 10px; background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.25); color: rgba(252,165,165,0.9); font-size: 12px; cursor: pointer; white-space: nowrap; }
+
+        /* 内容区滚动 */
+        .kb-v2-content-area { flex: 1; overflow-y: auto; padding: 8px 16px 80px; -webkit-overflow-scrolling: touch; }
+
+        /* 分类列表（accordion groups） */
+        .kb-v2-list { display: flex; flex-direction: column; gap: 8px; }
+        .kb-v2-empty { text-align: center; padding: 60px 20px; color: rgba(148,163,184,0.5); font-size: 14px; }
+
+        /* 列表项（V2 重设计） */
+        .kb-v2-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); cursor: pointer; transition: all 0.15s; -webkit-tap-highlight-color: transparent; }
+        .kb-v2-item:active { background: rgba(99,102,241,0.1); border-color: rgba(99,102,241,0.3); transform: scale(0.99); }
+        .kb-v2-item-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+        .kb-v2-item-icon[data-type="video"] { background: rgba(239,68,68,0.15); }
+        .kb-v2-item-icon[data-type="pdf"] { background: rgba(239,68,68,0.12); }
+        .kb-v2-item-icon[data-type="doc"] { background: rgba(59,130,246,0.12); }
+        .kb-v2-item-icon[data-type="img"] { background: rgba(16,185,129,0.12); }
+        .kb-v2-item-icon[data-type="txt"] { background: rgba(245,158,11,0.12); }
+        .kb-v2-item-icon[data-type="other"] { background: rgba(255,255,255,0.08); }
+        .kb-v2-item-body { flex: 1; min-width: 0; }
+        .kb-v2-item-title { font-size: 14px; font-weight: 700; color: rgba(248,250,252,0.92); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+        .kb-v2-item-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .kb-v2-chip { font-size: 10px; padding: 2px 7px; border-radius: 6px; font-weight: 600; }
+        .kb-v2-chip-type { background: rgba(99,102,241,0.15); color: #a5b4fc; }
+        .kb-v2-chip-req { background: rgba(239,68,68,0.15); color: #fca5a5; }
+        .kb-v2-chip-quiz { background: rgba(245,158,11,0.15); color: #fde68a; }
+        .kb-v2-item-date { font-size: 11px; color: rgba(148,163,184,0.5); }
+        .kb-v2-item-arrow { color: rgba(148,163,184,0.3); font-size: 16px; flex-shrink: 0; }
+
+        /* 分类组 */
+        .kb-v2-cat-group { margin-bottom: 6px; }
+        .kb-v2-cat-hdr { display: flex; align-items: center; gap: 8px; padding: 10px 4px; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+        .kb-v2-cat-hdr-icon { font-size: 18px; }
+        .kb-v2-cat-hdr-name { font-size: 13px; font-weight: 700; color: rgba(148,163,184,0.7); text-transform: uppercase; letter-spacing: 0.5px; flex: 1; }
+        .kb-v2-cat-count { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 8px; background: rgba(255,255,255,0.07); color: rgba(148,163,184,0.6); }
+        .kb-v2-cat-chev { font-size: 14px; color: rgba(148,163,184,0.4); transition: transform 0.2s; }
+        .kb-v2-cat-group.kb-v2-collapsed .kb-v2-cat-chev { transform: rotate(-90deg); }
+        .kb-v2-cat-group.kb-v2-collapsed .kb-v2-cat-body { display: none; }
+        .kb-v2-cat-body { display: flex; flex-direction: column; gap: 4px; padding-bottom: 4px; }
+
+        /* 详情视图 */
+        .kb-v2-viewer { position: absolute; inset: 0; background: #0a0f1e; z-index: 10; display: none; flex-direction: column; overflow: hidden; }
+        .kb-v2-viewer.kb-v2-active { display: flex; }
+
+        /* 详情顶栏 */
+        .kb-v2-viewer-topbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.07); flex-shrink: 0; background: rgba(13,18,37,0.95); }
+        .kb-v2-back-btn { display: flex; align-items: center; gap: 4px; color: #a5b4fc; font-size: 16px; font-weight: 700; background: none; border: none; cursor: pointer; padding: 4px 0; letter-spacing: -0.2px; }
+        .kb-v2-viewer-acts { display: flex; gap: 8px; }
+        .kb-v2-act-btn { width: 34px; height: 34px; border-radius: 10px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1); color: rgba(226,232,240,0.8); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .kb-v2-act-del { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.25); color: rgba(252,165,165,0.8); }
+
+        /* 文章元信息 */
+        .kb-v2-viewer-meta { padding: 16px 16px 0; flex-shrink: 0; }
+        .kb-v2-viewer-title { font-size: 18px; font-weight: 800; color: #f1f5f9; line-height: 1.35; margin-bottom: 8px; }
+        .kb-v2-viewer-metarow { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+
+        /* 详情体 */
+        .kb-v2-viewer-hint { padding: 60px 20px; text-align: center; color: rgba(148,163,184,0.4); font-size: 14px; }
+        .kb-v2-viewer-body { flex: 1; overflow-y: auto; padding: 0 16px 80px; -webkit-overflow-scrolling: touch; }
+
+        /* ══════════════════════════════════════════
+           知识库 + 数据文件 合并模块样式
+           ══════════════════════════════════════════ */
+
+        /* 顶级模块 Tab */
+        .kb-module-tabs {
+            display: flex;
+            gap: 6px;
+            padding: 12px 16px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+            background: rgba(0,0,0,0.15);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .kb-module-tab {
+            padding: 9px 20px;
+            border-radius: 10px 10px 0 0;
+            border: 1px solid transparent;
+            border-bottom: none;
+            background: transparent;
+            color: rgba(148,163,184,0.7);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .18s;
+        }
+        .kb-module-tab.active {
+            background: rgba(99,102,241,0.12);
+            border-color: rgba(99,102,241,0.25);
+            color: #a5b4fc;
+        }
+        .kb-module-tab:not(.active):hover {
+            background: rgba(255,255,255,0.05);
+            color: rgba(255,255,255,0.8);
+        }
+
+        /* 数据文件面板：页头 */
+        .kb-files-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            padding-top: 20px;
+        }
+        .kb-files-eyebrow {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: .14em;
+            color: rgba(99,102,241,.7);
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .kb-files-title {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #e8edf5;
+        }
+
+        /* 筛选卡片 */
+        .kb-files-filter-card {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 14px;
+            padding: 14px;
+            margin-bottom: 16px;
+        }
+        .kb-files-search-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .kb-files-filter-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .kb-files-filter-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex: 1;
+            min-width: 120px;
+        }
+        .kb-files-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: rgba(148,163,184,0.6);
+            text-transform: uppercase;
+            letter-spacing: .06em;
+        }
+        .kb-files-input, .kb-files-select {
+            padding: 9px 12px;
+            border-radius: 9px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(2,6,23,0.5);
+            color: rgba(248,250,252,0.9);
+            font-size: 13px;
+            flex: 1;
+        }
+        .kb-files-input:focus, .kb-files-select:focus {
+            outline: none;
+            border-color: rgba(99,102,241,0.5);
+        }
+
+        /* ══ 文件上传弹窗（深色主题）══ */
+        .uf-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            z-index: 9000;
+        }
+        .uf-modal {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 9001;
+            width: min(540px, 96vw);
+            max-height: 90dvh;
+            display: flex;
+            flex-direction: column;
+            background: rgba(12,16,40,0.95);
+            backdrop-filter: blur(24px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px;
+            box-shadow: 0 24px 60px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
+            overflow: hidden;
+        }
+        .uf-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            padding: 20px 20px 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+            flex-shrink: 0;
+        }
+        .uf-eyebrow {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: .14em;
+            color: rgba(99,102,241,.8);
+            margin-bottom: 4px;
+        }
+        .uf-title {
+            margin: 0;
+            font-size: 17px;
+            font-weight: 700;
+            color: #e8edf5;
+        }
+        .uf-close {
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            color: rgba(148,163,184,0.8);
+            width: 32px; height: 32px;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .uf-body {
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 16px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .uf-dropzone {
+            border: 2px dashed rgba(99,102,241,0.3);
+            border-radius: 14px;
+            padding: 28px 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: all .2s;
+            background: rgba(99,102,241,0.04);
+        }
+        .uf-dropzone:hover, .uf-dropzone.dragover {
+            border-color: rgba(99,102,241,0.7);
+            background: rgba(99,102,241,0.1);
+        }
+        .uf-drop-icon { font-size: 36px; margin-bottom: 8px; }
+        .uf-drop-text { font-size: 14px; font-weight: 600; color: #c7d2fe; margin-bottom: 4px; }
+        .uf-drop-hint { font-size: 12px; color: rgba(148,163,184,0.55); }
+        .uf-selected {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            background: rgba(99,102,241,0.1);
+            border: 1px solid rgba(99,102,241,0.25);
+            border-radius: 12px;
+        }
+        .uf-file-icon { font-size: 22px; flex-shrink: 0; }
+        .uf-file-name { flex: 1; font-size: 13px; font-weight: 600; color: #e8edf5; word-break: break-all; }
+        .uf-file-size { font-size: 12px; color: rgba(148,163,184,0.6); flex-shrink: 0; }
+        .uf-file-clear {
+            background: rgba(244,63,94,0.15);
+            border: 1px solid rgba(244,63,94,0.3);
+            border-radius: 6px;
+            color: #fb7185;
+            width: 26px; height: 26px;
+            font-size: 14px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .uf-field { display: flex; flex-direction: column; gap: 8px; }
+        .uf-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: rgba(148,163,184,0.7);
+            text-transform: uppercase;
+            letter-spacing: .06em;
+        }
+        .uf-type-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+        .uf-type-btn {
+            padding: 10px 6px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.04);
+            color: rgba(148,163,184,0.7);
+            font-size: 11px;
+            cursor: pointer;
+            text-align: center;
+            line-height: 1.4;
+            transition: all .15s;
+        }
+        .uf-type-btn:hover { background: rgba(255,255,255,0.08); color: #e8edf5; }
+        .uf-type-btn.active {
+            background: rgba(99,102,241,0.18);
+            border-color: rgba(99,102,241,0.5);
+            color: #a5b4fc;
+            font-weight: 600;
+        }
+        .uf-select, .uf-textarea {
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(2,6,23,0.5);
+            color: rgba(248,250,252,0.9);
+            font-size: 13px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .uf-select:focus, .uf-textarea:focus {
+            outline: none;
+            border-color: rgba(99,102,241,0.5);
+        }
+        .uf-textarea { resize: vertical; min-height: 60px; }
+        .uf-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 14px 20px;
+            border-top: 1px solid rgba(255,255,255,0.07);
+            flex-shrink: 0;
+        }
+        @media (max-width: 480px) {
+            .uf-type-grid { grid-template-columns: repeat(3, 1fr); }
+            .kb-files-filter-row { flex-direction: column; }
+        }
+
         /* ── 待审批：Glass Aurora ── */
         .content[data-active-page="approvals"] {
             background: transparent !important;
@@ -11161,11 +11942,6 @@
                         <span class="nav-badge" id="nav-badge-training" style="display:none;">0</span>
                     </a>
                 </div>
-                <div class="nav-item" data-page="files">
-                    <a href="#" class="nav-link" onclick="showPage('files')">
-                        <i>📁</i> <span>文件中心</span>
-                    </a>
-                </div>
                 <div class="nav-item" data-page="agents">
                     <a href="#" class="nav-link" onclick="showPage('agents')">
                         <i>📊</i> <span>数据中心</span>
@@ -13236,146 +14012,195 @@
                 </div>
             </div>
 
-            <div id="knowledge-upload-modal" class="modal ui-modal">
-                <div class="modal-content" style="max-width: 560px; max-height: 90vh; max-height: 90dvh; display: flex; flex-direction: column;">
-                    <div class="modal-header" style="flex-shrink: 0;">
+            <!-- ══ 知识库上传弹窗（移动优先重设计）══ -->
+            <div id="knowledge-upload-modal" class="modal kb-upload-modal-wrap">
+                <div class="kb-upload-sheet">
+                    <!-- 拖动条 -->
+                    <div class="kb-upload-sheet-handle"></div>
+                    <!-- Header -->
+                    <div class="kb-upload-header">
                         <div>
-                            <h3 class="ui-modal-title">上传内容</h3>
-                            <div class="ui-modal-desc">上传知识库文件</div>
+                            <div class="kb-upload-title">上传内容</div>
+                            <div class="kb-upload-subtitle">添加到知识库</div>
                         </div>
-                        <button class="modal-close" onclick="closeKnowledgeUploadModal()">×</button>
+                        <button class="kb-upload-close" onclick="closeKnowledgeUploadModal()">✕</button>
                     </div>
-                    <div class="modal-body" style="flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;">
-                        <div class="ui-form-grid" style="grid-template-columns: 1fr;">
-                            <div class="ui-form-group">
-                                <label class="ui-label">批量上传</label>
-                                <div style="display:flex;align-items:center;gap:8px;">
-                                    <input id="knowledge-upload-batch" type="checkbox" style="width:18px;height:18px;cursor:pointer;" onchange="toggleKnowledgeBatchMode()">
-                                    <span style="font-size:13px;cursor:pointer;" onclick="document.getElementById('knowledge-upload-batch').click()">同时上传多个文件（每个文件独立创建一条记录）</span>
-                                </div>
-                            </div>
-                            <div class="ui-form-group" id="knowledge-upload-batch-title-group" style="display:none;">
-                                <label class="ui-label">批量标题规则</label>
-                                <select id="knowledge-upload-batch-title-mode">
-                                    <option value="filename">使用文件名作为标题</option>
-                                    <option value="custom">统一自定义标题前缀</option>
-                                </select>
-                                <input id="knowledge-upload-batch-title-prefix" type="text" placeholder="自定义前缀（如：门店卫生SOP）" style="display:none;margin-top:6px;">
-                            </div>
-                            <div class="ui-form-group">
-                                <label class="ui-label">标题 <span class="req">*</span></label>
-                                <input id="knowledge-upload-title" type="text" placeholder="门店卫生SOP">
-                            </div>
 
-                            <div class="ui-form-group-row">
-                                <div class="ui-form-group">
-                                    <label class="ui-label">分类 <span class="req">*</span></label>
-                                    <select id="knowledge-upload-category">
-                                        <option value="">请选择</option>
-                                        <option value="行政文件">行政文件</option>
-                                        <option value="岗位SOP">岗位SOP</option>
-                                        <option value="业务SOP">业务SOP</option>
-                                        <option value="培训资料">培训资料</option>
-                                        <option value="其他">其他</option>
-                                    </select>
-                                </div>
-                                <div class="ui-form-group">
-                                    <label class="ui-label">类型</label>
-                                    <select id="knowledge-upload-type" onchange="syncKnowledgeUploadFields()">
-                                        <option value="video">视频</option>
-                                        <option value="pdf">PDF</option>
-                                        <option value="doc">DOC/DOCX</option>
-                                        <option value="txt">TXT</option>
-                                        <option value="img">图片</option>
-                                    </select>
-                                </div>
-                            </div>
+                    <!-- 滚动区域 -->
+                    <div class="kb-upload-body">
 
-                            <div class="ui-form-group-row">
-                                <div class="ui-form-group">
-                                    <label class="ui-label">投喂Agent <span class="req">*</span></label>
-                                    <select id="knowledge-upload-agent" onchange="syncKnowledgeUploadFields()">
-                                        <option value="">请选择</option>
-                                        <option value="sop_advisor">SOP 顾问</option>
-                                        <option value="data_auditor">数据审计员</option>
-                                        <option value="ops_supervisor">营运督导员</option>
-                                        <option value="chief_evaluator">绩效考核官</option>
-                                        <option value="appeal">申诉处理官</option>
-                                    </select>
-                                </div>
-                                <div class="ui-form-group">
-                                    <label class="ui-label">标签预设</label>
-                                    <div id="knowledge-upload-agent-tags" class="ui-file-hint" style="min-height: 38px; padding-top: 10px; line-height: 1.5;">请选择投喂Agent后自动带出标签</div>
-                                </div>
-                            </div>
+                        <!-- 文件选择区（最醒目，放最上）-->
+                        <div class="kb-upload-file-zone" onclick="document.getElementById('knowledge-upload-file').click()">
+                            <input id="knowledge-upload-file" type="file" onchange="handleKnowledgeFileSelect(event)" class="ui-file-input" style="display:none;">
+                            <div class="kb-upload-file-icon" id="kb-upload-file-icon">📎</div>
+                            <div class="kb-upload-file-label" id="kb-upload-file-label">点击选择文件</div>
+                            <div class="kb-upload-file-hint" id="knowledge-upload-file-hint">PDF · DOC · TXT · 图片 · 视频</div>
+                            <div id="knowledge-upload-file-status" class="kb-upload-file-status"></div>
+                        </div>
 
-                            <div class="ui-form-group">
-                                <label class="ui-label">知识库范围 <span class="req">*</span></label>
-                                <select id="knowledge-upload-scope">
-                                    <option value="public">📢 公共库（品牌愿景、通用规章，全员可见）</option>
-                                    <option value="business">📋 业务库（SOP、技术手册，TRAIN/OP 可见）</option>
-                                    <option value="sensitive">🔒 敏感库（薪资、隐私、申诉，仅 HR/REF/Master 可见）</option>
+                        <!-- 批量上传开关 -->
+                        <label class="kb-upload-toggle-row" onclick="document.getElementById('knowledge-upload-batch').click();event.preventDefault()">
+                            <span class="kb-upload-toggle-txt">批量上传多个文件</span>
+                            <span class="kb-upload-pill-toggle">
+                                <input id="knowledge-upload-batch" type="checkbox" style="display:none;" onchange="toggleKnowledgeBatchMode()">
+                                <span class="kb-pill-knob" id="kb-batch-knob"></span>
+                            </span>
+                        </label>
+                        <div id="knowledge-upload-batch-title-group" style="display:none;margin-bottom:14px;">
+                            <select id="knowledge-upload-batch-title-mode" class="kb-upload-select">
+                                <option value="filename">以文件名为标题</option>
+                                <option value="custom">统一前缀标题</option>
+                            </select>
+                            <input id="knowledge-upload-batch-title-prefix" type="text" placeholder="标题前缀（如：门店卫生SOP）" class="kb-upload-input" style="display:none;margin-top:8px;">
+                        </div>
+
+                        <!-- ─── 第一组：基础信息 ─── -->
+                        <div class="kb-upload-section-label">基础信息</div>
+
+                        <div class="kb-upload-field" id="kb-single-title-wrap">
+                            <label class="kb-upload-field-label">标题 <span class="req">*</span></label>
+                            <input id="knowledge-upload-title" type="text" placeholder="例：门店卫生操作SOP" class="kb-upload-input">
+                        </div>
+
+                        <div class="kb-upload-field-row">
+                            <div class="kb-upload-field">
+                                <label class="kb-upload-field-label">分类 <span class="req">*</span></label>
+                                <select id="knowledge-upload-category" class="kb-upload-select">
+                                    <option value="">请选择</option>
+                                    <option value="岗位SOP">📋 岗位SOP</option>
+                                    <option value="产品培训">🍽️ 产品培训</option>
+                                    <option value="入职培训">🎓 入职培训</option>
+                                    <option value="考核标准">📐 考核标准</option>
+                                    <option value="公司制度">🏢 公司制度</option>
+                                    <option value="模板文档">📁 模板文档</option>
                                 </select>
                             </div>
-
-                            <div class="ui-form-group">
-                                <label class="ui-label">品牌选择 <span class="req">*</span></label>
-                                <select id="knowledge-upload-brand-id" onchange="syncKnowledgeUploadFields()">
-                                    <option value="all">全部品牌（公司制度）</option>
-                                </select>
-                                <div class="ui-file-hint" style="margin-top: 6px;">可指定单一品牌，或选择"全部品牌"作为通用制度文档。</div>
-                            </div>
-
-                            <div class="ui-form-group">
-                                <label class="ui-label">版本号</label>
-                                <input id="knowledge-upload-version" type="text" placeholder="例如: v1.0、2024Q1、第2版" style="width:100%;">
-                                <div class="ui-file-hint" style="margin-top: 4px;">可选，用于文件版本管理</div>
-                            </div>
-
-                            <!-- 视频专属：内容摘要（供AI出题使用） -->
-                            <div id="knowledge-upload-video-summary-box" class="ui-form-group" style="display:none;">
-                                <label class="ui-label">视频内容摘要 <span class="req">*</span></label>
-                                <textarea id="knowledge-upload-video-summary" rows="5" placeholder="请描述视频的核心知识点，例如：&#10;1. 炒锅开档步骤：先煎虾汤，再煎浓汤…&#10;2. 注意事项：油温控制在…&#10;（此摘要将作为AI出题的依据）" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;padding:10px;font-size:13px;resize:vertical;min-height:100px;box-sizing:border-box;"></textarea>
-                                <div class="ui-file-hint" style="margin-top:4px;">⚠️ 视频无法自动提取文字，此摘要是AI出题的唯一依据，请填写完整</div>
-                            </div>
-
-                            <div class="ui-form-group">
-                                <label class="ui-label">分发范围 <span class="req">*</span></label>
-                                <select id="knowledge-upload-audience-type" onchange="syncKnowledgeUploadFields()">
-                                    <option value="all">全体员工</option>
-                                    <option value="store">指定门店</option>
-                                    <option value="position">指定岗位</option>
+                            <div class="kb-upload-field">
+                                <label class="kb-upload-field-label">文件类型</label>
+                                <select id="knowledge-upload-type" class="kb-upload-select" onchange="syncKnowledgeUploadFields()">
+                                    <option value="pdf">PDF</option>
+                                    <option value="doc">DOC/DOCX</option>
+                                    <option value="txt">TXT</option>
+                                    <option value="img">图片</option>
+                                    <option value="video">视频</option>
                                 </select>
                             </div>
+                        </div>
 
-                            <div id="knowledge-upload-audience-store-box" class="ui-form-group" style="display:none;">
-                                <label class="ui-label">选择门店（可多选）</label>
-                                <div id="knowledge-upload-audience-store-list" class="kb-aud-check-list" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;"></div>
+                        <!-- 视频摘要（条件显示）-->
+                        <div id="knowledge-upload-video-summary-box" style="display:none;margin-bottom:16px;">
+                            <label class="kb-upload-field-label">视频内容摘要 <span class="req">*</span><span style="font-size:10px;color:#f59e0b;margin-left:4px;">供AI出题</span></label>
+                            <textarea id="knowledge-upload-video-summary" rows="4" placeholder="描述视频核心知识点，如：&#10;1. 炒锅开档步骤…&#10;2. 注意事项…" class="kb-upload-textarea"></textarea>
+                        </div>
+
+                        <div class="kb-upload-field">
+                            <label class="kb-upload-field-label">版本号</label>
+                            <input id="knowledge-upload-version" type="text" placeholder="v1.0 / 2024Q1 / 第2版" class="kb-upload-input">
+                        </div>
+
+                        <!-- ─── 第二组：分发设置 ─── -->
+                        <div class="kb-upload-section-label">分发设置</div>
+
+                        <div class="kb-upload-field">
+                            <label class="kb-upload-field-label">投喂 Agent <span class="req">*</span></label>
+                            <select id="knowledge-upload-agent" class="kb-upload-select" onchange="syncKnowledgeUploadFields()">
+                                <option value="">请选择</option>
+                                <option value="sop_advisor">SOP 顾问</option>
+                                <option value="data_auditor">数据审计员</option>
+                                <option value="ops_supervisor">营运督导员</option>
+                                <option value="chief_evaluator">绩效考核官</option>
+                                <option value="appeal">申诉处理官</option>
+                            </select>
+                            <div id="knowledge-upload-agent-tags" style="margin-top:6px;font-size:12px;color:rgba(255,255,255,0.45);line-height:1.6;">选择Agent后自动带出标签</div>
+                        </div>
+
+                        <div class="kb-upload-field-row">
+                            <div class="kb-upload-field">
+                                <label class="kb-upload-field-label">库范围</label>
+                                <select id="knowledge-upload-scope" class="kb-upload-select">
+                                    <option value="public">📢 公共库</option>
+                                    <option value="business">📋 业务库</option>
+                                    <option value="sensitive">🔒 敏感库</option>
+                                </select>
                             </div>
-
-                            <div id="knowledge-upload-audience-position-box" class="ui-form-group" style="display:none;">
-                                <label class="ui-label">选择岗位（可多选）</label>
-                                <div id="knowledge-upload-audience-position-list" class="kb-aud-check-list" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;"></div>
+                            <div class="kb-upload-field">
+                                <label class="kb-upload-field-label">品牌</label>
+                                <select id="knowledge-upload-brand-id" class="kb-upload-select" onchange="syncKnowledgeUploadFields()">
+                                    <option value="all">全部品牌</option>
+                                </select>
                             </div>
+                        </div>
 
-                            <div class="ui-form-group">
-                                <label class="ui-label">选择文件</label>
-                                <div class="ui-file-upload">
-                                    <input id="knowledge-upload-file" type="file" onchange="handleKnowledgeFileSelect(event)" class="ui-file-input">
-                                    <div class="ui-file-dropzone" onclick="document.getElementById('knowledge-upload-file').click()">
-                                        <div class="ui-file-icon">📁</div>
-                                        <div class="ui-file-text">点击选择或拖放文件</div>
-                                        <div class="ui-file-hint" id="knowledge-upload-file-hint">支持 MP4/MOV/PDF/DOC/TXT/图片</div>
+                        <div class="kb-upload-field">
+                            <label class="kb-upload-field-label">分发对象</label>
+                            <select id="knowledge-upload-audience-type" class="kb-upload-select" onchange="syncKnowledgeUploadFields()">
+                                <option value="all">全体员工</option>
+                                <option value="store">指定门店</option>
+                                <option value="position">指定岗位</option>
+                            </select>
+                        </div>
+
+                        <div id="knowledge-upload-audience-store-box" style="display:none;margin-bottom:14px;">
+                            <label class="kb-upload-field-label">选择门店（可多选）</label>
+                            <div id="knowledge-upload-audience-store-list" class="kb-aud-check-list" style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid rgba(255,255,255,0.1);border-radius:10px;margin-top:6px;"></div>
+                        </div>
+
+                        <div id="knowledge-upload-audience-position-box" style="display:none;margin-bottom:14px;">
+                            <label class="kb-upload-field-label">选择岗位（可多选）</label>
+                            <div id="knowledge-upload-audience-position-list" class="kb-aud-check-list" style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid rgba(255,255,255,0.1);border-radius:10px;margin-top:6px;"></div>
+                        </div>
+
+                        <!-- ─── 第三组：培训认证联动 ─── -->
+                        <div class="kb-upload-section-label">培训认证联动</div>
+
+                        <div class="kb-training-link-box" style="margin-bottom:0;">
+                            <div class="kb-training-link-row">
+                                <div class="kb-training-link-item">
+                                    <label class="kb-training-toggle-label">
+                                        <input type="checkbox" id="knowledge-upload-required" class="kb-training-toggle-input">
+                                        <span class="kb-training-toggle-knob"></span>
+                                    </label>
+                                    <div>
+                                        <div class="kb-training-opt-title">设为必读材料</div>
+                                        <div class="kb-training-opt-sub">员工须阅读后才能参加认证考试</div>
                                     </div>
-                                    <div id="knowledge-upload-file-status" class="ui-file-status"></div>
                                 </div>
+                                <div class="kb-training-link-item">
+                                    <label class="kb-training-toggle-label">
+                                        <input type="checkbox" id="knowledge-upload-quiz-link" class="kb-training-toggle-input">
+                                        <span class="kb-training-toggle-knob"></span>
+                                    </label>
+                                    <div>
+                                        <div class="kb-training-opt-title">开启知识测验</div>
+                                        <div class="kb-training-opt-sub">AI 自动生成测验题，纳入培训认证</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="margin-top:12px;">
+                                <label class="kb-upload-field-label">关联培训计划（可选）</label>
+                                <select id="knowledge-upload-training-module" class="kb-upload-select" style="margin-top:6px;">
+                                    <option value="">不关联（仅作为知识库内容）</option>
+                                    <option value="onboarding">🧑‍💼 新员工入职培训</option>
+                                    <option value="kitchen_ops">🍳 后厨操作认证</option>
+                                    <option value="front_service">🫂 前厅服务认证</option>
+                                    <option value="cashier">💰 收银岗位认证</option>
+                                    <option value="hygiene">🧹 卫生安全认证</option>
+                                    <option value="product">🍽️ 产品知识认证</option>
+                                    <option value="management">📊 管理岗进阶</option>
+                                </select>
                             </div>
                         </div>
 
-                        <div class="ui-modal-footer">
-                            <button class="btn btn-secondary" id="btn-knowledge-upload-cancel" onclick="closeKnowledgeUploadModal()">取消</button>
-                            <button class="btn" id="btn-knowledge-upload-confirm" onclick="confirmKnowledgeUpload()">上传</button>
-                        </div>
+                        <!-- 底部间距 -->
+                        <div style="height:100px;"></div>
+                    </div>
+
+                    <!-- 粘性底部操作栏 -->
+                    <div class="kb-upload-footer">
+                        <button class="kb-upload-btn-cancel" id="btn-knowledge-upload-cancel" onclick="closeKnowledgeUploadModal()">取消</button>
+                        <button class="kb-upload-btn-confirm" id="btn-knowledge-upload-confirm" onclick="confirmKnowledgeUpload()">
+                            <span id="kb-upload-btn-text">📤 上传</span>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -13401,11 +14226,12 @@
                                     <label class="ui-label">分类 <span class="req">*</span></label>
                                     <select id="knowledge-edit-category">
                                         <option value="">请选择</option>
-                                        <option value="行政文件">行政文件</option>
-                                        <option value="岗位SOP">岗位SOP</option>
-                                        <option value="业务SOP">业务SOP</option>
-                                        <option value="培训资料">培训资料</option>
-                                        <option value="其他">其他</option>
+                                        <option value="岗位SOP">📋 岗位SOP</option>
+                                        <option value="产品培训">🍽️ 产品培训</option>
+                                        <option value="入职培训">🎓 入职培训</option>
+                                        <option value="考核标准">📐 考核标准</option>
+                                        <option value="公司制度">🏢 公司制度</option>
+                                        <option value="模板文档">📁 模板文档</option>
                                     </select>
                                 </div>
                                 <div class="ui-form-group">
@@ -13828,92 +14654,83 @@
             </div>
 
             <div id="knowledge-page" class="hidden">
-                <div class="dr-shell kb-knowledge-shell">
-                <div class="kb-dc-hero">
-                    <div class="kb-dc-eyebrow">KNOWLEDGE BASE</div>
-                    <div class="kb-dc-hero-title">知识库</div>
-                    <p class="kb-dc-hero-sub">制度、培训与标准的统一查阅入口（与分析报表同系视觉）</p>
-                    <div class="kb-dc-hero-actions">
-                        <button class="btn" id="btn-knowledge-upload" onclick="openKnowledgeUploadModal()">📤 上传内容</button>
-                        <button class="btn btn-secondary" id="btn-knowledge-flashcards" onclick="openKnowledgeFlashcardsModal()">🃏 自我测验</button>
-                        <button class="btn btn-secondary" id="btn-knowledge-chat" onclick="openKnowledgeChatModal()">🎓 AI培训</button>
+                <div id="kb-panel-knowledge">
+
+                <!-- ── 列表视图 ── -->
+                <div id="kb-list-view" class="kb-v2-list-view">
+                    <!-- 顶部固定栏 -->
+                    <div class="kb-v2-topbar">
+                        <div class="kb-v2-topbar-row">
+                            <div class="kb-v2-title">📚 知识库</div>
+                            <button class="kb-v2-upload-btn" id="btn-knowledge-upload" onclick="openKnowledgeUploadModal()">＋ 上传</button>
+                        </div>
+                        <div class="kb-v2-search-wrap">
+                            <span class="kb-v2-search-icon">🔍</span>
+                            <input id="knowledge-search" id="knowledge-recent-search" class="kb-v2-search-input" type="text" placeholder="搜索文档、视频、标题..." oninput="renderKnowledgeList()" onkeyup="renderKnowledgeList()">
+                        </div>
+                        <!-- 类型筛选 -->
+                        <div class="kb-v2-type-tabs">
+                            <button class="kb-v2-ttab active" id="kb-tab-all" onclick="setKnowledgeTab('all')">全部</button>
+                            <button class="kb-v2-ttab" id="kb-tab-video" onclick="setKnowledgeTab('video')">🎬 视频</button>
+                            <button class="kb-v2-ttab" id="kb-tab-doc" onclick="setKnowledgeTab('doc')">📄 文档</button>
+                        </div>
+                        <!-- 管理员高级筛选（折叠） -->
+                        <div id="kb-admin-filters" class="kb-v2-adv-filters">
+                            <select id="knowledge-filter-audience" class="kb-v2-sel" onchange="renderKnowledgeList()">
+                                <option value="mine">与我相关</option>
+                                <option value="all">全量（管理员）</option>
+                            </select>
+                            <select id="knowledge-filter-store" class="kb-v2-sel" onchange="renderKnowledgeList()">
+                                <option value="">全部门店</option>
+                            </select>
+                            <select id="knowledge-filter-position" class="kb-v2-sel" onchange="renderKnowledgeList()">
+                                <option value="">全部岗位</option>
+                            </select>
+                            <select id="knowledge-filter-brand" class="kb-v2-sel" onchange="renderKnowledgeList()">
+                                <option value="">全部品牌</option>
+                            </select>
+                            <button class="kb-v2-reset-btn" onclick="resetKnowledgeFilters()">重置</button>
+                        </div>
                     </div>
-                    <div class="kb-dc-search-bar">
-                        <input id="knowledge-search" type="text" placeholder="搜索知识点、文档、视频..." onkeyup="renderKnowledgeList()">
+                    <!-- 内容区 -->
+                    <div class="kb-v2-content-area">
+                        <div id="knowledge-cards"></div>
+                        <div id="knowledge-list" class="kb-v2-list"></div>
+                        <div id="knowledge-list-empty" class="kb-v2-empty" style="display:none;">暂无内容</div>
+                        <!-- 分类占位（保留兼容） -->
+                        <div id="kb-category-bar" style="display:none;"></div>
+                        <div id="knowledge-tabs" style="display:none;"></div>
                     </div>
                 </div>
 
-                <div id="knowledge-layout" class="kb-dc-layout">
-                    <div class="kb-dc-panel" id="knowledge-list-card">
-                        <div class="kb-dc-panel-head">
-                            <h3>📚 内容列表</h3>
-                        </div>
-                        <div class="kb-dc-panel-body">
-                            <div id="kb-category-bar" class="kb-dc-tab-bar" style="margin-bottom:10px;"></div>
-                            <div id="knowledge-tabs" class="kb-dc-tab-bar">
-                                <button class="btn" id="kb-tab-all" type="button" onclick="setKnowledgeTab('all')">全部</button>
-                                <button class="btn btn-secondary" id="kb-tab-video" type="button" onclick="setKnowledgeTab('video')">视频</button>
-                                <button class="btn btn-secondary" id="kb-tab-doc" type="button" onclick="setKnowledgeTab('doc')">文档</button>
-                            </div>
-                            <div id="kb-admin-filters">
-                                <div class="kb-dc-filter-row">
-                                    <select id="knowledge-filter-audience" onchange="renderKnowledgeList()">
-                                        <option value="mine">与我相关</option>
-                                        <option value="all">全量（管理员）</option>
-                                    </select>
-                                </div>
-                                <div class="kb-dc-filter-row">
-                                    <select id="knowledge-filter-store" onchange="renderKnowledgeList()">
-                                        <option value="">全部门店</option>
-                                    </select>
-                                    <select id="knowledge-filter-position" onchange="renderKnowledgeList()">
-                                        <option value="">全部岗位</option>
-                                    </select>
-                                </div>
-                                <div class="kb-dc-filter-row">
-                                    <select id="knowledge-filter-brand" onchange="renderKnowledgeList()">
-                                        <option value="">全部品牌</option>
-                                    </select>
-                                </div>
-                                <div style="display:flex; justify-content: flex-end; margin-top:4px;">
-                                    <button class="kb-dc-reset-btn" type="button" onclick="resetKnowledgeFilters()">重置筛选</button>
-                                </div>
-                            </div>
-                            <div class="kb-dc-section-label">最近更新</div>
-                            <div style="margin-top:6px;">
-                                <input id="knowledge-recent-search" type="text" style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid rgba(148,163,184,0.18);background:rgba(2,6,23,0.45);color:rgba(248,250,252,0.96);font-size:13px;" placeholder="搜索标题/文件名/分类/类型..." oninput="renderKnowledgeList()">
-                            </div>
-                            <div id="knowledge-cards"></div>
-                            <div id="knowledge-list" class="kb-dc-list-scroll"></div>
-                            <div id="knowledge-list-empty" class="kb-dc-empty" style="display:none;">暂无可查看内容。</div>
+                <!-- ── 详情视图（移动端全屏覆盖） ── -->
+                <div id="knowledge-viewer" class="kb-v2-viewer" oncontextmenu="return false;">
+                    <!-- 详情顶栏 -->
+                    <div class="kb-v2-viewer-topbar">
+                        <button class="kb-v2-back-btn" id="knowledge-back-btn" onclick="kbBackToList()">‹ 返回</button>
+                        <div class="kb-v2-viewer-acts">
+                            <button class="kb-v2-act-btn" id="knowledge-edit-btn" style="display:none;" onclick="">✏️</button>
+                            <button class="kb-v2-act-btn kb-v2-act-del" id="knowledge-delete-btn" style="display:none;" onclick="">🗑️</button>
                         </div>
                     </div>
+                    <!-- 文章标题/元信息 -->
+                    <div class="kb-v2-viewer-meta">
+                        <div id="knowledge-viewer-title" class="kb-v2-viewer-title"></div>
+                        <div id="knowledge-viewer-meta" class="kb-v2-viewer-metarow"></div>
+                    </div>
+                    <div id="knowledge-viewer-hint" class="kb-v2-viewer-hint">← 点击左侧内容查看</div>
+                    <div id="attn-monitor-bar" style="display:none;"></div>
+                    <div id="knowledge-viewer-body" class="kb-v2-viewer-body"></div>
+                    <!-- 底栏（兼容旧代码） -->
+                    <div id="knowledge-viewer-toolbar" style="display:none;">
+                        <button id="kb-toolbar-back" type="button" onclick="kbBackToList()"></button>
+                        <button id="kb-toolbar-edit" type="button" style="display:none;"></button>
+                        <button id="kb-toolbar-delete" type="button" style="display:none;"></button>
+                    </div>
+                </div>
 
-                    <div class="kb-dc-viewer" id="knowledge-viewer" oncontextmenu="return false;">
-                        <div class="kb-dc-viewer-head">
-                            <h3>👁️ 查看内容</h3>
-                            <div class="kb-dc-viewer-actions">
-                                <button class="btn" id="knowledge-edit-btn" type="button" style="display:none;">✏️ 编辑</button>
-                                <button class="btn btn-danger" id="knowledge-delete-btn" type="button" style="display:none;">🗑️ 删除</button>
-                                <button class="btn btn-secondary" id="knowledge-back-btn" type="button" onclick="kbBackToList()" style="display:none;">← 返回</button>
-                            </div>
-                        </div>
-                        <div id="knowledge-viewer-header" class="kb-dc-viewer-meta-bar">
-                            <div id="knowledge-viewer-title" class="dc-vtitle"></div>
-                            <div id="knowledge-viewer-meta" class="dc-vmeta"></div>
-                        </div>
-                        <div id="knowledge-viewer-hint" class="kb-dc-viewer-hint">请选择左侧内容进行查看</div>
-                        <div id="attn-monitor-bar" style="display:none;"></div>
-                        <div id="knowledge-viewer-body" class="kb-dc-viewer-body"></div>
-                        <div id="knowledge-viewer-toolbar" class="kb-dc-bottom-bar">
-                            <button class="btn btn-secondary" id="kb-toolbar-back" type="button">返回</button>
-                            <button class="btn" id="kb-toolbar-edit" type="button" style="display:none;">✏️ 编辑</button>
-                            <button class="btn btn-danger" id="kb-toolbar-delete" type="button" style="display:none;">删除</button>
-                        </div>
-                    </div>
-                </div>
-                </div>
-            </div>
+                </div><!-- /kb-panel-knowledge -->
+            </div><!-- /knowledge-page -->
 
             <!-- 培训认证页面 -->
             <div id="training-page" class="hidden">
@@ -14225,71 +15042,8 @@
                 </div>
             </div>
 
-            <!-- 文件中心页面 -->
-            <div id="files-page" class="hidden">
-                <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-                    <h2>📁 文件中心</h2>
-                    <div style="display:flex;gap:8px;">
-                        <button class="btn btn-secondary" onclick="batchDownloadFiles()" id="batch-download-btn" style="display:none;">
-                            <i>📦</i> 批量下载 (<span id="selected-count">0</span>)
-                        </button>
-                        <button class="btn btn-primary" onclick="showUploadFileDialog()">
-                            <i>⬆️</i> 上传文件
-                        </button>
-                    </div>
-                </div>
-
-                <!-- 搜索框 -->
-                <div class="card" style="margin-bottom: 16px;">
-                    <div style="display:flex;gap:8px;">
-                        <input type="text" id="file-search-input" placeholder="搜索文件名、备注、门店..." style="flex:1;padding:10px;border-radius:8px;border:1px solid #ddd;" onkeypress="if(event.key==='Enter') searchFiles()">
-                        <button class="btn btn-primary" onclick="searchFiles()">🔍 搜索</button>
-                        <button class="btn btn-secondary" onclick="clearSearch()">清除</button>
-                    </div>
-                </div>
-
-                <!-- 文件过滤器 -->
-                <div class="card" style="margin-bottom: 16px;">
-                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
-                        <div>
-                            <label style="font-size:12px;color:#666;">文件类型</label>
-                            <select id="file-filter-type" onchange="loadFilesList()" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ddd;">
-                                <option value="">全部</option>
-                                <option value="pos_sales">POS销售</option>
-                                <option value="feishu_export">飞书导出</option>
-                                <option value="daily_report">营业日报</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style="font-size:12px;color:#666;">门店</label>
-                            <select id="file-filter-store" onchange="loadFilesList()" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ddd;">
-                                <option value="">全部</option>
-                                <option value="洪潮大宁久光店">洪潮大宁久光店</option>
-                                <option value="马己仙上海音乐广场店">马己仙上海音乐广场店</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style="font-size:12px;color:#666;">校验状态</label>
-                            <select id="file-filter-validation" onchange="loadFilesList()" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ddd;">
-                                <option value="">全部</option>
-                                <option value="pending">待校验</option>
-                                <option value="passed">已通过</option>
-                                <option value="failed">未通过</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style="font-size:12px;color:#666;">上传人</label>
-                            <input type="text" id="file-filter-uploader" placeholder="输入用户名" onchange="loadFilesList()" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ddd;">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 文件列表 -->
-                <div id="files-list-container"></div>
-
-                <!-- 分页 -->
-                <div id="files-pagination" style="display:flex;justify-content:center;gap:8px;margin-top:16px;"></div>
-            </div>
+            <!-- 文件中心页面：已合并到 knowledge-page，showPage('files') 重定向 -->
+            <div id="files-page" class="hidden"></div>
 
             <div id="agents-page" class="hidden dc-v2">
                 <style>
@@ -22007,6 +22761,12 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             console.log('切换到页面:', pageName);
             updateDebug('当前页面: ' + pageName);
 
+            // 文件中心已合并到知识库
+            if (pageName === 'files') {
+                pageName = 'knowledge';
+                setTimeout(() => switchKbModule('files'), 100);
+            }
+
             if (pageName === 'dashboard') {
                 pageName = getHomePageName();
             }
@@ -24280,25 +25040,20 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             try { attnHideMonitorBar(); } catch (e) {}
             try { document.body.classList.remove('kb-detail-mode'); } catch (e) {}
             try { window.__HRMS_KB_ACTIVE_ID = ''; } catch (e) {}
-            const header = document.getElementById('knowledge-viewer-header');
             const title = document.getElementById('knowledge-viewer-title');
             const meta = document.getElementById('knowledge-viewer-meta');
             const hint = document.getElementById('knowledge-viewer-hint');
             const body = document.getElementById('knowledge-viewer-body');
-            const backBtn = document.getElementById('knowledge-back-btn');
-            if (header) header.style.display = 'none';
             if (title) title.textContent = '';
-            if (meta) meta.textContent = '';
+            if (meta) meta.innerHTML = '';
             if (hint) hint.style.display = '';
             if (body) body.innerHTML = '';
-            if (backBtn) backBtn.style.display = 'none';
 
-            try {
-                const tb = document.getElementById('knowledge-viewer-toolbar');
-                if (tb) tb.style.display = 'none';
-                const del = document.getElementById('kb-toolbar-delete');
-                if (del) del.style.display = 'none';
-            } catch (e) {}
+            // V2: 关闭 overlay viewer, 显示列表
+            const viewer = document.getElementById('knowledge-viewer');
+            const listView = document.getElementById('kb-list-view');
+            if (viewer) viewer.classList.remove('kb-v2-active');
+            if (listView) listView.classList.remove('kb-v2-hidden');
         }
 
         function kbBackToList() {
@@ -24505,122 +25260,125 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
 
             try { window.__HRMS_KB_ACTIVE_ID = id; } catch (e) {}
 
-            try { document.body.classList.add('kb-detail-mode'); } catch (e) {}
-            const header = document.getElementById('knowledge-viewer-header');
+            // V2: 显示 overlay viewer，隐藏列表
+            const viewer = document.getElementById('knowledge-viewer');
+            const listView = document.getElementById('kb-list-view');
+            if (viewer) viewer.classList.add('kb-v2-active');
+            if (listView) listView.classList.add('kb-v2-hidden');
+
+            try { attnHideMonitorBar(); } catch (e) {}
+
             const title = document.getElementById('knowledge-viewer-title');
             const meta = document.getElementById('knowledge-viewer-meta');
             const hint = document.getElementById('knowledge-viewer-hint');
             const body = document.getElementById('knowledge-viewer-body');
-            const backBtn = document.getElementById('knowledge-back-btn');
-            try {
-                const tb = document.getElementById('knowledge-viewer-toolbar');
-                const btnBack = document.getElementById('kb-toolbar-back');
-                const btnDel = document.getElementById('kb-toolbar-delete');
-                if (tb) tb.style.display = '';
-                if (btnBack) btnBack.onclick = () => kbBackToList();
-                if (btnDel) {
-                    if (isAdminUser()) {
-                        btnDel.style.display = '';
-                        btnDel.onclick = () => deleteKnowledgeItem(id);
-                    } else {
-                        btnDel.style.display = 'none';
-                    }
-                }
-                const btnEdit = document.getElementById('kb-toolbar-edit');
-                if (btnEdit) {
-                    if (isAdminUser()) {
-                        btnEdit.style.display = '';
-                        btnEdit.onclick = () => openKnowledgeEditModal(id);
-                    } else {
-                        btnEdit.style.display = 'none';
-                    }
-                }
-            } catch (e) {}
 
-            if (header) header.style.display = '';
-            if (backBtn) backBtn.style.display = '';
             if (hint) hint.style.display = 'none';
             if (title) title.textContent = String(item.title || '');
             if (meta) {
-                const t = String(item.type || '').toUpperCase();
+                const typeIcon = { video:'🎬', pdf:'📕', doc:'📘', img:'🖼️', txt:'📝' }[String(item.type||'doc')] || '📄';
+                const t = String(item.type || 'doc').toUpperCase();
                 const cat = String(item.category || '');
                 const sz = item.size ? formatFileSize(item.size) : '';
-                meta.textContent = [cat, t, sz].filter(Boolean).join(' · ');
+                meta.innerHTML = `<span class="kb-v2-chip kb-v2-chip-type">${typeIcon} ${t}</span>${cat ? `<span class="kb-v2-chip" style="background:rgba(255,255,255,0.07);color:rgba(148,163,184,0.8);">${escapeHtml(cat)}</span>` : ''}${sz ? `<span class="kb-v2-item-date">${escapeHtml(sz)}</span>` : ''}`;
             }
 
-            // 已移除专注度监控功能：不再展示监控面板
-            try { attnHideMonitorBar(); } catch (e) {}
-
-            // 添加删除按钮（仅管理员可见）
+            // 管理员按钮
             const deleteBtn = document.getElementById('knowledge-delete-btn');
             const editBtn = document.getElementById('knowledge-edit-btn');
             if (deleteBtn) {
-                if (isAdminUser()) {
-                    deleteBtn.style.display = '';
-                    deleteBtn.onclick = () => deleteKnowledgeItem(id);
-                } else {
-                    deleteBtn.style.display = 'none';
-                }
+                deleteBtn.style.display = isAdminUser() ? '' : 'none';
+                deleteBtn.onclick = () => deleteKnowledgeItem(id);
             }
             if (editBtn) {
-                if (isAdminUser()) {
-                    editBtn.style.display = '';
-                    editBtn.onclick = () => openKnowledgeEditModal(id);
-                } else {
-                    editBtn.style.display = 'none';
-                }
+                editBtn.style.display = isAdminUser() ? '' : 'none';
+                editBtn.onclick = () => openKnowledgeEditModal(id);
             }
 
             if (!body) return;
             body.innerHTML = '';
 
+            // ── AI 知识解析视图（主展示方式，与培训认证共用缓存）──
             const base = String(HRMS_API.baseUrl() || window.location?.origin || '').replace(/\/$/, '');
             const token = String(HRMS_API.token() || '').trim();
-            if (!token) {
-                body.innerHTML = '<div style="color:#c2410c; font-size: 12px;">登录已失效，请重新登录后再查看。</div>';
-                return;
-            }
-            const src = `${base}/api/knowledge/${encodeURIComponent(id)}/file?token=${encodeURIComponent(token)}`;
             const type = String(item.type || 'doc');
 
-            if (!src) {
-                body.innerHTML = '<div style="color:#c2410c; font-size: 12px;">无法生成文件访问链接，请重新登录后重试。</div>';
-                return;
-            }
+            // 所有类型：只显示 AI 解析（视频额外保留播放器）
+            const fileSrc = token ? `${base}/api/knowledge/${encodeURIComponent(id)}/file?token=${encodeURIComponent(token)}` : '';
 
-            if (type === 'video') {
+            if (type === 'video' && token) {
                 const vWrap = document.createElement('div');
                 vWrap.className = 'kb-video-viewer';
                 const v = document.createElement('video');
-                v.controls = true;
-                v.src = src;
-                v.preload = 'metadata';
+                v.controls = true; v.src = fileSrc; v.preload = 'metadata';
                 vWrap.appendChild(v);
                 body.appendChild(vWrap);
-                return;
-            }
-            if (type === 'img') {
-                const imgWrap = document.createElement('div');
-                imgWrap.className = 'kb-img-viewer';
-                const img = document.createElement('img');
-                img.alt = '';
-                img.src = src;
-                img.loading = 'quality';
-                img.decoding = 'async';
-                imgWrap.appendChild(img);
-                body.appendChild(imgWrap);
-                return;
-            }
-            if (type === 'pdf') {
-                renderKbPdfPreviewFromUrl(src, body);
-                return;
             }
 
-            const docFrame = document.createElement('iframe');
-            docFrame.title = 'doc';
-            docFrame.className = 'kb-doc-frame';
-            docFrame.src = src;
-            body.appendChild(docFrame);
+            const aiBox = document.createElement('div');
+            if (type === 'video') aiBox.style.marginTop = '16px';
+            body.appendChild(aiBox);
+            kbLoadAiSummary(id, aiBox, { showFileBtn: isAdminUser() && type !== 'video', fileSrc, fileType: type });
+        }
+
+        // ── 知识库 AI 解析（复用培训认证缓存端点）──
+        async function kbLoadAiSummary(itemId, container, opts = {}) {
+            const token = HRMS_API.token() || '';
+            container.innerHTML = `
+                <div style="text-align:center;padding:44px 0;color:rgba(255,255,255,0.38);">
+                    <div style="font-size:32px;margin-bottom:12px;opacity:0.8;">✨</div>
+                    <div style="font-size:13px;">AI 正在整理知识要点，请稍候…</div>
+                </div>`;
+            try {
+                const resp = await fetch('/api/knowledge/' + encodeURIComponent(itemId) + '/explanation', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await resp.json();
+                if (data.success && data.explanation) {
+                    const cacheBadge = data.cached
+                        ? '<span style="font-size:10px;padding:2px 7px;border-radius:6px;background:rgba(52,211,153,0.15);color:#6ee7b7;margin-left:6px;">已缓存</span>'
+                        : '<span style="font-size:10px;padding:2px 7px;border-radius:6px;background:rgba(251,191,36,0.15);color:#fde68a;margin-left:6px;">✨ 新生成</span>';
+                    const html = data.explanation
+                        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                        .replace(/^## (.+)$/gm,'<div class="kb-ai-h2">$1</div>')
+                        .replace(/^### (.+)$/gm,'<div class="kb-ai-h3">$1</div>')
+                        .replace(/^[-•] (.+)$/gm,'<div class="kb-ai-bullet"><span class="kb-ai-dot">•</span><span>$1</span></div>')
+                        .replace(/^\d+\. (.+)$/gm,'<div class="kb-ai-num">$1</div>')
+                        .replace(/\*\*(.+?)\*\*/g,'<strong style="color:#fff;font-weight:600;">$1</strong>')
+                        .replace(/\n/g,'<br>');
+
+                    let fileBtnHtml = '';
+                    if (opts.showFileBtn && opts.fileSrc) {
+                        const typeLabel = opts.fileType === 'pdf' ? 'PDF' : (opts.fileType === 'doc' ? '原文档' : '原文件');
+                        fileBtnHtml = `<a href="${escapeHtml(opts.fileSrc)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;margin-top:16px;padding:8px 16px;border-radius:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.6);font-size:12px;text-decoration:none;">📎 查看${typeLabel}</a>`;
+                    }
+
+                    container.innerHTML = `
+                        <div class="kb-ai-card">
+                            <div class="kb-ai-card-hdr">
+                                <span style="font-size:20px;">✨</span>
+                                <div>
+                                    <div class="kb-ai-card-title">AI 知识解析${cacheBadge}</div>
+                                    <div class="kb-ai-card-sub">AI 精心整理要点，助你快速掌握核心内容</div>
+                                </div>
+                            </div>
+                            <div class="kb-ai-content">${html}</div>
+                            ${fileBtnHtml}
+                        </div>`;
+                } else if (data.error === 'no_content') {
+                    container.innerHTML = `
+                        <div class="kb-ai-empty">
+                            <div style="font-size:36px;margin-bottom:12px;">📄</div>
+                            <div style="font-size:14px;font-weight:600;color:rgba(255,255,255,0.6);margin-bottom:6px;">暂无可解析内容</div>
+                            <div style="font-size:12px;color:rgba(255,255,255,0.35);line-height:1.7;">文件正在处理中，通常需要 1-2 分钟<br>视频请确保管理员已填写内容摘要</div>
+                            ${opts.showFileBtn && opts.fileSrc ? `<a href="${escapeHtml(opts.fileSrc)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;margin-top:16px;padding:8px 16px;border-radius:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.5);font-size:12px;text-decoration:none;">📎 查看原文件</a>` : ''}
+                        </div>`;
+                } else {
+                    container.innerHTML = `<div class="kb-ai-empty"><div style="font-size:32px;margin-bottom:10px;">⚠️</div><div style="font-size:13px;color:rgba(255,255,255,0.4);">${escapeHtml(data.message || 'AI 解析失败，请稍后重试')}</div></div>`;
+                }
+            } catch(e) {
+                container.innerHTML = `<div class="kb-ai-empty"><div style="font-size:32px;margin-bottom:10px;">📡</div><div style="font-size:13px;color:rgba(255,255,255,0.4);">网络错误，请检查连接后重试</div></div>`;
+            }
         }
 
         function renderBiSourcePresetDatalist() {
@@ -24868,55 +25626,83 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             if (!items.length) {
                 list.innerHTML = '';
                 if (empty) empty.style.display = '';
-                try {
-                    if (cardsEl) {
-                        cardsEl.innerHTML = '<div style="text-align:center;color:rgba(200,215,230,0.72);padding:28px 12px;">暂无可查看内容。</div>';
-                    }
-                } catch (e) {}
+                if (cardsEl) cardsEl.innerHTML = '<div class="kb-list-empty-msg">暂无内容，请上传资料</div>';
                 return;
             }
             if (empty) empty.style.display = 'none';
+            list.innerHTML = ''; // legacy list not used anymore
 
-            list.innerHTML = items.map(it => {
-                const id = String(it?.id || '');
-                const t = String(it?.type || 'doc');
-                const badge = t === 'video' ? '视频' : (t === 'pdf' ? 'PDF' : (t === 'img' ? '图片' : '文档'));
-                const icon = t === 'video' ? '🎬' : (t === 'pdf' ? '📄' : (t === 'img' ? '🖼️' : '📝'));
-                const metaRest = [String(it?.category || ''), it?.size ? formatFileSize(it.size) : ''].filter(Boolean).join(' · ');
-                return `
-                    <div class="kb-dc-item" onclick="openKnowledgeItem('${escapeHtml(id)}')">
-                        <div class="kb-dc-item-icon" data-type="${escapeHtml(t)}">${icon}</div>
-                        <div class="kb-dc-item-body">
-                            <div class="kb-dc-item-title">${escapeHtml(String(it?.title || ''))}</div>
-                            <div class="kb-dc-item-meta"><span class="kb-dc-type-pill">${escapeHtml(badge)}</span>${metaRest ? `<span class="kb-dc-meta-sep">·</span>${escapeHtml(metaRest)}` : ''}</div>
+            // ─── 分类分组卡片视图 ───
+            if (!cardsEl) return;
+
+            const typeIcon = t => t === 'video' ? '🎬' : t === 'pdf' ? '📄' : t === 'img' ? '🖼️' : '📝';
+            const typeBadge = t => t === 'video' ? '视频' : t === 'pdf' ? 'PDF' : t === 'img' ? '图片' : '文档';
+
+            if (activeCat) {
+                cardsEl.innerHTML = `<div class="kb-v2-cat-body">${items.map(it => kbRenderListItem(it, typeIcon, typeBadge)).join('')}</div>`;
+            } else {
+                const CATS = getKbCategoryOptions();
+                const grouped = {};
+                const uncategorized = [];
+                items.forEach(it => {
+                    const c = String(it?.category || '').trim();
+                    if (CATS.includes(c)) { if (!grouped[c]) grouped[c] = []; grouped[c].push(it); }
+                    else uncategorized.push(it);
+                });
+                let html = '';
+                CATS.forEach(cat => {
+                    const grp = grouped[cat] || [];
+                    if (!grp.length) return;
+                    const catIcon = (KB_CATEGORY_ICON || {})[cat] || '📂';
+                    html += `<div class="kb-v2-cat-group">
+                        <div class="kb-v2-cat-hdr" onclick="this.parentElement.classList.toggle('kb-v2-collapsed')">
+                            <span class="kb-v2-cat-hdr-icon">${catIcon}</span>
+                            <span class="kb-v2-cat-hdr-name">${escapeHtml(cat)}</span>
+                            <span class="kb-v2-cat-count">${grp.length}</span>
+                            <span class="kb-v2-cat-chev">›</span>
                         </div>
-                    </div>
-                `;
-            }).join('');
-
-            try {
-                if (cardsEl) {
-                    cardsEl.innerHTML = items.map(it => {
-                        const id = String(it?.id || '').trim() || '-';
-                        const title = String(it?.title || '').trim() || '-';
-                        const t = String(it?.type || 'doc');
-                        const badge = t === 'video' ? '视频' : (t === 'pdf' ? 'PDF' : (t === 'img' ? '图片' : '文档'));
-                        const icon = t === 'video' ? '🎬' : (t === 'pdf' ? '📄' : (t === 'img' ? '🖼️' : '📝'));
-                        const category = String(it?.category || '').trim() || '-';
-                        const size = it?.size ? formatFileSize(it.size) : '-';
-                        const createdAt = it?.createdAt ? String(it.createdAt).slice(0, 10) : '-';
-                        return `
-                            <div class="kb-dc-item" style="margin:8px 0;" onclick="openKnowledgeItem('${escapeHtml(id)}')">
-                                <div class="kb-dc-item-icon" data-type="${escapeHtml(t)}">${icon}</div>
-                                <div class="kb-dc-item-body">
-                                    <div class="kb-dc-item-title">${escapeHtml(title)}</div>
-                                    <div class="kb-dc-item-meta"><span class="kb-dc-type-pill">${escapeHtml(badge)}</span><span class="kb-dc-meta-sep">·</span>${escapeHtml(category)} · ${escapeHtml(size)} · ${escapeHtml(createdAt)}</div>
-                                </div>
-                            </div>
-                        `;
-                    }).join('');
+                        <div class="kb-v2-cat-body">${grp.map(it => kbRenderListItem(it, typeIcon, typeBadge)).join('')}</div>
+                    </div>`;
+                });
+                if (uncategorized.length) {
+                    html += `<div class="kb-v2-cat-group">
+                        <div class="kb-v2-cat-hdr" onclick="this.parentElement.classList.toggle('kb-v2-collapsed')">
+                            <span class="kb-v2-cat-hdr-icon">📂</span>
+                            <span class="kb-v2-cat-hdr-name">其他</span>
+                            <span class="kb-v2-cat-count">${uncategorized.length}</span>
+                            <span class="kb-v2-cat-chev">›</span>
+                        </div>
+                        <div class="kb-v2-cat-body">${uncategorized.map(it => kbRenderListItem(it, typeIcon, typeBadge)).join('')}</div>
+                    </div>`;
                 }
-            } catch (e) {}
+                cardsEl.innerHTML = html;
+            }
+        }
+
+        function kbRenderListItem(it, typeIcon, typeBadge) {
+            const id = String(it?.id || '');
+            const t = String(it?.type || 'doc');
+            const title = String(it?.title || '未命名');
+            const date = it?.createdAt ? String(it.createdAt).slice(0,10) : '';
+            const isRequired = it?.is_required || it?.isRequired;
+            const quizEnabled = it?.quiz_enabled || it?.quizEnabled;
+            const icon = typeIcon(t);
+            const badge = typeBadge(t);
+            const tags = [];
+            if (isRequired) tags.push('<span class="kb-v2-chip kb-v2-chip-req">必读</span>');
+            if (quizEnabled) tags.push('<span class="kb-v2-chip kb-v2-chip-quiz">测验</span>');
+            return `<div class="kb-v2-item" onclick="openKnowledgeItem('${escapeHtml(id)}')">
+                <div class="kb-v2-item-icon" data-type="${escapeHtml(t)}">${icon}</div>
+                <div class="kb-v2-item-body">
+                    <div class="kb-v2-item-title">${escapeHtml(title)}</div>
+                    <div class="kb-v2-item-meta">
+                        <span class="kb-v2-chip kb-v2-chip-type">${badge}</span>
+                        ${tags.join('')}
+                        ${date ? `<span class="kb-v2-item-date">${date}</span>` : ''}
+                    </div>
+                </div>
+                <div class="kb-v2-item-arrow">›</div>
+            </div>`;
         }
 
         // ═══════════════════════════════════════════════════════════
@@ -26210,13 +26996,32 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             }
         }
 
+        // ── 知识库模块 Tab 切换 ──
+        function switchKbModule(module) {
+            const knowledgePanel = document.getElementById('kb-panel-knowledge');
+            const filesPanel = document.getElementById('kb-panel-files');
+            const kbTab = document.getElementById('kb-mtab-knowledge');
+            const filesTab = document.getElementById('kb-mtab-files');
+            if (!knowledgePanel || !filesPanel) return;
+
+            if (module === 'files') {
+                knowledgePanel.style.display = 'none';
+                filesPanel.style.display = '';
+                if (kbTab) kbTab.classList.remove('active');
+                if (filesTab) filesTab.classList.add('active');
+                loadFilesList(1);
+            } else {
+                filesPanel.style.display = 'none';
+                knowledgePanel.style.display = '';
+                if (kbTab) kbTab.classList.add('active');
+                if (filesTab) filesTab.classList.remove('active');
+            }
+        }
+
         function loadKnowledgeData() {
             const btn = document.getElementById('btn-knowledge-upload');
             const isAdmin = currentUser && currentUser.role === ROLES.ADMIN;
             if (btn) btn.style.display = isAdmin ? '' : 'none';
-
-            const fcBtn = document.getElementById('btn-knowledge-flashcards');
-            if (fcBtn) fcBtn.style.display = currentUser ? '' : 'none';
 
             const filterAudience = document.getElementById('knowledge-filter-audience');
             if (filterAudience) {
@@ -27227,18 +28032,16 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             st.tab = t;
             setKnowledgeFilterState(st);
 
-            const allBtn = document.getElementById('kb-tab-all');
-            const vBtn = document.getElementById('kb-tab-video');
-            const dBtn = document.getElementById('kb-tab-doc');
-            const setActive = (btn, active) => {
+            ['kb-tab-all','kb-tab-video','kb-tab-doc'].forEach(id => {
+                const btn = document.getElementById(id);
                 if (!btn) return;
-                btn.classList.remove('btn');
-                btn.classList.remove('btn-secondary');
-                btn.classList.add(active ? 'btn' : 'btn-secondary');
-            };
-            setActive(allBtn, t === 'all');
-            setActive(vBtn, t === 'video');
-            setActive(dBtn, t === 'doc');
+                // V2 tabs use kb-v2-ttab + active
+                btn.classList.remove('btn','btn-secondary');
+                btn.classList.add('kb-v2-ttab');
+                const tabMap = { 'kb-tab-all': 'all', 'kb-tab-video': 'video', 'kb-tab-doc': 'doc' };
+                if (tabMap[id] === t) btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
 
             renderKnowledgeList();
         }
@@ -27252,8 +28055,18 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
         }
 
         function getKbCategoryOptions() {
-            return ['行政文件', '岗位SOP', '业务SOP', '培训资料', '其他'];
+            return ['岗位SOP', '产品培训', '入职培训', '考核标准', '公司制度', '模板文档'];
         }
+
+        // 分类图标映射
+        const KB_CATEGORY_ICON = {
+            '岗位SOP': '📋',
+            '产品培训': '🍽️',
+            '入职培训': '🎓',
+            '考核标准': '📐',
+            '公司制度': '🏢',
+            '模板文档': '📁',
+        };
 
         function renderKbCategoryBar() {
             const bar = document.getElementById('kb-category-bar');
@@ -32217,11 +33030,16 @@ ${knowledgeContent.slice(0, 30000)}`;
             const aud = document.getElementById('knowledge-upload-audience-type');
             if (title) title.value = '';
             if (category) category.value = '';
-            if (type) type.value = 'video';
+            if (type) type.value = 'pdf';
             if (agent) agent.value = '';
             if (aud) aud.value = 'all';
             if (file) file.value = '';
             if (status) status.textContent = '';
+            // Reset file zone display
+            const fileIcon = document.getElementById('kb-upload-file-icon');
+            const fileLabel = document.getElementById('kb-upload-file-label');
+            if (fileIcon) fileIcon.textContent = '📎';
+            if (fileLabel) { fileLabel.textContent = '点击选择文件'; fileLabel.style.color = '#a5b4fc'; }
 
             const confirmBtn = document.getElementById('btn-knowledge-upload-confirm');
             const cancelBtn = document.getElementById('btn-knowledge-upload-cancel');
@@ -32230,7 +33048,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             populateKnowledgeBrandOptions('all');
             try { populateKnowledgeAudienceOptions(); } catch (e) {}
             syncKnowledgeUploadFields();
-            modal.style.display = 'flex';
+            modal.classList.add('active');
         }
 
         function closeKnowledgeUploadModal() {
@@ -32266,7 +33084,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             }
             const modal = document.getElementById('knowledge-upload-modal');
             if (!modal) return;
-            modal.style.display = 'none';
+            modal.classList.remove('active');
             const batchCb = document.getElementById('knowledge-upload-batch');
             if (batchCb) batchCb.checked = false;
             const batchTitleGroup = document.getElementById('knowledge-upload-batch-title-group');
@@ -32472,12 +33290,18 @@ ${knowledgeContent.slice(0, 30000)}`;
             window.__KB_UPLOAD_IN_PROGRESS = !!busy;
             const confirmBtn = document.getElementById('btn-knowledge-upload-confirm');
             const cancelBtn = document.getElementById('btn-knowledge-upload-cancel');
-            const closeBtn = document.querySelector('#knowledge-upload-modal .modal-close');
+            const closeBtn = document.querySelector('#knowledge-upload-modal .kb-upload-close');
             if (confirmBtn) confirmBtn.disabled = !!busy;
             if (cancelBtn) cancelBtn.disabled = false;
             if (closeBtn) closeBtn.disabled = false;
+            const btnText = document.getElementById('kb-upload-btn-text');
+            if (busy && text) {
+                if (btnText) btnText.textContent = text;
+            } else if (!busy) {
+                if (btnText) btnText.textContent = '📤 上传';
+            }
             const statusEl = document.getElementById('knowledge-upload-file-status');
-            if (statusEl && text != null) statusEl.textContent = String(text);
+            if (statusEl && text != null && busy) statusEl.textContent = String(text);
         }
 
         function renderKnowledgeUploadProgress(pct, text) {
@@ -32692,7 +33516,12 @@ ${knowledgeContent.slice(0, 30000)}`;
                 event.target.value = '';
                 return;
             }
-            if (statusEl) statusEl.textContent = `已选择：${file.name}（${formatFileSize(size)}）`;
+            // Update new file zone UI
+            const fileIcon = document.getElementById('kb-upload-file-icon');
+            const fileLabel = document.getElementById('kb-upload-file-label');
+            if (fileIcon) fileIcon.textContent = '✅';
+            if (fileLabel) { fileLabel.textContent = file.name; fileLabel.style.color = '#6ee7b7'; }
+            if (statusEl) statusEl.textContent = formatFileSize(size);
         }
 
         async function confirmKnowledgeUpload() {
@@ -32708,6 +33537,9 @@ ${knowledgeContent.slice(0, 30000)}`;
             const audType = (document.getElementById('knowledge-upload-audience-type')?.value || '').trim();
             const kbScope = (document.getElementById('knowledge-upload-scope')?.value || 'public').trim();
             const version = (document.getElementById('knowledge-upload-version')?.value || '').trim();
+            const isRequired = document.getElementById('knowledge-upload-required')?.checked || false;
+            const quizEnabled = document.getElementById('knowledge-upload-quiz-link')?.checked || false;
+            const trainingModule = (document.getElementById('knowledge-upload-training-module')?.value || '').trim();
             const fileInput = document.getElementById('knowledge-upload-file');
             const statusEl = document.getElementById('knowledge-upload-file-status');
             const feedTags = getKnowledgeAgentTags(feedAgent);
@@ -32800,6 +33632,9 @@ ${knowledgeContent.slice(0, 30000)}`;
                     files.forEach(f => fd.append('files', f, f.name));
                     fd.append('batchTitleMode', batchTitleMode);
                     if (customPrefix) fd.append('customPrefix', customPrefix);
+                    fd.append('isRequired', isRequired ? '1' : '0');
+                    fd.append('quizEnabled', quizEnabled ? '1' : '0');
+                    if (trainingModule) fd.append('trainingModule', trainingModule);
 
                     renderKnowledgeUploadProgress(1, `批量上传 ${files.length} 个文件中...`);
                     const result = await HRMS_API.batchUploadKnowledge(fd);
@@ -32890,6 +33725,9 @@ ${knowledgeContent.slice(0, 30000)}`;
                             scope: kbScope,
                             version: version || undefined,
                             audienceType: audience.type,
+                            isRequired,
+                            quizEnabled,
+                            ...(trainingModule ? { trainingModule } : {}),
                             ...(videoSummary ? { videoSummary } : {}),
                             ...(audience.type === 'store' && audience.stores?.length ? { audienceStores: audience.stores } : {}),
                             ...(audience.type === 'position' && audience.positions?.length ? { audiencePositions: audience.positions } : {})
@@ -32923,6 +33761,9 @@ ${knowledgeContent.slice(0, 30000)}`;
                             if (audience.position) fd.append('audiencePosition', String(audience.position));
                         }
                         if (videoSummary) fd.append('videoSummary', videoSummary);
+                        fd.append('isRequired', isRequired ? '1' : '0');
+                        fd.append('quizEnabled', quizEnabled ? '1' : '0');
+                        if (trainingModule) fd.append('trainingModule', trainingModule);
                         fd.append('file', file, file.name);
                         await HRMS_API.uploadKnowledge(fd);
 
@@ -32956,6 +33797,9 @@ ${knowledgeContent.slice(0, 30000)}`;
                         if (audience.position) fd.append('audiencePosition', String(audience.position));
                     }
                     if (videoSummary) fd.append('videoSummary', videoSummary);
+                    fd.append('isRequired', isRequired ? '1' : '0');
+                    fd.append('quizEnabled', quizEnabled ? '1' : '0');
+                    if (trainingModule) fd.append('trainingModule', trainingModule);
                     fd.append('file', file, file.name);
 
                     await HRMS_API.uploadKnowledge(fd);
@@ -43275,6 +44119,29 @@ tr:nth-child(even) td { background: #fafafa; }
             `;
         }
 
+        async function notifyAttendanceAnomalies(date) {
+            const dateStr = String(date || '').trim();
+            if (!dateStr) return;
+            const ok = await hrmsConfirm({ title: '通知考勤异常员工', message: `将向 ${dateStr} 存在考勤异常的员工发送公司通知，确认吗？`, okText: '发送通知', icon: '📣' });
+            if (!ok) return;
+            try {
+                const token = HRMS_API.token() || '';
+                const resp = await fetch('/api/admin/attendance-anomaly-notify', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date: dateStr })
+                });
+                const data = await resp.json();
+                if (data.ok) {
+                    showNotification(`已通知 ${data.notified} 名异常员工`, 'success');
+                } else {
+                    showNotification(data.message || '通知失败', 'error');
+                }
+            } catch (e) {
+                showNotification('网络错误，通知失败', 'error');
+            }
+        }
+
         function loadReportsData() {
             if (!currentUser) return;
             refreshBrandsCache(true).then(() => {
@@ -43937,9 +44804,16 @@ tr:nth-child(even) td { background: #fafafa; }
                             if (k === 'leave_only') return '休假未列日报';
                             return k === 'work' ? '在职' : String(k || '—');
                         };
+                        // 计算总异常数
+                        const totalAnomalies = rows.reduce((sum, row) => sum + Number(row.anomaly_count ?? 0), 0);
+                        const notifyDateVal = end; // 默认通知最后一天的异常
+
                         let html = `
                             <div class="rep-hero" style="background: linear-gradient(135deg, #1d4ed8, #6366f1);">
-                                <div style="font-weight: 900; font-size: 16px;">出勤表（营业日报核对）</div>
+                                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                                    <div style="font-weight: 900; font-size: 16px;flex:1;">出勤表（营业日报核对）</div>
+                                    ${isAdminUser() && totalAnomalies > 0 ? `<button onclick="notifyAttendanceAnomalies('${escapeHtml(notifyDateVal)}')" style="padding:6px 14px;border-radius:10px;background:rgba(251,146,60,0.2);border:1px solid rgba(251,146,60,0.4);color:#fdba74;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">📣 通知异常员工 (${totalAnomalies})</button>` : ''}
+                                </div>
                                 <div class="meta" style="margin-top: 8px;">数据来源：<strong>正式提交</strong>营业日报。在职人员与打卡、已通过休假比对；<strong>休息</strong>以日报为准（本休/调休不要求休假流程）。门店名册中未列入出勤/休息且无已通过休假者标为<strong>缺勤</strong>。</div>
                                 <div class="meta" style="margin-top: 6px;">统计周期：${escapeHtml(start)} - ${escapeHtml(end)} · 每日默认折叠，点击标题展开明细</div>`;
                         if (darEmp && es) {
@@ -46631,7 +47505,6 @@ ${body}
                 { icon:'💰', label:'请款', page:'payment', roles:['admin','hq_manager','store_manager','cashier'] },
                 { icon:'📚', label:'知识库', page:'knowledge' },
                 { icon:'🎓', label:'培训认证', page:'training' },
-                { icon:'📁', label:'文件中心', page:'files', roles:['admin'] },
                 { icon:'📊', label:'数据中心', page:'agents', roles:['admin'] },
                 { icon:'📈', label:'增长看板', page:'growth', roles:['admin','hq_manager','store_manager','front_manager'] },
                 { icon:'🧭', label:'Agent任务', page:'agent-tasks', roles:['admin','hq_manager','hr_manager'] },
@@ -47759,59 +48632,115 @@ ${body}
             }
         }
 
+        // ── 文件上传弹窗（深色主题，支持拖拽）──
         function showUploadFileDialog() {
-            const html = `
-                <div class="modal-backdrop" onclick="closeUploadFileDialog()"></div>
-                <div class="modal" style="max-width:600px;">
-                    <div class="modal-header">
-                        <h3>上传文件</h3>
-                        <button class="btn-close" onclick="closeUploadFileDialog()">×</button>
+            if (document.getElementById('upload-file-dialog')) return;
+            const container = document.createElement('div');
+            container.id = 'upload-file-dialog';
+            container.innerHTML = `
+                <div class="uf-backdrop" onclick="closeUploadFileDialog()"></div>
+                <div class="uf-modal">
+                    <div class="uf-header">
+                        <div>
+                            <div class="uf-eyebrow">DATA FILES</div>
+                            <h3 class="uf-title">上传数据文件</h3>
+                        </div>
+                        <button class="uf-close" onclick="closeUploadFileDialog()">×</button>
                     </div>
-                    <div class="modal-body">
-                        <div style="margin-bottom:16px;">
-                            <label>选择文件</label>
-                            <input type="file" id="upload-file-input" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px;">
+                    <div class="uf-body">
+                        <!-- 拖拽区 -->
+                        <div class="uf-dropzone" id="uf-dropzone"
+                             ondragover="event.preventDefault();this.classList.add('dragover')"
+                             ondragleave="this.classList.remove('dragover')"
+                             ondrop="ufHandleDrop(event)"
+                             onclick="document.getElementById('upload-file-input').click()">
+                            <div class="uf-drop-icon">📂</div>
+                            <div class="uf-drop-text">拖放文件到此处，或点击选择</div>
+                            <div class="uf-drop-hint">支持 Excel / CSV / PDF / ZIP / 图片，最大 50MB</div>
+                            <input type="file" id="upload-file-input" style="display:none;"
+                                   accept=".xlsx,.xls,.csv,.pdf,.zip,.png,.jpg,.jpeg,.doc,.docx,.txt"
+                                   onchange="ufShowSelected(this)">
                         </div>
-                        <div style="margin-bottom:16px;">
-                            <label>文件类型</label>
-                            <select id="upload-file-type" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px;">
-                                <option value="pos_sales">POS销售数据</option>
-                                <option value="feishu_export">飞书导出</option>
-                                <option value="daily_report">营业日报</option>
-                            </select>
+                        <div class="uf-selected" id="uf-selected" style="display:none;">
+                            <span class="uf-file-icon" id="uf-file-icon">📄</span>
+                            <span class="uf-file-name" id="uf-file-name"></span>
+                            <span class="uf-file-size" id="uf-file-size"></span>
+                            <button class="uf-file-clear" onclick="ufClearFile()">×</button>
                         </div>
-                        <div style="margin-bottom:16px;">
-                            <label>关联门店（可选）</label>
-                            <select id="upload-file-store" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px;">
+
+                        <!-- 文件类型 -->
+                        <div class="uf-field">
+                            <label class="uf-label">文件类型 <span style="color:#f43f5e;">*</span></label>
+                            <div class="uf-type-grid" id="uf-type-grid">
+                                <button class="uf-type-btn active" data-val="pos_sales" onclick="ufSelectType(this)">📊<br><span>POS销售</span></button>
+                                <button class="uf-type-btn" data-val="feishu_export" onclick="ufSelectType(this)">🪶<br><span>飞书导出</span></button>
+                                <button class="uf-type-btn" data-val="daily_report" onclick="ufSelectType(this)">📋<br><span>营业日报</span></button>
+                                <button class="uf-type-btn" data-val="inventory" onclick="ufSelectType(this)">📦<br><span>库存数据</span></button>
+                                <button class="uf-type-btn" data-val="hr_doc" onclick="ufSelectType(this)">👥<br><span>HR文档</span></button>
+                                <button class="uf-type-btn" data-val="other" onclick="ufSelectType(this)">📄<br><span>其他</span></button>
+                            </div>
+                            <input type="hidden" id="upload-file-type" value="pos_sales">
+                        </div>
+
+                        <!-- 关联门店 -->
+                        <div class="uf-field">
+                            <label class="uf-label">关联门店（可选）</label>
+                            <select id="upload-file-store" class="uf-select">
                                 <option value="">不关联</option>
+                                <option value="洪潮大宁久光店">洪潮大宁久光店</option>
+                                <option value="马己仙上海音乐广场店">马己仙上海音乐广场店</option>
                             </select>
                         </div>
-                        <div style="margin-bottom:16px;">
-                            <label>上传说明（可选）</label>
-                            <textarea id="upload-file-note" rows="3" placeholder="备注信息..." style="width:100%;padding:8px;border:1px solid #ddd;border-radius:8px;"></textarea>
+
+                        <!-- 备注 -->
+                        <div class="uf-field">
+                            <label class="uf-label">上传说明（可选）</label>
+                            <textarea id="upload-file-note" class="uf-textarea" rows="2" placeholder="数据来源、时间范围、备注..."></textarea>
                         </div>
                     </div>
-                    <div class="modal-footer">
+                    <div class="uf-footer">
                         <button class="btn btn-secondary" onclick="closeUploadFileDialog()">取消</button>
-                        <button class="btn btn-primary" onclick="submitFileUpload()">上传</button>
+                        <button class="btn" id="uf-submit-btn" onclick="submitFileUpload()">⬆️ 上传</button>
                     </div>
                 </div>
             `;
-
-            const container = document.createElement('div');
-            container.id = 'upload-file-dialog';
-            container.innerHTML = html;
             document.body.appendChild(container);
+        }
 
-            // 填充门店选项
-            const storeSelect = document.getElementById('upload-file-store');
-            const stores = ['洪潮大宁久光店', '马己仙上海音乐广场店'];
-            stores.forEach(store => {
-                const option = document.createElement('option');
-                option.value = store;
-                option.textContent = store;
-                storeSelect.appendChild(option);
-            });
+        function ufHandleDrop(e) {
+            e.preventDefault();
+            document.getElementById('uf-dropzone').classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (!file) return;
+            const input = document.getElementById('upload-file-input');
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            input.files = dt.files;
+            ufShowSelected(input);
+        }
+
+        function ufShowSelected(input) {
+            const file = input.files?.[0];
+            if (!file) return;
+            const ext = file.name.split('.').pop().toLowerCase();
+            const iconMap = { xlsx:'📊', xls:'📊', csv:'📊', pdf:'📕', zip:'📦', png:'🖼️', jpg:'🖼️', jpeg:'🖼️', doc:'📝', docx:'📝', txt:'📄' };
+            document.getElementById('uf-file-icon').textContent = iconMap[ext] || '📄';
+            document.getElementById('uf-file-name').textContent = file.name;
+            document.getElementById('uf-file-size').textContent = formatFileSize(file.size);
+            document.getElementById('uf-selected').style.display = 'flex';
+            document.getElementById('uf-dropzone').style.display = 'none';
+        }
+
+        function ufClearFile() {
+            document.getElementById('upload-file-input').value = '';
+            document.getElementById('uf-selected').style.display = 'none';
+            document.getElementById('uf-dropzone').style.display = '';
+        }
+
+        function ufSelectType(btn) {
+            document.querySelectorAll('#uf-type-grid .uf-type-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('upload-file-type').value = btn.dataset.val;
         }
 
         function closeUploadFileDialog() {
@@ -47820,15 +48749,14 @@ ${body}
         }
 
         async function submitFileUpload() {
-            try {
-                const fileInput = document.getElementById('upload-file-input');
-                const file = fileInput?.files?.[0];
-                
-                if (!file) {
-                    showNotification('请选择文件', 'warning');
-                    return;
-                }
+            const fileInput = document.getElementById('upload-file-input');
+            const file = fileInput?.files?.[0];
+            if (!file) { showNotification('请先选择文件', 'warning'); return; }
 
+            const btn = document.getElementById('uf-submit-btn');
+            if (btn) { btn.disabled = true; btn.textContent = '上传中...'; }
+
+            try {
                 const formData = new FormData();
                 formData.append('file', file);
                 formData.append('file_type', document.getElementById('upload-file-type').value);
@@ -47840,16 +48768,15 @@ ${body}
                     headers: { 'Authorization': `Bearer ${(localStorage.getItem('HRMS_API_TOKEN') || localStorage.getItem('hrms_token') || '')}` },
                     body: formData
                 });
-
-                if (!res.ok) throw new Error('上传失败');
+                if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || '上传失败');
                 const data = await res.json();
-
                 showNotification(data.message || '文件上传成功', 'success');
                 closeUploadFileDialog();
-                loadFilesList(currentFilesPage);
+                loadFilesList(1);
             } catch (e) {
                 console.error('文件上传失败:', e);
-                showNotification('文件上传失败: ' + (e?.message || '未知错误'), 'error');
+                showNotification('上传失败：' + (e?.message || '未知错误'), 'error');
+                if (btn) { btn.disabled = false; btn.textContent = '⬆️ 上传'; }
             }
         }
 
