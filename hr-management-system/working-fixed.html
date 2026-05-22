@@ -14910,124 +14910,1246 @@
                 </div>
             </div>
 
+            <style>
+                #training-topic-modal .tt-modal-content {
+                    width: min(600px, calc(100vw - 20px));
+                    max-height: min(92vh, calc(100dvh - 18px));
+                    border-radius: 24px;
+                    padding: 0;
+                    overflow-y: auto;
+                    background:
+                        radial-gradient(circle at top right, rgba(14,165,233,0.16), transparent 34%),
+                        linear-gradient(180deg, rgba(30,41,59,0.98), rgba(15,23,42,0.985));
+                    border: 1px solid rgba(148,163,184,0.16);
+                    box-shadow: 0 24px 60px rgba(15,23,42,0.42);
+                }
+                #training-topic-modal .tt-modal-header {
+                    padding: 18px 18px 14px;
+                    border-bottom: 1px solid rgba(255,255,255,0.07);
+                    position: sticky;
+                    top: 0;
+                    z-index: 2;
+                    background: linear-gradient(180deg, rgba(30,41,59,0.98), rgba(30,41,59,0.94));
+                    backdrop-filter: blur(14px);
+                }
+                #training-topic-modal .tt-modal-title {
+                    margin: 0;
+                    font-size: 20px;
+                    font-weight: 800;
+                    color: #f8fafc;
+                }
+                #training-topic-modal .tt-modal-subtitle {
+                    margin-top: 6px;
+                    font-size: 12px;
+                    line-height: 1.6;
+                    color: rgba(226,232,240,0.68);
+                }
+                #training-topic-modal .tt-modal-body {
+                    padding: 18px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 16px;
+                }
+                #training-topic-modal .tt-field-label {
+                    display: block;
+                    margin-bottom: 8px;
+                    font-size: 12px;
+                    font-weight: 700;
+                    color: #cbd5e1;
+                    letter-spacing: 0.02em;
+                }
+                #training-topic-modal .tt-input,
+                #training-topic-modal .tt-select,
+                #training-topic-modal .tt-textarea {
+                    width: 100%;
+                    padding: 13px 14px;
+                    border-radius: 14px;
+                    background: rgba(15,23,42,0.72);
+                    border: 1px solid rgba(148,163,184,0.16);
+                    color: #fff;
+                    font-size: 15px;
+                    box-sizing: border-box;
+                }
+                #training-topic-modal .tt-input:focus,
+                #training-topic-modal .tt-select:focus,
+                #training-topic-modal .tt-textarea:focus {
+                    outline: none;
+                    border-color: rgba(56,189,248,0.72);
+                    box-shadow: 0 0 0 3px rgba(14,165,233,0.16);
+                }
+                #training-topic-modal .tt-section-card {
+                    padding: 14px;
+                    border-radius: 18px;
+                    background: rgba(15,23,42,0.48);
+                    border: 1px solid rgba(148,163,184,0.12);
+                }
+                #training-topic-modal .tt-highlight-card {
+                    padding: 14px;
+                    border-radius: 18px;
+                    background: linear-gradient(145deg, rgba(14,165,233,0.18), rgba(30,41,59,0.68));
+                    border: 1px solid rgba(56,189,248,0.26);
+                }
+                #training-topic-modal .tt-section-head {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 10px;
+                    margin-bottom: 10px;
+                }
+                #training-topic-modal .tt-section-title {
+                    font-size: 15px;
+                    font-weight: 800;
+                    color: #f8fafc;
+                }
+                #training-topic-modal .tt-section-tip {
+                    font-size: 11px;
+                    color: rgba(186,230,253,0.85);
+                }
+                #training-topic-modal .tt-summary {
+                    margin-top: 10px;
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                }
+                #training-topic-modal .tt-chip {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    padding: 6px 10px;
+                    border-radius: 999px;
+                    background: rgba(15,23,42,0.52);
+                    border: 1px solid rgba(186,230,253,0.14);
+                    color: rgba(224,242,254,0.92);
+                    font-size: 12px;
+                }
+                #training-topic-modal .tt-pos-grid {
+                    display: grid;
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    gap: 10px;
+                }
+                #training-topic-modal .ta-position-pill {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    min-height: 48px;
+                    padding: 0 14px;
+                    border-radius: 16px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    font-weight: 700;
+                    background: rgba(255,255,255,0.05);
+                    border: 1px solid rgba(255,255,255,0.1);
+                    color: rgba(226,232,240,0.7);
+                    transition: transform .16s ease, border-color .16s ease, background .16s ease, color .16s ease;
+                    -webkit-tap-highlight-color: rgba(14,165,233,0.12);
+                }
+                #training-topic-modal .ta-position-pill:active {
+                    transform: scale(0.98);
+                }
+                #training-topic-modal .ta-position-pill.is-active {
+                    background: linear-gradient(135deg, rgba(14,165,233,0.24), rgba(59,130,246,0.34));
+                    border-color: rgba(56,189,248,0.62);
+                    color: #eff6ff;
+                    box-shadow: 0 10px 24px rgba(14,165,233,0.16);
+                }
+                #training-topic-modal .ta-position-icon {
+                    width: 22px;
+                    height: 22px;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: 50%;
+                    background: rgba(15,23,42,0.58);
+                    color: rgba(191,219,254,0.9);
+                    font-size: 12px;
+                    flex-shrink: 0;
+                }
+                #training-topic-modal .ta-position-pill.is-active .ta-position-icon {
+                    background: rgba(255,255,255,0.16);
+                    color: #fff;
+                }
+                #training-topic-modal .tt-kb-box {
+                    border-radius: 16px;
+                    overflow: hidden;
+                    border: 1px solid rgba(148,163,184,0.14);
+                    background: rgba(2,6,23,0.42);
+                }
+                #training-topic-modal .tt-kb-search-wrap {
+                    padding: 10px 10px 0;
+                }
+                #training-topic-modal .tt-kb-panel {
+                    padding: 12px;
+                    border-radius: 18px;
+                    background: rgba(2,6,23,0.38);
+                    border: 1px solid rgba(148,163,184,0.1);
+                }
+                #training-topic-modal .tt-kb-panel + .tt-kb-panel {
+                    margin-top: 12px;
+                }
+                #training-topic-modal .tt-kb-panel-head {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 12px;
+                    margin-bottom: 10px;
+                }
+                #training-topic-modal .tt-kb-panel-title {
+                    font-size: 13px;
+                    font-weight: 800;
+                    color: #e2e8f0;
+                }
+                #training-topic-modal .tt-kb-panel-sub {
+                    margin-top: 4px;
+                    font-size: 11px;
+                    line-height: 1.6;
+                    color: rgba(148,163,184,0.72);
+                }
+                #training-topic-modal .tt-kb-clear-btn {
+                    border: 1px solid rgba(248,113,113,0.24);
+                    background: rgba(127,29,29,0.18);
+                    color: #fca5a5;
+                    border-radius: 999px;
+                    padding: 6px 10px;
+                    font-size: 11px;
+                    font-weight: 700;
+                    cursor: pointer;
+                }
+                #training-topic-modal .tt-kb-dropdown {
+                    display: none;
+                    background: rgba(15,23,42,0.92);
+                    border-top: 1px solid rgba(255,255,255,0.08);
+                    max-height: 320px;
+                    overflow-y: auto;
+                    padding: 10px;
+                }
+                #training-topic-modal .tt-kb-help {
+                    margin-top: 8px;
+                    font-size: 11px;
+                    line-height: 1.6;
+                    color: rgba(186,230,253,0.68);
+                }
+                #training-topic-modal .tt-kb-selected {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                    min-height: 24px;
+                }
+                .tt-kb-selected-head {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 10px;
+                    font-size: 12px;
+                    color: rgba(186,230,253,0.78);
+                }
+                .tt-kb-selected-count {
+                    font-weight: 800;
+                    color: #e0f2fe;
+                }
+                .tt-kb-selected-grid {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                }
+                .tt-kb-empty {
+                    padding: 14px;
+                    border-radius: 14px;
+                    border: 1px dashed rgba(148,163,184,0.18);
+                    background: rgba(15,23,42,0.42);
+                    font-size: 12px;
+                    line-height: 1.7;
+                    color: rgba(148,163,184,0.82);
+                    text-align: center;
+                }
+                .tt-kb-result {
+                    display: flex;
+                    align-items: stretch;
+                    gap: 12px;
+                    padding: 14px;
+                    cursor: pointer;
+                    border: 1px solid rgba(255,255,255,0.08);
+                    border-radius: 16px;
+                    background: rgba(15,23,42,0.74);
+                    margin-bottom: 10px;
+                    -webkit-tap-highlight-color: rgba(14,165,233,0.12);
+                    transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+                }
+                .tt-kb-result:last-child {
+                    margin-bottom: 0;
+                }
+                .tt-kb-result:active {
+                    transform: scale(0.99);
+                }
+                .tt-kb-result.is-selected {
+                    background: linear-gradient(145deg, rgba(8,145,178,0.22), rgba(30,41,59,0.88));
+                    border-color: rgba(34,211,238,0.34);
+                    box-shadow: 0 0 0 1px rgba(34,211,238,0.08) inset;
+                }
+                .tt-kb-result-mark {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 999px;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    background: rgba(255,255,255,0.08);
+                    color: rgba(224,242,254,0.9);
+                    font-size: 13px;
+                    font-weight: 800;
+                    flex-shrink: 0;
+                    margin-top: 2px;
+                }
+                .tt-kb-result.is-selected .tt-kb-result-mark {
+                    background: rgba(14,165,233,0.18);
+                    color: #67e8f9;
+                }
+                .tt-kb-result-main {
+                    flex: 1;
+                    min-width: 0;
+                }
+                .tt-kb-result-side {
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-between;
+                    align-items: flex-end;
+                    gap: 10px;
+                    flex-shrink: 0;
+                }
+                .tt-kb-result-top {
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 10px;
+                }
+                .tt-kb-result-badge {
+                    display: inline-flex;
+                    align-items: center;
+                    padding: 4px 8px;
+                    border-radius: 999px;
+                    background: rgba(255,255,255,0.06);
+                    border: 1px solid rgba(255,255,255,0.08);
+                    color: rgba(226,232,240,0.72);
+                    font-size: 10px;
+                    white-space: nowrap;
+                }
+                .tt-kb-result-title {
+                    font-size: 14px;
+                    font-weight: 700;
+                    color: #e2e8f0;
+                    line-height: 1.55;
+                }
+                .tt-kb-result-meta {
+                    margin-top: 8px;
+                    font-size: 11px;
+                    line-height: 1.75;
+                    color: rgba(255,255,255,0.52);
+                }
+                .tt-kb-result-add-btn {
+                    border: 1px solid rgba(56,189,248,0.24);
+                    background: linear-gradient(145deg, rgba(8,145,178,0.22), rgba(14,165,233,0.14));
+                    color: #cffafe;
+                    border-radius: 999px;
+                    padding: 8px 12px;
+                    font-size: 12px;
+                    font-weight: 800;
+                    cursor: pointer;
+                    min-width: 68px;
+                }
+                .tt-kb-result-hint {
+                    font-size: 10px;
+                    color: rgba(148,163,184,0.72);
+                    white-space: nowrap;
+                }
+                .tt-kb-chip {
+                    display: flex;
+                    align-items: flex-start;
+                    justify-content: space-between;
+                    gap: 12px;
+                    padding: 12px 14px;
+                    border-radius: 16px;
+                    background: linear-gradient(145deg, rgba(14,165,233,0.12), rgba(15,23,42,0.72));
+                    border: 1px solid rgba(56,189,248,0.18);
+                    color: #e0f2fe;
+                    font-size: 12px;
+                    line-height: 1.5;
+                }
+                .tt-kb-chip-main {
+                    min-width: 0;
+                    flex: 1;
+                }
+                .tt-kb-chip-title {
+                    font-size: 13px;
+                    font-weight: 700;
+                    color: #e0f2fe;
+                }
+                .tt-kb-chip-sub {
+                    margin-top: 5px;
+                    font-size: 11px;
+                    color: rgba(186,230,253,0.68);
+                }
+                .tt-kb-chip-meta {
+                    margin-top: 8px;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    flex-wrap: wrap;
+                    font-size: 10px;
+                    color: rgba(148,163,184,0.78);
+                }
+                .tt-kb-chip-badge {
+                    display: inline-flex;
+                    align-items: center;
+                    padding: 4px 8px;
+                    border-radius: 999px;
+                    background: rgba(56,189,248,0.12);
+                    border: 1px solid rgba(56,189,248,0.16);
+                    color: #bae6fd;
+                }
+                .tt-kb-chip-remove {
+                    cursor: pointer;
+                    color: rgba(255,255,255,0.72);
+                    font-size: 16px;
+                    line-height: 1;
+                    width: 28px;
+                    height: 28px;
+                    border-radius: 999px;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    background: rgba(255,255,255,0.06);
+                    flex-shrink: 0;
+                }
+                .training-admin-stack {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                }
+                .training-admin-card {
+                    background: rgba(255,255,255,0.05);
+                    border: 1px solid rgba(255,255,255,0.08);
+                    border-radius: 16px;
+                    overflow: hidden;
+                }
+                .training-admin-summary {
+                    padding: 14px;
+                }
+                .training-admin-row {
+                    display: flex;
+                    align-items: flex-start;
+                    justify-content: space-between;
+                    gap: 10px;
+                }
+                .training-admin-title {
+                    font-size: 14px;
+                    font-weight: 800;
+                    color: #fff;
+                    line-height: 1.5;
+                }
+                .training-admin-sub {
+                    margin-top: 6px;
+                    font-size: 12px;
+                    color: rgba(255,255,255,0.5);
+                    line-height: 1.7;
+                }
+                .training-admin-meta {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 6px;
+                    margin-top: 10px;
+                }
+                .training-admin-chip {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    padding: 4px 9px;
+                    border-radius: 999px;
+                    background: rgba(255,255,255,0.06);
+                    border: 1px solid rgba(255,255,255,0.08);
+                    color: rgba(226,232,240,0.78);
+                    font-size: 11px;
+                }
+                .training-admin-actions {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 8px;
+                    margin-top: 12px;
+                }
+                .training-admin-btn {
+                    padding: 10px 12px;
+                    border-radius: 12px;
+                    border: 1px solid rgba(255,255,255,0.12);
+                    background: rgba(255,255,255,0.06);
+                    color: #fff;
+                    font-size: 13px;
+                    cursor: pointer;
+                }
+                .training-admin-btn--danger {
+                    background: rgba(239,68,68,0.12);
+                    border-color: rgba(239,68,68,0.22);
+                    color: #fca5a5;
+                }
+                .training-admin-toggle {
+                    width: 100%;
+                    padding: 10px 14px;
+                    border: none;
+                    border-top: 1px solid rgba(255,255,255,0.06);
+                    background: rgba(255,255,255,0.03);
+                    color: rgba(226,232,240,0.66);
+                    font-size: 12px;
+                    font-weight: 700;
+                    text-align: left;
+                    cursor: pointer;
+                }
+                .training-admin-card details[open] .training-admin-toggle {
+                    background: rgba(99,102,241,0.08);
+                    color: #c7d2fe;
+                }
+                .training-admin-details {
+                    padding: 0 14px 14px;
+                }
+                .training-admin-stats {
+                    display: grid;
+                    grid-template-columns: repeat(3, minmax(0, 1fr));
+                    gap: 8px;
+                    margin-top: 10px;
+                }
+                .training-admin-stat {
+                    padding: 10px;
+                    border-radius: 14px;
+                    background: rgba(255,255,255,0.04);
+                    border: 1px solid rgba(255,255,255,0.07);
+                    text-align: center;
+                }
+                .training-admin-stat-value {
+                    font-size: 16px;
+                    font-weight: 800;
+                    color: #fff;
+                }
+                .training-admin-stat-label {
+                    margin-top: 4px;
+                    font-size: 11px;
+                    color: rgba(255,255,255,0.5);
+                }
+                .training-admin-member-list {
+                    margin-top: 12px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                }
+                .training-admin-member {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 10px;
+                    padding: 10px 12px;
+                    border-radius: 12px;
+                    background: rgba(255,255,255,0.04);
+                }
+                .training-admin-member-name {
+                    font-size: 13px;
+                    color: #e2e8f0;
+                    font-weight: 700;
+                }
+                .training-admin-member-meta {
+                    margin-top: 3px;
+                    font-size: 11px;
+                    color: rgba(255,255,255,0.42);
+                }
+                .training-admin-badge {
+                    font-size: 11px;
+                    font-weight: 700;
+                    padding: 4px 8px;
+                    border-radius: 999px;
+                    white-space: nowrap;
+                }
+                @media (max-width: 640px) {
+                    .training-admin-stats,
+                    .training-admin-actions {
+                        grid-template-columns: 1fr;
+                    }
+                }
+                .training-ai-shell {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 14px;
+                    padding: 0 0 28px;
+                }
+                .training-ai-hero {
+                    padding: 16px;
+                    border-radius: 18px;
+                    background: linear-gradient(145deg, rgba(99,102,241,0.18), rgba(30,41,59,0.74));
+                    border: 1px solid rgba(129,140,248,0.22);
+                }
+                .training-ai-hero-head {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    margin-bottom: 10px;
+                }
+                .training-ai-hero-title {
+                    font-size: 14px;
+                    font-weight: 800;
+                    color: #c7d2fe;
+                }
+                .training-ai-hero-sub {
+                    font-size: 12px;
+                    line-height: 1.7;
+                    color: rgba(226,232,240,0.72);
+                }
+                .training-ai-outline {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                    margin-top: 12px;
+                }
+                .training-ai-outline-chip {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    padding: 7px 10px;
+                    border-radius: 999px;
+                    background: rgba(15,23,42,0.52);
+                    border: 1px solid rgba(199,210,254,0.16);
+                    color: rgba(224,231,255,0.92);
+                    font-size: 12px;
+                    text-decoration: none;
+                }
+                .training-ai-grid {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                }
+                .training-ai-section {
+                    padding: 14px;
+                    border-radius: 18px;
+                    background: rgba(15,23,42,0.52);
+                    border: 1px solid rgba(148,163,184,0.12);
+                }
+                .training-ai-section-head {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    margin-bottom: 12px;
+                }
+                .training-ai-section-index {
+                    width: 26px;
+                    height: 26px;
+                    border-radius: 999px;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    background: rgba(99,102,241,0.18);
+                    color: #c7d2fe;
+                    font-size: 12px;
+                    font-weight: 800;
+                    flex-shrink: 0;
+                }
+                .training-ai-section-title {
+                    font-size: 15px;
+                    font-weight: 800;
+                    color: #f8fafc;
+                    line-height: 1.45;
+                }
+                .training-ai-intro {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                    margin-bottom: 12px;
+                }
+                .training-ai-intro p {
+                    margin: 0;
+                    font-size: 13px;
+                    line-height: 1.85;
+                    color: rgba(241,245,249,0.84);
+                }
+                .training-ai-group {
+                    margin-top: 12px;
+                    padding: 12px;
+                    border-radius: 16px;
+                    background: rgba(255,255,255,0.04);
+                    border: 1px solid rgba(148,163,184,0.08);
+                }
+                .training-ai-group-title {
+                    font-size: 13px;
+                    font-weight: 800;
+                    color: #c4b5fd;
+                    margin-bottom: 8px;
+                }
+                .training-ai-points,
+                .training-ai-steps {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                }
+                .training-ai-point,
+                .training-ai-step-row {
+                    display: flex;
+                    gap: 10px;
+                    align-items: flex-start;
+                }
+                .training-ai-point-mark,
+                .training-ai-step-mark {
+                    width: 22px;
+                    height: 22px;
+                    border-radius: 999px;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    flex-shrink: 0;
+                    margin-top: 1px;
+                    font-size: 11px;
+                    font-weight: 800;
+                }
+                .training-ai-point-mark {
+                    background: rgba(34,197,94,0.14);
+                    color: #86efac;
+                }
+                .training-ai-step-mark {
+                    background: rgba(99,102,241,0.18);
+                    color: #c7d2fe;
+                }
+                .training-ai-point-text,
+                .training-ai-step-text {
+                    font-size: 13px;
+                    line-height: 1.8;
+                    color: rgba(241,245,249,0.9);
+                    flex: 1;
+                }
+                .training-ai-plain {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                    margin-top: 8px;
+                }
+                .training-ai-plain-row {
+                    font-size: 13px;
+                    line-height: 1.85;
+                    color: rgba(241,245,249,0.88);
+                }
+                .training-ai-note {
+                    padding: 14px;
+                    border-radius: 16px;
+                    background: rgba(251,191,36,0.08);
+                    border: 1px solid rgba(251,191,36,0.18);
+                }
+                .training-ai-note-title {
+                    font-size: 13px;
+                    font-weight: 800;
+                    color: #fde68a;
+                    margin-bottom: 6px;
+                }
+                .training-ai-note-text {
+                    font-size: 12px;
+                    line-height: 1.75;
+                    color: rgba(255,248,220,0.82);
+                }
+                #training-topic-modal .tt-footer {
+                    padding: 16px 18px calc(16px + env(safe-area-inset-bottom, 0px));
+                    border-top: 1px solid rgba(255,255,255,0.06);
+                    display: flex;
+                    justify-content: flex-end;
+                    gap: 10px;
+                    position: sticky;
+                    bottom: 0;
+                    background: linear-gradient(180deg, rgba(15,23,42,0.92), rgba(15,23,42,0.98));
+                    backdrop-filter: blur(16px);
+                }
+                @media (max-width: 640px) {
+                    #training-topic-modal .tt-modal-content {
+                        width: calc(100vw - 12px);
+                        border-radius: 22px;
+                    }
+                    #training-topic-modal .tt-modal-body,
+                    #training-topic-modal .tt-modal-header,
+                    #training-topic-modal .tt-footer {
+                        padding-left: 14px;
+                        padding-right: 14px;
+                    }
+                    #training-topic-modal .tt-pos-grid {
+                        grid-template-columns: 1fr;
+                    }
+                    .tt-kb-result {
+                        padding: 12px;
+                    }
+                    .tt-kb-result-side {
+                        align-items: stretch;
+                    }
+                    .tt-kb-result-add-btn {
+                        width: 100%;
+                    }
+                }
+            </style>
+
             <!-- 培训知识点编辑弹窗 -->
             <div id="training-topic-modal" class="modal">
                 <div class="modal-backdrop" onclick="closeTrainingTopicModal()"></div>
-                <div class="modal-content" style="max-width:600px;border-radius:16px;padding:0;">
-                    <div style="padding:20px 20px 16px;border-bottom:1px solid rgba(255,255,255,0.06);">
+                <div class="modal-content tt-modal-content">
+                    <div class="tt-modal-header">
                         <div style="display:flex;align-items:center;justify-content:space-between;">
-                            <h3 style="margin:0;font-size:16px;font-weight:700;color:#f1f5f9;">编辑知识点</h3>
+                            <div>
+                                <h3 id="training-topic-modal-title" class="tt-modal-title">新建知识点</h3>
+                                <div class="tt-modal-subtitle">把门店、岗位、知识库文章和实操目标一次配置完整，手机上也能顺手完成。</div>
+                            </div>
                             <button class="modal-close" onclick="closeTrainingTopicModal()" style="font-size:20px;background:none;border:none;color:#94a3b8;cursor:pointer;">×</button>
                         </div>
                     </div>
-                    <div style="padding:20px;display:flex;flex-direction:column;gap:16px;">
+                    <div class="tt-modal-body">
                         <input type="hidden" id="training-topic-id">
                         <!-- 标题 -->
-                        <div>
-                            <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px;font-weight:600;">标题</label>
-                            <input type="text" id="training-topic-title" style="width:100%;padding:10px 12px;border-radius:8px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:14px;box-sizing:border-box;">
+                        <div class="tt-section-card">
+                            <label class="tt-field-label">标题</label>
+                            <input type="text" id="training-topic-title" class="tt-input" placeholder="例如：烧味岗位出餐标准">
                         </div>
-                        <!-- 门店（admin/hq可选，store_manager/production_mgr自动） -->
-                        <div id="training-topic-store-wrap">
-                            <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px;font-weight:600;">适用门店</label>
-                            <select id="training-topic-store" style="width:100%;padding:10px 12px;border-radius:8px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:14px;">
-                                <option value="">全部门店</option>
-                            </select>
-                        </div>
-                        <!-- 岗位（多选） -->
-                        <div>
-                            <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px;font-weight:600;">适用岗位（可多选）</label>
-                            <div id="training-topic-positions" style="display:flex;flex-wrap:wrap;gap:8px;padding:10px;background:rgba(0,0,0,0.25);border-radius:8px;border:1px solid rgba(255,255,255,0.1);">
-                                <!-- 由 JS 渲染 -->
+
+                        <div class="tt-highlight-card">
+                            <div class="tt-section-head">
+                                <div class="tt-section-title">① 先定义适用范围</div>
+                                <div class="tt-section-tip">让门店和岗位一眼就看清</div>
                             </div>
+                            <div id="training-topic-store-wrap">
+                                <label class="tt-field-label">适用门店 / 部门</label>
+                                <select id="training-topic-store" class="tt-select" onchange="updateTrainingTopicSummary()">
+                                    <option value="">全部门店</option>
+                                </select>
+                            </div>
+                            <div style="margin-top:14px;">
+                                <label class="tt-field-label">适用岗位（可多选）</label>
+                                <div id="training-topic-positions" class="tt-pos-grid">
+                                    <!-- 由 JS 渲染 -->
+                                </div>
+                            </div>
+                            <div id="training-topic-summary" class="tt-summary"></div>
                         </div>
+
                         <!-- 关联知识库（inline，不用 absolute 避免被 overflow 裁掉） -->
-                        <div>
-                            <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px;font-weight:600;">🔗 关联知识库文章（可多选）</label>
-                            <input type="text" id="training-kb-search" placeholder="输入关键词搜索文章…" autocomplete="off"
-                                oninput="searchKbArticles(this.value)"
-                                onfocus="if(!this.value)searchKbArticles('')"
-                                style="width:100%;padding:10px 12px;border-radius:8px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:14px;box-sizing:border-box;">
-                            <!-- 搜索结果：inline，不做 absolute -->
-                            <div id="training-kb-dropdown" style="display:none;background:#1a2638;border:1px solid rgba(255,255,255,0.12);border-radius:8px;margin-top:4px;max-height:180px;overflow-y:auto;"></div>
-                            <!-- 已选文章 chips -->
-                            <div id="training-kb-selected" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;min-height:24px;">
-                                <span style="font-size:12px;color:rgba(255,255,255,0.3);">未选择（点击搜索框选择）</span>
+                        <div class="tt-section-card">
+                            <div class="tt-section-head">
+                                <div class="tt-section-title">② 关联知识库文章</div>
+                                <div class="tt-section-tip">至少选择 1 篇</div>
+                            </div>
+                            <div class="tt-kb-panel">
+                                <div class="tt-kb-panel-head">
+                                    <div>
+                                        <div class="tt-kb-panel-title">已选文章</div>
+                                        <div class="tt-kb-panel-sub">这里固定显示最终会关联到当前知识点的文章，方便手机上反复确认。</div>
+                                    </div>
+                                    <button type="button" class="tt-kb-clear-btn" onclick="clearKbArticles()">清空</button>
+                                </div>
+                                <div id="training-kb-selected" class="tt-kb-selected">
+                                    <span class="tt-kb-empty">还没有选中文章。先在下方搜索，再点“加入”。</span>
+                                </div>
+                            </div>
+                            <div class="tt-kb-panel">
+                                <div class="tt-kb-panel-head">
+                                    <div>
+                                        <div class="tt-kb-panel-title">搜索并添加</div>
+                                        <div class="tt-kb-panel-sub">下方只展示“尚未加入”的文章，避免你反复分辨哪些已经选过。</div>
+                                    </div>
+                                </div>
+                                <div class="tt-kb-box">
+                                    <div class="tt-kb-search-wrap">
+                                        <input type="text" id="training-kb-search" placeholder="输入关键词搜索文章…" autocomplete="off"
+                                        oninput="searchKbArticles(this.value)"
+                                        onfocus="if(!this.value)searchKbArticles('')"
+                                        class="tt-input" style="border:none;border-radius:14px;background:rgba(255,255,255,0.04);">
+                                        <div class="tt-kb-help">可直接搜标题、培训关键词、岗位名。搜索结果里点“加入”即可，不会打乱上面的已选区。</div>
+                                    </div>
+                                    <div id="training-kb-dropdown" class="tt-kb-dropdown"></div>
+                                </div>
                             </div>
                         </div>
+
                         <!-- 实操目标（原：实操任务） -->
-                        <div>
-                            <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px;font-weight:600;">实操目标</label>
-                            <textarea id="training-topic-practice" rows="3" style="width:100%;padding:10px 12px;border-radius:8px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="描述员工需要完成的实操目标，如：完整演示烧鹅挂炉流程，包括上色、控温、出炉三步骤"></textarea>
+                        <div class="tt-section-card">
+                            <label class="tt-field-label">③ 实操目标</label>
+                            <textarea id="training-topic-practice" rows="4" class="tt-textarea" style="resize:vertical;" placeholder="描述员工需要完成的实操目标，如：完整演示烧鹅挂炉流程，包括上色、控温、出炉三步骤"></textarea>
                         </div>
                     </div>
-                    <div style="padding:16px 20px;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:flex-end;gap:10px;">
+                    <div class="tt-footer">
                         <button class="btn btn-secondary" onclick="closeTrainingTopicModal()">取消</button>
                         <button class="btn" onclick="saveTrainingTopic()">保存</button>
                     </div>
                 </div>
             </div>
 
+            <style>
+                #training-assignment-modal .ta-modal-content {
+                    width: min(560px, calc(100vw - 20px));
+                    max-height: min(92vh, calc(100dvh - 18px));
+                    border-radius: 24px;
+                    padding: 0;
+                    overflow-y: auto;
+                    background:
+                        radial-gradient(circle at top right, rgba(99,102,241,0.18), transparent 34%),
+                        linear-gradient(180deg, rgba(30,41,59,0.98), rgba(15,23,42,0.98));
+                    border: 1px solid rgba(148,163,184,0.16);
+                    box-shadow: 0 24px 60px rgba(15,23,42,0.42);
+                }
+                #training-assignment-modal .ta-modal-header {
+                    padding: 18px 18px 14px;
+                    border-bottom: 1px solid rgba(255,255,255,0.07);
+                    position: sticky;
+                    top: 0;
+                    z-index: 2;
+                    background: linear-gradient(180deg, rgba(30,41,59,0.98), rgba(30,41,59,0.94));
+                    backdrop-filter: blur(14px);
+                }
+                #training-assignment-modal .ta-modal-header-top {
+                    display: flex;
+                    align-items: flex-start;
+                    justify-content: space-between;
+                    gap: 12px;
+                }
+                #training-assignment-modal .ta-modal-title {
+                    margin: 0;
+                    font-size: 20px;
+                    font-weight: 800;
+                    color: #f8fafc;
+                    letter-spacing: 0.01em;
+                }
+                #training-assignment-modal .ta-modal-subtitle {
+                    margin-top: 6px;
+                    font-size: 12px;
+                    line-height: 1.6;
+                    color: rgba(226,232,240,0.68);
+                }
+                #training-assignment-modal .ta-modal-body {
+                    padding: 18px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 16px;
+                }
+                #training-assignment-modal .ta-field-label {
+                    display: block;
+                    margin-bottom: 8px;
+                    font-size: 12px;
+                    font-weight: 700;
+                    color: #cbd5e1;
+                    letter-spacing: 0.02em;
+                }
+                #training-assignment-modal .ta-select,
+                #training-assignment-modal .ta-input,
+                #training-assignment-modal .ta-textarea {
+                    width: 100%;
+                    padding: 13px 14px;
+                    border-radius: 14px;
+                    background: rgba(15,23,42,0.72);
+                    border: 1px solid rgba(148,163,184,0.16);
+                    color: #fff;
+                    font-size: 15px;
+                    box-sizing: border-box;
+                }
+                #training-assignment-modal .ta-select:focus,
+                #training-assignment-modal .ta-input:focus,
+                #training-assignment-modal .ta-textarea:focus {
+                    outline: none;
+                    border-color: rgba(129,140,248,0.75);
+                    box-shadow: 0 0 0 3px rgba(99,102,241,0.18);
+                }
+                #training-assignment-modal .ta-scope-card {
+                    padding: 14px;
+                    border-radius: 18px;
+                    background: linear-gradient(145deg, rgba(99,102,241,0.2), rgba(30,41,59,0.66));
+                    border: 1px solid rgba(129,140,248,0.3);
+                    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+                }
+                #training-assignment-modal .ta-scope-head {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 10px;
+                    margin-bottom: 10px;
+                }
+                #training-assignment-modal .ta-scope-title {
+                    font-size: 15px;
+                    font-weight: 800;
+                    color: #eef2ff;
+                }
+                #training-assignment-modal .ta-scope-tip {
+                    font-size: 11px;
+                    color: rgba(199,210,254,0.82);
+                }
+                #training-assignment-modal .ta-filter-summary {
+                    margin-top: 10px;
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                }
+                #training-assignment-modal .ta-chip {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    padding: 6px 10px;
+                    border-radius: 999px;
+                    background: rgba(15,23,42,0.52);
+                    border: 1px solid rgba(199,210,254,0.16);
+                    color: rgba(224,231,255,0.92);
+                    font-size: 12px;
+                }
+                #training-assignment-modal .ta-position-grid {
+                    display: grid;
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    gap: 10px;
+                }
+                #training-assignment-modal .ta-position-pill {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    min-height: 48px;
+                    padding: 0 14px;
+                    border-radius: 16px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    font-weight: 700;
+                    background: rgba(255,255,255,0.05);
+                    border: 1px solid rgba(255,255,255,0.1);
+                    color: rgba(226,232,240,0.7);
+                    transition: transform .16s ease, border-color .16s ease, background .16s ease, color .16s ease;
+                    -webkit-tap-highlight-color: rgba(99,102,241,0.12);
+                }
+                #training-assignment-modal .ta-position-pill:active {
+                    transform: scale(0.98);
+                }
+                #training-assignment-modal .ta-position-pill.is-active {
+                    background: linear-gradient(135deg, rgba(99,102,241,0.24), rgba(79,70,229,0.36));
+                    border-color: rgba(129,140,248,0.65);
+                    color: #eef2ff;
+                    box-shadow: 0 10px 24px rgba(79,70,229,0.18);
+                }
+                #training-assignment-modal .ta-position-icon {
+                    width: 22px;
+                    height: 22px;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: 50%;
+                    background: rgba(15,23,42,0.58);
+                    color: rgba(191,219,254,0.9);
+                    font-size: 12px;
+                    flex-shrink: 0;
+                }
+                #training-assignment-modal .ta-position-pill.is-active .ta-position-icon {
+                    background: rgba(255,255,255,0.16);
+                    color: #fff;
+                }
+                #training-assignment-modal .ta-employee-card {
+                    padding: 14px;
+                    border-radius: 18px;
+                    background: rgba(15,23,42,0.52);
+                    border: 1px solid rgba(148,163,184,0.12);
+                }
+                #training-assignment-modal .ta-toolbar {
+                    display: grid;
+                    grid-template-columns: 1.2fr 1fr 1fr;
+                    gap: 8px;
+                    margin-bottom: 10px;
+                }
+                #training-assignment-modal .ta-btn {
+                    min-height: 44px;
+                    padding: 0 12px;
+                    border-radius: 14px;
+                    border: 1px solid rgba(148,163,184,0.14);
+                    background: rgba(255,255,255,0.06);
+                    color: #cbd5e1;
+                    font-size: 13px;
+                    font-weight: 700;
+                    cursor: pointer;
+                }
+                #training-assignment-modal .ta-btn--primary {
+                    background: linear-gradient(135deg, rgba(99,102,241,0.8), rgba(79,70,229,0.96));
+                    border-color: rgba(129,140,248,0.75);
+                    color: #fff;
+                    box-shadow: 0 12px 24px rgba(79,70,229,0.24);
+                }
+                #training-assignment-modal .ta-employee-list {
+                    max-height: 260px;
+                    overflow-y: auto;
+                    padding: 8px;
+                    border-radius: 16px;
+                    background: rgba(2,6,23,0.46);
+                    border: 1px solid rgba(148,163,184,0.14);
+                }
+                #training-assignment-modal .ta-employee-empty {
+                    padding: 18px 12px;
+                    text-align: center;
+                    font-size: 13px;
+                    color: rgba(226,232,240,0.44);
+                    line-height: 1.7;
+                }
+                #training-assignment-modal .ta-store-group {
+                    margin-bottom: 10px;
+                }
+                #training-assignment-modal .ta-store-group:last-child {
+                    margin-bottom: 0;
+                }
+                #training-assignment-modal .ta-store-name {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    margin-bottom: 8px;
+                    padding: 4px 9px;
+                    border-radius: 999px;
+                    background: rgba(99,102,241,0.12);
+                    color: #c7d2fe;
+                    font-size: 11px;
+                    font-weight: 700;
+                }
+                #training-assignment-modal .ta-employee-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    padding: 11px 10px;
+                    border-radius: 14px;
+                    cursor: pointer;
+                    -webkit-tap-highlight-color: rgba(99,102,241,0.12);
+                    transition: background .16s ease, border-color .16s ease;
+                    border: 1px solid transparent;
+                }
+                #training-assignment-modal .ta-employee-item + .ta-employee-item {
+                    margin-top: 6px;
+                }
+                #training-assignment-modal .ta-employee-item:hover,
+                #training-assignment-modal .ta-employee-item:active {
+                    background: rgba(99,102,241,0.12);
+                    border-color: rgba(129,140,248,0.22);
+                }
+                #training-assignment-modal .ta-employee-item input[type="checkbox"] {
+                    width: 18px;
+                    height: 18px;
+                    cursor: pointer;
+                    accent-color: #6366f1;
+                    flex-shrink: 0;
+                }
+                #training-assignment-modal .ta-employee-name {
+                    flex: 1;
+                    font-size: 14px;
+                    font-weight: 700;
+                    color: #e2e8f0;
+                }
+                #training-assignment-modal .ta-employee-position {
+                    font-size: 12px;
+                    color: rgba(226,232,240,0.52);
+                }
+                #training-assignment-modal .ta-summary-bar {
+                    margin-top: 10px;
+                    min-height: 22px;
+                    font-size: 12px;
+                    font-weight: 700;
+                    color: #a5b4fc;
+                }
+                #training-assignment-modal .ta-two-col {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 12px;
+                }
+                #training-assignment-modal .ta-practice-card {
+                    margin-top: 2px;
+                    padding: 14px;
+                    border-radius: 16px;
+                    background: rgba(245,158,11,0.1);
+                    border: 1px solid rgba(245,158,11,0.22);
+                }
+                #training-assignment-modal .ta-footer {
+                    padding: 16px 18px calc(16px + env(safe-area-inset-bottom, 0px));
+                    border-top: 1px solid rgba(255,255,255,0.06);
+                    display: flex;
+                    justify-content: flex-end;
+                    gap: 10px;
+                    position: sticky;
+                    bottom: 0;
+                    background: linear-gradient(180deg, rgba(15,23,42,0.92), rgba(15,23,42,0.98));
+                    backdrop-filter: blur(16px);
+                }
+                @media (max-width: 640px) {
+                    #training-assignment-modal .ta-modal-content {
+                        width: calc(100vw - 12px);
+                        border-radius: 22px;
+                    }
+                    #training-assignment-modal .ta-modal-body,
+                    #training-assignment-modal .ta-modal-header,
+                    #training-assignment-modal .ta-footer {
+                        padding-left: 14px;
+                        padding-right: 14px;
+                    }
+                    #training-assignment-modal .ta-position-grid,
+                    #training-assignment-modal .ta-two-col,
+                    #training-assignment-modal .ta-toolbar {
+                        grid-template-columns: 1fr;
+                    }
+                }
+            </style>
+
             <!-- 培训指派弹窗（三维度：门店+岗位+人员） -->
             <div id="training-assignment-modal" class="modal">
                 <div class="modal-backdrop" onclick="closeTrainingAssignmentModal()"></div>
-                <div class="modal-content" style="max-width:560px;border-radius:16px;padding:0;max-height:90vh;overflow-y:auto;">
-                    <div style="padding:20px 20px 16px;border-bottom:1px solid rgba(255,255,255,0.06);position:sticky;top:0;background:#1e293b;z-index:2;">
-                        <div style="display:flex;align-items:center;justify-content:space-between;">
-                            <h3 style="margin:0;font-size:16px;font-weight:700;color:#f1f5f9;">指派培训任务</h3>
+                <div class="modal-content ta-modal-content">
+                    <div class="ta-modal-header">
+                        <div class="ta-modal-header-top">
+                            <div>
+                                <h3 class="ta-modal-title">指派培训任务</h3>
+                                <div class="ta-modal-subtitle">先锁定部门/岗位范围，再勾选员工。手机上每一步都能直接点选，不用反复缩放。</div>
+                            </div>
                             <button class="modal-close" onclick="closeTrainingAssignmentModal()" style="font-size:20px;background:none;border:none;color:#94a3b8;cursor:pointer;">×</button>
                         </div>
                     </div>
-                    <div style="padding:20px;display:flex;flex-direction:column;gap:16px;">
+                    <div class="ta-modal-body">
                         <!-- 知识点 -->
                         <div>
-                            <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px;font-weight:600;">培训知识点</label>
-                            <select id="training-assign-topic" style="width:100%;padding:10px 12px;border-radius:8px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:14px;box-sizing:border-box;"></select>
+                            <label class="ta-field-label">培训知识点</label>
+                            <select id="training-assign-topic" class="ta-select"></select>
                         </div>
-                        <!-- 维度1：门店 -->
-                        <div>
-                            <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px;font-weight:600;">① 选择门店</label>
-                            <select id="training-assign-store" onchange="loadAssignableEmployees()" style="width:100%;padding:10px 12px;border-radius:8px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:14px;box-sizing:border-box;">
-                                <option value="">全部门店</option>
-                            </select>
-                        </div>
-                        <!-- 维度2：岗位（多选）-->
-                        <div>
-                            <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px;font-weight:600;">② 筛选岗位（可多选，不选=全部）</label>
-                            <div id="training-assign-positions" style="display:flex;flex-wrap:wrap;gap:6px;padding:10px;background:rgba(0,0,0,0.25);border-radius:8px;border:1px solid rgba(255,255,255,0.1);">
-                                <!-- 由 JS 渲染 -->
+
+                        <div class="ta-scope-card">
+                            <div class="ta-scope-head">
+                                <div class="ta-scope-title">① 先选择部门 / 岗位范围</div>
+                                <div class="ta-scope-tip">这里决定后面会加载谁</div>
                             </div>
+                            <div>
+                                <label class="ta-field-label">门店 / 部门</label>
+                                <select id="training-assign-store" class="ta-select" onchange="handleTrainingAssignStoreChange()">
+                                    <option value="">全部门店</option>
+                                </select>
+                            </div>
+                            <div style="margin-top:14px;">
+                                <label class="ta-field-label">岗位筛选（可多选，不选=全部）</label>
+                                <div id="training-assign-positions" class="ta-position-grid">
+                                    <!-- 由 JS 渲染 -->
+                                </div>
+                            </div>
+                            <div id="training-assign-filter-summary" class="ta-filter-summary"></div>
                         </div>
+
                         <!-- 维度3：员工（多选）-->
-                        <div>
-                            <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px;font-weight:600;">③ 选择员工（可多选）</label>
-                            <div style="margin-bottom:6px;display:flex;gap:8px;">
-                                <button onclick="loadAssignableEmployees()" style="padding:5px 12px;font-size:12px;border-radius:6px;background:rgba(99,102,241,0.3);border:1px solid rgba(99,102,241,0.5);color:#a5b4fc;cursor:pointer;">🔍 加载员工</button>
-                                <button onclick="selectAllAssignEmployees(true)" style="padding:5px 12px;font-size:12px;border-radius:6px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;cursor:pointer;">全选</button>
-                                <button onclick="selectAllAssignEmployees(false)" style="padding:5px 12px;font-size:12px;border-radius:6px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;cursor:pointer;">清空</button>
+                        <div class="ta-employee-card">
+                            <label class="ta-field-label">② 选择员工（可多选）</label>
+                            <div class="ta-toolbar">
+                                <button type="button" onclick="loadAssignableEmployees()" class="ta-btn ta-btn--primary">加载员工</button>
+                                <button type="button" onclick="selectAllAssignEmployees(true)" class="ta-btn">全选</button>
+                                <button type="button" onclick="selectAllAssignEmployees(false)" class="ta-btn">清空</button>
                             </div>
-                            <div id="training-assign-emp-list" style="background:rgba(0,0,0,0.25);border-radius:8px;border:1px solid rgba(255,255,255,0.1);max-height:200px;overflow-y:auto;padding:8px;">
-                                <div style="color:rgba(255,255,255,0.3);font-size:13px;padding:8px;text-align:center;">请先选择门店/岗位，再点击"加载员工"</div>
+                            <div id="training-assign-emp-list" class="ta-employee-list">
+                                <div class="ta-employee-empty">请先选择门店或岗位范围，再点击“加载员工”</div>
                             </div>
-                            <div id="training-assign-emp-summary" style="margin-top:6px;font-size:12px;color:#a5b4fc;"></div>
+                            <div id="training-assign-emp-summary" class="ta-summary-bar"></div>
                         </div>
+
                         <!-- 截止日期 + 备注 -->
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                        <div class="ta-two-col">
                             <div>
-                                <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px;font-weight:600;">截止日期</label>
-                                <input type="date" id="training-assign-duedate" style="width:100%;padding:10px 12px;border-radius:8px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:14px;box-sizing:border-box;">
+                                <label class="ta-field-label">截止日期</label>
+                                <input type="date" id="training-assign-duedate" class="ta-input">
                             </div>
                             <div>
-                                <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px;font-weight:600;">备注</label>
-                                <input type="text" id="training-assign-note" style="width:100%;padding:10px 12px;border-radius:8px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:14px;box-sizing:border-box;" placeholder="选填">
+                                <label class="ta-field-label">备注</label>
+                                <input type="text" id="training-assign-note" class="ta-input" placeholder="选填">
                             </div>
                         </div>
+
                         <!-- 实操验证开关 -->
-                        <div style="margin-top:14px;padding:14px;border-radius:10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);">
-                            <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="toggleRequirePractice()">
+                        <div class="ta-practice-card">
+                            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;" onclick="toggleRequirePractice()">
                                 <div>
-                                    <div style="font-size:13px;font-weight:700;color:#fbbf24;">📹 需要实操验证</div>
-                                    <div style="font-size:11px;color:rgba(255,255,255,0.45);margin-top:3px;">开启后，员工完成测验还需上传实操视频/照片才算认证</div>
+                                    <div style="font-size:14px;font-weight:800;color:#fbbf24;">📹 需要实操验证</div>
+                                    <div style="font-size:12px;color:rgba(255,255,255,0.52);margin-top:4px;line-height:1.6;">开启后，员工完成测验后还需上传实操视频或照片才算通过认证。</div>
                                 </div>
                                 <div id="training-assign-practice-toggle" style="width:44px;height:24px;border-radius:12px;background:rgba(255,255,255,0.15);position:relative;transition:background .2s;flex-shrink:0;">
                                     <div id="training-assign-practice-knob" style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:3px;left:3px;transition:left .2s;"></div>
@@ -15035,7 +16157,7 @@
                             </div>
                         </div>
                     </div>
-                    <div style="padding:16px 20px;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:flex-end;gap:10px;">
+                    <div class="ta-footer">
                         <button class="btn btn-secondary" onclick="closeTrainingAssignmentModal()">取消</button>
                         <button class="btn" onclick="saveTrainingAssignment()">批量指派</button>
                     </div>
@@ -25725,6 +26847,27 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             return ['admin', 'hq_manager', 'store_manager', 'store_production_manager'].includes(currentUser?.role);
         }
 
+        function getTrainingDeadlineState(item) {
+            const dueDate = item?.due_date ? String(item.due_date).slice(0, 10) : '';
+            const daysOverdue = Number(item?.days_overdue || 0);
+            const isOverdue = item?.is_overdue === true || daysOverdue > 0;
+            const isDueToday = item?.is_due_today === true;
+            let dueText = dueDate ? ('截止 ' + dueDate) : '无期限';
+            if (isOverdue) dueText = `已逾期 ${Math.max(1, daysOverdue)} 天`;
+            else if (isDueToday) dueText = `今日到期 ${dueDate}`;
+            return { dueDate, daysOverdue, isOverdue, isDueToday, dueText };
+        }
+
+        function getTrainingDeadlineBadge(state) {
+            if (state.isOverdue) {
+                return `<span class="training-admin-badge" style="background:rgba(239,68,68,0.16);color:#fca5a5;">逾期 ${Math.max(1, state.daysOverdue)} 天</span>`;
+            }
+            if (state.isDueToday) {
+                return `<span class="training-admin-badge" style="background:rgba(245,158,11,0.16);color:#fcd34d;">今日到期</span>`;
+            }
+            return '';
+        }
+
         function loadTrainingPage() {
             const adminPanel = document.getElementById('training-admin-panel');
             const employeePanel = document.getElementById('training-employee-panel');
@@ -25777,22 +26920,39 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     return;
                 }
                 const canEdit = isAdminOrHQ();
-                list.innerHTML = data.topics.map(t => {
+                list.innerHTML = `<div class="training-admin-stack">` + data.topics.map(t => {
                     const posArr = (t.position || '').split(',').map(s => s.trim()).filter(Boolean);
-                    const posTags = posArr.map(p => `<span style="display:inline-block;padding:2px 8px;border-radius:10px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.35);font-size:11px;color:#a5b4fc;margin-right:3px;">${escapeHtml(p)}</span>`).join('');
-                    const storeBadge = t.store ? `<span style="font-size:11px;color:rgba(255,255,255,0.35);margin-left:6px;">🏪 ${escapeHtml(t.store)}</span>` : '';
+                    const posTags = posArr.map(p => `<span class="training-admin-chip">${escapeHtml(p)}</span>`).join('');
+                    const storeBadge = t.store ? `<span class="training-admin-chip">🏪 ${escapeHtml(t.store)}</span>` : '<span class="training-admin-chip">🏪 全部门店</span>';
                     const editBtns = canEdit ? `
-                        <div style="display:flex;gap:8px;margin-top:10px;">
-                            <button onclick="editTrainingTopic(${t.id})" style="flex:1;padding:9px;border-radius:8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);color:#fff;font-size:13px;cursor:pointer;">✏️ 编辑</button>
-                            <button onclick="deleteTrainingTopic(${t.id})" style="flex:1;padding:9px;border-radius:8px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);color:#f87171;font-size:13px;cursor:pointer;">🗑 删除</button>
+                        <div class="training-admin-actions">
+                            <button onclick="editTrainingTopic(${t.id})" class="training-admin-btn">✏️ 编辑</button>
+                            <button onclick="deleteTrainingTopic(${t.id})" class="training-admin-btn training-admin-btn--danger">🗑 删除</button>
                         </div>` : '';
                     return `
-                    <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.08);">
-                        <div style="font-weight:700;color:#fff;font-size:14px;margin-bottom:6px;">${escapeHtml(t.title)}${storeBadge}</div>
-                        <div style="display:flex;flex-wrap:wrap;gap:3px;">${posTags || '<span style="font-size:12px;color:rgba(255,255,255,0.35);">未设置岗位</span>'}</div>
-                        ${editBtns}
+                    <div class="training-admin-card">
+                        <details>
+                            <summary class="training-admin-summary" style="list-style:none;cursor:pointer;">
+                                <div class="training-admin-row">
+                                    <div style="flex:1;min-width:0;">
+                                        <div class="training-admin-title">${escapeHtml(t.title)}</div>
+                                        <div class="training-admin-sub">${t.kb_article_ids?.length ? `关联 ${t.kb_article_ids.length} 篇知识库文章` : '未配置知识库文章数量展示'}</div>
+                                    </div>
+                                    <span class="training-admin-badge" style="background:rgba(99,102,241,0.14);color:#c7d2fe;">${posArr.length || 0} 岗位</span>
+                                </div>
+                                <div class="training-admin-meta">
+                                    ${storeBadge}
+                                    ${posTags || '<span class="training-admin-chip">未设置岗位</span>'}
+                                </div>
+                            </summary>
+                            <button class="training-admin-toggle" type="button" onclick="this.parentElement.open = !this.parentElement.open;">查看详情</button>
+                            <div class="training-admin-details">
+                                <div class="training-admin-sub">${t.practice_task ? escapeHtml(t.practice_task) : '未填写实操目标'}</div>
+                                ${editBtns}
+                            </div>
+                        </details>
                     </div>`;
-                }).join('');
+                }).join('') + `</div>`;
                 // 更新指派弹窗的下拉框
                 const assignSelect = document.getElementById('training-assign-topic');
                 if (assignSelect) {
@@ -25804,7 +26964,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
         }
 
         // ── 知识库多选 picker ──────────────────────────────────
-        let _selectedKbArticles = []; // [{id, title}]
+        let _selectedKbArticles = []; // [{id, title, category, excerpt}]
+        let _kbSearchResults = [];
         let _kbSearchTimer = null;
 
         async function searchKbArticles(q) {
@@ -25816,18 +26977,28 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         headers: { 'Authorization': 'Bearer ' + localStorage.getItem('hrms_token') }
                     });
                     const data = await resp.json();
-                    if (!data.articles?.length) {
-                        dd.innerHTML = '<div style="padding:12px;color:rgba(255,255,255,0.4);font-size:13px;text-align:center;">未找到文章</div>';
+                    _kbSearchResults = Array.isArray(data.articles) ? data.articles : [];
+                    const selectedIds = new Set(_selectedKbArticles.map(a => a.id));
+                    const candidates = _kbSearchResults.filter(a => !selectedIds.has(a.id));
+                    if (!candidates.length) {
+                        dd.innerHTML = selectedIds.size
+                            ? '<div class="tt-kb-empty">搜索到了，但这些文章都已经加入当前知识点了。</div>'
+                            : '<div class="tt-kb-empty">未找到文章，换个关键词试试。</div>';
                     } else {
-                        const selectedIds = _selectedKbArticles.map(a => a.id);
-                        dd.innerHTML = data.articles.map(a => {
-                            const already = selectedIds.includes(a.id);
-                            return `<div onclick="toggleKbArticle('${a.id}','${escapeHtml(a.title)}')"
-                                style="padding:10px 12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;gap:8px;${already?'opacity:0.4;':''}">
-                                <span style="font-size:16px;">${already?'✓':'+'}</span>
-                                <div>
-                                    <div style="font-size:13px;font-weight:600;color:#e2e8f0;">${escapeHtml(a.title)}</div>
-                                    <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:2px;">${escapeHtml(a.category||'')} · ${escapeHtml((a.excerpt||'').slice(0,50))}…</div>
+                        dd.innerHTML = candidates.map(a => {
+                            const excerpt = escapeHtml((a.excerpt || '').replace(/\s+/g, ' ').trim().slice(0, 90));
+                            return `<div class="tt-kb-result">
+                                <span class="tt-kb-result-mark">+</span>
+                                <div class="tt-kb-result-main">
+                                    <div class="tt-kb-result-top">
+                                        <div class="tt-kb-result-title">${escapeHtml(a.title)}</div>
+                                        <span class="tt-kb-result-badge">${escapeHtml(a.category||'未分类')}</span>
+                                    </div>
+                                    <div class="tt-kb-result-meta">${excerpt}${(a.excerpt||'').length > 90 ? '…' : ''}</div>
+                                </div>
+                                <div class="tt-kb-result-side">
+                                    <button type="button" class="tt-kb-result-add-btn" onclick="event.stopPropagation(); addKbArticleFromSearch('${a.id}')">加入</button>
+                                    <div class="tt-kb-result-hint">加入当前知识点</div>
                                 </div>
                             </div>`;
                         }).join('');
@@ -25835,6 +27006,21 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     dd.style.display = 'block';
                 } catch(err) {}
             }, 250);
+        }
+
+        function addKbArticleFromSearch(id) {
+            const article = _kbSearchResults.find(a => a.id === id);
+            if (!article) return;
+            const exists = _selectedKbArticles.some(a => a.id === id);
+            if (exists) return;
+            _selectedKbArticles.push({
+                id: article.id,
+                title: article.title,
+                category: article.category || '',
+                excerpt: article.excerpt || ''
+            });
+            renderKbChips();
+            searchKbArticles(document.getElementById('training-kb-search').value);
         }
 
         function toggleKbArticle(id, title) {
@@ -25849,24 +27035,41 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             searchKbArticles(document.getElementById('training-kb-search').value);
         }
 
+        function clearKbArticles() {
+            if (!_selectedKbArticles.length) return;
+            _selectedKbArticles = [];
+            renderKbChips();
+            searchKbArticles(document.getElementById('training-kb-search').value);
+        }
+
         function removeKbArticle(id) {
             _selectedKbArticles = _selectedKbArticles.filter(a => a.id !== id);
             renderKbChips();
+            searchKbArticles(document.getElementById('training-kb-search').value);
         }
 
         function renderKbChips() {
             const container = document.getElementById('training-kb-selected');
             if (!container) return;
             if (_selectedKbArticles.length === 0) {
-                container.innerHTML = '<span style="font-size:12px;color:rgba(255,255,255,0.3);">未选择（可直接搜索选择）</span>';
+                container.innerHTML = '<div class="tt-kb-empty">还没有选中文章。先在下方搜索，再点“加入”。</div>';
                 return;
             }
-            container.innerHTML = _selectedKbArticles.map(a =>
-                `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.35);font-size:12px;color:#a5b4fc;">
-                    📄 ${escapeHtml(a.title)}
-                    <span onclick="removeKbArticle('${a.id}')" style="cursor:pointer;color:rgba(255,255,255,0.5);margin-left:2px;font-size:14px;line-height:1;">×</span>
-                </span>`
+            const head = `<div class="tt-kb-selected-head"><span class="tt-kb-selected-count">已选 ${_selectedKbArticles.length} 篇文章</span><span style="color:rgba(148,163,184,0.72);">保存后这些文章会进入培训学习页</span></div>`;
+            const cards = _selectedKbArticles.map((a, idx) =>
+                `<div class="tt-kb-chip">
+                    <div class="tt-kb-chip-main">
+                        <div class="tt-kb-chip-title">0${idx + 1}. ${escapeHtml(a.title)}</div>
+                        <div class="tt-kb-chip-sub">${escapeHtml((a.excerpt || '').replace(/\s+/g, ' ').trim().slice(0, 70)) || '已加入当前知识点，员工学习时会直接看到这篇资料。'}${(a.excerpt || '').length > 70 ? '…' : ''}</div>
+                        <div class="tt-kb-chip-meta">
+                            <span class="tt-kb-chip-badge">${escapeHtml(a.category || '未分类')}</span>
+                            <span>可在右侧随时移除</span>
+                        </div>
+                    </div>
+                    <span onclick="removeKbArticle('${a.id}')" class="tt-kb-chip-remove">×</span>
+                </div>`
             ).join('');
+            container.innerHTML = head + `<div class="tt-kb-selected-grid">${cards}</div>`;
         }
 
         // 点击外部关闭下拉
@@ -25881,6 +27084,150 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
         // ── 岗位列表（知识点 + 指派共用）──
         const _TRAINING_POSITIONS = ['炒锅','烧味','打荷','切配','出品','洗碗工','前厅服务员','收银','迎宾','前厅主管','出品经理','店长','全员通用'];
 
+        function renderTrainingAssignEmptyState(message) {
+            return `<div class="ta-employee-empty">${escapeHtml(message || '请先选择门店或岗位范围，再点击“加载员工”')}</div>`;
+        }
+
+        function formatTrainingExplanationText(text) {
+            return String(text || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#fff;font-weight:700;">$1</strong>');
+        }
+
+        function buildTrainingExplanationView(markdown, cacheBadgeHtml) {
+            const safe = formatTrainingExplanationText(markdown || '');
+            const lines = safe.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+            const sections = [];
+            let current = { title: '学习概览', intro: [], groups: [], loose: [] };
+            let currentGroup = null;
+
+            lines.forEach((line) => {
+                const h2 = line.match(/^##\s+(.+)$/);
+                const h3 = line.match(/^###\s+(.+)$/);
+                const bullet = line.match(/^[-•]\s+(.+)$/);
+                const ordered = line.match(/^\d+\.\s+(.+)$/);
+
+                if (h2) {
+                    if (current.title || current.intro.length || current.groups.length || current.loose.length) sections.push(current);
+                    current = { title: h2[1], intro: [], groups: [], loose: [] };
+                    currentGroup = null;
+                } else if (h3) {
+                    currentGroup = { title: h3[1], bullets: [], steps: [], text: [] };
+                    current.groups.push(currentGroup);
+                } else if (bullet) {
+                    if (currentGroup) currentGroup.bullets.push(bullet[1]);
+                    else current.loose.push({ kind: 'bullet', text: bullet[1] });
+                } else if (ordered) {
+                    if (currentGroup) currentGroup.steps.push(ordered[1]);
+                    else current.loose.push({ kind: 'step', text: ordered[1] });
+                } else {
+                    if (currentGroup) currentGroup.text.push(line);
+                    else current.intro.push(line);
+                }
+            });
+            if (current.title || current.intro.length || current.groups.length || current.loose.length) sections.push(current);
+
+            const validSections = sections.filter((section) => section.title || section.intro.length || section.groups.length || section.loose.length);
+            const sectionSource = validSections.length
+                ? validSections
+                : [{ title: '学习概览', intro: [safe.replace(/\n/g, '<br>')], groups: [], loose: [] }];
+
+            const outline = sectionSource.map((section, index) => `
+                <a class="training-ai-outline-chip" href="#training-ai-sec-${index}">
+                    <span>${index + 1}</span>
+                    <span>${section.title || `模块 ${index + 1}`}</span>
+                </a>
+            `).join('');
+
+            const renderLooseItems = (items) => {
+                if (!items.length) return '';
+                const bullets = items.filter((item) => item.kind === 'bullet');
+                const steps = items.filter((item) => item.kind === 'step');
+                const text = items.filter((item) => item.kind === 'text');
+                return `
+                    ${text.length ? `<div class="training-ai-plain">${text.map((item) => `<div class="training-ai-plain-row">${item.text}</div>`).join('')}</div>` : ''}
+                    ${bullets.length ? `<div class="training-ai-points">${bullets.map((item) => `<div class="training-ai-point"><span class="training-ai-point-mark">要</span><div class="training-ai-point-text">${item.text}</div></div>`).join('')}</div>` : ''}
+                    ${steps.length ? `<div class="training-ai-steps">${steps.map((item, idx) => `<div class="training-ai-step-row"><span class="training-ai-step-mark">${idx + 1}</span><div class="training-ai-step-text">${item.text}</div></div>`).join('')}</div>` : ''}
+                `;
+            };
+
+            const contentCards = sectionSource.map((section, sectionIndex) => {
+                const introHtml = section.intro.length
+                    ? `<div class="training-ai-intro">${section.intro.map((paragraph) => `<p>${paragraph}</p>`).join('')}</div>`
+                    : '';
+                const groupsHtml = section.groups.map((group) => `
+                    <div class="training-ai-group">
+                        <div class="training-ai-group-title">${group.title}</div>
+                        ${group.text.length ? `<div class="training-ai-plain">${group.text.map((row) => `<div class="training-ai-plain-row">${row}</div>`).join('')}</div>` : ''}
+                        ${group.steps.length ? `<div class="training-ai-steps">${group.steps.map((step, idx) => `<div class="training-ai-step-row"><span class="training-ai-step-mark">${idx + 1}</span><div class="training-ai-step-text">${step}</div></div>`).join('')}</div>` : ''}
+                        ${group.bullets.length ? `<div class="training-ai-points">${group.bullets.map((point) => `<div class="training-ai-point"><span class="training-ai-point-mark">要</span><div class="training-ai-point-text">${point}</div></div>`).join('')}</div>` : ''}
+                    </div>
+                `).join('');
+                return `
+                    <section class="training-ai-section" id="training-ai-sec-${sectionIndex}">
+                        <div class="training-ai-section-head">
+                            <span class="training-ai-section-index">${sectionIndex + 1}</span>
+                            <div class="training-ai-section-title">${section.title || `模块 ${sectionIndex + 1}`}</div>
+                        </div>
+                        ${introHtml}
+                        ${renderLooseItems(section.loose)}
+                        ${groupsHtml}
+                    </section>
+                `;
+            }).join('');
+
+            return `
+                <div class="training-ai-shell">
+                    <div class="training-ai-hero">
+                        <div class="training-ai-hero-head">
+                            <span style="font-size:24px;">✨</span>
+                            <div>
+                                <div class="training-ai-hero-title">AI 培训解析 ${cacheBadgeHtml || ''}</div>
+                                <div class="training-ai-hero-sub">以下内容按照原始解析的章节顺序展开。先看目录，再按章节往下读，会比直接扫长文更容易掌握重点。</div>
+                            </div>
+                        </div>
+                        <div class="training-ai-outline">${outline}</div>
+                    </div>
+                    <div class="training-ai-grid">${contentCards}</div>
+                    <div class="training-ai-note">
+                        <div class="training-ai-note-title">学习建议</div>
+                        <div class="training-ai-note-text">每看完一个章节就停下来回想 1 次重点，再继续看下一章；这样在进入测验前，理解和记忆都会更稳。</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function updateTrainingTopicSummary() {
+            const summary = document.getElementById('training-topic-summary');
+            if (!summary) return;
+            const storeText = document.getElementById('training-topic-store')?.selectedOptions?.[0]?.textContent?.trim() || '全部门店';
+            const positions = getSelectedPositions('training-topic-positions');
+            const posText = positions.length ? `${positions.length} 个岗位` : '未选择岗位';
+            summary.innerHTML = `
+                <span class="tt-chip">适用门店：${escapeHtml(storeText)}</span>
+                <span class="tt-chip">适用岗位：${escapeHtml(posText)}</span>
+            `;
+        }
+
+        function updateTrainingAssignFilterSummary() {
+            const summary = document.getElementById('training-assign-filter-summary');
+            if (!summary) return;
+            const storeText = document.getElementById('training-assign-store')?.selectedOptions?.[0]?.textContent?.trim() || '全部门店';
+            const positions = getSelectedPositions('training-assign-positions');
+            const posText = positions.length ? `${positions.length} 个岗位` : '全部岗位';
+            summary.innerHTML = `
+                <span class="ta-chip">当前门店：${escapeHtml(storeText)}</span>
+                <span class="ta-chip">岗位范围：${escapeHtml(posText)}</span>
+            `;
+        }
+
+        function handleTrainingAssignStoreChange() {
+            updateTrainingAssignFilterSummary();
+            loadAssignableEmployees();
+        }
+
         // 渲染岗位多选复选框
         function renderPositionCheckboxes(containerId, selectedPositions) {
             const container = document.getElementById(containerId);
@@ -25888,6 +27235,22 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             const selected = new Set(Array.isArray(selectedPositions) ? selectedPositions : []);
             container.innerHTML = _TRAINING_POSITIONS.map(p => {
                 const checked = selected.has(p);
+                if (containerId === 'training-assign-positions') {
+                    return `<label onclick="togglePositionBox('${containerId}','${p}',this)"
+                        class="ta-position-pill${checked ? ' is-active' : ''}"
+                        data-pos="${p}" data-checked="${checked ? '1' : '0'}">
+                        <span class="ta-position-icon">${checked ? '✓' : '+'}</span>
+                        <span>${p}</span>
+                    </label>`;
+                }
+                if (containerId === 'training-topic-positions') {
+                    return `<label onclick="togglePositionBox('${containerId}','${p}',this)"
+                        class="ta-position-pill${checked ? ' is-active' : ''}"
+                        data-pos="${p}" data-checked="${checked ? '1' : '0'}">
+                        <span class="ta-position-icon">${checked ? '✓' : '+'}</span>
+                        <span>${p}</span>
+                    </label>`;
+                }
                 return `<label onclick="togglePositionBox('${containerId}','${p}',this)"
                     style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;cursor:pointer;font-size:13px;
                     background:${checked ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.06)'};
@@ -25897,16 +27260,26 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     <span style="font-size:11px;">${checked ? '☑' : '☐'}</span> ${p}
                 </label>`;
             }).join('');
+            if (containerId === 'training-assign-positions') updateTrainingAssignFilterSummary();
+            if (containerId === 'training-topic-positions') updateTrainingTopicSummary();
         }
 
         function togglePositionBox(containerId, pos, el) {
             const isChecked = el.dataset.checked === '1';
             const newChecked = !isChecked;
             el.dataset.checked = newChecked ? '1' : '0';
-            el.style.background = newChecked ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.06)';
-            el.style.border = `1px solid ${newChecked ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.12)'}`;
-            el.style.color = newChecked ? '#a5b4fc' : 'rgba(255,255,255,0.6)';
-            el.querySelector('span').textContent = newChecked ? '☑' : '☐';
+            if (containerId === 'training-assign-positions' || containerId === 'training-topic-positions') {
+                el.classList.toggle('is-active', newChecked);
+                const icon = el.querySelector('.ta-position-icon');
+                if (icon) icon.textContent = newChecked ? '✓' : '+';
+                if (containerId === 'training-assign-positions') updateTrainingAssignFilterSummary();
+                if (containerId === 'training-topic-positions') updateTrainingTopicSummary();
+            } else {
+                el.style.background = newChecked ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.06)';
+                el.style.border = `1px solid ${newChecked ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.12)'}`;
+                el.style.color = newChecked ? '#a5b4fc' : 'rgba(255,255,255,0.6)';
+                el.querySelector('span').textContent = newChecked ? '☑' : '☐';
+            }
             // 如果是指派弹窗的岗位选择，自动刷新员工列表
             if (containerId === 'training-assign-positions') {
                 clearTimeout(window._assignPosTimer);
@@ -25922,6 +27295,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
 
         async function openTrainingTopicModal(id = null) {
             document.getElementById('training-topic-id').value = id || '';
+            const modalTitle = document.getElementById('training-topic-modal-title');
+            if (modalTitle) modalTitle.textContent = id ? '编辑知识点' : '新建知识点';
             document.getElementById('training-topic-title').value = '';
             document.getElementById('training-topic-practice').value = '';
             document.getElementById('training-kb-search').value = '';
@@ -25946,6 +27321,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     storeSelect.disabled = true;
                 }
             } catch(_) {}
+
+            updateTrainingTopicSummary();
 
             document.getElementById('training-topic-modal').classList.add('show');
         }
@@ -25972,6 +27349,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 if (!storeSelect.disabled && topic.store) {
                     storeSelect.value = topic.store;
                 }
+                updateTrainingTopicSummary();
                 document.getElementById('training-topic-practice').value = topic.practice_task || '';
                 // 恢复已关联知识库文章
                 const kbIds = topic.kb_article_ids || [];
@@ -26067,26 +27445,45 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 }
                 const sMap = {not_started:'未开始',learning:'学习中',quiz:'待测验',practice:'待实操认证',certified:'已认证',failed:'未通过'};
                 const sColor = {not_started:'#94a3b8',learning:'#60a5fa',quiz:'#a78bfa',practice:'#fb923c',certified:'#34d399',failed:'#f87171'};
-                list.innerHTML = data.assignments.map(a => {
+                list.innerHTML = `<div class="training-admin-stack">` + data.assignments.map(a => {
                     const st = a.session_status || 'not_started';
                     const color = sColor[st] || '#94a3b8';
+                    const deadline = getTrainingDeadlineState(a);
                     const displayName = escapeHtml(a.employee_name || a.employee_username);
                     const canRevoke = isAdminOrHQ() || a.assigned_by === currentUser?.username;
                     const revokeBtn = canRevoke ? `<button onclick="deleteTrainingAssignment(${a.id})" style="width:100%;padding:8px;border-radius:8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#f87171;font-size:13px;cursor:pointer;">撤销指派</button>` : '';
+                    const badge = `<span class="training-admin-badge" style="background:rgba(255,255,255,0.07);color:${color};">${sMap[st]||'未开始'}</span>`;
+                    const deadlineBadge = getTrainingDeadlineBadge(deadline);
+                    const cardStyle = deadline.isOverdue
+                        ? 'background:linear-gradient(145deg, rgba(127,29,29,0.42), rgba(30,41,59,0.96));border:1px solid rgba(248,113,113,0.38);box-shadow:0 0 0 1px rgba(239,68,68,0.08) inset;'
+                        : '';
                     return `
-                    <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.08);">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-                            <span style="font-weight:700;color:#fff;font-size:14px;">${displayName}</span>
-                            <span style="font-size:11px;padding:3px 10px;border-radius:10px;background:rgba(255,255,255,0.07);color:${color};">${sMap[st]||'未开始'}</span>
-                        </div>
-                        <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:${canRevoke ? '10px' : '0'};">
-                            📚 ${escapeHtml(a.title)} &nbsp;·&nbsp; ${escapeHtml(a.position||'')}
-                            &nbsp;·&nbsp; 截止 ${a.due_date ? a.due_date.slice(0,10) : '无期限'}
-                            ${a.quiz_score !== null ? ' &nbsp;·&nbsp; 测验 '+a.quiz_score+'分' : ''}
-                        </div>
-                        ${revokeBtn}
+                    <div class="training-admin-card" style="${cardStyle}">
+                        <details>
+                            <summary class="training-admin-summary" style="list-style:none;cursor:pointer;">
+                                <div class="training-admin-row">
+                                    <div style="flex:1;min-width:0;">
+                                        <div class="training-admin-title">${displayName}</div>
+                                        <div class="training-admin-sub">📚 ${escapeHtml(a.title)}</div>
+                                    </div>
+                                    ${badge}
+                                </div>
+                                <div class="training-admin-meta">
+                                    <span class="training-admin-chip">${escapeHtml(a.position || '未标注岗位')}</span>
+                                    <span class="training-admin-chip" style="${deadline.isOverdue ? 'color:#fecaca;border-color:rgba(248,113,113,0.35);background:rgba(127,29,29,0.22);' : deadline.isDueToday ? 'color:#fde68a;border-color:rgba(245,158,11,0.3);background:rgba(120,53,15,0.22);' : ''}">${escapeHtml(deadline.dueText)}</span>
+                                    ${a.quiz_score !== null ? `<span class="training-admin-chip">测验 ${a.quiz_score}分</span>` : ''}
+                                    ${deadlineBadge}
+                                </div>
+                            </summary>
+                            <button class="training-admin-toggle" type="button" onclick="this.parentElement.open = !this.parentElement.open;">查看详情</button>
+                            <div class="training-admin-details">
+                                <div class="training-admin-sub">指派人：${escapeHtml(a.assigned_by || '系统')} · 员工账号：${escapeHtml(a.employee_username || '')}</div>
+                                ${deadline.isOverdue ? `<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(127,29,29,0.22);border:1px solid rgba(248,113,113,0.24);font-size:12px;line-height:1.6;color:#fecaca;">该培训任务已逾期，系统会继续在进度看板中高亮，并向指派人发送飞书催办提醒。</div>` : ''}
+                                ${revokeBtn ? `<div style="margin-top:12px;">${revokeBtn}</div>` : ''}
+                            </div>
+                        </details>
                     </div>`;
-                }).join('');
+                }).join('') + `</div>`;
             } catch (e) {
                 showNotification('加载指派记录失败', 'error');
             }
@@ -26115,7 +27512,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             renderPositionCheckboxes('training-assign-positions', []);
             // 清空员工列表
             const empList = document.getElementById('training-assign-emp-list');
-            if (empList) empList.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:13px;padding:8px;text-align:center;">请先选择门店/岗位，再点击"加载员工"</div>';
+            if (empList) empList.innerHTML = renderTrainingAssignEmptyState();
             const empSummary = document.getElementById('training-assign-emp-summary');
             if (empSummary) empSummary.textContent = '';
 
@@ -26137,7 +27534,10 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 }
             } catch(_) {}
 
+            updateTrainingAssignFilterSummary();
+
             document.getElementById('training-assignment-modal').classList.add('show');
+            if (storeSelect?.value) loadAssignableEmployees();
         }
 
         function closeTrainingAssignmentModal() {
@@ -26150,7 +27550,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             const positions = getSelectedPositions('training-assign-positions');
             const empList = document.getElementById('training-assign-emp-list');
             if (!empList) return;
-            empList.innerHTML = '<div style="color:rgba(255,255,255,0.4);font-size:13px;padding:8px;text-align:center;">加载中…</div>';
+            empList.innerHTML = renderTrainingAssignEmptyState('正在加载符合条件的员工…');
             try {
                 const params = new URLSearchParams();
                 if (store) params.set('store', store);
@@ -26176,7 +27576,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     results.push(...(d.employees || []));
                 }
                 if (!results.length) {
-                    empList.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:13px;padding:8px;text-align:center;">未找到符合条件的员工</div>';
+                    empList.innerHTML = renderTrainingAssignEmptyState('未找到符合条件的员工，请调整门店或岗位范围');
                     return;
                 }
                 // 按门店分组渲染（带多选复选框）
@@ -26187,22 +27587,21 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     byStore[s].push(e);
                 });
                 empList.innerHTML = Object.entries(byStore).map(([storeName, emps]) => `
-                    <div style="margin-bottom:6px;">
-                        <div style="font-size:11px;color:rgba(255,255,255,0.4);padding:4px 6px 2px;font-weight:600;">${escapeHtml(storeName)}</div>
+                    <div class="ta-store-group">
+                        <div class="ta-store-name">门店 / 部门 · ${escapeHtml(storeName)}</div>
                         ${emps.map(e => `
-                            <label style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer;-webkit-tap-highlight-color:rgba(99,102,241,0.15);"
-                                   onmouseover="this.style.background='rgba(99,102,241,0.1)'" onmouseout="this.style.background=''" onclick="updateEmpSelectionSummary()">
+                            <label class="ta-employee-item" onclick="updateEmpSelectionSummary()">
                                 <input type="checkbox" value="${escapeHtml(e.username)}" data-name="${escapeHtml(e.name||e.username)}"
-                                    style="width:15px;height:15px;cursor:pointer;accent-color:#6366f1;">
-                                <span style="flex:1;font-size:13px;color:#e2e8f0;">${escapeHtml(e.name||e.username)}</span>
-                                <span style="font-size:11px;color:rgba(255,255,255,0.35);">${escapeHtml(e.position||'')}</span>
+                                    style="cursor:pointer;">
+                                <span class="ta-employee-name">${escapeHtml(e.name||e.username)}</span>
+                                <span class="ta-employee-position">${escapeHtml(e.position||'')}</span>
                             </label>
                         `).join('')}
                     </div>
                 `).join('');
                 updateEmpSelectionSummary();
             } catch(err) {
-                empList.innerHTML = '<div style="color:#f87171;font-size:13px;padding:8px;text-align:center;">加载失败</div>';
+                empList.innerHTML = renderTrainingAssignEmptyState('加载失败，请稍后重试');
             }
         }
 
@@ -26289,17 +27688,19 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 const stMap = {not_started:'未开始',learning:'学习中',quiz:'待测验',practice:'待实操认证',certified:'已认证',failed:'未通过'};
                 const stBg   = {not_started:'rgba(71,85,105,0.5)',learning:'rgba(96,165,250,0.2)',quiz:'rgba(139,92,246,0.25)',practice:'rgba(249,115,22,0.2)',certified:'rgba(52,211,153,0.2)',failed:'rgba(248,113,113,0.2)'};
                 const stColor = {not_started:'#94a3b8',learning:'#60a5fa',quiz:'#a78bfa',practice:'#fb923c',certified:'#34d399',failed:'#f87171'};
-                content.innerHTML = data.dashboard.map((d, idx) => {
+                content.innerHTML = `<div class="training-admin-stack">` + data.dashboard.map((d, idx) => {
                     const rate = d.assigned_count > 0 ? Math.round(d.certified_count / d.assigned_count * 100) : 0;
                     const barColor = rate >= 80 ? '#34d399' : rate >= 50 ? '#fbbf24' : '#f87171';
+                    const overdueCount = Number(d.overdue_count || 0);
                     const members = Array.isArray(d.members) ? d.members : [];
                     const assignerLine = d.assigner_name ? `<span style="font-size:11px;color:rgba(251,191,36,0.7);margin-left:6px;">派发人：${escapeHtml(d.assigner_name)}</span>` : '';
                     const membersHtml = members.length ? members.map((m, mi) => {
                         const st = m.status || 'not_started';
+                        const deadline = getTrainingDeadlineState(m);
                         const needsRetake = st === 'quiz' && m.quiz_score !== null && m.quiz_score !== undefined;
-                        const label = needsRetake ? '需补考' : (stMap[st] || st);
-                        const bg = needsRetake ? 'rgba(239,68,68,0.18)' : (stBg[st] || 'rgba(71,85,105,0.5)');
-                        const color = needsRetake ? '#fca5a5' : (stColor[st] || '#94a3b8');
+                        const label = deadline.isOverdue ? `逾期 ${Math.max(1, deadline.daysOverdue)} 天` : (needsRetake ? '需补考' : (stMap[st] || st));
+                        const bg = deadline.isOverdue ? 'rgba(239,68,68,0.18)' : (needsRetake ? 'rgba(239,68,68,0.18)' : (stBg[st] || 'rgba(71,85,105,0.5)'));
+                        const color = deadline.isOverdue ? '#fca5a5' : (needsRetake ? '#fca5a5' : (stColor[st] || '#94a3b8'));
                         const scoreNote = (m.quiz_score !== null && m.quiz_score !== undefined) ? ` · ${m.quiz_score}分` : '';
                         // 考试历史
                         const history = Array.isArray(m.quiz_history) ? m.quiz_history : [];
@@ -26320,37 +27721,65 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         const toggleBtn = attemptCount > 0
                             ? `<button onclick="(function(e){e.stopPropagation();var d=document.getElementById('${historyId}');d.style.display=d.style.display==='none'?'':'none';})(event)" style="font-size:10px;padding:2px 7px;border-radius:8px;border:none;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.5);cursor:pointer;margin-left:6px;">历史</button>`
                             : '';
-                        return `<div style="border-bottom:1px solid rgba(255,255,255,0.05);">
-                            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px;">
-                                <div style="display:flex;align-items:center;gap:4px;">
-                                    <span style="font-size:13px;color:#e2e8f0;">${escapeHtml(m.name||m.username)}</span>
-                                    ${historyBadge}${toggleBtn}
-                                </div>
-                                <span style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px;background:${bg};color:${color};">${label}${scoreNote}</span>
+                        const memberStyle = deadline.isOverdue
+                            ? 'background:rgba(127,29,29,0.26);border:1px solid rgba(248,113,113,0.26);'
+                            : '';
+                        const metaDeadline = deadline.dueDate ? ` · ${deadline.dueText}` : '';
+                        return `<div class="training-admin-member" style="${memberStyle}">
+                            <div style="flex:1;min-width:0;">
+                                <div class="training-admin-member-name">${escapeHtml(m.name||m.username)} ${historyBadge}${toggleBtn}</div>
+                                <div class="training-admin-member-meta">${escapeHtml(m.position || '')}${scoreNote}${escapeHtml(metaDeadline)}</div>
+                                ${historyHtml ? `<div id="${historyId}" style="display:none;padding-top:8px;">${historyHtml}</div>` : ''}
                             </div>
-                            ${historyHtml ? `<div id="${historyId}" style="display:none;padding:0 4px 8px;">${historyHtml}</div>` : ''}
+                            <span class="training-admin-badge" style="background:${bg};color:${color};">${label}</span>
                         </div>`;
                     }).join('') : '<div style="padding:8px 0;font-size:13px;color:rgba(255,255,255,0.3);">暂无指派成员</div>';
+                    const cardStyle = overdueCount > 0
+                        ? 'background:linear-gradient(145deg, rgba(127,29,29,0.4), rgba(30,41,59,0.96));border:1px solid rgba(248,113,113,0.4);box-shadow:0 0 0 1px rgba(239,68,68,0.08) inset;'
+                        : '';
+                    const overdueBanner = overdueCount > 0
+                        ? `<div style="margin-bottom:12px;padding:10px 12px;border-radius:12px;background:rgba(127,29,29,0.22);border:1px solid rgba(248,113,113,0.24);font-size:12px;line-height:1.6;color:#fecaca;">当前有 ${overdueCount} 人逾期未完成，该培训主题已进入重点跟进状态。</div>`
+                        : '';
                     return `
-                    <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.08);">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-                            <span style="font-weight:700;color:#fff;font-size:14px;">${escapeHtml(d.title)}</span>
-                            <span style="font-size:14px;font-weight:800;color:${barColor};">${rate}%</span>
-                        </div>
-                        <div style="font-size:12px;color:rgba(255,255,255,0.45);margin-bottom:8px;">
-                            ${escapeHtml(d.position||'')} &nbsp;·&nbsp; 已指派 ${d.assigned_count} 人 &nbsp;·&nbsp; 已认证 ${d.certified_count} 人${assignerLine}
-                        </div>
-                        <div style="height:6px;border-radius:3px;background:rgba(255,255,255,0.1);overflow:hidden;margin-bottom:10px;">
-                            <div style="height:100%;width:${rate}%;background:${barColor};border-radius:3px;transition:width .4s;"></div>
-                        </div>
-                        <button onclick="toggleDashboardMembers(${idx})" style="width:100%;padding:8px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.6);font-size:12px;cursor:pointer;text-align:left;">
-                            👥 查看人员进度 (${members.length}人)
-                        </button>
-                        <div id="dashboard-members-${idx}" style="display:none;margin-top:10px;padding:0 4px;">
-                            ${membersHtml}
-                        </div>
+                    <div class="training-admin-card" style="${cardStyle}">
+                        <details>
+                            <summary class="training-admin-summary" style="list-style:none;cursor:pointer;">
+                                <div class="training-admin-row">
+                                    <div style="flex:1;min-width:0;">
+                                        <div class="training-admin-title">${escapeHtml(d.title)}</div>
+                                        <div class="training-admin-sub">${escapeHtml(d.position || '未标注岗位')} ${assignerLine}</div>
+                                    </div>
+                                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+                                        ${overdueCount > 0 ? `<span class="training-admin-badge" style="background:rgba(239,68,68,0.16);color:#fca5a5;">${overdueCount} 人逾期</span>` : ''}
+                                        <span class="training-admin-badge" style="background:rgba(255,255,255,0.07);color:${barColor};">${rate}%</span>
+                                    </div>
+                                </div>
+                                <div class="training-admin-stats">
+                                    <div class="training-admin-stat">
+                                        <div class="training-admin-stat-value">${d.assigned_count}</div>
+                                        <div class="training-admin-stat-label">已指派</div>
+                                    </div>
+                                    <div class="training-admin-stat">
+                                        <div class="training-admin-stat-value">${d.certified_count}</div>
+                                        <div class="training-admin-stat-label">已认证</div>
+                                    </div>
+                                    <div class="training-admin-stat">
+                                        <div class="training-admin-stat-value">${members.length}</div>
+                                        <div class="training-admin-stat-label">成员数</div>
+                                    </div>
+                                </div>
+                            </summary>
+                            <button class="training-admin-toggle" type="button" onclick="this.parentElement.open = !this.parentElement.open;">查看成员进度</button>
+                            <div class="training-admin-details">
+                                ${overdueBanner}
+                                <div style="height:6px;border-radius:999px;background:rgba(255,255,255,0.1);overflow:hidden;margin-bottom:12px;">
+                                    <div style="height:100%;width:${rate}%;background:${barColor};border-radius:999px;transition:width .4s;"></div>
+                                </div>
+                                <div class="training-admin-member-list">${membersHtml}</div>
+                            </div>
+                        </details>
                     </div>`;
-                }).join('');
+                }).join('') + `</div>`;
             } catch (e) {
                 showNotification('加载看板失败', 'error');
             }
@@ -26522,20 +27951,28 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     const sBorder = {'learning':'rgba(96,165,250,0.3)','quiz':'rgba(139,92,246,0.3)','practice':'rgba(249,115,22,0.3)','certified':'rgba(52,211,153,0.3)','not_started':'rgba(148,163,184,0.2)'};
                     const sColor = {'learning':'#60a5fa','quiz':'#a78bfa','practice':'#fb923c','certified':'#34d399','not_started':'#94a3b8'};
                     const st = t.session_status || 'not_started';
+                    const deadline = getTrainingDeadlineState(t);
                     const isDone = st === 'certified';
                     const isPending = st === 'practice';
                     const btnLabel = isDone ? '✅ 已完成' : isPending ? '⏳ 等待审核' : '开始学习 →';
                     const btnDisabled = isDone || isPending;
                     const practiceTag = t.require_practice === false ? '<span style="font-size:10px;padding:2px 6px;border-radius:6px;background:rgba(96,165,250,0.12);color:#60a5fa;margin-left:6px;">无需实操</span>' : '';
+                    const statusBg = deadline.isOverdue ? 'rgba(239,68,68,0.12)' : sBg[st];
+                    const statusBorder = deadline.isOverdue ? 'rgba(239,68,68,0.3)' : sBorder[st];
+                    const statusColor = deadline.isOverdue ? '#fca5a5' : sColor[st];
+                    const statusLabel = deadline.isOverdue ? `⚠️ 已逾期 ${Math.max(1, deadline.daysOverdue)} 天` : `${sIcon[st]} ${sMap[st]||'未开始'}`;
+                    const cardStyle = deadline.isOverdue
+                        ? 'background:linear-gradient(145deg, rgba(127,29,29,0.36), rgba(30,41,59,0.96));border:1px solid rgba(248,113,113,0.34);'
+                        : 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);';
                     return `
-                        <div style="background:rgba(255,255,255,0.05);border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);">
+                        <div style="${cardStyle}border-radius:16px;overflow:hidden;">
                             <div style="padding:16px;">
                                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
                                     <span style="font-weight:700;color:#fff;font-size:15px;">${escapeHtml(t.title)}${practiceTag}</span>
-                                    <span style="font-size:12px;padding:4px 10px;border-radius:10px;background:${sBg[st]};border:1px solid ${sBorder[st]};color:${sColor[st]};">${sIcon[st]} ${sMap[st]||'未开始'}</span>
+                                    <span style="font-size:12px;padding:4px 10px;border-radius:10px;background:${statusBg};border:1px solid ${statusBorder};color:${statusColor};">${statusLabel}</span>
                                 </div>
                                 <div style="font-size:12px;color:rgba(255,255,255,0.4);">
-                                    ${escapeHtml(t.position)} &nbsp;·&nbsp; 截止 ${t.due_date ? t.due_date.slice(0,10) : '无期限'}
+                                    ${escapeHtml(t.position)} &nbsp;·&nbsp; ${escapeHtml(deadline.dueText)}
                                     ${t.quiz_score !== null && t.quiz_score !== undefined ? ' &nbsp;·&nbsp; 测验 '+t.quiz_score+'分' : ''}
                                 </div>
                             </div>
@@ -26660,32 +28097,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                             const cacheBadge = data.cached
                                 ? '<span style="font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(52,211,153,0.15);color:#6ee7b7;margin-left:6px;">已缓存</span>'
                                 : '<span style="font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(251,191,36,0.15);color:#fde68a;margin-left:6px;">✨ 新生成</span>';
-
-                            const html = data.explanation
-                                .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-                                .replace(/^## (.+)$/gm,
-                                    '<div style="font-size:15px;font-weight:700;color:#a5b4fc;margin:22px 0 8px;padding-bottom:7px;border-bottom:1px solid rgba(165,180,252,0.2);">$1</div>')
-                                .replace(/^### (.+)$/gm,
-                                    '<div style="font-size:13px;font-weight:600;color:#c4b5fd;margin:12px 0 4px;">$1</div>')
-                                .replace(/^[-•] (.+)$/gm,
-                                    '<div style="display:flex;gap:8px;margin:5px 0;"><span style="color:#a5b4fc;flex-shrink:0;margin-top:1px;">•</span><span>$1</span></div>')
-                                .replace(/^\d+\. (.+)$/gm,
-                                    '<div style="margin:5px 0;padding-left:4px;">$1</div>')
-                                .replace(/\*\*(.+?)\*\*/g,
-                                    '<strong style="color:#fff;font-weight:600;">$1</strong>')
-                                .replace(/\n/g, '<br>');
-
-                            container.innerHTML =
-                                '<div style="padding:0 0 28px;">' +
-                                    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.08);">' +
-                                        '<span style="font-size:22px;">✨</span>' +
-                                        '<div>' +
-                                            '<div style="font-size:13px;font-weight:700;color:#a5b4fc;">AI 培训解析' + cacheBadge + '</div>' +
-                                            '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:3px;">由 AI 精心整理，通俗易懂，助你快速掌握</div>' +
-                                        '</div>' +
-                                    '</div>' +
-                                    '<div style="font-size:14px;color:rgba(255,255,255,0.82);line-height:1.95;">' + html + '</div>' +
-                                '</div>';
+                            container.innerHTML = buildTrainingExplanationView(data.explanation, cacheBadge);
                         } else if (data.error === 'no_content') {
                             container.innerHTML = '<div style="text-align:center;padding:44px 0;"><div style="font-size:32px;margin-bottom:12px;">📄</div><div style="color:rgba(255,255,255,0.45);font-size:13px;line-height:1.7;">该培训资料暂无文字内容<br>管理员需填写「视频内容摘要」后方可生成解析</div></div>';
                         } else {

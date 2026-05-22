@@ -54,7 +54,7 @@ import { ensureHRMSApiSchema, registerHRMSApiRoutes } from './hrms-api-tools.js'
 import { ensureSOPDistributionSchema, registerSOPDistributionRoutes } from './sop-distribution.js';
 import { ensureKitchenExecutionSchema, registerKitchenExecutionRoutes } from './kitchen-execution.js';
 import { ensureRecipeSchema, registerRecipeRoutes, generateRecipeTemplate, importRecipeFromExcel } from './recipe-management.js';
-import { ensureTrainingSchema, registerTrainingRoutes } from './training.js';
+import { ensureTrainingSchema, registerTrainingRoutes, startTrainingReminderScheduler } from './training.js';
 import { setDataExecutorPool, purgeExpiredCache, updateMetricVersion } from './data-executor.js';
 import fileRoutes from './file-routes.js';
 import { enforceRuntimeSafetyOrExit, configureDbSessionSafety, isSchemaChangeAllowed, getAppEnv, isWebhookEnabled, isExternalEnabled } from './safety.js';
@@ -18490,6 +18490,7 @@ app.listen(PORT, HOST, async () => {
     await ensureRecipeSchema();
     await ensureTrainingSchema();
     console.log('[modules] RAG + TaskBoard + HRMS-API + SOP-Distribution + KitchenExec + Recipe + Training initialized');
+    startTrainingReminderScheduler();
 
 
     // 飞书表格→PG 与 sales_raw 目录入库：失败第一时间通知 admin（见 notifyAdminsDualWriteFailure 注释）

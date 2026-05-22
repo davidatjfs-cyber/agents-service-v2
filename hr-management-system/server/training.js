@@ -21,6 +21,8 @@ function pool() { return getPool(); }
 
 const MANAGER_ROLES = ['admin', 'hq_manager', 'store_manager', 'store_production_manager', 'hr_manager'];
 function isManager(role) { return MANAGER_ROLES.includes(role); }
+const TRAINING_REMINDER_INTERVAL_MS = Math.max(30 * 60 * 1000, Number(process.env.TRAINING_REMINDER_INTERVAL_MS || 60 * 60 * 1000));
+let _trainingReminderSchedulerStarted = false;
 
 // JWT 不含 store，从 employees 表实时查
 async function getUserStore(username) {
@@ -41,6 +43,46 @@ function getAssignableRoles(assignerRole) {
   if (assignerRole === 'store_manager') return ['store_employee', 'cashier', 'front_manager'];
   if (assignerRole === 'store_production_manager') return ['store_employee'];
   return null;
+}
+
+function getShanghaiDateKey(date = new Date()) {
+  return date.toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' });
+}
+
+function getShanghaiDateTimeText(date = new Date()) {
+  return date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
+}
+
+function parseReminderMeta(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  return raw;
+}
+
+async function createTrainingUserNotification(targetUsername, title, message, meta) {
+  try {
+    await pool().query(
+      `INSERT INTO hrms_user_notifications (target_username, title, message, type, meta, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
+      [
+        targetUsername,
+        title,
+        message,
+        'training_assignment',
+        JSON.stringify(meta || {})
+      ]
+    );
+  } catch (_) {}
+}
+
+async function sendTrainingFeishuMessage(username, message) {
+  try {
+    const fu = await lookupFeishuUserByUsername(username);
+    if (fu?.open_id) {
+      await sendLarkMessage(fu.open_id, message, { skipDedup: true });
+      return true;
+    }
+  } catch (_) {}
+  return false;
 }
 
 // ─── Schema ───────────────────────────────────────────────
@@ -77,7 +119,9 @@ export async function ensureTrainingSchema() {
     `);
     await pool().query(`CREATE INDEX IF NOT EXISTS idx_ta_employee ON training_assignments (employee_username)`);
     await pool().query(`CREATE INDEX IF NOT EXISTS idx_ta_topic ON training_assignments (topic_id)`);
+    await pool().query(`CREATE INDEX IF NOT EXISTS idx_ta_due_date ON training_assignments (due_date)`);
     await pool().query(`ALTER TABLE training_assignments ADD COLUMN IF NOT EXISTS require_practice BOOLEAN DEFAULT false`);
+    await pool().query(`ALTER TABLE training_assignments ADD COLUMN IF NOT EXISTS reminder_meta JSONB DEFAULT '{}'::jsonb`);
 
     // 学习会话表
     await pool().query(`
@@ -367,6 +411,25 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       let sql = `
         SELECT a.*, t.title, t.position,
                s.status AS session_status, s.quiz_passed, s.quiz_score,
+               CASE
+                 WHEN a.due_date IS NOT NULL
+                  AND a.due_date < ((NOW() AT TIME ZONE 'Asia/Shanghai')::date)
+                  AND COALESCE(s.status, 'not_started') != 'certified'
+                 THEN true ELSE false
+               END AS is_overdue,
+               CASE
+                 WHEN a.due_date IS NOT NULL
+                  AND a.due_date = ((NOW() AT TIME ZONE 'Asia/Shanghai')::date)
+                  AND COALESCE(s.status, 'not_started') != 'certified'
+                 THEN true ELSE false
+               END AS is_due_today,
+               CASE
+                 WHEN a.due_date IS NOT NULL
+                  AND a.due_date < ((NOW() AT TIME ZONE 'Asia/Shanghai')::date)
+                  AND COALESCE(s.status, 'not_started') != 'certified'
+                 THEN (((NOW() AT TIME ZONE 'Asia/Shanghai')::date) - a.due_date)
+                 ELSE 0
+               END AS days_overdue,
                e.name AS employee_name
         FROM training_assignments a
         JOIN training_topics t ON t.id = a.topic_id
@@ -514,6 +577,12 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
                ${assignerField},
                COUNT(DISTINCT a.employee_username) AS assigned_count,
                COUNT(DISTINCT CASE WHEN s.status = 'certified' THEN s.employee_username END) AS certified_count,
+               COUNT(DISTINCT CASE
+                 WHEN a.due_date IS NOT NULL
+                  AND a.due_date < ((NOW() AT TIME ZONE 'Asia/Shanghai')::date)
+                  AND COALESCE(s.status, 'not_started') != 'certified'
+                 THEN a.employee_username
+               END) AS overdue_count,
                COALESCE(
                  json_agg(
                    json_build_object(
@@ -521,7 +590,27 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
                      'name', COALESCE(e.name, a.employee_username),
                      'status', COALESCE(s.status, 'not_started'),
                      'quiz_score', s.quiz_score,
-                     'quiz_history', COALESCE(s.quiz_history, '[]'::jsonb)
+                     'quiz_history', COALESCE(s.quiz_history, '[]'::jsonb),
+                     'due_date', a.due_date,
+                     'is_overdue', CASE
+                       WHEN a.due_date IS NOT NULL
+                        AND a.due_date < ((NOW() AT TIME ZONE 'Asia/Shanghai')::date)
+                        AND COALESCE(s.status, 'not_started') != 'certified'
+                       THEN true ELSE false
+                     END,
+                     'is_due_today', CASE
+                       WHEN a.due_date IS NOT NULL
+                        AND a.due_date = ((NOW() AT TIME ZONE 'Asia/Shanghai')::date)
+                        AND COALESCE(s.status, 'not_started') != 'certified'
+                       THEN true ELSE false
+                     END,
+                     'days_overdue', CASE
+                       WHEN a.due_date IS NOT NULL
+                        AND a.due_date < ((NOW() AT TIME ZONE 'Asia/Shanghai')::date)
+                        AND COALESCE(s.status, 'not_started') != 'certified'
+                       THEN (((NOW() AT TIME ZONE 'Asia/Shanghai')::date) - a.due_date)
+                       ELSE 0
+                     END
                    ) ORDER BY e.name
                  ) FILTER (WHERE a.employee_username IS NOT NULL),
                  '[]'::json
@@ -619,7 +708,26 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       const result = await pool().query(`
         SELECT a.id AS assignment_id, a.due_date, a.note, a.require_practice, a.assigned_by,
                t.id AS topic_id, t.title, t.position, t.description, t.key_points,
-               s.id AS session_id, s.status AS session_status, s.quiz_passed, s.quiz_score
+               s.id AS session_id, s.status AS session_status, s.quiz_passed, s.quiz_score,
+               CASE
+                 WHEN a.due_date IS NOT NULL
+                  AND a.due_date < ((NOW() AT TIME ZONE 'Asia/Shanghai')::date)
+                  AND COALESCE(s.status, 'not_started') != 'certified'
+                 THEN true ELSE false
+               END AS is_overdue,
+               CASE
+                 WHEN a.due_date IS NOT NULL
+                  AND a.due_date = ((NOW() AT TIME ZONE 'Asia/Shanghai')::date)
+                  AND COALESCE(s.status, 'not_started') != 'certified'
+                 THEN true ELSE false
+               END AS is_due_today,
+               CASE
+                 WHEN a.due_date IS NOT NULL
+                  AND a.due_date < ((NOW() AT TIME ZONE 'Asia/Shanghai')::date)
+                  AND COALESCE(s.status, 'not_started') != 'certified'
+                 THEN (((NOW() AT TIME ZONE 'Asia/Shanghai')::date) - a.due_date)
+                 ELSE 0
+               END AS days_overdue
         FROM training_assignments a
         JOIN training_topics t ON t.id = a.topic_id
         LEFT JOIN training_sessions s ON s.topic_id = a.topic_id AND s.employee_username = a.employee_username
@@ -1221,4 +1329,144 @@ verdict说明：passed=合格，review=需人工复核，failed=不合格需重�
       res.json({ success: false, error: e?.message });
     }
   });
+}
+
+export async function runTrainingReminderSweep() {
+  const todayKey = getShanghaiDateKey();
+  let preDueSent = 0;
+  let overdueEscalated = 0;
+
+  try {
+    const result = await pool().query(`
+      SELECT
+        a.id,
+        a.employee_username,
+        a.assigned_by,
+        a.topic_id,
+        a.due_date,
+        a.reminder_meta,
+        t.title,
+        COALESCE(e.name, a.employee_username) AS employee_name,
+        COALESCE(assigner_emp.name, a.assigned_by, '管理员') AS assigner_name,
+        COALESCE(s.status, 'not_started') AS session_status
+      FROM training_assignments a
+      JOIN training_topics t ON t.id = a.topic_id
+      LEFT JOIN training_sessions s ON s.topic_id = a.topic_id AND s.employee_username = a.employee_username
+      LEFT JOIN employees e ON e.username = a.employee_username
+      LEFT JOIN employees assigner_emp ON assigner_emp.username = a.assigned_by
+      WHERE a.due_date IS NOT NULL
+        AND t.is_active = true
+        AND COALESCE(s.status, 'not_started') != 'certified'
+      ORDER BY a.due_date ASC, a.created_at ASC
+    `);
+
+    for (const row of result.rows || []) {
+      const dueDate = String(row.due_date || '').slice(0, 10);
+      if (!dueDate) continue;
+      const reminderMeta = parseReminderMeta(row.reminder_meta);
+      const topicTitle = String(row.title || '培训任务').trim();
+      const assigneeName = String(row.employee_name || row.employee_username || '').trim() || '员工';
+      const assignerName = String(row.assigner_name || row.assigned_by || '').trim() || '管理员';
+      const isOverdue = todayKey > dueDate;
+
+      if (!isOverdue) {
+        if (reminderMeta.last_pre_due_reminder_on === todayKey) continue;
+        const message = `请在 ${dueDate} 前完成培训任务「${topicTitle}」。系统将每天提醒一次，当前仍未完成，请尽快登录 HRMS 完成学习。`;
+        await createTrainingUserNotification(
+          row.employee_username,
+          '培训任务完成提醒',
+          message,
+          {
+            assignment_id: row.id,
+            topic_id: row.topic_id,
+            due_date: dueDate,
+            reminder_phase: 'pre_due',
+            reminded_on: todayKey
+          }
+        );
+        await sendTrainingFeishuMessage(
+          row.employee_username,
+          `📚 培训任务提醒\n\n你被指派的培训任务【${topicTitle}】尚未完成。\n截止日期：${dueDate}\n系统会在截止前每天提醒 1 次，请尽快登录 HRMS 完成学习。`
+        );
+        await pool().query(
+          `UPDATE training_assignments
+           SET reminder_meta = COALESCE(reminder_meta, '{}'::jsonb) || $1::jsonb
+           WHERE id = $2`,
+          [
+            JSON.stringify({
+              last_pre_due_reminder_on: todayKey,
+              pre_due_reminder_count: Number(reminderMeta.pre_due_reminder_count || 0) + 1,
+              last_pre_due_reminder_at: getShanghaiDateTimeText()
+            }),
+            row.id
+          ]
+        );
+        preDueSent++;
+        continue;
+      }
+
+      if (reminderMeta.last_overdue_reminder_on === todayKey) continue;
+      const daysOverdue = Math.max(1, Math.floor((Date.parse(`${todayKey}T00:00:00+08:00`) - Date.parse(`${dueDate}T00:00:00+08:00`)) / 86400000));
+      await sendTrainingFeishuMessage(
+        row.employee_username,
+        `⚠️ 培训任务已逾期\n\n培训任务【${topicTitle}】已超过截止日期 ${daysOverdue} 天（截止：${dueDate}）。请立即登录 HRMS 补完成，进度看板已标记为逾期。`
+      );
+      if (row.assigned_by) {
+        await sendTrainingFeishuMessage(
+          row.assigned_by,
+          `🚨 培训任务逾期提醒\n\n${assigneeName} 的培训任务【${topicTitle}】已逾期 ${daysOverdue} 天（截止：${dueDate}），当前仍未完成。请在培训进度看板中查看并跟进。`
+        );
+        await createTrainingUserNotification(
+          row.assigned_by,
+          '培训任务逾期提醒',
+          `${assigneeName} 的培训任务「${topicTitle}」已逾期 ${daysOverdue} 天，请及时跟进。`,
+          {
+            assignment_id: row.id,
+            topic_id: row.topic_id,
+            due_date: dueDate,
+            assignee_username: row.employee_username,
+            reminder_phase: 'overdue_escalation',
+            reminded_on: todayKey
+          }
+        );
+      }
+      await pool().query(
+        `UPDATE training_assignments
+         SET reminder_meta = COALESCE(reminder_meta, '{}'::jsonb) || $1::jsonb
+         WHERE id = $2`,
+        [
+          JSON.stringify({
+            last_overdue_reminder_on: todayKey,
+            overdue_reminder_count: Number(reminderMeta.overdue_reminder_count || 0) + 1,
+            last_overdue_reminder_at: getShanghaiDateTimeText()
+          }),
+          row.id
+        ]
+      );
+      overdueEscalated++;
+    }
+  } catch (e) {
+    console.error('[Training] reminder sweep error:', e?.message || e);
+    return { ok: false, error: e?.message || String(e), preDueSent, overdueEscalated };
+  }
+
+  if (preDueSent || overdueEscalated) {
+    console.log(`[Training] reminder sweep complete: preDue=${preDueSent}, overdue=${overdueEscalated}`);
+  }
+  return { ok: true, preDueSent, overdueEscalated };
+}
+
+export function startTrainingReminderScheduler() {
+  if (_trainingReminderSchedulerStarted) return;
+  _trainingReminderSchedulerStarted = true;
+
+  const tick = () => {
+    runTrainingReminderSweep().catch((e) => {
+      console.error('[Training] reminder scheduler tick error:', e?.message || e);
+    });
+  };
+
+  setTimeout(tick, 90 * 1000);
+  setInterval(tick, TRAINING_REMINDER_INTERVAL_MS);
+  console.log('[Training] reminder scheduler started');
 }
