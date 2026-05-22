@@ -1,0 +1,62 @@
+<h2>培训界面长什么样？</h2>
+<p class="subtitle">员工点开一个知识点后，看到的是哪种形式？</p>
+
+<div class="options">
+
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>📖 分页卡片式（逐步推进）</h3>
+      <div style="background:#1a1a2e;border-radius:10px;padding:14px;margin-top:10px;font-size:13px;color:#e2e8f0;">
+        <div style="text-align:center;color:#94a3b8;font-size:11px;margin-bottom:8px;">第 2 / 5 页</div>
+        <div style="background:#0f172a;border-radius:8px;padding:12px;margin-bottom:8px;">
+          <div style="font-size:11px;color:#6366f1;font-weight:700;margin-bottom:4px;">🔑 核心要点</div>
+          <div style="font-size:13px;line-height:1.6;">油温控制在 180°C，下锅前用筷子测试——周围冒小泡即可。</div>
+        </div>
+        <div style="background:#1e293b;border-radius:8px;height:70px;display:flex;align-items:center;justify-content:center;color:#475569;font-size:12px;">[ 操作示意图 ]</div>
+        <div style="display:flex;justify-content:space-between;margin-top:10px;">
+          <button style="padding:6px 14px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#94a3b8;font-size:12px;cursor:pointer;">← 上一页</button>
+          <button style="padding:6px 14px;background:#6366f1;border:none;border-radius:6px;color:#fff;font-size:12px;cursor:pointer;">下一页 →</button>
+        </div>
+      </div>
+      <p style="margin-top:8px;font-size:13px;color:#888;">每页一个核心概念，带图文，强制按顺序学</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>📜 长页滚动式（像文章）</h3>
+      <div style="background:#1a1a2e;border-radius:10px;padding:14px;margin-top:10px;font-size:13px;color:#e2e8f0;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:8px;">🍳 炒锅油温控制</div>
+        <div style="background:#1e293b;border-radius:8px;height:50px;display:flex;align-items:center;justify-content:center;color:#475569;font-size:12px;margin-bottom:8px;">[ 封面图 ]</div>
+        <div style="font-size:12px;line-height:1.7;color:#cbd5e1;">油温是炒菜的关键。正确的油温能让食材快速锁住水分，保持鲜嫩口感。判断方法：将竹筷插入油中，筷子周围迅速冒出细小气泡，说明油温约达 180°C...</div>
+        <div style="margin-top:8px;background:#0f172a;border-radius:6px;padding:8px;font-size:11px;color:#6ee7b7;border-left:3px solid #10b981;">💡 实操提示：冷锅冷油下食材是大忌！</div>
+        <div style="margin-top:6px;color:#475569;font-size:11px;">↓ 继续向下阅读...</div>
+      </div>
+      <p style="margin-top:8px;font-size:13px;color:#888;">自由阅读节奏，内容连贯，适合深度理解</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>💬 对话式（AI 讲解 + 追问）</h3>
+      <div style="background:#1a1a2e;border-radius:10px;padding:14px;margin-top:10px;font-size:13px;color:#e2e8f0;">
+        <div style="background:#0f172a;border-radius:8px;padding:10px;margin-bottom:6px;">
+          <div style="font-size:11px;color:#6366f1;margin-bottom:4px;">🤖 培训助手</div>
+          <div style="font-size:12px;line-height:1.6;">今天学习「油温控制」。你知道怎么判断油温是否到位吗？</div>
+        </div>
+        <div style="background:#1e3a2f;border-radius:8px;padding:8px;margin-bottom:6px;text-align:right;">
+          <div style="font-size:12px;color:#6ee7b7;">用筷子插进去看气泡？</div>
+        </div>
+        <div style="background:#0f172a;border-radius:8px;padding:10px;">
+          <div style="font-size:11px;color:#6366f1;margin-bottom:4px;">🤖 培训助手</div>
+          <div style="font-size:12px;line-height:1.6;">对！筷子周围冒小泡 = 约 180°C，正好适合大多数炒菜。下面我给你看一张示意图...</div>
+        </div>
+      </div>
+      <p style="margin-top:8px;font-size:13px;color:#888;">互动感最强，员工可以追问，AI 实时解答</p>
+    </div>
+  </div>
+
+</div>

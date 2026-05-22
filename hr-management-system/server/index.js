@@ -28,7 +28,7 @@ import { Readable } from 'stream';
 import zlib from 'zlib';
 import XLSX from 'xlsx';
 import axios from 'axios';
-import { setPool as setAgentPool, ensureAgentTables, registerAgentRoutes, startAgentScheduler, setTaskResponseHook, startBitablePolling, startScheduledTasks, assertCriticalFunctions, verifyLLMHealth, getAgentHealthStatus, startWeeklyReportScheduler, sendWeeklyReports, sendMonthlyReports, sendTestReportsToUser, lookupFeishuUserByUsername, sendLarkMessage, onFeishuEvent } from './agents.js';
+import { setPool as setAgentPool, ensureAgentTables, registerAgentRoutes, startAgentScheduler, setTaskResponseHook, startBitablePolling, startScheduledTasks, assertCriticalFunctions, verifyLLMHealth, getAgentHealthStatus, startWeeklyReportScheduler, sendWeeklyReports, sendMonthlyReports, sendTestReportsToUser, lookupFeishuUserByUsername, sendLarkMessage, onFeishuEvent, callLLM } from './agents.js';
 import { ensureAgentConfigTables, registerAgentConfigRoutes } from "./agent-config-manager.js";
 
 import { setMasterPool, ensureMasterTables, startMasterAgent, registerMasterRoutes, handleTaskResponse } from './master-agent.js';
@@ -16014,6 +16014,46 @@ app.get('/api/knowledge/:id/content', authRequired, async (req, res) => {
     return res.status(500).json({ error: 'server_error', message: msg });
   }
 });
+
+// GET /api/knowledge/:id/explanation - AI智能解析知识库文档
+app.get('/api/knowledge/:id/explanation', authRequired, async (req, res) => {
+  if (String(req.user?.role || '') !== 'admin') {
+    return res.status(403).json({ error: 'admin_only' });
+  }
+  const id = String(req.params?.id || '').trim();
+  if (!id) return res.status(400).json({ error: 'missing_id' });
+  try {
+    const r = await pool.query(
+      'SELECT id, title, content, file_type, ai_explanation FROM knowledge_base WHERE id = $1::uuid AND enabled = true LIMIT 1',
+      [id]
+    );
+    const row = r.rows?.[0];
+    if (!row) return res.status(404).json({ error: 'not_found' });
+    if (row.ai_explanation && String(row.ai_explanation).trim().length > 50) {
+      return res.json({ success: true, explanation: row.ai_explanation, cached: true });
+    }
+    const rawContent = String(row.content || '').trim();
+    if (!rawContent || rawContent.length < 20) {
+      return res.json({ success: false, error: 'no_content', message: '此文档暂无文字内容，无法生成AI解析' });
+    }
+    const aiResp = await callLLM([
+      { role: 'system', content: '你是一位餐饮行业培训专家。请对以下文档进行结构化解析，用清晰易懂的方式提炼核心要点，帮助餐饮从业人员快速掌握重点知识。输出使用简洁的中文Markdown格式，包含标题、要点列表等。' },
+      { role: 'user', content: '请解析以下文档内容：\n\n' + rawContent.slice(0, 8000) }
+    ], { maxTokens: 2000 });
+    const explanation = String(aiResp?.content || '').trim();
+    if (!explanation || explanation.length < 50) {
+      return res.json({ success: false, error: 'ai_failed', message: 'AI生成失败，请稍后重试' });
+    }
+    await pool.query('UPDATE knowledge_base SET ai_explanation = $1, updated_at = NOW() WHERE id = $2::uuid', [explanation, id]);
+    res.json({ success: true, explanation, cached: false });
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (/invalid input syntax for type uuid/i.test(msg)) return res.status(400).json({ error: 'invalid_id' });
+    console.error('[knowledge] explanation error:', msg);
+    res.status(500).json({ error: 'server_error', message: msg });
+  }
+});
+
 
 // 删除知识库条目（仅管理员）
 app.delete('/api/knowledge/:id', authRequired, async (req, res) => {

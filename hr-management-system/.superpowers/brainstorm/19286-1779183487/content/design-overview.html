@@ -1,0 +1,136 @@
+<h2>培训模块完整设计</h2>
+<p class="subtitle">结合两个新增需求 — 个人培训计划 + 实操认证</p>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px;">
+
+  <!-- Employee: Topic List -->
+  <div>
+    <div style="font-size:11px;color:#6366f1;font-weight:700;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">员工端 · 培训首页</div>
+    <div style="background:#0f172a;border-radius:12px;padding:14px;border:1px solid #1e293b;">
+      <div style="font-size:12px;font-weight:700;color:#e2e8f0;margin-bottom:10px;">我的培训任务</div>
+      <div style="display:grid;gap:6px;">
+        <div style="background:#1e293b;border-radius:8px;padding:10px;display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-size:12px;color:#e2e8f0;font-weight:600;">🔥 油温控制</div>
+            <div style="font-size:10px;color:#94a3b8;margin-top:2px;">到期：5月20日</div>
+          </div>
+          <span style="font-size:10px;padding:2px 8px;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);border-radius:8px;color:#6ee7b7;">已认证 ✅</span>
+        </div>
+        <div style="background:#1e293b;border-radius:8px;padding:10px;display:flex;align-items:center;justify-content:space-between;border:1px solid rgba(99,102,241,0.4);">
+          <div>
+            <div style="font-size:12px;color:#e2e8f0;font-weight:600;">🛡️ 食品安全操作</div>
+            <div style="font-size:10px;color:#94a3b8;margin-top:2px;">到期：5月22日</div>
+          </div>
+          <span style="font-size:10px;padding:2px 8px;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);border-radius:8px;color:#a5b4fc;">待认证 📝</span>
+        </div>
+        <div style="background:#1e293b;border-radius:8px;padding:10px;display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-size:12px;color:#e2e8f0;font-weight:600;">🏷️ 品牌规范</div>
+            <div style="font-size:10px;color:#94a3b8;margin-top:2px;">到期：5月30日</div>
+          </div>
+          <span style="font-size:10px;padding:2px 8px;background:rgba(255,255,255,0.06);border:1px solid #334155;border-radius:8px;color:#475569;">未开始</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Employee: Chat + Quiz -->
+  <div>
+    <div style="font-size:11px;color:#10b981;font-weight:700;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">员工端 · 对话学习 → 小测验</div>
+    <div style="background:#0f172a;border-radius:12px;padding:14px;border:1px solid #1e293b;">
+      <div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:8px;">🛡️ 食品安全操作</div>
+      <div style="display:grid;gap:5px;max-height:130px;overflow:hidden;">
+        <div style="background:#1e293b;border-radius:8px;padding:8px;">
+          <div style="font-size:10px;color:#6366f1;margin-bottom:2px;">🤖 培训助手</div>
+          <div style="font-size:11px;color:#e2e8f0;line-height:1.5;">今天学「生熟分开」。你知道为什么切完生肉的刀不能直接切蔬菜吗？</div>
+        </div>
+        <div style="background:#1e3a2f;border-radius:8px;padding:8px;text-align:right;">
+          <div style="font-size:11px;color:#6ee7b7;">因为会有细菌交叉污染吧</div>
+        </div>
+        <div style="background:#1e293b;border-radius:8px;padding:8px;">
+          <div style="font-size:10px;color:#6366f1;margin-bottom:2px;">🤖 培训助手</div>
+          <div style="font-size:11px;color:#e2e8f0;line-height:1.5;">完全正确！沙门氏菌等细菌会从生肉传到熟食，引起食物中毒。✅</div>
+        </div>
+      </div>
+      <div style="margin-top:8px;background:#2d2a1a;border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:8px;">
+        <div style="font-size:10px;color:#fcd34d;margin-bottom:4px;">📝 最终测验 (2/3 完成)</div>
+        <div style="font-size:11px;color:#e2e8f0;">刀具应每隔多久消毒一次？</div>
+        <div style="display:grid;gap:3px;margin-top:4px;">
+          <div style="font-size:10px;padding:4px 8px;background:#1e293b;border-radius:4px;color:#cbd5e1;">A. 每天结束时</div>
+          <div style="font-size:10px;padding:4px 8px;background:#1e3a2f;border:1px solid #10b981;border-radius:4px;color:#6ee7b7;">B. 每次换用食材前 ✓</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Employee: Practice Upload -->
+  <div>
+    <div style="font-size:11px;color:#f59e0b;font-weight:700;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">员工端 · 实操上传</div>
+    <div style="background:#0f172a;border-radius:12px;padding:14px;border:1px solid #1e293b;">
+      <div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:6px;">🎬 实操任务：「食品安全操作」</div>
+      <div style="background:#1a1a2e;border-radius:8px;padding:10px;font-size:11px;color:#94a3b8;margin-bottom:8px;line-height:1.6;">
+        <div style="color:#fcd34d;margin-bottom:4px;">📋 拍摄要求</div>
+        请录制 30-60 秒视频，展示：<br>
+        ① 生熟刀具分开使用<br>
+        ② 使用前消毒流程<br>
+        ③ 手部清洁步骤
+      </div>
+      <div style="border:2px dashed #334155;border-radius:8px;padding:14px;text-align:center;cursor:pointer;">
+        <div style="font-size:20px;margin-bottom:4px;">📤</div>
+        <div style="font-size:11px;color:#94a3b8;">点击上传视频或照片</div>
+        <div style="font-size:10px;color:#475569;margin-top:2px;">支持 MP4 / MOV / JPG，最大 200MB</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manager: Assignment + Review -->
+  <div>
+    <div style="font-size:11px;color:#ec4899;font-weight:700;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">管理后台 · 培训计划 + 待审核</div>
+    <div style="background:#0f172a;border-radius:12px;padding:14px;border:1px solid #1e293b;">
+      <div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:8px;">为员工指派培训</div>
+      <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+        <select style="flex:1;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:5px;font-size:11px;color:#e2e8f0;">
+          <option>选择员工：张师傅</option>
+        </select>
+        <select style="flex:1;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:5px;font-size:11px;color:#e2e8f0;">
+          <option>知识点：食品安全</option>
+        </select>
+      </div>
+      <div style="background:#1e293b;border-radius:6px;padding:6px 8px;font-size:10px;display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <span style="color:#e2e8f0;">李师傅 · 油温控制 <span style="color:#6ee7b7;">✅已认证</span></span>
+        <span style="color:#475569;">5月18日</span>
+      </div>
+      <div style="background:#2d1a1a;border:1px solid rgba(239,68,68,0.2);border-radius:6px;padding:8px;font-size:11px;margin-top:6px;">
+        <div style="color:#f87171;font-weight:600;margin-bottom:3px;">⚠️ 待人工审核</div>
+        <div style="color:#94a3b8;">王小明 · 油温控制 · AI 建议复核</div>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <button style="flex:1;background:#1e3a2f;border:1px solid #10b981;border-radius:5px;padding:4px;font-size:10px;color:#6ee7b7;cursor:pointer;">✅ 通过</button>
+          <button style="flex:1;background:#2d1a1a;border:1px solid #ef4444;border-radius:5px;padding:4px;font-size:10px;color:#f87171;cursor:pointer;">❌ 不通过</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top:14px;padding:12px;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.2);border-radius:10px;">
+  <div style="font-size:11px;color:#a5b4fc;font-weight:700;margin-bottom:6px;">📐 新增数据表（4张）</div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-size:10px;">
+    <div style="background:#1e293b;border-radius:6px;padding:8px;">
+      <div style="color:#6366f1;font-weight:700;margin-bottom:3px;">training_topics</div>
+      <div style="color:#64748b;">知识点大纲<br>岗位/内容/实操任务</div>
+    </div>
+    <div style="background:#1e293b;border-radius:6px;padding:8px;">
+      <div style="color:#10b981;font-weight:700;margin-bottom:3px;">training_assignments</div>
+      <div style="color:#64748b;">指派记录<br>员工/知识点/到期日</div>
+    </div>
+    <div style="background:#1e293b;border-radius:6px;padding:8px;">
+      <div style="color:#f59e0b;font-weight:700;margin-bottom:3px;">training_sessions</div>
+      <div style="color:#64748b;">学习进度<br>对话历史/测验结果</div>
+    </div>
+    <div style="background:#1e293b;border-radius:6px;padding:8px;">
+      <div style="color:#ec4899;font-weight:700;margin-bottom:3px;">training_certifications</div>
+      <div style="color:#64748b;">实操认证<br>视频/AI判定/复核</div>
+    </div>
+  </div>
+</div>

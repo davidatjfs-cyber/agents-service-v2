@@ -1,0 +1,105 @@
+<h2>管理层需要看到什么？</h2>
+<p class="subtitle">除了员工端的学习体验，后台管理侧的核心需求是什么？</p>
+
+<div class="options" data-multiselect>
+
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>📊 团队掌握率看板</h3>
+      <div style="background:#1a1a2e;border-radius:8px;padding:12px;margin-top:8px;font-size:12px;">
+        <div style="color:#94a3b8;font-size:11px;margin-bottom:6px;">炒锅岗 · 本月培训进度</div>
+        <div style="display:grid;gap:4px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="font-size:11px;color:#e2e8f0;width:80px;">油温控制</div>
+            <div style="flex:1;background:#1e293b;border-radius:4px;height:8px;overflow:hidden;"><div style="width:80%;height:100%;background:#6366f1;border-radius:4px;"></div></div>
+            <div style="font-size:11px;color:#a5b4fc;">8/10 人</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="font-size:11px;color:#e2e8f0;width:80px;">食品安全</div>
+            <div style="flex:1;background:#1e293b;border-radius:4px;height:8px;overflow:hidden;"><div style="width:50%;height:100%;background:#f59e0b;border-radius:4px;"></div></div>
+            <div style="font-size:11px;color:#fcd34d;">5/10 人</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="font-size:11px;color:#e2e8f0;width:80px;">品牌规范</div>
+            <div style="flex:1;background:#1e293b;border-radius:4px;height:8px;overflow:hidden;"><div style="width:30%;height:100%;background:#ef4444;border-radius:4px;"></div></div>
+            <div style="font-size:11px;color:#f87171;">3/10 人</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>👤 个人学习档案</h3>
+      <div style="background:#1a1a2e;border-radius:8px;padding:12px;margin-top:8px;font-size:12px;color:#e2e8f0;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <div style="width:28px;height:28px;background:#6366f1;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;">张</div>
+          <div>
+            <div style="font-size:12px;font-weight:600;">张师傅 · 炒锅岗</div>
+            <div style="font-size:10px;color:#94a3b8;">已掌握 12 / 20 个知识点</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;">
+          <span style="padding:2px 8px;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);border-radius:10px;font-size:10px;color:#6ee7b7;">油温控制 ✓</span>
+          <span style="padding:2px 8px;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);border-radius:10px;font-size:10px;color:#a5b4fc;">食品安全 学习中</span>
+          <span style="padding:2px 8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;font-size:10px;color:#475569;">品牌规范 未开始</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>✍️ 大纲内容管理（AI 提炼 + 人工审核）</h3>
+      <div style="background:#1a1a2e;border-radius:8px;padding:12px;margin-top:8px;font-size:12px;color:#e2e8f0;">
+        <div style="color:#94a3b8;font-size:11px;margin-bottom:6px;">炒锅岗 · 知识大纲</div>
+        <div style="display:grid;gap:4px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:#1e293b;border-radius:6px;">
+            <span style="font-size:12px;">🔥 油温控制</span>
+            <span style="font-size:10px;padding:2px 6px;background:rgba(16,185,129,0.15);border-radius:8px;color:#6ee7b7;">已发布</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:#1e293b;border-radius:6px;">
+            <span style="font-size:12px;">🛡️ 食品安全操作</span>
+            <span style="font-size:10px;padding:2px 6px;background:rgba(251,191,36,0.15);border-radius:8px;color:#fcd34d;">待审核</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:#1e293b;border-radius:6px;">
+            <span style="font-size:12px;">🏷️ 品牌规范</span>
+            <span style="font-size:10px;padding:2px 6px;background:rgba(239,68,68,0.1);border-radius:8px;color:#f87171;">AI 处理中</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="d" onclick="toggleSelect(this)">
+    <div class="letter">D</div>
+    <div class="content">
+      <h3>🔔 未完成提醒 / 到期预警</h3>
+      <div style="background:#1a1a2e;border-radius:8px;padding:12px;margin-top:8px;font-size:12px;color:#e2e8f0;">
+        <div style="display:grid;gap:5px;">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#2d1a1a;border:1px solid rgba(239,68,68,0.2);border-radius:6px;">
+            <span style="font-size:14px;">⚠️</span>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:#f87171;">李师傅 · 食品安全证书 3天后到期</div>
+              <div style="font-size:10px;color:#94a3b8;">需完成「食品安全操作」知识点测验</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#1e293b;border-radius:6px;">
+            <span style="font-size:14px;">📋</span>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:#fcd34d;">新员工王小明 · 入职培训未完成</div>
+              <div style="font-size:10px;color:#94a3b8;">已完成 3/8 个必修知识点</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p style="margin-top:16px;font-size:13px;color:#64748b;">可多选 — 选出你觉得管理后台必须有的功能</p>

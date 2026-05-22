@@ -310,16 +310,20 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
         return res.status(403).json({ error: '无权限' });
       }
       const q = (req.query.q || '').trim();
-      const params = q ? ['%' + q + '%'] : [];
-      const sql = q
-        ? `SELECT id, title, category, LEFT(content, 200) AS excerpt
-           FROM knowledge_base
-           WHERE enabled = true AND (title ILIKE $1 OR content ILIKE $1)
-           ORDER BY title LIMIT 20`
-        : `SELECT id, title, category, LEFT(content, 200) AS excerpt
-           FROM knowledge_base
-           WHERE enabled = true
-           ORDER BY updated_at DESC LIMIT 20`;
+      const idsParam = (req.query.ids || '').trim();
+      let sql, params;
+      if (idsParam) {
+        const ids = idsParam.split(',').map(s => s.trim()).filter(Boolean).slice(0, 50);
+        const placeholders = ids.map((_, i) => '$' + (i + 1)).join(',');
+        sql = `SELECT id, title, category, LEFT(content, 200) AS excerpt FROM knowledge_base WHERE enabled = true AND id::text IN (${placeholders}) ORDER BY title`;
+        params = ids;
+      } else if (q) {
+        sql = `SELECT id, title, category, LEFT(content, 200) AS excerpt FROM knowledge_base WHERE enabled = true AND (title ILIKE $1 OR content ILIKE $1) ORDER BY title LIMIT 20`;
+        params = ['%' + q + '%'];
+      } else {
+        sql = `SELECT id, title, category, LEFT(content, 200) AS excerpt FROM knowledge_base WHERE enabled = true ORDER BY updated_at DESC LIMIT 20`;
+        params = [];
+      }
       const result = await pool().query(sql, params);
       res.json({ success: true, articles: result.rows });
     } catch (e) {

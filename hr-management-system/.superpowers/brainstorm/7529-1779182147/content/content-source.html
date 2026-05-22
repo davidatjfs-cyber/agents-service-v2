@@ -1,0 +1,40 @@
+<h2>知识大纲的内容从哪里来？</h2>
+<p class="subtitle">这个决定影响整个系统的架构方向</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>在现有文件之上建结构</h3>
+      <p>已上传的 PDF / 视频 / 文档保持不动，管理员在上面建一层「大纲」——把文件分配到知识点、定义岗位课程顺序。</p>
+      <p style="margin-top:8px;font-size:13px;color:#888;">优点：利用现有内容，工作量最小<br>缺点：培训体验受限于原文件质量</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>AI 自动提炼 + 人工审核</h3>
+      <p>上传文件后，AI 自动拆解内容、生成大纲知识点、配图和小测验题，管理员审核后发布给员工。</p>
+      <p style="margin-top:8px;font-size:13px;color:#888;">优点：效率最高，自动化程度高<br>缺点：AI 生成质量需要把控，初期需要校对</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>管理员直接撰写培训内容</h3>
+      <p>在系统里内置一个编辑器，管理员直接写图文培训内容（像 Notion），不依赖上传文件，内容更精炼。</p>
+      <p style="margin-top:8px;font-size:13px;color:#888;">优点：内容质量最可控，结构最清晰<br>缺点：需要花时间写内容，工作量最大</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="d" onclick="toggleSelect(this)">
+    <div class="letter">D</div>
+    <div class="content">
+      <h3>混合：先 AI 提炼，再人工完善</h3>
+      <p>上传文件 → AI 生成初稿大纲 + 内容 → 管理员在编辑器里精修 → 发布。两者结合，启动快、质量有保障。</p>
+      <p style="margin-top:8px;font-size:13px;color:#888;">优点：兼顾效率和质量，推荐方向<br>缺点：开发量最大，需要编辑器 + AI 流水线</p>
+    </div>
+  </div>
+</div>

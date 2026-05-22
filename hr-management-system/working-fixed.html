@@ -27839,17 +27839,14 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 const kbIds = topic.kb_article_ids || [];
                 if (kbIds.length > 0) {
                     try {
-                        const kbResp = await fetch('/api/training/kb-search?q=', {
+                        const kbResp = await fetch('/api/training/kb-search?ids=' + encodeURIComponent(kbIds.join(',')), {
                             headers: { 'Authorization': 'Bearer ' + localStorage.getItem('hrms_token') }
                         });
                         const kbData = await kbResp.json();
-                        _selectedKbArticles = (kbData.articles || [])
-                            .filter(a => kbIds.includes(a.id))
-                            .map(a => ({ id: a.id, title: a.title }));
-                        kbIds.forEach(kid => {
-                            if (!_selectedKbArticles.find(a => a.id === kid)) {
-                                _selectedKbArticles.push({ id: kid, title: '文章 ' + kid.slice(0,8) });
-                            }
+                        const fetched = kbData.articles || [];
+                        _selectedKbArticles = kbIds.map(kid => {
+                            const found = fetched.find(a => a.id === kid);
+                            return found ? { id: found.id, title: found.title } : { id: kid, title: '文章 ' + kid.slice(0,8) };
                         });
                     } catch(_) {}
                     renderKbChips();
@@ -45190,43 +45187,55 @@ tr:nth-child(even) td { background: #fafafa; }
                     ${!hasRegisterData ? '<div style="margin-top:12px; padding:10px 12px; border-radius:12px; background:rgba(251,191,36,0.14); border:1px solid rgba(251,191,36,0.22); color:#fde68a; font-size:12px;">当前区间缺少营业日报核对台账，缺勤/休息统计已尽量按打卡回退，但仍建议结合日报补录后再复核。</div>' : ''}
                 </div>
 
-                ${digestRows.length ? `
-                <div style="margin-top:14px; font-size:12px; color:rgba(200,215,230,0.78); font-weight:800;">打卡全局视图</div>
-                <div style="display:grid; grid-template-columns:1fr; gap:12px; margin-top:10px;">
-                    ${digestRows.map(function(person) {
-                        return `
-                        <details style="border-radius:16px; background:rgba(15,23,42,0.48); border:1px solid rgba(255,255,255,0.08); overflow:hidden;">
-                            <summary style="list-style:none; cursor:pointer; padding:14px 16px; display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
-                                <div>
-                                    <div style="font-size:14px; font-weight:900; color:#f8fafc;">${escapeHtml(person.name || person.username || '-')}</div>
-                                    <div style="margin-top:4px; font-size:11px; color:rgba(148,163,184,0.9);">${escapeHtml(person.store || '-')} · ${escapeHtml(person.username || '-')}</div>
-                                </div>
-                                <div style="display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px;">
-                                    <span class="rep-overview-chip">打卡天数 <strong>${person.checkinDays}</strong></span>
-                                    <span class="rep-overview-chip">打卡次数 <strong>${person.totalPunches}</strong></span>
-                                    <span class="rep-overview-chip ${person.anomalyPunches ? 'rep-overview-chip--active' : ''}">异常 <strong>${person.anomalyPunches}</strong></span>
-                                </div>
-                            </summary>
-                            <div style="padding:0 16px 16px;">
-                                <div style="display:grid; grid-template-columns:1fr; gap:8px;">
-                                    ${person.days.map(function(day) {
-                                        return `
-                                        <div style="display:grid; grid-template-columns:minmax(72px,84px) minmax(0,1fr); gap:10px; align-items:center; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06);">
-                                            <div style="font-size:12px; font-weight:800; color:#e2e8f0;">${escapeHtml(repAttendanceFmtDay(day.date))}</div>
-                                            <div style="display:flex; flex-wrap:wrap; gap:8px;">
-                                                <span style="padding:4px 8px; border-radius:999px; background:rgba(34,197,94,0.12); color:#bbf7d0; font-size:11px; font-weight:700;">上班 ${escapeHtml(day.firstIn || '--:--')}</span>
-                                                <span style="padding:4px 8px; border-radius:999px; background:rgba(59,130,246,0.12); color:#bfdbfe; font-size:11px; font-weight:700;">下班 ${escapeHtml(day.lastOut || '--:--')}</span>
-                                                <span style="padding:4px 8px; border-radius:999px; background:rgba(255,255,255,0.08); color:#e2e8f0; font-size:11px; font-weight:700;">${escapeHtml(String(day.punchCount))} 次</span>
-                                                ${day.isLate ? '<span style="padding:4px 8px; border-radius:999px; background:rgba(251,191,36,0.16); color:#fde68a; font-size:11px; font-weight:800;">迟到</span>' : ''}
-                                                ${day.anomalyCount ? '<span style="padding:4px 8px; border-radius:999px; background:rgba(248,113,113,0.16); color:#fecaca; font-size:11px; font-weight:800;">异常 ' + escapeHtml(String(day.anomalyCount)) + '</span>' : ''}
-                                            </div>
-                                        </div>`;
-                                    }).join('')}
-                                </div>
-                            </div>
-                        </details>`;
-                    }).join('')}
-                </div>` : ''}
+                ${(function() {
+                    if (!digestRows.length && !summaryRows.length) return '';
+                    // Build per-store-per-day map
+                    const sdMap = new Map();
+                    digestRows.forEach(function(person) {
+                        person.days.forEach(function(day) {
+                            const key = day.date + '||' + person.store;
+                            if (!sdMap.has(key)) sdMap.set(key, { date: day.date, store: person.store, people: [] });
+                            const isAnomalous = day.isLate || day.anomalyCount > 0;
+                            sdMap.get(key).people.push({ name: person.name || person.username, username: person.username, firstIn: day.firstIn, lastOut: day.lastOut, isLate: day.isLate, anomalyCount: day.anomalyCount, isAnomalous });
+                        });
+                    });
+                    // Add absent employees from summaryRows
+                    summaryRows.forEach(function(row) {
+                        (Array.isArray(row.absentDates) ? row.absentDates : []).forEach(function(date) {
+                            const key = date + '||' + (row.store || '');
+                            if (!sdMap.has(key)) sdMap.set(key, { date, store: row.store || '', people: [] });
+                            const entry = sdMap.get(key);
+                            if (!entry.people.find(function(p) { return p.username === row.username; })) {
+                                entry.people.push({ name: row.name || row.username, username: row.username, firstIn: '', lastOut: '', isLate: false, anomalyCount: 0, isAbsent: true, isAnomalous: true });
+                            }
+                        });
+                    });
+                    const sdRows = Array.from(sdMap.values()).sort(function(a, b) {
+                        if (b.date !== a.date) return b.date.localeCompare(a.date);
+                        return (a.store || '').localeCompare(b.store || '');
+                    });
+                    if (!sdRows.length) return '';
+                    const parts = ['<div style="margin-top:14px; font-size:12px; color:rgba(200,215,230,0.78); font-weight:800;">打卡全局视图（按门店/日期）</div>','<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">'];
+                    sdRows.forEach(function(sd) {
+                        const anomPeople = sd.people.filter(function(p) { return p.isAnomalous; });
+                        const hasAnom = anomPeople.length > 0;
+                        parts.push(`<details style="border-radius:14px;background:${hasAnom ? 'rgba(30,15,5,0.45)' : 'rgba(15,23,42,0.28)'};border:1px solid ${hasAnom ? 'rgba(249,115,22,0.25)' : 'rgba(34,197,94,0.15)'};overflow:hidden;">`);
+                        parts.push(`<summary style="list-style:none;cursor:pointer;padding:13px 14px;display:flex;align-items:center;gap:10px;user-select:none;"><span style="display:inline-block;transition:transform .15s;color:rgba(148,163,184,0.8);font-size:12px;">▸</span><div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:800;color:#e2e8f0;">${escapeHtml(sd.store || '未知门店')}</div><div style="font-size:11px;color:rgba(148,163,184,0.8);margin-top:2px;">${escapeHtml(sd.date)} · ${escapeHtml(String(sd.people.length))} 人打卡</div></div>${hasAnom ? `<span style="padding:3px 10px;border-radius:999px;background:rgba(249,115,22,0.18);color:#fdba74;font-size:11px;font-weight:800;">⚠ ${escapeHtml(String(anomPeople.length))} 人异常</span>` : '<span style="padding:3px 10px;border-radius:999px;background:rgba(34,197,94,0.15);color:#86efac;font-size:11px;font-weight:800;">✓ 正常</span>'}</summary>`);
+                        if (hasAnom) {
+                            parts.push(`<div style="padding:0 14px 14px;border-top:1px solid rgba(255,255,255,0.06);">`);
+                            anomPeople.forEach(function(p) {
+                                const label = p.isAbsent ? '未打卡' : (p.isLate ? '迟到' + (p.firstIn ? ' ' + p.firstIn : '') : '异常打卡');
+                                parts.push(`<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);"><div style="width:6px;height:6px;border-radius:50%;background:${p.isAbsent ? '#f87171' : '#fbbf24'};flex-shrink:0;"></div><div style="flex:1;"><div style="font-size:12px;font-weight:700;color:#e2e8f0;">${escapeHtml(p.name || p.username || '—')}</div></div><span style="font-size:11px;padding:2px 8px;border-radius:6px;background:${p.isAbsent ? 'rgba(248,113,113,0.15)' : 'rgba(251,191,36,0.15)'};color:${p.isAbsent ? '#fca5a5' : '#fde68a'};">${escapeHtml(label)}</span></div>`);
+                            });
+                            parts.push(`</div>`);
+                        } else {
+                            parts.push(`<div style="padding:10px 14px 12px;font-size:12px;color:rgba(134,239,172,0.7);">当日所有打卡记录均正常 ✓</div>`);
+                        }
+                        parts.push('</details>');
+                    });
+                    parts.push('</div>');
+                    return parts.join('');
+                })()
 
                 ${summaryRows.length ? `
                 <div style="margin-top:16px; font-size:12px; color:rgba(200,215,230,0.78); font-weight:800;">打卡出勤汇总</div>
@@ -46956,63 +46965,42 @@ tr:nth-child(even) td { background: #fafafa; }
                             return;
                         }
                         html += '<style>.rep-dar-day summary::-webkit-details-marker{display:none}.rep-dar-day summary{list-style:none}.rep-dar-day[open] summary .rep-dar-chev{transform:rotate(90deg)}</style>';
-                        html += '<div style="margin-top:14px;display:flex;flex-direction:column;gap:10px;">';
+                        html += '<div style="margin-top:14px;display:flex;flex-direction:column;gap:8px;">';
                         for (const row of rows) {
                             const lines = normDarLines(row);
-                            const subAnomaly = lines.filter((l) => String(l.status || '') !== 'verified').length;
-                            const ok = subAnomaly === 0;
-                            const badge = ok
-                                ? '<span style="color:#22c55e;font-weight:800;">核实</span>'
-                                : '<span style="color:#f97316;font-weight:800;">异常</span>';
+                            const anomLines = lines.filter((l) => String(l.status || '') !== 'verified');
+                            const anomCount = anomLines.length;
+                            const ok = anomCount === 0;
                             const dateStr = String(row.report_date || '').slice(0, 10);
-                            html += `<details class="rep-dar-day" style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:10px 12px;background:rgba(15,23,42,0.35);">
-<summary style="cursor:pointer;font-weight:800;font-size:13px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;color:rgba(226,232,240,0.96);user-select:none;">
-<span class="rep-dar-chev" aria-hidden="true" style="display:inline-block;transition:transform .15s;color:rgba(148,163,184,0.95);">▸</span>
-<span>${escapeHtml(dateStr)}</span>
-<span style="opacity:0.88;">${escapeHtml(String(row.store || ''))}</span>
-${badge}
-<span style="font-size:12px;font-weight:700;color:rgba(148,163,184,0.95);">${darEmp ? '本日异常 ' : '异常 '}${escapeHtml(String(darEmp ? subAnomaly : (row.anomaly_count ?? 0)))}</span>
-</summary>
-<div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);">
-<div style="display:flex;flex-wrap:wrap;gap:12px 18px;font-size:12px;margin-bottom:12px;color:rgba(148,163,184,0.95);">
-<span>前厅人日 <strong style="color:#e2e8f0">${escapeHtml(String(row.front_person_days ?? ''))}</strong></span>
-<span>后厨人日 <strong style="color:#e2e8f0">${escapeHtml(String(row.kitchen_person_days ?? ''))}</strong></span>
-<span>休息人日 <strong style="color:#e2e8f0">${escapeHtml(String(row.rest_person_days ?? ''))}</strong></span>
-<span>工时合计 <strong style="color:#e2e8f0">${escapeHtml(String(row.labor_total ?? ''))}</strong></span>
+                            html += `<details class="rep-dar-day" style="border:1px solid ${ok ? 'rgba(34,197,94,0.15)' : 'rgba(249,115,22,0.25)'};border-radius:14px;background:${ok ? 'rgba(15,23,42,0.28)' : 'rgba(30,15,5,0.45)'};overflow:hidden;">
+<summary style="cursor:pointer;padding:13px 14px;display:flex;align-items:center;gap:10px;user-select:none;">
+<span class="rep-dar-chev" style="display:inline-block;transition:transform .15s;color:rgba(148,163,184,0.8);font-size:12px;">▸</span>
+<div style="flex:1;min-width:0;">
+  <div style="font-size:13px;font-weight:800;color:#e2e8f0;">${escapeHtml(String(row.store || ''))}</div>
+  <div style="font-size:11px;color:rgba(148,163,184,0.8);margin-top:2px;">${escapeHtml(dateStr)}</div>
+</div>
+${ok
+    ? '<span style="padding:3px 10px;border-radius:999px;background:rgba(34,197,94,0.15);color:#86efac;font-size:11px;font-weight:800;">✓ 全部核实</span>'
+    : `<span style="padding:3px 10px;border-radius:999px;background:rgba(249,115,22,0.18);color:#fdba74;font-size:11px;font-weight:800;">⚠ 异常 ${escapeHtml(String(anomCount))} 人</span>`}
+</summary>`;
+                            if (!ok) {
+                                html += `<div style="padding:0 14px 14px;border-top:1px solid rgba(255,255,255,0.06);margin-top:0;">`;
+                                for (const ln of anomLines) {
+                                    const rs = Array.isArray(ln.reasons) && ln.reasons.length ? ln.reasons.join('；') : (ln.has_clock_in ? '状态异常' : '无打卡记录');
+                                    html += `<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+<div style="width:6px;height:6px;border-radius:50%;background:#f97316;flex-shrink:0;"></div>
+<div style="flex:1;min-width:0;">
+  <div style="font-size:12px;font-weight:700;color:#e2e8f0;">${escapeHtml(String(ln.display_name || ln.username || '—'))}</div>
+  <div style="font-size:11px;color:rgba(251,146,60,0.8);margin-top:2px;">${escapeHtml(rs)}</div>
+</div>
+<span style="font-size:10px;padding:2px 7px;border-radius:6px;background:rgba(251,146,60,0.12);color:#fdba74;">${escapeHtml(ln.has_clock_in ? '有打卡' : '无打卡')}</span>
 </div>`;
-                            if (lines.length) {
-                                html += `<div class="rep-table" style="overflow-x:auto;"><table style="width:100%;font-size:12px;border-collapse:collapse;">
-<thead><tr style="background:rgba(255,255,255,0.04);">
-<th style="text-align:left;padding:6px;">姓名</th>
-<th style="text-align:left;padding:6px;">类型</th>
-<th style="text-align:left;padding:6px;">岗位段</th>
-<th style="text-align:right;padding:6px;">申报人日</th>
-<th style="text-align:center;padding:6px;">打卡</th>
-<th style="text-align:center;padding:6px;">休假命中</th>
-<th style="text-align:left;padding:6px;">状态</th>
-<th style="text-align:left;padding:6px;">说明</th>
-</tr></thead><tbody>`;
-                                for (const ln of lines) {
-                                    const lOk = String(ln.status || '') === 'verified';
-                                    const stCell = lOk
-                                        ? '<span style="color:#86efac;">核实</span>'
-                                        : '<span style="color:#fdba74;">异常</span>';
-                                    const clk = ln.has_clock_in ? '有' : '无';
-                                    const rs = Array.isArray(ln.reasons) && ln.reasons.length ? ln.reasons.join('；') : '—';
-                                    html += `<tr>
-<td style="padding:6px;">${escapeHtml(String(ln.display_name || ln.username || '—'))}</td>
-<td style="padding:6px;">${escapeHtml(kindZh(ln.kind))}</td>
-<td style="padding:6px;">${escapeHtml(segZh(ln.role_segment))}</td>
-<td style="padding:6px;text-align:right;">${escapeHtml(String(ln.declared_days ?? ''))}</td>
-<td style="padding:6px;text-align:center;">${escapeHtml(clk)}</td>
-<td style="padding:6px;text-align:center;">${escapeHtml(String(ln.approved_leave_hits ?? 0))}</td>
-<td style="padding:6px;">${stCell}</td>
-<td style="padding:6px;max-width:280px;">${escapeHtml(rs)}</td>
-</tr>`;
                                 }
-                                html += '</tbody></table></div>';
+                                html += `</div>`;
+                            } else {
+                                html += `<div style="padding:10px 14px 12px;font-size:12px;color:rgba(134,239,172,0.7);">当日所有员工出勤状态均已核实 ✓</div>`;
                             }
-                            html += '</div></details>';
+                            html += `</details>`;
                         }
                         html += '</div>';
                         if (box) box.innerHTML = html;
