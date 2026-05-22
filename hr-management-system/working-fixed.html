@@ -45215,7 +45215,8 @@ tr:nth-child(even) td { background: #fafafa; }
                         return (a.store || '').localeCompare(b.store || '');
                     });
                     if (!sdRows.length) return '';
-                    const parts = ['<div style="margin-top:14px; font-size:12px; color:rgba(200,215,230,0.78); font-weight:800;">打卡全局视图（按门店/日期）</div>','<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">'];
+                    const anomTotal = sdRows.reduce(function(s, sd) { return s + sd.people.filter(function(p) { return p.isAnomalous; }).length; }, 0);
+                    const parts = [`<details open style="margin-top:14px;border-radius:14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);overflow:hidden;"><summary style="list-style:none;cursor:pointer;padding:12px 14px;display:flex;align-items:center;gap:8px;user-select:none;"><span style="font-size:12px;color:rgba(200,215,230,0.78);font-weight:800;flex:1;">打卡全局视图（按门店/日期）</span>${anomTotal > 0 ? `<span style="padding:2px 8px;border-radius:999px;background:rgba(249,115,22,0.18);color:#fdba74;font-size:11px;font-weight:800;">⚠ ${anomTotal} 人异常</span>` : '<span style="padding:2px 8px;border-radius:999px;background:rgba(34,197,94,0.12);color:#86efac;font-size:11px;font-weight:800;">✓ 全部正常</span>'}<span style="font-size:11px;color:rgba(148,163,184,0.5);">▾</span></summary>`, '<div style="display:flex;flex-direction:column;gap:8px;padding:0 10px 12px;">'];
                     sdRows.forEach(function(sd) {
                         const anomPeople = sd.people.filter(function(p) { return p.isAnomalous; });
                         const hasAnom = anomPeople.length > 0;
@@ -45233,13 +45234,14 @@ tr:nth-child(even) td { background: #fafafa; }
                         }
                         parts.push('</details>');
                     });
-                    parts.push('</div>');
+                    parts.push('</div></details>');
                     return parts.join('');
-                })()
+                })()}
 
                 ${summaryRows.length ? `
-                <div style="margin-top:16px; font-size:12px; color:rgba(200,215,230,0.78); font-weight:800;">打卡出勤汇总</div>
-                <div style="display:grid; grid-template-columns:1fr; gap:12px; margin-top:10px;">
+                <details open style="margin-top:14px;border-radius:14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);overflow:hidden;">
+                <summary style="list-style:none;cursor:pointer;padding:12px 14px;display:flex;align-items:center;gap:8px;user-select:none;"><span style="font-size:12px;color:rgba(200,215,230,0.78);font-weight:800;flex:1;">打卡出勤汇总（${summaryRows.length} 人）</span><span style="font-size:11px;color:rgba(148,163,184,0.5);">▾</span></summary>
+                <div style="display:grid; grid-template-columns:1fr; gap:12px; padding:0 10px 12px;">
                     ${summaryRows.map(function(row) {
                         return `
                         <details style="border-radius:18px; background:linear-gradient(180deg, rgba(15,23,42,0.72), rgba(2,6,23,0.88)); border:1px solid rgba(255,255,255,0.08); overflow:hidden;">
@@ -45278,7 +45280,7 @@ tr:nth-child(even) td { background: #fafafa; }
                             </div>
                         </details>`;
                     }).join('')}
-                </div>` : ''}
+                </div></details>` : ''}
 
                 ${!summaryRows.length && !digestRows.length ? '<div style="color:rgba(200,215,230,0.52); padding:24px; text-align:center;">暂无考勤数据</div>' : ''}
             `;

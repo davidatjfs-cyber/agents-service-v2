@@ -10785,9 +10785,29 @@ app.get('/api/reports/attendance', authRequired, async (req, res) => {
           nameByLower.set(u, String(e?.name || '').trim() || String(e?.username || '').trim());
         }
       }
+      // Build storeByLower map from employees for fallback when checkin_records.store is empty
+      let storeByLower = null;
+      if (employeesList.length || usersList.length) {
+        storeByLower = new Map();
+        for (const e of [...employeesList, ...usersList]) {
+          const u = String(e?.username || '').trim().toLowerCase();
+          const s = String(e?.store || '').trim();
+          if (u && s && !storeByLower.has(u)) storeByLower.set(u, s);
+        }
+      } else {
+        const dbEmps2 = await dbListEmployeesForReports({ store: null, includeInactive: false });
+        storeByLower = new Map();
+        for (const e of dbEmps2) {
+          const u = String(e?.username || '').trim().toLowerCase();
+          const s = String(e?.store || '').trim();
+          if (u && s) storeByLower.set(u, s);
+        }
+      }
       checkinDetails = (cr.rows || []).map(r => {
         const lower = String(r.username || '').trim().toLowerCase();
         r.display_name = (nameByLower ? nameByLower.get(lower) : null) || r.username;
+        // Fill missing store from employee profile
+        if (!r.store && storeByLower) r.store = storeByLower.get(lower) || '';
         return r;
       });
     } catch (e) {}
