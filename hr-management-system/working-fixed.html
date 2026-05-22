@@ -7633,15 +7633,41 @@
         /* Daily Report - Mobile First */
         #daily-report-page {
             padding-top: 6px;
+            --drf-iris: #6d7cff;
+            --drf-mint: #5eead4;
+            --drf-coral: #ff7a90;
+            --drf-amber: #ffc46b;
             --drf-gold: #d4af37;
             --drf-gold-glow: rgba(212, 175, 55, 0.22);
-            --drf-border: rgba(212, 175, 55, 0.14);
+            --drf-border: rgba(109, 124, 255, 0.2);
             --drf-border-soft: rgba(255, 255, 255, 0.08);
-            --drf-text: #e9eef6;
-            --drf-muted: rgba(186, 198, 215, 0.58);
+            --drf-text: #eef1fa;
+            --drf-muted: rgba(154, 163, 199, 0.78);
+            --drf-panel: rgba(20, 26, 48, 0.58);
+            --drf-panel-strong: rgba(11, 15, 30, 0.9);
             --drf-mono: "IBM Plex Mono", ui-monospace, monospace;
             --drf-sans: "IBM Plex Sans", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
             font-family: var(--drf-sans);
+            color: var(--drf-text);
+            min-height: calc(100vh - 110px);
+            background:
+                radial-gradient(56vw 56vw at -6% -10%, rgba(109,124,255,0.22), transparent 58%),
+                radial-gradient(44vw 44vw at 112% -12%, rgba(255,122,144,0.18), transparent 56%),
+                radial-gradient(72vw 52vw at 50% 118%, rgba(94,234,212,0.10), transparent 60%),
+                linear-gradient(180deg, #0b0f1e 0%, #0a1020 48%, #080c16 100%);
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        #daily-report-page::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(135deg, rgba(255,255,255,0.04), transparent 26%),
+                radial-gradient(120% 80% at 0% 0%, rgba(255,255,255,0.05), transparent 46%);
+            opacity: 0.75;
         }
 
         #daily-report-page .dr-daily-page-head {
@@ -7649,9 +7675,11 @@
             align-items: flex-end;
             justify-content: space-between;
             gap: 12px;
-            margin-bottom: 14px;
-            padding-bottom: 14px;
-            border-bottom: 1px solid var(--drf-border-soft);
+            margin-bottom: 16px;
+            padding: 4px 0 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            z-index: 1;
         }
 
         #daily-report-page .dr-daily-page-head__eyebrow {
@@ -7659,29 +7687,62 @@
             font-size: 10px;
             font-weight: 600;
             letter-spacing: 0.22em;
-            color: var(--drf-gold);
+            color: #a5b4fc;
             opacity: 0.85;
             margin-bottom: 4px;
         }
 
         #daily-report-page .dr-daily-page-head h2 {
             margin: 0;
-            font-size: 1.35rem;
+            font-size: clamp(1.45rem, 4.5vw, 2rem);
             font-weight: 700;
-            letter-spacing: 0.04em;
+            letter-spacing: 0.02em;
             color: var(--drf-text);
+        }
+
+        #daily-report-page .dr-daily-page-head__sub {
+            margin: 8px 0 0;
+            max-width: 46ch;
+            font-size: 12px;
+            line-height: 1.55;
+            color: var(--drf-muted);
+        }
+
+        #daily-report-page .dr-daily-page-head__badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            align-self: flex-start;
+            padding: 9px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(109,124,255,0.24);
+            background: rgba(255,255,255,0.05);
+            color: #c7d2fe;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+        }
+
+        #daily-report-page .dr-daily-page-head__badge::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: var(--drf-mint);
+            box-shadow: 0 0 10px rgba(94, 234, 212, 0.55);
         }
 
         #daily-report-page .rep-filters {
             position: relative;
-            border-radius: 20px;
+            border-radius: 24px;
             padding: 18px 18px 16px;
             margin-bottom: 18px;
-            background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
-            border: 1px solid var(--drf-border);
+            background: linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.028));
+            border: 1px solid rgba(255,255,255,0.1);
             box-shadow:
-                0 0 0 1px rgba(0, 0, 0, 0.35) inset,
-                0 20px 40px -28px rgba(0, 0, 0, 0.55);
+                0 24px 48px -30px rgba(0, 0, 0, 0.6),
+                inset 0 1px 0 rgba(255,255,255,0.06);
             backdrop-filter: blur(14px);
         }
 
@@ -7691,7 +7752,7 @@
             inset: 0;
             border-radius: 20px;
             pointer-events: none;
-            background: linear-gradient(125deg, rgba(212, 175, 55, 0.07), transparent 42%);
+            background: linear-gradient(125deg, rgba(109,124,255,0.12), transparent 42%);
         }
 
         #daily-report-page .rep-filters__head {
@@ -7779,15 +7840,19 @@
         }
 
         #daily-report-page .rep-filters__actions .btn {
-            border-radius: 10px;
-            font-weight: 600;
-            font-size: 12px;
+            border-radius: 14px;
+            font-weight: 700;
+            font-size: 13px;
+            min-height: 44px;
+            box-shadow: none;
         }
 
         #daily-report-page .dr-shell {
             max-width: 900px;
             margin: 0 auto;
-            padding: 12px 12px 80px;
+            padding: 12px 12px 96px;
+            position: relative;
+            z-index: 1;
         }
 
         #daily-report-page .dr-store-bar {
@@ -7833,9 +7898,13 @@
         }
 
         #daily-report-page .dr-empty {
-            padding: 14px 4px;
+            padding: 18px 8px;
             color: rgba(200,215,230,0.78);
             font-size: 13px;
+            text-align: center;
+            border-radius: 16px;
+            border: 1px dashed rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.03);
         }
 
         #daily-report-page .dr-hr-slab {
@@ -7929,13 +7998,20 @@
 
         #daily-report-page .dr-report-card {
             padding: 0;
-            border-radius: 16px;
-            border: 1px solid var(--drf-border);
-            background: linear-gradient(165deg, rgba(255, 255, 255, 0.04) 0%, rgba(2, 6, 23, 0.55) 55%);
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(20,26,48,0.62) 54%, rgba(11,15,30,0.88) 100%);
             margin-bottom: 14px;
             cursor: pointer;
             overflow: hidden;
-            box-shadow: 0 12px 32px -20px rgba(0, 0, 0, 0.65);
+            box-shadow: 0 18px 38px -24px rgba(0, 0, 0, 0.7);
+            transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+
+        #daily-report-page .dr-report-card:active {
+            transform: scale(0.992);
+            border-color: rgba(109,124,255,0.35);
+            box-shadow: 0 18px 40px -24px rgba(109,124,255,0.24);
         }
 
         #daily-report-page .dr-report-card__in {
@@ -11514,7 +11590,7 @@
         }
 
         #daily-report-page .dr-report-arrow {
-            color: rgba(250, 204, 21, 0.65);
+            color: rgba(165, 180, 252, 0.78);
             font-size: 22px;
             font-weight: 900;
         }
@@ -11539,10 +11615,10 @@
         }
 
         #daily-report-page .dr-kpi {
-            border-radius: 14px;
+            border-radius: 16px;
             padding: 12px;
-            background: rgba(0, 0, 0, 0.22);
-            border: 1px solid rgba(255, 255, 255, 0.07);
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         #daily-report-page .dr-kpi .k {
@@ -11574,24 +11650,52 @@
         #daily-report-page .dr-edit-topbar {
             position: sticky;
             top: 0;
-            z-index: 3;
-            padding: 10px 0 12px;
+            z-index: 5;
+            padding: 10px 0 14px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             gap: 10px;
-            background: linear-gradient(180deg, rgba(2,6,23,0.92) 0%, rgba(2,6,23,0.70) 100%);
-            backdrop-filter: blur(10px);
+            background: linear-gradient(180deg, rgba(11,15,30,0.96) 0%, rgba(11,15,30,0.82) 72%, rgba(11,15,30,0) 100%);
+            backdrop-filter: blur(16px);
+        }
+
+        #daily-report-page .dr-edit-topbar__title {
+            min-width: 0;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            color: var(--drf-text);
+        }
+
+        #daily-report-page .dr-edit-topbar__title strong {
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+        }
+
+        #daily-report-page .dr-edit-topbar__title span {
+            font-size: 11px;
+            color: var(--drf-muted);
+            line-height: 1.35;
+        }
+
+        #daily-report-page .dr-edit-topbar__actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 0 0 auto;
         }
 
         /* 日报编辑 · 分析报表壳体 + 分段（对齐组织字典交互） */
         #daily-report-page .dr-report-shell {
-            border: 1px solid var(--drf-border);
-            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 22px;
             padding: 12px 12px 14px;
             margin-bottom: 16px;
-            background: linear-gradient(155deg, rgba(212, 175, 55, 0.09) 0%, rgba(8, 10, 14, 0.94) 48%);
-            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset, 0 18px 48px -28px rgba(0, 0, 0, 0.55);
+            background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(20,26,48,0.6) 50%, rgba(11,15,30,0.92) 100%);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 20px 44px -28px rgba(0, 0, 0, 0.62);
         }
 
         #daily-report-page .dr-report-toolbar {
@@ -11630,6 +11734,7 @@
             padding-bottom: 4px;
             margin-bottom: 10px;
             scrollbar-width: none;
+            scroll-snap-type: x proximity;
         }
 
         #daily-report-page .dr-report-seg::-webkit-scrollbar {
@@ -11638,21 +11743,23 @@
 
         #daily-report-page .dr-report-seg__btn {
             flex: 0 0 auto;
-            border: 1px solid rgba(251, 191, 36, 0.28);
-            background: rgba(10, 10, 12, 0.85);
-            color: #fde68a;
-            font-size: 11px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255,255,255,0.05);
+            color: #dbe4ff;
+            font-size: 12px;
             font-weight: 700;
-            padding: 8px 12px;
+            padding: 10px 14px;
             border-radius: 999px;
             cursor: pointer;
             transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+            scroll-snap-align: start;
         }
 
         #daily-report-page .dr-report-seg__btn.active {
-            background: rgba(245, 158, 11, 0.16);
-            border-color: rgba(251, 191, 36, 0.55);
-            color: #fffbeb;
+            background: linear-gradient(135deg, rgba(109,124,255,0.28), rgba(94,234,212,0.18));
+            border-color: rgba(109,124,255,0.4);
+            color: #ffffff;
+            box-shadow: 0 10px 22px -16px rgba(109,124,255,0.65);
         }
 
         #daily-report-page .dr-report-panels {
@@ -11679,10 +11786,11 @@
         }
 
         #daily-report-page .dr-rep-panel-card {
-            border-radius: 14px;
+            border-radius: 18px;
             border: 1px solid rgba(255, 255, 255, 0.08);
-            background: rgba(0, 0, 0, 0.22);
-            padding: 12px 14px 14px;
+            background: rgba(255,255,255,0.035);
+            padding: 14px 14px 16px;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
         }
 
         #daily-report-page .dr-rep-panel-card--sm {
@@ -11716,10 +11824,10 @@
             justify-content: space-between;
             gap: 12px;
             align-items: center;
-            padding: 10px 12px;
-            border-radius: 14px;
+            padding: 12px;
+            border-radius: 16px;
             border: 1px solid rgba(255,255,255,0.08);
-            background: rgba(255,255,255,0.03);
+            background: rgba(255,255,255,0.04);
             margin-top: 10px;
         }
 
@@ -11740,6 +11848,7 @@
             gap: 8px;
             align-items: center;
             flex: 0 0 auto;
+            flex-wrap: wrap;
         }
 
         #daily-report-page .dr-schedule-eff {
@@ -11759,15 +11868,56 @@
         #daily-report-page .dr-date-input,
         #daily-report-page .dr-weather-select {
             width: 100%;
-            padding: 12px;
-            border-radius: 12px;
+            padding: 13px 14px;
+            border-radius: 14px;
             background: rgba(255, 255, 255, 0.10) !important;
             border: 1px solid rgba(255, 255, 255, 0.20) !important;
             color: var(--apple-text) !important;
             color-scheme: dark;
         }
 
+        #daily-report-page .dr-edit-footer {
+            position: sticky;
+            bottom: calc(var(--mobile-bottom-safe) + env(safe-area-inset-bottom, 0px));
+            z-index: 4;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            padding: 12px;
+            margin-bottom: 6px;
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(11,15,30,0.88);
+            backdrop-filter: blur(18px);
+            box-shadow: 0 18px 40px -28px rgba(0,0,0,0.8);
+        }
+
+        #daily-report-page .dr-edit-footer .btn {
+            width: 100%;
+            justify-content: center;
+            min-height: 48px;
+            border-radius: 14px;
+        }
+
         @media (max-width: 520px) {
+            #daily-report-page .dr-daily-page-head {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+            #daily-report-page .dr-daily-page-head__badge {
+                align-self: stretch;
+                justify-content: center;
+            }
+            #daily-report-page .rep-filters__actions {
+                display: grid;
+                grid-template-columns: 1fr;
+            }
+            #daily-report-page .rep-filters__clear {
+                justify-content: stretch !important;
+            }
+            #daily-report-page .rep-filters__clear .btn {
+                width: 100%;
+            }
             #daily-report-page .dr-store-bar {
                 grid-template-columns: 78px 1fr;
             }
@@ -11777,6 +11927,34 @@
             #daily-report-page .dr-date-weather-grid {
                 grid-template-columns: 1fr;
                 align-items: stretch;
+            }
+            #daily-report-page .dr-edit-topbar {
+                flex-wrap: wrap;
+                align-items: stretch;
+            }
+            #daily-report-page .dr-edit-topbar__actions {
+                width: 100%;
+                justify-content: stretch;
+            }
+            #daily-report-page .dr-edit-topbar__actions .btn {
+                flex: 1 1 0;
+            }
+            #daily-report-page .dr-report-kpis,
+            #daily-report-page .dr-report-metrics {
+                grid-template-columns: 1fr;
+            }
+            #daily-report-page .dr-staff-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            #daily-report-page .dr-staff-actions {
+                width: 100%;
+            }
+            #daily-report-page .dr-staff-actions .btn {
+                flex: 1 1 0;
+            }
+            #daily-report-page .dr-edit-footer {
+                grid-template-columns: 1fr;
             }
         }
 
@@ -12538,7 +12716,9 @@
                         <div>
                             <span class="dr-daily-page-head__eyebrow">DAILY OPS</span>
                             <h2>营业日报</h2>
+                            <p class="dr-daily-page-head__sub">参考“待审批”的 glass aurora 质感重做日报页，优先保证手机单手操作、横向分区切换和长表单连续填报体验。</p>
                         </div>
+                        <div class="dr-daily-page-head__badge">Mobile First</div>
                     </header>
 
                     <section class="rep-filters" aria-label="营业日报检索条件">
@@ -12565,7 +12745,7 @@
                                 <label for="dr-list-end">结束日期</label>
                                 <input id="dr-list-end" type="date" class="dr-date-input" onchange="loadDailyReportData()" />
                             </div>
-                            <div class="rep-filters__full rep-field" style="display:flex; justify-content:flex-end;">
+                            <div class="rep-filters__full rep-field rep-filters__clear" style="display:flex; justify-content:flex-end;">
                                 <button class="btn btn-secondary" type="button" onclick="document.getElementById('dr-list-start').value=''; document.getElementById('dr-list-end').value=''; loadDailyReportData();">清除日期</button>
                             </div>
                         </div>
@@ -12580,8 +12760,11 @@
                     <div id="dr-edit-view" class="hidden">
                         <div class="dr-edit-topbar">
                             <button class="btn btn-secondary" type="button" onclick="closeDailyReportEditor()" style="padding: 10px 12px;">← 返回</button>
-                            <div style="font-weight: 900;">填写日报</div>
-                            <div style="display:flex; gap: 10px; align-items:center;">
+                            <div class="dr-edit-topbar__title">
+                                <strong>填写日报</strong>
+                                <span>顶部提交，底部保存草稿；左右滑动分区可连续填报。</span>
+                            </div>
+                            <div class="dr-edit-topbar__actions">
                                 <button id="dr-delete-btn" class="btn btn-secondary" type="button" onclick="deleteDailyReport()" style="padding: 10px 12px; display:none;">删除</button>
                                 <button id="dr-submit-btn" class="btn" type="button" onclick="submitDailyReport()" style="padding: 10px 12px;">提交并锁定</button>
                             </div>
@@ -12995,7 +13178,7 @@
                             </div>
                         </div>
 
-                <div style="display:flex; flex-direction: column; gap: 12px; margin-bottom: 18px;">
+                <div class="dr-edit-footer">
                     <button id="dr-save-draft-btn" class="btn" type="button" onclick="saveDailyReportDraft()" style="width:100%; justify-content:center; padding: 14px 16px;">保存草稿</button>
                     <button id="dr-export-pdf-btn" class="btn" type="button" onclick="exportDailyReportPdf()" style="width:100%; justify-content:center; padding: 14px 16px; background: linear-gradient(135deg, #f97316, #fb923c);">导出 PDF</button>
                 </div>
@@ -43328,6 +43511,7 @@ tr:nth-child(even) td { background: #fafafa; }
                 var _cStore = String(document.getElementById('dr-store')?.value || '').trim();
                 if (_cDate && _cStore) drFetchAndSetWechatMonthBase(_cDate, _cStore);
             } catch (e) {}
+            try { syncDailyReportPrivateRoom(); } catch (e) {}
         }
 
         function closeDailyReportEditor() {
@@ -44103,6 +44287,7 @@ tr:nth-child(even) td { background: #fafafa; }
                                 drSetValue('dr-schedule-remark', '');
                                 try { __DR_WECHAT_MONTH_BASE = drCalcWechatMonthBase(date, store); drUpdateWechatMonthTotal(); drFetchAndSetWechatMonthBase(date, store); } catch(_e3) {}
                             } catch (e2) {}
+                            try { syncDailyReportPrivateRoom(); } catch (e3) {}
                             syncDailyReportComputed();
                         }
                     } else {
@@ -44176,8 +44361,36 @@ tr:nth-child(even) td { background: #fafafa; }
             } catch (e) {}
         }
 
+        function drNormalizeStoreKey(store) {
+            const s = String(store || '').trim().replace(/\s+/g, '');
+            if (!s) return '';
+            if (/洪潮|大宁久光|久光店/.test(s)) return '洪潮大宁久光店';
+            if (/马己仙|音乐广场|大宁店/.test(s)) return '马己仙上海音乐广场店';
+            return s;
+        }
+
+        function drCalcPrivateRoomMonthTotalLocal(date, store) {
+            const rawDate = String(date || '').trim();
+            const rawStore = String(store || '').trim();
+            if (!rawDate || !rawStore) return null;
+            const ym = rawDate.slice(0, 7);
+            if (!/^\d{4}-\d{2}$/.test(ym)) return null;
+            const storeKey = drNormalizeStoreKey(rawStore);
+            const currentUses = Math.max(0, Math.floor(drGetNum('dr-private-room-uses') || 0));
+            const list = Array.isArray(__DR_LAST_LIST) ? __DR_LAST_LIST : [];
+            let total = 0;
+            list.forEach((r) => {
+                const rowDate = String(r?.date || '').trim();
+                if (!rowDate.startsWith(ym) || rowDate === rawDate) return;
+                const rowStoreKey = drNormalizeStoreKey(String(r?.store || '').trim());
+                if (!rowStoreKey || rowStoreKey !== storeKey) return;
+                total += Math.max(0, Math.floor(Number(r?.data?.private_room_uses) || 0));
+            });
+            return total + currentUses;
+        }
+
         async function syncDailyReportPrivateRoom() {
-            // 每次修改今日包房次数时，异步拉取本月累计（从服务器）
+            // 先用当前已加载的日报即时汇总，再用服务器累计补齐历史已提交数据。
             const dateEl = document.getElementById('dr-date');
             const storeEl = document.getElementById('dr-store');
             const date = dateEl?.value?.trim();
@@ -44185,6 +44398,8 @@ tr:nth-child(even) td { background: #fafafa; }
             if (!date || !store) return;
             const monthTotalEl = document.getElementById('dr-private-room-month-total');
             if (!monthTotalEl) return;
+            const localTotal = drCalcPrivateRoomMonthTotalLocal(date, store);
+            monthTotalEl.textContent = `${localTotal == null ? 0 : localTotal} 次`;
             try {
                 const token = localStorage.getItem('hrms_token') || '';
                 const ym = date.slice(0, 7);
@@ -44193,7 +44408,9 @@ tr:nth-child(even) td { background: #fafafa; }
                 });
                 if (r.ok) {
                     const d = await r.json();
-                    monthTotalEl.textContent = (d.total !== null && d.total !== undefined) ? `${d.total} 次` : '—';
+                    const serverTotal = Math.max(0, Math.floor(Number(d?.total) || 0));
+                    const finalTotal = localTotal == null ? serverTotal : Math.max(localTotal, serverTotal);
+                    monthTotalEl.textContent = `${finalTotal} 次`;
                 }
             } catch (e) {}
         }
@@ -44765,7 +44982,7 @@ tr:nth-child(even) td { background: #fafafa; }
                 const monthTotalEl = document.getElementById('dr-private-room-month-total');
                 if (monthTotalEl) {
                     const mt = data?.private_room_month_total;
-                    monthTotalEl.textContent = (mt !== null && mt !== undefined) ? `${mt} 次` : '—';
+                    monthTotalEl.textContent = (mt !== null && mt !== undefined) ? `${mt} 次` : '0 次';
                 }
                 drSetValue('dr-front-support', data?.staff?.frontSupport);
                 drSetValue('dr-kitchen-support', data?.staff?.kitchenSupport);
@@ -44828,6 +45045,7 @@ tr:nth-child(even) td { background: #fafafa; }
             drRenderStaff('schedule_front');
             drRenderStaff('schedule_kitchen');
             renderDailyReportPhotos();
+            try { syncDailyReportPrivateRoom(); } catch (e) {}
             syncDailyReportComputed();
             try { applyDailyReportEditorPermissions(); } catch (e) {}
         }

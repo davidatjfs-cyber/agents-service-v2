@@ -7625,20 +7625,25 @@ app.get('/api/daily-reports/private-room-month-total', authRequired, async (req,
     return res.json({ total: 0 });
   }
   try {
-    // 优先精确匹配门店名（避免 ILIKE 模糊匹配到多条或特殊字符导致恒为 0）
+    const labels = [...new Set(expandAgentStoreLabels(store).map((s) => String(s || '').trim()).filter(Boolean))];
+    const patterns = labels.map((s) => `%${s.replace(/%/g, '')}%`);
+
+    // 先按规范店名/别名做精确匹配，再退化到 ILIKE ANY，兼容洪潮门店双轨写法。
     let r = await pool.query(
       `SELECT COALESCE(SUM(private_room_uses), 0)::int AS total
        FROM daily_reports
-       WHERE TRIM(store) = TRIM($1) AND TO_CHAR(date::date,'YYYY-MM') = $2`,
-      [store, month]
+       WHERE TO_CHAR(date::date,'YYYY-MM') = $1
+         AND TRIM(store) = ANY($2::text[])`,
+      [month, labels]
     );
     let total = parseInt(r.rows?.[0]?.total || 0, 10);
     if (!total) {
       r = await pool.query(
         `SELECT COALESCE(SUM(private_room_uses), 0)::int AS total
          FROM daily_reports
-         WHERE POSITION(TRIM($1) IN TRIM(store)) > 0 AND TO_CHAR(date::date,'YYYY-MM') = $2`,
-        [store, month]
+         WHERE TO_CHAR(date::date,'YYYY-MM') = $1
+           AND TRIM(store) ILIKE ANY($2::text[])`,
+        [month, patterns]
       );
       total = parseInt(r.rows?.[0]?.total || 0, 10);
     }
