@@ -10269,6 +10269,481 @@
             }
         }
 
+        /* ── 分析报表：移动端排版增强（参考待审批模块） ── */
+        #reports-page {
+            --rep-iris: #6D7CFF;
+            --rep-iris-dim: #4754D6;
+            --rep-mint: #5EEAD4;
+            --rep-coral: #FF7A90;
+            --rep-amber: #FFC46B;
+            --rep-stroke-strong: rgba(255, 255, 255, 0.14);
+            --rep-glass: rgba(20, 26, 48, 0.58);
+            position: relative;
+            overflow-x: hidden;
+            background:
+                radial-gradient(52vw 52vw at 8% -8%, rgba(109, 124, 255, 0.24), transparent 60%),
+                radial-gradient(42vw 42vw at 100% 2%, rgba(255, 122, 144, 0.16), transparent 58%),
+                radial-gradient(62vw 48vw at 50% 102%, rgba(94, 234, 212, 0.12), transparent 60%),
+                linear-gradient(180deg, #0b0f1e 0%, #0a0f1c 42%, #09111d 100%);
+        }
+
+        #reports-page::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0.05;
+            mix-blend-mode: overlay;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.86' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+            background-repeat: repeat;
+            background-size: 240px 240px;
+            z-index: 0;
+        }
+
+        #reports-page .dr-shell {
+            position: relative;
+            z-index: 1;
+            max-width: 820px;
+            padding: 16px 14px 110px;
+        }
+
+        #reports-page .rep-page-head {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: start;
+            gap: 14px;
+            margin-bottom: 14px;
+            padding: 0;
+            border: none;
+        }
+
+        #reports-page .rep-page-head__main {
+            min-width: 0;
+        }
+
+        #reports-page .rep-page-head__eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            letter-spacing: 0.12em;
+            color: rgba(154, 163, 199, 0.82);
+            margin-bottom: 8px;
+        }
+
+        #reports-page .rep-page-head__eyebrow::before {
+            content: "";
+            width: 7px;
+            height: 7px;
+            border-radius: 999px;
+            background: var(--rep-iris);
+            box-shadow: 0 0 12px rgba(109, 124, 255, 0.88);
+            flex-shrink: 0;
+        }
+
+        #reports-page .rep-page-head h2 {
+            margin: 0;
+            letter-spacing: -0.02em;
+            color: #fff;
+        }
+
+        #reports-page .rep-page-head__desc {
+            margin: 8px 0 0;
+            font-size: 13px;
+            line-height: 1.55;
+            color: rgba(186, 198, 215, 0.78);
+            max-width: 54ch;
+        }
+
+        #reports-page .rep-page-head__actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        #reports-page .rep-page-head__actions .btn {
+            min-height: 42px;
+            padding: 0 14px;
+            border-radius: 12px;
+        }
+
+        #reports-page .rep-overview-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        #reports-page .rep-overview-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 32px;
+            padding: 0 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: rgba(232, 237, 245, 0.9);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+
+        #reports-page .rep-overview-chip strong {
+            color: #fff;
+            font-weight: 800;
+        }
+
+        #reports-page .rep-overview-chip--active {
+            background: rgba(109, 124, 255, 0.16);
+            border-color: rgba(109, 124, 255, 0.32);
+            color: #dbe3ff;
+        }
+
+        #reports-page .rep-controls-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        #reports-page .rep-filters {
+            border-radius: 18px;
+            padding: 16px 16px 14px;
+            margin-bottom: 0;
+            background: linear-gradient(165deg, rgba(20, 26, 48, 0.68), rgba(10, 15, 28, 0.82));
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.06),
+                0 16px 40px -28px rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(18px) saturate(1.28);
+            -webkit-backdrop-filter: blur(18px) saturate(1.28);
+        }
+
+        #reports-page .rep-filters::before {
+            border-radius: 18px;
+            background: linear-gradient(125deg, rgba(109, 124, 255, 0.12), rgba(255, 122, 144, 0.06) 38%, transparent 70%);
+        }
+
+        #reports-page .rep-filters__head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        #reports-page .rep-filters__head-main {
+            min-width: 0;
+        }
+
+        #reports-page .rep-filters__eyebrow {
+            color: rgba(154, 163, 199, 0.82);
+            letter-spacing: 0.16em;
+        }
+
+        #reports-page .rep-filters__title {
+            margin-top: 3px;
+            font-size: 16px;
+            color: #fff;
+            letter-spacing: -0.01em;
+        }
+
+        #reports-page .rep-filters__hint {
+            margin-top: 6px;
+            color: rgba(186, 198, 215, 0.72);
+            max-width: 54ch;
+        }
+
+        #reports-page .rep-filters__toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            min-height: 36px;
+            padding: 0 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: rgba(232, 237, 245, 0.86);
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        #reports-page .rep-filters__toggle:active {
+            transform: scale(0.98);
+        }
+
+        #reports-page .rep-filters[data-collapsed="true"] .rep-filters__grid {
+            display: none;
+        }
+
+        #reports-page .rep-filters__grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        #reports-page .rep-filters__divider {
+            margin: 0;
+        }
+
+        #reports-page .rep-field label {
+            margin-bottom: 7px;
+            color: rgba(154, 163, 199, 0.84) !important;
+        }
+
+        #reports-page .dr-date-input,
+        #reports-page .dr-store-select {
+            min-height: 46px;
+            padding: 0 14px !important;
+            border-radius: 12px !important;
+            background: rgba(255, 255, 255, 0.05) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            font-family: var(--rep-sans) !important;
+        }
+
+        #reports-page .dr-date-input::placeholder {
+            color: rgba(154, 163, 199, 0.68);
+        }
+
+        #reports-page .rep-tabs-wrap {
+            position: sticky;
+            top: calc(env(safe-area-inset-top, 0px) + 8px);
+            z-index: 5;
+            margin: 0 -2px;
+        }
+
+        #reports-page .rep-tabs {
+            gap: 8px;
+            margin-bottom: 0;
+            padding: 6px;
+            border-radius: 16px;
+            background: rgba(11, 15, 30, 0.84);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 14px 34px -28px rgba(0, 0, 0, 0.72);
+            overflow-x: auto;
+            overflow-y: hidden;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        #reports-page .rep-tabs::-webkit-scrollbar {
+            display: none;
+        }
+
+        #reports-page .rep-tab {
+            flex: 0 0 auto;
+            min-width: 74px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            color: rgba(186, 198, 215, 0.82);
+            white-space: nowrap;
+        }
+
+        #reports-page .rep-tab--active {
+            color: #fff !important;
+            background: linear-gradient(135deg, rgba(109, 124, 255, 0.98), rgba(88, 99, 224, 0.98)) !important;
+            box-shadow: 0 10px 26px -12px rgba(109, 124, 255, 0.62);
+        }
+
+        #reports-page .rep-subtabs {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 12px;
+            padding: 4px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        #reports-page .rep-subtab {
+            min-height: 38px;
+            padding: 0 14px;
+            border: none;
+            border-radius: 10px;
+            background: transparent;
+            color: rgba(186, 198, 215, 0.82);
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        #reports-page .rep-subtab--active {
+            color: #fff;
+            background: rgba(109, 124, 255, 0.22);
+            box-shadow: inset 0 0 0 1px rgba(109, 124, 255, 0.32);
+        }
+
+        #reports-page .rep-hero,
+        #reports-page .rep-payroll-audit-bar,
+        #reports-page .rep-pay-total,
+        #reports-page details.rep-pay-card,
+        #reports-page details.rep-row-details {
+            background: linear-gradient(165deg, rgba(20, 26, 48, 0.72), rgba(10, 15, 28, 0.88));
+            border-color: rgba(255, 255, 255, 0.08);
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.06),
+                0 16px 40px -30px rgba(0, 0, 0, 0.74);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+        }
+
+        #reports-page .rep-grid {
+            gap: 10px;
+        }
+
+        #reports-page .rep-metric {
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        #reports-page .rep-table {
+            margin-top: 10px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.03);
+            padding: 2px;
+        }
+
+        #reports-page .rep-responsive-table {
+            width: 100%;
+        }
+
+        #reports-page [id^="rep-"][id$="-box"] {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        @media (max-width: 740px) {
+            #reports-page .rep-page-head {
+                grid-template-columns: 1fr;
+            }
+
+            #reports-page .rep-page-head__actions {
+                justify-content: flex-start;
+            }
+
+            #reports-page .rep-filters__grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 640px) {
+            #reports-page .dr-shell {
+                padding: 12px 12px 108px;
+            }
+
+            #reports-page .rep-page-head h2 {
+                font-size: 1.22rem;
+            }
+
+            #reports-page .rep-page-head__desc {
+                font-size: 12px;
+            }
+
+            #reports-page .rep-filters {
+                padding: 14px 14px 12px;
+            }
+
+            #reports-page .rep-filters__head {
+                flex-direction: column;
+            }
+
+            #reports-page .rep-filters__toggle {
+                width: 100%;
+            }
+
+            #reports-page .rep-overview-bar {
+                gap: 6px;
+            }
+
+            #reports-page .rep-overview-chip {
+                min-height: 30px;
+                padding: 0 10px;
+                font-size: 10px;
+            }
+
+            #reports-page .rep-tabs-wrap {
+                top: calc(env(safe-area-inset-top, 0px) + 6px);
+            }
+
+            #reports-page .rep-tabs {
+                gap: 6px;
+                padding: 5px;
+            }
+
+            #reports-page .rep-tab {
+                min-width: 68px;
+                padding: 11px 12px;
+                font-size: 12px;
+            }
+
+            #reports-page .rep-subtabs {
+                width: 100%;
+            }
+
+            #reports-page .rep-subtab {
+                flex: 1 1 0;
+                padding: 0 10px;
+            }
+
+            #reports-page .rep-responsive-table thead {
+                display: none;
+            }
+
+            #reports-page .rep-responsive-table,
+            #reports-page .rep-responsive-table tbody,
+            #reports-page .rep-responsive-table tr,
+            #reports-page .rep-responsive-table td {
+                display: block;
+                width: 100%;
+            }
+
+            #reports-page .rep-responsive-table tbody {
+                padding: 6px;
+            }
+
+            #reports-page .rep-responsive-table tr {
+                margin-bottom: 10px;
+                padding: 10px 12px;
+                border-radius: 14px;
+                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+            }
+
+            #reports-page .rep-responsive-table td {
+                padding: 0;
+                border: none;
+            }
+
+            #reports-page .rep-responsive-table td + td {
+                margin-top: 8px;
+            }
+
+            #reports-page .rep-responsive-table td[data-label] {
+                display: grid;
+                grid-template-columns: minmax(70px, 92px) minmax(0, 1fr);
+                gap: 10px;
+                align-items: start;
+                font-size: 12px;
+                line-height: 1.45;
+            }
+
+            #reports-page .rep-responsive-table td[data-label]::before {
+                content: attr(data-label);
+                color: rgba(154, 163, 199, 0.82);
+                font-size: 10px;
+                font-weight: 800;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+            }
+        }
+
         /* ── 我的档案：Glass Aurora 风格覆盖 ── */
         #profile-page {
             --iris: #6D7CFF;
@@ -13471,9 +13946,10 @@
             <div id="reports-page" class="hidden">
                 <div class="dr-shell">
                     <header class="rep-page-head">
-                        <div>
+                        <div class="rep-page-head__main">
                             <span class="rep-page-head__eyebrow">INSIGHTS</span>
                             <h2>分析报表</h2>
+                            <p class="rep-page-head__desc">按门店、品牌、周期与报表类型快速切换。布局已按手机连续浏览优化，后续新增报表会继续沿用这一套卡片化与响应式表格骨架。</p>
                         </div>
                         <div class="rep-page-head__actions">
                             <button class="btn btn-secondary" type="button" onclick="loadReportsData()" title="刷新">刷新</button>
@@ -13482,11 +13958,17 @@
                         </div>
                     </header>
 
-                    <section class="rep-filters" aria-label="报表检索条件">
+                    <div id="rep-overview-bar" class="rep-overview-bar" aria-live="polite"></div>
+
+                    <div class="rep-controls-stack">
+                    <section id="rep-filters-card" class="rep-filters" aria-label="报表检索条件">
                         <div class="rep-filters__head">
-                            <div class="rep-filters__eyebrow">FILTERS</div>
-                            <div class="rep-filters__title">条件检索</div>
-                            <p class="rep-filters__hint">门店、品牌与日期区间用于业务 / 考勤与智能预测；「薪资月份」用于薪资、离职与欠休报表口径。</p>
+                            <div class="rep-filters__head-main">
+                                <div class="rep-filters__eyebrow">FILTERS</div>
+                                <div class="rep-filters__title">条件检索</div>
+                                <p class="rep-filters__hint">门店、品牌与日期区间用于业务 / 考勤与智能预测；「薪资月份」用于薪资、离职与欠休报表口径。手机上可先看上方概览，再按需展开筛选。</p>
+                            </div>
+                            <button id="rep-filters-toggle" class="rep-filters__toggle" type="button" onclick="toggleReportsFilters()">收起筛选</button>
                         </div>
                         <div class="rep-filters__grid">
                             <div class="rep-filters__full rep-field">
@@ -13518,7 +14000,7 @@
                             </div>
                         </div>
                     </section>
-
+                    <div class="rep-tabs-wrap">
                     <nav class="rep-tabs rep-tabs--many" role="tablist" aria-label="报表类型">
                         <button id="rep-tab-business" class="rep-tab rep-tab--active" type="button" role="tab" aria-selected="true" onclick="showReportsTab('business'); loadReportsData();">业务</button>
                         <button id="rep-tab-attendance" class="rep-tab" type="button" role="tab" aria-selected="false" onclick="showReportsTab('attendance'); loadReportsData();">考勤</button>
@@ -13529,11 +14011,13 @@
                         <button id="rep-tab-turnover" class="rep-tab" type="button" role="tab" aria-selected="false" onclick="showReportsTab('turnover'); loadReportsData();">离职</button>
                         <button id="rep-tab-leave-owed" class="rep-tab" type="button" role="tab" aria-selected="false" onclick="showReportsTab('leave-owed'); loadReportsData();">欠休</button>
                     </nav>
+                    </div>
+                    </div>
 
                     <div id="rep-business" style="margin-bottom:18px;">
-                        <div class="rep-seg" role="tablist" aria-label="业务分析视图">
-                            <button id="rep-biz-view-table" class="rep-seg-btn rep-seg-btn--active" type="button" onclick="switchBizView('table')">列表视图</button>
-                            <button id="rep-biz-view-dashboard" class="rep-seg-btn" type="button" onclick="switchBizView('dashboard')">仪表盘</button>
+                        <div class="rep-subtabs" role="tablist" aria-label="业务分析视图">
+                            <button id="rep-biz-view-table" class="rep-subtab rep-subtab--active" type="button" onclick="switchBizView('table')">列表视图</button>
+                            <button id="rep-biz-view-dashboard" class="rep-subtab" type="button" onclick="switchBizView('dashboard')">仪表盘</button>
                         </div>
                         <div id="rep-business-box" style="color:rgba(200,215,230,0.6);">加载中...</div>
                         <div id="rep-dashboard-box" class="hidden"></div>
@@ -44440,6 +44924,369 @@ tr:nth-child(even) td { background: #fafafa; }
             __REP_STORE_POPULATED = true;
         }
 
+        var __REP_FILTERS_COLLAPSED = false;
+        var __REP_FILTERS_AUTO_COLLAPSED = false;
+
+        function repTabTitle(tab) {
+            const key = String(tab || '').trim();
+            return ({
+                business: '业务报表',
+                attendance: '考勤报表',
+                'daily-attendance-register': '出勤表',
+                payroll: '薪资报表',
+                'inventory-forecast': '预测报表',
+                promotions: '晋升报表',
+                turnover: '离职分析',
+                'leave-owed': '欠休报表'
+            })[key] || '分析报表';
+        }
+
+        function repCurrentPeriodText(tab, start, end, month) {
+            const key = String(tab || '').trim();
+            if (key === 'payroll' || key === 'turnover' || key === 'leave-owed') {
+                return month ? `${month} 月份` : '待选择月份';
+            }
+            return start && end ? `${start} 至 ${end}` : '待选择时间范围';
+        }
+
+        function renderReportsOverview(meta) {
+            const bar = document.getElementById('rep-overview-bar');
+            if (!bar) return;
+            const info = meta && typeof meta === 'object' ? meta : {};
+            const tab = String(info.tab || __REP_TAB || 'business').trim() || 'business';
+            const store = String(info.store || document.getElementById('rep-store')?.value || '').trim();
+            const brand = String(info.brand || document.getElementById('rep-brand')?.value || '').trim();
+            const start = String(info.start || document.getElementById('rep-start')?.value || '').trim();
+            const end = String(info.end || document.getElementById('rep-end')?.value || '').trim();
+            const month = String(info.month || document.getElementById('rep-month')?.value || '').trim();
+            const chips = [
+                `<span class="rep-overview-chip rep-overview-chip--active">当前 <strong>${escapeHtml(repTabTitle(tab))}</strong></span>`,
+                `<span class="rep-overview-chip">门店 <strong>${escapeHtml(store || '全部门店')}</strong></span>`,
+                `<span class="rep-overview-chip">品牌 <strong>${escapeHtml(brand || '全部品牌')}</strong></span>`,
+                `<span class="rep-overview-chip">周期 <strong>${escapeHtml(repCurrentPeriodText(tab, start, end, month))}</strong></span>`
+            ];
+            if (tab === 'business') {
+                chips.push(`<span class="rep-overview-chip">视图 <strong>${escapeHtml(__BIZ_VIEW === 'dashboard' ? '仪表盘' : '列表')}</strong></span>`);
+            }
+            if (__REP_FILTERS_COLLAPSED) {
+                chips.push('<span class="rep-overview-chip">筛选 <strong>已折叠</strong></span>');
+            }
+            bar.innerHTML = chips.join('');
+        }
+
+        function toggleReportsFilters(forceExpanded) {
+            const card = document.getElementById('rep-filters-card');
+            const btn = document.getElementById('rep-filters-toggle');
+            if (!card || !btn) return;
+            if (typeof forceExpanded === 'boolean') {
+                __REP_FILTERS_COLLAPSED = !forceExpanded;
+            } else {
+                __REP_FILTERS_COLLAPSED = !__REP_FILTERS_COLLAPSED;
+            }
+            card.setAttribute('data-collapsed', __REP_FILTERS_COLLAPSED ? 'true' : 'false');
+            btn.textContent = __REP_FILTERS_COLLAPSED ? '展开筛选' : '收起筛选';
+            btn.setAttribute('aria-expanded', __REP_FILTERS_COLLAPSED ? 'false' : 'true');
+            renderReportsOverview();
+        }
+
+        function autoCollapseReportsFiltersIfNeeded() {
+            if (__REP_FILTERS_AUTO_COLLAPSED) return;
+            try {
+                if (window.innerWidth <= 640) {
+                    toggleReportsFilters(false);
+                    __REP_FILTERS_AUTO_COLLAPSED = true;
+                }
+            } catch (e) {}
+        }
+
+        function enhanceReportsResponsiveTables(root) {
+            const scope = root && root.querySelectorAll ? root : document.getElementById('reports-page');
+            if (!scope) return;
+            const tables = scope.querySelectorAll('table');
+            tables.forEach((table) => {
+                if (!(table instanceof HTMLElement)) return;
+                table.classList.add('rep-responsive-table');
+                const headerCells = Array.from(table.querySelectorAll('thead th'));
+                if (!headerCells.length) return;
+                const labels = headerCells.map((th) => String(th.textContent || '').trim());
+                const rows = table.querySelectorAll('tbody tr');
+                rows.forEach((tr) => {
+                    const cells = tr.querySelectorAll('td');
+                    cells.forEach((td, index) => {
+                        if (!(td instanceof HTMLElement)) return;
+                        const label = labels[index] || '';
+                        if (label) td.setAttribute('data-label', label);
+                    });
+                });
+            });
+        }
+
+        function finalizeReportsBox(box) {
+            if (!box) return;
+            enhanceReportsResponsiveTables(box);
+            autoCollapseReportsFiltersIfNeeded();
+            renderReportsOverview();
+        }
+
+        function repAttendanceFmtDay(dateStr) {
+            const raw = String(dateStr || '').trim();
+            return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw.slice(5) : (raw || '-');
+        }
+
+        function repAttendanceFmtTime(value) {
+            const dt = new Date(value);
+            if (!Number.isFinite(dt.getTime())) return '--:--';
+            return String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0');
+        }
+
+        function repAttendanceDateTags(dates, tone, emptyText) {
+            const items = Array.isArray(dates) ? dates.filter(Boolean) : [];
+            if (!items.length) {
+                return '<span style="font-size:11px; color:rgba(148,163,184,0.82);">' + escapeHtml(emptyText || '暂无') + '</span>';
+            }
+            const bgMap = {
+                green: 'rgba(34,197,94,0.14)',
+                red: 'rgba(248,113,113,0.16)',
+                amber: 'rgba(251,191,36,0.16)',
+                blue: 'rgba(96,165,250,0.14)'
+            };
+            const borderMap = {
+                green: 'rgba(74,222,128,0.28)',
+                red: 'rgba(248,113,113,0.28)',
+                amber: 'rgba(251,191,36,0.28)',
+                blue: 'rgba(96,165,250,0.24)'
+            };
+            const textMap = {
+                green: '#bbf7d0',
+                red: '#fecaca',
+                amber: '#fde68a',
+                blue: '#bfdbfe'
+            };
+            const bg = bgMap[tone] || bgMap.blue;
+            const bd = borderMap[tone] || borderMap.blue;
+            const color = textMap[tone] || textMap.blue;
+            return items.map(function(date) {
+                return '<span style="display:inline-flex; align-items:center; min-height:28px; padding:0 10px; border-radius:999px; background:' + bg + '; border:1px solid ' + bd + '; color:' + color + '; font-size:11px; font-weight:800;">' + escapeHtml(repAttendanceFmtDay(date)) + '</span>';
+            }).join('');
+        }
+
+        function repBuildAttendanceCheckinDigest(checkinDetails, summaryRows) {
+            const lateMap = new Map();
+            (Array.isArray(summaryRows) ? summaryRows : []).forEach(function(row) {
+                const identity = String(row?.username || row?.name || '').trim().toLowerCase();
+                const store = String(row?.store || '').trim();
+                (Array.isArray(row?.lateDates) ? row.lateDates : []).forEach(function(date) {
+                    lateMap.set(store + '||' + identity + '||' + String(date || '').trim(), true);
+                });
+            });
+
+            const peopleMap = new Map();
+            (Array.isArray(checkinDetails) ? checkinDetails : []).forEach(function(item) {
+                const username = String(item?.username || '').trim();
+                const identity = username.toLowerCase();
+                const name = String(item?.display_name || item?.name || username).trim() || username;
+                const store = String(item?.store || '').trim();
+                const date = String((item?.check_time || '')).slice(0, 10);
+                if (!identity || !date) return;
+                const personKey = store + '||' + identity;
+                if (!peopleMap.has(personKey)) {
+                    peopleMap.set(personKey, {
+                        store: store,
+                        username: username,
+                        name: name,
+                        dayMap: new Map(),
+                        totalPunches: 0,
+                        anomalyPunches: 0
+                    });
+                }
+                const person = peopleMap.get(personKey);
+                if (!person.name) person.name = name;
+                const dayKey = store + '||' + identity + '||' + date;
+                if (!person.dayMap.has(dayKey)) {
+                    person.dayMap.set(dayKey, {
+                        date: date,
+                        firstIn: '',
+                        lastOut: '',
+                        punchCount: 0,
+                        anomalyCount: 0,
+                        isLate: !!lateMap.get(dayKey)
+                    });
+                }
+                const day = person.dayMap.get(dayKey);
+                day.punchCount += 1;
+                person.totalPunches += 1;
+                const status = String(item?.status || '').trim();
+                if (status && !['normal', 'no_gps', 'confirmed'].includes(status)) {
+                    day.anomalyCount += 1;
+                    person.anomalyPunches += 1;
+                }
+                const hhmm = repAttendanceFmtTime(item?.check_time);
+                const type = String(item?.type || '').trim();
+                if (type === 'clock_in') {
+                    if (!day.firstIn || hhmm < day.firstIn) day.firstIn = hhmm;
+                } else if (type === 'clock_out') {
+                    if (!day.lastOut || hhmm > day.lastOut) day.lastOut = hhmm;
+                }
+            });
+
+            return Array.from(peopleMap.values()).map(function(person) {
+                const days = Array.from(person.dayMap.values()).sort(function(a, b) {
+                    return String(b.date || '').localeCompare(String(a.date || ''));
+                });
+                return {
+                    store: person.store,
+                    username: person.username,
+                    name: person.name,
+                    totalPunches: person.totalPunches,
+                    anomalyPunches: person.anomalyPunches,
+                    checkinDays: days.length,
+                    days: days
+                };
+            }).sort(function(a, b) {
+                if (Number(b.checkinDays || 0) !== Number(a.checkinDays || 0)) return Number(b.checkinDays || 0) - Number(a.checkinDays || 0);
+                if (Number(b.anomalyPunches || 0) !== Number(a.anomalyPunches || 0)) return Number(b.anomalyPunches || 0) - Number(a.anomalyPunches || 0);
+                return String(a.name || a.username || '').localeCompare(String(b.name || b.username || ''), 'zh-Hans-CN');
+            });
+        }
+
+        function repRenderAttendanceReport(resp, store, start, end) {
+            const summaryRows = Array.isArray(resp?.summaryRows) ? resp.summaryRows : (Array.isArray(resp?.rows) ? resp.rows : []);
+            const checkinDetails = Array.isArray(resp?.checkinDetails) ? resp.checkinDetails : [];
+            const digestRows = repBuildAttendanceCheckinDigest(checkinDetails, summaryRows);
+            const totals = resp?.totals || summaryRows.reduce(function(acc, row) {
+                acc.people += 1;
+                acc.actualAttendanceDays += Number(row?.actualAttendanceDays || 0);
+                acc.absenceDays += Number(row?.absenceDays || 0);
+                acc.lateDays += Number(row?.lateDays || 0);
+                acc.restDays += Number(row?.restDays || 0);
+                return acc;
+            }, { people: 0, actualAttendanceDays: 0, absenceDays: 0, lateDays: 0, restDays: 0 });
+
+            const titleStore = store || '全部门店';
+            const hasRegisterData = resp?.hasRegisterData !== false;
+            const heroMetric = function(label, value, hint, color) {
+                return '<div class="rep-metric" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.08);"><div class="k">' + escapeHtml(label) + '</div><div class="v" style="color:' + color + ';">' + escapeHtml(String(value)) + '</div><div style="margin-top:4px; font-size:11px; color:rgba(191,219,254,0.72);">' + escapeHtml(hint) + '</div></div>';
+            };
+            const statCell = function(label, value, color) {
+                return '<div style="padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06);"><div style="font-size:11px; color:rgba(148,163,184,0.9);">' + escapeHtml(label) + '</div><div style="margin-top:4px; font-size:20px; font-weight:900; color:' + color + ';">' + escapeHtml(String(value)) + '</div></div>';
+            };
+
+            return `
+                <div class="rep-hero" style="background:linear-gradient(135deg, #14532d, #0f766e 58%, #1d4ed8);">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+                        <div>
+                            <div style="font-weight:900; font-size:16px;">${escapeHtml(titleStore)} 考勤核查总览</div>
+                            <div class="meta" style="margin-top:6px;">统计周期：${escapeHtml(start)} - ${escapeHtml(end)} · 默认改成先看全局，再展开核查日期</div>
+                        </div>
+                    </div>
+                    <div class="rep-grid">
+                        ${heroMetric('员工人数', (totals.people || digestRows.length) + ' 人', '本周期进入汇总的员工', '#f8fafc')}
+                        ${heroMetric('实际出勤', Number(totals.actualAttendanceDays || 0) + ' 天', '按日报核对 + 打卡回退', '#86efac')}
+                        ${heroMetric('缺勤', Number(totals.absenceDays || 0) + ' 天', '无打卡且未命中休息/休假', '#fca5a5')}
+                        ${heroMetric('迟到', Number(totals.lateDays || 0) + ' 天', '以上班首次打卡判断', '#fde68a')}
+                        ${heroMetric('休息', Number(totals.restDays || 0) + ' 天', '营业日报排休 + 已批休假', '#93c5fd')}
+                        ${heroMetric('打卡轨迹', checkinDetails.length + ' 条', '默认不再直接铺满原始流水', '#c4b5fd')}
+                    </div>
+                    ${!hasRegisterData ? '<div style="margin-top:12px; padding:10px 12px; border-radius:12px; background:rgba(251,191,36,0.14); border:1px solid rgba(251,191,36,0.22); color:#fde68a; font-size:12px;">当前区间缺少营业日报核对台账，缺勤/休息统计已尽量按打卡回退，但仍建议结合日报补录后再复核。</div>' : ''}
+                </div>
+
+                ${digestRows.length ? `
+                <div style="margin-top:14px; font-size:12px; color:rgba(200,215,230,0.78); font-weight:800;">打卡全局视图</div>
+                <div style="display:grid; grid-template-columns:1fr; gap:12px; margin-top:10px;">
+                    ${digestRows.map(function(person) {
+                        return `
+                        <details style="border-radius:16px; background:rgba(15,23,42,0.48); border:1px solid rgba(255,255,255,0.08); overflow:hidden;">
+                            <summary style="list-style:none; cursor:pointer; padding:14px 16px; display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
+                                <div>
+                                    <div style="font-size:14px; font-weight:900; color:#f8fafc;">${escapeHtml(person.name || person.username || '-')}</div>
+                                    <div style="margin-top:4px; font-size:11px; color:rgba(148,163,184,0.9);">${escapeHtml(person.store || '-')} · ${escapeHtml(person.username || '-')}</div>
+                                </div>
+                                <div style="display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px;">
+                                    <span class="rep-overview-chip">打卡天数 <strong>${person.checkinDays}</strong></span>
+                                    <span class="rep-overview-chip">打卡次数 <strong>${person.totalPunches}</strong></span>
+                                    <span class="rep-overview-chip ${person.anomalyPunches ? 'rep-overview-chip--active' : ''}">异常 <strong>${person.anomalyPunches}</strong></span>
+                                </div>
+                            </summary>
+                            <div style="padding:0 16px 16px;">
+                                <div style="display:grid; grid-template-columns:1fr; gap:8px;">
+                                    ${person.days.map(function(day) {
+                                        return `
+                                        <div style="display:grid; grid-template-columns:minmax(72px,84px) minmax(0,1fr); gap:10px; align-items:center; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06);">
+                                            <div style="font-size:12px; font-weight:800; color:#e2e8f0;">${escapeHtml(repAttendanceFmtDay(day.date))}</div>
+                                            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                                                <span style="padding:4px 8px; border-radius:999px; background:rgba(34,197,94,0.12); color:#bbf7d0; font-size:11px; font-weight:700;">上班 ${escapeHtml(day.firstIn || '--:--')}</span>
+                                                <span style="padding:4px 8px; border-radius:999px; background:rgba(59,130,246,0.12); color:#bfdbfe; font-size:11px; font-weight:700;">下班 ${escapeHtml(day.lastOut || '--:--')}</span>
+                                                <span style="padding:4px 8px; border-radius:999px; background:rgba(255,255,255,0.08); color:#e2e8f0; font-size:11px; font-weight:700;">${escapeHtml(String(day.punchCount))} 次</span>
+                                                ${day.isLate ? '<span style="padding:4px 8px; border-radius:999px; background:rgba(251,191,36,0.16); color:#fde68a; font-size:11px; font-weight:800;">迟到</span>' : ''}
+                                                ${day.anomalyCount ? '<span style="padding:4px 8px; border-radius:999px; background:rgba(248,113,113,0.16); color:#fecaca; font-size:11px; font-weight:800;">异常 ' + escapeHtml(String(day.anomalyCount)) + '</span>' : ''}
+                                            </div>
+                                        </div>`;
+                                    }).join('')}
+                                </div>
+                            </div>
+                        </details>`;
+                    }).join('')}
+                </div>` : ''}
+
+                ${summaryRows.length ? `
+                <div style="margin-top:16px; font-size:12px; color:rgba(200,215,230,0.78); font-weight:800;">打卡出勤汇总</div>
+                <div style="display:grid; grid-template-columns:1fr; gap:12px; margin-top:10px;">
+                    ${summaryRows.map(function(row) {
+                        return `
+                        <details style="border-radius:18px; background:linear-gradient(180deg, rgba(15,23,42,0.72), rgba(2,6,23,0.88)); border:1px solid rgba(255,255,255,0.08); overflow:hidden;">
+                            <summary style="list-style:none; cursor:pointer; padding:16px; display:flex; justify-content:space-between; align-items:flex-start; gap:14px;">
+                                <div>
+                                    <div style="font-size:14px; font-weight:900; color:#f8fafc;">${escapeHtml(row.name || row.username || '-')}</div>
+                                    <div style="margin-top:4px; font-size:11px; color:rgba(148,163,184,0.88);">${escapeHtml(row.store || '-')} · ${escapeHtml(row.username || '-')}</div>
+                                </div>
+                                <div style="font-size:11px; color:rgba(148,163,184,0.84); white-space:nowrap;">点击展开日期核查</div>
+                            </summary>
+                            <div style="padding:0 16px 16px;">
+                                <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px;">
+                                    ${statCell('实际出勤', row.actualAttendanceDays || 0, '#86efac')}
+                                    ${statCell('缺勤', row.absenceDays || 0, '#fca5a5')}
+                                    ${statCell('迟到', row.lateDays || 0, '#fde68a')}
+                                    ${statCell('休息', row.restDays || 0, '#93c5fd')}
+                                </div>
+                                <div style="margin-top:14px; display:grid; grid-template-columns:1fr; gap:12px;">
+                                    <div>
+                                        <div style="font-size:11px; color:rgba(148,163,184,0.88); margin-bottom:8px;">实际出勤日期</div>
+                                        <div style="display:flex; flex-wrap:wrap; gap:8px;">${repAttendanceDateTags(row.actualDates, 'green', '无')}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size:11px; color:rgba(148,163,184,0.88); margin-bottom:8px;">缺勤日期</div>
+                                        <div style="display:flex; flex-wrap:wrap; gap:8px;">${repAttendanceDateTags(row.absentDates, 'red', '无缺勤')}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size:11px; color:rgba(148,163,184,0.88); margin-bottom:8px;">迟到日期</div>
+                                        <div style="display:flex; flex-wrap:wrap; gap:8px;">${repAttendanceDateTags(row.lateDates, 'amber', '无迟到')}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size:11px; color:rgba(148,163,184,0.88); margin-bottom:8px;">休息 / 可抵扣日期</div>
+                                        <div style="display:flex; flex-wrap:wrap; gap:8px;">${repAttendanceDateTags(row.restOffsetDates || row.restDates, 'blue', '无休息/休假')}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </details>`;
+                    }).join('')}
+                </div>` : ''}
+
+                ${!summaryRows.length && !digestRows.length ? '<div style="color:rgba(200,215,230,0.52); padding:24px; text-align:center;">暂无考勤数据</div>' : ''}
+            `;
+        }
+
+        var __REP_MUTATION_OBSERVER = null;
+        function initReportsEnhancementsObserver() {
+            if (__REP_MUTATION_OBSERVER) return;
+            const root = document.getElementById('reports-page');
+            if (!root || typeof MutationObserver === 'undefined') return;
+            __REP_MUTATION_OBSERVER = new MutationObserver(() => {
+                enhanceReportsResponsiveTables(root);
+                autoCollapseReportsFiltersIfNeeded();
+            });
+            __REP_MUTATION_OBSERVER.observe(root, { childList: true, subtree: true });
+        }
+
         function showReportsTab(tab) {
             const t = String(tab || '').trim() || 'business';
             __REP_TAB = t;
@@ -44453,6 +45300,9 @@ tr:nth-child(even) td { background: #fafafa; }
                     btn.setAttribute('aria-selected', x === t ? 'true' : 'false');
                 }
             });
+            initReportsEnhancementsObserver();
+            autoCollapseReportsFiltersIfNeeded();
+            renderReportsOverview();
         }
 
         function maybeOpenSmartAssistantFromRoute() {
@@ -45238,25 +46088,16 @@ tr:nth-child(even) td { background: #fafafa; }
             if (view === 'dashboard') {
                 if (tableBox) tableBox.classList.add('hidden');
                 if (dashBox) dashBox.classList.remove('hidden');
-                if (btnTable) {
-                    btnTable.classList.remove('rep-seg-btn--active');
-                    btnTable.classList.add('rep-seg-btn');
-                }
-                if (btnDash) {
-                    btnDash.classList.add('rep-seg-btn', 'rep-seg-btn--active');
-                }
+                if (btnTable) btnTable.classList.remove('rep-subtab--active');
+                if (btnDash) btnDash.classList.add('rep-subtab--active');
                 renderBizDashboard();
             } else {
                 if (tableBox) tableBox.classList.remove('hidden');
                 if (dashBox) dashBox.classList.add('hidden');
-                if (btnTable) {
-                    btnTable.classList.add('rep-seg-btn', 'rep-seg-btn--active');
-                }
-                if (btnDash) {
-                    btnDash.classList.remove('rep-seg-btn--active');
-                    btnDash.classList.add('rep-seg-btn');
-                }
+                if (btnTable) btnTable.classList.add('rep-subtab--active');
+                if (btnDash) btnDash.classList.remove('rep-subtab--active');
             }
+            renderReportsOverview();
         }
 
         function renderBizDashboard() {
@@ -46047,147 +46888,12 @@ tr:nth-child(even) td { background: #fafafa; }
                 if (box) box.innerHTML = '加载中...';
                 HRMS_API.getAttendanceReport({ store, start, end })
                     .then(resp => {
-                        const rowsRaw = Array.isArray(resp?.rows) ? resp.rows : [];
-                        const groupedMap = new Map();
-                        rowsRaw.forEach((r) => {
-                            const storeKey = String(r?.store || '').trim();
-                            const userKey = String(r?.username || '').trim().toLowerCase();
-                            if (!userKey) return;
-                            const key = `${storeKey}||${userKey}`;
-                            const prev = groupedMap.get(key) || {
-                                store: storeKey,
-                                username: String(r?.username || '').trim(),
-                                name: String(r?.name || r?.username || '').trim(),
-                                days: 0
-                            };
-                            prev.days += Number(r?.days || 0) || 0;
-                            if (!prev.name) prev.name = String(r?.name || r?.username || '').trim();
-                            groupedMap.set(key, prev);
-                        });
-                        const rows = Array.from(groupedMap.values()).sort((a, b) => String(a?.store || '').localeCompare(String(b?.store || ''), 'zh-Hans-CN') || String(a?.name || a?.username || '').localeCompare(String(b?.name || b?.username || ''), 'zh-Hans-CN'));
+                        const summaryRows = Array.isArray(resp?.summaryRows) ? resp.summaryRows : (Array.isArray(resp?.rows) ? resp.rows : []);
                         const checkinDetails = Array.isArray(resp?.checkinDetails) ? resp.checkinDetails : [];
-                        try { window.__REP_LAST_ATT = { store, start, end, rows: rows.slice(), checkinDetails: checkinDetails.slice() }; } catch (e) {}
-                        const uniqueNames = new Set(rows.map(r => String(r?.name || r?.username || '').trim()).filter(Boolean));
-                        const totalDays = rows.reduce((s, r) => s + Number(r?.days || 0), 0);
-                        const monthlyDays = Math.max(1, Math.ceil(((new Date(end + 'T00:00:00') - new Date(start + 'T00:00:00')) / 86400000) + 1));
-                        const totalMissing = rows.reduce((s, r) => s + Math.max(0, monthlyDays - (Number(r?.days || 0) || 0)), 0);
-                        const totalOffset = rows.reduce((s, r) => s + Math.min(Math.max(0, monthlyDays - (Number(r?.days || 0) || 0)), Number(r?.remainingLeave || 0) || 0), 0);
-                        const totalPayable = rows.reduce((s, r) => s + ((Number(r?.days || 0) || 0) + Math.min(Math.max(0, monthlyDays - (Number(r?.days || 0) || 0)), Number(r?.remainingLeave || 0) || 0)), 0);
-                        const titleStore = store || '全部门店';
-                        const statusMap = { normal: '正常', face_fail: '人脸异常', out_of_range: '超出范围', no_store_location: '未设定位', no_gps: '正常', confirmed: '已确认' };
-                        const checkinUniqueNames = new Set(checkinDetails.map(r => String(r?.display_name || r?.username || '').trim()).filter(Boolean));
-                        const html = `
-                            <div class="rep-hero" style="background: linear-gradient(135deg, #059669, #34d399);">
-                                <div style="display:flex; justify-content: space-between; align-items:flex-start; gap: 12px; flex-wrap: wrap;">
-                                    <div>
-                                        <div style="font-weight: 900; font-size: 16px;">${escapeHtml(titleStore)} 考勤汇总</div>
-                                        <div class="meta" style="margin-top: 6px;">统计周期：${escapeHtml(start)} - ${escapeHtml(end)}</div>
-                                    </div>
-                                </div>
-                                <div class="rep-grid">
-                                    <div class="rep-metric">
-                                        <div class="k">员工人数</div>
-                                        <div class="v">${uniqueNames.size || checkinUniqueNames.size} 人</div>
-                                    </div>
-                                    <div class="rep-metric">
-                                        <div class="k">出勤总计</div>
-                                        <div class="v">${totalDays.toFixed(1)} 天</div>
-                                    </div>
-                                    <div class="rep-metric">
-                                        <div class="k">缺勤待抵扣</div>
-                                        <div class="v">${totalMissing.toFixed(1)} 天</div>
-                                    </div>
-                                    <div class="rep-metric">
-                                        <div class="k">累计假期抵扣</div>
-                                        <div class="v">${totalOffset.toFixed(1)} 天</div>
-                                    </div>
-                                    <div class="rep-metric">
-                                        <div class="k">计薪出勤</div>
-                                        <div class="v">${totalPayable.toFixed(1)} 天</div>
-                                    </div>
-                                    <div class="rep-metric">
-                                        <div class="k">打卡记录</div>
-                                        <div class="v">${checkinDetails.length} 条</div>
-                                    </div>
-                                    <div class="rep-metric">
-                                        <div class="k">日报记录</div>
-                                        <div class="v">${rows.length} 条</div>
-                                    </div>
-                                </div>
-                            </div>
-                            ${checkinDetails.length > 0 ? `
-                            <div style="margin-top: 14px; font-size: 12px; color: rgba(200,215,230,0.75); font-weight: 800;">打卡明细</div>
-                            <div class="rep-table" style="overflow-x:auto; max-height:400px; overflow-y:auto;">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>姓名</th>
-                                            <th>门店</th>
-                                            <th>类型</th>
-                                            <th>打卡时间</th>
-                                            <th>距离(m)</th>
-                                            <th>人脸</th>
-                                            <th>状态</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${checkinDetails.slice(0, 500).map(r => {
-                                            const t = new Date(r.check_time);
-                                            const timeStr = t.getFullYear() + '-' + String(t.getMonth()+1).padStart(2,'0') + '-' + String(t.getDate()).padStart(2,'0') + ' ' + String(t.getHours()).padStart(2,'0') + ':' + String(t.getMinutes()).padStart(2,'0');
-                                            const typeLabel = r.type === 'clock_in' ? '<span style="color:rgba(34,197,94,0.9);">上班</span>' : '<span style="color:rgba(239,68,68,0.9);">下班</span>';
-                                            const dist = r.distance_meters != null ? Math.round(r.distance_meters) : '-';
-                                            const face = r.face_match ? '<span style="color:rgba(34,197,94,0.8);">✓</span>' : '<span style="color:rgba(239,68,68,0.8);">✗</span>';
-                                            const st = statusMap[r.status] || r.status;
-                                            const stColor = (r.status === 'normal' || r.status === 'confirmed' || r.status === 'no_gps') ? 'rgba(34,197,94,0.8)' : 'rgba(234,179,8,0.8)';
-                                            return '<tr><td>' + escapeHtml(r.display_name || r.username) + '</td><td>' + escapeHtml(r.store || '-') + '</td><td>' + typeLabel + '</td><td>' + escapeHtml(timeStr) + '</td><td style="text-align:right;">' + dist + '</td><td>' + face + '</td><td><span style="color:' + stColor + ';">' + escapeHtml(st) + '</span></td></tr>';
-                                        }).join('')}
-                                    </tbody>
-                                </table>
-                            </div>` : ''}
-                            ${rows.length > 0 ? `
-                            <div style="margin-top: 14px; font-size: 12px; color: rgba(200,215,230,0.75); font-weight: 800;">打卡出勤汇总</div>
-                            <div class="rep-table" style="overflow-x:auto;">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>门店</th>
-                                            <th>员工</th>
-                                            <th style="text-align:right;">实际出勤</th>
-                                            <th style="text-align:right;">缺勤</th>
-                                            <th style="text-align:right;">累计假期可抵扣</th>
-                                            <th style="text-align:right;">计薪出勤</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${rows.map(r => {
-                                            const days = Number(r?.days || 0) || 0;
-                                            const missing = Math.max(0, monthlyDays - days);
-                                            const offset = Math.min(missing, Number(r?.remainingLeave || 0) || 0);
-                                            const payable = days + offset;
-                                            return `
-                                            <tr>
-                                                <td>${escapeHtml(String(r?.store || ''))}</td>
-                                                <td>${escapeHtml(String(r?.name || r?.username || ''))}</td>
-                                                <td style="text-align:right;">${escapeHtml(String(days))}</td>
-                                                <td style="text-align:right;">${escapeHtml(String(Number(missing.toFixed(1))))}</td>
-                                                <td style="text-align:right; color:${offset > 0 ? '#fbbf24' : 'rgba(200,215,230,0.75)'}; font-weight:800;">${escapeHtml(String(Number(offset.toFixed(1))))}</td>
-                                                <td style="text-align:right; font-weight:800;">${escapeHtml(String(Number(payable.toFixed(1))))}</td>
-                                            </tr>
-                                        `;}).join('')}
-                                        <tr style="border-top: 1px solid rgba(255,255,255,0.06); font-weight: 900;">
-                                            <td>合计</td>
-                                            <td>${uniqueNames.size} 人</td>
-                                            <td style="text-align:right;">${totalDays.toFixed(1)}</td>
-                                            <td style="text-align:right;">${totalMissing.toFixed(1)}</td>
-                                            <td style="text-align:right;">${totalOffset.toFixed(1)}</td>
-                                            <td style="text-align:right;">${totalPayable.toFixed(1)}</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>` : ''}
-                            ${!rows.length && !checkinDetails.length ? '<div style="color:rgba(200,215,230,0.5); padding:20px; text-align:center;">暂无考勤数据</div>' : ''}
-                        `;
+                        try { window.__REP_LAST_ATT = { store, start, end, rows: summaryRows.slice(), checkinDetails: checkinDetails.slice(), totals: resp?.totals || null }; } catch (e) {}
+                        const html = repRenderAttendanceReport(resp, store, start, end);
                         if (box) box.innerHTML = html;
+                        if (box) finalizeReportsBox(box);
                     })
                     .catch(e => {
                         if (box) box.innerHTML = escapeHtml('加载失败：' + String(e?.message || e));

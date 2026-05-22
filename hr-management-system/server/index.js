@@ -9473,6 +9473,163 @@ function buildAttendanceFromCheckinRecords(rows, options = {}) {
   return out;
 }
 
+function normalizeAttendanceRegisterLineDetails(raw) {
+  let lines = raw;
+  if (typeof lines === 'string') {
+    try { lines = JSON.parse(lines); } catch (e) { lines = []; }
+  }
+  return Array.isArray(lines) ? lines : [];
+}
+
+function sortIsoDateList(values) {
+  return Array.from(new Set((Array.isArray(values) ? values : []).map((x) => String(x || '').trim()).filter(Boolean))).sort();
+}
+
+function buildAttendanceSummaryRows(registerRows, checkinDetails) {
+  const summaryMap = new Map();
+  const checkinDayMap = new Map();
+
+  const ensureSummary = (storeRaw, usernameRaw, nameRaw) => {
+    const store = String(storeRaw || '').trim();
+    const username = String(usernameRaw || '').trim();
+    const name = String(nameRaw || username || '').trim();
+    const identity = username ? username.toLowerCase() : name.toLowerCase();
+    if (!identity) return null;
+    const key = `${store}||${identity}`;
+    let row = summaryMap.get(key);
+    if (!row) {
+      row = {
+        store,
+        username,
+        name,
+        actualDates: new Set(),
+        absentDates: new Set(),
+        lateDates: new Set(),
+        restDates: new Set(),
+        restOffsetDates: new Set(),
+        anomalyPunches: 0,
+        punchDays: new Set()
+      };
+      summaryMap.set(key, row);
+    } else {
+      if (!row.username && username) row.username = username;
+      if ((!row.name || row.name === row.username) && name) row.name = name;
+      if (!row.store && store) row.store = store;
+    }
+    return row;
+  };
+
+  for (const regRow of (Array.isArray(registerRows) ? registerRows : [])) {
+    const reportDate = String(regRow?.report_date || '').slice(0, 10);
+    const store = String(regRow?.store || '').trim();
+    if (!reportDate) continue;
+    const lines = normalizeAttendanceRegisterLineDetails(regRow?.line_details);
+    for (const line of lines) {
+      const username = String(line?.username || line?.user || '').trim();
+      const name = String(line?.display_name || line?.name || username).trim();
+      const row = ensureSummary(store, username, name);
+      if (!row) continue;
+      const kind = String(line?.kind || '').trim();
+      if (kind === 'work') {
+        row.actualDates.add(reportDate);
+      } else if (kind === 'absent') {
+        row.absentDates.add(reportDate);
+      } else if (kind === 'rest' || kind === 'leave_only') {
+        row.restDates.add(reportDate);
+        row.restOffsetDates.add(reportDate);
+      }
+    }
+  }
+
+  for (const checkin of (Array.isArray(checkinDetails) ? checkinDetails : [])) {
+    const username = String(checkin?.username || '').trim();
+    const name = String(checkin?.display_name || checkin?.name || username).trim();
+    const store = String(checkin?.store || '').trim();
+    const date = shanghaiDateOnly(checkin?.check_time);
+    const row = ensureSummary(store, username, name);
+    if (!row || !date) continue;
+
+    const dayKey = `${store}||${(username || name).trim().toLowerCase()}||${date}`;
+    let day = checkinDayMap.get(dayKey);
+    if (!day) {
+      day = { store, date, firstIn: null, hasCountable: false, anomalyPunches: 0 };
+      checkinDayMap.set(dayKey, day);
+    }
+
+    const status = String(checkin?.status || '').trim();
+    if (isCountableCheckinStatus(status)) {
+      day.hasCountable = true;
+      row.punchDays.add(date);
+      if (!row.actualDates.has(date) && !row.absentDates.has(date) && !row.restDates.has(date)) {
+        row.actualDates.add(date);
+      }
+      if (String(checkin?.type || '').trim() === 'clock_in') {
+        const dt = new Date(checkin.check_time);
+        if (Number.isFinite(dt.getTime()) && (!day.firstIn || dt.getTime() < day.firstIn.getTime())) {
+          day.firstIn = dt;
+        }
+      }
+    }
+
+    if (status && !['normal', 'no_gps', 'confirmed'].includes(status)) {
+      day.anomalyPunches += 1;
+    }
+  }
+
+  for (const row of summaryMap.values()) {
+    const identity = String(row.username || row.name || '').trim().toLowerCase();
+    if (!identity) continue;
+    for (const [key, day] of checkinDayMap.entries()) {
+      if (!key.startsWith(`${row.store}||${identity}||`)) continue;
+      row.anomalyPunches += Number(day?.anomalyPunches || 0);
+      if (day?.hasCountable && day?.firstIn && row.actualDates.has(day.date)) {
+        const attWin = hrmsAttendanceWindowMinutesForStore(row.store);
+        const firstInMinutes = hrmsClockMinutesInShanghai(day.firstIn);
+        if (Number.isFinite(firstInMinutes) && firstInMinutes > attWin.startMinutes) {
+          row.lateDates.add(day.date);
+        }
+      }
+    }
+  }
+
+  return Array.from(summaryMap.values())
+    .map((row) => {
+      const actualDates = sortIsoDateList(Array.from(row.actualDates));
+      const absentDates = sortIsoDateList(Array.from(row.absentDates));
+      const lateDates = sortIsoDateList(Array.from(row.lateDates));
+      const restDates = sortIsoDateList(Array.from(row.restDates));
+      const restOffsetDates = sortIsoDateList(Array.from(row.restOffsetDates));
+      return {
+        store: row.store,
+        username: row.username,
+        name: row.name || row.username,
+        actualAttendanceDays: actualDates.length,
+        absenceDays: absentDates.length,
+        lateDays: lateDates.length,
+        restDays: restDates.length,
+        anomalyPunches: Number(row.anomalyPunches || 0),
+        checkinDays: row.punchDays.size,
+        actualDates,
+        absentDates,
+        lateDates,
+        restDates,
+        restOffsetDates
+      };
+    })
+    .sort((a, b) => {
+      if (String(a.store || '') !== String(b.store || '')) {
+        return String(a.store || '').localeCompare(String(b.store || ''), 'zh-Hans-CN');
+      }
+      if (Number(b.absenceDays || 0) !== Number(a.absenceDays || 0)) {
+        return Number(b.absenceDays || 0) - Number(a.absenceDays || 0);
+      }
+      if (Number(b.lateDays || 0) !== Number(a.lateDays || 0)) {
+        return Number(b.lateDays || 0) - Number(a.lateDays || 0);
+      }
+      return String(a.name || a.username || '').localeCompare(String(b.name || b.username || ''), 'zh-Hans-CN');
+    });
+}
+
 function pickMyStoreFromState(state, username) {
   const me = stateFindUserRecord(state, username) || {};
   const st = String(me?.store || '').trim();
@@ -10635,9 +10792,45 @@ app.get('/api/reports/attendance', authRequired, async (req, res) => {
       });
     } catch (e) {}
 
-    const rows = buildAttendanceFromCheckinRecords(checkinDetails, { start, end });
+    const fallbackRows = buildAttendanceFromCheckinRecords(checkinDetails, { start, end });
+    let registerRows = [];
+    try {
+      const args = [start, end];
+      let registerSql = `
+        SELECT store, report_date, line_details
+        FROM daily_report_attendance_register
+        WHERE report_date >= $1::date AND report_date <= $2::date`;
+      if (store) {
+        registerSql += ` AND TRIM(store) = TRIM($3::text)`;
+        args.push(store);
+      }
+      registerSql += ` ORDER BY report_date DESC, store ASC`;
+      const rr = await pool.query(registerSql, args);
+      registerRows = Array.isArray(rr.rows) ? rr.rows : [];
+    } catch (e) {}
 
-    return res.json({ start, end, store: store || '', rows, checkinDetails });
+    const summaryRows = buildAttendanceSummaryRows(registerRows, checkinDetails);
+    const totals = summaryRows.reduce((acc, row) => {
+      acc.people += 1;
+      acc.actualAttendanceDays += Number(row.actualAttendanceDays || 0);
+      acc.absenceDays += Number(row.absenceDays || 0);
+      acc.lateDays += Number(row.lateDays || 0);
+      acc.restDays += Number(row.restDays || 0);
+      acc.anomalyPunches += Number(row.anomalyPunches || 0);
+      return acc;
+    }, { people: 0, actualAttendanceDays: 0, absenceDays: 0, lateDays: 0, restDays: 0, anomalyPunches: 0 });
+
+    return res.json({
+      start,
+      end,
+      store: store || '',
+      rows: summaryRows,
+      summaryRows,
+      fallbackRows,
+      checkinDetails,
+      totals,
+      hasRegisterData: registerRows.length > 0
+    });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
