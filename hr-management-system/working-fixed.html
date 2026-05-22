@@ -10830,29 +10830,54 @@
             --text: #EEF1FA;
             --dim: #9AA3C7;
             --faint: #5B6597;
-            --stroke: rgba(255,255,255,0.08);
-            --stroke-hi: rgba(255,255,255,0.16);
-            --glass: rgba(20,26,48,0.55);
-            background: #0B0F1E !important;
-            position: relative; overflow-x: hidden;
+            --stroke: rgba(255,255,255,0.12);
+            --stroke-hi: rgba(255,255,255,0.22);
+            --glass: rgba(255,255,255,0.10);
+            background:
+                radial-gradient(56rem 30rem at 14% 4%, rgba(109,124,255,0.48), transparent 56%),
+                radial-gradient(44rem 24rem at 92% 10%, rgba(255,122,144,0.38), transparent 52%),
+                radial-gradient(58rem 28rem at 50% 100%, rgba(94,234,212,0.28), transparent 54%),
+                linear-gradient(180deg, #0B0F1E 0%, #121933 56%, #0C1222 100%) !important;
+            position: relative;
+            overflow-x: hidden;
             color: var(--text) !important;
         }
         #profile-page .ap-aurora { position:fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden; }
-        #profile-page .ap-aurora__blob { position:absolute; border-radius:50%; filter:blur(80px); }
-        #profile-page .ap-aurora__blob--1 { width:55vw; height:55vw; top:-15%; left:-10%; background:rgba(109,124,255,0.32); }
-        #profile-page .ap-aurora__blob--2 { width:45vw; height:45vw; top:-8%; right:-12%; background:rgba(255,122,144,0.22); }
-        #profile-page .ap-aurora__blob--3 { width:60vw; height:50vw; bottom:-15%; left:25%; background:rgba(94,234,212,0.14); }
+        #profile-page .ap-aurora__blob { position:absolute; border-radius:50%; filter:blur(120px); }
+        #profile-page .ap-aurora__blob--1 { width:70vw; height:64vw; top:-18%; left:-14%; background:rgba(109,124,255,0.46); }
+        #profile-page .ap-aurora__blob--2 { width:54vw; height:52vw; top:-10%; right:-14%; background:rgba(255,122,144,0.34); }
+        #profile-page .ap-aurora__blob--3 { width:74vw; height:58vw; bottom:-18%; left:22%; background:rgba(94,234,212,0.24); }
         #profile-page .ap-grain { position:fixed; inset:0; z-index:0; pointer-events:none; opacity:0.06; mix-blend-mode:overlay; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); background-repeat:repeat; background-size:256px 256px; }
         #profile-page .dr-shell { position:relative; z-index:1; padding-bottom:110px; }
         /* 玻璃卡片覆盖 */
-        #profile-page .card {
-            background: rgba(20,26,48,0.52) !important;
-            backdrop-filter: blur(20px) saturate(1.4) !important;
-            -webkit-backdrop-filter: blur(20px) saturate(1.4) !important;
-            border: 1px solid var(--stroke) !important;
+        #profile-page .card,
+        #profile-page .pf-quick-card,
+        #profile-page .pf-notif-card,
+        #profile-page .pf-leave-item,
+        #profile-page .pf-approval-item {
+            background: linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.07)) !important;
+            backdrop-filter: blur(28px) saturate(1.5) !important;
+            -webkit-backdrop-filter: blur(28px) saturate(1.5) !important;
+            border: 1px solid rgba(255,255,255,0.14) !important;
             border-radius: 18px;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 4px 24px rgba(0,0,0,0.35) !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,0.30),
+                inset 0 -1px 0 rgba(255,255,255,0.04),
+                0 16px 40px rgba(7,10,20,0.28) !important;
         }
+        #profile-page .pf-card-hero {
+            position: relative;
+            overflow: hidden;
+        }
+        #profile-page .pf-card-hero::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            background: linear-gradient(135deg, rgba(255,255,255,0.20), transparent 42%, rgba(255,255,255,0.05) 78%);
+            pointer-events: none;
+        }
+        #profile-page .pf-card-hero > * { position: relative; z-index: 1; }
         /* 页头 */
         #profile-page .rep-page-head { border-bottom-color: var(--stroke); }
         #profile-page .rep-page-head__eyebrow {
@@ -10889,11 +10914,92 @@
         #profile-page .ga-badge--mint { background: rgba(94,234,212,0.12); border: 1px solid rgba(94,234,212,0.2); color: var(--mint); }
         #profile-page .ga-badge--amber { background: rgba(255,196,107,0.15); border: 1px solid rgba(255,196,107,0.25); color: var(--amber); }
         #profile-page .ga-badge--coral { background: rgba(255,122,144,0.15); border: 1px solid rgba(255,122,144,0.25); color: var(--coral); }
+        #profile-page .pf-avatar-orb {
+            width: 58px;
+            height: 58px;
+            flex-shrink: 0;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #fff;
+            background: linear-gradient(145deg, rgba(109,124,255,0.48), rgba(255,122,144,0.26));
+            border: 1px solid rgba(255,255,255,0.22);
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,0.22),
+                0 10px 26px rgba(109,124,255,0.24);
+        }
+        #profile-page .pf-hero-name {
+            font-weight: 800;
+            font-size: 18px;
+            line-height: 1.15;
+            letter-spacing: -0.02em;
+        }
+        #profile-page .pf-hero-meta {
+            font-size: 12px;
+            color: rgba(226,236,250,0.74);
+            margin-top: 5px;
+            line-height: 1.5;
+        }
+        #profile-page .pf-store-rating-badge {
+            flex-shrink: 0;
+            align-self: center;
+            padding: 8px 12px;
+            border-radius: 16px;
+            max-width: 34vw;
+            text-align: right;
+            background: linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.08));
+            backdrop-filter: blur(22px) saturate(1.3);
+            -webkit-backdrop-filter: blur(22px) saturate(1.3);
+            border: 1px solid rgba(255,255,255,0.16);
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,0.22),
+                0 10px 28px rgba(7,10,20,0.24);
+        }
+        #profile-page .pf-points-banner {
+            padding: 13px 14px;
+            border-radius: 18px;
+            text-align: center;
+            cursor: pointer;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,0.12),
+                0 14px 26px rgba(7,10,20,0.20);
+        }
+        #profile-page .pf-icon-chip {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.16);
+        }
+        #profile-page .pf-icon-chip--amber { background: linear-gradient(135deg, rgba(255,196,107,0.22), rgba(255,196,107,0.10)); }
+        #profile-page .pf-icon-chip--iris { background: linear-gradient(135deg, rgba(109,124,255,0.22), rgba(109,124,255,0.10)); }
+        #profile-page .pf-icon-chip--mint { background: linear-gradient(135deg, rgba(94,234,212,0.22), rgba(94,234,212,0.10)); }
+        #profile-page .pf-icon-chip--lg {
+            position: relative;
+            width: 36px;
+            height: 36px;
+            border-radius: 12px;
+            font-size: 18px;
+        }
+        #profile-page .pf-notif-shell {
+            padding: 14px 16px;
+            border-radius: 20px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05));
+            border: 1px solid rgba(255,255,255,0.12);
+            backdrop-filter: blur(20px) saturate(1.2);
+            -webkit-backdrop-filter: blur(20px) saturate(1.2);
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,0.16),
+                0 12px 30px rgba(7,10,20,0.20);
+        }
         /* profile 通知卡片 */
         #profile-page .pf-notif-card {
-            background: rgba(20,26,48,0.42); border: 1px solid var(--stroke);
             border-radius: 14px; padding: 12px; margin-bottom: 8px;
-            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
             transition: border-color 0.15s;
         }
         #profile-page .pf-notif-card:hover { border-color: var(--stroke-hi); }
@@ -10908,53 +11014,179 @@
         #profile-page .pf-approval-item {
             display: flex; align-items: center; gap: 10px;
             padding: 10px; border-radius: 10px;
-            background: rgba(255,255,255,0.03); border: 1px solid var(--stroke);
             margin-bottom: 6px;
         }
         /* profile 假期记录 */
         #profile-page .pf-leave-item {
             padding: 10px 12px; border-radius: 10px;
-            background: rgba(20,26,48,0.35); border: 1px solid var(--stroke);
             margin-bottom: 6px;
         }
         /* 度量网格 */
-        #profile-page .profile-metrics-grid > div {
-            background: rgba(255,255,255,0.04); border-color: var(--stroke);
-            border-radius: 12px;
+        #profile-page .pf-metric-tile,
+        #profile-page .pf-summary-tile {
+            background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05));
+            border: 1px solid rgba(255,255,255,0.10);
+            border-radius: 16px;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+        }
+        #profile-page .pf-metric-k,
+        #profile-page .pf-summary-k {
+            font-size: 11px;
+            color: rgba(200,215,230,0.70);
+            line-height: 1.35;
+        }
+        #profile-page .pf-metric-v,
+        #profile-page .pf-summary-v {
+            margin-top: 6px;
+            font-weight: 750;
+            font-size: 14px;
+            line-height: 1.2;
         }
         /* 统计小卡（奖励/处罚） */
         #profile-page .pf-stat-reward {
-            background: rgba(94,234,212,0.06); border: 1px solid rgba(94,234,212,0.15);
+            background: linear-gradient(135deg, rgba(94,234,212,0.14), rgba(94,234,212,0.06)); border: 1px solid rgba(94,234,212,0.20);
             border-radius: 12px;
         }
         #profile-page .pf-stat-punish {
-            background: rgba(255,122,144,0.06); border: 1px solid rgba(255,122,144,0.15);
+            background: linear-gradient(135deg, rgba(255,122,144,0.14), rgba(255,122,144,0.06)); border: 1px solid rgba(255,122,144,0.20);
             border-radius: 12px;
+        }
+        #profile-page .pf-band {
+            border-radius: 16px;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.10);
+        }
+        #profile-page .pf-band--amber {
+            background: linear-gradient(135deg, rgba(255,196,107,0.18), rgba(255,196,107,0.08));
+            border: 1px solid rgba(255,196,107,0.26);
+        }
+        #profile-page .pf-band--mint {
+            background: linear-gradient(135deg, rgba(94,234,212,0.14), rgba(94,234,212,0.06));
+            border: 1px solid rgba(94,234,212,0.20);
+        }
+        #profile-page .pf-band--iris {
+            background: linear-gradient(135deg, rgba(109,124,255,0.12), rgba(94,234,212,0.06));
+            border: 1px solid rgba(109,124,255,0.18);
+        }
+        #profile-page .pf-band--coral {
+            background: linear-gradient(135deg, rgba(255,122,144,0.14), rgba(255,122,144,0.06));
+            border: 1px solid rgba(255,122,144,0.20);
+        }
+        #profile-page .pf-summary-tile--iris {
+            background: linear-gradient(135deg, rgba(109,124,255,0.10), rgba(109,124,255,0.05));
+            border-color: rgba(109,124,255,0.16);
+        }
+        #profile-page .pf-summary-tile--coral {
+            background: linear-gradient(135deg, rgba(255,122,144,0.10), rgba(255,122,144,0.05));
+            border-color: rgba(255,122,144,0.16);
+        }
+        #profile-page .pf-notif-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        #profile-page .pf-notif-main {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+            flex: 1;
+        }
+        #profile-page .pf-notif-icon {
+            font-size: 15px;
+            flex-shrink: 0;
+        }
+        #profile-page .pf-notif-copy {
+            min-width: 0;
+            flex: 1;
+        }
+        #profile-page .pf-notif-title-row {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+        #profile-page .pf-notif-title {
+            font-weight: 700;
+            font-size: 13px;
+            color: #fff;
+        }
+        #profile-page .pf-notif-meta {
+            font-size: 11px;
+            color: var(--faint);
+            margin-top: 2px;
+        }
+        #profile-page .pf-notif-body,
+        #profile-page .pf-notif-full {
+            margin-top: 8px;
+            color: var(--dim);
+            font-size: 12px;
+            line-height: 1.55;
+            white-space: pre-line;
+        }
+        #profile-page .pf-notif-expand-hint {
+            margin-top: 4px;
+            font-size: 11px;
+            color: var(--faint);
+            text-align: right;
+        }
+        #profile-page .pf-approval-main {
+            flex: 1;
+            min-width: 0;
+        }
+        #profile-page .pf-approval-title {
+            font-weight: 600;
+            font-size: 13px;
+            color: #fff;
+        }
+        #profile-page .pf-approval-meta {
+            font-size: 11px;
+            color: var(--faint);
+            margin-top: 2px;
+        }
+        #profile-page .pf-approval-summary {
+            font-size: 11px;
+            color: var(--dim);
+            margin-top: 2px;
+        }
+        #profile-page .pf-approval-actions {
+            display: flex;
+            gap: 5px;
+            flex-shrink: 0;
         }
         /* 快捷操作卡 */
         #profile-page .pf-quick-card {
-            background: rgba(20,26,48,0.52);
-            backdrop-filter: blur(20px) saturate(1.4);
-            -webkit-backdrop-filter: blur(20px) saturate(1.4);
-            border: 1px solid var(--stroke);
             border-radius: 16px;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 4px 24px rgba(0,0,0,0.35);
             padding: 16px; cursor: pointer; text-align: center;
             min-height: 90px; display: flex; flex-direction: column;
             align-items: center; justify-content: center;
-            transition: border-color 0.15s;
+            transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
         }
-        #profile-page .pf-quick-card:hover { border-color: var(--stroke-hi); }
+        #profile-page .pf-quick-card:hover {
+            border-color: var(--stroke-hi);
+            transform: translateY(-1px);
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,0.30),
+                inset 0 -1px 0 rgba(255,255,255,0.04),
+                0 18px 34px rgba(7,10,20,0.30) !important;
+        }
         #profile-page .pf-quick-card .pf-quick-icon {
             width: 40px; height: 40px; border-radius: 10px;
             display: flex; align-items: center; justify-content: center;
             font-size: 20px; margin-bottom: 8px;
+            border: 1px solid rgba(255,255,255,0.10);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.12);
         }
-        #profile-page .pf-quick-icon--leave { background: rgba(109,124,255,0.15); }
-        #profile-page .pf-quick-icon--promote { background: rgba(94,234,212,0.12); }
-        #profile-page .pf-quick-icon--mailbox { background: rgba(255,196,107,0.12); }
-        #profile-page .pf-quick-icon--password { background: rgba(255,122,144,0.10); }
-        #profile-page .pf-quick-icon--resign { background: rgba(90,100,130,0.15); opacity: 0.55; }
+        #profile-page .pf-quick-icon--leave { background: linear-gradient(135deg, rgba(109,124,255,0.20), rgba(109,124,255,0.10)); }
+        #profile-page .pf-quick-icon--promote { background: linear-gradient(135deg, rgba(94,234,212,0.18), rgba(94,234,212,0.08)); }
+        #profile-page .pf-quick-icon--mailbox { background: linear-gradient(135deg, rgba(255,196,107,0.18), rgba(255,196,107,0.08)); }
+        #profile-page .pf-quick-icon--password { background: linear-gradient(135deg, rgba(255,122,144,0.16), rgba(255,122,144,0.08)); }
+        #profile-page .pf-quick-icon--resign { background: linear-gradient(135deg, rgba(90,100,130,0.18), rgba(90,100,130,0.08)); }
+        #profile-page .pf-quick-card--muted {
+            opacity: 0.68;
+            filter: saturate(0.8);
+        }
 
         /* profile 响应式 */
         @media (max-width: 480px) {
@@ -10966,7 +11198,6 @@
         }
 
         /* ── 我的档案 / 员工管理 / 考勤打卡 / 奖惩管理 / 厨房执行 / 增长看板：与#reports-page 同系金融面板 ── */
-        #profile-page,
         #employees-page,
         #attendance-page,
         #rewards-page,
@@ -19020,14 +19251,14 @@
                 </header>
 
                 <!-- 个人信息卡片 - 紧凑头部 -->
-                <div class="card" style="margin-bottom: 14px; padding: 20px;">
+                <div class="card pf-card-hero" style="margin-bottom: 14px; padding: 20px;">
                     <div style="display:flex; align-items:flex-start; gap: 12px;">
-                        <div style="width: 52px; height: 52px; flex-shrink:0; border-radius: 50%; background: linear-gradient(135deg, rgba(59,130,246,0.25), rgba(139,92,246,0.25)); display:flex; align-items:center; justify-content:center; font-size: 22px; border: 2px solid rgba(59,130,246,0.3);">👤</div>
+                        <div class="pf-avatar-orb">👤</div>
                         <div style="flex:1; min-width:0;">
-                            <div style="font-weight: 800; font-size: 17px;" id="profile-name">--</div>
-                            <div style="font-size: 12px; color: rgba(200,215,230,0.75); margin-top: 4px; line-height:1.45;"><span id="profile-store">--</span> · <span id="profile-department">--</span> · <span id="profile-position">--</span></div>
+                            <div class="pf-hero-name" id="profile-name">--</div>
+                            <div class="pf-hero-meta"><span id="profile-store">--</span> · <span id="profile-department">--</span> · <span id="profile-position">--</span></div>
                         </div>
-                        <div id="profile-store-rating-badge" style="display:none; flex-shrink:0; align-self:center; padding: 8px 12px; border-radius: 14px; max-width: 34vw; text-align: right; background: rgba(255,255,255,0.07); backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4); border: 1px solid rgba(255,255,255,0.14); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 8px 28px rgba(0,0,0,0.22);">
+                        <div id="profile-store-rating-badge" class="pf-store-rating-badge" style="display:none;">
                             <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: rgba(200,215,230,0.5);">门店级别</div>
                             <div style="margin-top: 2px; display: flex; align-items: baseline; justify-content: flex-end; gap: 4px; flex-wrap: wrap;">
                                 <span id="profile-store-rating" style="font-size: 17px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1;">-</span>
@@ -19044,7 +19275,7 @@
 
                 <!-- 多劳多得：置顶在通知上方 -->
                 <div style="margin-bottom: 16px;">
-                    <div style="padding: 11px; border-radius: 12px; background: linear-gradient(135deg, rgba(250,204,21,0.18), rgba(245,158,11,0.08)); border: 1px solid rgba(250,204,21,0.34); text-align:center; cursor:pointer; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03), 0 10px 20px rgba(2,6,23,0.2);" onclick="showPage('points')">
+                    <div class="pf-points-banner pf-band pf-band--amber" onclick="showPage('points')">
                         <div style="font-size: 12px; color: rgba(254,240,138,0.95); font-weight:700;">💎 多劳多得</div>
                         <div style="font-weight: 900; font-size: 17px; margin-top: 4px; color: #facc15; text-shadow:0 2px 10px rgba(250,204,21,0.28);" id="profile-month-points">0分</div>
                         <div id="profile-points-ranking" style="font-size: 11px; color: rgba(250,204,21,0.7); margin-top: 3px; display:none;"></div>
@@ -19052,10 +19283,10 @@
                 </div>
 
                 <!-- 公司通知：多劳多得下方；标题固定，列表区内滚动 -->
-                <div id="profile-notif-section" style="margin-bottom: 16px; position: relative;">
+                <div id="profile-notif-section" class="pf-notif-shell" style="margin-bottom: 16px; position: relative;">
                     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px; padding: 0 2px;">
                         <div style="display:flex; align-items:center; gap: 10px;">
-                            <div style="position:relative; width:36px; height:36px; border-radius:12px; background:linear-gradient(135deg,rgba(250,204,21,0.22),rgba(245,158,11,0.12)); display:flex; align-items:center; justify-content:center; font-size:18px; box-shadow:0 4px 12px rgba(250,204,21,0.10);">
+                            <div class="pf-icon-chip pf-icon-chip--amber pf-icon-chip--lg">
                                 <span>📢</span>
                                 <span id="profile-notif-pulse" style="display:none; position:absolute; top:-2px; right:-2px; width:10px; height:10px; border-radius:50%; background:#f59e0b; box-shadow:0 0 0 3px rgba(15,23,42,0.9); animation: notifPulse 2s infinite;"></span>
                             </div>
@@ -19080,63 +19311,63 @@
                 <!-- 档案信息 + 统计 -->
                 <div class="card" style="margin-bottom: 14px; padding: 20px;">
                     <div style="display:flex; align-items:center; gap: 10px; margin-bottom: 14px;">
-                        <div style="width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, rgba(249,115,22,0.2), rgba(249,115,22,0.1)); display:flex; align-items:center; justify-content:center; font-size: 16px;">📅</div>
+                        <div class="pf-icon-chip pf-icon-chip--iris" style="font-size: 16px;">📅</div>
                         <span style="font-weight: 700; font-size: 15px;">档案信息</span>
                     </div>
                     <div class="profile-metrics-grid" style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px;">
-                        <div style="padding: 12px 10px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align:center; min-height: 68px; display:flex; flex-direction:column; justify-content:center;">
-                            <div style="font-size: 11px; color: rgba(200,215,230,0.65); line-height:1.3;">级别</div>
-                            <div style="font-weight: 700; font-size: 14px; margin-top: 6px; line-height:1.2; word-break:break-all;" id="profile-level">--</div>
+                        <div class="pf-metric-tile" style="padding: 12px 10px; text-align:center; min-height: 68px; display:flex; flex-direction:column; justify-content:center;">
+                            <div class="pf-metric-k">级别</div>
+                            <div class="pf-metric-v" style="word-break:break-all;" id="profile-level">--</div>
                         </div>
-                        <div style="padding: 12px 10px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align:center; min-height: 68px; display:flex; flex-direction:column; justify-content:center;">
-                            <div style="font-size: 11px; color: rgba(200,215,230,0.65); line-height:1.3;">直属上级</div>
-                            <div style="font-weight: 700; font-size: 14px; margin-top: 6px; line-height:1.2; word-break:break-all;" id="profile-manager">--</div>
+                        <div class="pf-metric-tile" style="padding: 12px 10px; text-align:center; min-height: 68px; display:flex; flex-direction:column; justify-content:center;">
+                            <div class="pf-metric-k">直属上级</div>
+                            <div class="pf-metric-v" style="word-break:break-all;" id="profile-manager">--</div>
                         </div>
-                        <div style="padding: 12px 10px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align:center; min-height: 68px; display:flex; flex-direction:column; justify-content:center;">
-                            <div style="font-size: 11px; color: rgba(200,215,230,0.65); line-height:1.3;">绩效得分</div>
-                            <div style="font-weight: 700; font-size: 14px; margin-top: 6px; line-height:1.2;" id="profile-total-score">--</div>
+                        <div class="pf-metric-tile" style="padding: 12px 10px; text-align:center; min-height: 68px; display:flex; flex-direction:column; justify-content:center;">
+                            <div class="pf-metric-k">绩效得分</div>
+                            <div class="pf-metric-v" id="profile-total-score">--</div>
                         </div>
-                        <div style="padding: 12px 10px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align:center; min-height: 68px; display:flex; flex-direction:column; justify-content:center;">
-                            <div style="font-size: 11px; color: rgba(200,215,230,0.65); line-height:1.3;">执行力等级</div>
-                            <div style="font-weight: 700; font-size: 14px; margin-top: 6px; line-height:1.2;" id="profile-execution-rating">--</div>
+                        <div class="pf-metric-tile" style="padding: 12px 10px; text-align:center; min-height: 68px; display:flex; flex-direction:column; justify-content:center;">
+                            <div class="pf-metric-k">执行力等级</div>
+                            <div class="pf-metric-v" id="profile-execution-rating">--</div>
                         </div>
-                        <div style="padding: 12px 10px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align:center; min-height: 68px; display:flex; flex-direction:column; justify-content:center;">
-                            <div style="font-size: 11px; color: rgba(200,215,230,0.65); line-height:1.3;">工作态度等级</div>
-                            <div style="font-weight: 700; font-size: 14px; margin-top: 6px; line-height:1.2;" id="profile-attitude-rating">--</div>
+                        <div class="pf-metric-tile" style="padding: 12px 10px; text-align:center; min-height: 68px; display:flex; flex-direction:column; justify-content:center;">
+                            <div class="pf-metric-k">工作态度等级</div>
+                            <div class="pf-metric-v" id="profile-attitude-rating">--</div>
                         </div>
-                        <div style="padding: 12px 10px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); text-align:center; min-height: 68px; display:flex; flex-direction:column; justify-content:center;">
-                            <div style="font-size: 11px; color: rgba(200,215,230,0.65); line-height:1.3;">工作能力等级</div>
-                            <div style="font-weight: 700; font-size: 14px; margin-top: 6px; line-height:1.2;" id="profile-ability-rating">--</div>
+                        <div class="pf-metric-tile" style="padding: 12px 10px; text-align:center; min-height: 68px; display:flex; flex-direction:column; justify-content:center;">
+                            <div class="pf-metric-k">工作能力等级</div>
+                            <div class="pf-metric-v" id="profile-ability-rating">--</div>
                         </div>
                     </div>
-                    <div id="profile-store-rating-hint" style="margin: 0 0 8px; padding: 10px 12px; border-radius: 10px; background: rgba(34,197,94,0.06); border: 1px solid rgba(34,197,94,0.12); font-size: 11px; color: rgba(200,215,230,0.78); line-height: 1.5;"></div>
-                    <div id="profile-personal-performance-hint" style="margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.12); font-size: 11px; color: rgba(200,215,230,0.78); line-height: 1.5;"></div>
+                    <div id="profile-store-rating-hint" class="pf-band pf-band--mint" style="margin: 0 0 8px; padding: 10px 12px; font-size: 11px; color: rgba(200,215,230,0.78); line-height: 1.5;"></div>
+                    <div id="profile-personal-performance-hint" class="pf-band pf-band--iris" style="margin: 0 0 12px; padding: 10px 12px; font-size: 11px; color: rgba(200,215,230,0.78); line-height: 1.5;"></div>
                     <div style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom:12px;">
-                        <div style="padding: 12px 10px; border-radius: 12px; background: rgba(34,197,94,0.06); border: 1px solid rgba(34,197,94,0.15); text-align:center; min-height: 64px; display:flex; flex-direction:column; justify-content:center;">
-                            <div style="font-size: 11px; color: rgba(34,197,94,0.85);">本月奖励</div>
-                            <div style="font-weight: 800; font-size: 15px; margin-top: 6px; color: rgba(34,197,94,0.95);" id="profile-month-reward-amount">¥0.00</div>
+                        <div class="pf-summary-tile pf-stat-reward" style="padding: 12px 10px; text-align:center; min-height: 64px; display:flex; flex-direction:column; justify-content:center;">
+                            <div class="pf-summary-k" style="color: rgba(34,197,94,0.85);">本月奖励</div>
+                            <div class="pf-summary-v" style="font-size: 15px; color: rgba(34,197,94,0.95);" id="profile-month-reward-amount">¥0.00</div>
                         </div>
-                        <div style="padding: 12px 10px; border-radius: 12px; background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.15); text-align:center; min-height: 64px; display:flex; flex-direction:column; justify-content:center;">
-                            <div style="font-size: 11px; color: rgba(239,68,68,0.85);">本月处罚</div>
-                            <div style="font-weight: 800; font-size: 15px; margin-top: 6px; color: rgba(239,68,68,0.95);" id="profile-month-punishment-amount">¥0.00</div>
+                        <div class="pf-summary-tile pf-stat-punish" style="padding: 12px 10px; text-align:center; min-height: 64px; display:flex; flex-direction:column; justify-content:center;">
+                            <div class="pf-summary-k" style="color: rgba(239,68,68,0.85);">本月处罚</div>
+                            <div class="pf-summary-v" style="font-size: 15px; color: rgba(239,68,68,0.95);" id="profile-month-punishment-amount">¥0.00</div>
                         </div>
                     </div>
                     <div style="display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;">
-                        <div style="padding: 10px 6px; border-radius: 10px; background: rgba(34,197,94,0.06); border: 1px solid rgba(34,197,94,0.15); text-align:center; cursor:pointer; min-height: 58px; display:flex; flex-direction:column; justify-content:center;" onclick="openMyRewards('reward')">
-                            <div style="font-size: 11px; color: rgba(34,197,94,0.85);">累积奖励</div>
-                            <div style="font-weight: 800; font-size: 15px; margin-top: 4px; color: rgba(34,197,94,0.95);" id="profile-reward-count">¥0.00</div>
+                        <div class="pf-summary-tile pf-stat-reward" style="padding: 10px 6px; text-align:center; cursor:pointer; min-height: 58px; display:flex; flex-direction:column; justify-content:center;" onclick="openMyRewards('reward')">
+                            <div class="pf-summary-k" style="color: rgba(34,197,94,0.85);">累积奖励</div>
+                            <div class="pf-summary-v" style="font-size: 15px; color: rgba(34,197,94,0.95);" id="profile-reward-count">¥0.00</div>
                         </div>
-                        <div style="padding: 10px 6px; border-radius: 10px; background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.15); text-align:center; cursor:pointer; min-height: 58px; display:flex; flex-direction:column; justify-content:center;" onclick="openMyRewards('punishment')">
-                            <div style="font-size: 11px; color: rgba(239,68,68,0.85);">累积处罚</div>
-                            <div style="font-weight: 800; font-size: 15px; margin-top: 4px; color: rgba(239,68,68,0.95);" id="profile-punishment-count">¥0.00</div>
+                        <div class="pf-summary-tile pf-stat-punish" style="padding: 10px 6px; text-align:center; cursor:pointer; min-height: 58px; display:flex; flex-direction:column; justify-content:center;" onclick="openMyRewards('punishment')">
+                            <div class="pf-summary-k" style="color: rgba(239,68,68,0.85);">累积处罚</div>
+                            <div class="pf-summary-v" style="font-size: 15px; color: rgba(239,68,68,0.95);" id="profile-punishment-count">¥0.00</div>
                         </div>
-                        <div style="padding: 10px 6px; border-radius: 10px; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.15); text-align:center; cursor:pointer; min-height: 58px; display:flex; flex-direction:column; justify-content:center;" onclick="showPage('exam')">
-                            <div style="font-size: 11px; color: rgba(59,130,246,0.85);">考试</div>
-                            <div style="font-weight: 800; font-size: 15px; margin-top: 4px; color: rgba(59,130,246,0.95);" id="profile-exam-count">0</div>
+                        <div class="pf-summary-tile pf-summary-tile--iris" style="padding: 10px 6px; text-align:center; cursor:pointer; min-height: 58px; display:flex; flex-direction:column; justify-content:center;" onclick="showPage('exam')">
+                            <div class="pf-summary-k" style="color: rgba(109,124,255,0.90);">考试</div>
+                            <div class="pf-summary-v" style="font-size: 15px; color: rgba(196,208,255,0.98);" id="profile-exam-count">0</div>
                         </div>
-                        <div style="padding: 10px 6px; border-radius: 10px; background: rgba(168,85,247,0.06); border: 1px solid rgba(168,85,247,0.15); text-align:center; cursor:pointer; min-height: 58px; display:flex; flex-direction:column; justify-content:center;" onclick="showPage('promotion')">
-                            <div style="font-size: 11px; color: rgba(168,85,247,0.85);">升职</div>
-                            <div style="font-weight: 800; font-size: 15px; margin-top: 4px; color: rgba(168,85,247,0.95);" id="profile-promotion-count">0</div>
+                        <div class="pf-summary-tile pf-summary-tile--coral" style="padding: 10px 6px; text-align:center; cursor:pointer; min-height: 58px; display:flex; flex-direction:column; justify-content:center;" onclick="showPage('promotion')">
+                            <div class="pf-summary-k" style="color: rgba(255,122,144,0.90);">升职</div>
+                            <div class="pf-summary-v" style="font-size: 15px; color: rgba(255,205,216,0.98);" id="profile-promotion-count">0</div>
                         </div>
                     </div>
                     <!-- 待审批 (embedded in 入职信息 card) -->
@@ -19154,13 +19385,13 @@
                 <!-- 本月考勤概览 -->
                 <div class="card" style="margin-bottom: 14px; padding: 20px;">
                     <div style="display:flex; align-items:center; gap: 10px; margin-bottom: 14px;">
-                        <div style="width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, rgba(96,165,250,0.2), rgba(96,165,250,0.1)); display:flex; align-items:center; justify-content:center; font-size: 16px;">🏖️</div>
+                        <div class="pf-icon-chip pf-icon-chip--mint" style="font-size: 16px;">🏖️</div>
                         <span style="font-weight: 700; font-size: 15px;">本月考勤概览</span>
                         <span style="font-size: 11px; color: rgba(200,215,230,0.5); margin-left: auto;" id="profile-leave-month"></span>
                     </div>
                     <div id="profile-leave-balance-box" class="att-list-item" style="padding: 12px;">
                         <div class="att-list-row"><span class="att-list-main" id="profile-att-username">-</span><span class="att-list-sub" id="profile-att-month">-</span></div>
-                        <div style="margin-top:8px; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; border:1px solid rgba(245,158,11,0.24); background:rgba(245,158,11,0.08); border-radius:10px; padding:8px 10px;">
+                        <div class="pf-band pf-band--amber" style="margin-top:8px; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; padding:8px 10px;">
                             <span style="font-size:12px; color:rgba(251,191,36,0.92); font-weight:700;">累计假期</span>
                             <span style="font-size:18px; color:#fbbf24; font-weight:900;"><span id="profile-att-cumulative-leave">0</span>天</span>
                         </div>
@@ -19199,7 +19430,7 @@
                         <div style="font-weight:700;font-size:13px;">修改密码</div>
                         <div style="font-size:11px;color:var(--dim);margin-top:4px;">认领账号后可自行修改</div>
                     </div>
-                    <div class="pf-quick-card" onclick="openResignationModal()" style="opacity:0.55;">
+                    <div class="pf-quick-card pf-quick-card--muted" onclick="openResignationModal()">
                         <div class="pf-quick-icon pf-quick-icon--resign">📋</div>
                         <div style="font-weight:700;font-size:13px;color:var(--dim);">离职申请</div>
                         <div style="font-size:11px;color:var(--faint);margin-top:4px;">提交离职审批</div>
@@ -42775,21 +43006,21 @@ tr:nth-child(even) td { background: #fafafa; }
                 const preview = isLong ? escapeHtml(rawMsg.slice(0, 80)) + '…' : msg;
 
                 return '<div class="pf-notif-card"' + (isLong ? ' onclick="this.querySelector(\'.notif-full-msg\').classList.toggle(\'notif-msg-show\')"' : '') + '>'
-                    + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">'
-                    +   '<div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">'
-                    +     '<span style="font-size:15px;flex-shrink:0;">' + typeIcon + '</span>'
-                    +     '<div style="min-width:0;flex:1;">'
-                    +       '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">'
-                    +         '<span style="font-weight:700;font-size:13px;color:#fff;">' + title + '</span>'
+                    + '<div class="pf-notif-head">'
+                    +   '<div class="pf-notif-main">'
+                    +     '<span class="pf-notif-icon">' + typeIcon + '</span>'
+                    +     '<div class="pf-notif-copy">'
+                    +       '<div class="pf-notif-title-row">'
+                    +         '<span class="pf-notif-title">' + title + '</span>'
                     +         badge
                     +       '</div>'
-                    +       '<div style="font-size:11px;color:var(--faint);margin-top:2px;">' + escapeHtml(relTime) + ' · ' + escapeHtml(fullDt) + '</div>'
+                    +       '<div class="pf-notif-meta">' + escapeHtml(relTime) + ' · ' + escapeHtml(fullDt) + '</div>'
                     +     '</div>'
                     +   '</div>'
                     +   delBtn
                     + '</div>'
-                    + '<div style="margin-top:8px;color:var(--dim);font-size:12px;line-height:1.55;white-space:pre-line;">' + preview + '</div>'
-                    + (isLong ? '<div class="notif-full-msg" style="display:none;margin-top:4px;color:var(--dim);font-size:12px;line-height:1.55;white-space:pre-line;">' + msg + '</div><div style="margin-top:4px;font-size:11px;color:var(--faint);text-align:right;">点击展开全文</div>' : '')
+                    + '<div class="pf-notif-body">' + preview + '</div>'
+                    + (isLong ? '<div class="notif-full-msg pf-notif-full" style="display:none;">' + msg + '</div><div class="pf-notif-expand-hint">点击展开全文</div>' : '')
                     + '</div>';
             };
 
@@ -42883,12 +43114,12 @@ tr:nth-child(even) td { background: #fafafa; }
                         summary = `金额：¥${escapeHtml(String(payload?.amount || '-'))}`;
                     }
                     return '<div class="pf-approval-item">'
-                        + '<div style="flex:1;min-width:0;">'
-                        +   '<div style="font-weight:600;font-size:13px;color:#fff;">' + escapeHtml(type) + '</div>'
-                        +   '<div style="font-size:11px;color:var(--faint);margin-top:2px;">申请人：' + escapeHtml(who) + ' · ' + escapeHtml(time) + '</div>'
-                        +   (summary ? '<div style="font-size:11px;color:var(--dim);margin-top:2px;">' + summary + '</div>' : '')
+                        + '<div class="pf-approval-main">'
+                        +   '<div class="pf-approval-title">' + escapeHtml(type) + '</div>'
+                        +   '<div class="pf-approval-meta">申请人：' + escapeHtml(who) + ' · ' + escapeHtml(time) + '</div>'
+                        +   (summary ? '<div class="pf-approval-summary">' + summary + '</div>' : '')
                         + '</div>'
-                        + '<div style="display:flex;gap:5px;flex-shrink:0;">'
+                        + '<div class="pf-approval-actions">'
                         +   '<button class="ga-btn ga-btn--primary ga-btn--sm" style="height:28px;font-size:11px;border-radius:8px;" onclick="profileQuickApprove(\'' + id + '\', true)">通过</button>'
                         +   '<button class="ga-btn ga-btn--danger ga-btn--sm" style="height:28px;font-size:11px;border-radius:8px;" onclick="profileQuickApprove(\'' + id + '\', false)">拒绝</button>'
                         +   '<button class="ga-btn ga-btn--ghost ga-btn--sm" style="height:28px;font-size:11px;border-radius:8px;" onclick="openApprovalDetailModal(\'' + id + '\')">详情</button>'
