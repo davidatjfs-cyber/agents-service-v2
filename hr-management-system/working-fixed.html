@@ -8467,97 +8467,651 @@
         .kb-upload-btn-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
 
         /* ══════════════════════════════════════════
-           知识库 V2 移动端重构样式
+           知识库 V3 手机优先改版
            ══════════════════════════════════════════ */
-        #knowledge-page { height: 100%; display: flex; flex-direction: column; }
-        #kb-panel-knowledge { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
-
-        /* 列表视图 */
-        .kb-v2-list-view { display: flex; flex-direction: column; height: 100%; overflow: hidden; background: #0a0f1e; }
+        #knowledge-page {
+            --kb-bg0: #08101f;
+            --kb-bg1: #111b33;
+            --kb-iris: #7c8dff;
+            --kb-mint: #67e8d6;
+            --kb-coral: #ff8ea6;
+            --kb-amber: #ffd37d;
+            --kb-text: #f8fbff;
+            --kb-dim: rgba(216, 228, 255, 0.74);
+            --kb-faint: rgba(188, 203, 236, 0.5);
+            --kb-stroke: rgba(255,255,255,0.1);
+            --kb-stroke-strong: rgba(255,255,255,0.18);
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 14% 12%, rgba(124,141,255,0.26), transparent 30%),
+                radial-gradient(circle at 88% 10%, rgba(255,142,166,0.18), transparent 22%),
+                radial-gradient(circle at 50% 94%, rgba(103,232,214,0.15), transparent 28%),
+                linear-gradient(180deg, var(--kb-bg1) 0%, var(--kb-bg0) 52%, #050a14 100%);
+        }
+        #kb-panel-knowledge {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+            z-index: 1;
+        }
+        .kb-v2-list-view {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+            background: transparent;
+        }
         .kb-v2-list-view.kb-v2-hidden { display: none; }
-
-        /* 顶栏 */
-        .kb-v2-topbar { padding: 14px 16px 0; background: linear-gradient(180deg, #0d1225 0%, #0a0f1e 100%); flex-shrink: 0; }
-        .kb-v2-topbar-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-        .kb-v2-title { font-size: 20px; font-weight: 800; color: #f1f5f9; letter-spacing: -0.3px; }
-        .kb-v2-upload-btn { padding: 8px 16px; border-radius: 20px; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; font-size: 13px; font-weight: 700; border: none; cursor: pointer; letter-spacing: 0.3px; }
-        .kb-v2-upload-btn:active { opacity: 0.85; }
-
-        /* 搜索栏 */
+        .kb-v2-topbar {
+            flex-shrink: 0;
+            padding: 14px 14px 0;
+            background:
+                linear-gradient(180deg, rgba(10,17,31,0.9) 0%, rgba(10,17,31,0.72) 72%, rgba(10,17,31,0) 100%);
+        }
+        .kb-v2-hero {
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.14);
+            border-radius: 24px;
+            padding: 18px 16px 16px;
+            background:
+                linear-gradient(145deg, rgba(20,28,50,0.92), rgba(11,16,31,0.74)),
+                rgba(9,14,26,0.84);
+            box-shadow:
+                0 22px 50px rgba(3,8,20,0.38),
+                inset 0 1px 0 rgba(255,255,255,0.08);
+            backdrop-filter: blur(24px);
+        }
+        .kb-v2-hero::before {
+            content: "";
+            position: absolute;
+            inset: -40% auto auto 46%;
+            width: 210px;
+            height: 210px;
+            background: radial-gradient(circle, rgba(124,141,255,0.32) 0%, rgba(124,141,255,0) 72%);
+            pointer-events: none;
+        }
+        .kb-v2-hero-copy,
+        .kb-v2-hero-actions,
+        .kb-v2-stat-strip,
+        .kb-v2-sticky-controls { position: relative; z-index: 1; }
+        .kb-v2-eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 10px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: rgba(225, 233, 255, 0.76);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.16em;
+        }
+        .kb-v2-eyebrow::before {
+            content: "";
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--kb-amber), var(--kb-coral));
+            box-shadow: 0 0 14px rgba(255,211,125,0.5);
+        }
+        .kb-v2-hero-main {
+            display: flex;
+            gap: 12px;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-top: 14px;
+        }
+        .kb-v2-title-wrap h2 {
+            margin: 0;
+            font-size: 28px;
+            line-height: 1.05;
+            color: var(--kb-text);
+            letter-spacing: -0.04em;
+        }
+        .kb-v2-title-wrap p {
+            margin: 8px 0 0;
+            font-size: 12px;
+            line-height: 1.55;
+            color: var(--kb-dim);
+            max-width: 560px;
+        }
+        .kb-v2-hero-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            flex-shrink: 0;
+        }
+        .kb-v2-upload-btn,
+        .kb-v2-organize-btn {
+            min-height: 40px;
+            padding: 10px 14px;
+            border-radius: 14px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            border: 1px solid transparent;
+            white-space: nowrap;
+        }
+        .kb-v2-upload-btn {
+            background: linear-gradient(135deg, #6f7dff, #8a63ff);
+            color: #fff;
+            box-shadow: 0 10px 24px rgba(111,125,255,0.34);
+        }
+        .kb-v2-organize-btn {
+            display: none;
+            background: rgba(255,255,255,0.06);
+            color: var(--kb-text);
+            border-color: rgba(255,255,255,0.14);
+        }
+        .kb-v2-upload-btn:active,
+        .kb-v2-organize-btn:active { transform: scale(0.98); }
+        .kb-v2-stat-strip {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            margin-top: 14px;
+        }
+        .kb-v2-stat {
+            padding: 12px 12px 10px;
+            border-radius: 18px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(18px);
+        }
+        .kb-v2-stat-label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: rgba(211, 221, 250, 0.54);
+        }
+        .kb-v2-stat-value {
+            margin-top: 7px;
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--kb-text);
+            letter-spacing: -0.03em;
+        }
+        .kb-v2-stat-sub {
+            margin-top: 3px;
+            font-size: 11px;
+            color: var(--kb-faint);
+            line-height: 1.4;
+        }
+        .kb-v2-sticky-controls {
+            position: sticky;
+            top: 0;
+            z-index: 4;
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 20px;
+            background: rgba(7,12,22,0.78);
+            border: 1px solid rgba(255,255,255,0.08);
+            backdrop-filter: blur(22px);
+            box-shadow: 0 16px 34px rgba(2,6,23,0.28);
+        }
         .kb-v2-search-wrap { position: relative; margin-bottom: 10px; }
-        .kb-v2-search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 14px; pointer-events: none; }
-        .kb-v2-search-input { width: 100%; padding: 10px 14px 10px 36px; border-radius: 12px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1); color: rgba(248,250,252,0.95); font-size: 14px; box-sizing: border-box; outline: none; transition: border-color 0.2s; }
-        .kb-v2-search-input:focus { border-color: rgba(99,102,241,0.6); background: rgba(255,255,255,0.09); }
-        .kb-v2-search-input::placeholder { color: rgba(148,163,184,0.5); }
-
-        /* 类型 Tab */
-        .kb-v2-type-tabs { display: flex; gap: 6px; margin-bottom: 10px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+        .kb-v2-search-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 15px;
+            pointer-events: none;
+        }
+        .kb-v2-search-input {
+            width: 100%;
+            min-height: 46px;
+            padding: 12px 16px 12px 40px;
+            border-radius: 14px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: rgba(248,250,252,0.96);
+            font-size: 15px;
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .kb-v2-search-input:focus {
+            border-color: rgba(124,141,255,0.62);
+            background: rgba(255,255,255,0.1);
+        }
+        .kb-v2-search-input::placeholder { color: rgba(180,193,223,0.52); }
+        .kb-v2-type-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+            overflow-x: auto;
+            padding-bottom: 2px;
+            scrollbar-width: none;
+        }
         .kb-v2-type-tabs::-webkit-scrollbar { display: none; }
-        .kb-v2-ttab { padding: 6px 14px; border-radius: 20px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1); color: rgba(148,163,184,0.8); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: all 0.15s; flex-shrink: 0; }
-        .kb-v2-ttab.active { background: rgba(99,102,241,0.2); border-color: rgba(99,102,241,0.5); color: #a5b4fc; }
-
-        /* 高级筛选 */
-        .kb-v2-adv-filters { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 10px; }
-        .kb-v2-sel { flex: 1; min-width: 100px; padding: 6px 10px; border-radius: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: rgba(226,232,240,0.9); font-size: 12px; outline: none; }
-        .kb-v2-reset-btn { padding: 6px 12px; border-radius: 10px; background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.25); color: rgba(252,165,165,0.9); font-size: 12px; cursor: pointer; white-space: nowrap; }
-
-        /* 内容区滚动 */
-        .kb-v2-content-area { flex: 1; overflow-y: auto; padding: 8px 16px 80px; -webkit-overflow-scrolling: touch; }
-
-        /* 分类列表（accordion groups） */
-        .kb-v2-list { display: flex; flex-direction: column; gap: 8px; }
-        .kb-v2-empty { text-align: center; padding: 60px 20px; color: rgba(148,163,184,0.5); font-size: 14px; }
-
-        /* 列表项（V2 重设计） */
-        .kb-v2-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); cursor: pointer; transition: all 0.15s; -webkit-tap-highlight-color: transparent; }
-        .kb-v2-item:active { background: rgba(99,102,241,0.1); border-color: rgba(99,102,241,0.3); transform: scale(0.99); }
-        .kb-v2-item-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
-        .kb-v2-item-icon[data-type="video"] { background: rgba(239,68,68,0.15); }
-        .kb-v2-item-icon[data-type="pdf"] { background: rgba(239,68,68,0.12); }
-        .kb-v2-item-icon[data-type="doc"] { background: rgba(59,130,246,0.12); }
-        .kb-v2-item-icon[data-type="img"] { background: rgba(16,185,129,0.12); }
-        .kb-v2-item-icon[data-type="txt"] { background: rgba(245,158,11,0.12); }
-        .kb-v2-item-icon[data-type="other"] { background: rgba(255,255,255,0.08); }
+        .kb-v2-ttab {
+            min-height: 38px;
+            padding: 8px 14px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: rgba(197,208,236,0.74);
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.15s;
+            flex-shrink: 0;
+        }
+        .kb-v2-ttab.active {
+            background: rgba(124,141,255,0.2);
+            border-color: rgba(124,141,255,0.42);
+            color: #d8ddff;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+        }
+        .kb-v2-adv-filters {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+        .kb-v2-sel,
+        .kb-org-group-select,
+        .kb-org-target-select {
+            width: 100%;
+            min-height: 40px;
+            padding: 8px 12px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: rgba(235,241,255,0.92);
+            font-size: 12px;
+            outline: none;
+        }
+        .kb-v2-reset-btn,
+        .kb-org-refresh-btn,
+        .kb-org-move-btn {
+            min-height: 40px;
+            padding: 8px 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.06);
+            color: rgba(244,246,255,0.92);
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .kb-v2-reset-btn { background: rgba(255,142,166,0.12); color: #ffd5df; border-color: rgba(255,142,166,0.22); }
+        .kb-v2-content-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 14px calc(120px + env(safe-area-inset-bottom, 0px));
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior-y: contain;
+        }
+        .kb-v2-context {
+            margin: 0 0 12px;
+            padding: 0 2px;
+            font-size: 12px;
+            color: var(--kb-dim);
+            line-height: 1.5;
+        }
+        .kb-v2-list { display: flex; flex-direction: column; gap: 10px; }
+        .kb-v2-empty {
+            text-align: center;
+            padding: 56px 20px;
+            color: rgba(184,198,232,0.56);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .kb-v2-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px;
+            border-radius: 18px;
+            background: linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04));
+            border: 1px solid rgba(255,255,255,0.1);
+            cursor: pointer;
+            transition: transform 0.15s, border-color 0.15s, background 0.15s;
+            -webkit-tap-highlight-color: transparent;
+            box-shadow: 0 12px 28px rgba(2,6,23,0.18);
+        }
+        .kb-v2-item:active {
+            background: linear-gradient(145deg, rgba(124,141,255,0.15), rgba(255,255,255,0.06));
+            border-color: rgba(124,141,255,0.34);
+            transform: scale(0.988);
+        }
+        .kb-v2-item-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+        .kb-v2-item-icon[data-type="video"] { background: rgba(255,142,166,0.18); }
+        .kb-v2-item-icon[data-type="pdf"] { background: rgba(255,211,125,0.16); }
+        .kb-v2-item-icon[data-type="doc"] { background: rgba(124,141,255,0.18); }
+        .kb-v2-item-icon[data-type="img"] { background: rgba(103,232,214,0.16); }
+        .kb-v2-item-icon[data-type="txt"] { background: rgba(94,234,212,0.14); }
         .kb-v2-item-body { flex: 1; min-width: 0; }
-        .kb-v2-item-title { font-size: 14px; font-weight: 700; color: rgba(248,250,252,0.92); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
-        .kb-v2-item-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-        .kb-v2-chip { font-size: 10px; padding: 2px 7px; border-radius: 6px; font-weight: 600; }
-        .kb-v2-chip-type { background: rgba(99,102,241,0.15); color: #a5b4fc; }
-        .kb-v2-chip-req { background: rgba(239,68,68,0.15); color: #fca5a5; }
-        .kb-v2-chip-quiz { background: rgba(245,158,11,0.15); color: #fde68a; }
-        .kb-v2-item-date { font-size: 11px; color: rgba(148,163,184,0.5); }
-        .kb-v2-item-arrow { color: rgba(148,163,184,0.3); font-size: 16px; flex-shrink: 0; }
-
-        /* 分类组 */
-        .kb-v2-cat-group { margin-bottom: 6px; }
-        .kb-v2-cat-hdr { display: flex; align-items: center; gap: 8px; padding: 10px 4px; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+        .kb-v2-item-title {
+            font-size: 14px;
+            font-weight: 800;
+            color: rgba(248,250,252,0.96);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 5px;
+        }
+        .kb-v2-item-meta {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .kb-v2-chip {
+            display: inline-flex;
+            align-items: center;
+            min-height: 22px;
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+        .kb-v2-chip-type { background: rgba(124,141,255,0.16); color: #d8deff; }
+        .kb-v2-chip-req { background: rgba(255,142,166,0.16); color: #ffd6df; }
+        .kb-v2-chip-quiz { background: rgba(255,211,125,0.16); color: #ffebbf; }
+        .kb-v2-item-date { font-size: 11px; color: rgba(180,193,223,0.56); }
+        .kb-v2-item-arrow {
+            color: rgba(195,208,238,0.38);
+            font-size: 18px;
+            flex-shrink: 0;
+            font-weight: 700;
+        }
+        .kb-v2-cat-group { margin-bottom: 10px; }
+        .kb-v2-cat-hdr {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 6px;
+            cursor: pointer;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
         .kb-v2-cat-hdr-icon { font-size: 18px; }
-        .kb-v2-cat-hdr-name { font-size: 13px; font-weight: 700; color: rgba(148,163,184,0.7); text-transform: uppercase; letter-spacing: 0.5px; flex: 1; }
-        .kb-v2-cat-count { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 8px; background: rgba(255,255,255,0.07); color: rgba(148,163,184,0.6); }
-        .kb-v2-cat-chev { font-size: 14px; color: rgba(148,163,184,0.4); transition: transform 0.2s; }
+        .kb-v2-cat-hdr-name {
+            font-size: 12px;
+            font-weight: 800;
+            color: rgba(202,214,242,0.66);
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            flex: 1;
+        }
+        .kb-v2-cat-count {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 9px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.08);
+            color: rgba(197,208,236,0.68);
+        }
+        .kb-v2-cat-chev { font-size: 15px; color: rgba(197,208,236,0.42); transition: transform 0.2s; }
         .kb-v2-cat-group.kb-v2-collapsed .kb-v2-cat-chev { transform: rotate(-90deg); }
         .kb-v2-cat-group.kb-v2-collapsed .kb-v2-cat-body { display: none; }
-        .kb-v2-cat-body { display: flex; flex-direction: column; gap: 4px; padding-bottom: 4px; }
-
-        /* 详情视图 */
-        .kb-v2-viewer { position: absolute; inset: 0; background: #0a0f1e; z-index: 10; display: none; flex-direction: column; overflow: hidden; }
+        .kb-v2-cat-body { display: flex; flex-direction: column; gap: 6px; }
+        .kb-v2-viewer {
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(180deg, rgba(7,12,24,0.98) 0%, rgba(5,10,20,0.98) 100%);
+            z-index: 10;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+        }
         .kb-v2-viewer.kb-v2-active { display: flex; }
-
-        /* 详情顶栏 */
-        .kb-v2-viewer-topbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.07); flex-shrink: 0; background: rgba(13,18,37,0.95); }
-        .kb-v2-back-btn { display: flex; align-items: center; gap: 4px; color: #a5b4fc; font-size: 16px; font-weight: 700; background: none; border: none; cursor: pointer; padding: 4px 0; letter-spacing: -0.2px; }
-        .kb-v2-viewer-acts { display: flex; gap: 8px; }
-        .kb-v2-act-btn { width: 34px; height: 34px; border-radius: 10px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1); color: rgba(226,232,240,0.8); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-        .kb-v2-act-del { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.25); color: rgba(252,165,165,0.8); }
-
-        /* 文章元信息 */
-        .kb-v2-viewer-meta { padding: 16px 16px 0; flex-shrink: 0; }
-        .kb-v2-viewer-title { font-size: 18px; font-weight: 800; color: #f1f5f9; line-height: 1.35; margin-bottom: 8px; }
-        .kb-v2-viewer-metarow { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-
-        /* 详情体 */
-        .kb-v2-viewer-hint { padding: 60px 20px; text-align: center; color: rgba(148,163,184,0.4); font-size: 14px; }
-        .kb-v2-viewer-body { flex: 1; overflow-y: auto; padding: 0 16px 80px; -webkit-overflow-scrolling: touch; }
+        .kb-v2-viewer-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 14px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            flex-shrink: 0;
+            background: rgba(10,16,29,0.94);
+            backdrop-filter: blur(24px);
+        }
+        .kb-v2-back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #dce1ff;
+            font-size: 15px;
+            font-weight: 800;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 999px;
+            cursor: pointer;
+            padding: 8px 12px;
+            letter-spacing: -0.02em;
+        }
+        .kb-v2-viewer-acts {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+        .kb-v2-act-btn {
+            min-height: 38px;
+            min-width: 38px;
+            padding: 8px 10px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: rgba(231,236,252,0.86);
+            font-size: 14px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+        }
+        .kb-v2-act-del {
+            background: rgba(255,142,166,0.1);
+            border-color: rgba(255,142,166,0.2);
+            color: rgba(255,226,233,0.92);
+        }
+        .kb-v2-viewer-meta {
+            padding: 16px 14px 0;
+            flex-shrink: 0;
+        }
+        .kb-v2-viewer-title {
+            font-size: 22px;
+            font-weight: 800;
+            color: #f3f6ff;
+            line-height: 1.24;
+            margin-bottom: 10px;
+            letter-spacing: -0.03em;
+        }
+        .kb-v2-viewer-metarow {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            margin-bottom: 14px;
+        }
+        .kb-v2-viewer-hint {
+            padding: 72px 24px;
+            text-align: center;
+            color: rgba(180,193,223,0.44);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .kb-v2-viewer-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 14px calc(108px + env(safe-area-inset-bottom, 0px));
+            -webkit-overflow-scrolling: touch;
+        }
+        .kb-org-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 12000;
+            display: none;
+            align-items: flex-end;
+            justify-content: center;
+            background: rgba(1,4,10,0.62);
+            backdrop-filter: blur(8px);
+        }
+        .kb-org-modal.is-open { display: flex; }
+        .kb-org-sheet {
+            width: min(720px, 100%);
+            max-height: min(86vh, 86dvh);
+            border-radius: 24px 24px 0 0;
+            background: linear-gradient(180deg, rgba(13,19,34,0.98) 0%, rgba(7,12,22,0.98) 100%);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-bottom: none;
+            box-shadow: 0 -20px 60px rgba(0,0,0,0.45);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .kb-org-handle {
+            width: 52px;
+            height: 5px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.18);
+            margin: 10px auto 0;
+            flex-shrink: 0;
+        }
+        .kb-org-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px 10px;
+        }
+        .kb-org-title {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--kb-text);
+        }
+        .kb-org-sub {
+            margin: 4px 0 0;
+            font-size: 12px;
+            color: var(--kb-dim);
+            line-height: 1.5;
+        }
+        .kb-org-close {
+            width: 36px;
+            height: 36px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.07);
+            color: rgba(241,245,255,0.92);
+            border: 1px solid rgba(255,255,255,0.1);
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .kb-org-toolbar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) repeat(3, auto);
+            gap: 8px;
+            padding: 0 16px 12px;
+        }
+        @media (max-width: 640px) {
+            .kb-org-toolbar {
+                grid-template-columns: 1fr 1fr;
+            }
+            .kb-org-toolbar .kb-org-group-select {
+                grid-column: 1 / -1;
+            }
+        }
+        .kb-org-status {
+            padding: 0 16px 12px;
+            font-size: 12px;
+            color: var(--kb-dim);
+            line-height: 1.5;
+        }
+        .kb-org-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 16px calc(20px + env(safe-area-inset-bottom, 0px));
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            -webkit-overflow-scrolling: touch;
+        }
+        .kb-org-card {
+            padding: 14px;
+            border-radius: 18px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .kb-org-card.is-highlight {
+            border-color: rgba(124,141,255,0.3);
+            box-shadow: 0 0 0 1px rgba(124,141,255,0.12);
+        }
+        .kb-org-card-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .kb-org-card-title {
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--kb-text);
+            line-height: 1.45;
+        }
+        .kb-org-card-meta {
+            margin-top: 4px;
+            font-size: 11px;
+            color: var(--kb-faint);
+            line-height: 1.4;
+        }
+        .kb-org-badge {
+            flex-shrink: 0;
+            padding: 5px 8px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.08);
+            color: rgba(240,244,255,0.84);
+            font-size: 10px;
+            font-weight: 700;
+        }
+        .kb-org-actions {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 8px;
+            align-items: center;
+        }
+        .kb-org-empty {
+            text-align: center;
+            padding: 46px 18px;
+            color: rgba(182,196,228,0.54);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        @media (min-width: 900px) {
+            .kb-v2-topbar,
+            .kb-v2-content-area,
+            .kb-v2-viewer-meta,
+            .kb-v2-viewer-body { padding-left: 22px; padding-right: 22px; }
+            .kb-v2-sticky-controls { padding: 14px; }
+            .kb-v2-adv-filters { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+            .kb-v2-search-input { font-size: 14px; }
+        }
 
         /* ══════════════════════════════════════════
            知识库 + 数据文件 合并模块样式
@@ -14957,13 +15511,13 @@
 
                         <div class="kb-upload-field" id="kb-single-title-wrap">
                             <label class="kb-upload-field-label">标题 <span class="req">*</span></label>
-                            <input id="knowledge-upload-title" type="text" placeholder="例：门店卫生操作SOP" class="kb-upload-input">
+                            <input id="knowledge-upload-title" type="text" placeholder="例：门店卫生操作SOP" class="kb-upload-input" oninput="syncKnowledgeUploadFields()">
                         </div>
 
                         <div class="kb-upload-field-row">
                             <div class="kb-upload-field">
                                 <label class="kb-upload-field-label">分类 <span class="req">*</span></label>
-                                <select id="knowledge-upload-category" class="kb-upload-select">
+                                <select id="knowledge-upload-category" class="kb-upload-select" onchange="syncKnowledgeUploadFields()">
                                     <option value="">请选择</option>
                                     <option value="岗位SOP">📋 岗位SOP</option>
                                     <option value="产品培训">🍽️ 产品培训</option>
@@ -15050,10 +15604,14 @@
 
                         <!-- ─── SOP 分组 ─── -->
                         <div class="kb-upload-field">
-                            <label class="kb-upload-field-label">添加到已有SOP分组（可选）</label>
+                            <label class="kb-upload-field-label">项目组 / SOP 分组</label>
                             <select id="knowledge-upload-group" class="kb-upload-select" onchange="syncKnowledgeUploadFields()">
-                                <option value="">新建SOP分组</option>
+                                <option value="">新建项目组</option>
                             </select>
+                            <div style="margin-top:8px;">
+                                <input id="knowledge-upload-group-name" type="text" placeholder="新项目组名称，例如：烧味岗位SOP / 新员工前厅培训" class="kb-upload-input">
+                            </div>
+                            <div id="knowledge-upload-group-note" style="margin-top:6px;font-size:12px;color:rgba(255,255,255,0.45);line-height:1.5;">可直接自定义项目组名字，也可以把文件放进已有项目组。</div>
                         </div>
 
                         <!-- ─── 第三组：培训认证联动 ─── -->
@@ -15111,18 +15669,20 @@
                 </div>
             </div>
 
-            <div id="knowledge-edit-modal" class="modal ui-modal">
-                <div class="modal-content" style="max-width: 520px; max-height: 90vh; max-height: 90dvh; display: flex; flex-direction: column;">
-                    <div class="modal-header" style="flex-shrink: 0;">
+            <div id="knowledge-edit-modal" class="modal kb-upload-modal-wrap">
+                <div class="kb-upload-sheet" style="max-width: 560px; width: min(560px, 100vw);">
+                    <div class="kb-upload-sheet-handle"></div>
+                    <div class="kb-upload-header" style="flex-shrink: 0;">
                         <div>
-                            <h3 class="ui-modal-title">编辑知识库内容</h3>
-                            <div class="ui-modal-desc">修改标题、分类、发布对象等</div>
+                            <div class="kb-upload-title">编辑知识库内容</div>
+                            <div class="kb-upload-subtitle">同步调整文件信息和所属项目组</div>
                         </div>
-                        <button class="modal-close" onclick="closeKnowledgeEditModal()">×</button>
+                        <button class="kb-upload-close" onclick="closeKnowledgeEditModal()">✕</button>
                     </div>
-                    <div class="modal-body" style="flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;">
+                    <div class="kb-upload-body" style="flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;">
                         <div class="ui-form-grid" style="grid-template-columns: 1fr;">
                             <input id="knowledge-edit-id" type="hidden">
+                            <div class="kb-upload-section-label">基础信息</div>
                             <div class="ui-form-group">
                                 <label class="ui-label">标题 <span class="req">*</span></label>
                                 <input id="knowledge-edit-title" type="text" placeholder="输入新标题">
@@ -15153,6 +15713,13 @@
                                 <label class="ui-label">版本号</label>
                                 <input id="knowledge-edit-version" type="text" placeholder="例如: v1.0、2024Q1">
                             </div>
+                            <div class="kb-upload-section-label">项目组设置</div>
+                            <div class="ui-form-group">
+                                <label class="ui-label">项目组名称 <span class="req">*</span></label>
+                                <input id="knowledge-edit-group-name" type="text" placeholder="例如：门店开档SOP / 后厨培训资料">
+                                <div style="margin-top:6px;font-size:12px;color:rgba(255,255,255,0.45);line-height:1.5;">这里改的是整个项目组的名字，不只是当前文件名。</div>
+                            </div>
+                            <div class="kb-upload-section-label">分发设置</div>
                             <div class="ui-form-group">
                                 <label class="ui-label">分发范围 <span class="req">*</span></label>
                                 <select id="knowledge-edit-audience-type" onchange="syncKnowledgeEditAudience()">
@@ -15170,10 +15737,10 @@
                                 <div id="knowledge-edit-audience-position-list" class="kb-aud-check-list" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid rgba(255,255,255,0.12);border-radius:10px;"></div>
                             </div>
                         </div>
-                        <div class="ui-modal-footer">
-                            <button class="btn btn-secondary" onclick="closeKnowledgeEditModal()">取消</button>
-                            <button class="btn" id="btn-knowledge-edit-confirm" onclick="confirmKnowledgeEdit()">保存修改</button>
-                        </div>
+                    </div>
+                    <div class="kb-upload-footer">
+                        <button class="kb-upload-btn-cancel" onclick="closeKnowledgeEditModal()">取消</button>
+                        <button class="kb-upload-btn-confirm" id="btn-knowledge-edit-confirm" onclick="confirmKnowledgeEdit()">保存修改</button>
                     </div>
                 </div>
             </div>
@@ -15564,63 +16131,84 @@
 
                 <!-- ── 列表视图 ── -->
                 <div id="kb-list-view" class="kb-v2-list-view">
-                    <!-- 顶部固定栏 -->
                     <div class="kb-v2-topbar">
-                        <div class="kb-v2-topbar-row">
-                            <div class="kb-v2-title">📚 知识库</div>
-                            <button class="kb-v2-upload-btn" id="btn-knowledge-upload" onclick="openKnowledgeUploadModal()">＋ 上传</button>
+                        <div class="kb-v2-hero">
+                            <div class="kb-v2-eyebrow">KNOWLEDGE HUB</div>
+                            <div class="kb-v2-hero-main">
+                                <div class="kb-v2-title-wrap">
+                                    <h2>知识库</h2>
+                                    <p>像“我的档案”一样更轻、更清楚，但更适合手机单手浏览和快速整理资料。</p>
+                                </div>
+                                <div class="kb-v2-hero-actions">
+                                    <button class="kb-v2-organize-btn" id="kb-organizer-entry" type="button" onclick="openKnowledgeOrganizerSheet()">整理/转组</button>
+                                    <button class="kb-v2-upload-btn" id="btn-knowledge-upload" type="button" onclick="openKnowledgeUploadModal()">＋ 上传</button>
+                                </div>
+                            </div>
+                            <div class="kb-v2-stat-strip">
+                                <div class="kb-v2-stat">
+                                    <div class="kb-v2-stat-label">分组</div>
+                                    <div class="kb-v2-stat-value" id="kb-stat-groups">0</div>
+                                    <div class="kb-v2-stat-sub">SOP 分组总数</div>
+                                </div>
+                                <div class="kb-v2-stat">
+                                    <div class="kb-v2-stat-label">资料</div>
+                                    <div class="kb-v2-stat-value" id="kb-stat-files">0</div>
+                                    <div class="kb-v2-stat-sub">当前可见文件</div>
+                                </div>
+                                <div class="kb-v2-stat">
+                                    <div class="kb-v2-stat-label">当前</div>
+                                    <div class="kb-v2-stat-value" id="kb-stat-focus">全部</div>
+                                    <div class="kb-v2-stat-sub">你正在浏览的范围</div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="kb-v2-search-wrap">
-                            <span class="kb-v2-search-icon">🔍</span>
-                            <input id="knowledge-search" id="knowledge-recent-search" class="kb-v2-search-input" type="text" placeholder="搜索文档、视频、标题..." oninput="renderKnowledgeList()" onkeyup="renderKnowledgeList()">
-                        </div>
-                        <!-- 类型筛选 -->
-                        <div class="kb-v2-type-tabs">
-                            <button class="kb-v2-ttab active" id="kb-tab-all" onclick="setKnowledgeTab('all')">全部</button>
-                            <button class="kb-v2-ttab" id="kb-tab-video" onclick="setKnowledgeTab('video')">🎬 视频</button>
-                            <button class="kb-v2-ttab" id="kb-tab-doc" onclick="setKnowledgeTab('doc')">📄 文档</button>
-                        </div>
-                        <!-- 管理员高级筛选（折叠） -->
-                        <div id="kb-admin-filters" class="kb-v2-adv-filters">
-                            <select id="knowledge-filter-audience" class="kb-v2-sel" onchange="renderKnowledgeList()">
-                                <option value="mine">与我相关</option>
-                                <option value="all">全量（管理员）</option>
-                            </select>
-                            <select id="knowledge-filter-store" class="kb-v2-sel" onchange="renderKnowledgeList()">
-                                <option value="">全部门店</option>
-                            </select>
-                            <select id="knowledge-filter-position" class="kb-v2-sel" onchange="renderKnowledgeList()">
-                                <option value="">全部岗位</option>
-                            </select>
-                            <select id="knowledge-filter-brand" class="kb-v2-sel" onchange="renderKnowledgeList()">
-                                <option value="">全部品牌</option>
-                            </select>
-                            <button class="kb-v2-reset-btn" onclick="resetKnowledgeFilters()">重置</button>
+                        <div class="kb-v2-sticky-controls">
+                            <div class="kb-v2-search-wrap">
+                                <span class="kb-v2-search-icon">🔍</span>
+                                <input id="knowledge-search" class="kb-v2-search-input" type="text" placeholder="搜索文档、视频、标题..." oninput="renderKnowledgeList()" onkeyup="renderKnowledgeList()">
+                            </div>
+                            <div class="kb-v2-type-tabs">
+                                <button class="kb-v2-ttab active" id="kb-tab-all" onclick="setKnowledgeTab('all')">全部</button>
+                                <button class="kb-v2-ttab" id="kb-tab-video" onclick="setKnowledgeTab('video')">🎬 视频</button>
+                                <button class="kb-v2-ttab" id="kb-tab-doc" onclick="setKnowledgeTab('doc')">📄 文档</button>
+                            </div>
+                            <div id="kb-admin-filters" class="kb-v2-adv-filters">
+                                <select id="knowledge-filter-audience" class="kb-v2-sel" onchange="renderKnowledgeList()">
+                                    <option value="mine">与我相关</option>
+                                    <option value="all">全量（管理员）</option>
+                                </select>
+                                <select id="knowledge-filter-store" class="kb-v2-sel" onchange="renderKnowledgeList()">
+                                    <option value="">全部门店</option>
+                                </select>
+                                <select id="knowledge-filter-position" class="kb-v2-sel" onchange="renderKnowledgeList()">
+                                    <option value="">全部岗位</option>
+                                </select>
+                                <select id="knowledge-filter-brand" class="kb-v2-sel" onchange="renderKnowledgeList()">
+                                    <option value="">全部品牌</option>
+                                </select>
+                                <button class="kb-v2-reset-btn" type="button" onclick="resetKnowledgeFilters()">重置</button>
+                            </div>
                         </div>
                     </div>
-                    <!-- 内容区 -->
                     <div class="kb-v2-content-area">
+                        <div id="kb-current-context" class="kb-v2-context">正在加载知识范围...</div>
                         <div id="knowledge-cards"></div>
                         <div id="knowledge-list" class="kb-v2-list"></div>
                         <div id="knowledge-list-empty" class="kb-v2-empty" style="display:none;">暂无内容</div>
-                        <!-- 分类占位（保留兼容） -->
                         <div id="kb-category-bar" style="display:none;"></div>
                         <div id="knowledge-tabs" style="display:none;"></div>
                     </div>
                 </div>
 
-                <!-- ── 详情视图（移动端全屏覆盖） ── -->
                 <div id="knowledge-viewer" class="kb-v2-viewer" oncontextmenu="return false;">
-                    <!-- 详情顶栏 -->
                     <div class="kb-v2-viewer-topbar">
-                        <button class="kb-v2-back-btn" id="knowledge-back-btn" onclick="kbBackToList()">‹ 返回</button>
+                        <button class="kb-v2-back-btn" id="knowledge-back-btn" onclick="kbBackToList()">‹ 返回列表</button>
                         <div class="kb-v2-viewer-acts">
-                            <button class="kb-v2-act-btn" id="knowledge-edit-btn" style="display:none;" onclick="">✏️</button>
-                            <button class="kb-v2-act-btn" id="knowledge-transfer-btn" style="display:none;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.6);padding:4px 8px;border-radius:6px;font-size:11px;cursor:pointer;">📁 转移</button>
-                            <button class="kb-v2-act-btn kb-v2-act-del" id="knowledge-delete-btn" style="display:none;" onclick="">🗑️</button>
+                            <button class="kb-v2-act-btn" id="knowledge-edit-btn" style="display:none;" type="button">编辑</button>
+                            <button class="kb-v2-act-btn" id="knowledge-transfer-btn" style="display:none;" type="button">转组</button>
+                            <button class="kb-v2-act-btn kb-v2-act-del" id="knowledge-delete-btn" style="display:none;" type="button">删除</button>
                         </div>
                     </div>
-                    <!-- 文章标题/元信息 -->
                     <div class="kb-v2-viewer-meta">
                         <div id="knowledge-viewer-title" class="kb-v2-viewer-title"></div>
                         <div id="knowledge-viewer-meta" class="kb-v2-viewer-metarow"></div>
@@ -15628,7 +16216,6 @@
                     <div id="knowledge-viewer-hint" class="kb-v2-viewer-hint">← 点击左侧内容查看</div>
                     <div id="attn-monitor-bar" style="display:none;"></div>
                     <div id="knowledge-viewer-body" class="kb-v2-viewer-body"></div>
-                    <!-- 底栏（兼容旧代码） -->
                     <div id="knowledge-viewer-toolbar" style="display:none;">
                         <button id="kb-toolbar-back" type="button" onclick="kbBackToList()"></button>
                         <button id="kb-toolbar-edit" type="button" style="display:none;"></button>
@@ -15638,6 +16225,27 @@
 
                 </div><!-- /kb-panel-knowledge -->
             </div><!-- /knowledge-page -->
+
+            <div id="knowledge-organizer-modal" class="kb-org-modal">
+                <div class="kb-org-sheet">
+                    <div class="kb-org-handle"></div>
+                    <div class="kb-org-head">
+                        <div>
+                            <h3 class="kb-org-title">知识库整理台</h3>
+                            <div class="kb-org-sub">这里专门用来做三件事：查看当前项目组里的文件、把文件转移到其他项目组、修改或删除整个项目组。</div>
+                        </div>
+                        <button class="kb-org-close" type="button" onclick="closeKnowledgeOrganizerSheet()">×</button>
+                    </div>
+                    <div class="kb-org-toolbar">
+                        <select id="kb-organizer-group" class="kb-org-group-select" onchange="handleKnowledgeOrganizerGroupChange(this.value)"></select>
+                        <button class="kb-org-refresh-btn" type="button" onclick="renameKnowledgeGroupFromOrganizer()">改组名</button>
+                        <button class="kb-org-refresh-btn" type="button" onclick="deleteKnowledgeGroupFromOrganizer()" style="background:rgba(255,142,166,0.12);border-color:rgba(255,142,166,0.22);color:#ffd5df;">删整组</button>
+                        <button class="kb-org-refresh-btn" type="button" onclick="refreshKnowledgeOrganizer()">刷新</button>
+                    </div>
+                    <div id="kb-organizer-status" class="kb-org-status">正在准备分组...</div>
+                    <div id="kb-organizer-list" class="kb-org-list"></div>
+                </div>
+            </div>
 
             <!-- 培训认证页面 -->
             <div id="training-page" class="hidden">
@@ -21519,6 +22127,18 @@
                 return this.request('/api/knowledge/group/' + encodeURIComponent(String(groupId || '')), { method: 'GET' });
             },
 
+            async updateKnowledgeGroup(groupId, payload) {
+                return this.request('/api/knowledge/group/' + encodeURIComponent(String(groupId || '')), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload || {})
+                });
+            },
+
+            async deleteKnowledgeGroup(groupId) {
+                return this.request('/api/knowledge/group/' + encodeURIComponent(String(groupId || '')), { method: 'DELETE' });
+            },
+
             async updateKnowledgeExplanation(id, explanation) {
                 return this.request('/api/knowledge/' + encodeURIComponent(String(id || '')) + '/explanation', {
                     method: 'PUT',
@@ -27333,8 +27953,9 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 const typeIcon = { video:'🎬', pdf:'📕', doc:'📘', img:'🖼️', txt:'📝' }[String(item.type||'doc')] || '📄';
                 const t = String(item.type || 'doc').toUpperCase();
                 const cat = String(item.category || '');
+                const groupName = String(item.groupName || getKnowledgeGroupLabel(item.groupId) || '').trim();
                 const sz = item.size ? formatFileSize(item.size) : '';
-                meta.innerHTML = `<span class="kb-v2-chip kb-v2-chip-type">${typeIcon} ${t}</span>${cat ? `<span class="kb-v2-chip" style="background:rgba(255,255,255,0.07);color:rgba(148,163,184,0.8);">${escapeHtml(cat)}</span>` : ''}${sz ? `<span class="kb-v2-item-date">${escapeHtml(sz)}</span>` : ''}`;
+                meta.innerHTML = `<span class="kb-v2-chip kb-v2-chip-type">${typeIcon} ${t}</span>${groupName ? `<span class="kb-v2-chip" style="background:rgba(124,141,255,0.16);color:#d8ddff;">${escapeHtml(groupName)}</span>` : ''}${cat ? `<span class="kb-v2-chip" style="background:rgba(255,255,255,0.07);color:rgba(148,163,184,0.8);">${escapeHtml(cat)}</span>` : ''}${sz ? `<span class="kb-v2-item-date">${escapeHtml(sz)}</span>` : ''}`;
             }
 
             // 管理员按钮
@@ -27351,7 +27972,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             }
             if (transferBtn) {
                 transferBtn.style.display = isAdminUser() ? '' : 'none';
-                transferBtn.onclick = () => openKnowledgeTransferModal(id);
+                transferBtn.onclick = () => openKnowledgeOrganizerSheet(item?.groupId || __KB_ACTIVE_GROUP_ID || '', id);
             }
 
             if (!body) return;
@@ -27699,6 +28320,42 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
         }
 
         let __KB_ACTIVE_GROUP_ID = '';
+        let __KB_ORGANIZER_GROUPS = [];
+        let __KB_ORGANIZER_ACTIVE_GROUP_ID = '';
+        let __KB_ORGANIZER_HIGHLIGHT_ITEM_ID = '';
+
+        function getVisibleKnowledgeItems(items) {
+            const list = Array.isArray(items) ? items : [];
+            return isAdminUser()
+                ? list.slice()
+                : list.filter((it) => knowledgeItemMatchesUser(it, currentUser));
+        }
+
+        function getKnowledgeGroupLabel(groupId) {
+            const gid = String(groupId || '').trim();
+            if (!gid) return '';
+            const hit = (__KB_CACHED_GROUPS || []).find((g) => String(g?.group_id || '') === gid);
+            if (hit) return String(hit?.title || '').trim();
+            const itemHit = (HRMS_STORE.getKnowledge() || []).find((item) => String(item?.groupId || '') === gid);
+            return String(itemHit?.groupName || '').trim();
+        }
+
+        function updateKnowledgeHeroStats(items, focusLabel, contextText) {
+            const visibleItems = getVisibleKnowledgeItems(items);
+            const groupsCountEl = document.getElementById('kb-stat-groups');
+            const filesCountEl = document.getElementById('kb-stat-files');
+            const focusEl = document.getElementById('kb-stat-focus');
+            const contextEl = document.getElementById('kb-current-context');
+            if (groupsCountEl) groupsCountEl.textContent = String((__KB_CACHED_GROUPS || []).length || 0);
+            if (filesCountEl) filesCountEl.textContent = String(visibleItems.length || 0);
+            if (focusEl) focusEl.textContent = String(focusLabel || '全部');
+            if (contextEl) contextEl.textContent = String(contextText || '向下查看资料列表，点击卡片进入详情。');
+        }
+
+        function syncKnowledgeAdminUi() {
+            const organizerBtn = document.getElementById('kb-organizer-entry');
+            if (organizerBtn) organizerBtn.style.display = isAdminUser() ? 'inline-flex' : 'none';
+        }
 
         async function loadKnowledgeGroups() {
             try {
@@ -27718,6 +28375,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             if (!groups.length) {
                 cardsEl.innerHTML = '<div class="kb-list-empty-msg">暂无SOP分组，请上传资料</div>';
                 if (empty) empty.style.display = 'none';
+                updateKnowledgeHeroStats([], '分组', '还没有 SOP 分组，管理员上传资料后会在这里形成更清晰的手机入口。');
                 return;
             }
             cardsEl.innerHTML = groups.map(g => {
@@ -27738,6 +28396,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 </div>`;
             }).join('');
             if (empty) empty.style.display = 'none';
+            updateKnowledgeHeroStats(HRMS_STORE.getKnowledge(), '分组', '先选一个 SOP 分组，再进入该分组下的资料列表。');
         }
 
         async function openKnowledgeGroup(groupId) {
@@ -27776,6 +28435,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         size: Number(r?.file_size || 0),
                         createdAt,
                         createdBy: String(r?.created_by || ''),
+                        groupId: String(r?.group_id || ''),
+                        groupName: normalizeKnowledgeTextDisplay(String(r?.group_name || '')),
                         source: 'cloud',
                         cloud: { filePath }
                     };
@@ -27785,6 +28446,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 if (!itemsMapped.length) {
                     if (cardsEl) cardsEl.innerHTML = '<div class="kb-list-empty-msg">该分组暂无文件</div>';
                     if (empty) empty.style.display = 'none';
+                    updateKnowledgeHeroStats([], '空分组', `当前分组「${getKnowledgeGroupLabel(groupId) || '未命名分组'}」还没有文件。`);
                     return;
                 }
                 const backHtml = `<div style="margin-bottom:16px;"><button onclick="kbBackToGroups()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.6);padding:6px 14px;border-radius:8px;font-size:12px;cursor:pointer;">‹ 返回所有分组</button></div>`;
@@ -27805,6 +28467,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     </div>`;
                 }).join('');
                 if (empty) empty.style.display = 'none';
+                updateKnowledgeHeroStats(itemsMapped, getKnowledgeGroupLabel(groupId) || '分组', `当前分组「${getKnowledgeGroupLabel(groupId) || '未命名分组'}」共 ${itemsMapped.length} 个文件，点击卡片进入详情。`);
             } catch (e) {
                 console.error(e);
                 if (cardsEl) cardsEl.innerHTML = '<div class="kb-list-empty-msg">加载失败: ' + escapeHtml(String(e.message || e)) + '</div>';
@@ -27821,6 +28484,202 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 renderKnowledgeGroupList();
             });
         }
+
+        async function openKnowledgeOrganizerSheet(preferredGroupId = '', highlightItemId = '') {
+            if (!isAdminUser()) {
+                showNotification('仅管理员可整理知识库文件', 'warning');
+                return;
+            }
+            const modal = document.getElementById('knowledge-organizer-modal');
+            if (!modal) return;
+            modal.classList.add('is-open');
+            __KB_ORGANIZER_HIGHLIGHT_ITEM_ID = String(highlightItemId || '').trim();
+            await refreshKnowledgeOrganizer(preferredGroupId || __KB_ACTIVE_GROUP_ID || __KB_ORGANIZER_ACTIVE_GROUP_ID || '');
+        }
+
+        function closeKnowledgeOrganizerSheet() {
+            const modal = document.getElementById('knowledge-organizer-modal');
+            if (modal) modal.classList.remove('is-open');
+            __KB_ORGANIZER_HIGHLIGHT_ITEM_ID = '';
+        }
+
+        async function refreshKnowledgeOrganizer(preferredGroupId = '') {
+            const statusEl = document.getElementById('kb-organizer-status');
+            const selectEl = document.getElementById('kb-organizer-group');
+            const listEl = document.getElementById('kb-organizer-list');
+            if (statusEl) statusEl.textContent = '正在同步分组与文件...';
+            if (listEl) listEl.innerHTML = '<div class="kb-org-empty">正在加载当前分组文件...</div>';
+            try {
+                const groupsResp = await HRMS_API.getKnowledgeGroups();
+                __KB_ORGANIZER_GROUPS = Array.isArray(groupsResp?.items) ? groupsResp.items : [];
+                if (!__KB_ORGANIZER_GROUPS.length) {
+                    if (selectEl) selectEl.innerHTML = '<option value="">暂无分组</option>';
+                    if (listEl) listEl.innerHTML = '<div class="kb-org-empty">还没有可整理的 SOP 分组。</div>';
+                    if (statusEl) statusEl.textContent = '暂无分组，请先上传资料创建 SOP 分组。';
+                    return;
+                }
+                if (selectEl) {
+                    selectEl.innerHTML = __KB_ORGANIZER_GROUPS.map((g) => {
+                        const gid = String(g?.group_id || '').trim();
+                        const title = String(g?.title || '未命名SOP');
+                        return `<option value="${escapeHtml(gid)}">${escapeHtml(title)} (${Number(g?.file_count || 0)}个文件)</option>`;
+                    }).join('');
+                }
+                const nextGroupId = String(preferredGroupId || __KB_ORGANIZER_ACTIVE_GROUP_ID || __KB_ORGANIZER_GROUPS?.[0]?.group_id || '').trim();
+                __KB_ORGANIZER_ACTIVE_GROUP_ID = nextGroupId;
+                if (selectEl) selectEl.value = nextGroupId;
+                await renderKnowledgeOrganizerGroup(nextGroupId);
+            } catch (e) {
+                console.error(e);
+                if (statusEl) statusEl.textContent = '整理台加载失败，请稍后重试。';
+                if (listEl) listEl.innerHTML = '<div class="kb-org-empty">分组加载失败，请稍后重试。</div>';
+            }
+        }
+
+        async function handleKnowledgeOrganizerGroupChange(groupId) {
+            __KB_ORGANIZER_ACTIVE_GROUP_ID = String(groupId || '').trim();
+            await renderKnowledgeOrganizerGroup(__KB_ORGANIZER_ACTIVE_GROUP_ID);
+        }
+
+        async function renderKnowledgeOrganizerGroup(groupId) {
+            const statusEl = document.getElementById('kb-organizer-status');
+            const listEl = document.getElementById('kb-organizer-list');
+            if (!listEl) return;
+            const gid = String(groupId || '').trim();
+            if (!gid) {
+                if (statusEl) statusEl.textContent = '请选择一个分组。';
+                listEl.innerHTML = '<div class="kb-org-empty">请选择一个分组后再整理文件。</div>';
+                return;
+            }
+            if (statusEl) statusEl.textContent = '正在载入当前分组文件...';
+            listEl.innerHTML = '<div class="kb-org-empty">正在载入当前分组文件...</div>';
+            try {
+                const data = await HRMS_API.getKnowledgeGroupFiles(gid);
+                const items = Array.isArray(data?.items) ? data.items : [];
+                const groupTitle = getKnowledgeGroupLabel(gid) || '未命名分组';
+                if (statusEl) statusEl.textContent = `当前项目组「${groupTitle}」共 ${items.length} 个文件。这里可以转移文件、改组名，也可以删除整个项目组。`;
+                if (!items.length) {
+                    listEl.innerHTML = '<div class="kb-org-empty">这个项目组还没有文件。你可以直接删组，或先上传新文件。</div>';
+                    return;
+                }
+                listEl.innerHTML = items.map((item) => {
+                    const id = String(item?.id || '');
+                    const title = normalizeKnowledgeTextDisplay(String(item?.title || '未命名资料'));
+                    const category = String(item?.category || '未分类');
+                    const createdAt = item?.created_at ? String(item.created_at).slice(0, 10) : '';
+                    const type = String(item?.file_type || '').toUpperCase() || 'FILE';
+                    const isHighlight = __KB_ORGANIZER_HIGHLIGHT_ITEM_ID && __KB_ORGANIZER_HIGHLIGHT_ITEM_ID === id;
+                    const targetOptions = __KB_ORGANIZER_GROUPS
+                        .filter((g) => String(g?.group_id || '') !== gid)
+                        .map((g) => `<option value="${escapeHtml(String(g?.group_id || ''))}">${escapeHtml(String(g?.title || '未命名SOP'))}</option>`)
+                        .join('');
+                    return `<div class="kb-org-card${isHighlight ? ' is-highlight' : ''}">
+                        <div class="kb-org-card-head">
+                            <div>
+                                <div class="kb-org-card-title">${escapeHtml(title)}</div>
+                                <div class="kb-org-card-meta">${escapeHtml(category)} · ${escapeHtml(type)}${createdAt ? ` · ${escapeHtml(createdAt)}` : ''}</div>
+                            </div>
+                            <span class="kb-org-badge">${escapeHtml(type)}</span>
+                        </div>
+                        <div class="kb-org-actions">
+                            <select class="kb-org-target-select" id="kb-org-target-${escapeHtml(id)}">
+                                <option value="">${targetOptions ? '选择目标项目组...' : '暂无其他项目组'}</option>
+                                ${targetOptions}
+                            </select>
+                            <button class="kb-org-move-btn" type="button" onclick="moveKnowledgeFromOrganizer('${escapeHtml(id)}', '${escapeHtml(gid)}')">转移</button>
+                        </div>
+                    </div>`;
+                }).join('');
+            } catch (e) {
+                console.error(e);
+                if (statusEl) statusEl.textContent = '文件加载失败，请重试。';
+                listEl.innerHTML = '<div class="kb-org-empty">当前分组文件加载失败，请稍后重试。</div>';
+            }
+        }
+
+        async function moveKnowledgeFromOrganizer(itemId, sourceGroupId) {
+            const targetEl = document.getElementById('kb-org-target-' + String(itemId || ''));
+            const targetGroupId = String(targetEl?.value || '').trim();
+            if (!targetGroupId) {
+                showNotification('请选择目标分组', 'warning');
+                return;
+            }
+            try {
+                await HRMS_API.moveKnowledgeToGroup(itemId, targetGroupId);
+                showNotification('资料已转移到目标分组', 'success');
+                __KB_ORGANIZER_HIGHLIGHT_ITEM_ID = String(itemId || '').trim();
+                await Promise.all([
+                    renderKnowledgeOrganizerGroup(String(sourceGroupId || '').trim()),
+                    loadKnowledgeGroups()
+                ]);
+                loadKnowledgeData();
+            } catch (e) {
+                showNotification('转移失败：' + String(e?.message || e), 'error');
+            }
+        }
+
+        async function renameKnowledgeGroupFromOrganizer() {
+            const groupId = String(document.getElementById('kb-organizer-group')?.value || '').trim();
+            if (!groupId) {
+                showNotification('请先选择一个项目组', 'warning');
+                return;
+            }
+            const currentName = getKnowledgeGroupLabel(groupId) || '未命名项目组';
+            const nextName = String(prompt('请输入新的项目组名称', currentName) || '').trim();
+            if (!nextName || nextName === currentName) return;
+            try {
+                await HRMS_API.updateKnowledgeGroup(groupId, { groupName: nextName });
+                const items = HRMS_STORE.getKnowledge();
+                (items || []).forEach((item) => {
+                    if (String(item?.groupId || '') === groupId) item.groupName = nextName;
+                });
+                HRMS_STORE.setKnowledge(items);
+                await loadKnowledgeGroups();
+                await refreshKnowledgeOrganizer(groupId);
+                renderKnowledgeList();
+                showNotification('项目组名称已更新', 'success');
+            } catch (e) {
+                showNotification('修改项目组名称失败：' + String(e?.message || e), 'error');
+            }
+        }
+
+        async function deleteKnowledgeGroupFromOrganizer() {
+            const groupId = String(document.getElementById('kb-organizer-group')?.value || '').trim();
+            const groupName = getKnowledgeGroupLabel(groupId) || '未命名项目组';
+            if (!groupId) {
+                showNotification('请先选择一个项目组', 'warning');
+                return;
+            }
+            if (!confirm(`确定删除整个项目组「${groupName}」吗？\n\n该组下所有文件都会一起删除。`)) return;
+            try {
+                await HRMS_API.deleteKnowledgeGroup(groupId);
+                const remaining = (HRMS_STORE.getKnowledge() || []).filter((item) => String(item?.groupId || '') !== groupId);
+                HRMS_STORE.setKnowledge(remaining);
+                if (String(__KB_ACTIVE_GROUP_ID || '') === groupId) __KB_ACTIVE_GROUP_ID = '';
+                if (String(window.__HRMS_KB_ACTIVE_ID || '').trim()) {
+                    const active = remaining.find((item) => String(item?.id || '') === String(window.__HRMS_KB_ACTIVE_ID || ''));
+                    if (!active) clearKnowledgeViewer();
+                }
+                await loadKnowledgeGroups();
+                await refreshKnowledgeOrganizer('');
+                renderKnowledgeList();
+                showNotification('整个项目组已删除', 'success');
+            } catch (e) {
+                showNotification('删除项目组失败：' + String(e?.message || e), 'error');
+            }
+        }
+
+        document.addEventListener('click', (event) => {
+            const modal = document.getElementById('knowledge-organizer-modal');
+            if (!modal || !modal.classList.contains('is-open')) return;
+            if (event.target === modal) closeKnowledgeOrganizerSheet();
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape') return;
+            const modal = document.getElementById('knowledge-organizer-modal');
+            if (modal && modal.classList.contains('is-open')) closeKnowledgeOrganizerSheet();
+        });
 
         function renderKnowledgeList() {
             const list = document.getElementById('knowledge-list');
@@ -27906,6 +28765,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 list.innerHTML = '';
                 if (empty) empty.style.display = '';
                 if (cardsEl) cardsEl.innerHTML = '<div class="kb-list-empty-msg">暂无内容，请上传资料</div>';
+                updateKnowledgeHeroStats([], '空结果', q ? `没有找到和“${q}”相关的资料，换个关键词试试。` : '当前筛选范围下暂无资料。');
                 return;
             }
             if (empty) empty.style.display = 'none';
@@ -27920,6 +28780,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             if (activeCat) {
                 // When a category is selected, show filtered items (not groups)
                 cardsEl.innerHTML = `<div class="kb-v2-cat-body">${items.map(it => kbRenderListItem(it, typeIcon, typeBadge)).join('')}</div>`;
+                updateKnowledgeHeroStats(items, activeCat, `已筛到分类「${activeCat}」，共 ${items.length} 个文件。`);
             } else if (tab === 'all' && !__KB_ACTIVE_GROUP_ID && !q) {
                 renderKnowledgeGroupList();
             } else {
@@ -27958,6 +28819,16 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     </div>`;
                 }
                 cardsEl.innerHTML = html;
+                const focusLabel = tab === 'video' ? '视频' : (tab === 'doc' ? '文档' : '全部');
+                const filters = [];
+                if (q) filters.push(`关键词“${q}”`);
+                if (storeVal) filters.push(`门店 ${storeVal}`);
+                if (positionVal) filters.push(`岗位 ${positionVal}`);
+                if (brandVal) filters.push(`品牌 ${brandVal}`);
+                const contextText = filters.length
+                    ? `当前按 ${filters.join(' / ')} 浏览，共 ${items.length} 个文件。`
+                    : `当前在「${focusLabel}」范围内，共 ${items.length} 个文件。`;
+                updateKnowledgeHeroStats(items, focusLabel, contextText);
             }
         }
 
@@ -29591,6 +30462,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             const btn = document.getElementById('btn-knowledge-upload');
             const isAdmin = currentUser && currentUser.role === ROLES.ADMIN;
             if (btn) btn.style.display = isAdmin ? '' : 'none';
+            syncKnowledgeAdminUi();
 
             const filterAudience = document.getElementById('knowledge-filter-audience');
             if (filterAudience) {
@@ -29648,6 +30520,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                             size: Number(r?.file_size || 0),
                             createdAt,
                             createdBy: String(r?.created_by || ''),
+                            groupId: String(r?.group_id || ''),
+                            groupName: normalizeKnowledgeTextDisplay(String(r?.group_name || '')),
                             source: 'cloud',
                             cloud: { filePath }
                         };
@@ -35601,6 +36475,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             const file = document.getElementById('knowledge-upload-file');
             const status = document.getElementById('knowledge-upload-file-status');
             const aud = document.getElementById('knowledge-upload-audience-type');
+            const groupName = document.getElementById('knowledge-upload-group-name');
             if (title) title.value = '';
             if (category) category.value = '';
             if (type) type.value = 'pdf';
@@ -35608,6 +36483,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             if (aud) aud.value = 'all';
             if (file) file.value = '';
             if (status) status.textContent = '';
+            if (groupName) groupName.value = '';
             // Reset file zone display
             const fileIcon = document.getElementById('kb-upload-file-icon');
             const fileLabel = document.getElementById('kb-upload-file-label');
@@ -35623,9 +36499,9 @@ ${knowledgeContent.slice(0, 30000)}`;
                     const opts = (groups?.items || []).map(g =>
                         `<option value="${escapeHtml(String(g.group_id || ''))}">${escapeHtml(String(g.title || ''))} (${g.file_count || 0}个文件)</option>`
                     );
-                    sel.innerHTML = '<option value="">新建SOP分组</option>' + opts.join('');
+                    sel.innerHTML = '<option value="">新建项目组</option>' + opts.join('');
                 } catch (e) {
-                    sel.innerHTML = '<option value="">新建SOP分组</option>';
+                    sel.innerHTML = '<option value="">新建项目组</option>';
                 }
             })();
 
@@ -35728,6 +36604,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             document.getElementById('knowledge-edit-category').value = String(item.category || '');
             document.getElementById('knowledge-edit-scope').value = String(item.scope || 'public');
             document.getElementById('knowledge-edit-version').value = String(item.version || '');
+            document.getElementById('knowledge-edit-group-name').value = String(item.groupName || getKnowledgeGroupLabel(item.groupId) || item.title || '');
             document.getElementById('knowledge-edit-audience-type').value = String(item.audience?.type || 'all');
 
             syncKnowledgeEditAudience();
@@ -35752,52 +36629,22 @@ ${knowledgeContent.slice(0, 30000)}`;
                 }
             }
 
-            modal.style.display = 'flex';
+            modal.classList.add('active');
         }
 
         function closeKnowledgeEditModal() {
             const modal = document.getElementById('knowledge-edit-modal');
-            if (modal) modal.style.display = 'none';
+            if (modal) modal.classList.remove('active');
         }
 
         async function openKnowledgeTransferModal(itemId) {
-            if (!isAdminUser()) { showNotification('仅管理员可操作', 'warning'); return; }
-            const groups = await HRMS_API.getKnowledgeGroups().catch(() => ({ items: [] }));
-            const opts = (groups?.items || []).map(g =>
-                `<option value="${escapeHtml(String(g.group_id || ''))}">${escapeHtml(String(g.title || ''))} (${g.file_count || 0}个文件)</option>`
-            );
-            const selHtml = `<select style="width:100%;padding:8px;border-radius:6px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.8);font-size:13px;margin-bottom:12px;">${opts.join('')}</select>`;
-            const dialog = document.createElement('div');
-            dialog.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:10000;display:flex;align-items:center;justify-content:center;';
-            dialog.innerHTML = `<div style="background:#1e1e2e;border-radius:12px;padding:24px;max-width:360px;width:90%;border:1px solid rgba(255,255,255,0.1);">
-                <div style="font-size:14px;font-weight:600;color:#fff;margin-bottom:16px;">转移到其他分组</div>
-                ${selHtml}
-                <div style="display:flex;gap:8px;justify-content:flex-end;">
-                    <button id="kb-transfer-cancel" style="padding:6px 16px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:12px;cursor:pointer;">取消</button>
-                    <button id="kb-transfer-ok" style="padding:6px 16px;border-radius:8px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.3);color:#a5b4fc;font-size:12px;cursor:pointer;">确认转移</button>
-                </div>
-            </div>`;
-            document.body.appendChild(dialog);
-            dialog.querySelector('#kb-transfer-cancel').onclick = () => dialog.remove();
-            dialog.querySelector('#kb-transfer-ok').onclick = async () => {
-                const sel = dialog.querySelector('select');
-                const targetGid = sel?.value || '';
-                if (!targetGid) { showNotification('请选择目标分组', 'warning'); return; }
-                try {
-                    const okBtn = dialog.querySelector('#kb-transfer-ok');
-                    if (okBtn) okBtn.disabled = true;
-                    await HRMS_API.moveKnowledgeToGroup(itemId, targetGid);
-                    dialog.remove();
-                    clearKnowledgeViewer();
-                    showNotification('已转移', 'success');
-                    loadKnowledgeData();
-                } catch (e) {
-                    showNotification('转移失败：' + String(e.message || e), 'error');
-                    const okBtn = dialog.querySelector('#kb-transfer-ok');
-                    if (okBtn) okBtn.disabled = false;
-                }
-            };
-            dialog.onclick = (e) => { if (e.target === dialog) dialog.remove(); };
+            if (!isAdminUser()) {
+                showNotification('仅管理员可操作', 'warning');
+                return;
+            }
+            const items = HRMS_STORE.getKnowledge();
+            const item = (items || []).find((x) => String(x?.id || '') === String(itemId || ''));
+            await openKnowledgeOrganizerSheet(item?.groupId || __KB_ACTIVE_GROUP_ID || '', itemId);
         }
 
         function syncKnowledgeEditAudience() {
@@ -35853,10 +36700,12 @@ ${knowledgeContent.slice(0, 30000)}`;
             const category = (document.getElementById('knowledge-edit-category')?.value || '').trim();
             const scope = (document.getElementById('knowledge-edit-scope')?.value || 'public').trim();
             const version = (document.getElementById('knowledge-edit-version')?.value || '').trim();
+            const groupName = (document.getElementById('knowledge-edit-group-name')?.value || '').trim();
             const audType = (document.getElementById('knowledge-edit-audience-type')?.value || '').trim();
 
             if (!title) { showNotification('请输入标题', 'warning'); return; }
             if (!category) { showNotification('请选择分类', 'warning'); return; }
+            if (!groupName) { showNotification('请输入项目组名称', 'warning'); return; }
             if (!['all', 'store', 'position'].includes(audType)) { showNotification('请选择分发范围', 'warning'); return; }
 
             const audience = { type: audType };
@@ -35879,7 +36728,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 audience.position = positions[0];
             }
 
-            const payload = { title, category, scope, audience };
+            const payload = { title, category, scope, audience, groupName };
             if (version) payload.version = version;
 
             try {
@@ -35889,6 +36738,10 @@ ${knowledgeContent.slice(0, 30000)}`;
                 if (result?.item) {
                     const items = HRMS_STORE.getKnowledge();
                     const idx = (items || []).findIndex(x => String(x?.id || '') === id);
+                    const targetGroupId = idx >= 0 ? String(items[idx]?.groupId || '') : String(result?.item?.group_id || '');
+                    (items || []).forEach((it) => {
+                        if (targetGroupId && String(it?.groupId || '') === targetGroupId) it.groupName = groupName;
+                    });
                     if (idx >= 0) {
                         items[idx].title = result.item.title;
                         items[idx].category = result.item.category;
@@ -35899,6 +36752,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                     }
                     HRMS_STORE.setKnowledge(items);
                     closeKnowledgeEditModal();
+                    await loadKnowledgeGroups();
                     renderKnowledgeList();
                     const viewerTitle = document.getElementById('knowledge-viewer-title');
                     if (viewerTitle && window.__HRMS_KB_ACTIVE_ID === id) viewerTitle.textContent = title;
@@ -35991,6 +36845,11 @@ ${knowledgeContent.slice(0, 30000)}`;
             const type = (document.getElementById('knowledge-upload-type')?.value || '').trim();
             const audType = (document.getElementById('knowledge-upload-audience-type')?.value || '').trim();
             const agent = (document.getElementById('knowledge-upload-agent')?.value || '').trim();
+            const groupId = (document.getElementById('knowledge-upload-group')?.value || '').trim();
+            const groupNameInput = document.getElementById('knowledge-upload-group-name');
+            const groupNoteEl = document.getElementById('knowledge-upload-group-note');
+            const category = (document.getElementById('knowledge-upload-category')?.value || '').trim();
+            const title = (document.getElementById('knowledge-upload-title')?.value || '').trim();
             const boxStore = document.getElementById('knowledge-upload-audience-store-box');
             const boxPos = document.getElementById('knowledge-upload-audience-position-box');
             if (boxStore) boxStore.style.display = audType === 'store' ? '' : 'none';
@@ -36027,6 +36886,19 @@ ${knowledgeContent.slice(0, 30000)}`;
                 else if (type === 'txt') fileEl.accept = 'text/plain,.txt';
                 else if (type === 'img') fileEl.accept = 'image/*,.png,.jpg,.jpeg,.webp,.bmp';
                 else fileEl.accept = '';
+            }
+
+            if (groupNameInput) {
+                const fallbackName = title || category || '';
+                groupNameInput.style.display = groupId ? 'none' : '';
+                if (!groupId && !String(groupNameInput.value || '').trim() && fallbackName) {
+                    groupNameInput.placeholder = `新项目组名称，例如：${fallbackName}`;
+                }
+            }
+            if (groupNoteEl) {
+                groupNoteEl.textContent = groupId
+                    ? '已选择已有项目组，上传后会直接进入该组。要换名字请在“整理/转组”里修改。'
+                    : '未选择已有项目组时，会新建一个项目组；这里的名字可自定义。';
             }
         }
 
@@ -36175,6 +37047,7 @@ ${knowledgeContent.slice(0, 30000)}`;
             const quizEnabled = document.getElementById('knowledge-upload-quiz-link')?.checked || false;
             const trainingModule = (document.getElementById('knowledge-upload-training-module')?.value || '').trim();
             const groupId = (document.getElementById('knowledge-upload-group')?.value || '').trim();
+            const groupName = (document.getElementById('knowledge-upload-group-name')?.value || '').trim();
             const fileInput = document.getElementById('knowledge-upload-file');
             const statusEl = document.getElementById('knowledge-upload-file-status');
             const feedTags = getKnowledgeAgentTags(feedAgent);
@@ -36272,6 +37145,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                     fd.append('quizEnabled', quizEnabled ? '1' : '0');
                     if (trainingModule) fd.append('trainingModule', trainingModule);
                     if (groupId) fd.append('groupId', groupId);
+                    if (groupName) fd.append('groupName', groupName);
 
                     renderKnowledgeUploadProgress(1, `批量上传 ${files.length} 个文件中...`);
                     const result = await HRMS_API.batchUploadKnowledge(fd);
@@ -36364,6 +37238,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                             audienceType: audience.type,
                             isRequired,
                             quizEnabled,
+                            ...(groupName ? { groupName } : {}),
                             ...(groupId ? { groupId } : {}),
                             ...(trainingModule ? { trainingModule } : {}),
                             ...(videoSummary ? { videoSummary } : {}),
@@ -36403,6 +37278,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                         fd.append('quizEnabled', quizEnabled ? '1' : '0');
                         if (trainingModule) fd.append('trainingModule', trainingModule);
                         if (groupId) fd.append('groupId', groupId);
+                        if (groupName) fd.append('groupName', groupName);
                         fd.append('file', file, file.name);
                         await HRMS_API.uploadKnowledge(fd);
 
@@ -36440,6 +37316,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                     fd.append('quizEnabled', quizEnabled ? '1' : '0');
                     if (trainingModule) fd.append('trainingModule', trainingModule);
                     if (groupId) fd.append('groupId', groupId);
+                    if (groupName) fd.append('groupName', groupName);
                     fd.append('file', file, file.name);
 
                     await HRMS_API.uploadKnowledge(fd);

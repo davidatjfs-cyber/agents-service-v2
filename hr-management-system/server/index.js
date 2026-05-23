@@ -14229,6 +14229,34 @@ function normalizeCreatedByUuid(input) {
   return isUuid(v) ? v : null;
 }
 
+function normalizeKnowledgeGroupName(input) {
+  return String(input || '').trim().slice(0, 120);
+}
+
+async function resolveKnowledgeGroupName(groupId, providedName, fallbackName) {
+  const named = normalizeKnowledgeGroupName(providedName);
+  if (named) return named;
+  const gid = String(groupId || '').trim();
+  if (gid) {
+    try {
+      const r = await pool.query(
+        `SELECT group_name, title
+         FROM knowledge_base
+         WHERE group_id = $1::uuid
+         ORDER BY updated_at DESC NULLS LAST, created_at ASC NULLS LAST
+         LIMIT 1`,
+        [gid]
+      );
+      const row = r.rows?.[0] || {};
+      const existing = normalizeKnowledgeGroupName(row.group_name || row.title || '');
+      if (existing) return existing;
+    } catch (e) {
+      console.warn('[knowledge] resolve group name failed:', e?.message || e);
+    }
+  }
+  return normalizeKnowledgeGroupName(fallbackName) || '未命名项目组';
+}
+
 // ─── Garbled UTF-8 repair (mojibake: UTF-8 bytes mis-decoded as Latin-1) ─────
 function repairGarbledUtf8(str) {
   if (typeof str !== 'string' || str.length < 2) return str;
@@ -16001,7 +16029,7 @@ app.get('/api/knowledge', authRequired, async (req, res) => {
     const qBrand = buildKnowledgeBrandScopeTag(req.query?.brandId || req.query?.brandScope || 'all');
     const withBrandFilter = qBrand && qBrand !== 'brand:all';
     const r = await pool.query(
-      `select id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience, group_id
+      `select id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience, group_id, group_name
        from knowledge_base
        ${withBrandFilter ? 'where tags @> $1::text[] or tags @> ARRAY[\'brand:all\']::text[]' : ''}
        order by created_at desc`,
@@ -16021,18 +16049,42 @@ app.get('/api/knowledge/groups', authRequired, async (req, res) => {
   try {
     const viewer = await getKnowledgeViewerProfile(req);
     const r = await pool.query(
-      `select g.group_id, g.title, g.category, g.tags, g.scope, count(*)::int as file_count,
-              max(g.updated_at) as updated_at, max(g.created_at) as created_at
-       from knowledge_base g
-       left join knowledge_base f on f.group_id = g.group_id
-       where coalesce(g.id::text, '') = coalesce(g.group_id::text, g.id::text)
-       group by g.group_id, g.title, g.category, g.tags, g.scope
-       order by max(g.updated_at) desc`
+      `select id, group_id, group_name, title, category, tags, scope, audience, created_at, updated_at
+       from knowledge_base
+       order by updated_at desc nulls last, created_at desc nulls last`
     );
-    const rows = (r.rows || []).filter(
+    const visible = (r.rows || []).filter(
       (row) => viewer.role === 'admin' || canViewerSeeKnowledgeAudience(viewer, row.audience)
     );
-    return res.json({ items: rows });
+    const grouped = new Map();
+    for (const row of visible) {
+      const gid = String(row?.group_id || '').trim();
+      if (!gid) continue;
+      if (!grouped.has(gid)) {
+        grouped.set(gid, {
+          group_id: gid,
+          title: normalizeKnowledgeGroupName(row?.group_name || row?.title || '') || '未命名项目组',
+          category: String(row?.category || '').trim(),
+          tags: Array.isArray(row?.tags) ? row.tags : [],
+          scope: String(row?.scope || '').trim(),
+          file_count: 0,
+          created_at: String(row?.created_at || ''),
+          updated_at: String(row?.updated_at || '')
+        });
+      }
+      const entry = grouped.get(gid);
+      entry.file_count += 1;
+      if (!entry.category && row?.category) entry.category = String(row.category || '').trim();
+      if ((!entry.title || entry.title === '未命名项目组') && (row?.group_name || row?.title)) {
+        entry.title = normalizeKnowledgeGroupName(row?.group_name || row?.title || '') || entry.title;
+      }
+      const updatedAt = String(row?.updated_at || '');
+      const createdAt = String(row?.created_at || '');
+      if (updatedAt && (!entry.updated_at || updatedAt > entry.updated_at)) entry.updated_at = updatedAt;
+      if (createdAt && (!entry.created_at || createdAt < entry.created_at)) entry.created_at = createdAt;
+    }
+    const items = Array.from(grouped.values()).sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
+    return res.json({ items });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
@@ -16043,14 +16095,18 @@ app.get('/api/knowledge/group/:groupId', authRequired, async (req, res) => {
   const groupId = String(req.params?.groupId || '').trim();
   if (!groupId) return res.status(400).json({ error: 'missing_group_id' });
   try {
+    const viewer = await getKnowledgeViewerProfile(req);
     const r = await pool.query(
       `select id, title, content, category, tags, file_path, file_type, file_size, ai_explanation,
-              created_by, version, created_at, updated_at, audience, group_id
+              created_by, version, created_at, updated_at, audience, group_id, group_name
        from knowledge_base where group_id = $1::uuid
        order by created_at asc`,
       [groupId]
     );
-    return res.json({ items: r.rows || [] });
+    const rows = (r.rows || []).filter(
+      (row) => viewer.role === 'admin' || canViewerSeeKnowledgeAudience(viewer, row.audience)
+    );
+    return res.json({ items: rows });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
@@ -16147,20 +16203,78 @@ app.put('/api/knowledge/:id/group', authRequired, async (req, res) => {
   if (!id) return res.status(400).json({ error: 'missing_id' });
   if (!groupId) return res.status(400).json({ error: 'missing_groupId' });
   try {
-    const old = await pool.query('SELECT group_id FROM knowledge_base WHERE id = $1::uuid', [id]);
-    const oldGroupId = old.rows?.[0]?.group_id;
-    await pool.query('UPDATE knowledge_base SET group_id = $1::uuid, updated_at = NOW() WHERE id = $2::uuid', [groupId, id]);
-    if (oldGroupId && String(oldGroupId) === String(id)) {
-      await pool.query(
-        `UPDATE knowledge_base SET group_id = id, updated_at = NOW()
-         WHERE id = (SELECT id FROM knowledge_base WHERE group_id = $1::uuid ORDER BY created_at ASC LIMIT 1)
-         AND NOT EXISTS (SELECT 1 FROM knowledge_base WHERE group_id = $1::uuid AND id = group_id)`,
-        [oldGroupId]
-      );
-    }
+    const target = await pool.query('SELECT 1 FROM knowledge_base WHERE group_id = $1::uuid LIMIT 1', [groupId]);
+    if (!target.rows?.length) return res.status(404).json({ error: 'target_group_not_found' });
+    const nextGroupName = await resolveKnowledgeGroupName(groupId, '', '');
+    await pool.query(
+      'UPDATE knowledge_base SET group_id = $1::uuid, group_name = $2, updated_at = NOW() WHERE id = $3::uuid',
+      [groupId, nextGroupName, id]
+    );
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+  }
+});
+
+// PUT /api/knowledge/group/:groupId — 修改整个项目组名称
+app.put('/api/knowledge/group/:groupId', authRequired, async (req, res) => {
+  if (String(req.user?.role || '') !== 'admin') {
+    return res.status(403).json({ error: 'admin_only' });
+  }
+  const groupId = String(req.params?.groupId || '').trim();
+  const groupName = normalizeKnowledgeGroupName(req.body?.groupName || req.body?.title || '');
+  if (!groupId) return res.status(400).json({ error: 'missing_group_id' });
+  if (!groupName) return res.status(400).json({ error: 'missing_group_name' });
+  try {
+    const r = await pool.query(
+      `UPDATE knowledge_base
+       SET group_name = $2, updated_at = NOW()
+       WHERE group_id = $1::uuid
+       RETURNING id`,
+      [groupId, groupName]
+    );
+    if (!r.rowCount) return res.status(404).json({ error: 'group_not_found' });
+    return res.json({ success: true, updated: Number(r.rowCount || 0), groupId, groupName });
+  } catch (e) {
+    return res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+  }
+});
+
+// DELETE /api/knowledge/group/:groupId — 删除整个项目组
+app.delete('/api/knowledge/group/:groupId', authRequired, async (req, res) => {
+  if (String(req.user?.role || '') !== 'admin') {
+    return res.status(403).json({ error: 'admin_only' });
+  }
+  const groupId = String(req.params?.groupId || '').trim();
+  if (!groupId) return res.status(400).json({ error: 'missing_group_id' });
+  try {
+    const r = await pool.query(
+      `SELECT id, file_path
+       FROM knowledge_base
+       WHERE group_id = $1::uuid`,
+      [groupId]
+    );
+    const rows = r.rows || [];
+    if (!rows.length) return res.status(404).json({ error: 'group_not_found' });
+    for (const row of rows) {
+      const filePath = String(row?.file_path || '').trim();
+      if (!filePath) continue;
+      try {
+        const rel = filePath.replace(/^\/uploads\//, '').replace(/^uploads\//, '');
+        const normalized = path.posix.normalize(rel).replace(/^\/+/, '');
+        if (normalized && normalized !== '.' && !normalized.includes('..')) {
+          const abs = path.join(uploadsDir, normalized);
+          if (fs.existsSync(abs)) fs.unlinkSync(abs);
+        }
+      } catch (e) {
+        console.log('knowledge group delete file cleanup (non-fatal):', e?.message || e);
+      }
+    }
+    await pool.query('DELETE FROM knowledge_base WHERE group_id = $1::uuid', [groupId]);
+    return res.json({ ok: true, deleted: rows.length });
+  } catch (e) {
+    console.error('DELETE /api/knowledge/group/:groupId error:', e);
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 });
 
@@ -16208,6 +16322,10 @@ app.put('/api/knowledge/:id', authRequired, async (req, res) => {
   if (!id) return res.status(400).json({ error: 'missing_id' });
 
   const { title, category, audience, scope, tags, version } = req.body || {};
+  const groupNameRaw = Object.prototype.hasOwnProperty.call(req.body || {}, 'groupName')
+    ? req.body?.groupName
+    : undefined;
+  const groupName = groupNameRaw === undefined ? undefined : normalizeKnowledgeGroupName(groupNameRaw);
   const sets = [];
   const params = [];
   let idx = 1;
@@ -16243,12 +16361,27 @@ app.put('/api/knowledge/:id', authRequired, async (req, res) => {
   params.push(id);
 
   try {
+    let targetGroupId = '';
+    if (groupNameRaw !== undefined) {
+      if (!groupName) return res.status(400).json({ error: 'missing_group_name' });
+      const groupLookup = await pool.query('SELECT group_id FROM knowledge_base WHERE id = $1::uuid LIMIT 1', [id]);
+      targetGroupId = String(groupLookup.rows?.[0]?.group_id || '').trim();
+    }
     const r = await pool.query(
-      `UPDATE knowledge_base SET ${sets.join(', ')} WHERE id = $${idx} RETURNING id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience`,
+      `UPDATE knowledge_base SET ${sets.join(', ')} WHERE id = $${idx} RETURNING id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience, group_id, group_name`,
       params
     );
     const row = r.rows?.[0];
     if (!row) return res.status(404).json({ error: 'not_found' });
+    if (targetGroupId && groupName) {
+      await pool.query(
+        `UPDATE knowledge_base
+         SET group_name = $2, updated_at = NOW()
+         WHERE group_id = $1::uuid`,
+        [targetGroupId, groupName]
+      );
+      row.group_name = groupName;
+    }
     return res.json({ item: row });
   } catch (e) {
     console.error('PUT /api/knowledge/:id error:', e);
@@ -16276,6 +16409,7 @@ app.post('/api/knowledge/batch', authRequired, knowledgeUpload.array('files', 10
   const customPrefix = String(req.body?.customPrefix || '').trim();
   const audienceObj = parseKnowledgeAudienceFromBody(req.body);
   let groupId = String(req.body?.groupId || '').trim();
+  const requestedGroupName = normalizeKnowledgeGroupName(req.body?.groupName || req.body?.group_name || '');
   if (!groupId || groupId === 'new') groupId = '';
   let useGroupId = groupId || null;
   if (!useGroupId && title) {
@@ -16283,6 +16417,11 @@ app.post('/api/knowledge/batch', authRequired, knowledgeUpload.array('files', 10
     if (existing.rows?.[0]?.group_id) useGroupId = existing.rows[0].group_id;
   }
   if (!useGroupId) useGroupId = randomUUID();
+  const useGroupName = await resolveKnowledgeGroupName(
+    useGroupId,
+    requestedGroupName,
+    title || customPrefix || category || '未命名项目组'
+  );
   if (!category) return res.status(400).json({ error: 'missing_category' });
   if (!feedAgent) return res.status(400).json({ error: 'missing_feed_agent' });
 
@@ -16305,10 +16444,10 @@ app.post('/api/knowledge/batch', authRequired, knowledgeUpload.array('files', 10
 
     try {
       const r = await pool.query(
-        `insert into knowledge_base (title, content, category, tags, file_path, file_type, file_size, access_roles, access_departments, created_by, scope, version, audience, group_id)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::uuid)
-         returning id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience`,
-        [fileTitle, '', category || null, tags, filePath, fileType || null, size || null, null, null, createdBy, kbScope, version, audienceObj, useGroupId]
+        `insert into knowledge_base (title, content, category, tags, file_path, file_type, file_size, access_roles, access_departments, created_by, scope, version, audience, group_id, group_name)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::uuid,$15)
+         returning id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience, group_id, group_name`,
+        [fileTitle, '', category || null, tags, filePath, fileType || null, size || null, null, null, createdBy, kbScope, version, audienceObj, useGroupId, useGroupName]
       );
       results.push(r.rows?.[0] || null);
 
@@ -16463,6 +16602,7 @@ app.post('/api/knowledge/direct', authRequired, async (req, res) => {
   const version = String(req.body?.version || '').trim() || null;
   const videoSummary = fileType === 'video' ? String(req.body?.videoSummary || '').trim() : '';
   let groupId = String(req.body?.groupId || '').trim();
+  const requestedGroupName = normalizeKnowledgeGroupName(req.body?.groupName || req.body?.group_name || '');
   if (!groupId || groupId === 'new') groupId = '';
 
   if (!title) return res.status(400).json({ error: 'missing_title' });
@@ -16479,11 +16619,12 @@ app.post('/api/knowledge/direct', authRequired, async (req, res) => {
       if (existing.rows?.[0]?.group_id) useGroupId = existing.rows[0].group_id;
     }
     if (!useGroupId) useGroupId = randomUUID();
+    const useGroupName = await resolveKnowledgeGroupName(useGroupId, requestedGroupName, title || category || '未命名项目组');
     const r = await pool.query(
-      `insert into knowledge_base (title, content, category, tags, file_path, file_type, file_size, access_roles, access_departments, created_by, scope, version, audience, group_id)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::uuid)
-       returning id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience`,
-      [title, videoSummary, category || null, tags, filePath, fileType || null, size || null, null, null, createdBy, kbScope, version, audienceObj, useGroupId]
+      `insert into knowledge_base (title, content, category, tags, file_path, file_type, file_size, access_roles, access_departments, created_by, scope, version, audience, group_id, group_name)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::uuid,$15)
+       returning id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience, group_id, group_name`,
+      [title, videoSummary, category || null, tags, filePath, fileType || null, size || null, null, null, createdBy, kbScope, version, audienceObj, useGroupId, useGroupName]
     );
     return res.json({ item: r.rows?.[0] || null });
   } catch (e) {
@@ -16506,6 +16647,7 @@ app.post('/api/knowledge', authRequired, knowledgeUpload.single('file'), async (
   const version = String(req.body?.version || '').trim() || null;
   const videoSummary = fileType === 'video' ? String(req.body?.videoSummary || '').trim() : '';
   let groupId = String(req.body?.groupId || '').trim();
+  const requestedGroupName = normalizeKnowledgeGroupName(req.body?.groupName || req.body?.group_name || '');
   if (!groupId || groupId === 'new') groupId = '';
 
   const localPath = req.file ? path.join(uploadsDir, req.file.filename) : '';
@@ -16524,11 +16666,12 @@ app.post('/api/knowledge', authRequired, knowledgeUpload.single('file'), async (
       if (existing.rows?.[0]?.group_id) useGroupId = existing.rows[0].group_id;
     }
     if (!useGroupId) useGroupId = randomUUID();
+    const useGroupName = await resolveKnowledgeGroupName(useGroupId, requestedGroupName, title || category || '未命名项目组');
     const r = await pool.query(
-      `insert into knowledge_base (title, content, category, tags, file_path, file_type, file_size, access_roles, access_departments, created_by, scope, version, audience, group_id)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::uuid)
-       returning id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience`,
-      [title, videoSummary, category || null, tags, `uploads/${req.file.filename}`, fileType || null, size || null, null, null, createdBy, kbScope, version, audienceObj, useGroupId]
+      `insert into knowledge_base (title, content, category, tags, file_path, file_type, file_size, access_roles, access_departments, created_by, scope, version, audience, group_id, group_name)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::uuid,$15)
+       returning id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience, group_id, group_name`,
+      [title, videoSummary, category || null, tags, `uploads/${req.file.filename}`, fileType || null, size || null, null, null, createdBy, kbScope, version, audienceObj, useGroupId, useGroupName]
     );
     inserted = r.rows?.[0] || null;
   } catch (e) {
@@ -17870,6 +18013,15 @@ app.listen(PORT, HOST, async () => {
     await pool.query(
       `ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS audience JSONB DEFAULT '{"type":"all"}'::jsonb`
     ).catch((e) => console.warn('[migration] knowledge_base.audience:', e?.message));
+    // 知识库项目组名称：独立于文件标题，避免“组名=第一份文件名”
+    await pool.query(
+      `ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS group_name VARCHAR(120) DEFAULT NULL`
+    ).catch((e) => console.warn('[migration] knowledge_base.group_name:', e?.message));
+    await pool.query(
+      `UPDATE knowledge_base
+       SET group_name = COALESCE(NULLIF(group_name, ''), title)
+       WHERE COALESCE(group_name, '') = ''`
+    ).catch((e) => console.warn('[migration] knowledge_base.group_name.backfill:', e?.message));
     // Runtime migration: 文件管理系统表
     await pool.query(`
       CREATE TABLE IF NOT EXISTS files (
