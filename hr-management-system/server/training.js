@@ -1136,17 +1136,17 @@ ${rawContent}
       const username = req.user?.username;
       if (!username) return res.status(401).json({ error: '未登录' });
       const result = await pool().query(`
-        SELECT s.id, t.id AS topic_id, t.title, t.position,
-               s.quiz_score, s.certified_at, s.quiz_passed_at,
-               a.require_practice,
-               c.ai_step_scores, c.ai_total_score, c.final_score,
-               c.review_status, c.manager_score, c.ai_verdict, c.ai_feedback
-        FROM training_sessions s
-        JOIN training_topics t ON t.id = s.topic_id
-        LEFT JOIN training_assignments a ON a.employee_username = s.employee_username AND a.topic_id = s.topic_id
-        LEFT JOIN training_certifications c ON c.session_id = s.id
-        WHERE s.employee_username = $1 AND s.status = 'certified'
-        ORDER BY s.certified_at DESC NULLS LAST
+        SELECT c.id, c.session_id, c.topic_id, c.media_url, c.media_type,
+               c.ai_verdict, c.ai_feedback, c.ai_total_score, c.ai_step_scores,
+               c.manager_verdict, c.manager_note, c.final_score, c.manager_score,
+               c.review_status, c.certified_at, c.created_at,
+               t.title, t.position,
+               s.quiz_score, s.status AS session_status
+        FROM training_certifications c
+        JOIN training_topics t ON t.id = c.topic_id
+        JOIN training_sessions s ON s.id = c.session_id
+        WHERE c.employee_username = $1
+        ORDER BY c.created_at DESC
       `, [username]);
       res.json({ success: true, certifications: result.rows });
     } catch (e) {
@@ -1603,22 +1603,6 @@ verdict说明：passed=合格，review=需人工复核，failed=不合格需重�
     }
   });
 
-  // GET /api/training/my-certifications - 我的认证记录
-  app.get('/api/training/my-certifications', authMiddleware, async (req, res) => {
-    try {
-      const username = req.user?.username;
-      const result = await pool().query(`
-        SELECT c.*, t.title, t.position
-        FROM training_certifications c
-        JOIN training_topics t ON t.id = c.topic_id
-        WHERE c.employee_username = $1
-        ORDER BY c.created_at DESC
-      `, [username]);
-      res.json({ success: true, certifications: result.rows });
-    } catch (e) {
-      res.json({ success: false, error: e?.message });
-    }
-  });
 }
 
 export async function runTrainingReminderSweep() {
