@@ -28123,11 +28123,13 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 } else if (data.error === 'no_content') {
                     const hint = String(data.message || '');
                     const isMedia = hint.includes('图片') || hint.includes('视频') || hint.includes('生成步骤图谱');
+                    const canGenRubric = isMedia && isAdminUser();
                     container.innerHTML = `
                         <div class="kb-ai-empty">
                             <div style="font-size:36px;margin-bottom:12px;">${isMedia ? '🖼️' : '📄'}</div>
                             <div style="font-size:14px;font-weight:600;color:rgba(255,255,255,0.6);margin-bottom:6px;">${isMedia ? '图片/视频文件' : '暂无可解析内容'}</div>
-                            <div style="font-size:12px;color:rgba(255,255,255,0.35);line-height:1.7;">${isMedia ? '点击上方「🎯 生成步骤图谱」按钮，AI将分析图��并生成评分标准' : '文件正在处理中，通常需要 1-2 分钟<br>视频请确保管理员已填写内容摘要'}</div>
+                            <div style="font-size:12px;color:rgba(255,255,255,0.35);line-height:1.7;margin-bottom:${canGenRubric ? '16px' : '0'};">${isMedia ? 'AI 可分析此文件并生成实操评分标准（步骤图谱）' : '文件正在处理中，通常需要 1-2 分钟<br>视频请确保管理员已填写内容摘要'}</div>
+                            ${canGenRubric ? `<button onclick="analyzeKnowledgeRubric('${escapeHtml(itemId)}', this)" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:12px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:0.02em;">🎯 生成步骤图谱</button>` : ''}
                             ${opts.showFileBtn && opts.fileSrc ? `<a href="${escapeHtml(opts.fileSrc)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;margin-top:16px;padding:8px 16px;border-radius:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.5);font-size:12px;text-decoration:none;">📎 查看原文件</a>` : ''}
                         </div>`;
                 } else {
@@ -28138,11 +28140,13 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             }
         }
 
-        async function analyzeKnowledgeRubric(itemId) {
+        async function analyzeKnowledgeRubric(itemId, inlineBtn) {
             const token = HRMS_API.token() || '';
-            const btn = document.getElementById('knowledge-rubric-btn');
+            const topbarBtn = document.getElementById('knowledge-rubric-btn');
+            // Support both the topbar button and an inline button inside the card
+            const allBtns = [topbarBtn, inlineBtn].filter(Boolean);
             try {
-                if (btn) { btn.disabled = true; btn.textContent = '⏳ AI分析中...'; }
+                allBtns.forEach(b => { b.disabled = true; b.textContent = '⏳ AI分析中...'; });
                 const resp = await fetch('/api/knowledge/' + encodeURIComponent(itemId) + '/analyze-rubric', {
                     method: 'POST',
                     headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
@@ -28150,13 +28154,13 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 const data = await resp.json();
                 if (data.success && data.rubric) {
                     showNotification(`步骤图谱已生成！共 ${data.rubric.items?.length || 0} 个步骤/检查点`, 'success');
-                    if (btn) { btn.textContent = '🔄 重新生成图谱'; }
-                    // Refresh to show rubric status
+                    allBtns.forEach(b => { b.textContent = '🔄 重新生成图谱'; });
+                    // Replace viewer body with fresh rubric card
                     const viewerBody = document.getElementById('knowledge-viewer-body');
                     if (viewerBody) {
+                        viewerBody.innerHTML = '';
                         const rubricInfo = document.createElement('div');
                         rubricInfo.className = 'kb-ai-card';
-                        rubricInfo.style.marginTop = '12px';
                         rubricInfo.innerHTML = `
                             <div class="kb-ai-card-hdr">
                                 <div style="display:flex;align-items:center;gap:10px;">
@@ -28168,8 +28172,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                                 </div>
                             </div>
                             <div class="kb-ai-content" style="font-size:12px;">
-                                ${data.rubric.items.map(s => `<div style="margin:6px 0"><strong>${s.name}</strong> (${s.weight}分): ${(s.checks||[]).join('；')}</div>`).join('')}
-                                ${data.rubric.fail_criteria?.length ? `<div style="margin-top:8px;color:#fca5a5;">⚠️ 一票否决: ${data.rubric.fail_criteria.join('；')}</div>` : ''}
+                                ${data.rubric.items.map(s => `<div style="margin:6px 0"><strong>${escapeHtml(s.name)}</strong> (${s.weight}分): ${(s.checks||[]).map(c=>escapeHtml(c)).join('；')}</div>`).join('')}
+                                ${data.rubric.fail_criteria?.length ? `<div style="margin-top:8px;color:#fca5a5;">⚠️ 一票否决: ${data.rubric.fail_criteria.map(f=>escapeHtml(f)).join('；')}</div>` : ''}
                             </div>`;
                         viewerBody.appendChild(rubricInfo);
                     }
@@ -28179,7 +28183,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             } catch(e) {
                 showNotification('请求失败: ' + (e.message || e), 'error');
             } finally {
-                if (btn) { btn.disabled = false; }
+                allBtns.forEach(b => { b.disabled = false; });
             }
         }
 
@@ -28577,6 +28581,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         createdBy: String(r?.created_by || ''),
                         groupId: String(r?.group_id || ''),
                         groupName: normalizeKnowledgeTextDisplay(String(r?.group_name || '')),
+                        step_rubric: r?.step_rubric || null,
                         source: 'cloud',
                         cloud: { filePath }
                     };
@@ -30878,6 +30883,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                             createdBy: String(r?.created_by || ''),
                             groupId: String(r?.group_id || ''),
                             groupName: normalizeKnowledgeTextDisplay(String(r?.group_name || '')),
+                            step_rubric: r?.step_rubric || null,
                             source: 'cloud',
                             cloud: { filePath }
                         };
