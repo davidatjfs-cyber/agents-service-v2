@@ -4945,6 +4945,7 @@ const UPLOAD_ALLOWED_EXTS = new Set([
   '.pdf','.doc','.docx','.xls','.xlsx','.ppt','.pptx',
   '.jpg','.jpeg','.png','.gif','.webp','.bmp',
   '.txt','.csv','.zip','.rar',
+  '.mp4','.mov','.webm','.avi',
 ]);
 const upload = multer({
   storage: multer.diskStorage({
@@ -4981,7 +4982,7 @@ const knowledgeUpload = multer({
       cb(null, `${randomUUID()}${ext}`);
     }
   }),
-  limits: { fileSize: 50 * 1024 * 1024 } // M4-FIX: 从300MB降到50MB
+  limits: { fileSize: 200 * 1024 * 1024 } // 视频上传需 200MB
 });
 
 // 配方工艺步骤媒体上传（图片 + 视频）
@@ -16000,7 +16001,7 @@ app.get('/api/knowledge', authRequired, async (req, res) => {
     const qBrand = buildKnowledgeBrandScopeTag(req.query?.brandId || req.query?.brandScope || 'all');
     const withBrandFilter = qBrand && qBrand !== 'brand:all';
     const r = await pool.query(
-      `select id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience
+      `select id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience, group_id
        from knowledge_base
        ${withBrandFilter ? 'where tags @> $1::text[] or tags @> ARRAY[\'brand:all\']::text[]' : ''}
        order by created_at desc`,
@@ -16010,6 +16011,46 @@ app.get('/api/knowledge', authRequired, async (req, res) => {
       (row) => viewer.role === 'admin' || canViewerSeeKnowledgeAudience(viewer, row.audience)
     );
     return res.json({ items: rows });
+  } catch (e) {
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
+  }
+});
+
+// GET /api/knowledge/groups — 返回按 group_id 分组的 SOP 列表
+app.get('/api/knowledge/groups', authRequired, async (req, res) => {
+  try {
+    const viewer = await getKnowledgeViewerProfile(req);
+    const r = await pool.query(
+      `select g.group_id, g.title, g.category, g.tags, g.scope, count(*)::int as file_count,
+              max(g.updated_at) as updated_at, max(g.created_at) as created_at
+       from knowledge_base g
+       left join knowledge_base f on f.group_id = g.group_id
+       where coalesce(g.id::text, '') = coalesce(g.group_id::text, g.id::text)
+       group by g.group_id, g.title, g.category, g.tags, g.scope
+       order by max(g.updated_at) desc`
+    );
+    const rows = (r.rows || []).filter(
+      (row) => viewer.role === 'admin' || canViewerSeeKnowledgeAudience(viewer, row.audience)
+    );
+    return res.json({ items: rows });
+  } catch (e) {
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
+  }
+});
+
+// GET /api/knowledge/group/:groupId — 返回某分组下所有文件
+app.get('/api/knowledge/group/:groupId', authRequired, async (req, res) => {
+  const groupId = String(req.params?.groupId || '').trim();
+  if (!groupId) return res.status(400).json({ error: 'missing_group_id' });
+  try {
+    const r = await pool.query(
+      `select id, title, content, category, tags, file_path, file_type, file_size, ai_explanation,
+              created_by, version, created_at, updated_at, audience, group_id
+       from knowledge_base where group_id = $1::uuid
+       order by created_at asc`,
+      [groupId]
+    );
+    return res.json({ items: r.rows || [] });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
@@ -16076,6 +16117,50 @@ app.get('/api/knowledge/:id/explanation', authRequired, async (req, res) => {
     if (/invalid input syntax for type uuid/i.test(msg)) return res.status(400).json({ error: 'invalid_id' });
     console.error('[knowledge] explanation error:', msg);
     res.status(500).json({ error: 'server_error', message: msg });
+  }
+});
+
+// PUT /api/knowledge/:id/explanation — 手动编辑 AI 解析内容
+app.put('/api/knowledge/:id/explanation', authRequired, async (req, res) => {
+  if (String(req.user?.role || '') !== 'admin') {
+    return res.status(403).json({ error: 'admin_only' });
+  }
+  const id = String(req.params?.id || '').trim();
+  const explanation = String(req.body?.explanation || '').trim();
+  if (!id) return res.status(400).json({ error: 'missing_id' });
+  if (!explanation) return res.status(400).json({ error: 'missing_explanation' });
+  try {
+    await pool.query('UPDATE knowledge_base SET ai_explanation = $1, updated_at = NOW() WHERE id = $2::uuid', [explanation, id]);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+  }
+});
+
+// PUT /api/knowledge/:id/group — 转移文件到其他分组
+app.put('/api/knowledge/:id/group', authRequired, async (req, res) => {
+  if (String(req.user?.role || '') !== 'admin') {
+    return res.status(403).json({ error: 'admin_only' });
+  }
+  const id = String(req.params?.id || '').trim();
+  const groupId = String(req.body?.groupId || '').trim();
+  if (!id) return res.status(400).json({ error: 'missing_id' });
+  if (!groupId) return res.status(400).json({ error: 'missing_groupId' });
+  try {
+    const old = await pool.query('SELECT group_id FROM knowledge_base WHERE id = $1::uuid', [id]);
+    const oldGroupId = old.rows?.[0]?.group_id;
+    await pool.query('UPDATE knowledge_base SET group_id = $1::uuid, updated_at = NOW() WHERE id = $2::uuid', [groupId, id]);
+    if (oldGroupId && String(oldGroupId) === String(id)) {
+      await pool.query(
+        `UPDATE knowledge_base SET group_id = id, updated_at = NOW()
+         WHERE id = (SELECT id FROM knowledge_base WHERE group_id = $1::uuid ORDER BY created_at ASC LIMIT 1)
+         AND NOT EXISTS (SELECT 1 FROM knowledge_base WHERE group_id = $1::uuid AND id = group_id)`,
+        [oldGroupId]
+      );
+    }
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
   }
 });
 
@@ -16190,6 +16275,14 @@ app.post('/api/knowledge/batch', authRequired, knowledgeUpload.array('files', 10
     : 'filename';
   const customPrefix = String(req.body?.customPrefix || '').trim();
   const audienceObj = parseKnowledgeAudienceFromBody(req.body);
+  let groupId = String(req.body?.groupId || '').trim();
+  if (!groupId || groupId === 'new') groupId = '';
+  let useGroupId = groupId || null;
+  if (!useGroupId && title) {
+    const existing = await pool.query('SELECT group_id FROM knowledge_base WHERE title = $1 ORDER BY created_at DESC LIMIT 1', [title]);
+    if (existing.rows?.[0]?.group_id) useGroupId = existing.rows[0].group_id;
+  }
+  if (!useGroupId) useGroupId = randomUUID();
   if (!category) return res.status(400).json({ error: 'missing_category' });
   if (!feedAgent) return res.status(400).json({ error: 'missing_feed_agent' });
 
@@ -16212,10 +16305,10 @@ app.post('/api/knowledge/batch', authRequired, knowledgeUpload.array('files', 10
 
     try {
       const r = await pool.query(
-        `insert into knowledge_base (title, content, category, tags, file_path, file_type, file_size, access_roles, access_departments, created_by, scope, version, audience)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)
+        `insert into knowledge_base (title, content, category, tags, file_path, file_type, file_size, access_roles, access_departments, created_by, scope, version, audience, group_id)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::uuid)
          returning id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience`,
-        [fileTitle, '', category || null, tags, filePath, fileType || null, size || null, null, null, createdBy, kbScope, version, audienceObj]
+        [fileTitle, '', category || null, tags, filePath, fileType || null, size || null, null, null, createdBy, kbScope, version, audienceObj, useGroupId]
       );
       results.push(r.rows?.[0] || null);
 
@@ -16369,6 +16462,8 @@ app.post('/api/knowledge/direct', authRequired, async (req, res) => {
   const size = Number(req.body?.size || 0);
   const version = String(req.body?.version || '').trim() || null;
   const videoSummary = fileType === 'video' ? String(req.body?.videoSummary || '').trim() : '';
+  let groupId = String(req.body?.groupId || '').trim();
+  if (!groupId || groupId === 'new') groupId = '';
 
   if (!title) return res.status(400).json({ error: 'missing_title' });
   if (!category) return res.status(400).json({ error: 'missing_category' });
@@ -16378,11 +16473,17 @@ app.post('/api/knowledge/direct', authRequired, async (req, res) => {
     const createdBy = normalizeCreatedByUuid(req.user?.id);
     const kbScope = ['public','business','sensitive'].includes(req.body?.scope) ? req.body.scope : 'public';
     const audienceObj = parseKnowledgeAudienceFromBody(req.body);
+    let useGroupId = groupId || null;
+    if (!useGroupId && title) {
+      const existing = await pool.query('SELECT group_id FROM knowledge_base WHERE title = $1 ORDER BY created_at DESC LIMIT 1', [title]);
+      if (existing.rows?.[0]?.group_id) useGroupId = existing.rows[0].group_id;
+    }
+    if (!useGroupId) useGroupId = randomUUID();
     const r = await pool.query(
-      `insert into knowledge_base (title, content, category, tags, file_path, file_type, file_size, access_roles, access_departments, created_by, scope, version, audience)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)
+      `insert into knowledge_base (title, content, category, tags, file_path, file_type, file_size, access_roles, access_departments, created_by, scope, version, audience, group_id)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::uuid)
        returning id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience`,
-      [title, videoSummary, category || null, tags, filePath, fileType || null, size || null, null, null, createdBy, kbScope, version, audienceObj]
+      [title, videoSummary, category || null, tags, filePath, fileType || null, size || null, null, null, createdBy, kbScope, version, audienceObj, useGroupId]
     );
     return res.json({ item: r.rows?.[0] || null });
   } catch (e) {
@@ -16403,36 +16504,39 @@ app.post('/api/knowledge', authRequired, knowledgeUpload.single('file'), async (
   const fileType = String(req.body?.type || '').trim() || String(req.file?.mimetype || '').trim();
   const size = Number(req.file?.size || 0);
   const version = String(req.body?.version || '').trim() || null;
-  // 视频类型：使用管理员填写的内容摘要作为 content（供AI出题）
   const videoSummary = fileType === 'video' ? String(req.body?.videoSummary || '').trim() : '';
-  if (!title) return res.status(400).json({ error: 'missing_title' });
-  if (!category) return res.status(400).json({ error: 'missing_category' });
-  if (!req.file) return res.status(400).json({ error: 'missing_file' });
+  let groupId = String(req.body?.groupId || '').trim();
+  if (!groupId || groupId === 'new') groupId = '';
 
-  const localPath = String(req.file?.path || '').trim();
-  let filePath = `/uploads/${req.file.filename}`;
+  const localPath = req.file ? path.join(uploadsDir, req.file.filename) : '';
+  if (!localPath || !fs.existsSync(localPath)) {
+    return res.status(400).json({ error: 'file_not_found' });
+  }
 
-  // Insert first, respond fast. Cloud upload runs asynchronously.
   let inserted = null;
   const audienceObj = parseKnowledgeAudienceFromBody(req.body);
   try {
     const createdBy = normalizeCreatedByUuid(req.user?.id);
     const kbScope = ['public','business','sensitive'].includes(req.body?.scope) ? req.body.scope : 'public';
+    let useGroupId = groupId || null;
+    if (!useGroupId && title) {
+      const existing = await pool.query('SELECT group_id FROM knowledge_base WHERE title = $1 ORDER BY created_at DESC LIMIT 1', [title]);
+      if (existing.rows?.[0]?.group_id) useGroupId = existing.rows[0].group_id;
+    }
+    if (!useGroupId) useGroupId = randomUUID();
     const r = await pool.query(
-      `insert into knowledge_base (title, content, category, tags, file_path, file_type, file_size, access_roles, access_departments, created_by, scope, version, audience)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)
+      `insert into knowledge_base (title, content, category, tags, file_path, file_type, file_size, access_roles, access_departments, created_by, scope, version, audience, group_id)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::uuid)
        returning id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience`,
-      [title, videoSummary, category || null, tags, filePath, fileType || null, size || null, null, null, createdBy, kbScope, version, audienceObj]
+      [title, videoSummary, category || null, tags, `uploads/${req.file.filename}`, fileType || null, size || null, null, null, createdBy, kbScope, version, audienceObj, useGroupId]
     );
     inserted = r.rows?.[0] || null;
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: 'internal_error' });
   }
 
-  // Return immediately so frontend can show success.
   res.json({ item: inserted, queued: true });
 
-  // Async cloud upload best-effort; if success, update DB and delete local file.
   (async () => {
     try {
       if (inserted?.id && localPath && fs.existsSync(localPath)) {
@@ -16448,6 +16552,10 @@ app.post('/api/knowledge', authRequired, knowledgeUpload.single('file'), async (
           /^application\/pdf/i.test(mime0) ||
           declaredType === 'pdf' ||
           /\.pdf$/i.test(origName);
+        const looksLikeVideo =
+          /^video\//i.test(mime0) ||
+          declaredType === 'video' ||
+          /\.(mp4|mov|webm|avi)$/i.test(origName);
         let parseSuccess = false;
 
         if (looksLikeImage) {
@@ -16473,6 +16581,93 @@ app.post('/api/knowledge', authRequired, knowledgeUpload.single('file'), async (
             const reason = String(ocrErr?.message || ocrErr);
             console.warn('[knowledge] image OCR error:', reason);
             void notifyAdminsOcrFailed(itemTitle, '图片', reason);
+          }
+        }
+
+        // Video — extract frames with ffmpeg, analyze with Qwen-VL
+        if (looksLikeVideo) {
+          let tmpDir = null;
+          try {
+            tmpDir = `/tmp/video_frames_${inserted.id}`;
+            fs.mkdirSync(tmpDir, { recursive: true });
+
+            const probe = execFileSync('ffprobe', [
+              '-v', 'error', '-show_entries', 'format=duration',
+              '-of', 'default=noprint_wrappers=1:nokey=1', localPath
+            ], { encoding: 'utf-8', timeout: 15000 });
+            const duration = parseFloat(probe.trim()) || 30;
+            const frameCount = Math.min(Math.max(6, Math.ceil(duration / 3)), 18);
+            const interval = duration / (frameCount + 1);
+
+            const frames = [];
+            for (let i = 1; i <= frameCount; i++) {
+              const t = interval * i;
+              const outFile = `${tmpDir}/frame_${String(i).padStart(3, '0')}.jpg`;
+              execFileSync('ffmpeg', [
+                '-ss', String(t), '-i', localPath,
+                '-vframes', '1', '-q:v', '3',
+                '-vf', 'scale=1280:-1',
+                '-y', outFile
+              ], { encoding: 'utf-8', timeout: 30000 });
+              if (fs.existsSync(outFile)) frames.push(outFile);
+            }
+
+            if (frames.length > 0) {
+              const qwenApiKey = process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY || '';
+              const qwenBaseUrl = process.env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+              const qwenModel = 'qwen-vl-max';
+
+              const messages = [{
+                type: 'text',
+                text: '你是资深餐饮SOP编写专家。视频标题为「' + itemTitle + '」。分析截图编写标准操作流程(SOP)。\n\n重要说明：如果视频中多个物料（如多只鸭子）依次进行相同操作，这是**同一工序**应用于多个物料，不是多道工序。请正确合并为一道工序。标题已明确食材，请直接使用。\n\n要求：(1)分步骤格式，每步包含：步骤编号、操作动作、建议时长、操作要点、注意事项；(2)使用专业烹饪术语；(3)包括设备、工具、温度参考值。输出简体中文Markdown。'
+              }];
+              for (const f of frames) {
+                const buf = fs.readFileSync(f);
+                messages.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${buf.toString('base64')}` } });
+              }
+
+              let rawText = '';
+              if (qwenApiKey) {
+                const resp = await axios.post(
+                  `${qwenBaseUrl}/chat/completions`,
+                  {
+                    model: qwenModel,
+                    messages: [{ role: 'user', content: messages }],
+                    temperature: 0.1, max_tokens: 8192
+                  },
+                  { headers: { 'Authorization': `Bearer ${qwenApiKey}`, 'Content-Type': 'application/json' }, timeout: 120000 }
+                );
+                rawText = String(resp.data?.choices?.[0]?.message?.content || '').trim();
+              } else {
+                const { callVisionLLM } = await import('./agents.js');
+                const vr = await callVisionLLM(messages, '', { maxTokens: 8192 });
+                rawText = String(vr?.content || '').trim();
+              }
+
+              if (rawText) {
+                const { callLLM } = await import('./agents.js');
+                const fmtResp = await callLLM([
+                  { role: 'system', content: '你是餐饮SOP编辑专家。你的任务：(1)用专业知识纠正AI视觉分析的工序误判——特别是"烫皮"工序，标准工艺为**一道烫皮**（过程中多次浸入沸水以确保均匀受热），如果原文出现"第二次烫皮""重复烫皮""再次烫皮"或类似内容，必须**合并进第一次烫皮步骤**，保留其时间数据和操作要点，不得作为独立步骤；(2)格式化输出：每步有编号、操作动作、建议时长、操作要点、注意事项；(3)添加标题和关键控制点。输出简体中文Markdown。' },
+                  { role: 'user', content: '整理以下SOP内容，纠正工序误判：\n\n' + rawText }
+                ], { maxTokens: 4096 });
+                const finalText = String(fmtResp?.content || rawText).trim();
+                await pool.query('UPDATE knowledge_base SET content = $1, updated_at = now() WHERE id = $2', [finalText, inserted.id]);
+                parseSuccess = true;
+              } else {
+                console.warn('[knowledge] video analysis returned empty');
+                void notifyAdminsOcrFailed(itemTitle, '视频', '视觉模型返回为空');
+              }
+            } else {
+              void notifyAdminsOcrFailed(itemTitle, '视频', 'ffmpeg 未提取到帧');
+            }
+          } catch (vidErr) {
+            const reason = String(vidErr?.message || vidErr);
+            console.warn('[knowledge] video process error:', reason);
+            void notifyAdminsOcrFailed(itemTitle, '视频', reason);
+          } finally {
+            if (tmpDir) {
+              try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
+            }
           }
         }
 

@@ -14929,7 +14929,7 @@
 
                         <!-- 文件选择区（最醒目，放最上）-->
                         <div class="kb-upload-file-zone" onclick="document.getElementById('knowledge-upload-file').click()">
-                            <input id="knowledge-upload-file" type="file" onchange="handleKnowledgeFileSelect(event)" class="ui-file-input" style="display:none;">
+                            <input id="knowledge-upload-file" type="file" multiple onchange="handleKnowledgeFileSelect(event)" class="ui-file-input" style="display:none;">
                             <div class="kb-upload-file-icon" id="kb-upload-file-icon">📎</div>
                             <div class="kb-upload-file-label" id="kb-upload-file-label">点击选择文件</div>
                             <div class="kb-upload-file-hint" id="knowledge-upload-file-hint">PDF · DOC · TXT · 图片 · 视频</div>
@@ -15046,6 +15046,14 @@
                         <div id="knowledge-upload-audience-position-box" style="display:none;margin-bottom:14px;">
                             <label class="kb-upload-field-label">选择岗位（可多选）</label>
                             <div id="knowledge-upload-audience-position-list" class="kb-aud-check-list" style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid rgba(255,255,255,0.1);border-radius:10px;margin-top:6px;"></div>
+                        </div>
+
+                        <!-- ─── SOP 分组 ─── -->
+                        <div class="kb-upload-field">
+                            <label class="kb-upload-field-label">添加到已有SOP分组（可选）</label>
+                            <select id="knowledge-upload-group" class="kb-upload-select" onchange="syncKnowledgeUploadFields()">
+                                <option value="">新建SOP分组</option>
+                            </select>
                         </div>
 
                         <!-- ─── 第三组：培训认证联动 ─── -->
@@ -15608,6 +15616,7 @@
                         <button class="kb-v2-back-btn" id="knowledge-back-btn" onclick="kbBackToList()">‹ 返回</button>
                         <div class="kb-v2-viewer-acts">
                             <button class="kb-v2-act-btn" id="knowledge-edit-btn" style="display:none;" onclick="">✏️</button>
+                            <button class="kb-v2-act-btn" id="knowledge-transfer-btn" style="display:none;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.6);padding:4px 8px;border-radius:6px;font-size:11px;cursor:pointer;">📁 转移</button>
                             <button class="kb-v2-act-btn kb-v2-act-del" id="knowledge-delete-btn" style="display:none;" onclick="">🗑️</button>
                         </div>
                     </div>
@@ -21502,6 +21511,30 @@
                 });
             },
 
+            async getKnowledgeGroups() {
+                return this.request('/api/knowledge/groups', { method: 'GET' });
+            },
+
+            async getKnowledgeGroupFiles(groupId) {
+                return this.request('/api/knowledge/group/' + encodeURIComponent(String(groupId || '')), { method: 'GET' });
+            },
+
+            async updateKnowledgeExplanation(id, explanation) {
+                return this.request('/api/knowledge/' + encodeURIComponent(String(id || '')) + '/explanation', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ explanation })
+                });
+            },
+
+            async moveKnowledgeToGroup(id, groupId) {
+                return this.request('/api/knowledge/' + encodeURIComponent(String(id || '')) + '/group', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ groupId })
+                });
+            },
+
             async getState() {
                 return this.request('/api/state', { method: 'GET' });
             },
@@ -27077,6 +27110,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
         }
 
         function kbBackToList() {
+            __KB_ACTIVE_GROUP_ID = '';
             clearKnowledgeViewer();
         }
 
@@ -27306,6 +27340,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             // 管理员按钮
             const deleteBtn = document.getElementById('knowledge-delete-btn');
             const editBtn = document.getElementById('knowledge-edit-btn');
+            const transferBtn = document.getElementById('knowledge-transfer-btn');
             if (deleteBtn) {
                 deleteBtn.style.display = isAdminUser() ? '' : 'none';
                 deleteBtn.onclick = () => deleteKnowledgeItem(id);
@@ -27314,9 +27349,14 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 editBtn.style.display = isAdminUser() ? '' : 'none';
                 editBtn.onclick = () => openKnowledgeEditModal(id);
             }
+            if (transferBtn) {
+                transferBtn.style.display = isAdminUser() ? '' : 'none';
+                transferBtn.onclick = () => openKnowledgeTransferModal(id);
+            }
 
             if (!body) return;
             body.innerHTML = '';
+            body.dataset.itemId = id;
 
             // ── AI 知识解析视图（主展示方式，与培训认证共用缓存）──
             const base = String(HRMS_API.baseUrl() || window.location?.origin || '').replace(/\/$/, '');
@@ -27355,10 +27395,11 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 });
                 const data = await resp.json();
                 if (data.success && data.explanation) {
+                    const rawExplanation = data.explanation;
                     const cacheBadge = data.cached
                         ? '<span style="font-size:10px;padding:2px 7px;border-radius:6px;background:rgba(52,211,153,0.15);color:#6ee7b7;margin-left:6px;">已缓存</span>'
                         : '<span style="font-size:10px;padding:2px 7px;border-radius:6px;background:rgba(251,191,36,0.15);color:#fde68a;margin-left:6px;">✨ 新生成</span>';
-                    const html = data.explanation
+                    const html = rawExplanation
                         .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
                         .replace(/^## (.+)$/gm,'<div class="kb-ai-h2">$1</div>')
                         .replace(/^### (.+)$/gm,'<div class="kb-ai-h3">$1</div>')
@@ -27373,6 +27414,12 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         fileBtnHtml = `<a href="${escapeHtml(opts.fileSrc)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;margin-top:16px;padding:8px 16px;border-radius:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.6);font-size:12px;text-decoration:none;">📎 查看${typeLabel}</a>`;
                     }
 
+                    const isAdmin = isAdminUser();
+                    const editBtnHtml = isAdmin
+                        ? `<button onclick="editKnowledgeExplanation('${escapeHtml(itemId)}', this)" style="padding:4px 12px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:11px;cursor:pointer;">✏️ 编辑</button>`
+                        : '';
+                    const copyBtnHtml = `<button onclick="copyKnowledgeExplanation(this)" style="padding:4px 12px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:11px;cursor:pointer;">📋 复制</button>`;
+
                     container.innerHTML = `
                         <div class="kb-ai-card">
                             <div class="kb-ai-card-hdr">
@@ -27381,10 +27428,15 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                                     <div class="kb-ai-card-title">AI 知识解析${cacheBadge}</div>
                                     <div class="kb-ai-card-sub">AI 精心整理要点，助你快速掌握核心内容</div>
                                 </div>
+                                <div style="display:flex;gap:8px;margin-left:auto;flex-shrink:0;">
+                                    ${copyBtnHtml}
+                                    ${editBtnHtml}
+                                </div>
                             </div>
                             <div class="kb-ai-content">${html}</div>
-                            ${fileBtnHtml}
+                            ${fileBtnHtml ? `<div style="margin-top:12px;">${fileBtnHtml}</div>` : ''}
                         </div>`;
+                    container.dataset.rawExplanation = rawExplanation;
                 } else if (data.error === 'no_content') {
                     container.innerHTML = `
                         <div class="kb-ai-empty">
@@ -27407,6 +27459,89 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             sel.innerHTML = ['<option value="">请选择数据源</option>']
                 .concat(BI_SOURCE_PRESET_OPTIONS.map((x) => `<option value="${escapeHtml(x.key)}">${escapeHtml(x.label)} (${escapeHtml(x.key)})</option>`))
                 .join('');
+        }
+
+        function editKnowledgeExplanation(itemId, btn) {
+            const viewerBody = document.getElementById('knowledge-viewer-body');
+            const card = btn?.closest('.kb-ai-card');
+            const raw = card?.parentElement?.dataset?.rawExplanation || viewerBody?.dataset?.rawExplanation || '';
+            const contentDiv = card?.querySelector('.kb-ai-content');
+            if (!contentDiv) return;
+            const textarea = document.createElement('textarea');
+            textarea.value = raw;
+            textarea.style.width = '100%';
+            textarea.style.minHeight = '200px';
+            textarea.style.padding = '12px';
+            textarea.style.borderRadius = '10px';
+            textarea.style.border = '1px solid rgba(255,255,255,0.15)';
+            textarea.style.background = 'rgba(0,0,0,0.25)';
+            textarea.style.color = 'rgba(255,255,255,0.85)';
+            textarea.style.fontSize = '13px';
+            textarea.style.lineHeight = '1.7';
+            textarea.style.resize = 'vertical';
+            textarea.style.outline = 'none';
+            contentDiv.replaceWith(textarea);
+            const actions = card?.querySelector('.kb-ai-card-hdr > div:last-child');
+            if (actions) {
+                actions.innerHTML = `
+                    <button onclick="saveKnowledgeExplanation('${escapeHtml(itemId)}', this)" style="padding:6px 16px;border-radius:8px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.3);color:#a5b4fc;font-size:12px;cursor:pointer;">💾 保存</button>
+                    <button onclick="cancelEditKnowledgeExplanation(this)" style="padding:6px 16px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:12px;cursor:pointer;">取消</button>
+                `;
+            }
+        }
+
+        async function saveKnowledgeExplanation(itemId, btn) {
+            const container = btn?.closest('#knowledge-viewer-body') || document.getElementById('knowledge-viewer-body');
+            const textarea = container?.querySelector('textarea');
+            if (!textarea) return;
+            const explanation = textarea.value.trim();
+            if (!explanation) { showNotification('内容不能为空', 'warning'); return; }
+            try {
+                btn.disabled = true;
+                btn.textContent = '保存中...';
+                await HRMS_API.updateKnowledgeExplanation(itemId, explanation);
+                showNotification('已保存', 'success');
+                // reload the summary
+                const aiBox = container?.querySelector('.kb-ai-card')?.parentElement || container;
+                await kbLoadAiSummary(itemId, aiBox, {});
+            } catch (e) {
+                showNotification('保存失败：' + String(e?.message || e), 'error');
+                btn.disabled = false;
+                btn.textContent = '💾 保存';
+            }
+        }
+
+        function cancelEditKnowledgeExplanation(btn) {
+            const container = btn?.closest('#knowledge-viewer-body') || document.getElementById('knowledge-viewer-body');
+            if (!container) return;
+            const kbAiCard = container.querySelector('.kb-ai-card');
+            if (kbAiCard) {
+                const aiBox = kbAiCard.parentElement;
+                const itemId = container.dataset?.itemId || window.__HRMS_KB_ACTIVE_ID;
+                if (itemId) kbLoadAiSummary(itemId, aiBox, {});
+            }
+        }
+
+        async function copyKnowledgeExplanation(btn) {
+            const card = btn?.closest('.kb-ai-card');
+            const raw = card?.parentElement?.dataset?.rawExplanation || '';
+            if (!raw) return;
+            try {
+                await navigator.clipboard.writeText(raw);
+                btn.textContent = '✅ 已复制';
+                btn.style.color = '#6ee7b7';
+                setTimeout(() => { btn.textContent = '📋 复制'; btn.style.color = 'rgba(255,255,255,0.5)'; }, 2000);
+            } catch (e) {
+                const ta = document.createElement('textarea');
+                ta.value = raw;
+                ta.style.position = 'fixed'; ta.style.left = '-9999px';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                btn.textContent = '✅ 已复制';
+                setTimeout(() => { btn.textContent = '📋 复制'; }, 2000);
+            }
         }
 
         function normalizeBiDataSourcesForUi(cfg) {
@@ -27563,6 +27698,130 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             return raw;
         }
 
+        let __KB_ACTIVE_GROUP_ID = '';
+
+        async function loadKnowledgeGroups() {
+            try {
+                const groups = await HRMS_API.getKnowledgeGroups();
+                __KB_CACHED_GROUPS = (groups?.items || []);
+            } catch (e) {
+                __KB_CACHED_GROUPS = [];
+            }
+        }
+        let __KB_CACHED_GROUPS = [];
+
+        function renderKnowledgeGroupList() {
+            const cardsEl = document.getElementById('knowledge-cards');
+            const empty = document.getElementById('knowledge-list-empty');
+            if (!cardsEl) return;
+            const groups = __KB_CACHED_GROUPS;
+            if (!groups.length) {
+                cardsEl.innerHTML = '<div class="kb-list-empty-msg">暂无SOP分组，请上传资料</div>';
+                if (empty) empty.style.display = 'none';
+                return;
+            }
+            cardsEl.innerHTML = groups.map(g => {
+                const gid = String(g.group_id || '');
+                const title = String(g.title || '未命名SOP');
+                const fileCount = g.file_count || 0;
+                const updated = g.updated_at ? String(g.updated_at).slice(0, 10) : '';
+                return `<div class="kb-v2-item" onclick="openKnowledgeGroup('${escapeHtml(gid)}')">
+                    <div class="kb-v2-item-icon" style="font-size:22px;">📁</div>
+                    <div class="kb-v2-item-body">
+                        <div class="kb-v2-item-title">${escapeHtml(title)}</div>
+                        <div class="kb-v2-item-meta">
+                            <span class="kb-v2-chip" style="background:rgba(255,255,255,0.07);color:rgba(148,163,184,0.8);">${fileCount} 个文件</span>
+                            ${updated ? `<span class="kb-v2-item-date">${updated}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="kb-v2-item-arrow">›</div>
+                </div>`;
+            }).join('');
+            if (empty) empty.style.display = 'none';
+        }
+
+        async function openKnowledgeGroup(groupId) {
+            if (!groupId) return;
+            __KB_ACTIVE_GROUP_ID = groupId;
+            const cardsEl = document.getElementById('knowledge-cards');
+            const empty = document.getElementById('knowledge-list-empty');
+            if (cardsEl) cardsEl.innerHTML = '<div class="kb-list-empty-msg" style="padding:40px 0;text-align:center;color:rgba(255,255,255,0.3);">加载中...</div>';
+            try {
+                const data = await HRMS_API.getKnowledgeGroupFiles(groupId);
+                const items = (data?.items || []);
+                const itemsMapped = items.map(r => {
+                    const fileType = String(r?.file_type || '').toLowerCase();
+                    const type = (fileType === 'video') ? 'video' : (fileType === 'pdf' ? 'pdf' : (fileType === 'img' ? 'img' : 'doc'));
+                    const createdAt = r?.created_at ? String(r.created_at) : '';
+                    const filePath = String(r?.file_path || '');
+                    let aud = { type: 'all' };
+                    try {
+                        const raw = r?.audience;
+                        if (raw && typeof raw === 'object' && !Array.isArray(raw)) aud = raw;
+                        else if (typeof raw === 'string' && raw.trim()) aud = JSON.parse(raw);
+                    } catch (e) {}
+                    const brandRef = parseBrandFromKnowledgeTags(r?.tags);
+                    return {
+                        id: String(r?.id || ''),
+                        title: normalizeKnowledgeTextDisplay(String(r?.title || '')),
+                        category: String(r?.category || ''),
+                        type,
+                        tags: Array.isArray(r?.tags) ? r.tags : [],
+                        brandId: String(brandRef.brandId || 'all'),
+                        brandName: String(brandRef.brandName || '全部品牌'),
+                        audience: aud,
+                        fileId: '',
+                        fileName: normalizeKnowledgeTextDisplay(String(r?.title || filePath || '')),
+                        mimeType: String(r?.file_type || ''),
+                        size: Number(r?.file_size || 0),
+                        createdAt,
+                        createdBy: String(r?.created_by || ''),
+                        source: 'cloud',
+                        cloud: { filePath }
+                    };
+                }).filter(it => it.id);
+                const typeIcon2 = t => t === 'video' ? '🎬' : t === 'pdf' ? '📄' : t === 'img' ? '🖼️' : '📝';
+                const typeBadge = t => t === 'video' ? '视频' : t === 'pdf' ? 'PDF' : t === 'img' ? '图片' : '文档';
+                if (!itemsMapped.length) {
+                    if (cardsEl) cardsEl.innerHTML = '<div class="kb-list-empty-msg">该分组暂无文件</div>';
+                    if (empty) empty.style.display = 'none';
+                    return;
+                }
+                const backHtml = `<div style="margin-bottom:16px;"><button onclick="kbBackToGroups()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.6);padding:6px 14px;border-radius:8px;font-size:12px;cursor:pointer;">‹ 返回所有分组</button></div>`;
+                if (cardsEl) cardsEl.innerHTML = backHtml + itemsMapped.map(it => {
+                    const icon = typeIcon2(it.type);
+                    const badge = typeBadge(it.type);
+                    const date = it.createdAt ? it.createdAt.slice(0,10) : '';
+                    return `<div class="kb-v2-item" onclick="openKnowledgeItem('${escapeHtml(it.id)}')">
+                        <div class="kb-v2-item-icon" data-type="${escapeHtml(it.type)}">${icon}</div>
+                        <div class="kb-v2-item-body">
+                            <div class="kb-v2-item-title">${escapeHtml(it.title)}</div>
+                            <div class="kb-v2-item-meta">
+                                <span class="kb-v2-chip kb-v2-chip-type">${badge}</span>
+                                ${date ? `<span class="kb-v2-item-date">${date}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="kb-v2-item-arrow">›</div>
+                    </div>`;
+                }).join('');
+                if (empty) empty.style.display = 'none';
+            } catch (e) {
+                console.error(e);
+                if (cardsEl) cardsEl.innerHTML = '<div class="kb-list-empty-msg">加载失败: ' + escapeHtml(String(e.message || e)) + '</div>';
+            }
+        }
+
+        function kbBackToGroups() {
+            __KB_ACTIVE_GROUP_ID = '';
+            const cardsEl = document.getElementById('knowledge-cards');
+            if (cardsEl) cardsEl.innerHTML = '<div class="kb-list-empty-msg" style="padding:40px 0;text-align:center;color:rgba(255,255,255,0.3);">加载中...</div>';
+            const empty = document.getElementById('knowledge-list-empty');
+            if (empty) empty.style.display = 'none';
+            loadKnowledgeGroups().then(() => {
+                renderKnowledgeGroupList();
+            });
+        }
+
         function renderKnowledgeList() {
             const list = document.getElementById('knowledge-list');
             const empty = document.getElementById('knowledge-list-empty');
@@ -27659,7 +27918,10 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             const typeBadge = t => t === 'video' ? '视频' : t === 'pdf' ? 'PDF' : t === 'img' ? '图片' : '文档';
 
             if (activeCat) {
+                // When a category is selected, show filtered items (not groups)
                 cardsEl.innerHTML = `<div class="kb-v2-cat-body">${items.map(it => kbRenderListItem(it, typeIcon, typeBadge)).join('')}</div>`;
+            } else if (tab === 'all' && !__KB_ACTIVE_GROUP_ID && !q) {
+                renderKnowledgeGroupList();
             } else {
                 const CATS = getKbCategoryOptions();
                 const grouped = {};
@@ -29356,8 +29618,10 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     const st = getKnowledgeFilterState();
                     const selectedBrandId = normalizeBrandIdInput(st.brandId || document.getElementById('knowledge-filter-brand')?.value || '');
                     __KB_ACTIVE_BRAND_ID = selectedBrandId || 'all';
-                    const resp = await HRMS_API.getKnowledge({ brandId: selectedBrandId && selectedBrandId !== 'all' ? selectedBrandId : '' });
-                    const items = (resp?.items || []).map(r => {
+                    await Promise.all([
+                        (async () => {
+                            const resp = await HRMS_API.getKnowledge({ brandId: selectedBrandId && selectedBrandId !== 'all' ? selectedBrandId : '' });
+                            const items = (resp?.items || []).map(r => {
                         const fileType = String(r?.file_type || '').toLowerCase();
                         const type = (fileType === 'video') ? 'video' : (fileType === 'pdf' ? 'pdf' : (fileType === 'doc' || fileType === 'docx' ? 'doc' : (fileType === 'txt' ? 'txt' : (fileType === 'img' ? 'img' : 'doc'))));
                         const createdAt = r?.created_at ? String(r.created_at) : '';
@@ -29378,7 +29642,6 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                             brandId: String(brandRef.brandId || 'all'),
                             brandName: String(brandRef.brandName || '全部品牌'),
                             audience: aud,
-                            // file_path 是磁盘路径，不是 IndexedDB 的 fileId；留空避免 readKnowledgeItemBlob 误查库
                             fileId: '',
                             fileName: normalizeKnowledgeTextDisplay(String(r?.title || filePath || '')),
                             mimeType: String(r?.file_type || ''),
@@ -29390,6 +29653,9 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         };
                     }).filter(it => it.id);
                     HRMS_STORE.setKnowledge(items);
+                        })(),
+                        loadKnowledgeGroups()
+                    ]);
                 } catch (e) {
                     console.error(e);
                     showNotification('知识库同步失败：' + String(e?.message || e), 'warning');
@@ -35348,6 +35614,21 @@ ${knowledgeContent.slice(0, 30000)}`;
             if (fileIcon) fileIcon.textContent = '📎';
             if (fileLabel) { fileLabel.textContent = '点击选择文件'; fileLabel.style.color = '#a5b4fc'; }
 
+            // Load existing SOP groups into selector
+            (async () => {
+                const sel = document.getElementById('knowledge-upload-group');
+                if (!sel) return;
+                try {
+                    const groups = await HRMS_API.getKnowledgeGroups();
+                    const opts = (groups?.items || []).map(g =>
+                        `<option value="${escapeHtml(String(g.group_id || ''))}">${escapeHtml(String(g.title || ''))} (${g.file_count || 0}个文件)</option>`
+                    );
+                    sel.innerHTML = '<option value="">新建SOP分组</option>' + opts.join('');
+                } catch (e) {
+                    sel.innerHTML = '<option value="">新建SOP分组</option>';
+                }
+            })();
+
             const confirmBtn = document.getElementById('btn-knowledge-upload-confirm');
             const cancelBtn = document.getElementById('btn-knowledge-upload-cancel');
             if (confirmBtn) confirmBtn.disabled = false;
@@ -35477,6 +35758,46 @@ ${knowledgeContent.slice(0, 30000)}`;
         function closeKnowledgeEditModal() {
             const modal = document.getElementById('knowledge-edit-modal');
             if (modal) modal.style.display = 'none';
+        }
+
+        async function openKnowledgeTransferModal(itemId) {
+            if (!isAdminUser()) { showNotification('仅管理员可操作', 'warning'); return; }
+            const groups = await HRMS_API.getKnowledgeGroups().catch(() => ({ items: [] }));
+            const opts = (groups?.items || []).map(g =>
+                `<option value="${escapeHtml(String(g.group_id || ''))}">${escapeHtml(String(g.title || ''))} (${g.file_count || 0}个文件)</option>`
+            );
+            const selHtml = `<select style="width:100%;padding:8px;border-radius:6px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.8);font-size:13px;margin-bottom:12px;">${opts.join('')}</select>`;
+            const dialog = document.createElement('div');
+            dialog.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:10000;display:flex;align-items:center;justify-content:center;';
+            dialog.innerHTML = `<div style="background:#1e1e2e;border-radius:12px;padding:24px;max-width:360px;width:90%;border:1px solid rgba(255,255,255,0.1);">
+                <div style="font-size:14px;font-weight:600;color:#fff;margin-bottom:16px;">转移到其他分组</div>
+                ${selHtml}
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <button id="kb-transfer-cancel" style="padding:6px 16px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:12px;cursor:pointer;">取消</button>
+                    <button id="kb-transfer-ok" style="padding:6px 16px;border-radius:8px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.3);color:#a5b4fc;font-size:12px;cursor:pointer;">确认转移</button>
+                </div>
+            </div>`;
+            document.body.appendChild(dialog);
+            dialog.querySelector('#kb-transfer-cancel').onclick = () => dialog.remove();
+            dialog.querySelector('#kb-transfer-ok').onclick = async () => {
+                const sel = dialog.querySelector('select');
+                const targetGid = sel?.value || '';
+                if (!targetGid) { showNotification('请选择目标分组', 'warning'); return; }
+                try {
+                    const okBtn = dialog.querySelector('#kb-transfer-ok');
+                    if (okBtn) okBtn.disabled = true;
+                    await HRMS_API.moveKnowledgeToGroup(itemId, targetGid);
+                    dialog.remove();
+                    clearKnowledgeViewer();
+                    showNotification('已转移', 'success');
+                    loadKnowledgeData();
+                } catch (e) {
+                    showNotification('转移失败：' + String(e.message || e), 'error');
+                    const okBtn = dialog.querySelector('#kb-transfer-ok');
+                    if (okBtn) okBtn.disabled = false;
+                }
+            };
+            dialog.onclick = (e) => { if (e.target === dialog) dialog.remove(); };
         }
 
         function syncKnowledgeEditAudience() {
@@ -35743,7 +36064,13 @@ ${knowledgeContent.slice(0, 30000)}`;
             if (!files.length) return;
 
             const batchCb = document.getElementById('knowledge-upload-batch');
-            const isBatch = batchCb && batchCb.checked;
+            const isBatch = files.length > 1 || (batchCb && batchCb.checked);
+
+            // Auto-toggle batch checkbox when multiple files selected
+            if (files.length > 1 && batchCb && !batchCb.checked) {
+                batchCb.checked = true;
+                toggleKnowledgeBatchMode();
+            }
 
             if (isBatch) {
                 const maxBatchFiles = 10;
@@ -35847,12 +36174,13 @@ ${knowledgeContent.slice(0, 30000)}`;
             const isRequired = document.getElementById('knowledge-upload-required')?.checked || false;
             const quizEnabled = document.getElementById('knowledge-upload-quiz-link')?.checked || false;
             const trainingModule = (document.getElementById('knowledge-upload-training-module')?.value || '').trim();
+            const groupId = (document.getElementById('knowledge-upload-group')?.value || '').trim();
             const fileInput = document.getElementById('knowledge-upload-file');
             const statusEl = document.getElementById('knowledge-upload-file-status');
             const feedTags = getKnowledgeAgentTags(feedAgent);
             const files = Array.from(fileInput?.files || []);
             const batchCb = document.getElementById('knowledge-upload-batch');
-            const isBatch = batchCb && batchCb.checked;
+            const isBatch = files.length > 1 || (batchCb && batchCb.checked);
             const file = files[0];
             if (!isBatch && !title) {
                 showNotification('请输入标题', 'warning');
@@ -35920,6 +36248,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 try {
                     setKnowledgeUploadBusy(true, '准备批量上传...');
                     const fd = new FormData();
+                    fd.append('title', title);
                     fd.append('category', category);
                     fd.append('type', type);
                     fd.append('feedAgent', feedAgent);
@@ -35942,6 +36271,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                     fd.append('isRequired', isRequired ? '1' : '0');
                     fd.append('quizEnabled', quizEnabled ? '1' : '0');
                     if (trainingModule) fd.append('trainingModule', trainingModule);
+                    if (groupId) fd.append('groupId', groupId);
 
                     renderKnowledgeUploadProgress(1, `批量上传 ${files.length} 个文件中...`);
                     const result = await HRMS_API.batchUploadKnowledge(fd);
@@ -36034,6 +36364,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                             audienceType: audience.type,
                             isRequired,
                             quizEnabled,
+                            ...(groupId ? { groupId } : {}),
                             ...(trainingModule ? { trainingModule } : {}),
                             ...(videoSummary ? { videoSummary } : {}),
                             ...(audience.type === 'store' && audience.stores?.length ? { audienceStores: audience.stores } : {}),
@@ -36071,6 +36402,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                         fd.append('isRequired', isRequired ? '1' : '0');
                         fd.append('quizEnabled', quizEnabled ? '1' : '0');
                         if (trainingModule) fd.append('trainingModule', trainingModule);
+                        if (groupId) fd.append('groupId', groupId);
                         fd.append('file', file, file.name);
                         await HRMS_API.uploadKnowledge(fd);
 
@@ -36107,6 +36439,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                     fd.append('isRequired', isRequired ? '1' : '0');
                     fd.append('quizEnabled', quizEnabled ? '1' : '0');
                     if (trainingModule) fd.append('trainingModule', trainingModule);
+                    if (groupId) fd.append('groupId', groupId);
                     fd.append('file', file, file.name);
 
                     await HRMS_API.uploadKnowledge(fd);
