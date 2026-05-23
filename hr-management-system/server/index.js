@@ -16146,28 +16146,36 @@ app.get('/api/knowledge/:id/explanation', authRequired, async (req, res) => {
   if (!id) return res.status(400).json({ error: 'missing_id' });
   try {
     const r = await pool.query(
-      'SELECT id, title, content, file_type, ai_explanation FROM knowledge_base WHERE id = $1::uuid AND enabled = true LIMIT 1',
+      'SELECT id, title, content, file_type, ai_explanation, step_rubric FROM knowledge_base WHERE id = $1::uuid AND enabled = true LIMIT 1',
       [id]
     );
     const row = r.rows?.[0];
     if (!row) return res.status(404).json({ error: 'not_found' });
+    const rubric = row.step_rubric || null;
     if (row.ai_explanation && String(row.ai_explanation).trim().length > 50) {
-      return res.json({ success: true, explanation: row.ai_explanation, cached: true });
+      return res.json({ success: true, explanation: row.ai_explanation, cached: true, rubric });
     }
     const rawContent = String(row.content || '').trim();
-    if (!rawContent || rawContent.length < 20) {
-      return res.json({ success: false, error: 'no_content', message: '此文档暂无文字内容，无法生成AI解析' });
+    // 图片/视频文件无文字内容但可能有图谱，有图谱时不报 no_content
+    const isMediaFile = ['img', 'video', 'image/jpeg', 'image/png', 'image/webp', 'video/mp4'].includes(String(row.file_type || '').toLowerCase());
+    if ((!rawContent || rawContent.length < 20) && !isMediaFile) {
+      return res.json({ success: false, error: 'no_content', message: '此文档暂无文字内容，无法生成AI解析', rubric });
+    }
+    if ((!rawContent || rawContent.length < 20) && isMediaFile) {
+      // 媒体文件：只返回图谱（如果有），不调用文字LLM
+      if (rubric) return res.json({ success: true, explanation: null, cached: false, rubric });
+      return res.json({ success: false, error: 'no_content', message: '图片/视频文件请点击「生成步骤图谱」生成AI评分标准', rubric: null });
     }
     const aiResp = await callLLM([
-      { role: 'system', content: '你是一位餐饮行业培训专家。请对以下文档进行结构化解析，用清晰易懂的方式提炼核心要点，帮助餐饮从业人员快速掌握重点知识。输出使用简洁的中文Markdown格式，包含标题、要点列表等。' },
-      { role: 'user', content: '请解析以下文档内容：\n\n' + rawContent.slice(0, 8000) }
-    ], { maxTokens: 2000 });
+      { role: 'system', content: '你是一位餐饮行业培训专家。请对以下文档进行完整、结构化解析，提炼所有核心要点，帮助餐饮从业人员快速掌握重点知识。输出使用清晰的中文Markdown格式，包含二级标题（##）、要点列表（-）、关键步骤（1.2.3.）等。请务必输出完整内容，不要在中途截断。' },
+      { role: 'user', content: '请完整解析以下文档内容（确保全文覆盖，不要截断）：\n\n' + rawContent.slice(0, 20000) }
+    ], { max_tokens: 6000 });
     const explanation = String(aiResp?.content || '').trim();
     if (!explanation || explanation.length < 50) {
       return res.json({ success: false, error: 'ai_failed', message: 'AI生成失败，请稍后重试' });
     }
     await pool.query('UPDATE knowledge_base SET ai_explanation = $1, updated_at = NOW() WHERE id = $2::uuid', [explanation, id]);
-    res.json({ success: true, explanation, cached: false });
+    res.json({ success: true, explanation, cached: false, rubric });
   } catch (e) {
     const msg = String(e?.message || e);
     if (/invalid input syntax for type uuid/i.test(msg)) return res.status(400).json({ error: 'invalid_id' });
@@ -16190,6 +16198,24 @@ app.put('/api/knowledge/:id/explanation', authRequired, async (req, res) => {
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'server_error', message: String(e?.message || e) });
+  }
+});
+
+// POST /api/knowledge/:id/explanation/regenerate — 清除缓存并强制重新生成AI解析
+app.post('/api/knowledge/:id/explanation/regenerate', authRequired, async (req, res) => {
+  if (String(req.user?.role || '') !== 'admin') {
+    return res.status(403).json({ error: 'admin_only' });
+  }
+  const id = String(req.params?.id || '').trim();
+  if (!id) return res.status(400).json({ error: 'missing_id' });
+  try {
+    // Clear cached explanation to force re-generation
+    await pool.query('UPDATE knowledge_base SET ai_explanation = NULL, updated_at = NOW() WHERE id = $1::uuid', [id]);
+    res.json({ success: true, message: '缓存已清除，重新打开文件将重新生成完整解析' });
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (/invalid input syntax for type uuid/i.test(msg)) return res.status(400).json({ error: 'invalid_id' });
+    res.status(500).json({ error: 'server_error', message: msg });
   }
 });
 

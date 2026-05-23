@@ -3560,7 +3560,8 @@ export async function callLLM(messages, options = {}) {
     ? (budgetExceeded ? Math.min(0.05, requestedTemp) : requestedTemp)
     : (budgetExceeded ? 0 : 0.1);
   const roleMaxTokens = role ? getMaxTokensForRole(role) : 1500;
-  const requestedMax = Number(options.max_tokens ?? roleMaxTokens);
+  // Accept both max_tokens (snake_case) and maxTokens (camelCase) for compatibility
+  const requestedMax = Number(options.max_tokens ?? options.maxTokens ?? roleMaxTokens);
   const maxTokens = Number.isFinite(requestedMax)
     ? (budgetExceeded ? Math.max(256, Math.min(600, requestedMax)) : requestedMax)
     : (budgetExceeded ? 512 : 1500);

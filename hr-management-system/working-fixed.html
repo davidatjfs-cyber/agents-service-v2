@@ -8216,11 +8216,16 @@
         }
         .kb-ai-card-hdr {
             display: flex;
-            gap: 12px;
-            align-items: flex-start;
+            flex-direction: column;
+            gap: 10px;
             margin-bottom: 16px;
             padding-bottom: 14px;
             border-bottom: 1px solid rgba(255,255,255,0.07);
+        }
+        .kb-ai-card-actions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
         }
         .kb-ai-card-title { font-size: 14px; font-weight: 700; color: #a5b4fc; }
         .kb-ai-card-sub { font-size: 11px; color: rgba(255,255,255,0.35); margin-top: 3px; }
@@ -15499,11 +15504,13 @@
                             </span>
                         </label>
                         <div id="knowledge-upload-batch-title-group" style="display:none;margin-bottom:14px;">
+                            <label class="kb-upload-field-label" style="margin-bottom:6px;display:block;">批量标题模式</label>
                             <select id="knowledge-upload-batch-title-mode" class="kb-upload-select">
-                                <option value="filename">以文件名为标题</option>
-                                <option value="custom">统一前缀标题</option>
+                                <option value="filename">以文件名为标题（推荐）</option>
+                                <option value="custom">统一前缀标题（如：SOP_01、SOP_02）</option>
                             </select>
                             <input id="knowledge-upload-batch-title-prefix" type="text" placeholder="标题前缀（如：门店卫生SOP）" class="kb-upload-input" style="display:none;margin-top:8px;">
+                            <div style="margin-top:6px;font-size:12px;color:rgba(255,255,255,0.4);line-height:1.5;">各文件将自动用文件名作为标题，在下方「项目组」中统一分组</div>
                         </div>
 
                         <!-- ─── 第一组：基础信息 ─── -->
@@ -27944,6 +27951,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
 
             try { window.__HRMS_KB_ACTIVE_ID = id; } catch (e) {}
 
+            const type = String(item.type || 'doc');
+
             // V2: 显示 overlay viewer，隐藏列表
             const viewer = document.getElementById('knowledge-viewer');
             const listView = document.getElementById('kb-list-view');
@@ -28001,7 +28010,6 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             // ── AI 知识解析视图（主展示方式，与培训认证共用缓存）──
             const base = String(HRMS_API.baseUrl() || window.location?.origin || '').replace(/\/$/, '');
             const token = String(HRMS_API.token() || '').trim();
-            const type = String(item.type || 'doc');
 
             // 所有类型：只显示 AI 解析（视频额外保留播放器）
             const fileSrc = token ? `${base}/api/knowledge/${encodeURIComponent(id)}/file?token=${encodeURIComponent(token)}` : '';
@@ -28034,6 +28042,31 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
                 const data = await resp.json();
+                // Helper: render rubric card
+                function renderRubricCard(rubric) {
+                    if (!rubric || !Array.isArray(rubric.items)) return '';
+                    const typeLabel = rubric.type === 'checkpoints' ? '连续检查' : '分步操作';
+                    const stepsSummary = rubric.items.map((s,i)=>`${i+1}.${escapeHtml(s.name)}(${s.weight}分)`).join(' · ');
+                    const stepsDetail = rubric.items.map(s =>
+                        `<div style="margin:6px 0"><strong>${escapeHtml(s.name)}</strong> (${s.weight}分): ${(s.checks||[]).map(c=>escapeHtml(c)).join('；')}</div>`
+                    ).join('');
+                    const failHtml = rubric.fail_criteria?.length
+                        ? `<div style="margin-top:8px;color:#fca5a5;">⚠️ 一票否决: ${rubric.fail_criteria.map(f=>escapeHtml(f)).join('；')}</div>`
+                        : '';
+                    return `<div class="kb-ai-card" style="margin-top:12px;">
+                        <div class="kb-ai-card-hdr">
+                            <div style="display:flex;align-items:center;gap:10px;">
+                                <span style="font-size:20px;flex-shrink:0;">🎯</span>
+                                <div style="flex:1;min-width:0;">
+                                    <div class="kb-ai-card-title">步骤图谱（${typeLabel}）</div>
+                                    <div class="kb-ai-card-sub">${stepsSummary} | 合格线 ${rubric.pass_threshold||80}分</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="kb-ai-content" style="font-size:12px;">${stepsDetail}${failHtml}</div>
+                    </div>`;
+                }
+
                 if (data.success && data.explanation) {
                     const rawExplanation = data.explanation;
                     const cacheBadge = data.cached
@@ -28058,31 +28091,43 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     const editBtnHtml = isAdmin
                         ? `<button onclick="editKnowledgeExplanation('${escapeHtml(itemId)}', this)" style="padding:4px 12px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:11px;cursor:pointer;">✏️ 编辑</button>`
                         : '';
+                    const regenBtnHtml = isAdmin && data.cached
+                        ? `<button onclick="regenKnowledgeExplanation('${escapeHtml(itemId)}', this)" style="padding:4px 12px;border-radius:8px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.25);color:#fde68a;font-size:11px;cursor:pointer;">🔄 重新生成</button>`
+                        : '';
                     const copyBtnHtml = `<button onclick="copyKnowledgeExplanation(this)" style="padding:4px 12px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:11px;cursor:pointer;">📋 复制</button>`;
 
                     container.innerHTML = `
                         <div class="kb-ai-card">
                             <div class="kb-ai-card-hdr">
-                                <span style="font-size:20px;">✨</span>
-                                <div>
-                                    <div class="kb-ai-card-title">AI 知识解析${cacheBadge}</div>
-                                    <div class="kb-ai-card-sub">AI 精心整理要点，助你快速掌握核心内容</div>
+                                <div style="display:flex;align-items:center;gap:10px;">
+                                    <span style="font-size:20px;flex-shrink:0;">✨</span>
+                                    <div style="flex:1;min-width:0;">
+                                        <div class="kb-ai-card-title">AI 知识解析${cacheBadge}</div>
+                                        <div class="kb-ai-card-sub">AI 精心整理要点，助你快速掌握核心内容</div>
+                                    </div>
                                 </div>
-                                <div style="display:flex;gap:8px;margin-left:auto;flex-shrink:0;">
+                                <div class="kb-ai-card-actions">
                                     ${copyBtnHtml}
+                                    ${regenBtnHtml}
                                     ${editBtnHtml}
                                 </div>
                             </div>
                             <div class="kb-ai-content">${html}</div>
                             ${fileBtnHtml ? `<div style="margin-top:12px;">${fileBtnHtml}</div>` : ''}
-                        </div>`;
+                        </div>
+                        ${renderRubricCard(data.rubric)}`;
                     container.dataset.rawExplanation = rawExplanation;
+                } else if (data.success && !data.explanation && data.rubric) {
+                    // 媒体文件：有图谱但无文字解析（图片/视频的正常状态）
+                    container.innerHTML = renderRubricCard(data.rubric);
                 } else if (data.error === 'no_content') {
+                    const hint = String(data.message || '');
+                    const isMedia = hint.includes('图片') || hint.includes('视频') || hint.includes('生成步骤图谱');
                     container.innerHTML = `
                         <div class="kb-ai-empty">
-                            <div style="font-size:36px;margin-bottom:12px;">📄</div>
-                            <div style="font-size:14px;font-weight:600;color:rgba(255,255,255,0.6);margin-bottom:6px;">暂无可解析内容</div>
-                            <div style="font-size:12px;color:rgba(255,255,255,0.35);line-height:1.7;">文件正在处理中，通常需要 1-2 分钟<br>视频请确保管理员已填写内容摘要</div>
+                            <div style="font-size:36px;margin-bottom:12px;">${isMedia ? '🖼️' : '📄'}</div>
+                            <div style="font-size:14px;font-weight:600;color:rgba(255,255,255,0.6);margin-bottom:6px;">${isMedia ? '图片/视频文件' : '暂无可解析内容'}</div>
+                            <div style="font-size:12px;color:rgba(255,255,255,0.35);line-height:1.7;">${isMedia ? '点击上方「🎯 生成步骤图谱」按钮，AI将分析图��并生成评分标准' : '文件正在处理中，通常需要 1-2 分钟<br>视频请确保管理员已填写内容摘要'}</div>
                             ${opts.showFileBtn && opts.fileSrc ? `<a href="${escapeHtml(opts.fileSrc)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;margin-top:16px;padding:8px 16px;border-radius:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.5);font-size:12px;text-decoration:none;">📎 查看原文件</a>` : ''}
                         </div>`;
                 } else {
@@ -28114,10 +28159,12 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         rubricInfo.style.marginTop = '12px';
                         rubricInfo.innerHTML = `
                             <div class="kb-ai-card-hdr">
-                                <span style="font-size:20px;">🎯</span>
-                                <div>
-                                    <div class="kb-ai-card-title">步骤图谱 (${data.rubric.type === 'checkpoints' ? '连续检查' : '分步操作'})</div>
-                                    <div class="kb-ai-card-sub">${data.rubric.items.map((s,i)=>`${i+1}.${s.name}(${s.weight}分)`).join(' · ')} | 合格线 ${data.rubric.pass_threshold||80}分</div>
+                                <div style="display:flex;align-items:center;gap:10px;">
+                                    <span style="font-size:20px;flex-shrink:0;">🎯</span>
+                                    <div style="flex:1;min-width:0;">
+                                        <div class="kb-ai-card-title">步骤图谱 (${data.rubric.type === 'checkpoints' ? '连续检查' : '分步操作'})</div>
+                                        <div class="kb-ai-card-sub">${data.rubric.items.map((s,i)=>`${i+1}.${s.name}(${s.weight}分)`).join(' · ')} | 合格线 ${data.rubric.pass_threshold||80}分</div>
+                                    </div>
                                 </div>
                             </div>
                             <div class="kb-ai-content" style="font-size:12px;">
@@ -28164,7 +28211,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             textarea.style.resize = 'vertical';
             textarea.style.outline = 'none';
             contentDiv.replaceWith(textarea);
-            const actions = card?.querySelector('.kb-ai-card-hdr > div:last-child');
+            const actions = card?.querySelector('.kb-ai-card-actions');
             if (actions) {
                 actions.innerHTML = `
                     <button onclick="saveKnowledgeExplanation('${escapeHtml(itemId)}', this)" style="padding:6px 16px;border-radius:8px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.3);color:#a5b4fc;font-size:12px;cursor:pointer;">💾 保存</button>
@@ -28224,6 +28271,37 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 document.body.removeChild(ta);
                 btn.textContent = '✅ 已复制';
                 setTimeout(() => { btn.textContent = '📋 复制'; }, 2000);
+            }
+        }
+
+        async function regenKnowledgeExplanation(itemId, btn) {
+            if (!itemId) return;
+            const token = HRMS_API.token() || '';
+            const origText = btn ? btn.textContent : '';
+            try {
+                if (btn) { btn.disabled = true; btn.textContent = '⏳ 清除中…'; }
+                const resp = await fetch('/api/knowledge/' + encodeURIComponent(itemId) + '/explanation/regenerate', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    showNotification('缓存已清除，正在重新生成完整解析…', 'info');
+                    // Reload the AI summary from scratch
+                    const viewerBody = document.getElementById('knowledge-viewer-body');
+                    const aiBox = viewerBody || document.createElement('div');
+                    aiBox.innerHTML = '';
+                    await kbLoadAiSummary(itemId, aiBox, {
+                        showFileBtn: isAdminUser(),
+                        fileType: String(window.__HRMS_KB_ACTIVE_ID || '')
+                    });
+                } else {
+                    showNotification('操作失败：' + (data.message || data.error), 'error');
+                    if (btn) { btn.disabled = false; btn.textContent = origText; }
+                }
+            } catch(e) {
+                showNotification('请求失败：' + (e.message || e), 'error');
+                if (btn) { btn.disabled = false; btn.textContent = origText; }
             }
         }
 
@@ -36842,15 +36920,19 @@ ${knowledgeContent.slice(0, 30000)}`;
             const isBatch = batchCb && batchCb.checked;
             const fileEl = document.getElementById('knowledge-upload-file');
             const titleGroup = document.getElementById('knowledge-upload-batch-title-group');
-            const titleEl = document.getElementById('knowledge-upload-title');
+            const singleTitleWrap = document.getElementById('kb-single-title-wrap');
             const hint = document.getElementById('knowledge-upload-file-hint');
             if (isBatch) {
                 if (fileEl) fileEl.setAttribute('multiple', 'multiple');
                 if (titleGroup) titleGroup.style.display = '';
+                // 批量模式：隐藏单文件标题输入（标题由文件名自动生成）
+                if (singleTitleWrap) singleTitleWrap.style.display = 'none';
                 if (hint) hint.textContent = '已开启多选模式，可同时选择多个文件（最多10个）';
             } else {
                 if (fileEl) fileEl.removeAttribute('multiple');
                 if (titleGroup) titleGroup.style.display = 'none';
+                // 恢复单文件标题输入
+                if (singleTitleWrap) singleTitleWrap.style.display = '';
                 syncKnowledgeUploadFields();
             }
             const batchTitleMode = document.getElementById('knowledge-upload-batch-title-mode');
@@ -37169,14 +37251,19 @@ ${knowledgeContent.slice(0, 30000)}`;
             if (groupNameInput) {
                 const fallbackName = title || category || '';
                 groupNameInput.style.display = groupId ? 'none' : '';
-                if (!groupId && !String(groupNameInput.value || '').trim() && fallbackName) {
-                    groupNameInput.placeholder = `新项目组名称，例如：${fallbackName}`;
+                if (!groupId && !String(groupNameInput.value || '').trim()) {
+                    const imgHint = type === 'img' ? '例如：菜品图库 / 炒饭系列' : (fallbackName ? `新项目组名称，例如：${fallbackName}` : '新项目组名称');
+                    groupNameInput.placeholder = imgHint;
                 }
             }
             if (groupNoteEl) {
-                groupNoteEl.textContent = groupId
-                    ? '已选择已有项目组，上传后会直接进入该组。要换名字请在“整理/转组”里修改。'
-                    : '未选择已有项目组时，会新建一个项目组；这里的名字可自定义。';
+                if (type === 'img' && !groupId) {
+                    groupNoteEl.innerHTML = '<span style=”color:#fde68a;”>💡 菜品图建议共用同一文件夹：上方先选「已有项目组」，或填写文件夹名后多次上传到同组。</span>';
+                } else {
+                    groupNoteEl.textContent = groupId
+                        ? '已选择已有项目组，上传后会直接进入该组。要换名字请在”整理/转组”里修改。'
+                        : '未选择已有项目组时，会新建一个项目组；这里的名字可自定义。';
+                }
             }
         }
 

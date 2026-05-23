@@ -349,15 +349,21 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       const isVideo = /\.(mp4|mov|webm|avi)$/i.test(fileField);
       const baseUrl = process.env.SERVER_BASE_URL || 'https://nnyx.cc';
 
-      const rubricPrompt = `你是餐饮培训标准制定专家。请认真观看视频/图片中的操作流程，提取标准化的培训考核评分表。
+      const dishName = article.title || '';
+      const dishDesc = article.content ? `\n菜品描述：${article.content.slice(0, 200)}` : '';
+
+      const rubricPrompt = `你是餐饮培训标准制定专家。当前考核菜品/操作：「${dishName}」${dishDesc}
+
+请认真观看视频/图片，提取标准化的培训考核评分表。
 
 要求：
-1. 判断操作类型：如果操作是可分步的（如切配、摆盘、烤鸭流程），用"steps"类型，列出操作步骤。如果是连续操作用"checkpoints"类型。
-2. 每个步骤/检查点包含：名称、权重（所有项权重相加等于100）、3-5个可视化检查点
-3. checkout必须是视觉上可判定的（能看到的东西），不能是不可见的（如"温度""时间""调味"等抽象概念）
-4. 列出3-5个一票否决项（fail_criteria），出现任一即不合格
-5. 合格线设为80分（pass_threshold）
-6. 严格返回JSON格式，不要额外文字
+1. 第一项必须是「菜品/操作核验」（权重10分）：核查员工提交的实操图片/视频是否为「${dishName || '考核内容'}」，checks 中要包含该菜品/操作的唯一识别特征（主料外观、器具、操作动作等），用于后续评分时区分是否提交了错误菜品。
+2. 判断操作类型：可分步操作（切配、摆盘、烤鸭流程）用"steps"，连续操作用"checkpoints"。
+3. 每个步骤/检查点包含：名称、权重（所有项权重相加等于100）、3-5个可视化检查点。
+4. checks 必须是视觉上可判定的（能看到的），不能是不可见的（如"温度""时间""调味"）。
+5. 列出3-5个一票否决项（fail_criteria），出现任一即不合格。
+6. 合格线设为80分（pass_threshold）。
+7. 严格返回JSON，不要额外文字。
 
 返回JSON示例：
 {
@@ -425,10 +431,21 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       const kbIds = topic.kb_article_ids || [];
       if (!kbIds.length) return res.json({ success: false, error: '该知识点未关联任何知识库文章，无法生成图谱' });
 
-      // 优先取已有 step_rubric 的KB文章，否则取第一个视频/图片文件做分析
-      const kbResult = await pool().query(`SELECT id, title, file_path, step_rubric FROM knowledge_base WHERE id = ANY($1) ORDER BY step_rubric IS NOT NULL DESC LIMIT 1`, [kbIds]);
-      if (kbResult.rows.length === 0) return res.json({ success: false, error: '关联的KB文章不存在' });
+      // 优先取已有 step_rubric 的KB文章（媒体文件优先），否则取第一个视频/图片文件
+      // 注意：1对1设计原则——每个培训话题对应1个SOP文件，多关联时只取第一个可用媒体文件
+      const kbResult = await pool().query(
+        `SELECT id, title, file_path, step_rubric FROM knowledge_base
+         WHERE id = ANY($1) AND (file_path IS NOT NULL OR step_rubric IS NOT NULL)
+         ORDER BY step_rubric IS NOT NULL DESC, file_path IS NOT NULL DESC
+         LIMIT 1`,
+        [kbIds]
+      );
+      if (kbResult.rows.length === 0) return res.json({ success: false, error: '关联的KB文章不存在或无媒体文件' });
       const kbArticle = kbResult.rows[0];
+      const usedKbCount = kbIds.length;
+      const warningMsg = usedKbCount > 1
+        ? `注意：该话题关联了${usedKbCount}篇KB文章，图谱仅基于「${kbArticle.title}」生成。建议每个话题只关联1篇SOP文件。`
+        : null;
 
       let rubric;
       if (kbArticle.step_rubric) {
@@ -457,7 +474,7 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       }
 
       await pool().query(`UPDATE training_topics SET step_rubric = $1 WHERE id = $2`, [JSON.stringify(rubric), id]);
-      res.json({ success: true, rubric });
+      res.json({ success: true, rubric, source_kb: { id: kbArticle.id, title: kbArticle.title }, warning: warningMsg });
     } catch (e) {
       console.error('[Training] generate-rubric error:', e?.message);
       res.json({ success: false, error: e?.message });
