@@ -16206,6 +16206,7 @@
                         <div class="kb-v2-viewer-acts">
                             <button class="kb-v2-act-btn" id="knowledge-edit-btn" style="display:none;" type="button">编辑</button>
                             <button class="kb-v2-act-btn" id="knowledge-transfer-btn" style="display:none;" type="button">转组</button>
+                            <button class="kb-v2-act-btn" id="knowledge-rubric-btn" style="display:none;background:rgba(99,102,241,0.18);color:#a5b4fc;border-color:rgba(99,102,241,0.35);" type="button">🎯 生成步骤图谱</button>
                             <button class="kb-v2-act-btn kb-v2-act-del" id="knowledge-delete-btn" style="display:none;" type="button">删除</button>
                         </div>
                     </div>
@@ -17275,8 +17276,17 @@
 
                         <!-- 实操目标（原：实操任务） -->
                         <div class="tt-section-card">
-                            <label class="tt-field-label">③ 实操目标</label>
-                            <textarea id="training-topic-practice" rows="4" class="tt-textarea" style="resize:vertical;" placeholder="描述员工需要完成的实操目标，如：完整演示烧鹅挂炉流程，包括上色、控温、出炉三步骤"></textarea>
+                            <label class="tt-field-label">③ 实操目标和步骤图谱</label>
+                            <textarea id="training-topic-practice" rows="3" class="tt-textarea" style="resize:vertical;" placeholder="描述员工需要完成的实操目标，如：完整演示烧鹅挂炉流程"></textarea>
+                            <div id="training-topic-rubric" style="margin-top:10px;">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <span style="font-size:12px;color:rgba(255,255,255,0.45);">步骤图谱：</span>
+                                    <span id="training-rubric-status" style="font-size:11px;color:rgba(255,255,255,0.35);">未配置</span>
+                                    <button type="button" id="training-rubric-btn" style="padding:4px 12px;border-radius:6px;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);color:#a5b4fc;font-size:11px;cursor:pointer;display:none;" onclick="generateTopicRubric()">📹 从培训视频生成</button>
+                                </div>
+                                <div id="training-rubric-preview" style="display:none;margin-top:8px;padding:10px 12px;border-radius:10px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);font-size:11px;color:rgba(255,255,255,0.7);line-height:1.6;">
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="tt-footer">
@@ -27974,6 +27984,15 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 transferBtn.style.display = isAdminUser() ? '' : 'none';
                 transferBtn.onclick = () => openKnowledgeOrganizerSheet(item?.groupId || __KB_ACTIVE_GROUP_ID || '', id);
             }
+            const rubricBtn = document.getElementById('knowledge-rubric-btn');
+            if (rubricBtn) {
+                const isVideoImg = type === 'video' || type === 'img';
+                rubricBtn.style.display = (isAdminUser() && isVideoImg) ? '' : 'none';
+                if (isVideoImg) {
+                    rubricBtn.textContent = item.step_rubric ? '🔄 重新生成图谱' : '🎯 生成步骤图谱';
+                    rubricBtn.onclick = () => analyzeKnowledgeRubric(id);
+                }
+            }
 
             if (!body) return;
             body.innerHTML = '';
@@ -28071,6 +28090,49 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 }
             } catch(e) {
                 container.innerHTML = `<div class="kb-ai-empty"><div style="font-size:32px;margin-bottom:10px;">📡</div><div style="font-size:13px;color:rgba(255,255,255,0.4);">网络错误，请检查连接后重试</div></div>`;
+            }
+        }
+
+        async function analyzeKnowledgeRubric(itemId) {
+            const token = HRMS_API.token() || '';
+            const btn = document.getElementById('knowledge-rubric-btn');
+            try {
+                if (btn) { btn.disabled = true; btn.textContent = '⏳ AI分析中...'; }
+                const resp = await fetch('/api/knowledge/' + encodeURIComponent(itemId) + '/analyze-rubric', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
+                });
+                const data = await resp.json();
+                if (data.success && data.rubric) {
+                    showNotification(`步骤图谱已生成！共 ${data.rubric.items?.length || 0} 个步骤/检查点`, 'success');
+                    if (btn) { btn.textContent = '🔄 重新生成图谱'; }
+                    // Refresh to show rubric status
+                    const viewerBody = document.getElementById('knowledge-viewer-body');
+                    if (viewerBody) {
+                        const rubricInfo = document.createElement('div');
+                        rubricInfo.className = 'kb-ai-card';
+                        rubricInfo.style.marginTop = '12px';
+                        rubricInfo.innerHTML = `
+                            <div class="kb-ai-card-hdr">
+                                <span style="font-size:20px;">🎯</span>
+                                <div>
+                                    <div class="kb-ai-card-title">步骤图谱 (${data.rubric.type === 'checkpoints' ? '连续检查' : '分步操作'})</div>
+                                    <div class="kb-ai-card-sub">${data.rubric.items.map((s,i)=>`${i+1}.${s.name}(${s.weight}分)`).join(' · ')} | 合格线 ${data.rubric.pass_threshold||80}分</div>
+                                </div>
+                            </div>
+                            <div class="kb-ai-content" style="font-size:12px;">
+                                ${data.rubric.items.map(s => `<div style="margin:6px 0"><strong>${s.name}</strong> (${s.weight}分): ${(s.checks||[]).join('；')}</div>`).join('')}
+                                ${data.rubric.fail_criteria?.length ? `<div style="margin-top:8px;color:#fca5a5;">⚠️ 一票否决: ${data.rubric.fail_criteria.join('；')}</div>` : ''}
+                            </div>`;
+                        viewerBody.appendChild(rubricInfo);
+                    }
+                } else {
+                    showNotification('生成失败: ' + (data.error || '未知错误'), 'error');
+                }
+            } catch(e) {
+                showNotification('请求失败: ' + (e.message || e), 'error');
+            } finally {
+                if (btn) { btn.disabled = false; }
             }
         }
 
@@ -29355,11 +29417,61 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
 
             updateTrainingTopicSummary();
 
+            // Reset rubric display for new topic
+            const rubricBtn = document.getElementById('training-rubric-btn');
+            if (rubricBtn) rubricBtn.style.display = 'none';
+            document.getElementById('training-rubric-status').textContent = '未配置';
+            document.getElementById('training-rubric-preview').style.display = 'none';
+
             document.getElementById('training-topic-modal').classList.add('show');
         }
 
         function closeTrainingTopicModal() {
             document.getElementById('training-topic-modal').classList.remove('show');
+        }
+
+        function showTopicRubric(rubric) {
+            const statusEl = document.getElementById('training-rubric-status');
+            const previewEl = document.getElementById('training-rubric-preview');
+            if (!statusEl || !previewEl) return;
+            if (rubric && Array.isArray(rubric.items) && rubric.items.length) {
+                statusEl.textContent = `已配置 · ${rubric.items.length}项 · 合格线${rubric.pass_threshold||80}分`;
+                statusEl.style.color = 'rgba(52,211,153,0.9)';
+                previewEl.style.display = '';
+                previewEl.innerHTML = rubric.items.map((s, i) =>
+                    `<div style="margin:4px 0">${i+1}. <strong>${s.name}</strong> (${s.weight}分): ${(s.checks||[]).join('；')}</div>`
+                ).join('') + (rubric.fail_criteria?.length ? `<div style="margin-top:6px;color:#fca5a5;">⚠️ 一票否决: ${rubric.fail_criteria.join('；')}</div>` : '');
+            } else {
+                statusEl.textContent = '未配置';
+                statusEl.style.color = 'rgba(255,255,255,0.35)';
+                previewEl.style.display = 'none';
+                previewEl.innerHTML = '';
+            }
+        }
+
+        async function generateTopicRubric() {
+            const id = document.getElementById('training-topic-id').value;
+            if (!id) return showNotification('请先保存知识点', 'warning');
+            const token = localStorage.getItem('hrms_token');
+            const btn = document.getElementById('training-rubric-btn');
+            try {
+                if (btn) { btn.disabled = true; btn.textContent = '⏳ 分析中...'; }
+                const resp = await fetch('/api/training/topics/' + id + '/generate-rubric', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
+                });
+                const data = await resp.json();
+                if (data.success && data.rubric) {
+                    showNotification(`步骤图谱已生成！共 ${data.rubric.items?.length || 0} 项`, 'success');
+                    showTopicRubric(data.rubric);
+                } else {
+                    showNotification('生成失败: ' + (data.error || '未知错误'), 'error');
+                }
+            } catch(e) {
+                showNotification('请求失败: ' + (e.message || e), 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '📹 从培训视频生成'; }
+            }
         }
 
         async function editTrainingTopic(id) {
@@ -29398,6 +29510,10 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     } catch(_) {}
                     renderKbChips();
                 }
+                // 恢复步骤图谱
+                showTopicRubric(topic.step_rubric);
+                const rubricBtn = document.getElementById('training-rubric-btn');
+                if (rubricBtn) rubricBtn.style.display = kbIds.length > 0 ? '' : 'none';
             } catch (e) {
                 showNotification('加载知识点失败', 'error');
             }
@@ -29430,6 +29546,15 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 if (data.success) {
                     showNotification('保存成功', 'success');
                     closeTrainingTopicModal();
+                    // If KB articles linked, prompt to generate rubric
+                    if (kb_article_ids.length > 0 && !id) {
+                        const newId = data.topic?.id;
+                        if (newId) {
+                            setTimeout(() => {
+                                showNotification('知识点已创建。可编辑知识点并点击"从培训视频生成"来设置实操评分图谱', 'info');
+                            }, 500);
+                        }
+                    }
                     loadTrainingTopics();
                 } else {
                     showNotification(data.error || '保存失败', 'error');
@@ -29840,29 +29965,47 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 }
                 const aiLabel = {passed:'AI：合格',review:'AI：建议复核',failed:'AI：不合格'};
                 const aiColor = {passed:'#34d399',review:'#fbbf24',failed:'#f87171'};
-                list.innerHTML = data.pending.map(c => `
-                    <div style="background:rgba(255,255,255,0.05);border-radius:14px;padding:14px;margin-bottom:12px;border:1px solid rgba(255,255,255,0.08);">
+                list.innerHTML = data.pending.map(c => {
+                    const stepScores = c.ai_step_scores;
+                    const totalScore = c.ai_total_score;
+                    let scoreHtml = '';
+                    if (stepScores && Array.isArray(stepScores) && stepScores.length) {
+                        const stepsStr = stepScores.map(s => {
+                            const pct = Math.round((s.score||0)/Math.max(1,s.max||1)*100);
+                            const c2 = pct>=80?'#34d399':pct>=60?'#fbbf24':'#f87171';
+                            return `<div style="display:flex;align-items:center;gap:6px;margin:3px 0;font-size:11px;">
+                                <span style="width:60px;color:rgba(255,255,255,0.55);">${escapeHtml(s.name||'')}</span>
+                                <span style="width:60px;text-align:right;font-weight:600;color:${c2};">${s.score}/${s.max}</span>
+                            </div>`;
+                        }).join('');
+                        scoreHtml = `<div style="background:rgba(0,0,0,0.25);border-radius:8px;padding:10px;margin-bottom:10px;">
+                            <div style="font-size:18px;font-weight:800;color:${totalScore>=80?'#34d399':totalScore>=60?'#fbbf24':'#f87171'};margin-bottom:4px;">AI评分：${totalScore}分</div>
+                            ${stepsStr}
+                        </div>`;
+                    }
+                    return `<div style="background:rgba(255,255,255,0.05);border-radius:14px;padding:14px;margin-bottom:12px;border:1px solid rgba(255,255,255,0.08);">
                         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
                             <span style="font-weight:700;color:#fff;font-size:14px;">${escapeHtml(c.employee_name || c.employee_username)}</span>
                             <span style="font-size:11px;color:${aiColor[c.ai_verdict]||'#94a3b8'};">${aiLabel[c.ai_verdict]||''}</span>
                         </div>
-                        <div style="font-size:12px;color:rgba(255,255,255,0.45);margin-bottom:10px;">📚 ${escapeHtml(c.title)} &nbsp;·&nbsp; ${escapeHtml(c.position)}</div>
+                        <div style="font-size:12px;color:rgba(255,255,255,0.45);margin-bottom:10px;">📚 ${escapeHtml(c.title)} · ${escapeHtml(c.position)}</div>
                         ${c.media_url ? (c.media_type === 'video'
                             ? `<video src="${c.media_url}" controls playsinline style="width:100%;border-radius:10px;margin-bottom:10px;max-height:200px;object-fit:cover;"></video>`
                             : `<img src="${c.media_url}" style="width:100%;border-radius:10px;margin-bottom:10px;max-height:200px;object-fit:cover;">`) : ''}
                         ${c.ai_feedback ? `<div style="background:rgba(0,0,0,0.25);border-radius:8px;padding:10px;font-size:13px;color:rgba(255,255,255,0.7);margin-bottom:10px;line-height:1.5;">💬 ${escapeHtml(c.ai_feedback)}</div>` : ''}
+                        ${scoreHtml}
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                            <button onclick="reviewCertification(${c.id},'passed')" style="padding:12px;border-radius:10px;background:rgba(52,211,153,0.15);border:1px solid rgba(52,211,153,0.3);color:#34d399;font-size:14px;font-weight:600;cursor:pointer;">✓ 通过</button>
-                            <button onclick="reviewCertification(${c.id},'failed')" style="padding:12px;border-radius:10px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);color:#f87171;font-size:14px;font-weight:600;cursor:pointer;">✗ 不通过</button>
+                            <button onclick="reviewCertWithScore(${c.id},'confirm')" style="padding:12px;border-radius:10px;background:rgba(52,211,153,0.15);border:1px solid rgba(52,211,153,0.3);color:#34d399;font-size:14px;font-weight:600;cursor:pointer;">✓ 确认AI评分</button>
+                            <button onclick="reviewCertWithOverride(${c.id})" style="padding:12px;border-radius:10px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.25);color:#fbbf24;font-size:14px;font-weight:600;cursor:pointer;">✎ 手动评分</button>
                         </div>
-                    </div>
-                `).join('');
+                    </div>`;
+                }).join('');
             } catch (e) {
                 showNotification('加载待审核列表失败', 'error');
             }
         }
 
-        async function reviewCertification(id, verdict) {
+        async function reviewCertWithScore(id, action) {
             try {
                 const resp = await fetch('/api/training/certifications/' + id + '/review', {
                     method: 'POST',
@@ -29870,11 +30013,11 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         'Content-Type': 'application/json',
                         'Authorization': 'Bearer ' + localStorage.getItem('hrms_token')
                     },
-                    body: JSON.stringify({ verdict })
+                    body: JSON.stringify({ action })
                 });
                 const data = await resp.json();
                 if (data.success) {
-                    showNotification('审核完成', 'success');
+                    showNotification(action === 'confirm' ? '已确认AI评分' : '审核完成', 'success');
                     loadPendingCertifications();
                 } else {
                     showNotification(data.error || '审核失败', 'error');
@@ -29882,6 +30025,92 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             } catch (e) {
                 showNotification('审核失败', 'error');
             }
+        }
+
+        async function reviewCertWithOverride(id) {
+            // Load score detail and show override dialog
+            try {
+                const resp = await fetch('/api/training/certifications/' + id + '/score-detail', {
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('hrms_token') }
+                });
+                const data = await resp.json();
+                if (!data.success) return showNotification('加载失败', 'error');
+
+                const scores = data.ai_step_scores || [];
+                const total = data.ai_total_score || 0;
+                const feedback = data.certification?.ai_feedback || '';
+
+                const stepsHtml = scores.map((s, i) =>
+                    `<div style="display:flex;align-items:center;gap:8px;margin:8px 0;">
+                        <span style="width:80px;color:rgba(255,255,255,0.7);font-size:13px;">${escapeHtml(s.name||'步骤'+(i+1))}</span>
+                        <input type="number" id="override-score-${i}" value="${s.score||0}" min="0" max="${s.max||100}"
+                            style="width:60px;padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:13px;text-align:center;">
+                        <span style="color:rgba(255,255,255,0.3);font-size:11px;">/${s.max||100}</span>
+                        <span style="font-size:11px;color:rgba(255,255,255,0.35);flex:1;">${escapeHtml(s.feedback||'')}</span>
+                    </div>`
+                ).join('');
+
+                const dialog = document.createElement('div');
+                dialog.innerHTML = `
+                    <div class="modal show" style="display:flex;z-index:9999;">
+                        <div class="modal-backdrop" onclick="this.parentElement.remove()"></div>
+                        <div class="modal-content" style="width:min(480px,calc(100vw-20px));max-height:90vh;overflow-y:auto;border-radius:18px;padding:24px;background:linear-gradient(180deg,rgba(30,41,59,0.98),rgba(15,23,42,0.98));border:1px solid rgba(148,163,184,0.16);">
+                            <h3 style="color:#fff;margin:0 0 4px;">手动覆盖评分</h3>
+                            <div style="font-size:12px;color:rgba(255,255,255,0.35);margin-bottom:16px;">AI评分：${total}分。你可以逐项调整分数。</div>
+                            ${stepsHtml}
+                            <div style="margin-top:10px;">
+                                <label style="font-size:11px;color:rgba(255,255,255,0.4);">审核备注</label>
+                                <textarea id="override-note" rows="2" style="width:100%;margin-top:4px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:12px;resize:vertical;"></textarea>
+                            </div>
+                            <div style="display:flex;gap:8px;margin-top:16px;">
+                                <button onclick="this.closest('.modal').remove()" style="flex:1;padding:12px;border-radius:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.6);font-size:14px;cursor:pointer;">取消</button>
+                                <button onclick="submitOverride(${id})" style="flex:1;padding:12px;border-radius:10px;background:rgba(99,102,241,0.9);border:none;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">提交人工评分</button>
+                            </div>
+                        </div>
+                    </div>`;
+                document.body.appendChild(dialog);
+            } catch (e) {
+                showNotification('加载失败: ' + (e.message||e), 'error');
+            }
+        }
+
+        async function submitOverride(id) {
+            const steps = [];
+            let i = 0;
+            while (true) {
+                const inp = document.getElementById('override-score-' + i);
+                if (!inp) break;
+                steps.push({ name: inp.previousElementSibling?.textContent || ('步骤'+(i+1)), score: Math.max(0, Number(inp.value) || 0) });
+                i++;
+            }
+            const note = document.getElementById('override-note')?.value || '';
+            try {
+                const resp = await fetch('/api/training/certifications/' + id + '/review', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + localStorage.getItem('hrms_token')
+                    },
+                    body: JSON.stringify({ action: 'override', steps, note })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    showNotification('已提交人工评分：' + (data.final_score||0) + '分', 'success');
+                    // Close dialog
+                    const modals = document.querySelectorAll('.modal.show');
+                    modals.forEach(m => m.remove());
+                    loadPendingCertifications();
+                } else {
+                    showNotification(data.error || '提交失败', 'error');
+                }
+            } catch (e) {
+                showNotification('提交失败: ' + (e.message||e), 'error');
+            }
+        }
+
+        // Legacy compatibility
+        async function reviewCertification(id, verdict) {
+            return reviewCertWithScore(id, verdict === 'passed' ? 'confirm' : 'override');
         }
 
         // 员工端 tab 切换
@@ -29927,6 +30156,20 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     const score = c.quiz_score !== null && c.quiz_score !== undefined ? c.quiz_score + '分' : '—';
                     const posArr = (c.position || '').split(',').map(s => s.trim()).filter(Boolean);
                     const posTags = posArr.map(p => `<span style="font-size:11px;padding:2px 8px;border-radius:8px;background:rgba(99,102,241,0.2);color:#a5b4fc;">${escapeHtml(p)}</span>`).join('');
+                    // 实操评分
+                    let practiceScoreHtml = '';
+                    const finalScore = c.final_score;
+                    const aiTotal = c.ai_total_score;
+                    const reviewStatus = c.review_status;
+                    if (c.require_practice && finalScore !== null && finalScore !== undefined) {
+                        const scoreColor = finalScore >= 80 ? '#34d399' : finalScore >= 60 ? '#fbbf24' : '#f87171';
+                        const scoreBadge = reviewStatus === 'overridden'
+                            ? '<span style="font-size:9px;color:rgba(255,255,255,0.35);">(人工)</span>'
+                            : '<span style="font-size:9px;color:rgba(255,255,255,0.35);">(AI确认)</span>';
+                        practiceScoreHtml = `<div style="margin-top:6px;font-size:13px;font-weight:700;color:${scoreColor};">实操 ${finalScore}分 ${scoreBadge}</div>`;
+                    } else if (c.require_practice && reviewStatus === 'pending') {
+                        practiceScoreHtml = `<div style="margin-top:6px;font-size:12px;color:#eab308;">实操评分待派发人审核</div>`;
+                    }
                     return `
                     <div style="background:rgba(52,211,153,0.07);border:1px solid rgba(52,211,153,0.25);border-radius:14px;padding:16px;">
                         <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;">
@@ -29938,6 +30181,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                             <div style="font-size:12px;color:rgba(255,255,255,0.5);">认证日期：${certDate}</div>
                             <div style="font-size:13px;font-weight:700;color:#fbbf24;">测验 ${score}</div>
                         </div>
+                        ${practiceScoreHtml}
                     </div>`;
                 }).join('');
             } catch (e) {
@@ -30420,7 +30664,41 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 if (data.success) {
                     const resultDiv = document.getElementById('training-practice-result');
                     resultDiv.style.display = '';
-                    if (data.verdict === 'passed') {
+                    const stepScores = data.step_scores;
+                    const totalScore = data.total_score;
+                    const hasRubric = data.has_rubric;
+
+                    // 图谱评分结果
+                    if (hasRubric && stepScores && Array.isArray(stepScores) && stepScores.length) {
+                        const scoreColor = totalScore >= 80 ? '#22c55e' : totalScore >= 60 ? '#eab308' : '#ef4444';
+                        const scoreEmoji = totalScore >= 80 ? '✅' : totalScore >= 60 ? '⚠️' : '❌';
+                        const stepsHtml = stepScores.map(s => {
+                            const pct = Math.round((s.score || 0) / Math.max(1, s.max || 1) * 100);
+                            const barColor = pct >= 80 ? '#22c55e' : pct >= 60 ? '#eab308' : '#ef4444';
+                            return `<div style="display:flex;align-items:center;gap:10px;margin:8px 0;font-size:13px;">
+                                <span style="min-width:80px;color:rgba(255,255,255,0.7);">${escapeHtml(s.name || '')}</span>
+                                <div style="flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,0.06);overflow:hidden;">
+                                    <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;"></div>
+                                </div>
+                                <span style="min-width:45px;text-align:right;color:${barColor};font-weight:600;">${s.score}/${s.max}</span>
+                            </div>
+                            ${s.feedback ? `<div style="margin-left:90px;margin-bottom:4px;font-size:11px;color:rgba(255,255,255,0.4);">${escapeHtml(s.feedback)}</div>` : ''}`;
+                        }).join('');
+
+                        resultDiv.innerHTML = `<div style="background:rgba(30,41,59,0.98);border:1px solid rgba(148,163,184,0.2);border-radius:14px;padding:24px;">
+                            <div style="text-align:center;margin-bottom:16px;">
+                                <div style="font-size:36px;margin-bottom:8px;">${scoreEmoji}</div>
+                                <div style="font-size:28px;font-weight:800;color:${scoreColor};">${totalScore !== null ? totalScore + '分' : 'N/A'}</div>
+                                <div style="font-size:12px;color:rgba(255,255,255,0.4);">AI自动评分 · 待派发人审核确认</div>
+                            </div>
+                            <div style="border-top:1px solid rgba(148,163,184,0.1);padding-top:12px;">
+                                ${stepsHtml}
+                            </div>
+                            <div style="margin-top:12px;padding:10px;border-radius:8px;background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.2);text-align:center;font-size:12px;color:#eab308;">
+                                ⏳ 评分已提交，等待派发人审核确认后生效
+                            </div>
+                        </div>`;
+                    } else if (data.verdict === 'passed') {
                         resultDiv.innerHTML = `<div style="background:rgba(34,197,94,0.2);border:1px solid rgba(34,197,94,0.3);border-radius:12px;padding:20px;text-align:center;"><div style="font-size:48px;margin-bottom:12px;">🎉</div><div style="font-size:18px;font-weight:600;color:#22c55e;">认证通过</div><div style="color:rgba(255,255,255,0.6);margin-top:8px;">${escapeHtml(data.feedback || '操作规范，符合要求')}</div></div>`;
                         setTimeout(() => backToTrainingHome(), 2000);
                     } else if (data.verdict === 'review') {

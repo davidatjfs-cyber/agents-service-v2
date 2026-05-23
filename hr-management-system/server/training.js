@@ -7,10 +7,11 @@
  */
 
 import { pool as getPool } from './utils/database.js';
-import { callLLM, callVisionLLM, lookupFeishuUserByUsername, sendLarkMessage } from './agents.js';
+import { callLLM, callVisionLLM, callVisionLLMVideo, lookupFeishuUserByUsername, sendLarkMessage } from './agents.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import axios from 'axios';
 import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
@@ -47,6 +48,23 @@ function getAssignableRoles(assignerRole) {
 
 function getShanghaiDateKey(date = new Date()) {
   return date.toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' });
+}
+
+function parseScoringJson(jsonText) {
+  try {
+    const parsed = JSON.parse(jsonText);
+    const steps = parsed.steps || [];
+    const totalScore = Number(parsed.total_score) || null;
+    const verdict = ['passed', 'review', 'failed'].includes(parsed.verdict) ? parsed.verdict : 'review';
+    const summary = parsed.summary || '';
+    const failReason = parsed.fail_reason || null;
+    // If fail_reason is present, force failed
+    const finalVerdict = failReason ? 'failed' : verdict;
+    const feedback = failReason ? `【一票否决】${failReason}。${summary}` : summary;
+    return { aiVerdict: finalVerdict, aiFeedback: feedback, aiStepScores: steps, aiTotalScore: totalScore };
+  } catch (e) {
+    return { aiVerdict: 'review', aiFeedback: '评分解析失败，需人工审核', aiStepScores: null, aiTotalScore: null };
+  }
 }
 
 function getShanghaiDateTimeText(date = new Date()) {
@@ -298,6 +316,173 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       }
       await pool().query(`UPDATE training_topics SET is_active = false WHERE id = $1`, [req.params.id]);
       res.json({ success: true });
+    } catch (e) {
+      res.json({ success: false, error: e?.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // 步骤图谱生成 & 管理
+  // ═══════════════════════════════════════════════════════════
+
+  // POST /api/knowledge/:id/analyze-rubric — 分析KB视频/图片，生成步骤图谱
+  app.post('/api/knowledge/:id/analyze-rubric', authMiddleware, async (req, res) => {
+    try {
+      if (!isManager(req.user?.role)) {
+        return res.status(403).json({ error: '无权限' });
+      }
+      const { id } = req.params;
+      const article = (await pool().query(`SELECT * FROM knowledge_base WHERE id = $1`, [id])).rows[0];
+      if (!article) return res.json({ success: false, error: '知识条目不存在' });
+
+      const fileField = article.file_path || '';
+      const isVideo = /\.(mp4|mov|webm|avi)$/i.test(fileField);
+      const baseUrl = process.env.SERVER_BASE_URL || 'https://nnyx.cc';
+
+      const rubricPrompt = `你是餐饮培训标准制定专家。请认真观看视频/图片中的操作流程，提取标准化的培训考核评分表。
+
+要求：
+1. 判断操作类型：如果操作是可分步的（如切配、摆盘、烤鸭流程），用"steps"类型，列出操作步骤。如果是连续操作用"checkpoints"类型。
+2. 每个步骤/检查点包含：名称、权重（所有项权重相加等于100）、3-5个可视化检查点
+3. checkout必须是视觉上可判定的（能看到的东西），不能是不可见的（如"温度""时间""调味"等抽象概念）
+4. 列出3-5个一票否决项（fail_criteria），出现任一即不合格
+5. 合格线设为80分（pass_threshold）
+6. 严格返回JSON格式，不要额外文字
+
+返回JSON示例：
+{
+  "type": "steps",
+  "items": [
+    {"name": "烫皮", "weight": 15, "checks": ["水温到位冒热气", "鸭皮颜色发白绷紧", "整体烫过无遗漏"]},
+    {"name": "挂皮水", "weight": 25, "checks": ["糖水均匀淋洒", "鸭身全部位覆盖面", "颜色呈淡琥珀"]}
+  ],
+  "fail_criteria": ["食材明显变质腐烂", "操作区域严重污秽", "漏掉关键步骤", "明显操作安全隐患"],
+  "pass_threshold": 80
+}`;
+
+      let llmResult;
+      if (isVideo) {
+        const videoUrl = `${baseUrl}${fileField}`;
+        const framePath = path.join(uploadsDir, `rubric-frame-${randomUUID()}.jpg`);
+        try {
+          execFileSync('ffmpeg', ['-i', path.join(__dirname, fileField), '-ss', '00:00:05', '-frames:v', '1', framePath], { timeout: 30000 });
+          llmResult = await callVisionLLM(framePath, rubricPrompt);
+          try { fs.unlinkSync(framePath); } catch (_) {}
+        } catch (ffmpegErr) {
+          // Try video API as fallback
+          try {
+            llmResult = await callVisionLLMVideo(videoUrl, rubricPrompt);
+          } catch (vErr) {
+            return res.json({ success: false, error: '视频分析失败: ' + (ffmpegErr?.message || vErr?.message) });
+          }
+        }
+      } else {
+        const fileAbsPath = path.join(__dirname, fileField);
+        if (!fs.existsSync(fileAbsPath)) return res.json({ success: false, error: '文件未找到' });
+        llmResult = await callVisionLLM(fileAbsPath, rubricPrompt);
+      }
+
+      if (!llmResult?.ok) return res.json({ success: false, error: 'AI分析失败: ' + (llmResult?.error || 'unknown') });
+
+      const text = llmResult.content || '';
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return res.json({ success: false, error: 'AI返回格式异常: ' + text.slice(0, 200) });
+
+      const rubric = JSON.parse(jsonMatch[0]);
+      if (!rubric.items || !Array.isArray(rubric.items)) return res.json({ success: false, error: '返回数据缺少items字段' });
+
+      const totalWeight = rubric.items.reduce((s, item) => s + (Number(item.weight) || 0), 0);
+      if (Math.abs(totalWeight - 100) > 5) {
+        return res.json({ success: false, error: `步骤权重总和应为100，当前为${totalWeight}`, raw_rubric: rubric });
+      }
+
+      await pool().query(`UPDATE knowledge_base SET step_rubric = $1 WHERE id = $2`, [JSON.stringify(rubric), id]);
+      res.json({ success: true, rubric });
+    } catch (e) {
+      console.error('[Training] analyze-rubric error:', e?.message);
+      res.json({ success: false, error: e?.message });
+    }
+  });
+
+  // POST /api/training/topics/:id/generate-rubric — 话题从关联KB视频生成图谱
+  app.post('/api/training/topics/:id/generate-rubric', authMiddleware, async (req, res) => {
+    try {
+      if (!isManager(req.user?.role)) return res.status(403).json({ error: '无权限' });
+      const { id } = req.params;
+      const topic = (await pool().query(`SELECT * FROM training_topics WHERE id = $1 AND is_active = true`, [id])).rows[0];
+      if (!topic) return res.json({ success: false, error: '知识点不存在' });
+      const kbIds = topic.kb_article_ids || [];
+      if (!kbIds.length) return res.json({ success: false, error: '该知识点未关联任何知识库文章，无法生成图谱' });
+
+      // 优先取已有 step_rubric 的KB文章，否则取第一个视频/图片文件做分析
+      const kbResult = await pool().query(`SELECT id, title, file_path, step_rubric FROM knowledge_base WHERE id = ANY($1) ORDER BY step_rubric IS NOT NULL DESC LIMIT 1`, [kbIds]);
+      if (kbResult.rows.length === 0) return res.json({ success: false, error: '关联的KB文章不存在' });
+      const kbArticle = kbResult.rows[0];
+
+      let rubric;
+      if (kbArticle.step_rubric) {
+        rubric = kbArticle.step_rubric;
+      } else {
+        // Trigger KB analysis first
+        try {
+          const analyzeRes = await axios.post(`http://localhost:3000/api/knowledge/${kbArticle.id}/analyze-rubric`, {
+            _user: req.user
+          }, { headers: { 'x-api-key': process.env.INTERNAL_API_KEY || '' } });
+          if (!analyzeRes.data?.success) {
+            return res.json({ success: false, error: '步骤图谱生成失败: ' + (analyzeRes.data?.error || '') });
+          }
+          rubric = analyzeRes.data.rubric;
+        } catch (innerE) {
+          return res.json({ success: false, error: '分析请求失败: ' + innerE?.message });
+        }
+      }
+
+      await pool().query(`UPDATE training_topics SET step_rubric = $1 WHERE id = $2`, [JSON.stringify(rubric), id]);
+      res.json({ success: true, rubric });
+    } catch (e) {
+      console.error('[Training] generate-rubric error:', e?.message);
+      res.json({ success: false, error: e?.message });
+    }
+  });
+
+  // GET /api/training/topics/:id/rubric — 获取话题图谱
+  app.get('/api/training/topics/:id/rubric', authMiddleware, async (req, res) => {
+    try {
+      const topic = (await pool().query(`SELECT step_rubric FROM training_topics WHERE id = $1`, [req.params.id])).rows[0];
+      if (!topic) return res.json({ success: false, error: '知识点不存在' });
+      res.json({ success: true, rubric: topic.step_rubric || null });
+    } catch (e) {
+      res.json({ success: false, error: e?.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // 实操评分明细
+  // ═══════════════════════════════════════════════════════════
+
+  // GET /api/training/certifications/:id/score-detail — 查看评分明细（员工端/管理端通用）
+  app.get('/api/training/certifications/:id/score-detail', authMiddleware, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const username = req.user?.username;
+      const isMgr = isManager(req.user?.role);
+      const certResult = await pool().query(`
+        SELECT c.*, t.title, t.position
+        FROM training_certifications c JOIN training_topics t ON t.id = c.topic_id
+        WHERE c.id = $1`, [id]);
+      if (certResult.rows.length === 0) return res.json({ success: false, error: '认证记录不存在' });
+      const cert = certResult.rows[0];
+      if (!isMgr && cert.employee_username !== username) return res.status(403).json({ error: '无权查看' });
+      res.json({
+        success: true,
+        certification: cert,
+        ai_step_scores: cert.ai_step_scores || null,
+        ai_total_score: cert.ai_total_score || null,
+        review_status: cert.review_status || 'pending',
+        manager_score: cert.manager_score || null,
+        final_score: cert.final_score || null,
+        manager_note: cert.manager_note || ''
+      });
     } catch (e) {
       res.json({ success: false, error: e?.message });
     }
@@ -656,42 +841,65 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
     }
   });
 
-  // POST /api/training/certifications/:id/review - 人工复核
+  // POST /api/training/certifications/:id/review - 人工复核（确认或覆盖AI评分）
   app.post('/api/training/certifications/:id/review', authMiddleware, async (req, res) => {
     try {
       if (!isManager(req.user?.role)) {
         return res.status(403).json({ error: '无权限访问' });
       }
       const { id } = req.params;
-      const { verdict, note } = req.body;
-      if (!['passed', 'failed'].includes(verdict)) {
-        return res.json({ success: false, error: '判定结果无效' });
+      const { action, verdict, note, steps } = req.body;
+      const reviewer = req.user?.username;
+
+      // 获取认证记录
+      const existing = (await pool().query(`SELECT * FROM training_certifications WHERE id = $1`, [id])).rows[0];
+      if (!existing) return res.json({ success: false, error: '认证记录不存在' });
+
+      let finalScore = null;
+      let managerScore = null;
+      let reviewStatus = 'pending';
+      let passed = false;
+      let managerNote = note || '';
+      let stepScores = existing.ai_step_scores;
+
+      if (action === 'confirm') {
+        // 确认AI评分
+        reviewStatus = 'confirmed';
+        finalScore = existing.ai_total_score || 0;
+        passed = (existing.ai_verdict === 'passed' || finalScore >= 80);
+      } else if (action === 'override' && Array.isArray(steps)) {
+        // 人工覆盖评分
+        reviewStatus = 'overridden';
+        managerScore = steps.reduce((sum, s) => sum + (Number(s.score) || 0), 0);
+        finalScore = managerScore;
+        stepScores = steps;
+        passed = managerScore >= (existing.ai_step_scores?.[0]?.pass_threshold || 80);
+      } else if (verdict && ['passed', 'failed'].includes(verdict)) {
+        // 兼容旧版调用（直接传passed/failed）
+        reviewStatus = 'confirmed';
+        passed = verdict === 'passed';
+        finalScore = existing.ai_total_score || (passed ? 100 : 0);
+      } else {
+        return res.json({ success: false, error: '请提供 action (confirm/override) 或 verdict (passed/failed)' });
       }
 
-      // 更新认证记录
-      const certResult = await pool().query(
+      await pool().query(
         `UPDATE training_certifications
          SET manager_verdict = $1, manager_note = $2, manager_reviewed_by = $3,
-             certified_at = CASE WHEN $4 THEN NOW() ELSE certified_at END
-         WHERE id = $5
-         RETURNING *`,
-        [verdict, note || '', req.user?.username, verdict === 'passed', id]
+             review_status = $4, manager_score = $5, final_score = $6,
+             ai_step_scores = CASE WHEN $7::jsonb IS NOT NULL THEN $7::jsonb ELSE ai_step_scores END,
+             certified_at = CASE WHEN $8 THEN NOW() ELSE NULL END
+         WHERE id = $9`,
+        [passed ? 'passed' : 'failed', managerNote, reviewer,
+         reviewStatus, managerScore, finalScore, JSON.stringify(stepScores), passed, id]
       );
 
-      if (certResult.rows.length === 0) {
-        return res.json({ success: false, error: '认证记录不存在' });
+      if (passed) {
+        await pool().query(`UPDATE training_sessions SET status = 'certified' WHERE id = $1`, [existing.session_id]);
       }
 
-      // 如果通过，更新 session 状态
-      if (verdict === 'passed') {
-        const cert = certResult.rows[0];
-        await pool().query(
-          `UPDATE training_sessions SET status = 'certified' WHERE id = $1`,
-          [cert.session_id]
-        );
-      }
-
-      res.json({ success: true, certification: certResult.rows[0] });
+      const updated = (await pool().query(`SELECT * FROM training_certifications WHERE id = $1`, [id])).rows[0];
+      res.json({ success: true, certification: updated, final_score: finalScore });
     } catch (e) {
       res.json({ success: false, error: e?.message });
     }
@@ -911,10 +1119,13 @@ ${rawContent}
       const result = await pool().query(`
         SELECT s.id, t.id AS topic_id, t.title, t.position,
                s.quiz_score, s.certified_at, s.quiz_passed_at,
-               a.require_practice
+               a.require_practice,
+               c.ai_step_scores, c.ai_total_score, c.final_score,
+               c.review_status, c.manager_score, c.ai_verdict, c.ai_feedback
         FROM training_sessions s
         JOIN training_topics t ON t.id = s.topic_id
         LEFT JOIN training_assignments a ON a.employee_username = s.employee_username AND a.topic_id = s.topic_id
+        LEFT JOIN training_certifications c ON c.session_id = s.id
         WHERE s.employee_username = $1 AND s.status = 'certified'
         ORDER BY s.certified_at DESC NULLS LAST
       `, [username]);
@@ -1200,7 +1411,7 @@ ${rawContent}
     }
   });
 
-  // POST /api/training/sessions/:id/upload-practice - 上传实操视频/图片
+  // POST /api/training/sessions/:id/upload-practice - 上传实操视频/图片（图谱评分版）
   app.post('/api/training/sessions/:id/upload-practice', authMiddleware, uploadMiddleware.single('file'), async (req, res) => {
     try {
       const { id } = req.params;
@@ -1210,65 +1421,105 @@ ${rawContent}
         return res.json({ success: false, error: '请上传文件' });
       }
 
-      // 获取 session 和 topic
       const sessionResult = await pool().query(`
-        SELECT s.*, t.title, t.position, t.description, t.key_points, t.practice_task
-        FROM training_sessions s
-        JOIN training_topics t ON t.id = s.topic_id
+        SELECT s.*, t.title, t.position, t.description, t.key_points, t.practice_task, t.step_rubric
+        FROM training_sessions s JOIN training_topics t ON t.id = s.topic_id
         WHERE s.id = $1 AND s.employee_username = $2
       `, [id, username]);
 
-      if (sessionResult.rows.length === 0) {
-        return res.json({ success: false, error: '会话不存在' });
-      }
-
+      if (sessionResult.rows.length === 0) return res.json({ success: false, error: '会话不存在' });
       const session = sessionResult.rows[0];
-      if (!session.quiz_passed) {
-        return res.json({ success: false, error: '请先通过测验' });
-      }
+      if (!session.quiz_passed) return res.json({ success: false, error: '请先通过测验' });
 
-      const topic = {
-        title: session.title,
-        key_points: session.key_points,
-        practice_task: session.practice_task
-      };
+      const rubric = session.step_rubric;
+      const topicTitle = session.title || '';
 
       const filePath = req.file.path;
       const fileName = req.file.filename;
       const mediaUrl = `/uploads/training/${fileName}`;
       const originalExt = path.extname(req.file.originalname).toLowerCase();
       const mediaType = ['.mp4', '.mov', '.webm'].includes(originalExt) ? 'video' : 'image';
+      const baseUrl = process.env.SERVER_BASE_URL || 'https://nnyx.cc';
 
-      // AI 判定
       let aiVerdict = 'review';
       let aiFeedback = '';
       let aiRawResponse = null;
+      let aiStepScores = null;
+      let aiTotalScore = null;
 
-      const judgmentPrompt = `你是餐饮培训评审官。请根据以下实操任务要求，判断图片/视频帧中的操作是否合格。
-任务要求：${topic.practice_task || '按要求完成操作'}
-考核要点：${JSON.stringify(topic.key_points)}
+      if (rubric && Array.isArray(rubric.items) && rubric.items.length) {
+        // ──── 图谱评分模式 ────
+        const scoringPrompt = `你是餐饮实操考试审评官。请根据以下步骤评分表，逐项判断员工操作是否合格，给出具体得分和扣分原因。
+
+【评分表】
+类型：${rubric.type === 'checkpoints' ? '连续操作检查点' : '分步操作步骤'}
+项目：
+${rubric.items.map((item, i) => `  ${i + 1}. ${item.name}（权重${item.weight}分，满分${item.weight}）: ${(item.checks || []).join('；')}`).join('\n')}
+一票否决项：${(rubric.fail_criteria || []).join('；')}
+合格线：${rubric.pass_threshold || 80}分
+实操科目：${topicTitle}
+
+请先认真观看${mediaType === 'video' ? '完整视频' : '图片'}，然后逐项评分。严格返回JSON：
+{
+  "steps": [{"name":"项目名称","score":12,"max":15,"feedback":"得分或扣分具体原因"}],
+  "total_score": 88,
+  "verdict": "passed/review/failed",
+  "fail_reason": "一票否决原因（无则填null）",
+  "summary": "整体评价，50字以内"
+}
+verdict说明：passed=总分≥${rubric.pass_threshold || 80}且无一票否决，review=总分60-79或存疑，failed=总分<60或有一票否决。
+注意：只能输出JSON，不要任何额外文字。`;
+
+        try {
+          if (mediaType === 'image') {
+            const visionResult = await callVisionLLM(filePath, scoringPrompt);
+            aiRawResponse = visionResult;
+            const text = visionResult?.content || '';
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (jsonMatch) Object.assign({ aiVerdict, aiFeedback, aiStepScores, aiTotalScore }, parseScoringJson(jsonMatch[0]));
+          } else {
+            const videoUrl = `${baseUrl}${mediaUrl}`;
+            // Try native video analysis first
+            let visionResult = await callVisionLLMVideo(videoUrl, scoringPrompt);
+            if (!visionResult?.ok) {
+              // Fallback: multi-frame extraction
+              const frames = [];
+              const frameDir = path.join(uploadsDir, `frames-${randomUUID()}`);
+              fs.mkdirSync(frameDir, { recursive: true });
+              try {
+                execFileSync('ffmpeg', ['-i', filePath, '-vf', 'fps=1/5,scale=480:-1', '-frames:v', '8', path.join(frameDir, '%03d.jpg')], { timeout: 60000 });
+                const frameFiles = fs.readdirSync(frameDir).sort().slice(0, 8);
+                for (const f of frameFiles) {
+                  const buf = fs.readFileSync(path.join(frameDir, f));
+                  frames.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${buf.toString('base64')}` } });
+                }
+                frames.push({ type: 'text', text: scoringPrompt });
+                visionResult = await callVisionLLM(frames, '');
+              } finally {
+                try { fs.rmSync(frameDir, { recursive: true, force: true }); } catch (_) {}
+              }
+            }
+            aiRawResponse = visionResult;
+            const text = visionResult?.content || '';
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (jsonMatch) Object.assign({ aiVerdict, aiFeedback, aiStepScores, aiTotalScore }, parseScoringJson(jsonMatch[0]));
+          }
+        } catch (scoreErr) {
+          console.error('[Training] Rubric scoring error:', scoreErr?.message);
+          aiVerdict = 'review';
+          aiFeedback = 'AI评分失败，需人工审核';
+        }
+      } else {
+        // ──── 无图谱：传统单帧判断 ────
+        const judgmentPrompt = `你是餐饮培训评审官。请根据以下实操任务要求，判断图片/视频帧中的操作是否合格。
+任务要求：${session.practice_task || '按要求完成操作'}
+考核要点：${JSON.stringify(session.key_points)}
 请返回JSON：{"verdict":"passed/review/failed","feedback":"具体说明，50字以内"}
 verdict说明：passed=合格，review=需人工复核，failed=不合格需重练。`;
 
-      try {
-        if (mediaType === 'image') {
-          // 图片直接调用视觉 AI
-          const visionResult = await callVisionLLM(filePath, judgmentPrompt);
-          aiRawResponse = visionResult;
-          const text = visionResult?.content || '';
-          const jsonMatch = text.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            aiVerdict = parsed.verdict || 'review';
-            aiFeedback = parsed.feedback || '';
-          }
-        } else {
-          // 视频：尝试提取帧
-          try {
-            const framePath = path.join(uploadsDir, `frame-${randomUUID()}.jpg`);
-            execFileSync('ffmpeg', ['-i', filePath, '-ss', '00:00:05', '-frames:v', '1', framePath], { timeout: 30000 });
-
-            const visionResult = await callVisionLLM(framePath, judgmentPrompt);
+        try {
+          if (mediaType === 'image') {
+            const visionResult = await callVisionLLM(filePath, judgmentPrompt);
             aiRawResponse = visionResult;
             const text = visionResult?.content || '';
             const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -1277,39 +1528,47 @@ verdict说明：passed=合格，review=需人工复核，failed=不合格需重�
               aiVerdict = parsed.verdict || 'review';
               aiFeedback = parsed.feedback || '';
             }
-
-            // 清理临时帧
-            try { fs.unlinkSync(framePath); } catch (_) {}
-          } catch (ffmpegErr) {
-            console.warn('[Training] FFmpeg failed, fallback to manual review:', ffmpegErr?.message);
-            aiVerdict = 'review';
-            aiFeedback = '视频处理失败，需人工审核';
+          } else {
+            try {
+              const framePath = path.join(uploadsDir, `frame-${randomUUID()}.jpg`);
+              execFileSync('ffmpeg', ['-i', filePath, '-ss', '00:00:05', '-frames:v', '1', framePath], { timeout: 30000 });
+              const visionResult = await callVisionLLM(framePath, judgmentPrompt);
+              aiRawResponse = visionResult;
+              const text = visionResult?.content || '';
+              const jsonMatch = text.match(/\{[\s\S]*\}/);
+              if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                aiVerdict = parsed.verdict || 'review';
+                aiFeedback = parsed.feedback || '';
+              }
+              try { fs.unlinkSync(framePath); } catch (_) {}
+            } catch (ffmpegErr) {
+              aiVerdict = 'review';
+              aiFeedback = '视频处理失败，需人工审核';
+            }
           }
+        } catch (aiErr) {
+          aiVerdict = 'review';
+          aiFeedback = 'AI 判定失败，需人工审核';
         }
-      } catch (aiErr) {
-        console.error('[Training] AI judgment error:', aiErr?.message);
-        aiVerdict = 'review';
-        aiFeedback = 'AI 判定失败，需人工审核';
       }
 
-      // 保存认证记录
+      // 保存认证记录（图谱评分始终设为 pending review，等派发人确认）
       const certResult = await pool().query(
-        `INSERT INTO training_certifications (session_id, employee_username, topic_id, media_url, media_type, ai_verdict, ai_feedback, ai_raw_response)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `INSERT INTO training_certifications (session_id, employee_username, topic_id, media_url, media_type, ai_verdict, ai_feedback, ai_raw_response, ai_step_scores, ai_total_score, review_status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')
          RETURNING *`,
-        [id, username, session.topic_id, mediaUrl, mediaType, aiVerdict, aiFeedback, aiRawResponse]
+        [id, username, session.topic_id, mediaUrl, mediaType, aiVerdict, aiFeedback || '', aiRawResponse, JSON.stringify(aiStepScores), aiTotalScore]
       );
-
-      // 如果 AI 判定通过，更新 session 状态
-      if (aiVerdict === 'passed') {
-        await pool().query(`UPDATE training_sessions SET status = 'certified' WHERE id = $1`, [id]);
-      }
 
       res.json({
         success: true,
         certification: certResult.rows[0],
         verdict: aiVerdict,
-        feedback: aiFeedback
+        feedback: aiFeedback,
+        step_scores: aiStepScores,
+        total_score: aiTotalScore,
+        has_rubric: !!rubric
       });
     } catch (e) {
       console.error('[Training] Upload practice error:', e?.message);

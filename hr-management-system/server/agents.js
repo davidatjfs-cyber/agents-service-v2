@@ -3739,6 +3739,96 @@ export async function callVisionLLM(imageUrl, prompt, opts = {}) {
   }
 }
 
+export async function callVisionLLMVideo(videoUrl, prompt, opts = {}) {
+  const apiKey = process.env.QWEN_API_KEY;
+  if (!apiKey) {
+    return { ok: false, error: 'no_qwen_api_key', content: '' };
+  }
+  if (!videoUrl) {
+    return { ok: false, error: 'no_video_url', content: '' };
+  }
+  const maxTokens = Math.max(256, Math.min(8192, Number(opts.maxTokens ?? opts.max_tokens ?? 3000)));
+
+  // Try native DashScope multimodal API (supports full video analysis)
+  try {
+    const resp = await axios.post(
+      'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
+      {
+        model: 'qwen-vl-max',
+        input: {
+          messages: [{
+            role: 'user',
+            content: [
+              { video: String(videoUrl) },
+              { text: String(prompt) }
+            ]
+          }]
+        },
+        parameters: { max_tokens: maxTokens, temperature: 0.2 }
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 300000
+      }
+    );
+    const output = resp.data?.output;
+    let content = '';
+    if (output) {
+      const msg = output.choices?.[0]?.message;
+      if (Array.isArray(msg?.content)) {
+        content = msg.content.map(c => c.text || '').join('').trim();
+      } else if (typeof msg?.content === 'string') {
+        content = msg.content;
+      }
+    }
+    trackLLMResult(true);
+    return { ok: true, content, raw: resp.data };
+  } catch (e) {
+    trackLLMResult(false);
+    console.error('[agents] callVisionLLMVideo error (native API):', e?.message);
+  }
+
+  // Fallback: try compatible API with video_url
+  try {
+    const cfg = getLLMClientConfig('qwen-vl-max', { forceProvider: 'doubao' });
+    const resp = await axios.post(
+      `${cfg.baseUrl}/chat/completions`,
+      {
+        model: cfg.model,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'video_url', video_url: { url: String(videoUrl) } },
+            { type: 'text', text: String(prompt) }
+          ]
+        }],
+        max_tokens: maxTokens,
+        temperature: 0.2
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${cfg.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 300000
+      }
+    );
+    trackLLMResult(true);
+    return {
+      ok: true,
+      content: resp.data?.choices?.[0]?.message?.content || '',
+      raw: resp.data
+    };
+  } catch (e) {
+    trackLLMResult(false);
+    console.error('[agents] callVisionLLMVideo error (compatible API):', e?.message);
+    return { ok: false, error: String(e?.message || e), content: '' };
+  }
+}
+
 async function getEmployeePositionForKb(username) {
   const u = String(username || '').trim().toLowerCase();
   if (!u) return '';

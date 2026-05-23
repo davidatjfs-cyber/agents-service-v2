@@ -16029,7 +16029,7 @@ app.get('/api/knowledge', authRequired, async (req, res) => {
     const qBrand = buildKnowledgeBrandScopeTag(req.query?.brandId || req.query?.brandScope || 'all');
     const withBrandFilter = qBrand && qBrand !== 'brand:all';
     const r = await pool.query(
-      `select id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, version, created_at, updated_at, audience, group_id, group_name
+      `select id, title, category, tags, scope, file_path, file_type, file_size, access_roles, access_departments, created_by, step_rubric, version, created_at, updated_at, audience, group_id, group_name
        from knowledge_base
        ${withBrandFilter ? 'where tags @> $1::text[] or tags @> ARRAY[\'brand:all\']::text[]' : ''}
        order by created_at desc`,
@@ -16097,7 +16097,7 @@ app.get('/api/knowledge/group/:groupId', authRequired, async (req, res) => {
   try {
     const viewer = await getKnowledgeViewerProfile(req);
     const r = await pool.query(
-      `select id, title, content, category, tags, file_path, file_type, file_size, ai_explanation,
+      `select id, title, content, category, tags, file_path, file_type, file_size, step_rubric, ai_explanation,
               created_by, version, created_at, updated_at, audience, group_id, group_name
        from knowledge_base where group_id = $1::uuid
        order by created_at asc`,
