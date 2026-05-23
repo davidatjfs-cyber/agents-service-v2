@@ -54,10 +54,11 @@ function parseScoringJson(jsonText) {
   try {
     const parsed = JSON.parse(jsonText);
     const steps = parsed.steps || [];
-    const totalScore = Number(parsed.total_score) || null;
+    const totalScore = parsed.total_score != null ? Number(parsed.total_score) : null;
     const verdict = ['passed', 'review', 'failed'].includes(parsed.verdict) ? parsed.verdict : 'review';
     const summary = parsed.summary || '';
-    const failReason = parsed.fail_reason || null;
+    // AI sometimes returns the string "null" — treat it as absent
+    const failReason = (parsed.fail_reason && parsed.fail_reason !== 'null') ? parsed.fail_reason : null;
     // If fail_reason is present, force failed
     const finalVerdict = failReason ? 'failed' : verdict;
     const feedback = failReason ? `【一票否决】${failReason}。${summary}` : summary;
@@ -193,6 +194,15 @@ export async function ensureTrainingSchema() {
     await pool().query(`ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS ai_explanation TEXT`);
     // 考试历史记录（每次提交均追加）
     await pool().query(`ALTER TABLE training_sessions ADD COLUMN IF NOT EXISTS quiz_history JSONB DEFAULT '[]'`);
+
+    // ── 实操图谱评分（2026-05-23新增）──
+    await pool().query(`ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS step_rubric JSONB`);
+    await pool().query(`ALTER TABLE training_topics ADD COLUMN IF NOT EXISTS step_rubric JSONB`);
+    await pool().query(`ALTER TABLE training_certifications ADD COLUMN IF NOT EXISTS ai_step_scores JSONB`);
+    await pool().query(`ALTER TABLE training_certifications ADD COLUMN IF NOT EXISTS ai_total_score INT`);
+    await pool().query(`ALTER TABLE training_certifications ADD COLUMN IF NOT EXISTS review_status VARCHAR(20) DEFAULT 'pending'`);
+    await pool().query(`ALTER TABLE training_certifications ADD COLUMN IF NOT EXISTS manager_score INT`);
+    await pool().query(`ALTER TABLE training_certifications ADD COLUMN IF NOT EXISTS final_score INT`);
 
     console.log('[Training] Schema ensured');
   } catch (e) {
@@ -365,7 +375,8 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
         const videoUrl = `${baseUrl}${fileField}`;
         const framePath = path.join(uploadsDir, `rubric-frame-${randomUUID()}.jpg`);
         try {
-          execFileSync('ffmpeg', ['-i', path.join(__dirname, fileField), '-ss', '00:00:05', '-frames:v', '1', framePath], { timeout: 30000 });
+          const localVideoPath = path.join(__dirname, '..', fileField);
+          execFileSync('ffmpeg', ['-i', localVideoPath, '-ss', '00:00:05', '-frames:v', '1', framePath], { timeout: 30000 });
           llmResult = await callVisionLLM(framePath, rubricPrompt);
           try { fs.unlinkSync(framePath); } catch (_) {}
         } catch (ffmpegErr) {
@@ -377,7 +388,7 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
           }
         }
       } else {
-        const fileAbsPath = path.join(__dirname, fileField);
+        const fileAbsPath = path.join(__dirname, '..', fileField);
         if (!fs.existsSync(fileAbsPath)) return res.json({ success: false, error: '文件未找到' });
         llmResult = await callVisionLLM(fileAbsPath, rubricPrompt);
       }
@@ -423,11 +434,19 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       if (kbArticle.step_rubric) {
         rubric = kbArticle.step_rubric;
       } else {
-        // Trigger KB analysis first
+        // Check file type — only images/videos can be analyzed
+        const fileField = kbArticle.file_path || '';
+        const isMedia = /\.(mp4|mov|webm|avi|jpg|jpeg|png|gif|webp)$/i.test(fileField);
+        if (!isMedia) {
+          return res.json({ success: false, error: `关联的知识库文章（${kbArticle.title}）是${kbArticle.file_type || 'PDF'}格式，图谱分析需要视频或图片文件。请先上传包含操作视频/图片的知识库文章，或手动配置图谱。` });
+        }
+        // Trigger KB analysis — pass original JWT so authMiddleware passes
         try {
-          const analyzeRes = await axios.post(`http://localhost:3000/api/knowledge/${kbArticle.id}/analyze-rubric`, {
-            _user: req.user
-          }, { headers: { 'x-api-key': process.env.INTERNAL_API_KEY || '' } });
+          const analyzeRes = await axios.post(
+            `http://localhost:3000/api/knowledge/${kbArticle.id}/analyze-rubric`,
+            {},
+            { headers: { 'Authorization': req.headers['authorization'] || '' } }
+          );
           if (!analyzeRes.data?.success) {
             return res.json({ success: false, error: '步骤图谱生成失败: ' + (analyzeRes.data?.error || '') });
           }
@@ -873,7 +892,7 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
         managerScore = steps.reduce((sum, s) => sum + (Number(s.score) || 0), 0);
         finalScore = managerScore;
         stepScores = steps;
-        passed = managerScore >= (existing.ai_step_scores?.[0]?.pass_threshold || 80);
+        passed = managerScore >= 80; // rubric pass_threshold always 80
       } else if (verdict && ['passed', 'failed'].includes(verdict)) {
         // 兼容旧版调用（直接传passed/failed）
         reviewStatus = 'confirmed';
@@ -1476,7 +1495,11 @@ verdict说明：passed=总分≥${rubric.pass_threshold || 80}且无一票否决
             aiRawResponse = visionResult;
             const text = visionResult?.content || '';
             const jsonMatch = text.match(/\{[\s\S]*\}/);
-            if (jsonMatch) Object.assign({ aiVerdict, aiFeedback, aiStepScores, aiTotalScore }, parseScoringJson(jsonMatch[0]));
+            if (jsonMatch) {
+              const p = parseScoringJson(jsonMatch[0]);
+              aiVerdict = p.aiVerdict; aiFeedback = p.aiFeedback;
+              aiStepScores = p.aiStepScores; aiTotalScore = p.aiTotalScore;
+            }
           } else {
             const videoUrl = `${baseUrl}${mediaUrl}`;
             // Try native video analysis first
@@ -1502,7 +1525,11 @@ verdict说明：passed=总分≥${rubric.pass_threshold || 80}且无一票否决
             aiRawResponse = visionResult;
             const text = visionResult?.content || '';
             const jsonMatch = text.match(/\{[\s\S]*\}/);
-            if (jsonMatch) Object.assign({ aiVerdict, aiFeedback, aiStepScores, aiTotalScore }, parseScoringJson(jsonMatch[0]));
+            if (jsonMatch) {
+              const p = parseScoringJson(jsonMatch[0]);
+              aiVerdict = p.aiVerdict; aiFeedback = p.aiFeedback;
+              aiStepScores = p.aiStepScores; aiTotalScore = p.aiTotalScore;
+            }
           }
         } catch (scoreErr) {
           console.error('[Training] Rubric scoring error:', scoreErr?.message);
