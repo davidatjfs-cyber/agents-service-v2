@@ -349,15 +349,18 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       const isVideo = /\.(mp4|mov|webm|avi)$/i.test(fileField);
       const baseUrl = process.env.SERVER_BASE_URL || 'https://nnyx.cc';
 
-      const dishName = article.title || '';
+      // 菜品名称来自知识库条目标题（上传时以文件名为标题，即菜品真实名称）
+      const dishName = (article.title || '').trim();
       const dishDesc = article.content ? `\n菜品描述：${article.content.slice(0, 200)}` : '';
 
-      const rubricPrompt = `你是餐饮培训标准制定专家。当前考核菜品/操作：「${dishName}」${dishDesc}
+      const rubricPrompt = `你是餐饮培训标准制定专家。
+【重要】当前考核菜品/操作的准确名称是：「${dishName}」${dishDesc}
+这个名称来自文件名，是该菜品/操作的真实名称，请严格以此为准，不要根据图片自行猜测菜名。
 
 请认真观看视频/图片，提取标准化的培训考核评分表。
 
 要求：
-1. 第一项必须是「菜品/操作核验」（权重10分）：核查员工提交的实操图片/视频是否为「${dishName || '考核内容'}」，checks 中要包含该菜品/操作的唯一识别特征（主料外观、器具、操作动作等），用于后续评分时区分是否提交了错误菜品。
+1. 第一项必须是「菜品核验：${dishName || '考核内容'}」（权重10分）：核查员工提交的实操图片/视频是否为「${dishName || '考核内容'}」，checks 中要列出该菜品的唯一识别特征（主料外观、颜色、器具、摆盘方式等），用于后续评分时区分是否提交了错误菜品。
 2. 判断操作类型：可分步操作（切配、摆盘、烤鸭流程）用"steps"，连续操作用"checkpoints"。
 3. 每个步骤/检查点包含：名称、权重（所有项权重相加等于100）、3-5个可视化检查点。
 4. checks 必须是视觉上可判定的（能看到的），不能是不可见的（如"温度""时间""调味"）。

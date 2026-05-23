@@ -37234,6 +37234,19 @@ ${knowledgeContent.slice(0, 30000)}`;
             const videoSummaryBox = document.getElementById('knowledge-upload-video-summary-box');
             if (videoSummaryBox) videoSummaryBox.style.display = type === 'video' ? '' : 'none';
 
+            // 图片类型：标题即菜品名，更新标签和 placeholder 提示
+            const titleInput = document.getElementById('knowledge-upload-title');
+            const titleLabel = document.querySelector('#kb-single-title-wrap label');
+            if (titleInput && titleLabel) {
+                if (type === 'img') {
+                    titleLabel.innerHTML = '菜品名称 <span class="req">*</span> <span style="font-size:10px;color:#fde68a;font-weight:400;">（自动来自文件名，可修改）</span>';
+                    titleInput.placeholder = '例：宫保鸡丁（选文件后自动填入）';
+                } else {
+                    titleLabel.innerHTML = '标题 <span class="req">*</span>';
+                    titleInput.placeholder = '例：门店卫生操作SOP';
+                }
+            }
+
             const hint = document.getElementById('knowledge-upload-file-hint');
             const fileEl = document.getElementById('knowledge-upload-file');
             if (hint) {
@@ -37241,7 +37254,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 else if (type === 'pdf') hint.textContent = '支持：PDF';
                 else if (type === 'doc') hint.textContent = '支持：DOC/DOCX（推荐DOCX）';
                 else if (type === 'txt') hint.textContent = '支持：TXT';
-                else if (type === 'img') hint.textContent = '支持：图片（png/jpg/jpeg/webp等，可用于OCR提取文字）';
+                else if (type === 'img') hint.textContent = '支持：图片（png/jpg/jpeg/webp等）· 📌 文件名即菜品名，请以菜品名命名文件（如"宫保鸡丁.jpg"）';
                 else hint.textContent = '请选择文件';
             }
 
@@ -37393,6 +37406,18 @@ ${knowledgeContent.slice(0, 30000)}`;
                 event.target.value = '';
                 return;
             }
+            // 图片类型：自动用文件名（去扩展名）作为标题（即菜品名）
+            if (type === 'img') {
+                const titleInput = document.getElementById('knowledge-upload-title');
+                if (titleInput) {
+                    // 去掉扩展名作为菜品名称
+                    const nameWithoutExt = file.name.replace(/\.[^.]+$/, '');
+                    titleInput.value = nameWithoutExt;
+                    // 触发 syncKnowledgeUploadFields 更新组名 placeholder
+                    syncKnowledgeUploadFields();
+                }
+            }
+
             // Update new file zone UI
             const fileIcon = document.getElementById('kb-upload-file-icon');
             const fileLabel = document.getElementById('kb-upload-file-label');
