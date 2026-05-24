@@ -23,7 +23,7 @@ export async function buildExperienceBlock({ agent, store, query }) {
     }
   } catch (e) { /* silent */ }
 
-  if (agent === 'data_auditor' && store) {
+  if (store) {
     try {
       const stats = await getStrategyStats({ store, problem: String(query || '').slice(0, 120) });
       if (stats.length) {

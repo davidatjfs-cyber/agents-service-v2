@@ -147,26 +147,38 @@ async function handleTrigger(ctx) {
   }
 
   if (type === 'revenue_drop' || type === 'revenue') {
-    await dispatchToAgent('data_auditor', `分析营收下降 - ${store}`, ctx);
-    await dispatchToAgent('ops_supervisor', `检查运营问题 - ${store}`, ctx);
-    await dispatchToAgent('marketing_planner', `制定提升方案 - ${store}`, ctx);
+    const auditResult = await dispatchToAgent('data_auditor', `分析营收下降 - ${store}`, ctx);
+    const opsCtx = { ...ctx, upstreamAnalysis: { data_auditor: (auditResult?.response || '').slice(0, 600) } };
+    const opsResult = await dispatchToAgent('ops_supervisor', `检查运营问题 - ${store}`, opsCtx);
+    const mktCtx = {
+      ...ctx,
+      upstreamAnalysis: {
+        data_auditor: (auditResult?.response || '').slice(0, 600),
+        ops_supervisor: (opsResult?.response || '').slice(0, 400)
+      }
+    };
+    await dispatchToAgent('marketing_planner', `制定提升方案 - ${store}`, mktCtx);
   } else if (
     type === 'bad_review_spike' ||
     type === 'bad_review_service' ||
     type === 'bad_review_product' ||
     type === 'bad_review'
   ) {
-    await dispatchToAgent('food_quality', `分析差评问题 - ${store}`, ctx);
-    await dispatchToAgent('ops_supervisor', `检查服务问题 - ${store}`, ctx);
+    const fqResult = await dispatchToAgent('food_quality', `分析差评问题 - ${store}`, ctx);
+    const opsCtx = { ...ctx, upstreamAnalysis: { food_quality: (fqResult?.response || '').slice(0, 600) } };
+    await dispatchToAgent('ops_supervisor', `检查服务问题 - ${store}`, opsCtx);
   } else if (type === 'gross_margin') {
-    await dispatchToAgent('data_auditor', `分析毛利率异常 - ${store}`, ctx);
-    await dispatchToAgent('procurement_advisor', `检查采购成本 - ${store}`, ctx);
+    const auditResult = await dispatchToAgent('data_auditor', `分析毛利率异常 - ${store}`, ctx);
+    const procCtx = { ...ctx, upstreamAnalysis: { data_auditor: (auditResult?.response || '').slice(0, 600) } };
+    await dispatchToAgent('procurement_advisor', `检查采购成本 - ${store}`, procCtx);
   } else if (type === 'labor' || type === 'labor_efficiency' || type === 'labor_cost') {
-    await dispatchToAgent('ops_supervisor', `分析人工成本 - ${store}`, ctx);
-    await dispatchToAgent('data_auditor', `检查人工数据 - ${store}`, ctx);
+    const opsResult = await dispatchToAgent('ops_supervisor', `分析人工成本 - ${store}`, ctx);
+    const auditCtx = { ...ctx, upstreamAnalysis: { ops_supervisor: (opsResult?.response || '').slice(0, 600) } };
+    await dispatchToAgent('data_auditor', `检查人工数据 - ${store}`, auditCtx);
   } else if (type === 'traffic' || type === 'customer_flow') {
-    await dispatchToAgent('marketing_planner', `分析客流下降 - ${store}`, ctx);
-    await dispatchToAgent('ops_supervisor', `检查运营状况 - ${store}`, ctx);
+    const mktResult = await dispatchToAgent('marketing_planner', `分析客流下降 - ${store}`, ctx);
+    const opsCtx = { ...ctx, upstreamAnalysis: { marketing_planner: (mktResult?.response || '').slice(0, 600) } };
+    await dispatchToAgent('ops_supervisor', `检查运营状况 - ${store}`, opsCtx);
   } else {
     await dispatchToAgent('data_auditor', `分析异常: ${type} - ${store}`, ctx);
   }

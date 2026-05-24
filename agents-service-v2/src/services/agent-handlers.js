@@ -1989,6 +1989,23 @@ async function handleOpsSupervisor(text, ctx) {
       logger.warn({ err: e?.message }, 'ops_supervisor experience hint skipped');
     }
   }
+  // 上游 Agent 分析结论（proactive 串行链传递）
+  if (ctx.upstreamAnalysis && Object.keys(ctx.upstreamAnalysis).length) {
+    const parts = Object.entries(ctx.upstreamAnalysis)
+      .map(([ag, txt]) => `【${ag} 结论】${txt}`)
+      .join('\n');
+    opsData += `\n\n【上游分析（供定向补充，勿重复）】\n${parts}`;
+  }
+  // 历史策略成效（strategy-stats 反馈闭环）
+  if (store) {
+    try {
+      const stratStats = await getStrategyStats({ store, problem: text.slice(0, 120) });
+      if (stratStats.length) {
+        const lines = stratStats.slice(0, 3).map(s => `- ${s.action}（成功率${Math.round(s.successRate * 100)}%｜评分${s.weightedScore > 0 ? s.weightedScore.toFixed(2) : s.avgScore.toFixed(2)}）`);
+        opsData += `\n\n【本店历史策略参考】\n${lines.join('\n')}\n优先采用成功率最高的策略。`;
+      }
+    } catch (e) { /* fail-soft */ }
+  }
   // 统一知识库检索（P0: ops_supervisor 也能访问知识库 + wiki + mempalace）
   let unifiedKnowledgeBlock_ops = '';
   if (store) {
@@ -2650,6 +2667,24 @@ async function handleMarketingPlanner(text, ctx) {
 
   if (!mktData.trim()) {
     mktData = '【弱数据模式】门店侧日报字段不可用或未拉取到数据。请仍输出可执行营销方案（含≥3条活动），禁止仅回答「无数据」或拒答。';
+  }
+
+  // 上游 Agent 分析结论（proactive 串行链传递）
+  if (ctx.upstreamAnalysis && Object.keys(ctx.upstreamAnalysis).length) {
+    const parts = Object.entries(ctx.upstreamAnalysis)
+      .map(([ag, txt]) => `【${ag} 结论】${txt}`)
+      .join('\n');
+    mktData += `\n\n【上游分析（供定向补充，勿重复）】\n${parts}`;
+  }
+  // 历史策略成效（strategy-stats 反馈闭环）
+  if (store) {
+    try {
+      const stratStats = await getStrategyStats({ store, problem: text.slice(0, 120) });
+      if (stratStats.length) {
+        const lines = stratStats.slice(0, 3).map(s => `- ${s.action}（成功率${Math.round(s.successRate * 100)}%｜评分${s.weightedScore > 0 ? s.weightedScore.toFixed(2) : s.avgScore.toFixed(2)}）`);
+        mktData += `\n\n【本店历史策略参考（strategy-stats）】\n${lines.join('\n')}\n策略扩写时优先引用成功率最高的历史经验。`;
+      }
+    } catch (e) { /* fail-soft */ }
   }
 
   // 统一知识库检索（P0: marketing_planner 也能访问知识库 + wiki + mempalace）
