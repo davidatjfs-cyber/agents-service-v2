@@ -19,6 +19,31 @@ function parseScheduleTimes(input) {
   return normalized.length ? normalized : ['09:00'];
 }
 
+function canManageKitchenConfig(role) {
+  return String(role || '') === 'admin';
+}
+
+async function getRuntimeUserContext(username) {
+  const uname = String(username || '').trim().toLowerCase();
+  if (!uname) return null;
+  const r = await pool().query(`SELECT data FROM hrms_state WHERE key = $1 LIMIT 1`, ['default']);
+  const data = r.rows?.[0]?.data;
+  if (!data || typeof data !== 'object') return null;
+  const people = []
+    .concat(Array.isArray(data.employees) ? data.employees : [])
+    .concat(Array.isArray(data.users) ? data.users : []);
+  const found = people.find((item) => String(item?.username || '').trim().toLowerCase() === uname);
+  if (!found) return null;
+  return {
+    username: String(found.username || '').trim(),
+    role: String(found.role || '').trim(),
+    store: String(found.store || '').trim(),
+    position: String(found.position || found.station || '').trim(),
+    department: String(found.department || '').trim(),
+    name: String(found.name || found.real_name || '').trim()
+  };
+}
+
 // ─── Schema ───────────────────────────────────────────────
 export async function ensureKitchenExecutionSchema() {
   try {
@@ -525,12 +550,14 @@ export function registerKitchenExecutionRoutes(app, authMiddleware) {
   app.get('/api/kitchen/my-tasks', auth, async (req, res) => {
     const user = req.user;
     if (!user) return res.status(401).json({ error: 'unauthorized' });
+    const runtimeUser = await getRuntimeUserContext(user.username);
 
     // admin/hq_manager 的 store 可能是"总部"，允许通过 query 参数覆盖
-    const station = req.query.station || user.position || '';
-    const store = (String(user.store || '') === '总部' && req.query.store)
+    const station = req.query.station || runtimeUser?.position || user.position || '';
+    const effectiveStore = runtimeUser?.store || user.store || '';
+    const store = (String(effectiveStore || '') === '总部' && req.query.store)
       ? req.query.store
-      : (user.store || req.query.store || '');
+      : (effectiveStore || req.query.store || '');
 
     // Normalize station: "烧味/卤水" → "烧味"
     const normalizedStation = String(station).replace(/\/.*/, '').trim();
@@ -567,10 +594,12 @@ export function registerKitchenExecutionRoutes(app, authMiddleware) {
     if (!allowed.includes(role)) {
       return res.status(403).json({ error: 'forbidden' });
     }
+    const runtimeUser = await getRuntimeUserContext(user.username);
+    const effectiveStore = runtimeUser?.store || user.store || '';
     // admin/hq_manager 的 store 可能是"总部"，允许通过 query 参数覆盖
-    const store = (String(user.store || '') === '总部' && req.query.store)
+    const store = (String(effectiveStore || '') === '总部' && req.query.store)
       ? req.query.store
-      : (user.store || req.query.store || '');
+      : (effectiveStore || req.query.store || '');
     if (!store) return res.status(400).json({ error: 'store required' });
     res.json(await getStationDashboard({ store, date: req.query.date }));
   });
@@ -607,12 +636,18 @@ export function registerKitchenExecutionRoutes(app, authMiddleware) {
   });
 
   app.get('/api/kitchen/station-dish', auth, async (req, res) => {
+    if (!canManageKitchenConfig(req.user?.role)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
     const store = req.query.store || req.user?.store || '';
     if (!store) return res.status(400).json({ error: 'store required' });
     res.json(await listStationDishes({ store }));
   });
 
   app.get('/api/kitchen/station-employees', auth, async (req, res) => {
+    if (!canManageKitchenConfig(req.user?.role)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
     const store = req.query.store || req.user?.store || '';
     const station = req.query.station || '';
     if (!store || !station) return res.status(400).json({ error: 'store and station required' });
@@ -631,6 +666,9 @@ export function registerKitchenExecutionRoutes(app, authMiddleware) {
 
   // 获取可选菜品列表（来自 kitchen_sop_steps，用于下拉选择）
   app.get('/api/kitchen/available-dishes', auth, async (req, res) => {
+    if (!canManageKitchenConfig(req.user?.role)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
     try {
       const r = await pool().query(
         `SELECT DISTINCT station, dish_name FROM kitchen_sop_steps WHERE enabled=TRUE ORDER BY station, dish_name`

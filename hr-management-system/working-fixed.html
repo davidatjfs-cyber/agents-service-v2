@@ -25508,6 +25508,23 @@ th { background: #f5f5f5; font-weight: 700; }
             return r === ROLES.ADMIN || r === ROLES.STORE_MANAGER || r === ROLES.PRODUCTION_MANAGER || r === ROLES.HQ_MANAGER;
         }
 
+        function hrmsIsKitchenEntryUser(role, position) {
+            const r = String(role || '').trim();
+            const pos = String(position || '').toLowerCase();
+            return r === ROLES.PRODUCTION_MANAGER
+                || /(后厨|厨房|炒锅|烧味|打荷|切配|出品|厨师|厨工)/.test(pos)
+                || [ROLES.ADMIN, ROLES.HQ_MANAGER, ROLES.STORE_MANAGER].includes(r);
+        }
+
+        function hrmsCanAccessKitchenDashboard(role) {
+            const r = String(role || '').trim();
+            return [ROLES.ADMIN, ROLES.HQ_MANAGER, ROLES.STORE_MANAGER, ROLES.PRODUCTION_MANAGER].includes(r);
+        }
+
+        function hrmsCanAccessKitchenAdminPanels(role) {
+            return String(role || '').trim() === ROLES.ADMIN;
+        }
+
         function hrmsIsAlwaysAllowedPage(pageName) {
             return ['profile', 'attendance', 'exam', 'points'].includes(String(pageName || '').trim());
         }
@@ -25565,6 +25582,10 @@ th { background: #f5f5f5; font-weight: 700; }
                 const r = String(role == null ? currentUser?.role : role || '').trim();
                 return r === ROLES.ADMIN || r === ROLES.HQ_MANAGER || r === ROLES.STORE_MANAGER || r === ROLES.FRONT_MANAGER;
             }
+            if (page === 'kitchen') {
+                const r = String(role == null ? currentUser?.role : role || '').trim();
+                return hrmsIsKitchenEntryUser(r, currentUser?.position);
+            }
             const pages = getRoleModulePages(role == null ? currentUser?.role : role);
             if (pages === null) return true;
             return Array.isArray(pages) && pages.includes(page);
@@ -25579,7 +25600,8 @@ th { background: #f5f5f5; font-weight: 700; }
             if (r === ROLES.HR_MANAGER) return ['profile', 'employees', 'approvals', 'reports'];
             if (r === ROLES.CASHIER) return ['profile', 'attendance', 'payment', 'exam'];
             if (r === ROLES.FRONT_MANAGER) return ['profile', 'daily-report', 'attendance', 'exam'];
-            return ['profile', 'attendance', 'kitchen', 'training'];
+            if (hrmsIsKitchenEntryUser(r, currentUser?.position)) return ['profile', 'attendance', 'kitchen', 'training'];
+            return ['profile', 'attendance', 'points', 'training'];
         }
 
         function getHomePageName() {
@@ -26344,10 +26366,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
 
             if (pageName === 'kitchen') {
                 const role = String(currentUser?.role || '');
-                const pos  = String(currentUser?.position || '').toLowerCase();
-                const isKitchen = role === 'store_production_manager'
-                    || /(后厨|厨房|炒锅|烧味|打荷|切配|出品|厨师|厨工)/.test(pos)
-                    || ['admin','hq_manager','store_manager'].includes(role);
+                const isKitchen = hrmsIsKitchenEntryUser(role, currentUser?.position);
                 if (!isKitchen) {
                     showNotification('仅厨房岗位员工可访问', 'warning');
                     pageName = getHomePageName();
@@ -52518,10 +52537,7 @@ ${body}
                 { icon:'⚙️', label:'系统设置', page:'settings', roles:['admin'] },
             ];
             const role = currentUser?.role || '';
-            const _kitchenPos = String(currentUser?.position || '').toLowerCase();
-            const _isKitchenUser = role === 'store_production_manager'
-                || /(后厨|厨房|炒锅|烧味|打荷|切配|出品|厨师|厨工)/.test(_kitchenPos)
-                || ['admin','hq_manager','store_manager'].includes(role);
+            const _isKitchenUser = hrmsIsKitchenEntryUser(role, currentUser?.position);
             const visibleItems = allItems.filter(item => {
                 if (item.kitchenOnly && !_isKitchenUser) return false;
                 if (Array.isArray(item.roles) && item.roles.length && !item.roles.includes(role)) return false;
@@ -56993,7 +57009,7 @@ ${body}
      // 进入厨房页面时调用
      async function initKitchenPage() {
        const role = currentUser?.role || '';
-       const isMgr = ['admin','hq_manager','store_manager','store_production_manager'].includes(role);
+       const isMgr = hrmsCanAccessKitchenDashboard(role);
 
        // 标准化岗位名：员工档案可能写 "烧味/卤水"，截取 / 前的部分
        const rawStation = currentUser?.position || currentUser?.station || '';
@@ -57004,9 +57020,9 @@ ${body}
        const dashboardBtn = document.getElementById('kitchen-dashboard-tab-btn');
        const manageBtn = document.getElementById('kitchen-manage-btn');
        const recipeBtn = document.getElementById('kitchen-recipe-btn');
-       const isAdmin = ['admin','hq_manager','store_manager','store_production_manager'].includes(role);
+       const isAdmin = hrmsCanAccessKitchenAdminPanels(role);
        if (dashboardBtn) dashboardBtn.style.display = isMgr ? '' : 'none';
-       if (manageBtn) manageBtn.style.display = role === 'admin' ? '' : 'none';
+       if (manageBtn) manageBtn.style.display = isAdmin ? '' : 'none';
        if (recipeBtn) recipeBtn.style.display = isAdmin ? '' : 'none';
 
        if (isMgr) {
@@ -57017,6 +57033,11 @@ ${body}
      }
 
     function showKitchenView(view) {
+      const role = String(currentUser?.role || '').trim();
+      if ((view === 'dashboard' && !hrmsCanAccessKitchenDashboard(role)) ||
+          ((view === 'manage' || view === 'recipe') && !hrmsCanAccessKitchenAdminPanels(role))) {
+        view = hrmsCanAccessKitchenDashboard(role) ? 'dashboard' : 'staff';
+      }
       _kitchenCurrentView = view;
       document.getElementById('kitchen-staff-view').style.display     = view === 'staff'     ? '' : 'none';
       document.getElementById('kitchen-dashboard-view').style.display = view === 'dashboard' ? '' : 'none';
@@ -58672,12 +58693,8 @@ ${compsHtml || '<p style="color:#888;">暂无半成品数据</p>'}
     // 厨房导航显示控制：登录后调用
     function updateKitchenNavVisibility() {
       const role = currentUser?.role || '';
-      const pos  = (currentUser?.position || '').toLowerCase();
-      const isKitchenRole = role === 'store_production_manager';
-      const isKitchenPos  = /(后厨|厨房|炒锅|烧味|打荷|切配|出品|厨师|厨工)/.test(pos);
-      const isManager     = ['admin','hq_manager','store_manager'].includes(role);
       const nav = document.getElementById('nav-kitchen');
-      if (nav) nav.style.display = (isKitchenRole || isKitchenPos || isManager) ? '' : 'none';
+      if (nav) nav.style.display = hrmsIsKitchenEntryUser(role, currentUser?.position) ? '' : 'none';
     }
     // ═══════════════════════════════════════════════════════
 
