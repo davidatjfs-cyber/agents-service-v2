@@ -28227,7 +28227,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 const data = await resp.json();
 
                 // 3. 构建 Word 文档
-                const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, HeadingLevel } = window.docx;
+                const { Document, Packer, Paragraph, TextRun, HeadingLevel } = window.docx;
                 const children = [];
 
                 // 标题
@@ -28277,7 +28277,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     children.push(new Paragraph({ text: '' }));
                 }
 
-                // 步骤图谱
+                // 步骤图谱 — rendered as paragraphs (avoids Table API cross-platform issues)
                 const rubric = data.rubric;
                 if (rubric && Array.isArray(rubric.items) && rubric.items.length > 0) {
                     children.push(new Paragraph({ text: '步骤图谱', heading: HeadingLevel.HEADING_2 }));
@@ -28286,36 +28286,20 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                         children: [new TextRun({ text: '评分类型：' + typeLabel + '　　合格线：' + (rubric.pass_threshold || 80) + ' 分', color: '666666', size: 20 })]
                     }));
                     children.push(new Paragraph({ text: '' }));
-
-                    // A4 content width ≈ 8200 DXA (11906 - 1800×2 margins)
-                    const COL = { step: 1800, score: 800, check: 5600 }; // total 8200
-                    const mkTxtCell = (text, bold, dxa) => new TableCell({
-                        width: { size: dxa, type: WidthType.DXA },
-                        children: [new Paragraph({ children: [new TextRun({ text: String(text || ''), bold: !!bold })] })]
-                    });
-                    const mkChecksCell = (checks, dxa) => {
-                        const runs = [];
-                        (checks || []).forEach((c, i) => {
-                            if (i > 0) runs.push(new TextRun({ text: '', break: 1 }));
-                            runs.push(new TextRun({ text: '• ' + c }));
+                    const nums = ['一','二','三','四','五','六','七','八','九','十'];
+                    rubric.items.forEach((s, idx) => {
+                        children.push(new Paragraph({
+                            children: [new TextRun({ text: '步骤' + (nums[idx] || (idx+1)) + '：' + String(s.name || '') + '（' + (s.weight || 0) + ' 分）', bold: true })]
+                        }));
+                        (s.checks || []).forEach(c => {
+                            children.push(new Paragraph({ children: [new TextRun({ text: '• ' + c })], indent: { left: 360 } }));
                         });
-                        return new TableCell({
-                            width: { size: dxa, type: WidthType.DXA },
-                            children: [new Paragraph({ children: runs.length ? runs : [new TextRun({ text: '' })] })]
-                        });
-                    };
-                    const headerRow = new TableRow({ children: [mkTxtCell('步骤', true, COL.step), mkTxtCell('分值', true, COL.score), mkTxtCell('检查点', true, COL.check)] });
-                    const dataRows = rubric.items.map(s => new TableRow({ children: [
-                        mkTxtCell(s.name, true, COL.step),
-                        mkTxtCell(s.weight + '分', false, COL.score),
-                        mkChecksCell(s.checks, COL.check)
-                    ]}));
-                    children.push(new Table({ width: { size: 8200, type: WidthType.DXA }, rows: [headerRow, ...dataRows] }));
-
-                    if (rubric.fail_criteria?.length) {
                         children.push(new Paragraph({ text: '' }));
+                    });
+                    if (rubric.fail_criteria?.length) {
                         children.push(new Paragraph({ children: [new TextRun({ text: '⚠ 一票否决条件', bold: true, color: 'CC0000' })] }));
                         rubric.fail_criteria.forEach(f => children.push(new Paragraph({ children: [new TextRun({ text: '• ' + f })], indent: { left: 360 } })));
+                        children.push(new Paragraph({ text: '' }));
                     }
                 }
 
