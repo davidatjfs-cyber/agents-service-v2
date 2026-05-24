@@ -19001,7 +19001,7 @@
                     <button class="btn btn-secondary" type="button" onclick="showKitchenView('dashboard')">📊 看板</button>
                     <button class="btn btn-secondary" type="button" id="kitchen-manage-btn" onclick="showKitchenView('manage')" style="display:none;">⚙️ 配置</button>
                     <button class="btn btn-secondary" type="button" id="kitchen-recipe-btn" onclick="showKitchenView('recipe')" style="display:none;">📖 配方</button>
-                    <button class="btn btn-secondary" type="button" onclick="kitchenSyncSopSteps()">🔄 同步</button>
+                    <button class="btn btn-secondary" type="button" id="kitchen-sync-btn" onclick="kitchenSyncSopSteps()" style="display:none;">🔄 同步</button>
                   </div>
                 </header>
 
@@ -56302,12 +56302,14 @@ ${body}
        _kitchenStore   = currentUser?.store || '';
 
        document.getElementById('kitchen-mgr-actions').style.display = isMgr ? '' : 'none';
-       // 只有管理员能看到菜品配置 & 配方管理
+       // 配方、同步、菜品配置：仅管理员
+       const isAdmin = role === 'admin';
        const manageBtn = document.getElementById('kitchen-manage-btn');
        const recipeBtn = document.getElementById('kitchen-recipe-btn');
-       const isAdmin = ['admin','hq_manager','store_manager','store_production_manager'].includes(role);
-       if (manageBtn) manageBtn.style.display = role === 'admin' ? '' : 'none';
+       const syncBtn   = document.getElementById('kitchen-sync-btn');
+       if (manageBtn) manageBtn.style.display = isAdmin ? '' : 'none';
        if (recipeBtn) recipeBtn.style.display = isAdmin ? '' : 'none';
+       if (syncBtn)   syncBtn.style.display   = isAdmin ? '' : 'none';
 
        if (isMgr) {
          showKitchenView('dashboard');
