@@ -29323,14 +29323,13 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
         function addKbArticleFromSearch(id) {
             const article = _kbSearchResults.find(a => a.id === id);
             if (!article) return;
-            const exists = _selectedKbArticles.some(a => a.id === id);
-            if (exists) return;
-            _selectedKbArticles.push({
+            // 单选：每个知识点只能对应一个文件
+            _selectedKbArticles = [{
                 id: article.id,
                 title: article.title,
                 category: article.category || '',
                 excerpt: article.excerpt || ''
-            });
+            }];
             renderKbChips();
             searchKbArticles(document.getElementById('training-kb-search').value);
         }
@@ -29340,10 +29339,10 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             if (idx >= 0) {
                 _selectedKbArticles.splice(idx, 1);
             } else {
-                _selectedKbArticles.push({ id, title });
+                // 单选：替换，不追加
+                _selectedKbArticles = [{ id, title }];
             }
             renderKbChips();
-            // 刷新下拉列表以更新勾选状态
             searchKbArticles(document.getElementById('training-kb-search').value);
         }
 
@@ -29367,7 +29366,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 container.innerHTML = '<div class="tt-kb-empty">还没有选中文章。先在下方搜索，再点“加入”。</div>';
                 return;
             }
-            const head = `<div class="tt-kb-selected-head"><span class="tt-kb-selected-count">已选 ${_selectedKbArticles.length} 篇文章</span><span style="color:rgba(148,163,184,0.72);">保存后这些文章会进入培训学习页</span></div>`;
+            const head = `<div class="tt-kb-selected-head"><span class="tt-kb-selected-count">已选文件（每个知识点限 1 个）</span><span style="color:rgba(148,163,184,0.72);">保存后员工学习时会看到此文件</span></div>`;
             const cards = _selectedKbArticles.map((a, idx) =>
                 `<div class="tt-kb-chip">
                     <div class="tt-kb-chip-main">

@@ -919,12 +919,24 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
     }
   });
 
-  // GET /api/training/certifications/pending - 待审核列表
+  // GET /api/training/certifications/pending - 待审核列表（谁派发谁审核）
   app.get('/api/training/certifications/pending', authMiddleware, async (req, res) => {
     try {
       if (!isManager(req.user?.role)) {
         return res.status(403).json({ error: '无权限访问' });
       }
+      const username = String(req.user?.username || '').trim();
+      const role = String(req.user?.role || '').trim();
+      const isAdminOrHQ = role === 'admin' || role === 'hq_manager';
+      // 谁派发谁审核：非管理员/总部只能看到自己派发的任务的认证
+      const assignerClause = isAdminOrHQ
+        ? ''
+        : `AND EXISTS (
+             SELECT 1 FROM training_assignments a2
+             WHERE a2.employee_username = c.employee_username
+               AND a2.topic_id = c.topic_id
+               AND lower(a2.assigned_by) = lower('${username.replace(/'/g, "''")}')
+           )`;
       const result = await pool().query(`
         SELECT c.*, t.title, t.position, s.employee_username,
                e.name AS employee_name
@@ -933,6 +945,7 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
         JOIN training_topics t ON t.id = c.topic_id
         LEFT JOIN employees e ON e.username = c.employee_username
         WHERE c.manager_verdict IS NULL
+        ${assignerClause}
         ORDER BY c.created_at DESC
       `);
       res.json({ success: true, pending: result.rows });
@@ -941,7 +954,7 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
     }
   });
 
-  // POST /api/training/certifications/:id/review - 人工复核（确认或覆盖AI评分）
+  // POST /api/training/certifications/:id/review - 人工复核（谁派发谁审核）
   app.post('/api/training/certifications/:id/review', authMiddleware, async (req, res) => {
     try {
       if (!isManager(req.user?.role)) {
@@ -950,10 +963,23 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       const { id } = req.params;
       const { action, verdict, note, steps } = req.body;
       const reviewer = req.user?.username;
+      const role = String(req.user?.role || '').trim();
+      const isAdminOrHQ = role === 'admin' || role === 'hq_manager';
 
       // 获取认证记录
       const existing = (await pool().query(`SELECT * FROM training_certifications WHERE id = $1`, [id])).rows[0];
       if (!existing) return res.json({ success: false, error: '认证记录不存在' });
+
+      // 谁派发谁审核：非管理员/总部校验是否为派发人
+      if (!isAdminOrHQ) {
+        const assignCheck = await pool().query(
+          `SELECT 1 FROM training_assignments WHERE employee_username = $1 AND topic_id = $2 AND lower(assigned_by) = lower($3) LIMIT 1`,
+          [existing.employee_username, existing.topic_id, reviewer]
+        );
+        if (!assignCheck.rows.length) {
+          return res.status(403).json({ error: '只有派发人才能审核此认证' });
+        }
+      }
 
       let finalScore = null;
       let managerScore = null;
