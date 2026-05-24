@@ -14,7 +14,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <title>年年有喜管理系统</title>
     <style>
         /* Premium International UI Design */
@@ -11922,816 +11921,6 @@
             box-shadow: 0 24px 48px -32px rgba(0, 0, 0, 0.65);
         }
 
-        /* ── Kitchen: Glass Aurora mobile surface ── */
-        #kitchen-page {
-            --kit-iris: #6d7cff;
-            --kit-mint: #5eead4;
-            --kit-coral: #ff7a90;
-            --kit-amber: #ffc46b;
-            --kit-ink-0: #0b0f1e;
-            --kit-ink-1: #121933;
-            --kit-ink-2: #171f3e;
-            --kit-text: #eef1fa;
-            --kit-dim: #9aa3c7;
-            --kit-faint: #5b6597;
-            --kit-glass: rgba(255,255,255,0.1);
-            --kit-glass-strong: rgba(255,255,255,0.15);
-            --kit-border: rgba(255,255,255,0.14);
-            --kit-border-strong: rgba(255,255,255,0.22);
-            --kit-shadow: 0 24px 70px rgba(6, 10, 22, 0.34);
-            --kit-radius-lg: 24px;
-            --kit-radius-md: 18px;
-            --kit-radius-sm: 14px;
-            --kit-space-xs: 8px;
-            --kit-space-sm: 14px;
-            --kit-space-md: 22px;
-            --kit-space-lg: 36px;
-            --kit-space-xl: 56px;
-            background:
-                radial-gradient(56rem 30rem at 12% 0%, rgba(109,124,255,0.46), transparent 56%),
-                radial-gradient(42rem 24rem at 102% 10%, rgba(255,122,144,0.34), transparent 54%),
-                radial-gradient(58rem 28rem at 50% 100%, rgba(94,234,212,0.24), transparent 56%),
-                linear-gradient(180deg, #0b0f1e 0%, #121933 54%, #0d1223 100%);
-            color: var(--kit-text);
-            font-family: "Noto Sans SC", "IBM Plex Sans", "PingFang SC", system-ui, sans-serif;
-            position: relative;
-            overflow: hidden;
-        }
-
-        #kitchen-page::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            background:
-                linear-gradient(160deg, rgba(255,255,255,0.06), transparent 24%),
-                radial-gradient(circle at 24% 18%, rgba(255,255,255,0.08), transparent 16%),
-                radial-gradient(circle at 80% 12%, rgba(255,255,255,0.05), transparent 14%);
-            opacity: 0.82;
-        }
-
-        #kitchen-page .dr-shell.kitchen-shell {
-            position: relative;
-            z-index: 1;
-            max-width: min(1120px, 100%);
-            padding: 18px 14px 110px;
-        }
-
-        #kitchen-page .rep-page-head {
-            display: block;
-            margin-bottom: 18px;
-            padding: 0;
-            border: none;
-        }
-
-        #kitchen-page .kitchen-hero {
-            position: relative;
-            overflow: hidden;
-            border-radius: 28px;
-            padding: 22px 18px 18px;
-            background:
-                linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.08)),
-                linear-gradient(135deg, rgba(255,255,255,0.08), transparent 48%);
-            border: 1px solid var(--kit-border);
-            box-shadow:
-                inset 0 1px 0 rgba(255,255,255,0.28),
-                inset 0 -1px 0 rgba(255,255,255,0.04),
-                var(--kit-shadow);
-            backdrop-filter: blur(28px) saturate(1.28);
-            -webkit-backdrop-filter: blur(28px) saturate(1.28);
-        }
-
-        #kitchen-page .kitchen-hero::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            background:
-                radial-gradient(28rem 16rem at 0% 0%, rgba(109,124,255,0.22), transparent 58%),
-                radial-gradient(24rem 16rem at 100% 0%, rgba(255,122,144,0.16), transparent 52%),
-                linear-gradient(135deg, rgba(255,255,255,0.15), transparent 36%, rgba(255,255,255,0.04) 72%);
-        }
-
-        #kitchen-page .kitchen-hero > * {
-            position: relative;
-            z-index: 1;
-        }
-
-        #kitchen-page .kitchen-hero__top {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 16px;
-            margin-bottom: 16px;
-        }
-
-        #kitchen-page .kitchen-hero__copy {
-            min-width: 0;
-            flex: 1;
-        }
-
-        #kitchen-page .rep-page-head__eyebrow {
-            color: rgba(238,241,250,0.7);
-            font-size: 11px;
-            letter-spacing: 0.26em;
-            margin-bottom: 8px;
-        }
-
-        #kitchen-page .rep-page-head h2 {
-            font-family: "Noto Sans SC", "IBM Plex Sans", sans-serif;
-            font-size: clamp(28px, 6vw, 38px);
-            line-height: 1.04;
-            letter-spacing: -0.03em;
-            margin: 0;
-            color: var(--kit-text);
-        }
-
-        #kitchen-page .rep-page-head__sub {
-            margin-top: 10px;
-            max-width: 680px;
-            color: var(--kit-dim);
-            font-size: 13px;
-            line-height: 1.65;
-        }
-
-        #kitchen-page .kitchen-hero__badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 12px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.08);
-            border: 1px solid rgba(255,255,255,0.12);
-            color: var(--kit-text);
-            font-size: 12px;
-            font-weight: 600;
-            white-space: nowrap;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
-        }
-
-        #kitchen-page .kitchen-hero__badge b {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, var(--kit-mint), var(--kit-iris));
-            box-shadow: 0 0 18px rgba(94,234,212,0.55);
-        }
-
-        #kitchen-page .kitchen-segmented {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 8px;
-            padding: 8px;
-            border-radius: 18px;
-            background: rgba(8, 12, 26, 0.34);
-            border: 1px solid rgba(255,255,255,0.08);
-            margin-bottom: 14px;
-        }
-
-        #kitchen-page .kitchen-segmented__item {
-            min-width: 0;
-            border: none;
-            border-radius: 14px;
-            padding: 13px 12px;
-            background: transparent;
-            color: rgba(238,241,250,0.62);
-            font-size: 12px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.25s ease;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        #kitchen-page .kitchen-segmented__item--active {
-            background: linear-gradient(135deg, rgba(109,124,255,0.86), rgba(94,234,212,0.36));
-            color: #fff;
-            box-shadow: 0 12px 28px rgba(109,124,255,0.28);
-        }
-
-        #kitchen-page .kitchen-segmented__item:active {
-            transform: scale(0.98);
-        }
-
-        #kitchen-page .kitchen-toolbar {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-        }
-
-        #kitchen-page .kitchen-toolbar__meta {
-            font-size: 12px;
-            color: rgba(238,241,250,0.56);
-        }
-
-        #kitchen-page .kitchen-toolbar__actions {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-
-        #kitchen-page .kitchen-sync-chip,
-        #kitchen-page .kitchen-toolbar .btn,
-        #kitchen-page .kitchen-toolbar .btn-secondary {
-            min-height: 42px;
-            border-radius: 14px;
-            padding: 10px 14px;
-            font-size: 12px;
-            font-weight: 700;
-        }
-
-        #kitchen-page .kitchen-sync-chip {
-            border: 1px solid rgba(255,255,255,0.14);
-            background: rgba(255,255,255,0.08);
-            color: var(--kit-text);
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.16);
-        }
-
-        #kitchen-page .kitchen-view-panel {
-            position: relative;
-            margin-top: 16px;
-        }
-
-        #kitchen-page .kitchen-section-card,
-        #kitchen-page .rep-filters,
-        #kitchen-page #recipe-list-panel,
-        #kitchen-page #recipe-editor-panel,
-        #kitchen-page #ingredient-lib-panel {
-            position: relative;
-            overflow: hidden;
-            border-radius: var(--kit-radius-lg);
-            padding: 18px;
-            background:
-                linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06)),
-                linear-gradient(135deg, rgba(255,255,255,0.08), transparent 48%);
-            border: 1px solid var(--kit-border);
-            box-shadow:
-                inset 0 1px 0 rgba(255,255,255,0.24),
-                inset 0 -1px 0 rgba(255,255,255,0.04),
-                0 18px 46px rgba(8, 12, 26, 0.24);
-            backdrop-filter: blur(24px) saturate(1.22);
-            -webkit-backdrop-filter: blur(24px) saturate(1.22);
-        }
-
-        #kitchen-page .kitchen-section-card::before,
-        #kitchen-page .rep-filters::before,
-        #kitchen-page #recipe-list-panel::before,
-        #kitchen-page #recipe-editor-panel::before,
-        #kitchen-page #ingredient-lib-panel::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            border-radius: inherit;
-            pointer-events: none;
-            background: linear-gradient(145deg, rgba(255,255,255,0.12), transparent 36%, rgba(255,255,255,0.04));
-        }
-
-        #kitchen-page .kitchen-section-card > *,
-        #kitchen-page .rep-filters > *,
-        #kitchen-page #recipe-list-panel > *,
-        #kitchen-page #recipe-editor-panel > *,
-        #kitchen-page #ingredient-lib-panel > * {
-            position: relative;
-            z-index: 1;
-        }
-
-        #kitchen-page .kitchen-progress-wrap,
-        #kitchen-page .kitchen-time-rail {
-            margin-top: 14px;
-        }
-
-        #kitchen-page .kitchen-progress-wrap {
-            display: none;
-        }
-
-        #kitchen-page .kitchen-time-rail {
-            display: none;
-            overflow-x: auto;
-            white-space: nowrap;
-            padding-bottom: 2px;
-            scrollbar-width: none;
-            -webkit-overflow-scrolling: touch;
-        }
-        #kitchen-page .kitchen-time-rail::-webkit-scrollbar { display: none; }
-
-        #kitchen-page .kitchen-empty-state {
-            display: none;
-            text-align: center;
-            padding: 42px 18px;
-            color: var(--kit-dim);
-        }
-
-        #kitchen-page .kitchen-empty-state__icon {
-            width: 72px;
-            height: 72px;
-            margin: 0 auto 14px;
-            border-radius: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 34px;
-            background: rgba(255,255,255,0.08);
-            border: 1px solid rgba(255,255,255,0.12);
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
-        }
-
-        #kitchen-page .kitchen-empty-state__title {
-            font-size: 18px;
-            font-weight: 700;
-            color: var(--kit-text);
-        }
-
-        #kitchen-page .kitchen-empty-state__desc {
-            margin-top: 6px;
-            font-size: 13px;
-            line-height: 1.6;
-        }
-
-        #kitchen-page .kitchen-grid {
-            display: grid;
-            gap: 12px;
-        }
-
-        #kitchen-page .kitchen-view-back {
-            margin-bottom: 12px;
-        }
-
-        #kitchen-page .kitchen-view-back .btn-secondary {
-            min-height: 40px;
-            border-radius: 14px;
-            padding: 10px 14px;
-        }
-
-        #kitchen-page .kitchen-manage-topbar,
-        #kitchen-page .kitchen-recipe-topbar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            margin-bottom: 14px;
-            flex-wrap: wrap;
-        }
-
-        #kitchen-page .kitchen-panel-title {
-            font-size: 16px;
-            font-weight: 700;
-            color: var(--kit-text);
-        }
-
-        #kitchen-page .kitchen-panel-subtitle {
-            margin-top: 4px;
-            font-size: 12px;
-            color: var(--kit-dim);
-        }
-
-        #kitchen-page .kitchen-inline-note {
-            font-size: 11px;
-            color: rgba(238,241,250,0.56);
-        }
-
-        #kitchen-page .btn,
-        #kitchen-page .btn-secondary {
-            border-radius: 14px;
-            border: 1px solid transparent;
-        }
-
-        #kitchen-page .btn {
-            background: linear-gradient(135deg, rgba(109,124,255,0.94), rgba(94,234,212,0.42));
-            box-shadow: 0 10px 28px rgba(109,124,255,0.28);
-        }
-
-        #kitchen-page .btn-secondary {
-            background: rgba(255,255,255,0.08);
-            border-color: rgba(255,255,255,0.1);
-            color: var(--kit-text);
-        }
-
-        #kitchen-page input,
-        #kitchen-page textarea,
-        #kitchen-page select {
-            color-scheme: dark;
-        }
-
-        #kitchen-page .kitchen-pill-title {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 10px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.08);
-            border: 1px solid rgba(255,255,255,0.1);
-            font-size: 11px;
-            font-weight: 700;
-            color: rgba(238,241,250,0.74);
-            letter-spacing: 0.04em;
-        }
-
-        #kitchen-page .kitchen-progress-card,
-        #kitchen-page .kitchen-time-chip,
-        #kitchen-page .kitchen-task-group,
-        #kitchen-page .kitchen-task-card,
-        #kitchen-page .kitchen-dashboard-card,
-        #kitchen-page .kitchen-overview-card,
-        #kitchen-page .kitchen-risk-card,
-        #kitchen-page .kitchen-store-pick,
-        #kitchen-page .kitchen-mapping-card {
-            position: relative;
-            overflow: hidden;
-            border-radius: var(--kit-radius-md);
-            border: 1px solid rgba(255,255,255,0.12);
-            background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06));
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 16px 34px rgba(8,12,26,0.2);
-            backdrop-filter: blur(18px);
-            -webkit-backdrop-filter: blur(18px);
-        }
-
-        #kitchen-page .kitchen-progress-card {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            padding: 16px 18px;
-        }
-
-        #kitchen-page .kitchen-progress-card__ring {
-            position: relative;
-            width: 72px;
-            height: 72px;
-            flex-shrink: 0;
-        }
-
-        #kitchen-page .kitchen-progress-card__value {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 16px;
-            font-weight: 800;
-            color: var(--kit-text);
-        }
-
-        #kitchen-page .kitchen-progress-card__title {
-            font-size: 18px;
-            font-weight: 700;
-            color: var(--kit-text);
-        }
-
-        #kitchen-page .kitchen-progress-card__meta {
-            margin-top: 6px;
-            color: var(--kit-dim);
-            font-size: 12px;
-            line-height: 1.6;
-        }
-
-        #kitchen-page .kitchen-time-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 14px;
-            margin-right: 8px;
-            white-space: nowrap;
-            font-size: 12px;
-            font-weight: 700;
-            cursor: pointer;
-            color: rgba(238,241,250,0.72);
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        #kitchen-page .kitchen-time-chip--active {
-            background: linear-gradient(135deg, rgba(109,124,255,0.88), rgba(109,124,255,0.32));
-            color: #fff;
-            border-color: rgba(255,255,255,0.18);
-            box-shadow: 0 12px 28px rgba(109,124,255,0.24);
-        }
-
-        #kitchen-page .kitchen-time-chip__count {
-            color: inherit;
-            opacity: 0.72;
-            font-family: "Geist Mono", "IBM Plex Mono", monospace;
-        }
-
-        #kitchen-page .kitchen-task-group {
-            padding: 14px;
-        }
-
-        #kitchen-page .kitchen-task-group__head {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-
-        #kitchen-page .kitchen-task-group__time {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 13px;
-            font-weight: 700;
-            color: rgba(238,241,250,0.88);
-        }
-
-        #kitchen-page .kitchen-task-group__meta {
-            font-size: 11px;
-            color: rgba(238,241,250,0.52);
-            text-align: right;
-            line-height: 1.45;
-        }
-
-        #kitchen-page .kitchen-task-stack {
-            display: grid;
-            gap: 10px;
-        }
-
-        #kitchen-page .kitchen-task-card {
-            padding: 14px;
-            cursor: pointer;
-            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.2s ease;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        #kitchen-page .kitchen-task-card:active {
-            transform: scale(0.985);
-        }
-
-        #kitchen-page .kitchen-task-card__row {
-            display: flex;
-            gap: 12px;
-            align-items: flex-start;
-        }
-
-        #kitchen-page .kitchen-task-card__icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            font-size: 22px;
-            border: 1px solid rgba(255,255,255,0.16);
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
-        }
-
-        #kitchen-page .kitchen-task-card__title {
-            font-size: 16px;
-            font-weight: 700;
-            line-height: 1.3;
-            color: var(--kit-text);
-        }
-
-        #kitchen-page .kitchen-task-card__chips {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            margin-top: 8px;
-        }
-
-        #kitchen-page .kitchen-task-card__chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px 10px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.08);
-            border: 1px solid rgba(255,255,255,0.08);
-            font-size: 11px;
-            color: rgba(238,241,250,0.74);
-        }
-
-        #kitchen-page .kitchen-task-card__hint {
-            margin-top: 7px;
-            font-size: 11px;
-            line-height: 1.5;
-            color: rgba(238,241,250,0.58);
-        }
-
-        #kitchen-page .kitchen-task-card__arrow {
-            flex-shrink: 0;
-            font-size: 14px;
-            color: rgba(238,241,250,0.28);
-            margin-top: 14px;
-        }
-
-        #kitchen-page .kitchen-overview-card,
-        #kitchen-page .kitchen-dashboard-card,
-        #kitchen-page .kitchen-risk-card,
-        #kitchen-page .kitchen-store-pick,
-        #kitchen-page .kitchen-mapping-card {
-            padding: 16px;
-        }
-
-        #kitchen-page .kitchen-overview-card {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-
-        #kitchen-page .kitchen-overview-card__title {
-            font-size: 18px;
-            font-weight: 700;
-        }
-
-        #kitchen-page .kitchen-overview-card__meta {
-            margin-top: 6px;
-            font-size: 12px;
-            color: rgba(238,241,250,0.58);
-            line-height: 1.6;
-        }
-
-        #kitchen-page .kitchen-dashboard-card__top,
-        #kitchen-page .kitchen-mapping-card__top {
-            display: flex;
-            justify-content: space-between;
-            gap: 10px;
-            align-items: flex-start;
-        }
-
-        #kitchen-page .kitchen-dashboard-card__station,
-        #kitchen-page .kitchen-mapping-card__title {
-            font-size: 16px;
-            font-weight: 700;
-            color: var(--kit-text);
-        }
-
-        #kitchen-page .kitchen-dashboard-card__rate {
-            font-family: "Geist Mono", "IBM Plex Mono", monospace;
-            font-size: 30px;
-            font-weight: 700;
-            line-height: 1;
-        }
-
-        #kitchen-page .kitchen-progress-bar {
-            height: 8px;
-            margin-top: 14px;
-            border-radius: 999px;
-            overflow: hidden;
-            background: rgba(255,255,255,0.08);
-        }
-
-        #kitchen-page .kitchen-progress-bar > span {
-            display: block;
-            height: 100%;
-            border-radius: inherit;
-            transition: width 0.45s ease;
-        }
-
-        #kitchen-page .kitchen-dashboard-card__meta,
-        #kitchen-page .kitchen-mapping-card__meta {
-            margin-top: 8px;
-            font-size: 12px;
-            color: rgba(238,241,250,0.6);
-            line-height: 1.6;
-        }
-
-        #kitchen-page .kitchen-mini-list {
-            display: grid;
-            gap: 8px;
-            margin-top: 12px;
-        }
-
-        #kitchen-page .kitchen-mini-list__item {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            padding: 10px 12px;
-            border-radius: 14px;
-            background: rgba(255,255,255,0.06);
-            border: 1px solid rgba(255,255,255,0.08);
-        }
-
-        #kitchen-page .kitchen-mini-list__item strong {
-            display: block;
-            font-size: 12px;
-            color: var(--kit-text);
-            line-height: 1.4;
-        }
-
-        #kitchen-page .kitchen-mini-list__item span {
-            display: block;
-            font-size: 10px;
-            color: rgba(238,241,250,0.5);
-            margin-top: 2px;
-        }
-
-        #kitchen-page .kitchen-risk-card {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 10px;
-        }
-
-        #kitchen-page .kitchen-risk-card__title {
-            font-size: 14px;
-            color: var(--kit-text);
-            line-height: 1.5;
-        }
-
-        #kitchen-page .kitchen-risk-card__meta {
-            margin-top: 4px;
-            font-size: 11px;
-            color: rgba(238,241,250,0.56);
-            line-height: 1.55;
-        }
-
-        #kitchen-page .kitchen-store-pick {
-            cursor: pointer;
-            text-align: left;
-            color: var(--kit-text);
-            font-size: 15px;
-            font-weight: 700;
-            transition: transform 0.18s ease, box-shadow 0.18s ease;
-        }
-
-        #kitchen-page .kitchen-store-pick:active {
-            transform: scale(0.985);
-        }
-
-        #kitchen-page .kitchen-mapping-card__actions {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            flex-shrink: 0;
-            justify-content: flex-end;
-        }
-
-        #kitchen-page .kitchen-mapping-card__actions .btn-secondary {
-            min-height: 38px;
-            padding: 9px 12px;
-        }
-
-        @media (max-width: 768px) {
-            #kitchen-page .dr-shell.kitchen-shell {
-                padding: 14px 12px 96px;
-            }
-
-            #kitchen-page .kitchen-hero {
-                border-radius: 24px;
-                padding: 18px 14px 14px;
-            }
-
-            #kitchen-page .kitchen-hero__top {
-                flex-direction: column;
-                align-items: flex-start;
-                margin-bottom: 14px;
-            }
-
-            #kitchen-page .kitchen-hero__badge {
-                align-self: stretch;
-                justify-content: center;
-            }
-
-            #kitchen-page .kitchen-segmented {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-
-            #kitchen-page .kitchen-toolbar {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            #kitchen-page .kitchen-toolbar__actions {
-                width: 100%;
-            }
-
-            #kitchen-page .kitchen-toolbar__actions > * {
-                flex: 1 1 calc(50% - 5px);
-            }
-
-            #kitchen-page .rep-filters,
-            #kitchen-page #recipe-list-panel,
-            #kitchen-page #recipe-editor-panel,
-            #kitchen-page #ingredient-lib-panel,
-            #kitchen-page .kitchen-section-card {
-                border-radius: 22px;
-                padding: 14px;
-            }
-
-            #kitchen-page .kitchen-progress-card,
-            #kitchen-page .kitchen-overview-card {
-                align-items: flex-start;
-            }
-
-            #kitchen-page .kitchen-dashboard-card__top,
-            #kitchen-page .kitchen-mapping-card__top,
-            #kitchen-page .kitchen-risk-card {
-                flex-direction: column;
-            }
-
-            #kitchen-page .kitchen-mapping-card__actions {
-                width: 100%;
-                justify-content: stretch;
-            }
-
-            #kitchen-page .kitchen-mapping-card__actions .btn-secondary {
-                flex: 1;
-                justify-content: center;
-            }
-        }
-
         #attendance-page .rep-tabs,
         #growth-page .rep-tabs {
             display: flex;
@@ -17025,6 +16214,7 @@
                             <button class="kb-v2-act-btn" id="knowledge-edit-btn" style="display:none;" type="button">编辑</button>
                             <button class="kb-v2-act-btn" id="knowledge-transfer-btn" style="display:none;" type="button">转组</button>
                             <button class="kb-v2-act-btn" id="knowledge-rubric-btn" style="display:none;background:rgba(99,102,241,0.18);color:#a5b4fc;border-color:rgba(99,102,241,0.35);" type="button">🎯 生成步骤图谱</button>
+                            <button class="kb-v2-act-btn" id="knowledge-export-word-btn" style="display:none;background:rgba(52,211,153,0.13);color:#6ee7b7;border-color:rgba(52,211,153,0.28);" type="button" onclick="exportKnowledgeToWord()">📄 导出 Word</button>
                             <button class="kb-v2-act-btn kb-v2-act-del" id="knowledge-delete-btn" style="display:none;" type="button">删除</button>
                         </div>
                     </div>
@@ -19800,84 +18990,60 @@
             <!-- 厨房备料执行页面                           -->
             <!-- ═══════════════════════════════════════════ -->
             <div id="kitchen-page" class="hidden">
-              <div class="dr-shell kitchen-shell">
+              <div class="dr-shell">
                 <header class="rep-page-head">
-                  <div class="kitchen-hero">
-                    <div class="kitchen-hero__top">
-                      <div class="kitchen-hero__copy">
-                        <span class="rep-page-head__eyebrow" id="kitchen-eyebrow">KITCHEN EXECUTION</span>
-                        <h2 id="kitchen-page-title">今日备料</h2>
-                        <p class="rep-page-head__sub" id="kitchen-page-sub">加载中…</p>
-                      </div>
-                      <div class="kitchen-hero__badge"><b></b><span>Glass Aurora Mobile Console</span></div>
-                    </div>
-                    <div class="kitchen-segmented" id="kitchen-segmented-nav">
-                      <button class="kitchen-segmented__item kitchen-segmented__item--active" type="button" id="kitchen-staff-tab-btn" onclick="showKitchenView('staff')">今日执行</button>
-                      <button class="kitchen-segmented__item" type="button" id="kitchen-dashboard-tab-btn" onclick="showKitchenView('dashboard')">完成看板</button>
-                      <button class="kitchen-segmented__item" type="button" id="kitchen-manage-btn" onclick="showKitchenView('manage')" style="display:none;">岗位配置</button>
-                      <button class="kitchen-segmented__item" type="button" id="kitchen-recipe-btn" onclick="showKitchenView('recipe')" style="display:none;">配方中心</button>
-                    </div>
-                    <div class="kitchen-toolbar" id="kitchen-mgr-actions" style="display:none;">
-                      <div>
-                        <div class="kitchen-pill-title">MOBILE FIRST</div>
-                        <div class="kitchen-panel-subtitle">更大的点击区、更清楚的状态区分、更适合门店现场操作。</div>
-                      </div>
-                      <div class="kitchen-toolbar__actions">
-                        <button class="btn btn-secondary" type="button" onclick="showKitchenView('staff')">员工视角</button>
-                        <button class="btn btn-secondary" type="button" onclick="showKitchenView('dashboard')">门店看板</button>
-                        <button class="kitchen-sync-chip" type="button" onclick="kitchenSyncSopSteps()">同步 SOP</button>
-                      </div>
-                    </div>
+                  <div>
+                    <span class="rep-page-head__eyebrow" id="kitchen-eyebrow">KITCHEN</span>
+                    <h2 id="kitchen-page-title">今日备料</h2>
+                    <p class="rep-page-head__sub" id="kitchen-page-sub">加载中…</p>
+                  </div>
+                  <div class="rep-page-head__actions" id="kitchen-mgr-actions" style="display:none;">
+                    <button class="btn btn-secondary" type="button" onclick="showKitchenView('dashboard')">📊 看板</button>
+                    <button class="btn btn-secondary" type="button" id="kitchen-manage-btn" onclick="showKitchenView('manage')" style="display:none;">⚙️ 配置</button>
+                    <button class="btn btn-secondary" type="button" id="kitchen-recipe-btn" onclick="showKitchenView('recipe')" style="display:none;">📖 配方</button>
+                    <button class="btn btn-secondary" type="button" onclick="kitchenSyncSopSteps()">🔄 同步</button>
                   </div>
                 </header>
 
                 <!-- 进度环 & 时段快选 (staff view) -->
-                <div id="kitchen-progress-ring" class="kitchen-progress-wrap"></div>
-                <div id="kitchen-time-chips" class="kitchen-time-rail"></div>
+                <div id="kitchen-progress-ring" style="display:none;margin-bottom:16px;"></div>
+                <div id="kitchen-time-chips" style="display:none;margin-bottom:14px;overflow-x:auto;white-space:nowrap;padding-bottom:4px;-webkit-overflow-scrolling:touch;"></div>
 
                 <!-- 员工视图：今日任务清单 -->
-                <div id="kitchen-staff-view" class="kitchen-view-panel">
-                  <div id="kitchen-task-list" class="kitchen-grid"></div>
-                  <div id="kitchen-empty-tip" class="kitchen-empty-state">
-                    <div class="kitchen-empty-state__icon">✅</div>
-                    <div class="kitchen-empty-state__title">今日任务已全部完成</div>
-                    <div class="kitchen-empty-state__desc">辛苦了，整班节奏已经跑顺，明天继续保持。</div>
+                <div id="kitchen-staff-view">
+                  <div id="kitchen-task-list" style="display:grid;gap:10px;"></div>
+                  <div id="kitchen-empty-tip" style="display:none;text-align:center;padding:48px 20px;color:var(--rep-muted);">
+                    <div style="font-size:48px;margin-bottom:12px;">✅</div>
+                    <div style="font-size:17px;font-weight:700;color:var(--rep-text);">今日任务已全部完成</div>
+                    <div style="font-size:13px;margin-top:6px;">辛苦了，明天见！</div>
                   </div>
-                  <div id="kitchen-no-tasks" class="kitchen-empty-state">
-                    <div class="kitchen-empty-state__icon">📋</div>
-                    <div class="kitchen-empty-state__title">暂无配置任务</div>
-                    <div class="kitchen-empty-state__desc" id="kitchen-no-tasks-reason"></div>
+                  <div id="kitchen-no-tasks" style="display:none;text-align:center;padding:48px 20px;color:var(--rep-muted);">
+                    <div style="font-size:48px;margin-bottom:12px;">📋</div>
+                    <div style="font-size:17px;font-weight:700;color:var(--rep-text);">暂无配置任务</div>
+                    <div style="font-size:13px;margin-top:6px;" id="kitchen-no-tasks-reason"></div>
                   </div>
                 </div>
 
                 <!-- 出品经理视图：完成率看板 -->
-                <div id="kitchen-dashboard-view" class="kitchen-view-panel" style="display:none;">
-                  <div class="kitchen-view-back">
+                <div id="kitchen-dashboard-view" style="display:none;">
+                  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
                     <button class="btn btn-secondary" type="button" onclick="showKitchenView('staff')" style="font-size:12px;">👤 员工视图</button>
                   </div>
-                  <div id="kitchen-dashboard-store-picker" class="kitchen-grid" style="display:none;margin-bottom:16px;"></div>
-                  <div id="kitchen-dashboard-overview" class="kitchen-grid" style="margin-bottom:14px;"></div>
-                  <div id="kitchen-dashboard-cards" class="kitchen-grid"></div>
-                  <div id="kitchen-unchecked-section" class="kitchen-section-card" style="display:none;margin-top:16px;">
-                    <div class="kitchen-manage-topbar">
-                      <div>
-                        <div class="kitchen-panel-title">今日未确认项</div>
-                        <div class="kitchen-panel-subtitle">优先处理超时和高风险项目，避免班次尾部堆积。</div>
-                      </div>
-                    </div>
-                    <div id="kitchen-unchecked-list" class="kitchen-grid"></div>
+                  <div id="kitchen-dashboard-store-picker" style="display:none;margin-bottom:16px;"></div>
+                  <div id="kitchen-dashboard-overview" style="margin-bottom:14px;"></div>
+                  <div id="kitchen-dashboard-cards" style="display:grid;gap:10px;"></div>
+                  <div id="kitchen-unchecked-section" style="display:none;margin-top:16px;">
+                    <h3 style="font-size:14px;color:var(--rep-gold);margin-bottom:10px;">⚠️ 今日未确认项</h3>
+                    <div id="kitchen-unchecked-list" style="display:grid;gap:6px;"></div>
                   </div>
                 </div>
 
                 <!-- 管理视图：菜品配置 -->
-                <div id="kitchen-manage-view" class="kitchen-view-panel" style="display:none;">
+                <div id="kitchen-manage-view" style="display:none;">
                   <div class="rep-filters" style="margin-bottom:14px;">
-                    <div class="kitchen-manage-topbar" style="cursor:pointer;" onclick="document.getElementById('kitchen-config-form').style.display=document.getElementById('kitchen-config-form').style.display==='none'?'':'none';this.querySelector('span').textContent=document.getElementById('kitchen-config-form').style.display==='none'?'展开表单':'收起表单';">
-                      <div>
-                        <h3 id="kitchen-form-title" class="kitchen-panel-title" style="margin:0;">添加岗位负责菜品</h3>
-                        <div class="kitchen-panel-subtitle" id="kitchen-form-subtitle">按档口、执行人、时间和关键控制点快速完成厨房排布。</div>
-                      </div>
-                      <span class="kitchen-pill-title" style="letter-spacing:0;">收起表单</span>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;cursor:pointer;" onclick="document.getElementById('kitchen-config-form').style.display=document.getElementById('kitchen-config-form').style.display==='none'?'':'none';this.querySelector('span').textContent=document.getElementById('kitchen-config-form').style.display==='none'?'▶ 展开':'▼ 收起';">
+                      <h3 id="kitchen-form-title" style="font-size:15px;font-weight:700;color:var(--rep-text);margin:0;">添加岗位负责菜品</h3>
+                      <span style="font-size:12px;color:var(--rep-muted);">▼ 收起</span>
                     </div>
                     <input id="kitchen-edit-id" type="hidden" value="">
                     <div id="kitchen-config-form" style="display:grid;gap:10px;">
@@ -19925,15 +19091,15 @@
                       </div>
                     </div>
                   </div>
-                  <div class="kitchen-manage-topbar" style="margin-bottom:14px;">
+                  <div style="margin-bottom:14px;display:flex;gap:10px;align-items:center;">
                     <button class="btn btn-secondary" type="button" onclick="kitchenSyncSopSteps()" style="font-size:12px;">🔄 从飞书同步SOP步骤</button>
-                    <span id="kitchen-sync-status" class="kitchen-inline-note"></span>
+                    <span id="kitchen-sync-status" style="font-size:11px;color:var(--rep-muted);"></span>
                   </div>
-                  <div id="kitchen-mapping-list" class="kitchen-grid"></div>
+                  <div id="kitchen-mapping-list" style="display:grid;gap:8px;"></div>
                 </div>
 
                 <!-- 配方管理视图（仅管理员） -->
-                <div id="kitchen-recipe-view" class="kitchen-view-panel" style="display:none;">
+                <div id="kitchen-recipe-view" style="display:none;">
 
                   <!-- 隐藏 datalist：原料库自动补全 -->
                   <datalist id="ingredient-datalist"></datalist>
@@ -25508,23 +24674,6 @@ th { background: #f5f5f5; font-weight: 700; }
             return r === ROLES.ADMIN || r === ROLES.STORE_MANAGER || r === ROLES.PRODUCTION_MANAGER || r === ROLES.HQ_MANAGER;
         }
 
-        function hrmsIsKitchenEntryUser(role, position) {
-            const r = String(role || '').trim();
-            const pos = String(position || '').toLowerCase();
-            return r === ROLES.PRODUCTION_MANAGER
-                || /(后厨|厨房|炒锅|烧味|打荷|切配|出品|厨师|厨工)/.test(pos)
-                || [ROLES.ADMIN, ROLES.HQ_MANAGER, ROLES.STORE_MANAGER].includes(r);
-        }
-
-        function hrmsCanAccessKitchenDashboard(role) {
-            const r = String(role || '').trim();
-            return [ROLES.ADMIN, ROLES.HQ_MANAGER, ROLES.STORE_MANAGER, ROLES.PRODUCTION_MANAGER].includes(r);
-        }
-
-        function hrmsCanAccessKitchenAdminPanels(role) {
-            return String(role || '').trim() === ROLES.ADMIN;
-        }
-
         function hrmsIsAlwaysAllowedPage(pageName) {
             return ['profile', 'attendance', 'exam', 'points'].includes(String(pageName || '').trim());
         }
@@ -25582,10 +24731,6 @@ th { background: #f5f5f5; font-weight: 700; }
                 const r = String(role == null ? currentUser?.role : role || '').trim();
                 return r === ROLES.ADMIN || r === ROLES.HQ_MANAGER || r === ROLES.STORE_MANAGER || r === ROLES.FRONT_MANAGER;
             }
-            if (page === 'kitchen') {
-                const r = String(role == null ? currentUser?.role : role || '').trim();
-                return hrmsIsKitchenEntryUser(r, currentUser?.position);
-            }
             const pages = getRoleModulePages(role == null ? currentUser?.role : role);
             if (pages === null) return true;
             return Array.isArray(pages) && pages.includes(page);
@@ -25600,8 +24745,7 @@ th { background: #f5f5f5; font-weight: 700; }
             if (r === ROLES.HR_MANAGER) return ['profile', 'employees', 'approvals', 'reports'];
             if (r === ROLES.CASHIER) return ['profile', 'attendance', 'payment', 'exam'];
             if (r === ROLES.FRONT_MANAGER) return ['profile', 'daily-report', 'attendance', 'exam'];
-            if (hrmsIsKitchenEntryUser(r, currentUser?.position)) return ['profile', 'attendance', 'kitchen', 'training'];
-            return ['profile', 'attendance', 'points', 'training'];
+            return ['profile', 'attendance', 'kitchen', 'training'];
         }
 
         function getHomePageName() {
@@ -26366,7 +25510,10 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
 
             if (pageName === 'kitchen') {
                 const role = String(currentUser?.role || '');
-                const isKitchen = hrmsIsKitchenEntryUser(role, currentUser?.position);
+                const pos  = String(currentUser?.position || '').toLowerCase();
+                const isKitchen = role === 'store_production_manager'
+                    || /(后厨|厨房|炒锅|烧味|打荷|切配|出品|厨师|厨工)/.test(pos)
+                    || ['admin','hq_manager','store_manager'].includes(role);
                 if (!isKitchen) {
                     showNotification('仅厨房岗位员工可访问', 'warning');
                     pageName = getHomePageName();
@@ -28593,6 +27740,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             if (hint) hint.style.display = '';
             if (body) body.innerHTML = '';
 
+            const exportWordBtn = document.getElementById('knowledge-export-word-btn');
+            if (exportWordBtn) exportWordBtn.style.display = 'none';
             // V2: 关闭 overlay viewer, 显示列表
             const viewer = document.getElementById('knowledge-viewer');
             const listView = document.getElementById('kb-list-view');
@@ -28856,6 +28005,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     rubricBtn.onclick = () => analyzeKnowledgeRubric(id);
                 }
             }
+            const exportWordBtn2 = document.getElementById('knowledge-export-word-btn');
+            if (exportWordBtn2) exportWordBtn2.style.display = '';
 
             if (!body) return;
             body.innerHTML = '';
@@ -28899,26 +28050,11 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 // Helper: render rubric card
                 function renderRubricCard(rubric) {
                     if (!rubric || !Array.isArray(rubric.items)) return '';
-                    const hasKitchenFields = rubric.items[0]?.action !== undefined;
-                    const dishInfo = rubric.dish_name ? `<div style="font-size:11px;color:rgba(255,255,255,0.45);">${escapeHtml(rubric.dish_name)}${rubric.station ? ' · '+escapeHtml(rubric.station) : ''}</div>` : '';
-                    const typeLabel = hasKitchenFields ? '厨房SOP步骤' : (rubric.type === 'checkpoints' ? '连续检查' : '分步操作');
-                    const stepsSummary = rubric.items.map((s,i)=>`${i+1}.${escapeHtml(s.action||s.name||'')}(${s.weight}分)`).join(' · ');
-                    const stepsDetail = rubric.items.map(s => {
-                        const itemName = s.action || s.name || '';
-                        const checks = (s.checks||[]).map(c=>escapeHtml(c)).join('；');
-                        const quality = s.quality_standard ? `<div style="color:rgba(52,211,153,0.8);font-size:11px;">✅ 标准：${escapeHtml(s.quality_standard)}</div>` : '';
-                        const failure = s.common_failure ? `<div style="color:rgba(251,191,36,0.8);font-size:11px;">⚠️ 注意：${escapeHtml(s.common_failure)}${s.failure_action ? ' → '+escapeHtml(s.failure_action) : ''}</div>` : '';
-                        const critical = s.is_critical ? '<span style="color:#f87171;font-weight:600;">🔴 关键步骤</span>' : '';
-                        const timeLimit = s.time_limit_seconds ? `<span style="color:rgba(255,255,255,0.35);font-size:11px;">⏱ ${Math.floor(s.time_limit_seconds/60)}分${s.time_limit_seconds%60}秒</span>` : '';
-                        return `<div style="margin:8px 0;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.03);">
-                            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                                <strong>${escapeHtml(itemName)}</strong> <span style="color:rgba(255,255,255,0.3);font-size:11px;">(${s.weight}分)</span>
-                                ${critical} ${timeLimit}
-                            </div>
-                            ${checks ? `<div style="font-size:11px;color:rgba(255,255,255,0.55);margin-top:2px;">${checks}</div>` : ''}
-                            ${quality} ${failure}
-                        </div>`;
-                    }).join('');
+                    const typeLabel = rubric.type === 'checkpoints' ? '连续检查' : '分步操作';
+                    const stepsSummary = rubric.items.map((s,i)=>`${i+1}.${escapeHtml(s.name)}(${s.weight}分)`).join(' · ');
+                    const stepsDetail = rubric.items.map(s =>
+                        `<div style="margin:6px 0"><strong>${escapeHtml(s.name)}</strong> (${s.weight}分): ${(s.checks||[]).map(c=>escapeHtml(c)).join('；')}</div>`
+                    ).join('');
                     const failHtml = rubric.fail_criteria?.length
                         ? `<div style="margin-top:8px;color:#fca5a5;">⚠️ 一票否决: ${rubric.fail_criteria.map(f=>escapeHtml(f)).join('；')}</div>`
                         : '';
@@ -28929,7 +28065,6 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                                 <div style="flex:1;min-width:0;">
                                     <div class="kb-ai-card-title">步骤图谱（${typeLabel}）</div>
                                     <div class="kb-ai-card-sub">${stepsSummary} | 合格线 ${rubric.pass_threshold||80}分</div>
-                                    ${dishInfo}
                                 </div>
                             </div>
                         </div>
@@ -29054,6 +28189,140 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 showNotification('请求失败: ' + (e.message || e), 'error');
             } finally {
                 allBtns.forEach(b => { b.disabled = false; });
+            }
+        }
+
+        async function exportKnowledgeToWord() {
+            const itemId = window.__HRMS_KB_ACTIVE_ID;
+            if (!itemId) { showNotification('请先打开一个知识库条目', 'warning'); return; }
+            const btn = document.getElementById('knowledge-export-word-btn');
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ 生成中...'; }
+            try {
+                // 1. 懒加载 docx.js
+                if (!window.docx) {
+                    await new Promise((resolve, reject) => {
+                        const urls = [
+                            '/docx.umd.js',
+                            'https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js',
+                            'https://unpkg.com/docx@8.5.0/build/index.umd.js'
+                        ];
+                        let tried = 0;
+                        const tryLoad = (url) => {
+                            const s = document.createElement('script'); s.src = url;
+                            s.onload = resolve;
+                            s.onerror = () => { tried++; tried < urls.length ? tryLoad(urls[tried]) : reject(new Error('docx.js 加载失败')); };
+                            document.head.appendChild(s);
+                        };
+                        tryLoad(urls[0]);
+                    });
+                }
+
+                // 2. 获取条目信息和 AI 解析数据
+                const token = HRMS_API.token() || '';
+                const allItems = HRMS_STORE.getKnowledge();
+                const item = (allItems || []).find(x => String(x?.id || '') === itemId) || {};
+                const resp = await fetch('/api/knowledge/' + encodeURIComponent(itemId) + '/explanation', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await resp.json();
+
+                // 3. 构建 Word 文档
+                const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, HeadingLevel } = window.docx;
+                const children = [];
+
+                // 标题
+                children.push(new Paragraph({ text: String(item.title || '知识库资料'), heading: HeadingLevel.HEADING_1 }));
+
+                // 元数据
+                const metaParts = [];
+                if (item.type) metaParts.push('类型：' + String(item.type).toUpperCase());
+                if (item.category) metaParts.push('分类：' + item.category);
+                if (item.groupName) metaParts.push('分组：' + item.groupName);
+                const created = String(item.created_at || '').slice(0, 10);
+                if (created) metaParts.push('创建日期：' + created);
+                if (metaParts.length) {
+                    children.push(new Paragraph({ children: [new TextRun({ text: metaParts.join('   |   '), color: '888888', size: 20 })] }));
+                }
+                children.push(new Paragraph({ text: '' }));
+
+                // AI 知识解析
+                if (data.success && data.explanation) {
+                    children.push(new Paragraph({ text: 'AI 知识解析', heading: HeadingLevel.HEADING_2 }));
+                    children.push(new Paragraph({ text: '' }));
+                    let numIdx = 0;
+                    for (const line of String(data.explanation).split('\n')) {
+                        const t = line.trim();
+                        if (!t) { children.push(new Paragraph({ text: '' })); numIdx = 0; continue; }
+                        if (t.startsWith('## ')) {
+                            numIdx = 0;
+                            children.push(new Paragraph({ text: t.slice(3).trim(), heading: HeadingLevel.HEADING_3 }));
+                        } else if (t.startsWith('### ')) {
+                            numIdx = 0;
+                            children.push(new Paragraph({ text: t.slice(4).trim(), heading: HeadingLevel.HEADING_4 }));
+                        } else if (t.startsWith('- ') || t.startsWith('• ')) {
+                            const content = t.replace(/^[-•] /, '').replace(/\*\*(.+?)\*\*/g, '$1');
+                            children.push(new Paragraph({ children: [new TextRun({ text: '• ' + content })], indent: { left: 360 } }));
+                        } else if (/^\d+\.\s/.test(t)) {
+                            numIdx++;
+                            const content = t.replace(/^\d+\.\s/, '').replace(/\*\*(.+?)\*\*/g, '$1');
+                            children.push(new Paragraph({ children: [new TextRun({ text: numIdx + '. ' + content })], indent: { left: 360 } }));
+                        } else {
+                            const parts = t.split(/(\*\*[^*]+\*\*)/g);
+                            const runs = parts.filter(Boolean).map(p =>
+                                p.startsWith('**') ? new TextRun({ text: p.slice(2, -2), bold: true }) : new TextRun({ text: p })
+                            );
+                            children.push(new Paragraph({ children: runs.length ? runs : [new TextRun({ text: t })] }));
+                        }
+                    }
+                    children.push(new Paragraph({ text: '' }));
+                }
+
+                // 步骤图谱
+                const rubric = data.rubric;
+                if (rubric && Array.isArray(rubric.items) && rubric.items.length > 0) {
+                    children.push(new Paragraph({ text: '步骤图谱', heading: HeadingLevel.HEADING_2 }));
+                    const typeLabel = rubric.type === 'checkpoints' ? '连续检查' : '分步操作';
+                    children.push(new Paragraph({
+                        children: [new TextRun({ text: '评分类型：' + typeLabel + '　　合格线：' + (rubric.pass_threshold || 80) + ' 分', color: '666666', size: 20 })]
+                    }));
+                    children.push(new Paragraph({ text: '' }));
+
+                    const mkCell = (text, bold, dxa) => new TableCell({
+                        width: { size: dxa, type: WidthType.DXA },
+                        children: [new Paragraph({ children: [new TextRun({ text: String(text || ''), bold: !!bold })] })]
+                    });
+                    const headerRow = new TableRow({ children: [mkCell('步骤', true, 2200), mkCell('分值', true, 900), mkCell('检查点', true, 6260)] });
+                    const dataRows = rubric.items.map(s => new TableRow({ children: [
+                        mkCell(s.name, true, 2200),
+                        mkCell(s.weight + '分', false, 900),
+                        mkCell((s.checks || []).join('；'), false, 6260)
+                    ]}));
+                    children.push(new Table({ rows: [headerRow, ...dataRows] }));
+
+                    if (rubric.fail_criteria?.length) {
+                        children.push(new Paragraph({ text: '' }));
+                        children.push(new Paragraph({ children: [new TextRun({ text: '⚠ 一票否决条件', bold: true, color: 'CC0000' })] }));
+                        rubric.fail_criteria.forEach(f => children.push(new Paragraph({ children: [new TextRun({ text: '• ' + f })], indent: { left: 360 } })));
+                    }
+                }
+
+                // 4. 生成并下载
+                const doc = new Document({ sections: [{ properties: {}, children }] });
+                const blob = await Packer.toBlob(doc);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = String(item.title || '知识库资料').replace(/[\\/:*?"<>|]/g, '_') + '.docx';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => { try { document.body.removeChild(a); URL.revokeObjectURL(url); } catch(e){} }, 300);
+                showNotification('Word 文件已生成，请查看下载', 'success');
+
+            } catch(e) {
+                showNotification('导出失败：' + (e.message || String(e)), 'error');
+                console.error('[exportKnowledgeToWord]', e);
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '📄 导出 Word'; }
             }
         }
 
@@ -52553,7 +51822,10 @@ ${body}
                 { icon:'⚙️', label:'系统设置', page:'settings', roles:['admin'] },
             ];
             const role = currentUser?.role || '';
-            const _isKitchenUser = hrmsIsKitchenEntryUser(role, currentUser?.position);
+            const _kitchenPos = String(currentUser?.position || '').toLowerCase();
+            const _isKitchenUser = role === 'store_production_manager'
+                || /(后厨|厨房|炒锅|烧味|打荷|切配|出品|厨师|厨工)/.test(_kitchenPos)
+                || ['admin','hq_manager','store_manager'].includes(role);
             const visibleItems = allItems.filter(item => {
                 if (item.kitchenOnly && !_isKitchenUser) return false;
                 if (Array.isArray(item.roles) && item.roles.length && !item.roles.includes(role)) return false;
@@ -57025,7 +56297,7 @@ ${body}
      // 进入厨房页面时调用
      async function initKitchenPage() {
        const role = currentUser?.role || '';
-       const isMgr = hrmsCanAccessKitchenDashboard(role);
+       const isMgr = ['admin','hq_manager','store_manager','store_production_manager'].includes(role);
 
        // 标准化岗位名：员工档案可能写 "烧味/卤水"，截取 / 前的部分
        const rawStation = currentUser?.position || currentUser?.station || '';
@@ -57033,12 +56305,11 @@ ${body}
        _kitchenStore   = currentUser?.store || '';
 
        document.getElementById('kitchen-mgr-actions').style.display = isMgr ? '' : 'none';
-       const dashboardBtn = document.getElementById('kitchen-dashboard-tab-btn');
+       // 只有管理员能看到菜品配置 & 配方管理
        const manageBtn = document.getElementById('kitchen-manage-btn');
        const recipeBtn = document.getElementById('kitchen-recipe-btn');
-       const isAdmin = hrmsCanAccessKitchenAdminPanels(role);
-       if (dashboardBtn) dashboardBtn.style.display = isMgr ? '' : 'none';
-       if (manageBtn) manageBtn.style.display = isAdmin ? '' : 'none';
+       const isAdmin = ['admin','hq_manager','store_manager','store_production_manager'].includes(role);
+       if (manageBtn) manageBtn.style.display = role === 'admin' ? '' : 'none';
        if (recipeBtn) recipeBtn.style.display = isAdmin ? '' : 'none';
 
        if (isMgr) {
@@ -57049,11 +56320,6 @@ ${body}
      }
 
     function showKitchenView(view) {
-      const role = String(currentUser?.role || '').trim();
-      if ((view === 'dashboard' && !hrmsCanAccessKitchenDashboard(role)) ||
-          ((view === 'manage' || view === 'recipe') && !hrmsCanAccessKitchenAdminPanels(role))) {
-        view = hrmsCanAccessKitchenDashboard(role) ? 'dashboard' : 'staff';
-      }
       _kitchenCurrentView = view;
       document.getElementById('kitchen-staff-view').style.display     = view === 'staff'     ? '' : 'none';
       document.getElementById('kitchen-dashboard-view').style.display = view === 'dashboard' ? '' : 'none';
@@ -57061,16 +56327,6 @@ ${body}
       document.getElementById('kitchen-recipe-view').style.display    = view === 'recipe'    ? '' : 'none';
       document.getElementById('kitchen-progress-ring').style.display  = view === 'staff'     ? '' : 'none';
       document.getElementById('kitchen-time-chips').style.display     = view === 'staff'     ? '' : 'none';
-      [
-        ['staff', 'kitchen-staff-tab-btn'],
-        ['dashboard', 'kitchen-dashboard-tab-btn'],
-        ['manage', 'kitchen-manage-btn'],
-        ['recipe', 'kitchen-recipe-btn']
-      ].forEach(function(pair) {
-        const btn = document.getElementById(pair[1]);
-        if (!btn) return;
-        btn.classList.toggle('kitchen-segmented__item--active', pair[0] === view);
-      });
 
       if (view === 'staff')     loadKitchenTasks();
       if (view === 'dashboard') loadKitchenDashboard();
@@ -57090,7 +56346,6 @@ ${body}
       document.getElementById('kitchen-time-chips').style.display = 'none';
 
       if (!station || !store) {
-        document.getElementById('kitchen-empty-tip').style.display = 'none';
         document.getElementById('kitchen-no-tasks').style.display = '';
         document.getElementById('kitchen-task-list').style.display = 'none';
         document.getElementById('kitchen-no-tasks-reason').textContent =
@@ -57110,10 +56365,6 @@ ${body}
         const empty = document.getElementById('kitchen-empty-tip');
         const none  = document.getElementById('kitchen-no-tasks');
 
-        empty.style.display = 'none';
-        none.style.display = 'none';
-        list.style.display = '';
-
         if (!tasks.length) {
           none.style.display = ''; list.style.display = 'none';
           document.getElementById('kitchen-no-tasks-reason').textContent = '请在「菜品配置」中添加档口负责菜品';
@@ -57130,19 +56381,18 @@ ${body}
         const pct = Math.round(done / total * 100);
         document.getElementById('kitchen-progress-ring').style.display = '';
         document.getElementById('kitchen-progress-ring').innerHTML = `
-          <div class="kitchen-progress-card">
-            <div class="kitchen-progress-card__ring">
-              <svg viewBox="0 0 64 64" style="width:72px;height:72px;transform:rotate(-90deg);">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div style="position:relative;width:56px;height:56px;flex-shrink:0;">
+              <svg viewBox="0 0 64 64" style="width:56px;height:56px;transform:rotate(-90deg);">
                 <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="5"/>
-                <circle cx="32" cy="32" r="28" fill="none" stroke="${pct===100?'#5eead4':pct>=50?'#ffc46b':'#6d7cff'}" stroke-width="5"
+                <circle cx="32" cy="32" r="28" fill="none" stroke="${pct===100?'#22c55e':pct>=50?'#f59e0b':'#6366f1'}" stroke-width="5"
                   stroke-dasharray="${Math.round(pct/100*175.9)} 175.9" stroke-linecap="round"/>
               </svg>
-              <div class="kitchen-progress-card__value">${pct}%</div>
+              <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#fff;">${pct}%</div>
             </div>
             <div>
-              <div class="kitchen-pill-title">TODAY SNAPSHOT</div>
-              <div class="kitchen-progress-card__title">${done} / ${total} 项完成</div>
-              <div class="kitchen-progress-card__meta">${pct===100?'所有任务已经清空，可以准备收尾。':pct>=50?'完成过半，优先处理当前时段和风险项。':'先把当前时段任务跑顺，再逐步清掉后续队列。'}</div>
+              <div style="font-size:14px;font-weight:700;color:#fff;">${done} / ${total} 项完成</div>
+              <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px;">${pct===100?'全部完成 ✓':pct>=50?'进行中，加油':'刚开始，别急'}</div>
             </div>
           </div>`;
 
@@ -57159,7 +56409,13 @@ ${body}
           var tDone = tasks.filter(x => x.schedule_time === t && x.confirmed).length;
           var tTotal = tasks.filter(x => x.schedule_time === t).length;
           var isActive = t === activeTime;
-          return `<button class="kitchen-time-chip ${isActive ? 'kitchen-time-chip--active' : ''}" onclick="scrollToTimeGroup('${t}')">🕒 ${t} <span class="kitchen-time-chip__count">${tDone}/${tTotal}</span></button>`;
+          return `<button onclick="scrollToTimeGroup('${t}')" style="
+            display:inline-flex;align-items:center;gap:6px;margin-right:8px;
+            padding:8px 14px;border-radius:999px;border:1px solid ${isActive ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.08)'};
+            background:${isActive ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.04)'};
+            color:${isActive ? '#fff' : 'rgba(255,255,255,0.6)'};font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;
+            -webkit-tap-highlight-color:transparent;
+          ">🕒 ${t} <span style="opacity:${isActive?'.8':'.5'}">${tDone}/${tTotal}</span></button>`;
         }).join('');
 
         // 按时段分组渲染任务卡
@@ -57173,15 +56429,15 @@ ${body}
           var rows = grouped[timeKey];
           var doneCount = rows.filter(t => t.confirmed).length;
           var overdueCount = rows.filter(t => !t.confirmed && kitchenTaskTimingState(t.schedule_time).overdue).length;
-          return `<div id="kitchen-group-${timeKey.replace(':','')}" class="kitchen-task-group">
-            <div class="kitchen-task-group__head">
-              <div class="kitchen-task-group__time" style="color:${overdueCount?'#ffd1d7':'rgba(238,241,250,0.88)'};">
+          return `<div id="kitchen-group-${timeKey.replace(':','')}" style="margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 4px;margin-bottom:6px;">
+              <div style="font-size:12px;font-weight:700;color:${overdueCount?'#fca5a5':'rgba(255,255,255,0.5)'};display:flex;align-items:center;gap:6px;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
                 ${timeKey}
               </div>
-              <div class="kitchen-task-group__meta" style="color:${overdueCount?'#ffd1d7':'rgba(238,241,250,0.52)'};">${doneCount}/${rows.length}${overdueCount? '<br>'+overdueCount+' 项超时':''}</div>
+              <div style="font-size:11px;color:${overdueCount?'#fca5a5':'rgba(255,255,255,0.35)'};">${doneCount}/${rows.length}${overdueCount? ' · '+overdueCount+'超时':''}</div>
             </div>
-            <div class="kitchen-task-stack">${rows.map(t => kitchenTaskCard(t, station, store)).join('')}</div>
+            ${rows.map(t => kitchenTaskCard(t, station, store)).join('')}
           </div>`;
         }).join('');
 
@@ -57211,29 +56467,38 @@ ${body}
       const dishEsc = task.dish_name.replace(/'/g, "\\'");
       const scheduleEsc = String(task.schedule_time || '').replace(/'/g, "\\'");
       const timing = kitchenTaskTimingState(task.schedule_time);
-      const accent = done ? '#5eead4' : timing.overdue ? '#ff7a90' : timing.label === '进行中' ? '#ffc46b' : '#6d7cff';
-      const bgColor = done ? 'rgba(94,234,212,0.08)' : timing.overdue ? 'rgba(255,122,144,0.08)' : timing.label === '进行中' ? 'rgba(255,196,107,0.08)' : 'rgba(109,124,255,0.08)';
+      const borderColor = done ? 'rgba(34,197,94,0.25)' : timing.overdue ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.08)';
+      const bgColor = done ? 'rgba(34,197,94,0.05)' : timing.overdue ? 'rgba(239,68,68,0.06)' : 'rgba(255,255,255,0.03)';
       return `
         <div onclick="openPunchCard('${dishEsc}','${station}','${store}','${scheduleEsc}')" style="
-          background:${bgColor};border-color:${done ? 'rgba(94,234,212,0.28)' : timing.overdue ? 'rgba(255,122,144,0.28)' : 'rgba(255,255,255,0.12)'};
+          background:${bgColor};border:1.5px solid ${borderColor};border-radius:14px;padding:16px;
+          margin-bottom:8px;cursor:pointer;
+          transition:all .15s;-webkit-tap-highlight-color:transparent;
           ${done ? 'opacity:0.7;' : ''}
-        " class="kitchen-task-card">
-          <div class="kitchen-task-card__row">
-            <div class="kitchen-task-card__icon" style="background:${done ? 'rgba(94,234,212,0.18)' : timing.overdue ? 'rgba(255,122,144,0.18)' : 'rgba(109,124,255,0.18)'};color:${accent};border-color:${done ? 'rgba(94,234,212,0.3)' : timing.overdue ? 'rgba(255,122,144,0.3)' : 'rgba(109,124,255,0.32)'};">${done ? '✓' : task.is_prep ? '🧂' : '🍽'}</div>
+        " ontouchstart="this.style.transform='scale(.98)'" ontouchend="this.style.transform='scale(1)'">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="
+              width:44px;height:44px;border-radius:50%;flex-shrink:0;
+              background:${done ? '#22c55e' : timing.overdue ? 'rgba(239,68,68,0.15)' : 'rgba(99,102,241,0.12)'};
+              border:2px solid ${done ? '#22c55e' : timing.overdue ? '#ef4444' : 'rgba(99,102,241,0.3)'};
+              display:flex;align-items:center;justify-content:center;font-size:20px;
+              color:${done ? '#fff' : timing.overdue ? '#fca5a5' : '#a5b4fc'};
+            ">${done ? '✓' : task.is_prep ? '🧂' : '🍽'}</div>
             <div style="flex:1;min-width:0;">
-              <div class="kitchen-task-card__title" style="color:${done?'rgba(238,241,250,0.56)':'#eef1fa'};${done?'text-decoration:line-through;':''}">
+              <div style="font-size:16px;font-weight:700;color:${done?'rgba(255,255,255,0.5)':'#fff'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+                ${done?'text-decoration:line-through;':''}">
                 ${task.dish_name}
               </div>
-              <div class="kitchen-task-card__chips">
-                <span class="kitchen-task-card__chip">${task.schedule_time || '--:--'}</span>
-                ${!done ? `<span class="kitchen-task-card__chip" style="background:${accent}20;color:${accent};border-color:${accent}26;">${timing.label}</span>` : ''}
-                ${done && task.confirmed_at ? `<span class="kitchen-task-card__chip">完成 ${String(task.confirmed_at).slice(11,16)}</span>` : ''}
+              <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+                <span style="font-size:11px;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.5);">${task.schedule_time || '--:--'}</span>
+                ${!done ? `<span style="font-size:11px;padding:3px 8px;border-radius:999px;background:${timing.color}22;color:${timing.color};font-weight:600;">${timing.label}</span>` : ''}
+                ${done && task.confirmed_at ? `<span style="font-size:11px;color:rgba(255,255,255,0.3);">完成 ${String(task.confirmed_at).slice(11,16)}</span>` : ''}
               </div>
               ${!done && task.critical_step_name
-                ? `<div class="kitchen-task-card__hint" style="color:#ffc46b;">⚡ 关键控制点：${task.critical_step_name}</div>`
-                : !done ? `<div class="kitchen-task-card__hint">点击进入逐步骤打点，按当前档口节奏完成确认。</div>` : ''}
+                ? `<div style="font-size:11px;color:#f59e0b;margin-top:4px;">⚡ ${task.critical_step_name}</div>`
+                : !done ? `<div style="font-size:11px;color:rgba(255,255,255,0.2);margin-top:4px;">点击逐步骤打点 →</div>` : ''}
             </div>
-            ${!done ? `<div class="kitchen-task-card__arrow">▸</div>` : ''}
+            ${!done ? `<div style="flex-shrink:0;font-size:11px;color:rgba(255,255,255,0.2);">▸</div>` : ''}
           </div>
         </div>`;
     }
@@ -57500,7 +56765,11 @@ ${body}
           document.getElementById('kitchen-dashboard-store-picker').style.display = '';
           document.getElementById('kitchen-dashboard-store-picker').innerHTML =
             KITCHEN_VALID_STORES.map(s => `
-              <button class="kitchen-store-pick" onclick="_kitchenStore='${s}';loadKitchenDashboard();">📍 ${s}</button>
+              <button onclick="_kitchenStore='${s}';loadKitchenDashboard();" style="
+                display:block;width:100%;padding:16px;margin-bottom:8px;
+                background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);border-radius:14px;
+                color:#fff;font-size:15px;font-weight:600;cursor:pointer;text-align:left;
+              ">📍 ${s}</button>
             `).join('');
           document.getElementById('kitchen-dashboard-overview').innerHTML = '';
           document.getElementById('kitchen-dashboard-cards').innerHTML = '';
@@ -57524,37 +56793,35 @@ ${body}
 
         // 整体概览
         document.getElementById('kitchen-dashboard-overview').innerHTML = totalAll ? `
-          <div class="kitchen-overview-card">
-            <div class="kitchen-progress-card__ring">
-              <svg viewBox="0 0 64 64" style="width:72px;height:72px;transform:rotate(-90deg);">
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;margin-bottom:14px;">
+            <div style="position:relative;width:52px;height:52px;flex-shrink:0;">
+              <svg viewBox="0 0 64 64" style="width:52px;height:52px;transform:rotate(-90deg);">
                 <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="5"/>
-                <circle cx="32" cy="32" r="28" fill="none" stroke="${overallRate===100?'#5eead4':overallRate>=60?'#ffc46b':'#ff7a90'}" stroke-width="5"
+                <circle cx="32" cy="32" r="28" fill="none" stroke="${overallRate===100?'#22c55e':overallRate>=60?'#f59e0b':'#ef4444'}" stroke-width="5"
                   stroke-dasharray="${Math.round(overallRate/100*175.9)} 175.9" stroke-linecap="round"/>
               </svg>
-              <div class="kitchen-progress-card__value">${overallRate}%</div>
+              <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;">${overallRate}%</div>
             </div>
             <div>
-              <div class="kitchen-pill-title">STORE OVERVIEW</div>
-              <div class="kitchen-overview-card__title">整体完成率</div>
-              <div class="kitchen-overview-card__meta">${confirmedAll} / ${totalAll} 项已确认，覆盖 ${summary.length} 个档口。${overallRate===100?' 当前门店节奏稳定。':overallRate>=60?' 当前班次总体可控，重点看风险项。':' 需要尽快清理未确认队列，避免时段积压。'}</div>
+              <div style="font-size:15px;font-weight:700;color:#fff;">整体完成率</div>
+              <div style="font-size:12px;color:rgba(255,255,255,0.45);margin-top:2px;">${confirmedAll} / ${totalAll} 项 · ${summary.length} 个档口</div>
             </div>
           </div>
         ` : '';
 
         // 岗位卡片
         var cardsHtml = summary.map(s => `
-          <div class="kitchen-dashboard-card">
-            <div class="kitchen-dashboard-card__top">
-              <div>
-                <div class="kitchen-pill-title">STATION</div>
-                <div class="kitchen-dashboard-card__station">${s.station}</div>
-              </div>
-              <div class="kitchen-dashboard-card__rate" style="color:${s.rate===100?'#5eead4':s.rate>=60?'#ffc46b':'#ff7a90'};">${s.rate}%</div>
+          <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <div style="font-size:15px;font-weight:700;">${s.station}</div>
+              <div style="font-size:24px;font-weight:800;color:${s.rate===100?'#22c55e':s.rate>=60?'#f59e0b':'#ef4444'};">${s.rate}%</div>
             </div>
-            <div class="kitchen-progress-bar"><span style="width:${s.rate}%;background:${s.rate===100?'#5eead4':s.rate>=60?'#ffc46b':'#ff7a90'};"></span></div>
-            <div class="kitchen-dashboard-card__meta">${s.confirmed}/${s.total} 项完成</div>
+            <div style="height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
+              <div style="height:100%;width:${s.rate}%;background:${s.rate===100?'#22c55e':s.rate>=60?'#f59e0b':'#ef4444'};border-radius:3px;transition:width .5s;"></div>
+            </div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:6px;">${s.confirmed}/${s.total} 项完成</div>
             ${(s.completed_details||[]).length ? `
-              <div class="kitchen-mini-list">
+              <div style="margin-top:10px;display:grid;gap:4px;">
                 ${(s.completed_details||[]).slice(-3).map(item => {
                   var durStr = '';
                   if (item.confirmed_at && item.schedule_time) {
@@ -57570,29 +56837,29 @@ ${body}
                     } catch(e) {}
                   }
                   return `
-                  <div class="kitchen-mini-list__item">
-                    <span style="color:#5eead4;flex-shrink:0;">✓</span>
+                  <div style="display:flex;gap:8px;align-items:center;font-size:11px;padding:6px 10px;border-radius:8px;background:rgba(34,197,94,0.06);">
+                    <span style="color:#86efac;flex-shrink:0;">✓</span>
                     <span style="flex:1;min-width:0;">
-                      <strong style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.is_prep?'🧂':'🍽'} ${item.dish_name}</strong>
-                      <span>${item.employee_name || item.employee_username || ''}</span>
+                      <div style="color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.is_prep?'🧂':'🍽'} ${item.dish_name}</div>
+                      <div style="color:rgba(255,255,255,0.35);margin-top:1px;font-size:10px;">${item.employee_name || item.employee_username || ''}</div>
                     </span>
-                    <span style="color:rgba(238,241,250,0.4);flex-shrink:0;text-align:right;line-height:1.4;font-size:10px;">
+                    <span style="color:rgba(255,255,255,0.3);flex-shrink:0;text-align:right;line-height:1.4;">
                       <div>${String(item.confirmed_at||'').slice(11,16)||''}</div>
-                      ${durStr ? '<div style="color:rgba(238,241,250,0.22);">'+durStr+'</div>' : ''}
+                      ${durStr ? '<div style="color:rgba(255,255,255,0.15);">'+durStr+'</div>' : ''}
                     </span>
                   </div>`;
                 }).join('')}
               </div>
             ` : ''}
             ${(s.unchecked_details||[]).some(i => kitchenTaskTimingState(i.schedule_time).overdue) ? `
-              <div style="font-size:11px;color:#ffd1d7;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08);">
+              <div style="font-size:11px;color:#fca5a5;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.05);">
                 ⚠ ${s.unchecked_details.filter(i => kitchenTaskTimingState(i.schedule_time).overdue).length} 项超时未完成
               </div>
             ` : ''}
           </div>
         `).join('');
 
-        document.getElementById('kitchen-dashboard-cards').innerHTML = cardsHtml || '<div class="kitchen-empty-state" style="display:block;"><div class="kitchen-empty-state__icon">📈</div><div class="kitchen-empty-state__title">暂无看板数据</div><div class="kitchen-empty-state__desc">请先配置岗位菜品并开始执行，系统才会生成完成率统计。</div></div>';
+        document.getElementById('kitchen-dashboard-cards').innerHTML = cardsHtml || '<div style="color:rgba(255,255,255,0.3);padding:24px;text-align:center;">暂无数据，请先配置岗位菜品</div>';
 
         // 未确认明细
         const unchecked = data.unchecked || [];
@@ -57603,12 +56870,11 @@ ${body}
           ulist.innerHTML = unchecked.map(u => {
             const overdue = kitchenTaskTimingState(u.schedule_time).overdue;
             return `
-            <div class="kitchen-risk-card" style="background:${overdue ? 'rgba(255,122,144,0.1)' : 'rgba(255,255,255,0.06)'};border-color:${overdue ? 'rgba(255,122,144,0.24)' : 'rgba(255,255,255,0.1)'};">
-              <div>
-                <div class="kitchen-risk-card__title">${u.is_prep?'🧂':'🍽'} ${u.dish_name}</div>
-                <div class="kitchen-risk-card__meta">${u.station} · ${u.schedule_time||'--:--'}${u.assignee_name?' · '+u.assignee_name:''}</div>
-              </div>
-              <div class="kitchen-pill-title" style="background:${overdue ? 'rgba(255,122,144,0.18)' : 'rgba(255,255,255,0.08)'};border-color:${overdue ? 'rgba(255,122,144,0.26)' : 'rgba(255,255,255,0.1)'};color:${overdue ? '#ffd1d7' : 'rgba(238,241,250,0.74)'};">${overdue?'超时未确认':'待确认'}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;
+              background:${overdue ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)'};border:1px solid ${overdue ? 'rgba(239,68,68,0.25)' : 'rgba(255,255,255,0.06)'};
+              border-radius:10px;padding:10px 12px;gap:8px;">
+              <span style="font-size:13px;color:rgba(255,255,255,0.8);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${u.is_prep?'🧂':'🍽'} ${u.dish_name}</span>
+              <span style="font-size:11px;color:${overdue?'#fca5a5':'rgba(255,255,255,0.35)'};text-align:right;flex-shrink:0;line-height:1.5;">${u.station} · ${u.schedule_time||'--:--'}${u.assignee_name?'<br>'+u.assignee_name:''}${overdue?'<br>超时':''}</span>
             </div>`;
           }).join('');
         } else {
@@ -57639,22 +56905,18 @@ ${body}
         const data = await r.json();
         const mappings = data.rows || [];
         document.getElementById('kitchen-mapping-list').innerHTML = mappings.length ? mappings.map(m => `
-          <div class="kitchen-mapping-card">
-            <div class="kitchen-mapping-card__top">
-              <div style="min-width:0;">
-                <div class="kitchen-pill-title">ASSIGNMENT</div>
-                <div class="kitchen-mapping-card__title">${m.station} · ${m.dish_name}</div>
-                <div class="kitchen-mapping-card__meta">执行人：${m.assignee_name || m.assignee_username || '未指定'} · 时间：${(m.scheduled_times || []).join(' / ') || '09:00'}</div>
-                ${m.critical_step_name ? `<div class="kitchen-mapping-card__meta">关键点：${m.critical_step_name}</div>` : ''}
-                ${m.is_prep ? `<div class="kitchen-mapping-card__meta">类型：预制料 / 半成品任务</div>` : ''}
-              </div>
-              <div class="kitchen-mapping-card__actions">
-                <button class="btn btn-secondary" type="button" onclick='kitchenEditMappingFromJson("${encodeURIComponent(JSON.stringify(m)).replace(/"/g, '&quot;')}")' style="font-size:12px;white-space:nowrap;">编辑</button>
-                <button class="btn btn-secondary" type="button" onclick="kitchenRemoveMapping('${m.id}')" style="font-size:12px;white-space:nowrap;">删除</button>
-              </div>
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px;">
+            <div style="min-width:0;">
+              <div style="font-size:13px;color:#fff;font-weight:600;">${m.station} · ${m.dish_name}</div>
+              <div style="font-size:11px;color:rgba(255,255,255,0.45);margin-top:4px;">执行人：${m.assignee_name || m.assignee_username || '未指定'} · 时间：${(m.scheduled_times || []).join(' / ') || '09:00'}</div>
+              ${m.critical_step_name ? `<div style="font-size:11px;color:rgba(255,255,255,0.38);margin-top:4px;">关键点：${m.critical_step_name}</div>` : ''}
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0;">
+              <button class="btn btn-secondary" type="button" onclick='kitchenEditMappingFromJson("${encodeURIComponent(JSON.stringify(m)).replace(/"/g, '&quot;')}")' style="font-size:12px;white-space:nowrap;">编辑</button>
+              <button class="btn btn-secondary" type="button" onclick="kitchenRemoveMapping('${m.id}')" style="font-size:12px;white-space:nowrap;">删除</button>
             </div>
           </div>
-        `).join('') : '<div class="kitchen-empty-state" style="display:block;"><div class="kitchen-empty-state__icon">🗂</div><div class="kitchen-empty-state__title">暂无岗位配置</div><div class="kitchen-empty-state__desc">先为档口绑定执行人和菜品，员工视图才会生成当天任务。</div></div>';
+        `).join('') : '<div style="color:rgba(255,255,255,0.4);font-size:13px;padding:10px 0;">暂无配置</div>';
       } catch(e) {
         document.getElementById('kitchen-mapping-list').innerHTML = '<div style="color:#ef4444;font-size:13px;padding:10px 0;">加载配置失败</div>';
       }
@@ -58709,8 +57971,12 @@ ${compsHtml || '<p style="color:#888;">暂无半成品数据</p>'}
     // 厨房导航显示控制：登录后调用
     function updateKitchenNavVisibility() {
       const role = currentUser?.role || '';
+      const pos  = (currentUser?.position || '').toLowerCase();
+      const isKitchenRole = role === 'store_production_manager';
+      const isKitchenPos  = /(后厨|厨房|炒锅|烧味|打荷|切配|出品|厨师|厨工)/.test(pos);
+      const isManager     = ['admin','hq_manager','store_manager'].includes(role);
       const nav = document.getElementById('nav-kitchen');
-      if (nav) nav.style.display = hrmsIsKitchenEntryUser(role, currentUser?.position) ? '' : 'none';
+      if (nav) nav.style.display = (isKitchenRole || isKitchenPos || isManager) ? '' : 'none';
     }
     // ═══════════════════════════════════════════════════════
 
