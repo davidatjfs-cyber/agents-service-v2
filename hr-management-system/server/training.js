@@ -349,7 +349,6 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       const isVideo = /\.(mp4|mov|webm|avi)$/i.test(fileField);
       const baseUrl = process.env.SERVER_BASE_URL || 'https://nnyx.cc';
 
-      // 菜品名称来自知识库条目标题（上传时以文件名为标题，即菜品真实名称）
       const dishName = (article.title || '').trim();
       const dishDesc = article.content ? `\n菜品描述：${article.content.slice(0, 200)}` : '';
 
@@ -357,25 +356,37 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
 【重要】当前考核菜品/操作的准确名称是：「${dishName}」${dishDesc}
 这个名称来自文件名，是该菜品/操作的真实名称，请严格以此为准，不要根据图片自行猜测菜名。
 
-请认真观看视频/图片，提取标准化的培训考核评分表。
+请认真观看视频/图片，提取标准化的培训考核评分表。输出格式必须严格对齐厨房SOP结构，包含每步的：操作动作、评分权重、质量标准、常见失败、补救措施、是否为关键步骤，以及3-5个可视化检查点用于实操评分。
 
 要求：
-1. 第一项必须是「菜品核验：${dishName || '考核内容'}」（权重10分）：核查员工提交的实操图片/视频是否为「${dishName || '考核内容'}」，checks 中要列出该菜品的唯一识别特征（主料外观、颜色、器具、摆盘方式等），用于后续评分时区分是否提交了错误菜品。
-2. 判断操作类型：可分步操作（切配、摆盘、烤鸭流程）用"steps"，连续操作用"checkpoints"。
-3. 每个步骤/检查点包含：名称、权重（所有项权重相加等于100）、3-5个可视化检查点。
-4. checks 必须是视觉上可判定的（能看到的），不能是不可见的（如"温度""时间""调味"）。
+1. 第一项必须是「菜品核验：${dishName || '考核内容'}」（权重10分）：核查员工提交的实操图片/视频是否为「${dishName || '考核内容'}」，checks中列出该菜品的唯一识别特征。
+2. 提取后续操作步骤时，每步必须包含完整厨房SOP字段。
+3. action/checks 必须是视觉上可判定的（能看到），不能是不可见的（"温度""时间"等抽象概念转为视觉描述）。
+4. 判断工位(station)名称，如"烧味""切配""炒锅""凉菜"等。
 5. 列出3-5个一票否决项（fail_criteria），出现任一即不合格。
 6. 合格线设为80分（pass_threshold）。
-7. 严格返回JSON，不要额外文字。
+7. 权重：菜品核验10分 + 其余步骤合计90分（权重根据重要性分配）。
+8. 严格返回JSON，不要额外文字。
 
-返回JSON示例：
+返回JSON格式（严格使用厨房SOP结构）：
 {
+  "dish_name": "${dishName}",
+  "station": "识别出的工位",
   "type": "steps",
   "items": [
-    {"name": "烫皮", "weight": 15, "checks": ["水温到位冒热气", "鸭皮颜色发白绷紧", "整体烫过无遗漏"]},
-    {"name": "挂皮水", "weight": 25, "checks": ["糖水均匀淋洒", "鸭身全部位覆盖面", "颜色呈淡琥珀"]}
+    {
+      "step_seq": 1,
+      "action": "操作动作名称，如：烫鸭",
+      "weight": 10,
+      "quality_standard": "质量标准，如：表皮均匀收缩",
+      "common_failure": "常见失败，如：烫制不均",
+      "failure_action": "补救措施，如：重新烫制",
+      "is_critical": false,
+      "time_limit_seconds": null,
+      "checks": ["可视化检查点1", "可视化检查点2"]
+    }
   ],
-  "fail_criteria": ["食材明显变质腐烂", "操作区域严重污秽", "漏掉关键步骤", "明显操作安全隐患"],
+  "fail_criteria": ["一票否决项1", "一票否决项2"],
   "pass_threshold": 80
 }`;
 
@@ -454,25 +465,75 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
       if (kbArticle.step_rubric) {
         rubric = kbArticle.step_rubric;
       } else {
-        // Check file type — only images/videos can be analyzed
-        const fileField = kbArticle.file_path || '';
-        const isMedia = /\.(mp4|mov|webm|avi|jpg|jpeg|png|gif|webp)$/i.test(fileField);
-        if (!isMedia) {
-          return res.json({ success: false, error: `关联的知识库文章（${kbArticle.title}）是${kbArticle.file_type || 'PDF'}格式，图谱分析需要视频或图片文件。请先上传包含操作视频/图片的知识库文章，或手动配置图谱。` });
-        }
-        // Trigger KB analysis — pass original JWT so authMiddleware passes
-        try {
-          const analyzeRes = await axios.post(
-            `http://localhost:3000/api/knowledge/${kbArticle.id}/analyze-rubric`,
-            {},
-            { headers: { 'Authorization': req.headers['authorization'] || '' } }
+        // 检查是否有现成的厨房 SOP 步骤数据（根据菜品名称匹配）
+        const dishMatch = await pool().query(
+          `SELECT DISTINCT dish_name, station FROM kitchen_sop_steps WHERE dish_name ILIKE $1 OR $2 ILIKE '%' || dish_name || '%' LIMIT 1`,
+          [`%${topic.title}%`, topic.title]
+        );
+        if (dishMatch.rows.length > 0) {
+          const { dish_name: matchedDish, station: matchedStation } = dishMatch.rows[0];
+          const steps = await pool().query(
+            `SELECT step_seq, action, time_limit_seconds, quality_standard, common_failure, failure_action, is_critical
+             FROM kitchen_sop_steps WHERE dish_name = $1 ORDER BY step_seq`,
+            [matchedDish]
           );
-          if (!analyzeRes.data?.success) {
-            return res.json({ success: false, error: '步骤图谱生成失败: ' + (analyzeRes.data?.error || '') });
+          // Convert to rubric format: 第一项菜品核验 + 每步默认权重
+          const totalSteps = steps.rows.length;
+          const baseWeight = totalSteps > 0 ? Math.floor(90 / totalSteps) : 0;
+          const remainder = 90 - baseWeight * totalSteps;
+          rubric = {
+            dish_name: matchedDish,
+            station: matchedStation,
+            type: 'steps',
+            items: [
+              {
+                step_seq: 0,
+                action: `菜品核验：${matchedDish}`,
+                weight: 10,
+                quality_standard: `确认提交内容为「${matchedDish}」`,
+                common_failure: null,
+                failure_action: null,
+                is_critical: true,
+                time_limit_seconds: null,
+                checks: [`外观符合${matchedDish}特征`, '主料颜色正确', '摆盘/器具符合标准']
+              },
+              ...steps.rows.map((s, i) => ({
+                step_seq: s.step_seq,
+                action: s.action,
+                weight: baseWeight + (i < remainder ? 1 : 0),
+                quality_standard: s.quality_standard || null,
+                common_failure: s.common_failure || null,
+                failure_action: s.failure_action || null,
+                is_critical: s.is_critical || false,
+                time_limit_seconds: s.time_limit_seconds || null,
+                checks: (s.quality_standard ? [s.quality_standard] : []).concat(s.common_failure ? [`避免：${s.common_failure}`] : [])
+              }))
+            ],
+            fail_criteria: ['提交的实操内容与考核菜品明显不符', '操作区域严重污秽', '明显操作安全隐患'],
+            pass_threshold: 80,
+            source: 'kitchen_sop_steps'
+          };
+        } else {
+          // Check file type — only images/videos can be analyzed
+          const fileField = kbArticle.file_path || '';
+          const isMedia = /\.(mp4|mov|webm|avi|jpg|jpeg|png|gif|webp)$/i.test(fileField);
+          if (!isMedia) {
+            return res.json({ success: false, error: `关联的知识库文章（${kbArticle.title}）是${kbArticle.file_type || 'PDF'}格式，图谱分析需要视频或图片文件。请先上传包含操作视频/图片的知识库文章，或手动配置图谱。` });
           }
-          rubric = analyzeRes.data.rubric;
-        } catch (innerE) {
-          return res.json({ success: false, error: '分析请求失败: ' + innerE?.message });
+          // Trigger KB analysis
+          try {
+            const analyzeRes = await axios.post(
+              `http://localhost:3000/api/knowledge/${kbArticle.id}/analyze-rubric`,
+              {},
+              { headers: { 'Authorization': req.headers['authorization'] || '' } }
+            );
+            if (!analyzeRes.data?.success) {
+              return res.json({ success: false, error: '步骤图谱生成失败: ' + (analyzeRes.data?.error || '') });
+            }
+            rubric = analyzeRes.data.rubric;
+          } catch (innerE) {
+            return res.json({ success: false, error: '分析请求失败: ' + innerE?.message });
+          }
         }
       }
 
@@ -1487,20 +1548,29 @@ ${rawContent}
       let aiTotalScore = null;
 
       if (rubric && Array.isArray(rubric.items) && rubric.items.length) {
-        // ──── 图谱评分模式 ────
+        // ──── 图谱评分模式（兼容新旧格式）────
+        const isKitchenSop = rubric.items[0].action !== undefined;  // 厨房SOP格式用action，旧格式用name
+        const dishInfo = rubric.dish_name ? `考核菜品：${rubric.dish_name}（${rubric.station || '未知工位'}）` : '';
         const scoringPrompt = `你是餐饮实操考试审评官。请根据以下步骤评分表，逐项判断员工操作是否合格，给出具体得分和扣分原因。
 
 【评分表】
-类型：${rubric.type === 'checkpoints' ? '连续操作检查点' : '分步操作步骤'}
+${dishInfo}
 项目：
-${rubric.items.map((item, i) => `  ${i + 1}. ${item.name}（权重${item.weight}分，满分${item.weight}）: ${(item.checks || []).join('；')}`).join('\n')}
+${rubric.items.map((item, i) => {
+  const name = item.action || item.name || `步骤${i+1}`;
+  const checks = item.checks || [];
+  const quality = item.quality_standard ? `质量标准：${item.quality_standard}` : '';
+  const failure = item.common_failure ? `常见失败：${item.common_failure}` : '';
+  const critical = item.is_critical ? '【关键步骤】' : '';
+  return `  ${i+1}. ${critical} ${name}（${item.weight}分）: ${checks.join('；')}${quality ? '\n     质量：'+quality : ''}${failure ? '\n     注意：'+failure : ''}`;
+}).join('\n')}
 一票否决项：${(rubric.fail_criteria || []).join('；')}
 合格线：${rubric.pass_threshold || 80}分
 实操科目：${topicTitle}
 
 请先认真观看${mediaType === 'video' ? '完整视频' : '图片'}，然后逐项评分。严格返回JSON：
 {
-  "steps": [{"name":"项目名称","score":12,"max":15,"feedback":"得分或扣分具体原因"}],
+  "steps": [{"name":"步骤名称","score":12,"max":15,"feedback":"得分或扣分具体原因"}],
   "total_score": 88,
   "verdict": "passed/review/failed",
   "fail_reason": "一票否决原因（无则填null）",

@@ -28899,11 +28899,26 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 // Helper: render rubric card
                 function renderRubricCard(rubric) {
                     if (!rubric || !Array.isArray(rubric.items)) return '';
-                    const typeLabel = rubric.type === 'checkpoints' ? '连续检查' : '分步操作';
-                    const stepsSummary = rubric.items.map((s,i)=>`${i+1}.${escapeHtml(s.name)}(${s.weight}分)`).join(' · ');
-                    const stepsDetail = rubric.items.map(s =>
-                        `<div style="margin:6px 0"><strong>${escapeHtml(s.name)}</strong> (${s.weight}分): ${(s.checks||[]).map(c=>escapeHtml(c)).join('；')}</div>`
-                    ).join('');
+                    const hasKitchenFields = rubric.items[0]?.action !== undefined;
+                    const dishInfo = rubric.dish_name ? `<div style="font-size:11px;color:rgba(255,255,255,0.45);">${escapeHtml(rubric.dish_name)}${rubric.station ? ' · '+escapeHtml(rubric.station) : ''}</div>` : '';
+                    const typeLabel = hasKitchenFields ? '厨房SOP步骤' : (rubric.type === 'checkpoints' ? '连续检查' : '分步操作');
+                    const stepsSummary = rubric.items.map((s,i)=>`${i+1}.${escapeHtml(s.action||s.name||'')}(${s.weight}分)`).join(' · ');
+                    const stepsDetail = rubric.items.map(s => {
+                        const itemName = s.action || s.name || '';
+                        const checks = (s.checks||[]).map(c=>escapeHtml(c)).join('；');
+                        const quality = s.quality_standard ? `<div style="color:rgba(52,211,153,0.8);font-size:11px;">✅ 标准：${escapeHtml(s.quality_standard)}</div>` : '';
+                        const failure = s.common_failure ? `<div style="color:rgba(251,191,36,0.8);font-size:11px;">⚠️ 注意：${escapeHtml(s.common_failure)}${s.failure_action ? ' → '+escapeHtml(s.failure_action) : ''}</div>` : '';
+                        const critical = s.is_critical ? '<span style="color:#f87171;font-weight:600;">🔴 关键步骤</span>' : '';
+                        const timeLimit = s.time_limit_seconds ? `<span style="color:rgba(255,255,255,0.35);font-size:11px;">⏱ ${Math.floor(s.time_limit_seconds/60)}分${s.time_limit_seconds%60}秒</span>` : '';
+                        return `<div style="margin:8px 0;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.03);">
+                            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                                <strong>${escapeHtml(itemName)}</strong> <span style="color:rgba(255,255,255,0.3);font-size:11px;">(${s.weight}分)</span>
+                                ${critical} ${timeLimit}
+                            </div>
+                            ${checks ? `<div style="font-size:11px;color:rgba(255,255,255,0.55);margin-top:2px;">${checks}</div>` : ''}
+                            ${quality} ${failure}
+                        </div>`;
+                    }).join('');
                     const failHtml = rubric.fail_criteria?.length
                         ? `<div style="margin-top:8px;color:#fca5a5;">⚠️ 一票否决: ${rubric.fail_criteria.map(f=>escapeHtml(f)).join('；')}</div>`
                         : '';
@@ -28914,6 +28929,7 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                                 <div style="flex:1;min-width:0;">
                                     <div class="kb-ai-card-title">步骤图谱（${typeLabel}）</div>
                                     <div class="kb-ai-card-sub">${stepsSummary} | 合格线 ${rubric.pass_threshold||80}分</div>
+                                    ${dishInfo}
                                 </div>
                             </div>
                         </div>
