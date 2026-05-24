@@ -16166,9 +16166,52 @@ app.get('/api/knowledge/:id/explanation', authRequired, async (req, res) => {
       if (rubric) return res.json({ success: true, explanation: null, cached: false, rubric });
       return res.json({ success: false, error: 'no_content', message: '图片/视频文件请点击「生成步骤图谱」生成AI评分标准', rubric: null });
     }
+    const isSopContent = /SOP|标准操作|工序|步骤\s*\d|操作动作|质量标准|常见失败|补救/.test(rawContent);
+    let sysPrompt, userPrompt;
+    if (isSopContent || isMediaFile) {
+      sysPrompt = '你是一名餐饮培训标准制定专家，把操作规程转化成厨房SOP格式培训材料。输出时严格遵守给定结构，不添加多余内容。';
+      userPrompt = `请根据以下原始内容，输出严格对齐厨房SOP格式的标准培训解析。每步必须包含：操作动作、质量标准、常见失败、补救措施、是否为关键步骤。
+
+【原始SOP内容】
+${rawContent.slice(0, 20000)}
+
+请严格按以下结构输出（保留 ## 标题符号）：
+
+## 🍳 工序：${row.title}
+
+## 📋 SOP步骤分解
+按原始内容的步骤顺序，每一步用以下格式输出：
+
+### 步骤N：操作动作名称
+
+> **关键步骤**：是/否
+
+- **操作动作**：具体做什么，一线员工能直接照着做的动作描述
+- **质量标准**：做到什么程度算合格（可视化可判定）
+- **⏱ 建议时长**：N分钟
+
+> **常见失败**：可能会出什么问题
+
+> **补救措施**：出了问题怎么办
+
+### 步骤N+1：...
+
+---
+
+## ⚠️ 一票否决项
+列出3-5条绝对不能出现的情况（出现任一即不合格）：
+
+## ✅ 关键记忆
+用"到岗→操作→复核"格式的口诀，帮助员工快速记住核心流程。
+
+输出语言：简体中文。不要添加任何开场白或结尾语，直接从"## 🍳 工序"开始输出。`;
+    } else {
+      sysPrompt = '你是一位餐饮行业培训专家。请对以下文档进行完整、结构化解析，提炼所有核心要点，帮助餐饮从业人员快速掌握重点知识。输出使用清晰的中文Markdown格式，包含二级标题（##）、要点列表（-）、关键步骤（1.2.3.）等。请务必输出完整内容，不要在中途截断。';
+      userPrompt = '请完整解析以下文档内容（确保全文覆盖，不要截断）：\n\n' + rawContent.slice(0, 20000);
+    }
     const aiResp = await callLLM([
-      { role: 'system', content: '你是一位餐饮行业培训专家。请对以下文档进行完整、结构化解析，提炼所有核心要点，帮助餐饮从业人员快速掌握重点知识。输出使用清晰的中文Markdown格式，包含二级标题（##）、要点列表（-）、关键步骤（1.2.3.）等。请务必输出完整内容，不要在中途截断。' },
-      { role: 'user', content: '请完整解析以下文档内容（确保全文覆盖，不要截断）：\n\n' + rawContent.slice(0, 20000) }
+      { role: 'system', content: sysPrompt },
+      { role: 'user', content: userPrompt }
     ], { max_tokens: 6000 });
     const explanation = String(aiResp?.content || '').trim();
     if (!explanation || explanation.length < 50) {
