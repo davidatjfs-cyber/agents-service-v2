@@ -1,0 +1,387 @@
+<style>
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1.05fr 1.35fr;
+    gap: 22px;
+    align-items: start;
+  }
+  .note {
+    padding: 14px 16px;
+    border-radius: 16px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(230,236,248,0.82);
+    font-size: 14px;
+    line-height: 1.65;
+  }
+  .badge-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 10px 0 18px;
+  }
+  .tiny-badge {
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.05);
+    color: rgba(238,241,250,0.84);
+  }
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  .visual {
+    position: relative;
+    min-height: 620px;
+    overflow: hidden;
+    border-radius: 28px;
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 20px 50px rgba(0,0,0,0.32);
+  }
+  .visual--current {
+    background:
+      linear-gradient(165deg, #05070b 0%, #0c1018 58%, #0a0c12 100%);
+  }
+  .visual--target {
+    background:
+      radial-gradient(560px 360px at 18% 6%, rgba(109,124,255,0.52), transparent 58%),
+      radial-gradient(500px 300px at 88% 10%, rgba(255,122,144,0.42), transparent 52%),
+      radial-gradient(640px 320px at 50% 100%, rgba(94,234,212,0.30), transparent 52%),
+      linear-gradient(180deg, #0b0f1e 0%, #121933 54%, #0c1222 100%);
+  }
+  .visual::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.08;
+    mix-blend-mode: overlay;
+    background-image: radial-gradient(rgba(255,255,255,0.95) 0.55px, transparent 0.55px);
+    background-size: 8px 8px;
+  }
+  .chrome {
+    position: absolute;
+    inset: 0;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: rgba(238,241,250,0.9);
+  }
+  .eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgba(154,163,199,0.8);
+    margin-bottom: 8px;
+  }
+  .headline {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    margin: 0;
+    color: #fff;
+  }
+  .subline {
+    margin-top: 8px;
+    color: rgba(214,223,244,0.78);
+    font-size: 13px;
+  }
+  .glass-card {
+    position: relative;
+    border-radius: 24px;
+    padding: 18px;
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+  .visual--current .glass-card {
+    background: rgba(17,20,27,0.90);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 28px rgba(0,0,0,0.32);
+  }
+  .visual--target .glass-card {
+    background: linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.08));
+    backdrop-filter: blur(28px) saturate(1.35);
+    -webkit-backdrop-filter: blur(28px) saturate(1.35);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.35),
+      inset 0 -1px 0 rgba(255,255,255,0.05),
+      0 16px 38px rgba(7,10,20,0.30);
+  }
+  .glass-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+  .visual--target .glass-card::before {
+    background: linear-gradient(135deg, rgba(255,255,255,0.18), transparent 42%, rgba(255,255,255,0.06) 78%);
+  }
+  .profile-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .avatar {
+    width: 58px;
+    height: 58px;
+    border-radius: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: white;
+  }
+  .visual--current .avatar {
+    background: linear-gradient(135deg, rgba(59,130,246,0.34), rgba(124,58,237,0.24));
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .visual--target .avatar {
+    background: linear-gradient(145deg, rgba(109,124,255,0.48), rgba(255,122,144,0.26));
+    border: 1px solid rgba(255,255,255,0.22);
+    box-shadow: 0 10px 26px rgba(109,124,255,0.24);
+  }
+  .name {
+    font-size: 20px;
+    font-weight: 800;
+    color: white;
+  }
+  .meta {
+    margin-top: 6px;
+    font-size: 12px;
+    color: rgba(214,223,244,0.68);
+  }
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 14px;
+  }
+  .stat {
+    border-radius: 18px;
+    padding: 14px 14px 12px;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .visual--current .stat {
+    background: rgba(255,255,255,0.035);
+  }
+  .visual--target .stat {
+    background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05));
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+  .stat-k {
+    font-size: 11px;
+    color: rgba(154,163,199,0.8);
+    letter-spacing: 0.06em;
+  }
+  .stat-v {
+    margin-top: 8px;
+    font-size: 18px;
+    font-weight: 800;
+    color: #fff;
+  }
+  .tint-iris .stat-v { color: #c8d1ff; }
+  .tint-mint .stat-v { color: #b6fbf0; }
+  .tint-coral .stat-v { color: #ffc5cf; }
+  .tint-amber .stat-v { color: #ffe0ab; }
+  .section-label {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    color: rgba(154,163,199,0.82);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .ticker {
+    padding: 10px 12px;
+    border-radius: 14px;
+    margin-top: 10px;
+    font-size: 13px;
+    color: rgba(239,244,255,0.86);
+  }
+  .visual--current .ticker {
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .visual--target .ticker {
+    background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.04));
+    border: 1px solid rgba(255,255,255,0.12);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+  .callout {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    font-size: 13px;
+    line-height: 1.55;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .callout--bad {
+    background: rgba(255,122,144,0.10);
+    color: rgba(255,217,224,0.92);
+  }
+  .callout--good {
+    background: linear-gradient(135deg, rgba(109,124,255,0.14), rgba(94,234,212,0.10));
+    color: rgba(232,240,255,0.92);
+  }
+  @media (max-width: 980px) {
+    .hero-grid, .compare { grid-template-columns: 1fr; }
+    .visual { min-height: 560px; }
+  }
+</style>
+
+<h2>档案页 Glass Aurora 方向对照</h2>
+<p class="subtitle">这一版不是最终代码，是把“为什么现在发黑”以及“100% 靠近品牌书后会是什么观感”先可视化给你看。</p>
+
+<div class="badge-row">
+  <div class="tiny-badge">已确认方向：强 Aurora</div>
+  <div class="tiny-badge">目标：三色光斑明确可见</div>
+  <div class="tiny-badge">目标：玻璃层真正透出背景</div>
+  <div class="tiny-badge">目标：卡片不再像黑铁板</div>
+</div>
+
+<div class="hero-grid">
+  <div class="note">
+    <strong>我现在的判断</strong><br><br>
+    不是单纯“底板是黑色”导致发黑，而是三件事叠加：
+    <br><br>
+    1. 档案页虽然已经放了三团 aurora blob，但透明度偏低，模糊半径也不够大。
+    <br>
+    2. 后面又复用了另一套偏重的深色金融面板背景，整体黑度把光晕吃掉了。
+    <br>
+    3. 卡片底色太实，玻璃层更像深灰实体卡，而不是半透明悬浮层。
+    <br><br>
+    所以用户视觉上会觉得“主题是黑的”，而不是“有空气感的 Glass Aurora”。
+  </div>
+
+  <div class="note">
+    <strong>这次档案页我建议的改法</strong><br><br>
+    1. 先把整页背景从“金融黑金面板”抽离，改回品牌书的三色极光底。
+    <br>
+    2. 顶部人物卡、通知区、考勤区改成更高透的玻璃层，允许极光在卡后穿透。
+    <br>
+    3. 强化卡片高光边、内反射和轻微雾面，让它更像玻璃，不是黑块。
+    <br>
+    4. 功能色只留在关键数据和状态，不让大面积实色把极光再压回去。
+  </div>
+</div>
+
+<div class="compare" style="margin-top:22px;">
+  <div class="card" data-choice="current" onclick="toggleSelect(this)">
+    <div class="card-body" style="padding:0;">
+      <h3 style="margin:0 0 10px;">现在的问题感受</h3>
+      <p style="margin:0 0 14px;color:rgba(230,236,248,0.72);">极光有做，但像藏在黑底后面；卡片更像深色面板，不像玻璃。</p>
+      <div class="visual visual--current">
+        <div class="chrome">
+          <div class="topbar">
+            <div>
+              <div class="eyebrow">PROFILE</div>
+              <h3 class="headline">我的档案</h3>
+              <div class="subline">个人档案、通知、绩效与本月考勤概览</div>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div class="profile-head">
+              <div class="avatar">👤</div>
+              <div>
+                <div class="name">陈晓雅</div>
+                <div class="meta">徐汇店 · 前厅 · 店助</div>
+              </div>
+            </div>
+            <div class="stat-grid">
+              <div class="stat">
+                <div class="stat-k">绩效得分</div>
+                <div class="stat-v">89</div>
+              </div>
+              <div class="stat">
+                <div class="stat-k">本月积分</div>
+                <div class="stat-v">132</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div class="section-label">公司通知</div>
+            <div class="ticker">关于端午排班调整的提醒</div>
+            <div class="ticker">门店卫生巡检结果已更新</div>
+          </div>
+
+          <div class="callout callout--bad">
+            视觉问题：背景发闷，卡片透感不足，极光没有成为空间感来源。
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="target" onclick="toggleSelect(this)">
+    <div class="card-body" style="padding:0;">
+      <h3 style="margin:0 0 10px;">目标效果</h3>
+      <p style="margin:0 0 14px;color:rgba(230,236,248,0.72);">页面一打开先感知到“光”和“空气”，再看到卡片与信息层级。</p>
+      <div class="visual visual--target">
+        <div class="chrome">
+          <div class="topbar">
+            <div>
+              <div class="eyebrow">PROFILE</div>
+              <h3 class="headline">我的档案</h3>
+              <div class="subline">个人档案、通知、绩效与本月考勤概览</div>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div class="profile-head">
+              <div class="avatar">👤</div>
+              <div>
+                <div class="name">陈晓雅</div>
+                <div class="meta">徐汇店 · 前厅 · 店助</div>
+              </div>
+            </div>
+            <div class="stat-grid">
+              <div class="stat tint-iris">
+                <div class="stat-k">绩效得分</div>
+                <div class="stat-v">89</div>
+              </div>
+              <div class="stat tint-amber">
+                <div class="stat-k">本月积分</div>
+                <div class="stat-v">132</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div class="section-label">公司通知</div>
+            <div class="ticker">关于端午排班调整的提醒</div>
+            <div class="ticker">门店卫生巡检结果已更新</div>
+          </div>
+
+          <div class="glass-card">
+            <div class="section-label">本月考勤概览</div>
+            <div class="stat-grid">
+              <div class="stat tint-coral">
+                <div class="stat-k">缺勤</div>
+                <div class="stat-v">1</div>
+              </div>
+              <div class="stat tint-mint">
+                <div class="stat-k">休息</div>
+                <div class="stat-v">4</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="callout callout--good">
+            目标观感：极光先营造空间，玻璃卡片承接光晕，信息仍然清晰但不再“压黑”。
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
