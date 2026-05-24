@@ -16214,6 +16214,7 @@
                             <button class="kb-v2-act-btn" id="knowledge-edit-btn" style="display:none;" type="button">编辑</button>
                             <button class="kb-v2-act-btn" id="knowledge-transfer-btn" style="display:none;" type="button">转组</button>
                             <button class="kb-v2-act-btn" id="knowledge-rubric-btn" style="display:none;background:rgba(99,102,241,0.18);color:#a5b4fc;border-color:rgba(99,102,241,0.35);" type="button">🎯 生成步骤图谱</button>
+                            <button class="kb-v2-act-btn" id="knowledge-export-word-btn" style="display:none;background:rgba(52,211,153,0.13);color:#6ee7b7;border-color:rgba(52,211,153,0.28);" type="button" onclick="exportKnowledgeToWord()">📄 导出 Word</button>
                             <button class="kb-v2-act-btn kb-v2-act-del" id="knowledge-delete-btn" style="display:none;" type="button">删除</button>
                         </div>
                     </div>
@@ -27739,6 +27740,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
             if (hint) hint.style.display = '';
             if (body) body.innerHTML = '';
 
+            const exportWordBtn = document.getElementById('knowledge-export-word-btn');
+            if (exportWordBtn) exportWordBtn.style.display = 'none';
             // V2: 关闭 overlay viewer, 显示列表
             const viewer = document.getElementById('knowledge-viewer');
             const listView = document.getElementById('kb-list-view');
@@ -28002,6 +28005,8 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                     rubricBtn.onclick = () => analyzeKnowledgeRubric(id);
                 }
             }
+            const exportWordBtn2 = document.getElementById('knowledge-export-word-btn');
+            if (exportWordBtn2) exportWordBtn2.style.display = '';
 
             if (!body) return;
             body.innerHTML = '';
@@ -28184,6 +28189,139 @@ ${r.approvalNote ? '审批备注：' + r.approvalNote : ''}
                 showNotification('请求失败: ' + (e.message || e), 'error');
             } finally {
                 allBtns.forEach(b => { b.disabled = false; });
+            }
+        }
+
+        async function exportKnowledgeToWord() {
+            const itemId = window.__HRMS_KB_ACTIVE_ID;
+            if (!itemId) { showNotification('请先打开一个知识库条目', 'warning'); return; }
+            const btn = document.getElementById('knowledge-export-word-btn');
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ 生成中...'; }
+            try {
+                // 1. 懒加载 docx.js
+                if (!window.docx) {
+                    await new Promise((resolve, reject) => {
+                        const urls = [
+                            'https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.js',
+                            'https://unpkg.com/docx@8.5.0/build/index.js'
+                        ];
+                        let tried = 0;
+                        const tryLoad = (url) => {
+                            const s = document.createElement('script'); s.src = url;
+                            s.onload = resolve;
+                            s.onerror = () => { tried++; tried < urls.length ? tryLoad(urls[tried]) : reject(new Error('docx.js 加载失败')); };
+                            document.head.appendChild(s);
+                        };
+                        tryLoad(urls[0]);
+                    });
+                }
+
+                // 2. 获取条目信息和 AI 解析数据
+                const token = HRMS_API.token() || '';
+                const allItems = HRMS_STORE.getKnowledge();
+                const item = (allItems || []).find(x => String(x?.id || '') === itemId) || {};
+                const resp = await fetch('/api/knowledge/' + encodeURIComponent(itemId) + '/explanation', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await resp.json();
+
+                // 3. 构建 Word 文档
+                const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, HeadingLevel } = window.docx;
+                const children = [];
+
+                // 标题
+                children.push(new Paragraph({ text: String(item.title || '知识库资料'), heading: HeadingLevel.HEADING_1 }));
+
+                // 元数据
+                const metaParts = [];
+                if (item.type) metaParts.push('类型：' + String(item.type).toUpperCase());
+                if (item.category) metaParts.push('分类：' + item.category);
+                if (item.groupName) metaParts.push('分组：' + item.groupName);
+                const created = String(item.created_at || '').slice(0, 10);
+                if (created) metaParts.push('创建日期：' + created);
+                if (metaParts.length) {
+                    children.push(new Paragraph({ children: [new TextRun({ text: metaParts.join('   |   '), color: '888888', size: 20 })] }));
+                }
+                children.push(new Paragraph({ text: '' }));
+
+                // AI 知识解析
+                if (data.success && data.explanation) {
+                    children.push(new Paragraph({ text: 'AI 知识解析', heading: HeadingLevel.HEADING_2 }));
+                    children.push(new Paragraph({ text: '' }));
+                    let numIdx = 0;
+                    for (const line of String(data.explanation).split('\n')) {
+                        const t = line.trim();
+                        if (!t) { children.push(new Paragraph({ text: '' })); numIdx = 0; continue; }
+                        if (t.startsWith('## ')) {
+                            numIdx = 0;
+                            children.push(new Paragraph({ text: t.slice(3).trim(), heading: HeadingLevel.HEADING_3 }));
+                        } else if (t.startsWith('### ')) {
+                            numIdx = 0;
+                            children.push(new Paragraph({ text: t.slice(4).trim(), heading: HeadingLevel.HEADING_4 }));
+                        } else if (t.startsWith('- ') || t.startsWith('• ')) {
+                            const content = t.replace(/^[-•] /, '').replace(/\*\*(.+?)\*\*/g, '$1');
+                            children.push(new Paragraph({ children: [new TextRun({ text: '• ' + content })], indent: { left: 360 } }));
+                        } else if (/^\d+\.\s/.test(t)) {
+                            numIdx++;
+                            const content = t.replace(/^\d+\.\s/, '').replace(/\*\*(.+?)\*\*/g, '$1');
+                            children.push(new Paragraph({ children: [new TextRun({ text: numIdx + '. ' + content })], indent: { left: 360 } }));
+                        } else {
+                            const parts = t.split(/(\*\*[^*]+\*\*)/g);
+                            const runs = parts.filter(Boolean).map(p =>
+                                p.startsWith('**') ? new TextRun({ text: p.slice(2, -2), bold: true }) : new TextRun({ text: p })
+                            );
+                            children.push(new Paragraph({ children: runs.length ? runs : [new TextRun({ text: t })] }));
+                        }
+                    }
+                    children.push(new Paragraph({ text: '' }));
+                }
+
+                // 步骤图谱
+                const rubric = data.rubric;
+                if (rubric && Array.isArray(rubric.items) && rubric.items.length > 0) {
+                    children.push(new Paragraph({ text: '步骤图谱', heading: HeadingLevel.HEADING_2 }));
+                    const typeLabel = rubric.type === 'checkpoints' ? '连续检查' : '分步操作';
+                    children.push(new Paragraph({
+                        children: [new TextRun({ text: '评分类型：' + typeLabel + '　　合格线：' + (rubric.pass_threshold || 80) + ' 分', color: '666666', size: 20 })]
+                    }));
+                    children.push(new Paragraph({ text: '' }));
+
+                    const mkCell = (text, bold, dxa) => new TableCell({
+                        width: { size: dxa, type: WidthType.DXA },
+                        children: [new Paragraph({ children: [new TextRun({ text: String(text || ''), bold: !!bold })] })]
+                    });
+                    const headerRow = new TableRow({ children: [mkCell('步骤', true, 2200), mkCell('分值', true, 900), mkCell('检查点', true, 6260)] });
+                    const dataRows = rubric.items.map(s => new TableRow({ children: [
+                        mkCell(s.name, true, 2200),
+                        mkCell(s.weight + '分', false, 900),
+                        mkCell((s.checks || []).join('；'), false, 6260)
+                    ]}));
+                    children.push(new Table({ rows: [headerRow, ...dataRows] }));
+
+                    if (rubric.fail_criteria?.length) {
+                        children.push(new Paragraph({ text: '' }));
+                        children.push(new Paragraph({ children: [new TextRun({ text: '⚠ 一票否决条件', bold: true, color: 'CC0000' })] }));
+                        rubric.fail_criteria.forEach(f => children.push(new Paragraph({ children: [new TextRun({ text: '• ' + f })], indent: { left: 360 } })));
+                    }
+                }
+
+                // 4. 生成并下载
+                const doc = new Document({ sections: [{ properties: {}, children }] });
+                const blob = await Packer.toBlob(doc);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = String(item.title || '知识库资料').replace(/[\\/:*?"<>|]/g, '_') + '.docx';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => { try { document.body.removeChild(a); URL.revokeObjectURL(url); } catch(e){} }, 300);
+                showNotification('Word 文件已生成，请查看下载', 'success');
+
+            } catch(e) {
+                showNotification('导出失败：' + (e.message || String(e)), 'error');
+                console.error('[exportKnowledgeToWord]', e);
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '📄 导出 Word'; }
             }
         }
 
