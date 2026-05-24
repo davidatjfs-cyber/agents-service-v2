@@ -1157,7 +1157,49 @@ export function registerTrainingRoutes(app, authMiddleware, uploadMiddleware) {
         return res.json({ success: false, error: 'no_content', message: '此文章暂无文字内容，无法生成AI解析' });
       }
 
-      const prompt = `你是一名经验丰富的餐饮培训导师，正在为餐厅一线员工制作培训材料。
+      const isSopContent = /SOP|标准操作|工序|步骤\s*\d|操作动作|质量标准|常见失败|补救/.test(rawContent);
+      const fileType = (row.file_type || '').toLowerCase();
+      const isMediaFile = /video|image|mp4|mov|jpg|jpeg|png|gif/.test(fileType);
+
+      let prompt;
+      if (isSopContent || isMediaFile) {
+        prompt = `你是一名餐饮培训标准制定专家，请根据以下原始内容，输出严格对齐厨房SOP格式的标准培训解析。
+
+【原始SOP内容】
+${rawContent}
+
+请严格按以下结构输出（保留 ## 标题符号），每步必须包含：操作动作、质量标准、常见失败、补救措施、是否为关键步骤：
+
+## 🍳 工序：${row.title}
+
+## 📋 SOP步骤分解
+按原始内容的步骤顺序，每一步用以下格式输出：
+
+### 步骤N：操作动作名称
+
+> **关键步骤**：是/否
+
+- **操作动作**：具体做什么，一线员工能直接照着做的动作描述
+- **质量标准**：做到什么程度算合格（可视化可判定）
+- **⏱ 建议时长**：N分钟
+
+> **常见失败**：可能会出什么问题
+
+> **补救措施**：出了问题怎么办
+
+### 步骤N+1：...
+
+---
+
+## ⚠️ 一票否决项
+列出3-5条绝对不能出现的情况（出现任一即不合格）：
+
+## ✅ 关键记忆
+用"到岗→操作→复核"格式的口诀，帮助员工快速记住核心流程。
+
+输出语言：简体中文。不要添加任何开场白或结尾语，直接从"## 🍳 工序"开始输出。`;
+      } else {
+        prompt = `你是一名经验丰富的餐饮培训导师，正在为餐厅一线员工制作培训材料。
 
 【培训文章标题】${row.title}
 
@@ -1187,6 +1229,7 @@ ${rawContent}
 用3-5条极简口诀或行动清单，帮助员工快速记住最核心的内容，类似"到岗先检查→操作按流程→完成后复核"这种格式。
 
 输出语言：简体中文。不要添加任何开场白或结尾语，直接从"## 📌 一句话总结"开始输出。`;
+      }
 
       const aiResp = await callLLM([
         { role: 'system', content: '你是专业的餐饮培训导师，擅长把复杂的操作规程转化成一线员工能快速理解和记忆的培训内容。输出时严格遵守给定的结构，不添加多余内容。' },
