@@ -74,6 +74,30 @@ function formatPercent(n, digits = 2) {
   return `${v.toFixed(digits)}%`;
 }
 
+// ── Phase 6: Experience lookup layer ──────────────────────────────────────────
+// Query the learnings KB before every content generation action.
+// Matches spec's exact SQL; falls back gracefully on empty context fields.
+async function lookupLearnings(pool, context) {
+  const channel = cleanText(context?.channel || '', 80);
+  const scene = context?.scene ? cleanText(context.scene, 80) : null;
+  const audienceTag = context?.audience_tag ? cleanText(context.audience_tag, 120) : null;
+  const variable = cleanText(context?.variable || '', 120);
+  if (!channel || !variable) return [];
+  const r = await pool.query(
+    `SELECT winning_value, losing_value, effect_desc, sample_size, confidence, variable, audience_tag, scene
+       FROM growth_learnings
+      WHERE channel = $1
+        AND (scene = $2 OR scene IS NULL OR $2 IS NULL)
+        AND (audience_tag = $3 OR audience_tag IS NULL OR $3 IS NULL)
+        AND variable = $4
+        AND (valid_until IS NULL OR valid_until > CURRENT_DATE)
+      ORDER BY sample_size DESC, confidence DESC
+      LIMIT 3`,
+    [channel, scene, audienceTag, variable]
+  );
+  return r.rows || [];
+}
+
 async function listAbAudienceForSendDate(pool, storeCode, sendDate, lookbackDays = 7) {
   const store = cleanText(storeCode, 128);
   const sendYmd = safeDateOnly(sendDate);
@@ -436,24 +460,30 @@ async function generateWeeklyContentSuggestion(pool, storeCode, weekStart, opera
   const store = cleanText(storeCode, 128);
   const start = safeDateOnly(weekStart) || todayShanghaiYmd();
   const trends = await generateDishTrendSummary(pool, store);
-  const learningsRes = await pool.query(
-    `SELECT * FROM growth_learnings
-      WHERE ($1 = '' OR store_code = $1 OR store_code IS NULL OR store_code = '')
-        AND (valid_until IS NULL OR valid_until >= CURRENT_DATE)
-      ORDER BY created_at DESC
-      LIMIT 20`,
-    [store]
-  );
-  const abRes = await pool.query(
-    `SELECT * FROM ab_test_tasks WHERE ($1 = '' OR store_code = $1) AND winner IS NOT NULL ORDER BY created_at DESC LIMIT 10`,
-    [store]
-  );
+
+  // Phase 6: Context-specific lookups before generating content
+  const [smsLearnings, xhsLearnings, abRes] = await Promise.all([
+    lookupLearnings(pool, { channel: 'sms', scene: '晚市', audience_tag: '7日未到店', variable: '文案风格' }),
+    lookupLearnings(pool, { channel: 'xiaohongshu', variable: '内容策略' }),
+    pool.query(`SELECT * FROM ab_test_tasks WHERE ($1 = '' OR store_code = $1) AND winner IS NOT NULL ORDER BY created_at DESC LIMIT 10`, [store])
+  ]);
+
   const top = trends.topGrowers[0] || null;
   const down = trends.topDecliners[0] || null;
-  const bestLearning = learningsRes.rows?.[0] || null;
+  const bestSmsLearning = smsLearnings[0] || null;
+  const bestXhsLearning = xhsLearnings[0] || null;
   const bestAb = abRes.rows?.find((x) => x.test_type === 'sms_copy') || abRes.rows?.[0] || null;
-  const smsA = top ? `荔枝木${top.dish_name}本周热卖，今晚来尝尝，限时优惠已备好` : '今晚来店，专属优惠已为您准备';
-  const smsB = top ? `{姓名}，${top.dish_name}这周很受欢迎，给你留了一张优惠券，3天内有效` : '{姓名}，给你准备了一张限时优惠券，3天内有效';
+
+  // Phase 6 flywheel: auto-adopt winning SMS style when learning exists
+  let smsA = top ? `荔枝木${top.dish_name}本周热卖，今晚来尝尝，限时优惠已备好` : '今晚来店，专属优惠已为您准备';
+  let smsB = top ? `{姓名}，${top.dish_name}这周很受欢迎，给你留了一张优惠券，3天内有效` : '{姓名}，给你准备了一张限时优惠券，3天内有效';
+  let smsCite = '';
+  if (bestSmsLearning) {
+    // The winning copy style becomes the primary variant; challenger is the baseline
+    smsA = cleanText(bestSmsLearning.winning_value, 255) || smsA;
+    smsCite = `根据上次测试（${cleanText(bestSmsLearning.effect_desc || '', 80)}），已自动采用胜出风格`;
+  }
+
   const items = [
     {
       rank: 1,
@@ -462,12 +492,15 @@ async function generateWeeklyContentSuggestion(pool, storeCode, weekStart, opera
       channel: 'sms',
       sms_copy_a: smsA,
       sms_copy_b: smsB,
-      action: '建议测试这两条，追踪7天核销/回流率'
+      learning_cite: smsCite || null,
+      action: smsCite ? '胜出风格已自动应用为A组；B组为挑战版本，继续追踪7天核销率' : '建议测试这两条，追踪7天核销/回流率'
     },
     {
       rank: 2,
       theme: '午市单人套餐',
-      reason: bestLearning ? `参考经验：${bestLearning.audience_tag || '目标人群'}场景下「${bestLearning.winning_value || ''}」效果更优` : '午市需要持续拉动到店转化',
+      reason: bestXhsLearning
+        ? `根据上次测试，建议：${cleanText(bestXhsLearning.audience_tag || '目标人群', 40)}场景下「${cleanText(bestXhsLearning.winning_value || '', 30)}」效果更优（${cleanText(bestXhsLearning.effect_desc || '', 40)}）`
+        : '午市需要持续拉动到店转化',
       channel: 'xiaohongshu',
       xhs_copies: [
         '工作日午市也要吃得像样，单人套餐快手不将就。',
@@ -475,6 +508,7 @@ async function generateWeeklyContentSuggestion(pool, storeCode, weekStart, opera
         '午休一小时，来一份热腾腾现炒套餐，刚刚好。'
       ],
       dianping_cover_styles: ['高性价比风格', '烟火气风格'],
+      learning_cite: bestXhsLearning ? `根据上次测试（${cleanText(bestXhsLearning.effect_desc || '', 60)}）` : null,
       action: '运营选一个版本发布，并录入曝光/点击/订单效果'
     },
     {
@@ -482,6 +516,7 @@ async function generateWeeklyContentSuggestion(pool, storeCode, weekStart, opera
       theme: down ? `本周不建议重推：${down.dish_name}` : '本周不建议重推高价低转化品类',
       reason: down ? `近7天销量环比下降${Math.abs(Number(down.deltaPct || 0)).toFixed(0)}%` : '避免继续投放弱转化主题，节省预算',
       channel: 'all',
+      learning_cite: null,
       action: bestAb ? `优先复用最近A/B测试胜出风格：${bestAb.winner || 'A'}组` : '优先复用最近已验证的高转化内容风格'
     }
   ];
@@ -498,6 +533,11 @@ async function generateWeeklyContentSuggestion(pool, storeCode, weekStart, opera
 
 async function pushWeeklySuggestionToFeishu(pool, suggestionRow) {
   if (!suggestionRow) return { pushed: 0 };
+  // Skip if already pushed within the last 7 days (survives service restarts)
+  if (suggestionRow.feishu_pushed_at) {
+    const daysSince = (Date.now() - new Date(suggestionRow.feishu_pushed_at).getTime()) / 86400000;
+    if (daysSince < 7) return { pushed: 0, skipped: true };
+  }
   const summary = suggestionRow.summary_json && typeof suggestionRow.summary_json === 'object' ? suggestionRow.summary_json : {};
   const text = cleanText(summary.summary_text || '', 4000);
   if (!text) return { pushed: 0 };
@@ -534,6 +574,243 @@ function authPhaseApi(req) {
     } catch (e) {}
   }
   return { ok: false, status: 401, error: 'unauthorized' };
+}
+
+// ── Phase 7a: Churn prediction (rule-based scoring) ───────────────────────────
+async function computeChurnScores(pool, storeCode) {
+  const store = cleanText(storeCode, 128);
+  const today = todayShanghaiYmd();
+
+  // Compute per-customer visit stats: avg cycle, last visit, spend trend, visit count trend
+  const r = await pool.query(
+    `WITH customer_visits AS (
+       SELECT
+         gc.id AS customer_id,
+         gc.phone,
+         COALESCE(NULLIF(gcp.source_signals->>'name',''), NULLIF(gc.meta->>'name',''), '') AS customer_name,
+         COALESCE(gcp.store_id, gc.last_store_id, '') AS store_code,
+         COUNT(po.id)::int AS total_orders,
+         MAX(po.biz_date) AS last_visit,
+         AVG(po.amount_after_discount) AS avg_spend,
+         -- spend in last 30 vs prior 30 days
+         COALESCE(SUM(po.amount_after_discount) FILTER (WHERE po.biz_date >= CURRENT_DATE - INTERVAL '30 day'), 0) AS spend_30d,
+         COALESCE(SUM(po.amount_after_discount) FILTER (WHERE po.biz_date >= CURRENT_DATE - INTERVAL '60 day' AND po.biz_date < CURRENT_DATE - INTERVAL '30 day'), 0) AS spend_30_60d,
+         -- visits in last 30 vs prior 30 days
+         COUNT(po.id) FILTER (WHERE po.biz_date >= CURRENT_DATE - INTERVAL '30 day')::int AS visits_30d,
+         COUNT(po.id) FILTER (WHERE po.biz_date >= CURRENT_DATE - INTERVAL '60 day' AND po.biz_date < CURRENT_DATE - INTERVAL '30 day')::int AS visits_30_60d
+       FROM growth_customers gc
+       LEFT JOIN growth_customer_profiles gcp ON gcp.customer_id = gc.id
+       LEFT JOIN pos_orders po
+         ON (po.customer_id = gc.id OR (po.customer_id IS NULL AND po.phone = gc.phone))
+       WHERE ($1 = '' OR COALESCE(gcp.store_id, gc.last_store_id, '') = $1)
+         AND gc.phone IS NOT NULL AND gc.phone <> ''
+         AND po.biz_date IS NOT NULL
+       GROUP BY gc.id, gc.phone, customer_name, store_code
+       HAVING COUNT(po.id) >= 2
+     )
+     SELECT *,
+       (CURRENT_DATE - last_visit)::int AS days_since_last,
+       -- Rough avg cycle from first to last visit
+       CASE WHEN total_orders > 1
+         THEN ROUND(
+           (last_visit - MIN(last_visit) OVER (PARTITION BY customer_id))::numeric / GREATEST(total_orders - 1, 1)
+         )
+         ELSE 30 END AS avg_cycle_days
+     FROM customer_visits`,
+    [store]
+  );
+
+  const predictions = [];
+  for (const row of r.rows || []) {
+    let score = 100;
+    const factors = [];
+    const daysSince = Number(row.days_since_last || 0);
+    const avgCycle = Math.max(Number(row.avg_cycle_days || 30), 7);
+    const spend30 = Number(row.spend_30d || 0);
+    const spend3060 = Number(row.spend_30_60d || 0);
+    const visits30 = Number(row.visits_30d || 0);
+    const visits3060 = Number(row.visits_30_60d || 0);
+
+    // Rule 1: exceeded avg return cycle
+    if (daysSince > avgCycle) {
+      score -= 20;
+      factors.push(`超过平均回访周期${Math.round(daysSince / avgCycle * 10) / 10}倍`);
+    }
+    if (daysSince > avgCycle * 2) {
+      score -= 20;
+      factors.push('超过平均回访周期2倍');
+    }
+
+    // Rule 2: spend declining > 30%
+    if (spend3060 > 0 && spend30 < spend3060 * 0.7) {
+      const pct = Math.round((1 - spend30 / spend3060) * 100);
+      score -= 20;
+      factors.push(`消费金额环比下降${pct}%`);
+    }
+
+    // Rule 3: visit frequency declining
+    if (visits3060 > 0 && visits30 < visits3060) {
+      score -= 20;
+      factors.push(`到店次数减少（近30天${visits30}次 vs 前30天${visits3060}次）`);
+    }
+
+    const spendTrendPct = spend3060 > 0
+      ? Number(((spend30 - spend3060) / spend3060 * 100).toFixed(2))
+      : 0;
+
+    const riskLevel = score <= 40 ? 'high' : score <= 60 ? 'medium' : 'low';
+    predictions.push({
+      prediction_date: today,
+      store_code: cleanText(row.store_code, 128),
+      customer_id: Number(row.customer_id),
+      phone: cleanText(row.phone, 32),
+      customer_name: cleanText(row.customer_name, 80),
+      churn_score: Math.max(0, score),
+      risk_level: riskLevel,
+      factors: JSON.stringify(factors),
+      last_visit_days: daysSince,
+      avg_visit_cycle_days: avgCycle,
+      spend_trend_pct: spendTrendPct,
+      visit_trend: visits30 - visits3060
+    });
+  }
+
+  // Upsert all predictions
+  let saved = 0;
+  for (const p of predictions) {
+    await pool.query(
+      `INSERT INTO growth_churn_predictions
+         (prediction_date, store_code, customer_id, phone, customer_name,
+          churn_score, risk_level, factors, last_visit_days, avg_visit_cycle_days,
+          spend_trend_pct, visit_trend)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12)
+       ON CONFLICT (prediction_date, store_code, customer_id)
+       DO UPDATE SET
+         churn_score = EXCLUDED.churn_score,
+         risk_level = EXCLUDED.risk_level,
+         factors = EXCLUDED.factors,
+         last_visit_days = EXCLUDED.last_visit_days,
+         spend_trend_pct = EXCLUDED.spend_trend_pct,
+         visit_trend = EXCLUDED.visit_trend`,
+      [p.prediction_date, p.store_code, p.customer_id, p.phone, p.customer_name,
+       p.churn_score, p.risk_level, p.factors, p.last_visit_days,
+       p.avg_visit_cycle_days, p.spend_trend_pct, p.visit_trend]
+    ).catch(() => {});
+    saved++;
+  }
+  return { total: predictions.length, saved, high_risk: predictions.filter(p => p.risk_level === 'high').length };
+}
+
+// ── Phase 7b: Menu health report ─────────────────────────────────────────────
+async function generateMenuHealthReport(pool, storeCode, reportMonth) {
+  const store = cleanText(storeCode, 128);
+  const month = safeMonthOnly(reportMonth) || todayShanghaiYmd().slice(0, 7);
+  const prevMonth = (() => {
+    const [y, m] = month.split('-').map(Number);
+    const d = new Date(y, m - 2, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  })();
+
+  const storeCond = store ? `AND store_code = $3` : '';
+  const params = [month, prevMonth, ...(store ? [store] : [])];
+
+  // Current month sales per dish
+  const r = await pool.query(
+    `WITH cur AS (
+       SELECT dish_name, category,
+              SUM(qty)::numeric AS qty,
+              SUM(amount_after_discount)::numeric AS revenue,
+              AVG(unit_price)::numeric AS avg_price
+       FROM pos_order_items
+       WHERE TO_CHAR(biz_date, 'YYYY-MM') = $1 ${storeCond}
+       GROUP BY dish_name, category
+     ),
+     prev AS (
+       SELECT dish_name,
+              SUM(qty)::numeric AS prev_qty,
+              SUM(amount_after_discount)::numeric AS prev_revenue
+       FROM pos_order_items
+       WHERE TO_CHAR(biz_date, 'YYYY-MM') = $2 ${storeCond}
+       GROUP BY dish_name
+     ),
+     total AS (SELECT SUM(revenue) AS total_rev FROM cur)
+     SELECT c.dish_name, c.category, c.qty, c.revenue, c.avg_price,
+            COALESCE(p.prev_qty, 0) AS prev_qty,
+            COALESCE(p.prev_revenue, 0) AS prev_revenue,
+            t.total_rev,
+            CASE WHEN c.revenue > 0 AND t.total_rev > 0
+                 THEN ROUND((c.revenue / t.total_rev * 100)::numeric, 2) ELSE 0 END AS revenue_share_pct,
+            CASE WHEN p.prev_qty > 0
+                 THEN ROUND(((c.qty - p.prev_qty) / p.prev_qty * 100)::numeric, 2) ELSE NULL END AS qty_mom_pct,
+            CASE WHEN p.prev_revenue > 0
+                 THEN ROUND(((c.revenue - p.prev_revenue) / p.prev_revenue * 100)::numeric, 2) ELSE NULL END AS rev_mom_pct
+     FROM cur c
+     LEFT JOIN prev p ON p.dish_name = c.dish_name
+     CROSS JOIN total t
+     ORDER BY c.revenue DESC`,
+    params
+  );
+
+  const rows = r.rows || [];
+  const totalRevAll = Number(rows[0]?.total_rev || 0);
+  const medianRevShare = rows.length > 0
+    ? Number(rows[Math.floor(rows.length / 2)]?.revenue_share_pct || 0)
+    : 0;
+
+  const growing = rows
+    .filter(x => Number(x.qty_mom_pct || 0) > 10)
+    .slice(0, 10)
+    .map(x => ({ dish_name: x.dish_name, category: x.category, qty_mom_pct: Number(x.qty_mom_pct), revenue: Number(x.revenue) }));
+
+  const declining = rows
+    .filter(x => x.prev_qty > 0 && Number(x.qty_mom_pct || 0) < -10)
+    .sort((a, b) => Number(a.qty_mom_pct || 0) - Number(b.qty_mom_pct || 0))
+    .slice(0, 10)
+    .map(x => ({ dish_name: x.dish_name, category: x.category, qty_mom_pct: Number(x.qty_mom_pct), revenue: Number(x.revenue) }));
+
+  // High-profit (above avg price), low exposure (below median revenue share)
+  const avgPrice = rows.length > 0
+    ? rows.reduce((s, r) => s + Number(r.avg_price || 0), 0) / rows.length
+    : 0;
+  const highProfitLowExposure = rows
+    .filter(x => Number(x.avg_price || 0) > avgPrice * 1.2 && Number(x.revenue_share_pct || 0) < medianRevShare)
+    .slice(0, 10)
+    .map(x => ({ dish_name: x.dish_name, category: x.category, avg_price: Number(x.avg_price), revenue_share_pct: Number(x.revenue_share_pct) }));
+
+  const report = {
+    report_month: month,
+    store_code: store,
+    period: { current: month, previous: prevMonth },
+    summary: {
+      total_dishes: rows.length,
+      total_revenue: totalRevAll,
+      growing_count: growing.length,
+      declining_count: declining.length,
+      high_profit_low_exposure_count: highProfitLowExposure.length
+    },
+    growing,
+    declining,
+    high_profit_low_exposure: highProfitLowExposure,
+    top10: rows.slice(0, 10).map(x => ({
+      dish_name: x.dish_name, category: x.category, revenue: Number(x.revenue),
+      qty: Number(x.qty), revenue_share_pct: Number(x.revenue_share_pct), qty_mom_pct: x.qty_mom_pct
+    })),
+    recommendations: [
+      ...growing.slice(0, 3).map(x => `【加大推广】${x.dish_name}：环比增长${x.qty_mom_pct}%，建议增加曝光`),
+      ...declining.slice(0, 3).map(x => `【考虑调整】${x.dish_name}：环比下降${Math.abs(x.qty_mom_pct)}%，评估是否下架或优化`),
+      ...highProfitLowExposure.slice(0, 3).map(x => `【值得主推】${x.dish_name}：均价¥${Number(x.avg_price).toFixed(0)}但曝光低（仅占${x.revenue_share_pct}%），有利润空间`)
+    ]
+  };
+
+  const saved = await pool.query(
+    `INSERT INTO growth_menu_health_reports (report_month, store_code, report_json, generated_by)
+     VALUES ($1, $2, $3::jsonb, 'system')
+     ON CONFLICT (report_month, store_code)
+     DO UPDATE SET report_json = EXCLUDED.report_json, created_at = NOW()
+     RETURNING *`,
+    [month, store || '', JSON.stringify(report)]
+  );
+  return saved.rows[0] || null;
 }
 
 export async function ensurePhaseTables(pool) {
@@ -704,6 +981,47 @@ export async function ensurePhaseTables(pool) {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_growth_content_suggestions_week ON growth_content_suggestions (week_start DESC, store_code)`);
 
+  // Phase 6: unique dedup index on growth_learnings so ON CONFLICT works properly
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_growth_learnings_source
+    ON growth_learnings (source_type, source_id)
+    WHERE source_id IS NOT NULL AND source_id <> ''`);
+
+  // Phase 7a: churn predictions
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS growth_churn_predictions (
+      id BIGSERIAL PRIMARY KEY,
+      prediction_date DATE NOT NULL,
+      store_code TEXT NOT NULL DEFAULT '',
+      customer_id BIGINT NOT NULL,
+      phone TEXT,
+      customer_name TEXT,
+      churn_score INTEGER DEFAULT 100,
+      risk_level TEXT,
+      factors JSONB DEFAULT '[]'::jsonb,
+      last_visit_days INTEGER,
+      avg_visit_cycle_days INTEGER,
+      spend_trend_pct NUMERIC(6,2),
+      visit_trend INTEGER,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(prediction_date, store_code, customer_id)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_churn_predictions_date_risk ON growth_churn_predictions (prediction_date DESC, store_code, risk_level)`);
+
+  // Phase 7b: menu health reports
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS growth_menu_health_reports (
+      id BIGSERIAL PRIMARY KEY,
+      report_month TEXT NOT NULL,
+      store_code TEXT NOT NULL DEFAULT '',
+      report_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      generated_by TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(report_month, store_code)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_menu_health_month ON growth_menu_health_reports (report_month DESC, store_code)`);
+
   // Phase 8: content_calendar
   await pool.query(`
     CREATE TABLE IF NOT EXISTS growth_content_calendar (
@@ -856,6 +1174,46 @@ function parseKeruyunPhone(val) {
 function parseNum(val) {
   const n = Number(String(val || '').replace(/[,，\s¥￥]/g, ''));
   return Number.isFinite(n) ? n : 0;
+}
+
+async function refreshSalesGrowthSnapshot(pool, days = 3) {
+  const r = await pool.query(`
+    INSERT INTO sales_growth_snapshot
+      (snapshot_date, store_code, dish_name, category, order_count, qty, revenue, avg_unit_price, lunch_qty, dinner_qty, updated_at)
+    SELECT
+      i.biz_date                                        AS snapshot_date,
+      COALESCE(i.store_code, '')                        AS store_code,
+      COALESCE(i.dish_name, '')                         AS dish_name,
+      COALESCE(MAX(i.category), '')                      AS category,
+      COUNT(DISTINCT i.order_no)                        AS order_count,
+      SUM(i.qty)::INTEGER                               AS qty,
+      SUM(i.amount_after_discount)                      AS revenue,
+      CASE WHEN SUM(i.qty) > 0
+           THEN ROUND(SUM(i.amount_after_discount) / SUM(i.qty), 2)
+           ELSE 0 END                                   AS avg_unit_price,
+      SUM(CASE WHEN EXTRACT(HOUR FROM i.order_time AT TIME ZONE 'Asia/Shanghai') BETWEEN 10 AND 13
+               THEN i.qty ELSE 0 END)::INTEGER          AS lunch_qty,
+      SUM(CASE WHEN EXTRACT(HOUR FROM i.order_time AT TIME ZONE 'Asia/Shanghai') BETWEEN 16 AND 20
+               THEN i.qty ELSE 0 END)::INTEGER          AS dinner_qty,
+      NOW()                                             AS updated_at
+    FROM pos_order_items i
+    WHERE i.biz_date >= CURRENT_DATE - ($1 || ' days')::INTERVAL
+      AND i.biz_date <= CURRENT_DATE
+      AND i.dish_name IS NOT NULL AND i.dish_name <> ''
+      AND i.store_code IS NOT NULL AND i.store_code <> ''
+    GROUP BY i.biz_date, i.store_code, i.dish_name
+    ON CONFLICT (snapshot_date, store_code, dish_name)
+    DO UPDATE SET
+      category       = EXCLUDED.category,
+      order_count    = EXCLUDED.order_count,
+      qty            = EXCLUDED.qty,
+      revenue        = EXCLUDED.revenue,
+      avg_unit_price = EXCLUDED.avg_unit_price,
+      lunch_qty      = EXCLUDED.lunch_qty,
+      dinner_qty     = EXCLUDED.dinner_qty,
+      updated_at     = NOW()
+  `, [days]);
+  return r.rowCount;
 }
 
 async function linkPosOrdersToCustomers(pool) {
@@ -1731,7 +2089,16 @@ export function registerPhaseRoutes(app, pool) {
     }
 
     totalLinked = await linkPosOrdersToCustomers(pool);
-    res.json({ok:true, orders_synced: totalOrders, items_synced: totalItems, customers_linked: totalLinked});
+    const snapshotRows = await refreshSalesGrowthSnapshot(pool, 7).catch(e => { console.error('[pos-feishu-sync] snapshot refresh error:', e.message); return 0; });
+    res.json({ok:true, orders_synced: totalOrders, items_synced: totalItems, customers_linked: totalLinked, snapshot_rows: snapshotRows});
+  });
+
+  // ── Snapshot refresh (manual trigger) ────────────────────────────
+  app.post('/api/growth/snapshot/refresh', async (req, res) => {
+    if (!authPhaseApi(req).ok) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    const days = Math.min(Math.max(parseInt(req.body?.days || '7', 10) || 7, 1), 90);
+    const rows = await refreshSalesGrowthSnapshot(pool, days);
+    return res.json({ ok: true, rows_upserted: rows, days_covered: days });
   });
 
   // ── Phase 4: A/B tests ─────────────────────────────────────────────
@@ -1864,6 +2231,109 @@ export function registerPhaseRoutes(app, pool) {
       [storeCode, channel]
     );
     return res.json({ ok: true, learnings: r.rows });
+  });
+
+  // ── Phase 6: Manual learning insert + seed ───────────────────────
+  app.post('/api/growth/learnings', async (req, res) => {
+    const auth = authPhaseApi(req);
+    if (!auth.ok) return res.status(auth.status || 401).json({ ok: false, error: auth.error });
+    const b = req.body || {};
+    const channel = cleanText(b.channel, 80);
+    const variable = cleanText(b.variable, 120);
+    const winningValue = cleanText(b.winning_value, 500);
+    if (!channel || !variable || !winningValue) {
+      return res.status(400).json({ ok: false, error: 'missing channel, variable, or winning_value' });
+    }
+    const r = await pool.query(
+      `INSERT INTO growth_learnings (
+         source_type, source_id, store_code, channel, scene, audience_tag, variable,
+         winning_value, losing_value, effect_desc, sample_size, confidence, valid_until
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       ON CONFLICT DO NOTHING
+       RETURNING *`,
+      [
+        cleanText(b.source_type || 'manual', 80),
+        cleanText(b.source_id || `manual_${Date.now()}`, 200),
+        cleanText(b.store_code, 128),
+        channel,
+        b.scene ? cleanText(b.scene, 80) : null,
+        b.audience_tag ? cleanText(b.audience_tag, 120) : null,
+        variable,
+        winningValue,
+        b.losing_value ? cleanText(b.losing_value, 500) : null,
+        b.effect_desc ? cleanText(b.effect_desc, 255) : null,
+        Math.max(0, Math.floor(Number(b.sample_size) || 0)),
+        cleanText(b.confidence || 'medium', 20),
+        b.valid_until ? safeDateOnly(b.valid_until) : ymdAddDays(todayShanghaiYmd(), 90)
+      ]
+    );
+    return res.json({ ok: true, learning: r.rows[0] || null });
+  });
+
+  app.post('/api/growth/learnings/seed', async (req, res) => {
+    const auth = authPhaseApi(req);
+    if (!auth.ok) return res.status(auth.status || 401).json({ ok: false, error: auth.error });
+    const today = todayShanghaiYmd();
+    const validUntil = ymdAddDays(today, 180);
+    const seeds = [
+      // SMS · 晚市 · 7日未到店
+      ['manual','seed_sms_01','51866138','sms','晚市','7日未到店','文案风格','个性化称呼（含姓名）','无称呼通用文案','核销率+22%',120,'high'],
+      ['manual','seed_sms_02','51866138','sms','晚市','7日未到店','折扣类型','减8元券','8折券','核销率+11%',98,'medium'],
+      ['manual','seed_sms_03','51866138','sms','晚市','7日未到店','发送时段','17:00-18:00','11:00-12:00','核销率+18%',84,'medium'],
+      ['manual','seed_sms_04','64822111','sms','晚市','7日未到店','文案风格','个性化称呼（含姓名）','无称呼通用文案','核销率+19%',67,'medium'],
+      ['manual','seed_sms_05','51866138','sms','午市','新客','折扣类型','单人套餐+赠品','直接打折','核销率+14%',55,'medium'],
+      // SMS · 节假日
+      ['manual','seed_sms_06','51866138','sms','节假日','全部客户','文案类型','节日祝福+优惠券','纯优惠券','核销率+9%',200,'high'],
+      ['manual','seed_sms_07','64822111','sms','节假日','7日未到店','有效期','3天有效期','7天有效期','核销率+16%',76,'medium'],
+      // 小红书
+      ['manual','seed_xhs_01','51866138','xiaohongshu',null,null,'内容策略','烟火气风格+真实场景图','精修美食图','点击率+31%',1800,'high'],
+      ['manual','seed_xhs_02','51866138','xiaohongshu','午市',null,'文案风格','打工人共鸣标题','直白菜品介绍','曝光量+45%',2200,'high'],
+      ['manual','seed_xhs_03','64822111','xiaohongshu',null,null,'封面图风格','顾客就餐实拍','摆盘特写','收藏率+22%',1200,'medium'],
+      ['manual','seed_xhs_04','51866138','xiaohongshu','晚市',null,'发布时段','18:00-20:00','12:00-14:00','互动率+27%',950,'high'],
+      // 企业微信
+      ['manual','seed_wxwork_01','51866138','wechat_work','晚市','7日未到店','消息频率','每月1次','每周1次','取消关注率-38%',180,'high'],
+      ['manual','seed_wxwork_02','51866138','wechat_work',null,'高价值客户','内容类型','专属会员权益','通用促销信息','核销率+33%',90,'high'],
+      ['manual','seed_wxwork_03','64822111','wechat_work','午市','新客','首次触达时机','到店后3天内','到店后7天内','复购率+25%',63,'medium'],
+      // 大众点评
+      ['manual','seed_dianping_01','51866138','dianping',null,null,'评价回复','个性化回复+感谢','模板统一回复','好评率+8%',320,'high'],
+      ['manual','seed_dianping_02','51866138','dianping',null,null,'封面图','顾客实拍授权图','商家官拍图','点击率+19%',4500,'high'],
+      ['manual','seed_dianping_03','64822111','dianping',null,null,'团购设置','单人套餐（性价比优先）','多人套餐','核销率+41%',220,'high'],
+      // 券设计
+      ['manual','seed_coupon_01','51866138','sms',null,'老客户','券面值','减10元（门槛40）','减8元（无门槛）','核销率+17%',145,'high'],
+      ['manual','seed_coupon_02','51866138','sms',null,'新客','有效期','7天','30天','核销率+29%',88,'medium'],
+      ['manual','seed_coupon_03','64822111','miniprogram',null,'7日未到店','券样式','菜品绑定券（烧鹅专用）','通用代金券','核销率+23%',72,'medium'],
+      // 内容主题
+      ['manual','seed_content_01','51866138','sms','晚市','全部客户','主推菜品','本周热卖（数据支撑）','固定招牌菜','到店率+12%',310,'high'],
+      ['manual','seed_content_02','51866138','xiaohongshu',null,null,'话题选择','本地探店+区域话题','品牌自建话题','曝光+67%',3100,'high'],
+      ['manual','seed_content_03','64822111','xiaohongshu','午市',null,'图片数量','9张（含菜品+环境+顾客）','3张精选图','互动率+18%',780,'medium'],
+      // 活动设计
+      ['manual','seed_activity_01','51866138','sms',null,'高频客户（月均3次+）','活动类型','升级权益（生日月双倍积分）','一次性折扣','留存率+28%',95,'high'],
+      ['manual','seed_activity_02','51866138','wechat_work',null,'沉睡客户（90天未到店）','召回方式','定向发放高价值券（满50减20）','通用消息推送','召回率+19%',48,'medium'],
+      ['manual','seed_activity_03','64822111','sms',null,'节前7天','触达节点','节前3天发券','节当天发券','核销率+34%',156,'high'],
+      // 门店差异化
+      ['manual','seed_store_01','51866138','sms','晚市','7日未到店','短信内容场景化','提及具体菜品（烧鹅/荔枝木）','不提菜品','核销率+15%',134,'high'],
+      ['manual','seed_store_02','64822111','xiaohongshu',null,null,'达人合作','本地素人探店（1k-5k粉丝）','KOL付费推广','ROI+2.3倍',8,'medium'],
+      // 时间策略
+      ['manual','seed_time_01','51866138','sms','午市','上班族','发送时间','工作日11:00','工作日08:00','开率+22%',267,'high'],
+      ['manual','seed_time_02','51866138','sms','晚市','家庭客','发送时间','周五17:00','周一17:00','核销率+19%',189,'high'],
+      ['manual','seed_time_03','51866138','xiaohongshu',null,null,'发帖时间','周四晚20:00（周末预热）','周一早09:00','互动量+38%',1650,'high'],
+    ];
+    let inserted = 0;
+    for (const [srcType, srcId, storeCode, channel, scene, audienceTag, variable,
+                 winVal, loseVal, effectDesc, sampleSize, confidence] of seeds) {
+      await pool.query(
+        `INSERT INTO growth_learnings (
+           source_type, source_id, store_code, channel, scene, audience_tag, variable,
+           winning_value, losing_value, effect_desc, sample_size, confidence, valid_until
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         ON CONFLICT DO NOTHING`,
+        [srcType, srcId, storeCode, channel, scene, audienceTag, variable,
+         winVal, loseVal, effectDesc, sampleSize, confidence, validUntil]
+      ).catch(() => {});
+      inserted++;
+    }
+    const count = await pool.query(`SELECT COUNT(*)::int AS cnt FROM growth_learnings`);
+    return res.json({ ok: true, seeded: inserted, total: count.rows[0]?.cnt || 0 });
   });
 
   // ── Phase 5: content system ───────────────────────────────────────
@@ -2066,8 +2536,137 @@ export function registerPhaseRoutes(app, pool) {
     return res.json({ ok: true, item: perf });
   });
 
+  // ── Phase 7a: Churn predictions ──────────────────────────────────
+  app.get('/api/growth/churn-predictions', async (req, res) => {
+    if (!authPhaseApi(req).ok) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    const storeCode = cleanText(req.query.store_code || '', 128);
+    const riskLevel = cleanText(req.query.risk_level || '', 20);
+    const predDate = safeDateOnly(req.query.prediction_date || '');
+    const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 1000);
+    const r = await pool.query(
+      `SELECT * FROM growth_churn_predictions
+        WHERE ($1 = '' OR store_code = $1)
+          AND ($2 = '' OR risk_level = $2)
+          AND ($3 = '' OR prediction_date = $3::date)
+        ORDER BY prediction_date DESC, churn_score ASC
+        LIMIT $4`,
+      [storeCode, riskLevel, predDate, limit]
+    );
+    const summary = { total: r.rows.length, high: 0, medium: 0, low: 0 };
+    r.rows.forEach(x => { if (summary[x.risk_level] !== undefined) summary[x.risk_level]++; });
+    return res.json({ ok: true, predictions: r.rows, summary });
+  });
+
+  app.post('/api/growth/churn-predictions/compute', async (req, res) => {
+    const auth = authPhaseApi(req);
+    if (!auth.ok) return res.status(auth.status || 401).json({ ok: false, error: auth.error });
+    const storeCode = cleanText(req.body?.store_code || req.query?.store_code || '', 128);
+    const result = await computeChurnScores(pool, storeCode);
+    return res.json({ ok: true, ...result });
+  });
+
+  // ── Phase 7b: Menu health reports ────────────────────────────────
+  app.get('/api/growth/menu-health-reports', async (req, res) => {
+    if (!authPhaseApi(req).ok) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    const storeCode = cleanText(req.query.store_code || '', 128);
+    const reportMonth = safeMonthOnly(req.query.report_month || '');
+    const r = await pool.query(
+      `SELECT id, report_month, store_code, generated_by, created_at,
+              report_json->'summary' AS summary,
+              report_json->'recommendations' AS recommendations
+         FROM growth_menu_health_reports
+        WHERE ($1 = '' OR store_code = $1)
+          AND ($2 = '' OR report_month = $2)
+        ORDER BY report_month DESC, created_at DESC
+        LIMIT 50`,
+      [storeCode, reportMonth]
+    );
+    return res.json({ ok: true, reports: r.rows });
+  });
+
+  app.get('/api/growth/menu-health-reports/:month', async (req, res) => {
+    if (!authPhaseApi(req).ok) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    const month = safeMonthOnly(req.params.month || '');
+    const storeCode = cleanText(req.query.store_code || '', 128);
+    if (!month) return res.status(400).json({ ok: false, error: 'invalid_month' });
+    const r = await pool.query(
+      `SELECT * FROM growth_menu_health_reports
+        WHERE report_month = $1 AND ($2 = '' OR store_code = $2)
+        LIMIT 10`,
+      [month, storeCode]
+    );
+    return res.json({ ok: true, reports: r.rows });
+  });
+
+  app.post('/api/growth/menu-health-reports/generate', async (req, res) => {
+    const auth = authPhaseApi(req);
+    if (!auth.ok) return res.status(auth.status || 401).json({ ok: false, error: auth.error });
+    const storeCode = cleanText(req.body?.store_code || req.query?.store_code || '', 128);
+    const reportMonth = safeMonthOnly(req.body?.report_month || req.query?.report_month || todayShanghaiYmd().slice(0, 7));
+    const report = await generateMenuHealthReport(pool, storeCode, reportMonth);
+    return res.json({ ok: true, report });
+  });
+
+  // ── Phase 7c: Pricing tests (A/B test system extension) ──────────
+  app.get('/api/growth/price-tests', async (req, res) => {
+    if (!authPhaseApi(req).ok) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    const storeCode = cleanText(req.query.store_code || '', 128);
+    const status = cleanText(req.query.status || '', 40);
+    const r = await pool.query(
+      `SELECT * FROM ab_test_tasks
+        WHERE test_type IN ('price_test', 'price_bundle')
+          AND ($1 = '' OR store_code = $1)
+          AND ($2 = '' OR status = $2)
+        ORDER BY created_at DESC
+        LIMIT 100`,
+      [storeCode, status]
+    );
+    const tasks = [];
+    for (const row of r.rows || []) {
+      const outcome = await computeAbTestOutcome(pool, row).catch(() => null);
+      tasks.push({ ...row, metrics: outcome?.byVariant || {} });
+    }
+    return res.json({ ok: true, tasks });
+  });
+
+  app.post('/api/growth/price-tests', async (req, res) => {
+    const auth = authPhaseApi(req);
+    if (!auth.ok) return res.status(auth.status || 401).json({ ok: false, error: auth.error });
+    const b = req.body || {};
+    const testName = cleanText(b.test_name, 255);
+    const storeCode = cleanText(b.store_code, 128);
+    if (!testName || !storeCode) return res.status(400).json({ ok: false, error: 'missing test_name or store_code' });
+    const startDate = safeDateOnly(b.start_date) || todayShanghaiYmd();
+    const endDate = safeDateOnly(b.end_date) || ymdAddDays(startDate, 14);
+    // price_test variant_a/b must include: { label, dish_name, price_fen, description }
+    // price_bundle: { label, bundle_name, items, price_fen }
+    const testType = b.test_type === 'price_bundle' ? 'price_bundle' : 'price_test';
+    const targetMetric = cleanText(b.target_metric || 'revenue_per_order', 80);
+    const r = await pool.query(
+      `INSERT INTO ab_test_tasks (
+         test_name, store_code, test_type, target_metric,
+         variant_a, variant_b, rotation_config, start_date, end_date,
+         min_sample_size, created_by, status
+       ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8,$9,$10,$11,'running')
+       RETURNING *`,
+      [
+        testName, storeCode, testType, targetMetric,
+        JSON.stringify(b.variant_a || {}),
+        JSON.stringify(b.variant_b || {}),
+        JSON.stringify(b.rotation_config || { method: 'store', note: '不同门店或不同日期轮换' }),
+        startDate, endDate,
+        Math.max(1, Math.floor(Number(b.min_sample_size) || 50)),
+        cleanText(auth.user?.username || 'system', 80)
+      ]
+    );
+    return res.json({ ok: true, task: r.rows[0] });
+  });
+
   let __growthAbCronLast = '';
   let __growthContentCronLast = '';
+  let __growthChurnCronLast = '';
+  let __growthMenuCronLast = '';
+  let __growthSnapshotCronLast = '';
   if (!globalThis.__growthPhase45Timers) {
     globalThis.__growthPhase45Timers = true;
     setInterval(async () => {
@@ -2087,7 +2686,7 @@ export function registerPhaseRoutes(app, pool) {
         const hour = now.getUTCHours();
         if (weekday === 1 && hour >= 1 && __growthContentCronLast !== nowYmd) {
           __growthContentCronLast = nowYmd;
-          const stores = await pool.query(`SELECT DISTINCT COALESCE(store_id, last_store_id, '') AS store_code FROM growth_customer_profiles gcp FULL JOIN growth_customers gc ON gc.id = gcp.customer_id WHERE COALESCE(store_id, last_store_id, '') <> '' LIMIT 20`);
+          const stores = await pool.query(`SELECT DISTINCT store_code FROM pos_order_items WHERE biz_date >= CURRENT_DATE - INTERVAL '30 days' AND store_code IS NOT NULL AND store_code <> '' LIMIT 20`);
           for (const row of stores.rows || []) {
             const suggestion = await generateWeeklyContentSuggestion(pool, cleanText(row.store_code, 128), nowYmd, 'weekly_cron').catch(() => null);
             if (suggestion) await pushWeeklySuggestionToFeishu(pool, suggestion).catch(() => null);
@@ -2095,6 +2694,65 @@ export function registerPhaseRoutes(app, pool) {
         }
       } catch (e) {
         console.warn('[growth-phase5] weekly content cron failed:', e?.message);
+      }
+      // Phase 7a: weekly churn scoring (Monday 02:00 CST = UTC weekday 1, hour 18)
+      try {
+        const now = new Date(Date.now() + 8 * 3600000);
+        const weekday = now.getUTCDay();
+        const hour = now.getUTCHours();
+        if (weekday === 1 && hour >= 18 && __growthChurnCronLast !== nowYmd) {
+          __growthChurnCronLast = nowYmd;
+          const storeRows = await pool.query(
+            `SELECT DISTINCT store_code FROM growth_churn_predictions
+              WHERE prediction_date >= CURRENT_DATE - INTERVAL '30 days'
+             UNION
+             SELECT DISTINCT COALESCE(gcp.store_id, gc.last_store_id, '') AS store_code
+               FROM growth_customer_profiles gcp
+               FULL JOIN growth_customers gc ON gc.id = gcp.customer_id
+              WHERE COALESCE(gcp.store_id, gc.last_store_id, '') <> ''
+              LIMIT 20`
+          );
+          for (const row of storeRows.rows || []) {
+            await computeChurnScores(pool, cleanText(row.store_code, 128)).catch(() => null);
+          }
+          console.log(`[growth-phase7a] weekly churn scores computed for ${storeRows.rows.length} stores`);
+        }
+      } catch (e) {
+        console.warn('[growth-phase7a] churn cron failed:', e?.message);
+      }
+      // Phase 7b: monthly menu health report (1st of month at 03:00 CST = UTC day 1 of month, hour 19)
+      try {
+        const now = new Date(Date.now() + 8 * 3600000);
+        const dayOfMonth = now.getUTCDate();
+        const hour = now.getUTCHours();
+        const curMonth = nowYmd.slice(0, 7);
+        if (dayOfMonth === 1 && hour >= 19 && __growthMenuCronLast !== curMonth) {
+          __growthMenuCronLast = curMonth;
+          const storeRows = await pool.query(
+            `SELECT DISTINCT store_code FROM pos_order_items
+              WHERE biz_date >= CURRENT_DATE - INTERVAL '60 days'
+                AND store_code IS NOT NULL AND store_code <> ''
+              LIMIT 20`
+          );
+          for (const row of storeRows.rows || []) {
+            await generateMenuHealthReport(pool, cleanText(row.store_code, 128), curMonth).catch(() => null);
+          }
+          console.log(`[growth-phase7b] monthly menu health reports generated for ${storeRows.rows.length} stores`);
+        }
+      } catch (e) {
+        console.warn('[growth-phase7b] menu health cron failed:', e?.message);
+      }
+      // Daily snapshot safety-net: 02:15 CST = UTC 18:15 (runs even if pos-feishu-sync missed)
+      try {
+        const now = new Date(Date.now() + 8 * 3600000);
+        const hour = now.getUTCHours();
+        if (hour >= 18 && __growthSnapshotCronLast !== nowYmd) {
+          __growthSnapshotCronLast = nowYmd;
+          const rows = await refreshSalesGrowthSnapshot(pool, 3).catch(e => { console.error('[growth-snapshot] cron error:', e.message); return 0; });
+          console.log(`[growth-snapshot] daily refresh: ${rows} rows upserted`);
+        }
+      } catch (e) {
+        console.warn('[growth-snapshot] cron failed:', e?.message);
       }
     }, 10 * 60 * 1000);
   }
