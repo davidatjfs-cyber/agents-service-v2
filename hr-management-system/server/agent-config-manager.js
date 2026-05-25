@@ -1090,7 +1090,7 @@ export function registerAgentConfigRoutes(app, authRequired) {
     hq_manager: ['profile', 'attendance', 'daily-report', 'approvals', 'employees', 'payment', 'exam', 'rewards', 'points', 'knowledge', 'reports', 'agents'],
     hr_manager: ['profile', 'attendance', 'employees', 'approvals', 'payment', 'reports', 'exam'],
     cashier: ['profile', 'attendance', 'payment', 'exam'],
-    front_manager: ['profile', 'attendance', 'exam', 'points', 'daily-report', 'approvals', 'knowledge']
+    front_manager: ['profile', 'attendance', 'exam', 'points', 'daily-report', 'knowledge']
   };
 
   // 所有用户可调用（登录后加载自己角色的可用模块）

@@ -15,6 +15,7 @@ import {
   resolvePerformanceReportDisplayName
 } from '../utils/scoring-assignee.js';
 import { notifyAdminsDataIssue } from './admin-data-alert.js';
+import { resolveDutyBoundRecipients } from './store-duty-bindings.js';
 
 /** 任务类型 → 中文标签 */
 function taskTypeLabel(type) {
@@ -480,17 +481,12 @@ export async function sendDailyTaskCompletionReport(opts = {}) {
       ];
       if (!assigneeKeys.length) continue;
 
-      const fuR = await query(
-        `SELECT username, open_id, role
-         FROM feishu_users
-         WHERE registered = true
-           AND open_id IS NOT NULL
-           AND trim(open_id) <> ''
-           AND role IN ('store_manager', 'store_production_manager')
-           AND lower(trim(username)) = ANY($1::text[])`,
-        [assigneeKeys]
-      );
-      const fuRows = fuR.rows || [];
+      const dutyRows = await resolveDutyBoundRecipients({
+        store,
+        category: 'ops',
+        fallbackRoles: ['store_manager', 'store_production_manager']
+      });
+      const fuRows = dutyRows.filter((row) => assigneeKeys.includes(String(row.username || '').trim().toLowerCase()));
 
       for (const row of fuRows) {
         const un = String(row.username || '').trim().toLowerCase();

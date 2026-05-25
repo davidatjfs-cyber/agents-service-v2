@@ -12,6 +12,7 @@ import { sendText, sendCard, feishuOutboundMessageId } from './feishu-client.js'
 import { resolveSingleScoringUser } from '../utils/scoring-assignee.js';
 import { formatTaskCardAuditSection } from './task-reply-audit-hint.js';
 import { createUnifiedTask } from './task-orchestrator.js';
+import { resolveDutyBoundRecipients } from './store-duty-bindings.js';
 
 /** 定时任务多角色时：先店长、再出品经理，其余保持配置顺序 */
 const PRIMARY_ROLE_ORDER = ['store_manager', 'store_production_manager', 'front_manager'];
@@ -27,6 +28,19 @@ function orderedAssigneeRoles(roleList) {
  */
 async function resolvePrimaryPatrolAssignee(store, roleList) {
   const ordered = orderedAssigneeRoles(roleList);
+  const dutyRecipients = await resolveDutyBoundRecipients({
+    store,
+    category: 'food_safety',
+    fallbackRoles: ordered
+  });
+  const primary = dutyRecipients[0];
+  if (primary?.open_id) {
+    return {
+      username: String(primary.username || '').trim(),
+      role: String(primary.role || ordered[0] || 'store_manager').trim(),
+      open_id: String(primary.open_id).trim()
+    };
+  }
   for (const role of ordered) {
     const u = await resolveSingleScoringUser(store, role);
     if (!u?.username || String(u.username).startsWith('__periodic')) continue;
@@ -53,6 +67,20 @@ async function resolvePrimaryPatrolAssignee(store, roleList) {
  */
 async function resolveScheduledCardRecipients(store, roleList) {
   const ordered = orderedAssigneeRoles(roleList);
+  const dutyRecipients = await resolveDutyBoundRecipients({
+    store,
+    category: 'ops',
+    fallbackRoles: ordered
+  });
+  if (dutyRecipients.length) {
+    return dutyRecipients
+      .filter((row) => String(row.open_id || '').trim())
+      .map((row) => ({
+        username: String(row.username || '').trim(),
+        role: String(row.role || '').trim() || ordered[0] || 'store_manager',
+        open_id: String(row.open_id || '').trim()
+      }));
+  }
   const out = [];
   const seenOpen = new Set();
   for (const role of ordered) {

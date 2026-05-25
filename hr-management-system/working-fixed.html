@@ -18522,6 +18522,8 @@
                   <button class="rep-tab" onclick="showGrowthTab('posters')" id="growth-tab-posters">海报</button>
                   <button class="rep-tab" onclick="showGrowthTab('public')" id="growth-tab-public">公域品宣</button>
                   <button class="rep-tab" onclick="showGrowthTab('actions')" id="growth-tab-actions">AI建议</button>
+                  <button class="rep-tab" onclick="showGrowthTab('abtests')" id="growth-tab-abtests">A/B测试</button>
+                  <button class="rep-tab" onclick="showGrowthTab('contentsys')" id="growth-tab-contentsys">内容系统</button>
                   <button class="rep-tab" onclick="showGrowthTab('exec-logs')" id="growth-tab-exec-logs">执行记录</button>
                   <button class="rep-tab" onclick="showGrowthTab('pos')" id="growth-tab-pos">POS消费</button>
                 </nav>
@@ -18940,9 +18942,69 @@
                                  </div>
                             </div>
                         </div>
+                     </div>
+                     </div>
+                    <div id="growth-abtests-content" style="display:none;">
+                        <div class="rep-filters">
+                            <div class="rep-filters__eyebrow">AB TESTS</div>
+                            <div class="rep-filters__title">A/B 测试系统</div>
+                            <div class="rep-seg" style="margin-bottom:14px;">
+                                <button onclick="loadGrowthAbTests()" class="rep-seg-btn rep-seg-btn--active" style="flex:1;">刷新测试</button>
+                                <button onclick="bootstrapGrowthAbTest()" class="rep-seg-btn" style="flex:1;">启动首个测试</button>
+                            </div>
+                            <div id="growth-abtest-summary" style="margin-bottom:14px;"></div>
+                            <div id="growth-abtests-list" style="max-height:52vh;overflow-y:auto;"></div>
+                        </div>
                     </div>
+                    <div id="growth-contentsys-content" style="display:none;">
+                        <div class="rep-dashboard-grid">
+                            <div class="rep-filters">
+                                <div class="rep-filters__eyebrow">WEEKLY CONTENT</div>
+                                <div class="rep-filters__title">本周内容建议</div>
+                                <div class="rep-seg" style="margin-bottom:14px;">
+                                    <button onclick="loadGrowthContentSuggestions()" class="rep-seg-btn rep-seg-btn--active" style="flex:1;">刷新建议</button>
+                                    <button onclick="generateGrowthContentSuggestions()" class="rep-seg-btn" style="flex:1;">生成并推飞书</button>
+                                </div>
+                                <div id="growth-content-suggestions-list" style="max-height:50vh;overflow-y:auto;"></div>
+                            </div>
+                            <div class="rep-filters">
+                                <div class="rep-filters__eyebrow">PERFORMANCE</div>
+                                <div class="rep-filters__title">内容效果录入</div>
+                                <div class="rep-filters__grid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;position:relative;">
+                                    <div class="rep-field"><label>渠道</label><select id="content-perf-channel" class="dr-store-select"><option value="sms">短信</option><option value="wecom">企微</option><option value="dianping">大众点评</option><option value="xiaohongshu">小红书</option><option value="douyin">抖音</option></select></div>
+                                    <div class="rep-field"><label>场景</label><input id="content-perf-scene" class="dr-store-select" placeholder="如 午市"></div>
+                                    <div class="rep-field"><label>人群标签</label><input id="content-perf-audience" class="dr-store-select" placeholder="如 7日未到店"></div>
+                                    <div class="rep-field"><label>变量</label><input id="content-perf-variable" class="dr-store-select" placeholder="如 文案风格"></div>
+                                    <div class="rep-field"><label>内容标题</label><input id="content-perf-title" class="dr-store-select" placeholder="标题"></div>
+                                    <div class="rep-field"><label>winning_value</label><input id="content-perf-winning" class="dr-store-select" placeholder="胜出内容/风格"></div>
+                                    <div class="rep-field"><label>losing_value</label><input id="content-perf-losing" class="dr-store-select" placeholder="落败内容/风格"></div>
+                                    <div class="rep-field"><label>曝光</label><input id="content-perf-impressions" class="dr-store-select" type="number" placeholder="0"></div>
+                                    <div class="rep-field"><label>点击</label><input id="content-perf-clicks" class="dr-store-select" type="number" placeholder="0"></div>
+                                    <div class="rep-field"><label>订单</label><input id="content-perf-orders" class="dr-store-select" type="number" placeholder="0"></div>
+                                    <div class="rep-field"><label>核销</label><input id="content-perf-redemptions" class="dr-store-select" type="number" placeholder="0"></div>
+                                    <div class="rep-field"><label>营收</label><input id="content-perf-revenue" class="dr-store-select" type="number" placeholder="0"></div>
+                                </div>
+                                <div class="rep-field" style="margin-top:10px;"><label>备注</label><textarea id="content-perf-notes" class="dr-store-select" style="min-height:70px;resize:vertical;"></textarea></div>
+                                <div class="rep-seg" style="margin-top:14px;">
+                                    <button onclick="saveGrowthContentPerformance()" class="rep-seg-btn rep-seg-btn--active" style="flex:1;">保存效果</button>
+                                    <button onclick="loadGrowthContentPerformance()" class="rep-seg-btn" style="flex:1;">刷新记录</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="rep-dashboard-grid" style="margin-top:14px;">
+                            <div class="rep-filters">
+                                <div class="rep-filters__eyebrow">CONTENT LOG</div>
+                                <div class="rep-filters__title">内容效果记录</div>
+                                <div id="growth-content-performance-list" style="max-height:38vh;overflow-y:auto;"></div>
+                            </div>
+                            <div class="rep-filters">
+                                <div class="rep-filters__eyebrow">LEARNINGS</div>
+                                <div class="rep-filters__title">增长经验库</div>
+                                <div id="growth-learnings-list" style="max-height:38vh;overflow-y:auto;"></div>
+                            </div>
+                        </div>
                     </div>
-                    <div id="growth-pos-content" style="display:none;">
+                     <div id="growth-pos-content" style="display:none;">
                         <div class="rep-filters">
                             <div class="rep-filters__eyebrow">POS</div>
                             <div class="rep-filters__title">POS消费分析</div>
@@ -19934,6 +19996,7 @@
                         <a class="settings-rep-toc__link" href="#monthly-target-settings-card">05 目标</a>
                         <a class="settings-rep-toc__link" href="#approval-flow-settings-card">06 审批</a>
                         <a class="settings-rep-toc__link" href="#points-rule-settings-card">07 积分</a>
+                        <a class="settings-rep-toc__link" href="#store-duty-settings-card">08 职责</a>
                     </nav>
                     <div class="settings-rep-stack">
                     <section id="llm-settings-card" class="settings-rep-sec">
@@ -20154,6 +20217,65 @@
                             <div id="points-rule-list" style="margin-top:10px;"></div>
                         </div>
                     </section>
+
+                    <section id="store-duty-settings-card" class="settings-rep-sec">
+                        <div class="settings-rep-sec__bar">
+                            <div class="settings-rep-sec__no">08</div>
+                            <div>
+                                <h3 class="settings-rep-sec__title">跨店职责绑定</h3>
+                                <p class="settings-rep-sec__lede">用于代理店长、跨店监管、前厅协同和审批边界收口。消息接收和多门店切换都以这里为准。</p>
+                            </div>
+                        </div>
+                        <div class="settings-rep-sec__body">
+                            <div class="settings-form" style="grid-template-columns:repeat(2,minmax(0,1fr));">
+                                <div>
+                                    <label class="settings-label">HRMS 用户名</label>
+                                    <input id="duty-binding-username" class="settings-input" type="text" placeholder="例如：NNYXYF26">
+                                </div>
+                                <div>
+                                    <label class="settings-label">门店</label>
+                                    <select id="duty-binding-store" class="settings-input"></select>
+                                </div>
+                                <div>
+                                    <label class="settings-label">职责级别</label>
+                                    <select id="duty-binding-access-level" class="settings-input">
+                                        <option value="primary">主负责</option>
+                                        <option value="support">协同</option>
+                                        <option value="supervisor">监管</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="settings-label">生效区间</label>
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                        <input id="duty-binding-effective-from" class="settings-input" type="datetime-local">
+                                        <input id="duty-binding-effective-to" class="settings-input" type="datetime-local">
+                                    </div>
+                                </div>
+                                <div class="settings-form-full">
+                                    <label class="settings-label">权限开关</label>
+                                    <div id="duty-binding-flags" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px;color:rgba(226,232,240,0.88);font-size:13px;">
+                                        <label><input type="checkbox" id="db-is-primary-store"> 主门店</label>
+                                        <label><input type="checkbox" id="db-enabled" checked> 启用</label>
+                                        <label><input type="checkbox" id="db-can-receive-ops" checked> 接收经营/任务消息</label>
+                                        <label><input type="checkbox" id="db-can-receive-performance" checked> 接收绩效结果</label>
+                                        <label><input type="checkbox" id="db-can-receive-food-safety" checked> 接收巡检/食安</label>
+                                        <label><input type="checkbox" id="db-can-receive-approval"> 接收审批消息</label>
+                                        <label><input type="checkbox" id="db-can-handle-ops" checked> 可处理经营任务</label>
+                                        <label><input type="checkbox" id="db-can-handle-food-safety" checked> 可处理食安任务</label>
+                                        <label><input type="checkbox" id="db-can-approve-hrms"> 可审批 HRMS</label>
+                                        <label><input type="checkbox" id="db-can-view-employees"> 可查看员工</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="settings-actions" style="margin-top:12px;">
+                                <button class="btn" type="button" onclick="saveStoreDutyBindingFromUI()">保存绑定</button>
+                                <button class="btn btn-secondary" type="button" onclick="resetStoreDutyBindingForm()">清空表单</button>
+                                <button class="btn btn-secondary" type="button" onclick="loadStoreDutyBindings()">刷新列表</button>
+                            </div>
+                            <div id="store-duty-bindings-status" class="settings-hint" style="margin-top:10px;"></div>
+                            <div id="store-duty-bindings-list" style="margin-top:14px;"></div>
+                        </div>
+                    </section>
                     </div>
                 </div>
 
@@ -20165,6 +20287,7 @@
                     <button class="btn btn-secondary" type="button" onclick="openMonthlyTargetsModal()">目标</button>
                     <button class="btn btn-secondary" type="button" onclick="openApprovalFlowModal()">审批</button>
                     <button class="btn" type="button" onclick="hrmsScrollToSettingsCard('points-rule-settings-card')">积分</button>
+                    <button class="btn btn-secondary" type="button" onclick="hrmsScrollToSettingsCard('store-duty-settings-card')">职责</button>
                 </div>
             </div>
 
@@ -22012,6 +22135,28 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ oldPassword, newPassword })
+                });
+            },
+            async switchStore(store) {
+                return this.request('/api/auth/switch-store', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ store })
+                });
+            },
+            async listStoreDutyBindings() {
+                return this.request('/api/admin/store-duty-bindings', { method: 'GET' });
+            },
+            async saveStoreDutyBinding(payload) {
+                return this.request('/api/admin/store-duty-bindings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload || {})
+                });
+            },
+            async deleteStoreDutyBinding(id) {
+                return this.request('/api/admin/store-duty-bindings/' + encodeURIComponent(String(id || '')), {
+                    method: 'DELETE'
                 });
             },
             async getStores() {
@@ -24908,19 +25053,7 @@ th { background: #f5f5f5; font-weight: 700; }
                 const users = HRMS_STORE.getUsers() || [];
                 const userInfo = users.find(x => x && String(x.username || '').toLowerCase() === String(u.username || '').toLowerCase()) || {};
 
-                currentUser = {
-                    id: u.id,
-                    username: u.username,
-                    name: empInfo.name || u.name || u.username,
-                    role: hrmsNormalizeRoleCode(u.role),
-                    store: empInfo.store || u.store || '',
-                    position: empInfo.position || u.position || '',
-                    department: empInfo.department || u.department || '',
-                    level: empInfo.level || empInfo.jobLevel || empInfo.rank || u.level || '',
-                    joinDate: empInfo.joinDate || empInfo.hireDate || empInfo.entryDate || u.joinDate || '',
-                    managerUsername: empInfo.managerUsername || empInfo.manager || u.managerUsername || '',
-                    status: 'active'
-                };
+                currentUser = hydrateCurrentUserFromApiUser(u);
                 isLoggedIn = true;
 
                 // 先显示主界面，不阻塞
@@ -25028,7 +25161,7 @@ th { background: #f5f5f5; font-weight: 700; }
             [ROLES.PRODUCTION_MANAGER]: ['profile', 'attendance', 'exam', 'points', 'rewards', 'forecast', 'kitchen', 'training'],
             [ROLES.HQ_MANAGER]:         ['profile', 'attendance', 'exam', 'points', 'employees', 'daily-report', 'approvals', 'payment', 'rewards', 'reports', 'kitchen', 'training'],
             [ROLES.HR_MANAGER]:         ['profile', 'attendance', 'exam', 'points', 'employees', 'approvals', 'payment', 'rewards', 'reports', 'training'],
-            [ROLES.FRONT_MANAGER]:      ['profile', 'attendance', 'exam', 'points', 'daily-report', 'approvals', 'training'],
+            [ROLES.FRONT_MANAGER]:      ['profile', 'attendance', 'exam', 'points', 'daily-report', 'training'],
             [ROLES.CASHIER]:            ['profile', 'attendance', 'exam', 'points', 'payment', 'training']
         };
         async function loadRoleModulesFromServer() {
@@ -25093,6 +25226,57 @@ th { background: #f5f5f5; font-weight: 700; }
             return 'profile';
         }
 
+        function getAllowedStoresForUser() {
+            const stores = Array.isArray(currentUser?.allowed_stores) ? currentUser.allowed_stores : [];
+            return stores.map(function (item) { return String(item || '').trim(); }).filter(Boolean);
+        }
+
+        function hydrateCurrentUserFromApiUser(u, fallbackPassword) {
+            if (!u) return null;
+            const employees = HRMS_STORE.getEmployees() || [];
+            const users = HRMS_STORE.getUsers() || [];
+            const empInfo = employees.find(e => String(e?.username || '').toLowerCase() === String(u.username || '').toLowerCase()) || {};
+            const userInfo = users.find(x => x && String(x.username || '').toLowerCase() === String(u.username || '').toLowerCase()) || {};
+            return {
+                id: u.id,
+                username: u.username,
+                name: empInfo.name || u.name || u.username,
+                role: hrmsNormalizeRoleCode(u.role),
+                store: empInfo.store || u.store || '',
+                current_store: String(u.current_store || u.store || empInfo.store || '').trim(),
+                primary_store: String(u.primary_store || u.store || empInfo.store || '').trim(),
+                allowed_stores: Array.isArray(u.allowed_stores) ? u.allowed_stores : [],
+                position: empInfo.position || u.position || userInfo.position || '',
+                department: empInfo.department || u.department || userInfo.department || '',
+                level: empInfo.level || empInfo.jobLevel || empInfo.rank || u.level || '',
+                joinDate: empInfo.joinDate || empInfo.hireDate || empInfo.entryDate || u.joinDate || '',
+                managerUsername: empInfo.managerUsername || empInfo.manager || u.managerUsername || '',
+                status: 'active',
+                _loginPassword: fallbackPassword || currentUser?._loginPassword || ''
+            };
+        }
+
+        async function switchCurrentUserStore(nextStore) {
+            const store = String(nextStore || '').trim();
+            if (!currentUser || !store) return;
+            const allowed = getAllowedStoresForUser();
+            if (!allowed.includes(store)) {
+                showNotification('该门店不在当前账号可切换范围内', 'warning');
+                return;
+            }
+            try {
+                const resp = await HRMS_API.switchStore(store);
+                if (resp?.token) HRMS_API.setToken(resp.token);
+                if (resp?.user) currentUser = hydrateCurrentUserFromApiUser(resp.user, currentUser?._loginPassword);
+                updateUserInfo();
+                if (typeof closeMobileMoreMenu === 'function') closeMobileMoreMenu();
+                showNotification('已切换到 ' + store, 'success');
+                showPage(currentPage || getHomePageName());
+            } catch (e) {
+                showNotification('切换门店失败: ' + (e?.message || e), 'error');
+            }
+        }
+
         // ---- 二次确认对话框 (替代原生 confirm，提供美化弹窗) ----
         function hrmsConfirm({ title = '确认操作', message = '', okText = '确认删除', okStyle = '', icon = '⚠️' } = {}) {
             return new Promise((resolve) => {
@@ -25146,6 +25330,14 @@ async function saveRoleModulesConfig(){try{var cfg=collectRoleModulesFromUI();va
 async function resetRoleModulesConfig(){const _okRC=await hrmsConfirm({title:'重置权限配置',message:'确定恢复为默认权限配置？此操作将覆盖当前配置。',okText:'确认重置',icon:'🔄'});if(!_okRC)return;_serverRoleModules=null;renderRoleModulesGrid();showNotification('已恢复默认配置，请点击保存生效','info');}
 async function loadDedupStats(){var el=document.getElementById('dedup-stats-content');if(!el)return;el.textContent='加载中...';try{var r=await fetch('/api/dedup/stats',{credentials:'include'});if(!r.ok)throw new Error('HTTP '+r.status);var d=await r.json();var t=d.tables||{};el.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:13px;"><span>消息记录重复组:</span><span style="font-weight:600;color:'+(t.agent_messages_dup_groups>0?'#ef5350':'#66bb6a')+'">'+t.agent_messages_dup_groups+'</span><span>飞书通用记录:</span><span>'+t.feishu_generic_records+'</span><span>销售明细:</span><span>'+t.sales_raw+'</span><span>桌访记录:</span><span>'+t.table_visit_records+'</span></div>';}catch(e){el.textContent='加载失败: '+e.message;}}
 async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重复数据',message:'确定清理重复数据？此操作将永久删除重复记录。',okText:'确认清理',icon:'🧹'});if(!_okDD)return;try{var r=await fetch('/api/dedup/cleanup',{method:'POST',credentials:'include'});if(!r.ok)throw new Error('HTTP '+r.status);var d=await r.json();showNotification('清理完成，删除 '+d.deleted+' 条重复记录','success');loadDedupStats();}catch(e){showNotification('清理失败: '+e.message,'error');}}
+var __storeDutyBindingsCache = [];
+function renderDutyBindingStoreOptions(){var sel=document.getElementById('duty-binding-store');if(!sel)return;var stores=(HRMS_STORE.getStores&&HRMS_STORE.getStores())||[];sel.innerHTML=(stores||[]).map(function(s){var name=String(s?.name||s?.id||'').trim();return name?'<option value=\"'+escapeHtml(name)+'\">'+escapeHtml(name)+'</option>':'';}).join('')||'<option value=\"\">暂无门店</option>';}
+function resetStoreDutyBindingForm(){var ids=['duty-binding-username','duty-binding-effective-from','duty-binding-effective-to'];ids.forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});var level=document.getElementById('duty-binding-access-level');if(level)level.value='support';var primary=document.getElementById('db-is-primary-store');if(primary)primary.checked=false;var enabled=document.getElementById('db-enabled');if(enabled)enabled.checked=true;['db-can-receive-ops','db-can-receive-performance','db-can-receive-food-safety','db-can-handle-ops','db-can-handle-food-safety'].forEach(function(id){var el=document.getElementById(id);if(el)el.checked=true;});['db-can-receive-approval','db-can-approve-hrms','db-can-view-employees'].forEach(function(id){var el=document.getElementById(id);if(el)el.checked=false;});var status=document.getElementById('store-duty-bindings-status');if(status)status.textContent='';}
+function fillStoreDutyBindingForm(item){if(!item)return;var set=function(id,val){var el=document.getElementById(id);if(el)el.value=val||'';};set('duty-binding-username',item.username);set('duty-binding-store',item.store);set('duty-binding-access-level',item.access_level||'support');set('duty-binding-effective-from',String(item.effective_from||'').slice(0,16));set('duty-binding-effective-to',String(item.effective_to||'').slice(0,16));var boolIds={'db-is-primary-store':'is_primary_store','db-enabled':'enabled','db-can-receive-ops':'can_receive_ops','db-can-receive-performance':'can_receive_performance','db-can-receive-food-safety':'can_receive_food_safety','db-can-receive-approval':'can_receive_approval','db-can-handle-ops':'can_handle_ops','db-can-handle-food-safety':'can_handle_food_safety','db-can-approve-hrms':'can_approve_hrms','db-can-view-employees':'can_view_employees'};Object.keys(boolIds).forEach(function(id){var el=document.getElementById(id);if(el)el.checked=!!item[boolIds[id]];});var status=document.getElementById('store-duty-bindings-status');if(status)status.textContent='正在编辑：'+String(item.username||'')+' · '+String(item.store||'');}
+function renderStoreDutyBindings(){var box=document.getElementById('store-duty-bindings-list');if(!box)return;var items=Array.isArray(__storeDutyBindingsCache)?__storeDutyBindingsCache:[];if(!items.length){box.innerHTML='<div class=\"settings-hint\">暂无职责绑定，保存后会优先用于消息接收和门店切换。</div>';return;}box.innerHTML='<div style=\"display:flex;flex-direction:column;gap:10px;\">'+items.map(function(item){var tags=[];if(item.is_primary_store)tags.push('主门店');if(item.can_receive_approval)tags.push('审批消息');if(item.can_approve_hrms)tags.push('可审批');if(item.can_view_employees)tags.push('可看员工');if(!item.enabled)tags.push('已停用');return '<div style=\"padding:12px 14px;border-radius:16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);\"><div style=\"display:flex;justify-content:space-between;gap:10px;align-items:flex-start;\"><div><div style=\"font-weight:700;color:#fff;\">'+escapeHtml(String(item.username||''))+' · '+escapeHtml(String(item.store||''))+'</div><div style=\"margin-top:4px;font-size:12px;color:rgba(200,215,230,0.72);\">级别：'+escapeHtml(String(item.access_level||'support'))+' · '+escapeHtml(tags.join(' / ')||'基础协同')+'</div></div><div style=\"display:flex;gap:8px;\"><button class=\"btn btn-secondary\" type=\"button\" onclick=\"fillStoreDutyBindingForm(__storeDutyBindingsCache['+items.indexOf(item)+'])\">编辑</button><button class=\"btn btn-secondary\" type=\"button\" onclick=\"deleteStoreDutyBinding('+Number(item.id||0)+')\">删除</button></div></div></div>';}).join('')+'</div>';}
+async function loadStoreDutyBindings(){if(!isAdminUser())return;renderDutyBindingStoreOptions();var status=document.getElementById('store-duty-bindings-status');try{if(status)status.textContent='加载中...';var resp=await HRMS_API.listStoreDutyBindings();__storeDutyBindingsCache=Array.isArray(resp?.items)?resp.items:[];renderStoreDutyBindings();if(status)status.textContent='';}catch(e){if(status)status.textContent='加载失败：'+(e?.message||e);}}
+async function saveStoreDutyBindingFromUI(){try{var payload={username:String(document.getElementById('duty-binding-username')?.value||'').trim(),store:String(document.getElementById('duty-binding-store')?.value||'').trim(),access_level:String(document.getElementById('duty-binding-access-level')?.value||'support').trim(),effective_from:String(document.getElementById('duty-binding-effective-from')?.value||'').trim(),effective_to:String(document.getElementById('duty-binding-effective-to')?.value||'').trim(),is_primary_store:!!document.getElementById('db-is-primary-store')?.checked,enabled:!!document.getElementById('db-enabled')?.checked,can_receive_ops:!!document.getElementById('db-can-receive-ops')?.checked,can_receive_performance:!!document.getElementById('db-can-receive-performance')?.checked,can_receive_food_safety:!!document.getElementById('db-can-receive-food-safety')?.checked,can_receive_approval:!!document.getElementById('db-can-receive-approval')?.checked,can_handle_ops:!!document.getElementById('db-can-handle-ops')?.checked,can_handle_food_safety:!!document.getElementById('db-can-handle-food-safety')?.checked,can_approve_hrms:!!document.getElementById('db-can-approve-hrms')?.checked,can_view_employees:!!document.getElementById('db-can-view-employees')?.checked};if(!payload.username||!payload.store)throw new Error('请先填写用户名和门店');await HRMS_API.saveStoreDutyBinding(payload);showNotification('职责绑定已保存','success');resetStoreDutyBindingForm();await loadStoreDutyBindings();}catch(e){showNotification('保存失败: '+(e?.message||e),'error');}}
+async function deleteStoreDutyBinding(id){if(!id)return;var ok=await hrmsConfirm({title:'删除职责绑定',message:'确认删除这条职责绑定？',okText:'确认删除',icon:'🗑️'});if(!ok)return;try{await HRMS_API.deleteStoreDutyBinding(id);showNotification('职责绑定已删除','success');await loadStoreDutyBindings();}catch(e){showNotification('删除失败: '+(e?.message||e),'error');}}
 
         // 更新调试信息
         function updateDebug(message) {
@@ -25259,24 +25451,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
                 }
                 
                 // 从员工数据中获取完整信息
-                const employees = HRMS_STORE.getEmployees() || [];
-                const empInfo = employees.find(e => e.username === u.username) || {};
-                const users = HRMS_STORE.getUsers() || [];
-                const userInfo = users.find(x => x && x.username === u.username) || {};
-                
-                currentUser = {
-                    id: u.id,
-                    username: u.username,
-                    name: empInfo.name || u.name || u.username,
-                    role: hrmsNormalizeRoleCode(u.role),
-                    store: empInfo.store || u.store || '',
-                    position: empInfo.position || u.position || '',
-                    department: empInfo.department || u.department || '',
-                    level: empInfo.level || empInfo.jobLevel || empInfo.rank || u.level || '',
-                    joinDate: empInfo.joinDate || empInfo.hireDate || empInfo.entryDate || u.joinDate || '',
-                    managerUsername: empInfo.managerUsername || empInfo.manager || u.managerUsername || '',
-                    status: 'active'
-                };
+                currentUser = hydrateCurrentUserFromApiUser(u, password);
                 isLoggedIn = true;
                 console.log('登录成功:', currentUser);
 
@@ -25369,11 +25544,20 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
             if (!currentUser) return;
             
             const userInfo = document.querySelector('.user-info');
+            const activeStore = String(currentUser.current_store || currentUser.store || '').trim();
+            const allowedStores = getAllowedStoresForUser();
+            const storeSuffix = allowedStores.length > 1 ? ` · 可切换${allowedStores.length}店` : '';
+            const switcherHtml = allowedStores.length > 1 ? `
+                <select onchange="switchCurrentUserStore(this.value)" style="margin-top:8px;width:100%;padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(15,23,42,0.75);color:#fff;font-size:12px;">
+                    ${allowedStores.map(store => `<option value="${escapeHtml(store)}" ${store === activeStore ? 'selected' : ''}>${escapeHtml(store)}</option>`).join('')}
+                </select>
+            ` : '';
             userInfo.innerHTML = `
                 <div class="user-avatar">👤</div>
                 <div style="font-weight: 600; margin-bottom: 5px;">${currentUser.name}</div>
                 <div style="font-size: 12px; opacity: 0.9;">${getRoleDisplayName(currentUser.role)}</div>
-                <div style="font-size: 11px; opacity: 0.8; margin-top: 5px;">${currentUser.store}</div>
+                <div style="font-size: 11px; opacity: 0.8; margin-top: 5px;">${activeStore}${storeSuffix}</div>
+                ${switcherHtml}
             `;
 
             // users management is removed — merged into employees
@@ -25834,7 +26018,7 @@ async function runDedupCleanup(){const _okDD=await hrmsConfirm({title:'清理重
 
             if (pageName === 'approvals') {
                 const _apr = String(currentUser?.role || '').trim();
-                const canAccess = currentUser && (_apr === ROLES.ADMIN || _apr === ROLES.HQ_MANAGER || _apr === ROLES.HR_MANAGER || _apr === ROLES.STORE_MANAGER || _apr === ROLES.CASHIER || _apr === ROLES.FRONT_MANAGER || _apr.startsWith('custom_'));
+                const canAccess = currentUser && (_apr === ROLES.ADMIN || _apr === ROLES.HQ_MANAGER || _apr === ROLES.HR_MANAGER || _apr === ROLES.STORE_MANAGER || _apr === ROLES.CASHIER || _apr.startsWith('custom_'));
                 if (!canAccess) {
                     showNotification('您没有待审批权限', 'warning');
                     pageName = getHomePageName();
@@ -38536,6 +38720,9 @@ ${knowledgeContent.slice(0, 30000)}`;
             const brandsCard = document.getElementById('brands-settings-card');
             if (brandsCard) brandsCard.style.display = isAdminUser() ? '' : 'none';
 
+            const dutyCard = document.getElementById('store-duty-settings-card');
+            if (dutyCard) dutyCard.style.display = isAdminUser() ? '' : 'none';
+
             refreshBrandsCache(true).then(() => {
                 const s = document.getElementById('brands-settings-summary');
                 if (s) {
@@ -38545,6 +38732,7 @@ ${knowledgeContent.slice(0, 30000)}`;
 
             if (isAdminUser()) renderApprovalFlowSummary();
             if (isAdminUser()) loadPointRulesSettings();
+            if (isAdminUser()) { renderDutyBindingStoreOptions(); loadStoreDutyBindings(); }
         }
 
         function closeBrandSettingsModal() {
@@ -52133,14 +52321,35 @@ ${body}
             if (nameEl && currentUser) nameEl.textContent = currentUser.name || currentUser.username || '-';
             if (roleEl && currentUser) {
                 const roleMap = { admin:'系统管理员', hr_manager:'人事经理', hq_manager:'总部营运', store_manager:'店长', front_manager:'前厅经理', store_employee:'员工', cashier:'出纳', store_production_manager:'出品经理' };
-                roleEl.textContent = (currentUser.store ? currentUser.store + ' · ' : '') + (roleMap[currentUser.role] || currentUser.role || '-');
+                roleEl.textContent = ((currentUser.current_store || currentUser.store) ? (currentUser.current_store || currentUser.store) + ' · ' : '') + (roleMap[currentUser.role] || currentUser.role || '-');
+            }
+            const switchWrap = document.getElementById('mobile-more-store-switch');
+            if (switchWrap) {
+                const stores = getAllowedStoresForUser();
+                if (stores.length > 1) {
+                    switchWrap.style.display = 'block';
+                    switchWrap.innerHTML = `
+                        <div style="margin-top:12px;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);">
+                            <div style="font-size:11px;color:rgba(255,255,255,0.58);margin-bottom:6px;">当前操作门店</div>
+                            <select id="mobile-store-switch-select" onchange="switchCurrentUserStore(this.value)" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(15,23,42,0.86);color:#fff;">
+                                ${stores.map(function (store) {
+                                    const selected = String(currentUser?.current_store || currentUser?.store || '') === String(store) ? 'selected' : '';
+                                    return `<option value="${escapeHtml(store)}" ${selected}>${escapeHtml(store)}</option>`;
+                                }).join('')}
+                            </select>
+                        </div>
+                    `;
+                } else {
+                    switchWrap.style.display = 'none';
+                    switchWrap.innerHTML = '';
+                }
             }
 
             const allItems = [
                 { icon:'👤', label:'我的档案', page:'profile' },
                 { icon:'👥', label:'员工管理', page:'employees', roles:['admin','hr_manager','hq_manager','store_manager'] },
                 { icon:'📋', label:'营业日报', page:'daily-report', roles:['admin','hq_manager','store_manager','front_manager'] },
-                { icon:'✅', label:'待审批', page:'approvals', roles:['admin','hr_manager','hq_manager','store_manager','front_manager'] },
+                { icon:'✅', label:'待审批', page:'approvals', roles:['admin','hr_manager','hq_manager','store_manager'] },
                 { icon:'💰', label:'请款', page:'payment', roles:['admin','hq_manager','store_manager','cashier'] },
                 { icon:'📚', label:'知识库', page:'knowledge' },
                 { icon:'🎓', label:'培训认证', page:'training' },
@@ -53441,7 +53650,7 @@ ${body}
         }
 
         function showGrowthTab(tab) {
-            ['dashboard', 'wecom', 'wecomconfig', 'campaigns', 'profiles', 'constraints', 'posters', 'public', 'actions', 'pos', 'exec-logs'].forEach(function(name) {
+            ['dashboard', 'wecom', 'wecomconfig', 'campaigns', 'profiles', 'constraints', 'posters', 'public', 'actions', 'abtests', 'contentsys', 'pos', 'exec-logs'].forEach(function(name) {
                 var content = document.getElementById('growth-' + name + '-content');
                 var btn = document.getElementById('growth-tab-' + name);
                 if (content) content.style.display = name === tab ? '' : 'none';
@@ -53462,6 +53671,12 @@ ${body}
                 loadGrowthConstraints();
             } else if (tab === 'actions') {
                 loadGrowthActionBoard();
+            } else if (tab === 'abtests') {
+                loadGrowthAbTests();
+            } else if (tab === 'contentsys') {
+                loadGrowthContentSuggestions();
+                loadGrowthContentPerformance();
+                loadGrowthLearnings();
             } else if (tab === 'posters') {
                 loadPosterTemplates();
                 loadPosterHistory();
@@ -54227,6 +54442,218 @@ ${body}
                     + '<span style="font-size:11px;color:rgba(226,232,240,0.45);">' + pct + '%</span>'
                     + '</div>';
             }).join('');
+        }
+
+        function growthFmtPct(n) {
+            var v = Number(n || 0);
+            if (!Number.isFinite(v)) return '0.00%';
+            return (v * 100).toFixed(2) + '%';
+        }
+
+        async function loadGrowthAbTests() {
+            try {
+                var store = document.getElementById('growth-store-filter')?.value || '51866138';
+                var r = await fetch('/api/growth/ab-tests?store_code=' + encodeURIComponent(store), { headers: growthAuthHeaders() });
+                var data = await r.json();
+                var tasks = data?.tasks || [];
+                var summary = document.getElementById('growth-abtest-summary');
+                var host = document.getElementById('growth-abtests-list');
+                var completed = tasks.filter(function(t){ return t.status === 'completed'; }).length;
+                if (summary) {
+                    summary.innerHTML = '<div class="rep-grid">'
+                        + '<div class="rep-metric"><div class="k">测试数</div><div class="v">' + tasks.length + '</div></div>'
+                        + '<div class="rep-metric"><div class="k">已完成</div><div class="v">' + completed + '</div></div>'
+                        + '<div class="rep-metric"><div class="k">经验条数</div><div class="v" id="growth-ab-learning-count">-</div></div>'
+                        + '</div>';
+                }
+                host.innerHTML = tasks.length ? tasks.map(function(t) {
+                    var mA = t.metrics?.A || {};
+                    var mB = t.metrics?.B || {};
+                    var winner = t.winner || '-';
+                    var lift = Number(t.winner_lift || 0).toFixed(2);
+                    return '<div style="padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
+                        + '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">'
+                        + '<div style="min-width:0;flex:1;">'
+                        + '<div style="font-size:14px;font-weight:800;color:#fff;">' + escapeHtml(t.test_name || '未命名测试') + '</div>'
+                        + '<div style="font-size:12px;color:var(--rep-muted);margin-top:4px;">' + escapeHtml(t.test_type || '-') + ' · ' + escapeHtml(t.target_metric || '-') + ' · ' + escapeHtml(t.start_date || '') + ' ~ ' + escapeHtml(t.end_date || '') + '</div>'
+                        + '</div>'
+                        + '<div style="font-size:11px;padding:3px 10px;border-radius:999px;background:' + (t.status === 'completed' ? 'rgba(34,197,94,0.12)' : 'rgba(245,158,11,0.12)') + ';color:' + (t.status === 'completed' ? '#22c55e' : '#f59e0b') + ';font-weight:700;">' + escapeHtml(t.status || 'running') + '</div>'
+                        + '</div>'
+                        + '<div class="rep-grid" style="margin-top:12px;grid-template-columns:repeat(3,minmax(0,1fr));">'
+                        + '<div class="rep-metric"><div class="k">A组</div><div class="v">' + growthFmtPct(mA.redemption_rate || 0) + '</div><div style="font-size:11px;color:var(--rep-muted);margin-top:4px;">发送' + (mA.sent || 0) + ' · 核销' + (mA.redemptions || 0) + '</div></div>'
+                        + '<div class="rep-metric"><div class="k">B组</div><div class="v">' + growthFmtPct(mB.redemption_rate || 0) + '</div><div style="font-size:11px;color:var(--rep-muted);margin-top:4px;">发送' + (mB.sent || 0) + ' · 核销' + (mB.redemptions || 0) + '</div></div>'
+                        + '<div class="rep-metric"><div class="k">胜者</div><div class="v" style="color:var(--rep-gold);">' + escapeHtml(String(winner)) + '</div><div style="font-size:11px;color:var(--rep-muted);margin-top:4px;">提升 ' + lift + '%</div></div>'
+                        + '</div>'
+                        + '<div style="margin-top:10px;font-size:12px;color:rgba(226,232,240,0.78);line-height:1.6;">' + escapeHtml(t.ai_summary || '尚未生成总结') + '</div>'
+                        + '<div style="margin-top:10px;display:flex;gap:8px;">'
+                        + '<button class="rep-seg-btn" style="flex:1;" onclick="refreshGrowthAbTest(' + Number(t.id || 0) + ')">刷新结果</button>'
+                        + '</div>'
+                        + '</div>';
+                }).join('') : '<div class="rep-pay-empty">暂无A/B测试</div>';
+                loadGrowthLearnings();
+            } catch (e) {
+                document.getElementById('growth-abtests-list').innerHTML = '<div class="rep-pay-empty">加载A/B测试失败：' + escapeHtml(e?.message || e) + '</div>';
+            }
+        }
+
+        async function bootstrapGrowthAbTest() {
+            try {
+                var r = await fetch('/api/growth/ab-tests/bootstrap-first', {
+                    method: 'POST',
+                    headers: Object.assign({}, growthAuthHeaders(), { 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({ store_code: '51866138' })
+                });
+                var d = await r.json();
+                if (!d.ok) throw new Error(d.error || 'bootstrap_failed');
+                showNotification('首个A/B测试已启动并完成回放评估', 'success');
+                loadGrowthAbTests();
+            } catch (e) {
+                showNotification('启动失败：' + (e?.message || e), 'error');
+            }
+        }
+
+        async function refreshGrowthAbTest(id) {
+            try {
+                var r = await fetch('/api/growth/ab-tests/' + encodeURIComponent(String(id || '')) + '/refresh', {
+                    method: 'POST',
+                    headers: Object.assign({}, growthAuthHeaders(), { 'Content-Type': 'application/json' })
+                });
+                var d = await r.json();
+                if (!d.ok) throw new Error(d.error || 'refresh_failed');
+                showNotification('测试结果已刷新', 'success');
+                loadGrowthAbTests();
+            } catch (e) {
+                showNotification('刷新失败：' + (e?.message || e), 'error');
+            }
+        }
+
+        async function loadGrowthLearnings() {
+            try {
+                var store = document.getElementById('growth-store-filter')?.value || '51866138';
+                var r = await fetch('/api/growth/learnings?store_code=' + encodeURIComponent(store), { headers: growthAuthHeaders() });
+                var d = await r.json();
+                var rows = d?.learnings || [];
+                var host = document.getElementById('growth-learnings-list');
+                var countEl = document.getElementById('growth-ab-learning-count');
+                if (countEl) countEl.textContent = rows.length;
+                if (!host) return;
+                host.innerHTML = rows.length ? rows.map(function(x) {
+                    return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
+                        + '<div style="font-size:13px;font-weight:700;color:#fff;">' + escapeHtml(x.variable || '-') + ' · ' + escapeHtml(x.channel || '-') + '</div>'
+                        + '<div style="font-size:12px;color:rgba(226,232,240,0.78);margin-top:4px;">胜出：' + escapeHtml(x.winning_value || '-') + (x.losing_value ? ' ｜ 落败：' + escapeHtml(x.losing_value) : '') + '</div>'
+                        + '<div style="font-size:11px;color:var(--rep-muted);margin-top:4px;">' + escapeHtml(x.effect_desc || '-') + ' · 样本' + escapeHtml(String(x.sample_size || 0)) + ' · 置信度' + escapeHtml(x.confidence || 'medium') + '</div>'
+                        + '</div>';
+                }).join('') : '<div class="rep-pay-empty">暂无经验库数据</div>';
+            } catch (e) {
+                var host = document.getElementById('growth-learnings-list');
+                if (host) host.innerHTML = '<div class="rep-pay-empty">加载经验库失败：' + escapeHtml(e?.message || e) + '</div>';
+            }
+        }
+
+        async function loadGrowthContentSuggestions() {
+            try {
+                var store = document.getElementById('growth-store-filter')?.value || '51866138';
+                var r = await fetch('/api/growth/content-suggestions?store_code=' + encodeURIComponent(store), { headers: growthAuthHeaders() });
+                var d = await r.json();
+                var rows = d?.suggestions || [];
+                var host = document.getElementById('growth-content-suggestions-list');
+                host.innerHTML = rows.length ? rows.map(function(x) {
+                    var summary = x.summary_json || {};
+                    var items = Array.isArray(summary.items) ? summary.items : [];
+                    return '<div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
+                        + '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">'
+                        + '<div><div style="font-size:14px;font-weight:800;color:#fff;">周建议 · ' + escapeHtml(summary.store_code || x.store_code || '-') + '</div><div style="font-size:11px;color:var(--rep-muted);margin-top:4px;">周起始 ' + escapeHtml(x.week_start || '-') + '</div></div>'
+                        + '<div style="font-size:11px;color:' + (x.feishu_pushed_at ? '#22c55e' : '#f59e0b') + ';font-weight:700;">' + (x.feishu_pushed_at ? '已推飞书' : '未推送') + '</div>'
+                        + '</div>'
+                        + '<div style="margin-top:10px;font-size:12px;color:rgba(226,232,240,0.78);line-height:1.6;">' + escapeHtml(summary.summary_text || '') + '</div>'
+                        + items.map(function(it) {
+                            return '<div style="margin-top:10px;padding:10px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);">'
+                                + '<div style="font-size:13px;font-weight:700;color:#fff;">' + escapeHtml(String(it.rank || '')) + '）' + escapeHtml(it.theme || '-') + '</div>'
+                                + '<div style="font-size:12px;color:rgba(226,232,240,0.78);margin-top:4px;">' + escapeHtml(it.reason || '-') + '</div>'
+                                + (it.sms_copy_a ? '<div style="font-size:11px;color:var(--rep-gold);margin-top:6px;">A：' + escapeHtml(it.sms_copy_a) + '</div>' : '')
+                                + (it.sms_copy_b ? '<div style="font-size:11px;color:#38bdf8;margin-top:4px;">B：' + escapeHtml(it.sms_copy_b) + '</div>' : '')
+                                + '</div>';
+                        }).join('')
+                        + '</div>';
+                }).join('') : '<div class="rep-pay-empty">暂无内容建议</div>';
+            } catch (e) {
+                document.getElementById('growth-content-suggestions-list').innerHTML = '<div class="rep-pay-empty">加载建议失败：' + escapeHtml(e?.message || e) + '</div>';
+            }
+        }
+
+        async function generateGrowthContentSuggestions() {
+            try {
+                var store = document.getElementById('growth-store-filter')?.value || '51866138';
+                var r = await fetch('/api/growth/content-suggestions/generate', {
+                    method: 'POST',
+                    headers: Object.assign({}, growthAuthHeaders(), { 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({ store_code: store })
+                });
+                var d = await r.json();
+                if (!d.ok) throw new Error(d.error || 'generate_failed');
+                showNotification('内容建议已生成并尝试推送飞书', 'success');
+                loadGrowthContentSuggestions();
+                loadGrowthLearnings();
+            } catch (e) {
+                showNotification('生成失败：' + (e?.message || e), 'error');
+            }
+        }
+
+        async function loadGrowthContentPerformance() {
+            try {
+                var store = document.getElementById('growth-store-filter')?.value || '51866138';
+                var r = await fetch('/api/growth/content-performance-v2?store_code=' + encodeURIComponent(store), { headers: growthAuthHeaders() });
+                var d = await r.json();
+                var rows = d?.items || [];
+                var host = document.getElementById('growth-content-performance-list');
+                host.innerHTML = rows.length ? rows.map(function(x) {
+                    return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
+                        + '<div style="font-size:13px;font-weight:700;color:#fff;">' + escapeHtml(x.content_title || x.channel || '-') + '</div>'
+                        + '<div style="font-size:12px;color:rgba(226,232,240,0.78);margin-top:4px;">' + escapeHtml(x.channel || '-') + ' · ' + escapeHtml(x.scene || '-') + ' · ' + escapeHtml(x.audience_tag || '-') + '</div>'
+                        + '<div style="font-size:11px;color:var(--rep-muted);margin-top:4px;">曝光' + (x.impressions || 0) + ' · 点击' + (x.clicks || 0) + ' · 订单' + (x.orders || 0) + ' · 核销' + (x.redemptions || 0) + ' · 营收¥' + Number(x.revenue || 0).toFixed(2) + '</div>'
+                        + '</div>';
+                }).join('') : '<div class="rep-pay-empty">暂无内容效果记录</div>';
+            } catch (e) {
+                document.getElementById('growth-content-performance-list').innerHTML = '<div class="rep-pay-empty">加载效果失败：' + escapeHtml(e?.message || e) + '</div>';
+            }
+        }
+
+        async function saveGrowthContentPerformance() {
+            try {
+                var store = document.getElementById('growth-store-filter')?.value || '51866138';
+                var payload = {
+                    store_code: store,
+                    channel: document.getElementById('content-perf-channel')?.value || 'sms',
+                    scene: document.getElementById('content-perf-scene')?.value || '',
+                    audience_tag: document.getElementById('content-perf-audience')?.value || '',
+                    variable: document.getElementById('content-perf-variable')?.value || '',
+                    content_title: document.getElementById('content-perf-title')?.value || '',
+                    winning_value: document.getElementById('content-perf-winning')?.value || '',
+                    losing_value: document.getElementById('content-perf-losing')?.value || '',
+                    impressions: Number(document.getElementById('content-perf-impressions')?.value || 0),
+                    clicks: Number(document.getElementById('content-perf-clicks')?.value || 0),
+                    orders: Number(document.getElementById('content-perf-orders')?.value || 0),
+                    redemptions: Number(document.getElementById('content-perf-redemptions')?.value || 0),
+                    revenue: Number(document.getElementById('content-perf-revenue')?.value || 0),
+                    notes: document.getElementById('content-perf-notes')?.value || ''
+                };
+                if (!payload.content_title) {
+                    showNotification('请填写内容标题', 'warning');
+                    return;
+                }
+                var r = await fetch('/api/growth/content-performance-v2', {
+                    method: 'POST',
+                    headers: Object.assign({}, growthAuthHeaders(), { 'Content-Type': 'application/json' }),
+                    body: JSON.stringify(payload)
+                });
+                var d = await r.json();
+                if (!d.ok) throw new Error(d.error || 'save_failed');
+                showNotification('内容效果已保存，并写入经验库', 'success');
+                loadGrowthContentPerformance();
+                loadGrowthLearnings();
+            } catch (e) {
+                showNotification('保存失败：' + (e?.message || e), 'error');
+            }
         }
 
         async function loadGrowthConstraints() {
@@ -58374,6 +58801,7 @@ ${compsHtml || '<p style="color:#888;">暂无半成品数据</p>'}
                 <div id="mobile-more-role" style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:2px;">-</div>
             </div>
         </div>
+        <div id="mobile-more-store-switch" style="display:none;margin:-4px 0 14px;"></div>
         <div id="mobile-more-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;"></div>
         <div onclick="logout()" style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);text-align:center;color:#ff453a;font-size:14px;font-weight:600;cursor:pointer;">退出登录</div>
     </div>

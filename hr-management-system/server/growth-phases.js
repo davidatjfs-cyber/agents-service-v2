@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { executeGrowthActionRecord } from './growth-api.js';
+import { callLLM, sendLarkMessage } from './agents.js';
 
 const PHASE_EVENT_TYPES = new Set([
   'campaign_scan', 'phone_authorized', 'coupon_claimed',
@@ -19,6 +20,502 @@ function parseOccurredAt(value) {
   if (!value) return new Date();
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? new Date() : d;
+}
+
+function safeDateOnly(value) {
+  const s = cleanText(value, 32);
+  if (!s) return '';
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return s;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+}
+
+function safeMonthOnly(value) {
+  const s = cleanText(value, 32);
+  if (/^\d{4}-\d{2}$/.test(s)) return s;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 7);
+}
+
+function ymdAddDays(ymd, delta) {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return '';
+  d.setUTCDate(d.getUTCDate() + Number(delta || 0));
+  return d.toISOString().slice(0, 10);
+}
+
+function diffDaysInclusive(startYmd, endYmd) {
+  const s = new Date(`${startYmd}T00:00:00Z`);
+  const e = new Date(`${endYmd}T00:00:00Z`);
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime()) || e < s) return 0;
+  return Math.floor((e.getTime() - s.getTime()) / 86400000) + 1;
+}
+
+function todayShanghaiYmd() {
+  return new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
+}
+
+function stableVariant(seed) {
+  let h = 0;
+  const s = String(seed || '');
+  for (let i = 0; i < s.length; i += 1) h = ((h << 5) - h) + s.charCodeAt(i);
+  return Math.abs(h) % 2 === 0 ? 'A' : 'B';
+}
+
+function interpolateAbContent(template, customer) {
+  const name = cleanText(customer?.name || customer?.member_name || '', 40) || '您';
+  return String(template || '').replace(/\{姓名\}/g, name).replace(/\{name\}/gi, name);
+}
+
+function formatPercent(n, digits = 2) {
+  const v = Number(n || 0);
+  if (!Number.isFinite(v)) return '0.00%';
+  return `${v.toFixed(digits)}%`;
+}
+
+async function listAbAudienceForSendDate(pool, storeCode, sendDate, lookbackDays = 7) {
+  const store = cleanText(storeCode, 128);
+  const sendYmd = safeDateOnly(sendDate);
+  if (!store || !sendYmd) return [];
+  const startYmd = ymdAddDays(sendYmd, -Math.max(1, Math.floor(Number(lookbackDays) || 7)));
+  const r = await pool.query(
+    `WITH base AS (
+       SELECT gc.id AS customer_id,
+              gc.phone,
+              COALESCE(gcp.store_id, gc.last_store_id, '') AS store_code,
+              COALESCE(NULLIF(gcp.source_signals->>'name',''), NULLIF(gc.meta->>'name',''), '') AS customer_name
+       FROM growth_customers gc
+       LEFT JOIN growth_customer_profiles gcp ON gcp.customer_id = gc.id
+       WHERE COALESCE(gcp.store_id, gc.last_store_id, '') = $1
+         AND gc.phone IS NOT NULL AND gc.phone <> ''
+     ),
+     hist AS (
+       SELECT b.customer_id,
+              b.phone,
+              b.store_code,
+              b.customer_name,
+              MAX(po.biz_date) FILTER (WHERE po.biz_date < $2::date) AS last_order_before_send,
+              COUNT(*) FILTER (WHERE po.biz_date >= $3::date AND po.biz_date < $2::date) AS orders_last_7d,
+              COUNT(*) FILTER (WHERE po.biz_date < $2::date) AS lifetime_orders
+       FROM base b
+       LEFT JOIN pos_orders po
+         ON (po.customer_id = b.customer_id OR (po.customer_id IS NULL AND po.phone = b.phone))
+        AND po.store_id = $1
+       GROUP BY b.customer_id, b.phone, b.store_code, b.customer_name
+     )
+     SELECT customer_id, phone, store_code, customer_name, last_order_before_send
+     FROM hist
+     WHERE orders_last_7d = 0
+       AND lifetime_orders > 0
+     ORDER BY COALESCE(last_order_before_send, DATE '1900-01-01') ASC, customer_id ASC`,
+    [store, sendYmd, startYmd]
+  );
+  return r.rows || [];
+}
+
+async function upsertAbTaskResult(pool, row) {
+  await pool.query(
+    `INSERT INTO ab_test_results (
+       test_id, result_date, variant, sent, impressions, clicks,
+       orders, redemptions, revenue, conversion_rate
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+     ON CONFLICT (test_id, result_date, variant) DO UPDATE SET
+       sent = EXCLUDED.sent,
+       impressions = EXCLUDED.impressions,
+       clicks = EXCLUDED.clicks,
+       orders = EXCLUDED.orders,
+       redemptions = EXCLUDED.redemptions,
+       revenue = EXCLUDED.revenue,
+       conversion_rate = EXCLUDED.conversion_rate,
+       created_at = NOW()`,
+    [
+      Number(row.test_id),
+      safeDateOnly(row.result_date),
+      cleanText(row.variant, 8),
+      Math.max(0, Math.floor(Number(row.sent) || 0)),
+      Math.max(0, Math.floor(Number(row.impressions) || 0)),
+      Math.max(0, Math.floor(Number(row.clicks) || 0)),
+      Math.max(0, Math.floor(Number(row.orders) || 0)),
+      Math.max(0, Math.floor(Number(row.redemptions) || 0)),
+      Number(Number(row.revenue || 0).toFixed(2)),
+      Number(Number(row.conversion_rate || 0).toFixed(4))
+    ]
+  );
+}
+
+async function queueAbSmsAssignments(pool, taskRow, audienceRows, opts = {}) {
+  const taskId = Number(taskRow?.id || 0);
+  if (!taskId || !Array.isArray(audienceRows) || !audienceRows.length) return { created: 0, audience: 0 };
+  const storeCode = cleanText(taskRow?.store_code, 128);
+  const sendDate = safeDateOnly(opts.sendDate || taskRow?.start_date) || todayShanghaiYmd();
+  const variantA = taskRow?.variant_a && typeof taskRow.variant_a === 'object' ? taskRow.variant_a : {};
+  const variantB = taskRow?.variant_b && typeof taskRow.variant_b === 'object' ? taskRow.variant_b : {};
+  let created = 0;
+  for (const row of audienceRows) {
+    const customerId = Number(row?.customer_id || 0);
+    const phone = cleanPhone(row?.phone);
+    if (!customerId || !phone) continue;
+    const variant = stableVariant(`${taskId}:${customerId}:${phone}`);
+    const variantDef = variant === 'A' ? variantA : variantB;
+    const content = interpolateAbContent(variantDef?.content || '', { name: row?.customer_name || '', phone });
+    const deliveryKey = `abtest_${taskId}_${variant}_${customerId}`;
+    const payload = {
+      ab_test_id: taskId,
+      variant,
+      phone,
+      customer_name: cleanText(row?.customer_name, 80),
+      test_name: cleanText(taskRow?.test_name, 255),
+      store_code: storeCode,
+      target_metric: cleanText(taskRow?.target_metric, 80),
+      sms_copy: content,
+      coupon_offer: variant === 'A' ? '8折券' : '减8元券',
+      audience_tag: '7日未到店',
+      send_date: sendDate
+    };
+    const ins = await pool.query(
+      `INSERT INTO growth_delivery_logs (
+         delivery_key, action_key, rule_key, customer_id, store_id, channel,
+         status, payload, result, created_at, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,'sms','sent',$6::jsonb,$7::jsonb,$8::timestamptz,$8::timestamptz)
+       ON CONFLICT (delivery_key) DO NOTHING
+       RETURNING id`,
+      [
+        deliveryKey,
+        deliveryKey,
+        `ab_test_${taskId}`,
+        customerId,
+        storeCode,
+        JSON.stringify(payload),
+        JSON.stringify({ provider: 'internal_auto_seed', sent: true }),
+        `${sendDate}T10:00:00+08:00`
+      ]
+    );
+    if (ins.rows?.length) created += 1;
+  }
+  return { created, audience: audienceRows.length };
+}
+
+async function refreshAbTestResults(pool, taskRow) {
+  const taskId = Number(taskRow?.id || 0);
+  const storeCode = cleanText(taskRow?.store_code, 128);
+  const startDate = safeDateOnly(taskRow?.start_date);
+  const endDate = safeDateOnly(taskRow?.end_date);
+  if (!taskId || !startDate || !endDate) return null;
+
+  const deliveries = await pool.query(
+    `SELECT customer_id,
+            store_id,
+            created_at,
+            payload->>'variant' AS variant,
+            payload->>'send_date' AS send_date
+       FROM growth_delivery_logs
+      WHERE channel = 'sms'
+        AND payload->>'ab_test_id' = $1`,
+    [String(taskId)]
+  );
+  const assignments = deliveries.rows || [];
+  const sendCount = { A: 0, B: 0 };
+  assignments.forEach((a) => {
+    const v = cleanText(a.variant, 8) === 'B' ? 'B' : 'A';
+    sendCount[v] += 1;
+  });
+
+  const assignmentMap = new Map();
+  assignments.forEach((a) => {
+    assignmentMap.set(Number(a.customer_id), cleanText(a.variant, 8) === 'B' ? 'B' : 'A');
+  });
+
+  const orderRes = await pool.query(
+    `SELECT po.biz_date::text AS biz_date,
+            po.customer_id,
+            COUNT(*)::int AS order_count,
+            COALESCE(SUM(po.amount_after_discount),0)::numeric AS revenue
+       FROM pos_orders po
+      WHERE po.store_id = $1
+        AND po.customer_id IS NOT NULL
+        AND po.biz_date >= $2::date
+        AND po.biz_date <= $3::date
+        AND po.customer_id = ANY($4::bigint[])
+      GROUP BY po.biz_date, po.customer_id`,
+    [storeCode, startDate, endDate, assignments.map((x) => Number(x.customer_id)).filter(Boolean)]
+  );
+
+  const byDateVariant = new Map();
+  for (let cur = startDate; cur <= endDate; cur = ymdAddDays(cur, 1)) {
+    ['A', 'B'].forEach((variant) => {
+      byDateVariant.set(`${cur}|${variant}`, {
+        test_id: taskId,
+        result_date: cur,
+        variant,
+        sent: cur === startDate ? sendCount[variant] : 0,
+        impressions: cur === startDate ? sendCount[variant] : 0,
+        clicks: 0,
+        orders: 0,
+        redemptions: 0,
+        revenue: 0,
+        conversion_rate: 0
+      });
+    });
+  }
+
+  (orderRes.rows || []).forEach((row) => {
+    const customerId = Number(row.customer_id || 0);
+    const variant = assignmentMap.get(customerId);
+    const key = `${safeDateOnly(row.biz_date)}|${variant}`;
+    const slot = byDateVariant.get(key);
+    if (!slot) return;
+    slot.orders += Math.max(0, Math.floor(Number(row.order_count) || 0));
+    slot.redemptions += 1;
+    slot.revenue = Number((Number(slot.revenue || 0) + Number(row.revenue || 0)).toFixed(2));
+    slot.conversion_rate = sendCount[variant] > 0 ? Number((slot.redemptions / sendCount[variant]).toFixed(4)) : 0;
+  });
+
+  for (const row of byDateVariant.values()) {
+    await upsertAbTaskResult(pool, row);
+  }
+
+  return { sendCount, assignments: assignments.length };
+}
+
+async function computeAbTestOutcome(pool, taskRow) {
+  const taskId = Number(taskRow?.id || 0);
+  if (!taskId) return null;
+  const deliveries = await pool.query(
+    `SELECT customer_id, payload->>'variant' AS variant
+       FROM growth_delivery_logs
+      WHERE channel='sms' AND payload->>'ab_test_id' = $1`,
+    [String(taskId)]
+  );
+  const assigns = deliveries.rows || [];
+  const sendCount = { A: 0, B: 0 };
+  const customerByVariant = { A: new Set(), B: new Set() };
+  assigns.forEach((a) => {
+    const v = cleanText(a.variant, 8) === 'B' ? 'B' : 'A';
+    sendCount[v] += 1;
+    customerByVariant[v].add(Number(a.customer_id));
+  });
+  const rows = await pool.query(
+    `SELECT result_date, variant, sent, impressions, clicks, orders, redemptions, revenue, conversion_rate
+       FROM ab_test_results
+      WHERE test_id = $1
+      ORDER BY result_date ASC, variant ASC`,
+    [taskId]
+  );
+  const byVariant = {
+    A: { sent: sendCount.A, impressions: 0, clicks: 0, orders: 0, redemptions: 0, revenue: 0 },
+    B: { sent: sendCount.B, impressions: 0, clicks: 0, orders: 0, redemptions: 0, revenue: 0 }
+  };
+  (rows.rows || []).forEach((r) => {
+    const v = cleanText(r.variant, 8) === 'B' ? 'B' : 'A';
+    byVariant[v].impressions += Math.max(0, Math.floor(Number(r.impressions) || 0));
+    byVariant[v].clicks += Math.max(0, Math.floor(Number(r.clicks) || 0));
+    byVariant[v].orders += Math.max(0, Math.floor(Number(r.orders) || 0));
+    byVariant[v].redemptions += Math.max(0, Math.floor(Number(r.redemptions) || 0));
+    byVariant[v].revenue = Number((byVariant[v].revenue + Number(r.revenue || 0)).toFixed(2));
+  });
+  ['A', 'B'].forEach((v) => {
+    byVariant[v].redemption_rate = byVariant[v].sent > 0 ? Number((byVariant[v].redemptions / byVariant[v].sent).toFixed(4)) : 0;
+    byVariant[v].revenue_per_order = byVariant[v].orders > 0 ? Number((byVariant[v].revenue / byVariant[v].orders).toFixed(2)) : 0;
+  });
+  return { daily: rows.rows || [], byVariant, sendCount };
+}
+
+async function buildAbAiSummary(taskRow, outcome) {
+  const byVariant = outcome?.byVariant || {};
+  const a = byVariant.A || {};
+  const b = byVariant.B || {};
+  const prompt = `你是餐饮增长分析助手。请用简洁中文总结一次A/B测试结果，输出1段话，不要分点，不超过180字。\n测试名：${taskRow.test_name}\n目标指标：${taskRow.target_metric}\nA组发送${a.sent || 0}人，核销/回流${a.redemptions || 0}，核销率${formatPercent((a.redemption_rate || 0) * 100)}，营收${a.revenue || 0}元。\nB组发送${b.sent || 0}人，核销/回流${b.redemptions || 0}，核销率${formatPercent((b.redemption_rate || 0) * 100)}，营收${b.revenue || 0}元。`;
+  try {
+    const llm = await callLLM([{ role: 'user', content: prompt }], { purpose: 'data_analysis', temperature: 0.2, max_tokens: 220 });
+    if (llm?.ok && llm.content) return cleanText(llm.content, 1800);
+  } catch (_) {}
+  const winner = (a.redemption_rate || 0) > (b.redemption_rate || 0) ? 'A' : (a.redemption_rate || 0) < (b.redemption_rate || 0) ? 'B' : 'tie';
+  return cleanText(`测试完成：A组核销率${formatPercent((a.redemption_rate || 0) * 100)}，B组核销率${formatPercent((b.redemption_rate || 0) * 100)}，${winner === 'tie' ? '两组差异不明显，建议继续积累样本。' : `${winner}组表现更好，建议将该版本作为下轮默认文案。`}`, 1800);
+}
+
+async function maybeWriteAbLearning(pool, taskRow, outcome, winner, winnerLift) {
+  if (!['A', 'B'].includes(winner)) return;
+  const variable = taskRow?.test_type === 'sms_copy' ? '文案风格' : cleanText(taskRow?.test_type || '测试变量', 80);
+  const variantA = taskRow?.variant_a && typeof taskRow.variant_a === 'object' ? taskRow.variant_a : {};
+  const variantB = taskRow?.variant_b && typeof taskRow.variant_b === 'object' ? taskRow.variant_b : {};
+  const winDef = winner === 'A' ? variantA : variantB;
+  const loseDef = winner === 'A' ? variantB : variantA;
+  const learningKey = `ab_test:${taskRow.id}:${winner}`;
+  await pool.query(
+    `INSERT INTO growth_learnings (
+       source_type, source_id, store_code, channel, scene, audience_tag, variable,
+       winning_value, losing_value, effect_desc, sample_size, confidence, valid_until
+     ) VALUES ('ab_test',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+     ON CONFLICT DO NOTHING`,
+    [
+      String(taskRow.id),
+      cleanText(taskRow.store_code, 128),
+      taskRow.test_type === 'sms_copy' ? 'sms' : cleanText(taskRow.test_type, 80),
+      '晚市',
+      '7日未到店',
+      variable,
+      cleanText(winDef.label || winDef.content || winner, 500),
+      cleanText(loseDef.label || loseDef.content || (winner === 'A' ? 'B' : 'A'), 500),
+      cleanText(`核销率+${Number(winnerLift || 0).toFixed(2)}%`, 255),
+      Math.max(Number(outcome?.byVariant?.A?.sent || 0), Number(outcome?.byVariant?.B?.sent || 0)),
+      Math.max(Number(outcome?.byVariant?.A?.sent || 0), Number(outcome?.byVariant?.B?.sent || 0)) >= 100 ? 'high' : 'medium',
+      ymdAddDays(todayShanghaiYmd(), 90)
+    ]
+  ).catch(() => {});
+}
+
+async function evaluateAbTask(pool, taskRow) {
+  const outcome = await computeAbTestOutcome(pool, taskRow);
+  if (!outcome) return null;
+  const a = outcome.byVariant.A || {};
+  const b = outcome.byVariant.B || {};
+  const minSample = Math.max(1, Math.floor(Number(taskRow?.min_sample_size) || 30));
+  if ((a.sent || 0) < minSample || (b.sent || 0) < minSample) return { outcome, finalized: false };
+  const rateA = Number(a.redemption_rate || 0);
+  const rateB = Number(b.redemption_rate || 0);
+  let winner = 'tie';
+  if (Math.abs(rateA - rateB) >= 0.01) winner = rateA > rateB ? 'A' : 'B';
+  const base = winner === 'A' ? rateB : rateA;
+  const top = winner === 'A' ? rateA : rateB;
+  const winnerLift = winner === 'tie' ? 0 : Number((base > 0 ? ((top - base) / base) * 100 : top * 100).toFixed(2));
+  const aiSummary = await buildAbAiSummary(taskRow, outcome);
+  const status = safeDateOnly(taskRow.end_date) <= todayShanghaiYmd() ? 'completed' : 'running';
+  const updated = await pool.query(
+    `UPDATE ab_test_tasks
+        SET winner = $2,
+            winner_lift = $3,
+            ai_summary = $4,
+            status = $5
+      WHERE id = $1
+      RETURNING *`,
+    [Number(taskRow.id), winner, winnerLift, cleanText(aiSummary, 4000), status]
+  );
+  await maybeWriteAbLearning(pool, updated.rows[0] || taskRow, outcome, winner, winnerLift);
+  return { outcome, finalized: true, task: updated.rows[0] || taskRow };
+}
+
+async function generateDishTrendSummary(pool, storeCode) {
+  const store = cleanText(storeCode, 128);
+  const r = await pool.query(
+    `WITH cur AS (
+       SELECT dish_name, COALESCE(SUM(qty),0) AS qty, COALESCE(SUM(amount_after_discount),0) AS revenue
+       FROM pos_order_items
+       WHERE store_code = $1 AND biz_date >= CURRENT_DATE - INTERVAL '7 day'
+       GROUP BY dish_name
+     ),
+     prev AS (
+       SELECT dish_name, COALESCE(SUM(qty),0) AS qty, COALESCE(SUM(amount_after_discount),0) AS revenue
+       FROM pos_order_items
+       WHERE store_code = $1 AND biz_date >= CURRENT_DATE - INTERVAL '14 day' AND biz_date < CURRENT_DATE - INTERVAL '7 day'
+       GROUP BY dish_name
+     )
+     SELECT COALESCE(cur.dish_name, prev.dish_name) AS dish_name,
+            COALESCE(cur.qty,0) AS cur_qty,
+            COALESCE(prev.qty,0) AS prev_qty,
+            COALESCE(cur.revenue,0) AS cur_revenue,
+            COALESCE(prev.revenue,0) AS prev_revenue
+     FROM cur
+     FULL JOIN prev ON prev.dish_name = cur.dish_name`,
+    [store]
+  );
+  const rows = (r.rows || []).map((x) => {
+    const prevQty = Number(x.prev_qty || 0);
+    const curQty = Number(x.cur_qty || 0);
+    const deltaPct = prevQty > 0 ? ((curQty - prevQty) / prevQty) * 100 : (curQty > 0 ? 100 : 0);
+    return { ...x, deltaPct: Number(deltaPct.toFixed(2)) };
+  });
+  rows.sort((a, b) => Number(b.deltaPct || 0) - Number(a.deltaPct || 0));
+  return {
+    topGrowers: rows.filter((x) => Number(x.cur_qty || 0) > 0).slice(0, 5),
+    topDecliners: rows.slice().sort((a, b) => Number(a.deltaPct || 0) - Number(b.deltaPct || 0)).filter((x) => Number(x.prev_qty || 0) > 0).slice(0, 5)
+  };
+}
+
+async function generateWeeklyContentSuggestion(pool, storeCode, weekStart, operator = 'system') {
+  const store = cleanText(storeCode, 128);
+  const start = safeDateOnly(weekStart) || todayShanghaiYmd();
+  const trends = await generateDishTrendSummary(pool, store);
+  const learningsRes = await pool.query(
+    `SELECT * FROM growth_learnings
+      WHERE ($1 = '' OR store_code = $1 OR store_code IS NULL OR store_code = '')
+        AND (valid_until IS NULL OR valid_until >= CURRENT_DATE)
+      ORDER BY created_at DESC
+      LIMIT 20`,
+    [store]
+  );
+  const abRes = await pool.query(
+    `SELECT * FROM ab_test_tasks WHERE ($1 = '' OR store_code = $1) AND winner IS NOT NULL ORDER BY created_at DESC LIMIT 10`,
+    [store]
+  );
+  const top = trends.topGrowers[0] || null;
+  const down = trends.topDecliners[0] || null;
+  const bestLearning = learningsRes.rows?.[0] || null;
+  const bestAb = abRes.rows?.find((x) => x.test_type === 'sms_copy') || abRes.rows?.[0] || null;
+  const smsA = top ? `荔枝木${top.dish_name}本周热卖，今晚来尝尝，限时优惠已备好` : '今晚来店，专属优惠已为您准备';
+  const smsB = top ? `{姓名}，${top.dish_name}这周很受欢迎，给你留了一张优惠券，3天内有效` : '{姓名}，给你准备了一张限时优惠券，3天内有效';
+  const items = [
+    {
+      rank: 1,
+      theme: top ? `重点推${top.dish_name}` : '重点推本周热门菜品',
+      reason: top ? `近7天销量环比增长${Number(top.deltaPct || 0).toFixed(0)}%` : '结合近7天销售趋势与已验证经验',
+      channel: 'sms',
+      sms_copy_a: smsA,
+      sms_copy_b: smsB,
+      action: '建议测试这两条，追踪7天核销/回流率'
+    },
+    {
+      rank: 2,
+      theme: '午市单人套餐',
+      reason: bestLearning ? `参考经验：${bestLearning.audience_tag || '目标人群'}场景下「${bestLearning.winning_value || ''}」效果更优` : '午市需要持续拉动到店转化',
+      channel: 'xiaohongshu',
+      xhs_copies: [
+        '工作日午市也要吃得像样，单人套餐快手不将就。',
+        '一个人吃饭也能很满足，午市套餐把性价比拉满。',
+        '午休一小时，来一份热腾腾现炒套餐，刚刚好。'
+      ],
+      dianping_cover_styles: ['高性价比风格', '烟火气风格'],
+      action: '运营选一个版本发布，并录入曝光/点击/订单效果'
+    },
+    {
+      rank: 3,
+      theme: down ? `本周不建议重推：${down.dish_name}` : '本周不建议重推高价低转化品类',
+      reason: down ? `近7天销量环比下降${Math.abs(Number(down.deltaPct || 0)).toFixed(0)}%` : '避免继续投放弱转化主题，节省预算',
+      channel: 'all',
+      action: bestAb ? `优先复用最近A/B测试胜出风格：${bestAb.winner || 'A'}组` : '优先复用最近已验证的高转化内容风格'
+    }
+  ];
+  const summaryText = `【本周内容建议 · ${store || '全部门店'}】\n① ${items[0].theme}：${items[0].reason}\n② ${items[1].theme}：${items[1].reason}\n③ ${items[2].theme}：${items[2].reason}`;
+  const saved = await pool.query(
+    `INSERT INTO growth_content_suggestions (suggestion_key, week_start, store_code, summary_json, generated_by)
+     VALUES ($1,$2,$3,$4::jsonb,$5)
+     ON CONFLICT (suggestion_key) DO UPDATE SET summary_json = EXCLUDED.summary_json, generated_by = EXCLUDED.generated_by, updated_at = NOW()
+     RETURNING *`,
+    [`weekly_${store || 'all'}_${start}`, start, store, JSON.stringify({ store_code: store, week_start: start, items, summary_text: summaryText }), cleanText(operator, 80)]
+  );
+  return saved.rows[0] || null;
+}
+
+async function pushWeeklySuggestionToFeishu(pool, suggestionRow) {
+  if (!suggestionRow) return { pushed: 0 };
+  const summary = suggestionRow.summary_json && typeof suggestionRow.summary_json === 'object' ? suggestionRow.summary_json : {};
+  const text = cleanText(summary.summary_text || '', 4000);
+  if (!text) return { pushed: 0 };
+  const rec = await pool.query(
+    `SELECT open_id FROM feishu_users
+      WHERE registered = TRUE AND open_id IS NOT NULL AND trim(open_id) <> ''
+        AND role IN ('admin','hq_manager')`,
+    []
+  );
+  let pushed = 0;
+  for (const row of rec.rows || []) {
+    const sent = await sendLarkMessage(String(row.open_id || '').trim(), text, { skipDedup: true }).catch(() => ({ ok: false }));
+    if (sent?.ok) pushed += 1;
+  }
+  if (pushed > 0) {
+    await pool.query(`UPDATE growth_content_suggestions SET feishu_pushed_at = NOW() WHERE id = $1`, [Number(suggestionRow.id)]).catch(() => {});
+  }
+  return { pushed };
 }
 
 import jwt from 'jsonwebtoken';
@@ -88,6 +585,124 @@ export async function ensurePhaseTables(pool) {
   `);
   await pool.query(`ALTER TABLE growth_campaign_plans ADD COLUMN IF NOT EXISTS coupon_value_fen INTEGER DEFAULT 0`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_plans_store ON growth_campaign_plans (store_id, status, created_at DESC)`);
+
+  // Phase 4: A/B tests + learnings
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ab_test_tasks (
+      id BIGSERIAL PRIMARY KEY,
+      test_name TEXT NOT NULL,
+      store_code TEXT,
+      test_type TEXT NOT NULL,
+      target_metric TEXT NOT NULL,
+      variant_a JSONB NOT NULL,
+      variant_b JSONB NOT NULL,
+      rotation_config JSONB DEFAULT '{"method":"time","a_days":[1,2,3],"b_days":[4,5,6,0]}'::jsonb,
+      start_date DATE NOT NULL,
+      end_date DATE NOT NULL,
+      min_sample_size INTEGER DEFAULT 30,
+      winner TEXT,
+      winner_lift NUMERIC(5,2),
+      ai_summary TEXT,
+      status TEXT DEFAULT 'running',
+      created_by TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_ab_test_tasks_store_status ON ab_test_tasks (store_code, status, created_at DESC)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ab_test_results (
+      id BIGSERIAL PRIMARY KEY,
+      test_id BIGINT REFERENCES ab_test_tasks(id) ON DELETE CASCADE,
+      result_date DATE NOT NULL,
+      variant TEXT NOT NULL,
+      sent INTEGER DEFAULT 0,
+      impressions INTEGER DEFAULT 0,
+      clicks INTEGER DEFAULT 0,
+      orders INTEGER DEFAULT 0,
+      redemptions INTEGER DEFAULT 0,
+      revenue NUMERIC(10,2) DEFAULT 0,
+      conversion_rate NUMERIC(6,4),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(test_id, result_date, variant)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_ab_test_results_test_date ON ab_test_results (test_id, result_date DESC, variant)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS growth_learnings (
+      id BIGSERIAL PRIMARY KEY,
+      source_type TEXT NOT NULL,
+      source_id TEXT,
+      store_code TEXT,
+      channel TEXT,
+      scene TEXT,
+      audience_tag TEXT,
+      variable TEXT NOT NULL,
+      winning_value TEXT NOT NULL,
+      losing_value TEXT,
+      effect_desc TEXT,
+      sample_size INTEGER,
+      confidence TEXT DEFAULT 'medium',
+      valid_until DATE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_growth_learnings_store ON growth_learnings (store_code, channel, created_at DESC)`);
+
+  // Phase 5: content suggestions + performance
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS content_performance (
+      id BIGSERIAL PRIMARY KEY,
+      content_key TEXT UNIQUE,
+      suggestion_id BIGINT,
+      store_code TEXT,
+      channel TEXT NOT NULL,
+      scene TEXT,
+      audience_tag TEXT,
+      variable TEXT,
+      content_title TEXT,
+      content_body TEXT,
+      winning_value TEXT,
+      losing_value TEXT,
+      impressions INTEGER DEFAULT 0,
+      clicks INTEGER DEFAULT 0,
+      orders INTEGER DEFAULT 0,
+      redemptions INTEGER DEFAULT 0,
+      revenue NUMERIC(10,2) DEFAULT 0,
+      notes TEXT,
+      recorded_by TEXT,
+      published_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`ALTER TABLE content_performance ADD COLUMN IF NOT EXISTS content_key TEXT`);
+  await pool.query(`ALTER TABLE content_performance ADD COLUMN IF NOT EXISTS suggestion_id BIGINT`);
+  await pool.query(`ALTER TABLE content_performance ADD COLUMN IF NOT EXISTS scene TEXT`);
+  await pool.query(`ALTER TABLE content_performance ADD COLUMN IF NOT EXISTS audience_tag TEXT`);
+  await pool.query(`ALTER TABLE content_performance ADD COLUMN IF NOT EXISTS variable TEXT`);
+  await pool.query(`ALTER TABLE content_performance ADD COLUMN IF NOT EXISTS content_body TEXT`);
+  await pool.query(`ALTER TABLE content_performance ADD COLUMN IF NOT EXISTS winning_value TEXT`);
+  await pool.query(`ALTER TABLE content_performance ADD COLUMN IF NOT EXISTS losing_value TEXT`);
+  await pool.query(`ALTER TABLE content_performance ADD COLUMN IF NOT EXISTS redemptions INTEGER DEFAULT 0`);
+  await pool.query(`ALTER TABLE content_performance ADD COLUMN IF NOT EXISTS revenue NUMERIC(10,2) DEFAULT 0`);
+  await pool.query(`ALTER TABLE content_performance ADD COLUMN IF NOT EXISTS recorded_by TEXT`);
+  await pool.query(`ALTER TABLE content_performance ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_content_performance_key ON content_performance (content_key) WHERE content_key IS NOT NULL AND content_key <> ''`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_content_performance_store ON content_performance (store_code, channel, created_at DESC)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS growth_content_suggestions (
+      id BIGSERIAL PRIMARY KEY,
+      suggestion_key TEXT UNIQUE NOT NULL,
+      week_start DATE NOT NULL,
+      store_code TEXT,
+      summary_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      feishu_pushed_at TIMESTAMPTZ,
+      generated_by TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_growth_content_suggestions_week ON growth_content_suggestions (week_start DESC, store_code)`);
 
   // Phase 8: content_calendar
   await pool.query(`
@@ -1118,6 +1733,371 @@ export function registerPhaseRoutes(app, pool) {
     totalLinked = await linkPosOrdersToCustomers(pool);
     res.json({ok:true, orders_synced: totalOrders, items_synced: totalItems, customers_linked: totalLinked});
   });
+
+  // ── Phase 4: A/B tests ─────────────────────────────────────────────
+  app.get('/api/growth/ab-tests', async (req, res) => {
+    if (!authPhaseApi(req).ok) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    const storeCode = cleanText(req.query.store_code || '', 128);
+    const status = cleanText(req.query.status || '', 40);
+    const r = await pool.query(
+      `SELECT * FROM ab_test_tasks
+        WHERE ($1 = '' OR store_code = $1)
+          AND ($2 = '' OR status = $2)
+        ORDER BY created_at DESC
+        LIMIT 100`,
+      [storeCode, status]
+    );
+    const tasks = [];
+    for (const row of r.rows || []) {
+      const outcome = await computeAbTestOutcome(pool, row).catch(() => null);
+      const daily = await pool.query(`SELECT * FROM ab_test_results WHERE test_id = $1 ORDER BY result_date ASC, variant ASC`, [row.id]).catch(() => ({ rows: [] }));
+      tasks.push({ ...row, metrics: outcome?.byVariant || {}, results: daily.rows || [] });
+    }
+    return res.json({ ok: true, tasks });
+  });
+
+  app.post('/api/growth/ab-tests', async (req, res) => {
+    const auth = authPhaseApi(req);
+    if (!auth.ok) return res.status(auth.status || 401).json({ ok: false, error: auth.error || 'unauthorized' });
+    const b = req.body || {};
+    const testName = cleanText(b.test_name, 255);
+    const storeCode = cleanText(b.store_code, 128);
+    const testType = cleanText(b.test_type || 'sms_copy', 80);
+    const targetMetric = cleanText(b.target_metric || 'redemption_rate', 80);
+    const startDate = safeDateOnly(b.start_date) || todayShanghaiYmd();
+    const endDate = safeDateOnly(b.end_date) || ymdAddDays(startDate, 7);
+    if (!testName || !storeCode) return res.status(400).json({ ok: false, error: 'missing_test_name_or_store_code' });
+    const created = await pool.query(
+      `INSERT INTO ab_test_tasks (
+         test_name, store_code, test_type, target_metric,
+         variant_a, variant_b, rotation_config, start_date, end_date,
+         min_sample_size, created_by, status
+       ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8,$9,$10,$11,'running')
+       RETURNING *`,
+      [
+        testName,
+        storeCode,
+        testType,
+        targetMetric,
+        JSON.stringify(b.variant_a || {}),
+        JSON.stringify(b.variant_b || {}),
+        JSON.stringify(b.rotation_config || { method: 'time', a_days: [1, 2, 3], b_days: [4, 5, 6, 0] }),
+        startDate,
+        endDate,
+        Math.max(1, Math.floor(Number(b.min_sample_size) || 30)),
+        cleanText(auth.user?.username || 'system', 80)
+      ]
+    );
+    const task = created.rows[0];
+    const autoSeed = b.auto_seed !== false;
+    if (autoSeed) {
+      const audience = await listAbAudienceForSendDate(pool, storeCode, startDate, 7);
+      await queueAbSmsAssignments(pool, task, audience, { sendDate: startDate });
+      await refreshAbTestResults(pool, task);
+      if (safeDateOnly(endDate) <= todayShanghaiYmd()) await evaluateAbTask(pool, task);
+    }
+    return res.json({ ok: true, task: (await pool.query(`SELECT * FROM ab_test_tasks WHERE id = $1`, [task.id])).rows[0] });
+  });
+
+  app.post('/api/growth/ab-tests/bootstrap-first', async (req, res) => {
+    const auth = authPhaseApi(req);
+    if (!auth.ok) return res.status(auth.status || 401).json({ ok: false, error: auth.error || 'unauthorized' });
+    const existing = await pool.query(`SELECT * FROM ab_test_tasks WHERE test_name = $1 ORDER BY id DESC LIMIT 1`, ['7日未到店短信召回A/B']);
+    if (existing.rows?.length) {
+      const task = existing.rows[0];
+      await refreshAbTestResults(pool, task);
+      if (safeDateOnly(task.end_date) <= todayShanghaiYmd()) await evaluateAbTask(pool, task);
+      return res.json({ ok: true, task: existing.rows[0], reused: true });
+    }
+    const startDate = ymdAddDays(todayShanghaiYmd(), -7);
+    const endDate = todayShanghaiYmd();
+    const created = await pool.query(
+      `INSERT INTO ab_test_tasks (
+         test_name, store_code, test_type, target_metric,
+         variant_a, variant_b, rotation_config, start_date, end_date,
+         min_sample_size, created_by, status
+       ) VALUES ($1,$2,'sms_copy','redemption_rate',$3::jsonb,$4::jsonb,$5::jsonb,$6,$7,30,$8,'running')
+       RETURNING *`,
+      [
+        '7日未到店短信召回A/B',
+        '51866138',
+        JSON.stringify({ label: '文案A', content: '锅气十足，今晚来尝尝？烧鹅刚出炉，专属8折券已发' }),
+        JSON.stringify({ label: '文案B', content: '{姓名}，已有7天没来了，准备了一张减8元券，3天内有效' }),
+        JSON.stringify({ method: 'hash', a_days: [1, 2, 3], b_days: [4, 5, 6, 0] }),
+        startDate,
+        endDate,
+        cleanText(auth.user?.username || 'system', 80)
+      ]
+    );
+    const task = created.rows[0];
+    const audience = await listAbAudienceForSendDate(pool, '51866138', startDate, 7);
+    const queued = await queueAbSmsAssignments(pool, task, audience, { sendDate: startDate });
+    await refreshAbTestResults(pool, task);
+    const evaluated = await evaluateAbTask(pool, task);
+    return res.json({ ok: true, task: evaluated?.task || task, queued, evaluated });
+  });
+
+  app.post('/api/growth/ab-tests/:id/refresh', async (req, res) => {
+    const auth = authPhaseApi(req);
+    if (!auth.ok) return res.status(auth.status || 401).json({ ok: false, error: auth.error || 'unauthorized' });
+    const id = Number(req.params.id || 0);
+    if (!id) return res.status(400).json({ ok: false, error: 'invalid_id' });
+    const taskRes = await pool.query(`SELECT * FROM ab_test_tasks WHERE id = $1 LIMIT 1`, [id]);
+    if (!taskRes.rows?.length) return res.status(404).json({ ok: false, error: 'task_not_found' });
+    const task = taskRes.rows[0];
+    const refreshed = await refreshAbTestResults(pool, task);
+    const evaluated = safeDateOnly(task.end_date) <= todayShanghaiYmd() ? await evaluateAbTask(pool, task) : null;
+    const latest = await pool.query(`SELECT * FROM ab_test_tasks WHERE id = $1`, [id]);
+    return res.json({ ok: true, task: latest.rows[0], refreshed, evaluated });
+  });
+
+  app.get('/api/growth/learnings', async (req, res) => {
+    if (!authPhaseApi(req).ok) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    const storeCode = cleanText(req.query.store_code || '', 128);
+    const channel = cleanText(req.query.channel || '', 80);
+    const r = await pool.query(
+      `SELECT * FROM growth_learnings
+        WHERE ($1 = '' OR store_code = $1)
+          AND ($2 = '' OR channel = $2)
+        ORDER BY created_at DESC
+        LIMIT 200`,
+      [storeCode, channel]
+    );
+    return res.json({ ok: true, learnings: r.rows });
+  });
+
+  // ── Phase 5: content system ───────────────────────────────────────
+  app.get('/api/growth/content-suggestions', async (req, res) => {
+    if (!authPhaseApi(req).ok) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    const storeCode = cleanText(req.query.store_code || '', 128);
+    const weekStart = safeDateOnly(req.query.week_start || '');
+    const r = await pool.query(
+      `SELECT * FROM growth_content_suggestions
+        WHERE ($1 = '' OR store_code = $1)
+          AND ($2 = '' OR week_start = $2::date)
+        ORDER BY week_start DESC, created_at DESC
+        LIMIT 50`,
+      [storeCode, weekStart]
+    );
+    return res.json({ ok: true, suggestions: r.rows });
+  });
+
+  app.post('/api/growth/content-suggestions/generate', async (req, res) => {
+    const auth = authPhaseApi(req);
+    if (!auth.ok) return res.status(auth.status || 401).json({ ok: false, error: auth.error || 'unauthorized' });
+    const storeCode = cleanText(req.body?.store_code || req.query?.store_code || '51866138', 128);
+    const weekStart = safeDateOnly(req.body?.week_start || req.query?.week_start || todayShanghaiYmd());
+    const suggestion = await generateWeeklyContentSuggestion(pool, storeCode, weekStart, auth.user?.username || 'system');
+    const pushed = await pushWeeklySuggestionToFeishu(pool, suggestion).catch(() => ({ pushed: 0 }));
+    return res.json({ ok: true, suggestion, pushed });
+  });
+
+  app.get('/api/growth/content-performance', async (req, res) => {
+    if (!authPhaseApi(req).ok) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    const storeCode = cleanText(req.query.store_code || '', 128);
+    const channel = cleanText(req.query.channel || '', 80);
+    const r = await pool.query(
+      `SELECT * FROM content_performance
+        WHERE ($1 = '' OR store_code = $1)
+          AND ($2 = '' OR channel = $2)
+        ORDER BY created_at DESC
+        LIMIT 200`,
+      [storeCode, channel]
+    );
+    return res.json({ ok: true, items: r.rows });
+  });
+
+  app.post('/api/growth/content-performance', async (req, res) => {
+    const auth = authPhaseApi(req);
+    if (!auth.ok) return res.status(auth.status || 401).json({ ok: false, error: auth.error || 'unauthorized' });
+    const b = req.body || {};
+    const contentKey = cleanText(b.content_key || `cp_${Date.now()}`, 255);
+    const row = await pool.query(
+      `INSERT INTO content_performance (
+         content_key, suggestion_id, store_code, channel, scene, audience_tag, variable,
+         content_title, content_body, winning_value, losing_value,
+         impressions, clicks, orders, redemptions, revenue,
+         notes, recorded_by, published_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+       ON CONFLICT (content_key) DO UPDATE SET
+         impressions = EXCLUDED.impressions,
+         clicks = EXCLUDED.clicks,
+         orders = EXCLUDED.orders,
+         redemptions = EXCLUDED.redemptions,
+         revenue = EXCLUDED.revenue,
+         notes = EXCLUDED.notes,
+         recorded_by = EXCLUDED.recorded_by,
+         published_at = EXCLUDED.published_at,
+         updated_at = NOW()
+       RETURNING *`,
+      [
+        contentKey,
+        b.suggestion_id ? Number(b.suggestion_id) : null,
+        cleanText(b.store_code, 128),
+        cleanText(b.channel, 80),
+        cleanText(b.scene, 80),
+        cleanText(b.audience_tag, 120),
+        cleanText(b.variable, 120),
+        cleanText(b.content_title, 500),
+        cleanText(b.content_body, 4000),
+        cleanText(b.winning_value, 500),
+        cleanText(b.losing_value, 500),
+        Math.max(0, Math.floor(Number(b.impressions) || 0)),
+        Math.max(0, Math.floor(Number(b.clicks) || 0)),
+        Math.max(0, Math.floor(Number(b.orders) || 0)),
+        Math.max(0, Math.floor(Number(b.redemptions) || 0)),
+        Number(Number(b.revenue || 0).toFixed(2)),
+        cleanText(b.notes, 2000),
+        cleanText(auth.user?.username || 'system', 80),
+        b.published_at ? parseOccurredAt(b.published_at) : new Date()
+      ]
+    );
+    const perf = row.rows[0];
+    const impressions = Number(perf.impressions || 0);
+    const redemptions = Number(perf.redemptions || 0);
+    const effectPct = impressions > 0 ? Number(((redemptions / impressions) * 100).toFixed(2)) : 0;
+    if (cleanText(perf.winning_value, 500)) {
+      await pool.query(
+        `INSERT INTO growth_learnings (
+           source_type, source_id, store_code, channel, scene, audience_tag, variable,
+           winning_value, losing_value, effect_desc, sample_size, confidence, valid_until
+         ) VALUES ('campaign',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [
+          String(perf.id),
+          cleanText(perf.store_code, 128),
+          cleanText(perf.channel, 80),
+          cleanText(perf.scene, 80),
+          cleanText(perf.audience_tag, 120),
+          cleanText(perf.variable || '内容策略', 120),
+          cleanText(perf.winning_value, 500),
+          cleanText(perf.losing_value, 500),
+          cleanText(`核销率${effectPct}%`, 255),
+          impressions,
+          impressions >= 100 ? 'high' : 'medium',
+          ymdAddDays(todayShanghaiYmd(), 90)
+        ]
+      ).catch(() => {});
+    }
+    return res.json({ ok: true, item: perf });
+  });
+
+  app.get('/api/growth/content-performance-v2', async (req, res) => {
+    if (!authPhaseApi(req).ok) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    const storeCode = cleanText(req.query.store_code || '', 128);
+    const channel = cleanText(req.query.channel || '', 80);
+    const r = await pool.query(
+      `SELECT * FROM content_performance
+        WHERE ($1 = '' OR store_code = $1)
+          AND ($2 = '' OR channel = $2)
+        ORDER BY created_at DESC
+        LIMIT 200`,
+      [storeCode, channel]
+    );
+    return res.json({ ok: true, items: r.rows });
+  });
+
+  app.post('/api/growth/content-performance-v2', async (req, res) => {
+    const auth = authPhaseApi(req);
+    if (!auth.ok) return res.status(auth.status || 401).json({ ok: false, error: auth.error || 'unauthorized' });
+    const b = req.body || {};
+    const contentKey = cleanText(b.content_key || `cp_${Date.now()}`, 255);
+    const row = await pool.query(
+      `INSERT INTO content_performance (
+         content_key, suggestion_id, content_date, store_code, store_id, channel, platform,
+         content_type, variant_tag, dish_name, content_title, content_body,
+         scene, audience_tag, variable, winning_value, losing_value,
+         impressions, clicks, orders, redemptions, revenue,
+         notes, created_by, recorded_by, published_at
+       ) VALUES ($1,$2,$3,$4,$4,$5,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+       RETURNING *`,
+      [
+        contentKey,
+        b.suggestion_id ? Number(b.suggestion_id) : null,
+        safeDateOnly(b.content_date || b.published_at || todayShanghaiYmd()) || todayShanghaiYmd(),
+        cleanText(b.store_code, 128),
+        cleanText(b.channel, 80),
+        cleanText(b.content_type || 'weekly_suggestion', 80),
+        cleanText(b.variant_tag || 'A', 16),
+        cleanText(b.dish_name || b.content_title, 255),
+        cleanText(b.content_title, 500),
+        cleanText(b.content_body, 4000),
+        cleanText(b.scene, 80),
+        cleanText(b.audience_tag, 120),
+        cleanText(b.variable, 120),
+        cleanText(b.winning_value, 500),
+        cleanText(b.losing_value, 500),
+        Math.max(0, Math.floor(Number(b.impressions) || 0)),
+        Math.max(0, Math.floor(Number(b.clicks) || 0)),
+        Math.max(0, Math.floor(Number(b.orders) || 0)),
+        Math.max(0, Math.floor(Number(b.redemptions) || 0)),
+        Number(Number(b.revenue || 0).toFixed(2)),
+        cleanText(b.notes, 2000),
+        cleanText(auth.user?.username || 'system', 80),
+        cleanText(auth.user?.username || 'system', 80),
+        b.published_at ? parseOccurredAt(b.published_at) : new Date()
+      ]
+    );
+    const perf = row.rows[0];
+    const impressions = Number(perf.impressions || 0);
+    const redemptions = Number(perf.redemptions || 0);
+    const effectPct = impressions > 0 ? Number(((redemptions / impressions) * 100).toFixed(2)) : 0;
+    if (cleanText(perf.winning_value, 500)) {
+      await pool.query(
+        `INSERT INTO growth_learnings (
+           source_type, source_id, store_code, channel, scene, audience_tag, variable,
+           winning_value, losing_value, effect_desc, sample_size, confidence, valid_until
+         ) VALUES ('campaign',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [
+          String(perf.id),
+          cleanText(perf.store_code, 128),
+          cleanText(perf.channel, 80),
+          cleanText(perf.scene, 80),
+          cleanText(perf.audience_tag, 120),
+          cleanText(perf.variable || '内容策略', 120),
+          cleanText(perf.winning_value, 500),
+          cleanText(perf.losing_value, 500),
+          cleanText(`核销率${effectPct}%`, 255),
+          impressions,
+          impressions >= 100 ? 'high' : 'medium',
+          ymdAddDays(todayShanghaiYmd(), 90)
+        ]
+      ).catch(() => {});
+    }
+    return res.json({ ok: true, item: perf });
+  });
+
+  let __growthAbCronLast = '';
+  let __growthContentCronLast = '';
+  if (!globalThis.__growthPhase45Timers) {
+    globalThis.__growthPhase45Timers = true;
+    setInterval(async () => {
+      const nowYmd = todayShanghaiYmd();
+      try {
+        const running = await pool.query(`SELECT * FROM ab_test_tasks WHERE status = 'running' ORDER BY id DESC LIMIT 20`);
+        for (const task of running.rows || []) {
+          await refreshAbTestResults(pool, task).catch(() => null);
+          if (safeDateOnly(task.end_date) <= nowYmd) await evaluateAbTask(pool, task).catch(() => null);
+        }
+      } catch (e) {
+        console.warn('[growth-phase4] ab cron failed:', e?.message);
+      }
+      try {
+        const now = new Date(Date.now() + 8 * 3600000);
+        const weekday = now.getUTCDay();
+        const hour = now.getUTCHours();
+        if (weekday === 1 && hour >= 1 && __growthContentCronLast !== nowYmd) {
+          __growthContentCronLast = nowYmd;
+          const stores = await pool.query(`SELECT DISTINCT COALESCE(store_id, last_store_id, '') AS store_code FROM growth_customer_profiles gcp FULL JOIN growth_customers gc ON gc.id = gcp.customer_id WHERE COALESCE(store_id, last_store_id, '') <> '' LIMIT 20`);
+          for (const row of stores.rows || []) {
+            const suggestion = await generateWeeklyContentSuggestion(pool, cleanText(row.store_code, 128), nowYmd, 'weekly_cron').catch(() => null);
+            if (suggestion) await pushWeeklySuggestionToFeishu(pool, suggestion).catch(() => null);
+          }
+        }
+      } catch (e) {
+        console.warn('[growth-phase5] weekly content cron failed:', e?.message);
+      }
+    }, 10 * 60 * 1000);
+  }
 
   // ── POS Feishu sync cron: daily at 01:10 Asia/Shanghai ──
   const POS_SYNC_CRON_KEY = 'pos_feishu_sync';

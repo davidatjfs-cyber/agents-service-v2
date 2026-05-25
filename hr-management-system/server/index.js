@@ -67,6 +67,14 @@ import {
   summarizeDailyRegisterForEmployee,
   filterDailyRegisterRowsByEmployee
 } from './daily-attendance-register.js';
+import {
+  buildStoreAccessContext,
+  canAccessApprovalCenter,
+  canViewEmployeesForRole,
+  ensureStoreDutyBindingsTable,
+  loadActiveDutyRowsForUser,
+  pickEffectiveStore,
+} from './store-duty-bindings.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = String(process.env.HOST || '0.0.0.0');
@@ -1931,6 +1939,9 @@ app.get('/api/approvals', authRequired, async (req, res) => {
   const username = String(req.user?.username || '').trim();
   const role = String(req.user?.role || '').trim();
   if (!username) return res.status(400).json({ error: 'missing_user' });
+  if (!canAccessApprovalCenter(role, { dutyRows: [], currentStore: req.user?.current_store, primaryStore: req.user?.primary_store })) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
 
   const view = String(req.query?.view || 'assigned').trim();
   const status = String(req.query?.status || '').trim();
@@ -2070,6 +2081,7 @@ function canUserViewApprovalRow(user, row, state0) {
   if (!user || !row) return false;
   const un = String(user.username || '').trim().toLowerCase();
   const role = String(user.role || '').trim();
+  if (!canAccessApprovalCenter(role, { dutyRows: [], currentStore: user.current_store, primaryStore: user.primary_store })) return false;
   if (['admin', 'hq_manager', 'cashier', 'hr_manager'].includes(role)) return true;
   if (role === 'store_production_manager' && String(row.type || '') === 'points') return false;
   const appl = String(row.applicant_username || '').trim().toLowerCase();
@@ -2092,6 +2104,9 @@ function canUserViewApprovalRow(user, row, state0) {
 }
 
 app.get('/api/approvals/:id', authRequired, async (req, res) => {
+  if (!canAccessApprovalCenter(req.user?.role, { dutyRows: [], currentStore: req.user?.current_store, primaryStore: req.user?.primary_store })) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
   const id = String(req.params?.id || '').trim();
   if (!id) return res.status(400).json({ error: 'missing_id' });
   try {
@@ -2648,6 +2663,9 @@ app.get('/api/payments/budget-summary', authRequired, async (req, res) => {
 });
 
 app.post('/api/approvals', authRequired, async (req, res) => {
+  if (!canAccessApprovalCenter(req.user?.role, { dutyRows: [], currentStore: req.user?.current_store, primaryStore: req.user?.primary_store })) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
   const username = String(req.user?.username || '').trim();
   const role = String(req.user?.role || '').trim();
   const type = normalizeApprovalType(req.body?.type);
@@ -3127,6 +3145,9 @@ app.post('/api/approvals', authRequired, async (req, res) => {
 });
 
 app.post('/api/approvals/:id/read', authRequired, async (req, res) => {
+  if (!canAccessApprovalCenter(req.user?.role, { dutyRows: [], currentStore: req.user?.current_store, primaryStore: req.user?.primary_store })) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
   const username = String(req.user?.username || '').trim();
   const id = String(req.params?.id || '').trim();
   if (!username) return res.status(400).json({ error: 'missing_user' });
@@ -3146,6 +3167,9 @@ app.post('/api/approvals/:id/read', authRequired, async (req, res) => {
 
 // Admin delete approval record（级联清理休假记录，避免重新申请产生重复）
 app.delete('/api/approvals/:id', authRequired, async (req, res) => {
+  if (!canAccessApprovalCenter(req.user?.role, { dutyRows: [], currentStore: req.user?.current_store, primaryStore: req.user?.primary_store })) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
   const role = String(req.user?.role || '').trim();
   if (role !== 'admin') return res.status(403).json({ error: 'admin_only' });
   const id = String(req.params?.id || '').trim();
@@ -3245,6 +3269,9 @@ function buildOnboardingEmployeeRecordFromPayload(emp, stateForId) {
 }
 
 app.post('/api/approvals/:id/decide', authRequired, async (req, res) => {
+  if (!canAccessApprovalCenter(req.user?.role, { dutyRows: [], currentStore: req.user?.current_store, primaryStore: req.user?.primary_store })) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
   const __decideStartedAt = Date.now();
   const username = String(req.user?.username || '').trim();
   const role = String(req.user?.role || '').trim();
@@ -4857,6 +4884,114 @@ app.put('/api/role-modules', authRequired, async (req, res) => {
     const state = (await getSharedState()) || {};
     state.roleModules = config;
     await saveSharedState(state);
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
+  }
+});
+
+app.get('/api/admin/store-duty-bindings', authRequired, async (req, res) => {
+  const role = String(req.user?.role || '').trim();
+  if (role !== 'admin') return res.status(403).json({ error: 'admin_only' });
+  try {
+    await ensureStoreDutyBindingsReady();
+    const rows = await pool.query(
+      `SELECT id, username, store, access_level, is_primary_store,
+              can_receive_ops, can_receive_performance, can_receive_food_safety, can_receive_approval,
+              can_handle_ops, can_handle_food_safety, can_approve_hrms, can_view_employees,
+              enabled, effective_from, effective_to, metadata, updated_at
+         FROM store_duty_bindings
+        ORDER BY enabled DESC, username ASC, is_primary_store DESC, store ASC, id ASC`
+    );
+    return res.json({ items: rows.rows || [] });
+  } catch (e) {
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
+  }
+});
+
+app.post('/api/admin/store-duty-bindings', authRequired, async (req, res) => {
+  const role = String(req.user?.role || '').trim();
+  if (role !== 'admin') return res.status(403).json({ error: 'admin_only' });
+  try {
+    await ensureStoreDutyBindingsReady();
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const username = String(body.username || '').trim();
+    const store = String(body.store || '').trim();
+    if (!username || !store) return res.status(400).json({ error: 'missing_username_or_store' });
+    const bool = (key) => Boolean(body[key]);
+    const metadata = body.metadata && typeof body.metadata === 'object' ? body.metadata : {};
+    const result = await pool.query(
+      `INSERT INTO store_duty_bindings (
+          username, store, access_level, is_primary_store,
+          can_receive_ops, can_receive_performance, can_receive_food_safety, can_receive_approval,
+          can_handle_ops, can_handle_food_safety, can_approve_hrms, can_view_employees,
+          enabled, effective_from, effective_to, metadata, updated_at
+        ) VALUES (
+          $1, $2, $3, $4,
+          $5, $6, $7, $8,
+          $9, $10, $11, $12,
+          $13, NULLIF($14,'')::timestamptz, NULLIF($15,'')::timestamptz, $16::jsonb, now()
+        )
+        ON CONFLICT (username, store) DO UPDATE SET
+          access_level = EXCLUDED.access_level,
+          is_primary_store = EXCLUDED.is_primary_store,
+          can_receive_ops = EXCLUDED.can_receive_ops,
+          can_receive_performance = EXCLUDED.can_receive_performance,
+          can_receive_food_safety = EXCLUDED.can_receive_food_safety,
+          can_receive_approval = EXCLUDED.can_receive_approval,
+          can_handle_ops = EXCLUDED.can_handle_ops,
+          can_handle_food_safety = EXCLUDED.can_handle_food_safety,
+          can_approve_hrms = EXCLUDED.can_approve_hrms,
+          can_view_employees = EXCLUDED.can_view_employees,
+          enabled = EXCLUDED.enabled,
+          effective_from = EXCLUDED.effective_from,
+          effective_to = EXCLUDED.effective_to,
+          metadata = EXCLUDED.metadata,
+          updated_at = now()
+        RETURNING *`,
+      [
+        username,
+        store,
+        String(body.access_level || 'support').trim() || 'support',
+        bool('is_primary_store'),
+        bool('can_receive_ops'),
+        bool('can_receive_performance'),
+        bool('can_receive_food_safety'),
+        bool('can_receive_approval'),
+        bool('can_handle_ops'),
+        bool('can_handle_food_safety'),
+        bool('can_approve_hrms'),
+        bool('can_view_employees'),
+        body.enabled !== false,
+        String(body.effective_from || '').trim(),
+        String(body.effective_to || '').trim(),
+        JSON.stringify(metadata)
+      ]
+    );
+    if (bool('is_primary_store')) {
+      await pool.query(
+        `UPDATE store_duty_bindings
+            SET is_primary_store = false, updated_at = now()
+          WHERE lower(trim(username)) = lower(trim($1))
+            AND lower(trim(store)) <> lower(trim($2))`,
+        [username, store]
+      );
+    }
+    return res.json({ item: result.rows?.[0] || null });
+  } catch (e) {
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
+  }
+});
+
+app.delete('/api/admin/store-duty-bindings/:id', authRequired, async (req, res) => {
+  const role = String(req.user?.role || '').trim();
+  if (role !== 'admin') return res.status(403).json({ error: 'admin_only' });
+  try {
+    await ensureStoreDutyBindingsReady();
+    const id = Number(req.params?.id || 0);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'invalid_id' });
+    const result = await pool.query('DELETE FROM store_duty_bindings WHERE id = $1 RETURNING id', [id]);
+    if (!result.rowCount) return res.status(404).json({ error: 'not_found' });
     return res.json({ ok: true });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: 'internal_error' });
@@ -9642,6 +9777,40 @@ function pickMyStoreFromState(state, username) {
   return st;
 }
 
+let __storeDutyBindingsReady = false;
+
+async function ensureStoreDutyBindingsReady() {
+  if (__storeDutyBindingsReady) return;
+  try {
+    await ensureStoreDutyBindingsTable(pool);
+    __storeDutyBindingsReady = true;
+  } catch (e) {
+    console.warn('[store-duty-bindings] ensure table failed:', e?.message || e);
+  }
+}
+
+async function getUserStoreAccessContext(username, role, opts = {}) {
+  const normalizedUsername = String(username || '').trim();
+  const normalizedRole = normalizeRoleForJwt(role);
+  const requestedStore = String(opts?.requestedStore || '').trim();
+  const stateStore = String(opts?.stateStore || '').trim();
+  let dutyRows = [];
+  if (normalizedUsername) {
+    try {
+      await ensureStoreDutyBindingsReady();
+      dutyRows = await loadActiveDutyRowsForUser(pool, normalizedUsername);
+    } catch (e) {
+      dutyRows = [];
+    }
+  }
+  return buildStoreAccessContext({
+    role: normalizedRole,
+    stateStore,
+    dutyRows,
+    requestedStore,
+  });
+}
+
 const OPS_BRAND_STORE_MAP = {
   '洪潮大宁久光店': '洪潮传统潮汕菜',
   '马己仙上海音乐广场店': '马己仙广东小馆'
@@ -14039,6 +14208,24 @@ async function authRequired(req, res, next) {
       }
     }
 
+    try {
+      const state0 = (await getSharedState().catch(() => null)) || {};
+      const stateStore = String(pickMyStoreFromState(state0, uname) || payload.store || '').trim();
+      const ctx = await getUserStoreAccessContext(uname, payload.role, {
+        requestedStore: payload.current_store || stateStore,
+        stateStore
+      });
+      req.user = {
+        ...payload,
+        store: stateStore,
+        primary_store: ctx.primaryStore,
+        current_store: ctx.currentStore,
+        allowed_stores: ctx.allowedStores
+      };
+    } catch (_e) {
+      req.user = payload;
+    }
+
     next();
   } catch (e) {
     return res.status(401).json({ error: 'unauthorized' });
@@ -14079,6 +14266,23 @@ async function authRequiredOrQueryToken(req, res, next) {
       if (e && e.statusCode === 403) {
         return res.status(403).json({ error: 'account_disabled', message: '账号已停用或已离职' });
       }
+    }
+    try {
+      const state0 = (await getSharedState().catch(() => null)) || {};
+      const stateStore = String(pickMyStoreFromState(state0, uname) || payload.store || '').trim();
+      const ctx = await getUserStoreAccessContext(uname, payload.role, {
+        requestedStore: payload.current_store || stateStore,
+        stateStore
+      });
+      req.user = {
+        ...payload,
+        store: stateStore,
+        primary_store: ctx.primaryStore,
+        current_store: ctx.currentStore,
+        allowed_stores: ctx.allowedStores
+      };
+    } catch (_e) {
+      req.user = payload;
     }
     return next();
   } catch (e) {
@@ -14328,7 +14532,7 @@ function hrmsIsInactiveEmploymentRecord(row) {
  * - 仅 admin 可看到离职等停用记录；
  * - 店长仅能看到本店（与自身档案或 feishu_users 门店一致）的在册人员。
  */
-async function applyStatePeopleVisibilityForRole(data, role, username, fullStateForLookup) {
+async function applyStatePeopleVisibilityForRole(data, role, username, fullStateForLookup, requestedStore) {
   if (!data || typeof data !== 'object') return data;
   const r = normalizeRoleForJwt(String(role || '').trim());
   if (r === 'admin') return data;
@@ -14341,32 +14545,27 @@ async function applyStatePeopleVisibilityForRole(data, role, username, fullState
   const un = String(username || '').trim().toLowerCase();
 
   let storeScope = null;
-  if (r === 'store_manager') {
+  let allowedStores = null;
+  if (r === 'store_manager' || r === 'front_manager') {
     const self = lookupAll.find((x) => String(x?.username || '').trim().toLowerCase() === un);
-    storeScope = hrmsNormStoreName(self?.store);
-    if (!storeScope && username) {
-      try {
-        const rr = await pool.query(
-          `select trim(store) as s from feishu_users
-           where coalesce(registered, false) = true
-             and lower(trim(username)) = lower(trim($1))
-           limit 1`,
-          [username]
-        );
-        storeScope = hrmsNormStoreName(rr.rows?.[0]?.s);
-      } catch (_e) {
-        storeScope = '';
-      }
-    }
+    const stateStore = hrmsNormStoreName(self?.store);
+    const ctx = await getUserStoreAccessContext(username, r, {
+      requestedStore,
+      stateStore
+    });
+    storeScope = hrmsNormStoreName(ctx.currentStore || stateStore);
+    allowedStores = new Set((ctx.allowedStores || []).map((item) => hrmsNormStoreName(item)).filter(Boolean));
   }
 
   const pass = (row) => {
     if (hrmsIsInactiveEmploymentRecord(row)) return false;
-    if (storeScope) return hrmsNormStoreName(row?.store) === storeScope;
+    const rowStore = hrmsNormStoreName(row?.store);
+    if (allowedStores && allowedStores.size > 0) return allowedStores.has(rowStore) && (!storeScope || rowStore === storeScope);
+    if (storeScope) return rowStore === storeScope;
     return true;
   };
 
-  if (r === 'store_manager' && !storeScope) {
+  if ((r === 'store_manager' || r === 'front_manager') && !storeScope) {
     const keepSelf = (row) => String(row?.username || '').trim().toLowerCase() === un;
     return {
       ...data,
@@ -14406,7 +14605,7 @@ app.get('/api/state', authRequired, async (req, res) => {
     const role = String(req.user?.role || '').trim();
     const uname = String(req.user?.username || '').trim();
     let payload = stripPasswordFieldsFromStateForClient(repaired, role);
-    payload = await applyStatePeopleVisibilityForRole(payload, role, uname, repaired);
+    payload = await applyStatePeopleVisibilityForRole(payload, role, uname, repaired, req.user?.current_store);
     return res.json({ data: payload });
   } catch (e) {
     return res.status(500).json({ error: 'server_error', message: 'internal_error' });
@@ -15482,6 +15681,23 @@ async function storeSessionNonce(uname, nonce) {
   }
 }
 
+async function buildLoginUserPayload({ id, username, name, role, stateStore }) {
+  const ctx = await getUserStoreAccessContext(username, role, {
+    requestedStore: stateStore,
+    stateStore
+  });
+  return {
+    id,
+    username,
+    name,
+    role,
+    store: stateStore,
+    primary_store: ctx.primaryStore,
+    current_store: ctx.currentStore,
+    allowed_stores: ctx.allowedStores
+  };
+}
+
 async function handleLogin(req, res) {
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '').trim();
@@ -15511,6 +15727,7 @@ async function handleLogin(req, res) {
         // Sync role from shared-state (authoritative source for role edits made in frontend)
         let finalRole = normalizeRoleForJwt(u.role);
         let finalName = u.real_name;
+        let stateStore = '';
         try {
           const sr = await pool.query('select data from hrms_state where key = $1 limit 1', ['default']);
           const sd = sr.rows?.[0]?.data;
@@ -15526,6 +15743,7 @@ async function handleLogin(req, res) {
               if (stateRole && stateRole !== 'store_employee') finalRole = stateRole;
               else if (stateRole) finalRole = stateRole;
               if (stateUser.name) finalName = String(stateUser.name).trim() || finalName;
+              stateStore = String(stateUser.store || '').trim();
             }
           }
         } catch (syncErr) {}
@@ -15544,9 +15762,16 @@ async function handleLogin(req, res) {
           { expiresIn: '7d' }
         );
         recordLogin(u.username, sn, req);
+        const loginUser = await buildLoginUserPayload({
+          id: u.id,
+          username: u.username,
+          name: finalName,
+          role: finalRole,
+          stateStore
+        });
         return res.json({
           token,
-          user: { id: u.id, username: u.username, name: finalName, role: finalRole }
+          user: loginUser
         });
       }
     } catch (dbErr) {
@@ -15573,6 +15798,7 @@ async function handleLogin(req, res) {
         const canonicalUsername = String(found.username || '').trim() || username;
         const id = String(found.id || canonicalUsername);
         const name = String(found.name || found.real_name || found.realName || canonicalUsername);
+        const stateStore = String(found.store || '').trim();
         if (!JWT_SECRET) return res.status(500).json({ error: 'server_config_error' });
         const persistedState = await storeSessionNonce(canonicalUsername, sn);
         if (!persistedState) {
@@ -15584,7 +15810,14 @@ async function handleLogin(req, res) {
         }
         const token = jwt.sign({ id, username: canonicalUsername, name, role, sn }, JWT_SECRET, { expiresIn: '7d' });
         recordLogin(canonicalUsername, sn, req);
-        return res.json({ token, user: { id, username: canonicalUsername, name, role } });
+        const loginUser = await buildLoginUserPayload({
+          id,
+          username: canonicalUsername,
+          name,
+          role,
+          stateStore
+        });
+        return res.json({ token, user: loginUser });
       }
     }
   } catch (e) {
@@ -15605,9 +15838,16 @@ async function handleLogin(req, res) {
         JWT_SECRET,
         { expiresIn: '7d' }
       );
+      const loginUser = await buildLoginUserPayload({
+        id: localUser.id,
+        username: localUser.username,
+        name: localUser.name,
+        role: localUser.role,
+        stateStore: ''
+      });
       return res.json({
         token,
-        user: { id: localUser.id, username: localUser.username, name: localUser.name, role: localUser.role }
+        user: loginUser
       });
     }
   }
@@ -15617,6 +15857,38 @@ async function handleLogin(req, res) {
 
 app.get('/api/auth/me', authRequired, async (req, res) => {
   return res.json({ user: req.user });
+});
+
+app.post('/api/auth/switch-store', authRequired, async (req, res) => {
+  const username = String(req.user?.username || '').trim();
+  const role = normalizeRoleForJwt(req.user?.role);
+  const requestedStore = String(req.body?.store || '').trim();
+  if (!requestedStore) return res.status(400).json({ error: 'missing_store' });
+  if (!JWT_SECRET) return res.status(500).json({ error: 'server_config_error' });
+  try {
+    const state0 = (await getSharedState().catch(() => null)) || {};
+    const stateStore = String(pickMyStoreFromState(state0, username) || req.user?.store || '').trim();
+    const ctx = await getUserStoreAccessContext(username, role, {
+      requestedStore,
+      stateStore
+    });
+    const nextStore = pickEffectiveStore(ctx, requestedStore);
+    if (!nextStore || nextStore !== requestedStore) {
+      return res.status(403).json({ error: 'store_forbidden' });
+    }
+    const nextPayload = {
+      ...req.user,
+      role,
+      store: stateStore,
+      primary_store: ctx.primaryStore,
+      current_store: nextStore,
+      allowed_stores: ctx.allowedStores
+    };
+    const token = jwt.sign(nextPayload, JWT_SECRET, { expiresIn: '7d' });
+    return res.json({ token, user: nextPayload });
+  } catch (e) {
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
+  }
 });
 
 app.post('/api/auth/change-password', authRequired, async (req, res) => {

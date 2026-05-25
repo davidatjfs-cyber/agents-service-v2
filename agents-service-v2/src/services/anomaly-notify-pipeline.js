@@ -16,6 +16,7 @@ import { anomalyRuleLabelZh } from '../utils/anomaly-labels.js';
 import { planAndExecute } from './master-planner.js';
 import { resolveSingleScoringUser, isMajixianPmObserverUsername } from '../utils/scoring-assignee.js';
 import { createUnifiedTask } from './task-orchestrator.js';
+import { resolveDutyBoundRecipients } from './store-duty-bindings.js';
 
 function storeKey(v) {
   return String(v || '')
@@ -117,15 +118,11 @@ function plannerSyntheticQuestion(ruleKey) {
 }
 
 async function pickUsersForStoreAndRoles(store, dbRoles) {
-  const r = await query(
-    `SELECT open_id, username, role, store,
-            COALESCE(NULLIF(TRIM(name), ''), username) AS display_name
-     FROM feishu_users
-     WHERE registered = true AND open_id IS NOT NULL AND open_id NOT LIKE '%probe%'`
-  );
-  const rows = (r.rows || []).filter(
-    (u) => dbRoles.includes(u.role) && sameStore(u.store, store)
-  );
+  const rows = await resolveDutyBoundRecipients({
+    store,
+    category: 'ops',
+    fallbackRoles: dbRoles
+  });
   return rows;
 }
 
@@ -184,7 +181,11 @@ async function collapseProductionManagerNotifyRecipients(store, users) {
 
 /** 食安：门店店长/出品 + 全量 admin/hq_manager（不按门店过滤） */
 async function pickUsersForFoodSafety(store, dbRoles) {
-  const local = await pickUsersForStoreAndRoles(store, ['store_manager', 'store_production_manager']);
+  const local = await resolveDutyBoundRecipients({
+    store,
+    category: 'food_safety',
+    fallbackRoles: ['store_manager', 'store_production_manager']
+  });
   let hqRows = [];
   try {
     const r = await query(
