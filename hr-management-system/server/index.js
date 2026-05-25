@@ -2662,10 +2662,18 @@ app.get('/api/payments/budget-summary', authRequired, async (req, res) => {
   }
 });
 
-app.post('/api/approvals', authRequired, async (req, res) => {
-  if (!canAccessApprovalCenter(req.user?.role, { dutyRows: [], currentStore: req.user?.current_store, primaryStore: req.user?.primary_store })) {
-    return res.status(403).json({ error: 'forbidden' });
-  }
+ app.post('/api/approvals', authRequired, async (req, res) => {
+   const approvalType = normalizeApprovalType(req.body?.type);
+   const currentUsername = String(req.user?.username || '').trim().toLowerCase();
+   if (approvalType !== 'offboarding' && !canAccessApprovalCenter(req.user?.role, { dutyRows: [], currentStore: req.user?.current_store, primaryStore: req.user?.primary_store })) {
+     return res.status(403).json({ error: 'forbidden' });
+   }
+   if (approvalType === 'offboarding' && normalizeRoleForJwt(String(req.user?.role || '')) === 'store_employee') {
+     const payloadApplicant = String(req.body?.payload?.applicantUsername || req.body?.payload?.username || '').trim().toLowerCase();
+     if (payloadApplicant && payloadApplicant !== currentUsername) {
+       return res.status(403).json({ error: 'forbidden' });
+     }
+   }
   const username = String(req.user?.username || '').trim();
   const role = String(req.user?.role || '').trim();
   const type = normalizeApprovalType(req.body?.type);
