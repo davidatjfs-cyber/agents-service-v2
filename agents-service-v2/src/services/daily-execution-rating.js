@@ -17,6 +17,7 @@ import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
 import { getPMReportStatusByBizDate, getMajixianMeetingDayEval } from './pm-execution-report-coverage.js';
 import { sortFeishuScoringRows } from '../utils/scoring-assignee.js';
 import { getMonthlyExecutionFilingCount } from '../utils/performance-filing-counts.js';
+import { resolveDutyBoundRecipients } from './store-duty-bindings.js';
 
 // ─────────────────────────────────────────────
 // 1. 数据查询函数
@@ -496,7 +497,25 @@ export async function runDailyExecutionRating(date) {
        ORDER BY fu.store, fu.role, fu.updated_at DESC NULLS LAST, fu.username`
     );
 
-    const staff = collapseExecutionRatingStaff(staffResult.rows || []);
+    // Supplement feishu_users staff with duty-bound managers for stores that have no feishu_users coverage
+    const feishuRows = staffResult.rows || [];
+    const coveredStores = new Set(feishuRows.map(r => String(r.store || '').trim().toLowerCase()).filter(Boolean));
+    const allStores = ['洪潮大宁久光店', '马己仙上海音乐广场店'];
+    const supplementRows = [];
+    for (const st of allStores) {
+      if (!coveredStores.has(st.toLowerCase())) {
+        const dutyRows = await resolveDutyBoundRecipients({ store: st, category: 'ops', fallbackRoles: ['store_manager'] }).catch(() => []);
+        for (const dr of dutyRows) {
+          if (!dr.open_id) continue;
+          supplementRows.push({
+            username: dr.username, name: dr.display_name || dr.username, open_id: dr.open_id,
+            role: dr.role || 'store_manager', store: st,
+            brand: st.includes('洪潮') ? '洪潮' : st.includes('马己仙') ? '马己仙' : '未知'
+          });
+        }
+      }
+    }
+    const staff = collapseExecutionRatingStaff([...feishuRows, ...supplementRows]);
     if (!staff.length) {
       logger.warn('daily execution rating: no staff found');
       return { date, checked: 0, results: [] };

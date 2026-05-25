@@ -26,6 +26,7 @@ import {
 } from '../utils/anomaly-week-bounds.js';
 import { anomalyRollupPeriodKey } from '../utils/week-period-keys.js';
 import { ensureHrmsUserNotificationsTable } from '../utils/hrms-user-notifications.js';
+import { resolveDutyBoundRecipients } from './store-duty-bindings.js';
 
 const FOOD_SAFETY_HQ_POINTS = 20;
 
@@ -205,7 +206,12 @@ async function resolveScoringUsersForStore(store, role) {
      WHERE registered = true AND role = $1`,
     [role]
   );
-  return (r.rows || []).filter((row) => sameStore(store, row.store));
+  const fromFeishu = (r.rows || []).filter((row) => sameStore(store, row.store));
+  if (fromFeishu.length) return fromFeishu;
+  // Fallback: duty-bound recipients for the store when feishu_users has no coverage
+  const category = role === 'store_production_manager' ? 'food_safety' : 'ops';
+  const dutyRows = await resolveDutyBoundRecipients({ store, category, fallbackRoles: [role] }).catch(() => []);
+  return dutyRows.map(dr => ({ username: dr.username, disp: dr.display_name || dr.username, store }));
 }
 
 async function fetchOpenUser(openId) {

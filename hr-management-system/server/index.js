@@ -15864,7 +15864,20 @@ async function handleLogin(req, res) {
 }
 
 app.get('/api/auth/me', authRequired, async (req, res) => {
-  return res.json({ user: req.user });
+  const username = String(req.user?.username || '').trim();
+  const role = normalizeRoleForJwt(req.user?.role);
+  const stateStore = String(req.user?.current_store || req.user?.store || '').trim();
+  const ctx = await getUserStoreAccessContext(username, role, {
+    requestedStore: stateStore,
+    stateStore,
+  }).catch(() => null);
+  const user = {
+    ...req.user,
+    primary_store: ctx?.primaryStore || req.user?.primary_store,
+    current_store: ctx?.currentStore || req.user?.current_store,
+    allowed_stores: ctx?.allowedStores?.length ? ctx.allowedStores : (req.user?.allowed_stores || []),
+  };
+  return res.json({ user });
 });
 
 app.post('/api/auth/switch-store', authRequired, async (req, res) => {

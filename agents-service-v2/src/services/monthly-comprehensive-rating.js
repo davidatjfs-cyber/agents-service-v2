@@ -30,6 +30,7 @@ import {
   getMonthlyAttitudeFilingCount
 } from '../utils/performance-filing-counts.js';
 import { getBadReviewRowsForStoreDateRange } from './deterministic-replies.js';
+import { resolveDutyBoundRecipients } from './store-duty-bindings.js';
 
 const MONTHLY_RATING_PENDING = '待定';
 
@@ -581,6 +582,20 @@ async function loadMonthlyComprehensiveStaff() {
     const b = byStore.get(st);
     if (row.role === 'store_manager') b.managers.push(row);
     else if (row.role === 'store_production_manager') b.pms.push(row);
+  }
+
+  // Supplement duty-bound store managers for stores with no feishu_users coverage
+  const allKnownStores = ['洪潮大宁久光店', '马己仙上海音乐广场店'];
+  for (const st of allKnownStores) {
+    if (!byStore.has(st)) byStore.set(st, { managers: [], pms: [] });
+    const b = byStore.get(st);
+    if (b.managers.length === 0) {
+      const dutyRows = await resolveDutyBoundRecipients({ store: st, category: 'performance', fallbackRoles: ['store_manager'] }).catch(() => []);
+      for (const dr of dutyRows) {
+        const brand = st.includes('洪潮') ? '洪潮' : st.includes('马己仙') ? '马己仙' : '未知';
+        b.managers.push({ username: dr.username, name: dr.display_name || dr.username, open_id: dr.open_id || '', role: 'store_manager', store: st, brand });
+      }
+    }
   }
 
   const staff = [];

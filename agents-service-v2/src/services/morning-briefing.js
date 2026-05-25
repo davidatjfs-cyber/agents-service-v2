@@ -16,6 +16,7 @@ import { expandAgentStoreLabels } from '../config/store-mapping.js';
 import { getShanghaiNowClock } from '../utils/cron-run-monitor.js';
 import { isMajixianPmObserverUsername } from '../utils/scoring-assignee.js';
 import { notifyAdminsDataIssue } from './admin-data-alert.js';
+import { ensureStoreDutyBindingsTable } from './store-duty-bindings.js';
 
 /** 马己仙出品观察号若未维护 store，与主责出品经理同店晨报 */
 const CANONICAL_MAJIXIAN_PM_USERNAME = 'NNYXLYR04';
@@ -219,6 +220,26 @@ function briefingYmdAddDays(ymd, deltaDays) {
 
 function recipientScope(user) {
   return user.role === 'admin' || user.role === 'hq_manager' ? '__all_stores__' : String(user.store || '').trim();
+}
+
+/** Returns all duty-bound stores for a user (primary first), or [] if no bindings exist */
+async function getDutyBoundStoresForUser(username) {
+  try {
+    await ensureStoreDutyBindingsTable();
+    const r = await query(
+      `SELECT store FROM store_duty_bindings
+       WHERE lower(trim(username)) = lower(trim($1))
+         AND enabled = true
+         AND (effective_from IS NULL OR effective_from <= now())
+         AND (effective_to IS NULL OR effective_to >= now())
+       ORDER BY is_primary_store DESC, id ASC`,
+      [username]
+    );
+    return (r.rows || []).map(row => String(row.store || '').trim()).filter(Boolean);
+  } catch (e) {
+    logger.warn({ err: e?.message, username }, 'getDutyBoundStoresForUser failed');
+    return [];
+  }
 }
 
 /** 门店侧晨报：优先 feishu_users.store；马己仙观察号未填门店时回退主责出品经理门店 */
@@ -696,23 +717,52 @@ export async function sendMorningBriefing(options = {}) {
           storeLabel = '全门店汇总';
         }
       } else {
-        const briefingStore = await resolveBriefingStoreForUser(user);
-        if (briefingStore) {
-          const content = await buildStoreBriefing(briefingStore, {
-            recipientName: user.name || user.username || ''
-          });
-          if (content) {
-            payload = content;
-            storeLabel = briefingStore;
-          }
-        }
-        if (!payload) {
+        const dutyStores = await getDutyBoundStoresForUser(user.username);
+        const storesToBrief = dutyStores.length > 0
+          ? dutyStores
+          : [await resolveBriefingStoreForUser(user)].filter(Boolean);
+        if (!storesToBrief.length) {
           logger.warn(
-            { runYmd, user: user.username, role: user.role, feishuStore: user.store, briefingStore },
-            'morning briefing skip: empty payload (no resolvable store or build failed)'
+            { runYmd, user: user.username, role: user.role, feishuStore: user.store },
+            'morning briefing skip: no resolvable store (duty bindings empty and feishu_users.store empty)'
           );
           continue;
         }
+        for (const briefingStore of storesToBrief) {
+          const storeScope = briefingStore;
+          if (await hasBriefingSuccess(runYmd, user.username, storeScope)) {
+            logger.info({ runYmd, user: user.username, storeScope }, 'morning briefing skip: already sent OK for store');
+            continue;
+          }
+          const content = await buildStoreBriefing(briefingStore, {
+            recipientName: user.name || user.username || ''
+          });
+          if (!content) {
+            logger.warn({ runYmd, user: user.username, briefingStore }, 'morning briefing skip: empty content for store');
+            continue;
+          }
+          let ok = false;
+          let lastErr = '';
+          for (let i = 1; i <= BRIEFING_RETRY_MAX; i++) {
+            const r = await sendMorningBriefingToUser(user, content, briefingStore);
+            ok = !!r?.ok;
+            lastErr = r?.error || '';
+            await recordBriefingAttempt(runYmd, user.username, storeScope, ok, lastErr);
+            if (ok) break;
+            if (i < BRIEFING_RETRY_MAX) await new Promise((resolve) => setTimeout(resolve, 1200));
+          }
+          if (!ok) {
+            briefingFailures.push({
+              username: String(user.username || '').trim(),
+              name: String(user.name || '').trim(),
+              scope: storeScope,
+              storeLabel: briefingStore,
+              error: lastErr || 'unknown'
+            });
+            logger.warn({ runYmd, user: user.username, storeScope, error: lastErr }, 'morning briefing recipient failed after retries');
+          }
+        }
+        continue; // store-level users handled above; skip the shared send block
       }
       if (!payload) continue;
       let ok = false;
