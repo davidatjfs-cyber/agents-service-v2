@@ -81,8 +81,9 @@ export function buildStoreAccessContext({ role, stateStore, dutyRows = [], reque
 
 export function canAccessApprovalCenter(role, context) {
   const normalizedRole = String(role || '').trim();
-  if (normalizedRole === 'front_manager') return false;
+  if (['admin', 'hq_manager'].includes(normalizedRole)) return true;
   if (normalizedRole === 'store_manager') return true;
+  if (normalizedRole === 'front_manager') return false;
   const row = Array.isArray(context?.dutyRows)
     ? context.dutyRows.find((item) => item.store === context.currentStore || item.store === context.primaryStore)
     : null;
@@ -91,8 +92,9 @@ export function canAccessApprovalCenter(role, context) {
 
 export function canViewEmployeesForRole(role, context) {
   const normalizedRole = String(role || '').trim();
-  if (normalizedRole === 'front_manager') return false;
+  if (['admin', 'hq_manager'].includes(normalizedRole)) return true;
   if (normalizedRole === 'store_manager') return true;
+  if (normalizedRole === 'front_manager') return false;
   const row = Array.isArray(context?.dutyRows)
     ? context.dutyRows.find((item) => item.store === context.currentStore || item.store === context.primaryStore)
     : null;
