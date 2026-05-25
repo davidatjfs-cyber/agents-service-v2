@@ -18524,6 +18524,7 @@
                   <button class="rep-tab" onclick="showGrowthTab('actions')" id="growth-tab-actions">AI建议</button>
                   <button class="rep-tab" onclick="showGrowthTab('exec-logs')" id="growth-tab-exec-logs">执行记录</button>
                   <button class="rep-tab" onclick="showGrowthTab('pos')" id="growth-tab-pos">POS消费</button>
+                  <button class="rep-tab" onclick="showGrowthTab('content-perf')" id="growth-tab-content-perf">内容效果</button>
                 </nav>
                     <div id="growth-dashboard-content">
                     <div id="growth-metrics-cards" class="rep-grid" style="margin-bottom:14px;"></div>
@@ -18998,6 +18999,45 @@
                                 <div class="rep-poster-step__title">🏪 门店对比</div>
                                 <div id="pos-stats-stores" style="min-height:100px;"></div>
                             </div>
+                        </div>
+                    </div>
+                    <div id="growth-content-perf-content" style="display:none;">
+                        <div class="rep-filters">
+                            <div class="rep-filters__eyebrow">CONTENT</div>
+                            <div class="rep-filters__title">内容效果记录</div>
+                            <div class="rep-seg" style="margin-bottom:14px;">
+                                <select id="cp-days" class="dr-store-select" style="flex:1;max-width:160px;padding:9px 12px;">
+                                    <option value="7">近7天</option>
+                                    <option value="30" selected>近30天</option>
+                                    <option value="90">近90天</option>
+                                </select>
+                                <button onclick="loadContentPerf()" class="rep-seg-btn rep-seg-btn--active" style="flex:1;">刷新</button>
+                                <button onclick="showContentPerfForm()" class="rep-seg-btn" style="flex:1;background:rgba(56,189,248,0.12);color:#38bdf8;">+ 录入</button>
+                            </div>
+                            <div id="cp-form" style="display:none;background:rgba(255,255,255,0.04);border-radius:12px;padding:14px;margin-bottom:14px;">
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                                    <input id="cp-date" type="date" class="dr-store-select" style="padding:9px 12px;" />
+                                    <input id="cp-channel" type="text" class="dr-store-select" placeholder="渠道（如小红书）" style="padding:9px 12px;" />
+                                    <input id="cp-platform" type="text" class="dr-store-select" placeholder="平台（如大众点评）" style="padding:9px 12px;" />
+                                    <input id="cp-title" type="text" class="dr-store-select" placeholder="内容标题" style="padding:9px 12px;" />
+                                </div>
+                                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">
+                                    <input id="cp-impressions" type="number" class="dr-store-select" placeholder="曝光" style="padding:9px 8px;" min="0" />
+                                    <input id="cp-clicks" type="number" class="dr-store-select" placeholder="点击" style="padding:9px 8px;" min="0" />
+                                    <input id="cp-likes" type="number" class="dr-store-select" placeholder="点赞" style="padding:9px 8px;" min="0" />
+                                    <input id="cp-comments" type="number" class="dr-store-select" placeholder="评论" style="padding:9px 8px;" min="0" />
+                                    <input id="cp-shares" type="number" class="dr-store-select" placeholder="转发" style="padding:9px 8px;" min="0" />
+                                    <input id="cp-followers" type="number" class="dr-store-select" placeholder="新增粉丝" style="padding:9px 8px;" min="0" />
+                                    <input id="cp-conversions" type="number" class="dr-store-select" placeholder="转化到店" style="padding:9px 8px;" min="0" />
+                                </div>
+                                <input id="cp-notes" type="text" class="dr-store-select" placeholder="备注（可选）" style="padding:9px 12px;width:100%;box-sizing:border-box;margin-bottom:10px;" />
+                                <div style="display:flex;gap:8px;">
+                                    <button onclick="submitContentPerf()" class="rep-seg-btn rep-seg-btn--active" style="flex:1;">保存</button>
+                                    <button onclick="document.getElementById('cp-form').style.display='none'" class="rep-seg-btn" style="flex:1;">取消</button>
+                                </div>
+                            </div>
+                            <div id="cp-loading" style="display:none;text-align:center;padding:40px;color:var(--rep-muted);">加载中...</div>
+                            <div id="cp-list"></div>
                         </div>
                     </div>
                     <div id="growth-actions-content" style="display:none;">
@@ -53441,7 +53481,7 @@ ${body}
         }
 
         function showGrowthTab(tab) {
-            ['dashboard', 'wecom', 'wecomconfig', 'campaigns', 'profiles', 'constraints', 'posters', 'public', 'actions', 'pos', 'exec-logs'].forEach(function(name) {
+            ['dashboard', 'wecom', 'wecomconfig', 'campaigns', 'profiles', 'constraints', 'posters', 'public', 'actions', 'pos', 'exec-logs', 'content-perf'].forEach(function(name) {
                 var content = document.getElementById('growth-' + name + '-content');
                 var btn = document.getElementById('growth-tab-' + name);
                 if (content) content.style.display = name === tab ? '' : 'none';
@@ -53475,6 +53515,8 @@ ${body}
                 populateTemplateFormSelects();
             } else if (tab === 'public') {
                 refreshPublicContentWorkspace();
+            } else if (tab === 'content-perf') {
+                loadContentPerf();
             } else if (tab === 'pos') {
                 loadPosStats();
             } else if (tab === 'exec-logs') {
@@ -54871,6 +54913,102 @@ ${body}
                     + '<div style="font-size:11px;color:var(--rep-muted);text-align:center;margin-top:4px;">' + c.label + '</div>'
                     + '</div>';
             }).join('');
+        }
+
+        function showContentPerfForm() {
+            var f = document.getElementById('cp-form');
+            if (!f) return;
+            f.style.display = f.style.display === 'none' ? '' : 'none';
+            if (f.style.display !== 'none') {
+                var today = new Date().toISOString().slice(0, 10);
+                var dateEl = document.getElementById('cp-date');
+                if (dateEl && !dateEl.value) dateEl.value = today;
+            }
+        }
+
+        async function loadContentPerf() {
+            var days = document.getElementById('cp-days')?.value || '30';
+            var storeFilter = document.getElementById('growth-store-filter')?.value || '';
+            var loading = document.getElementById('cp-loading');
+            var list = document.getElementById('cp-list');
+            if (loading) loading.style.display = 'block';
+            if (list) list.innerHTML = '';
+            try {
+                var r = await fetch('/api/growth/content-performance?days=' + days + '&store_id=' + encodeURIComponent(storeFilter), { headers: growthAuthHeaders() });
+                var d = await r.json();
+                if (loading) loading.style.display = 'none';
+                if (!d.ok || !d.records?.length) {
+                    if (list) list.innerHTML = '<div style="color:rgba(226,232,240,0.4);text-align:center;padding:40px;">暂无记录，点击「+ 录入」开始记录内容效果</div>';
+                    return;
+                }
+                var html = '<div style="display:grid;gap:10px;">';
+                d.records.forEach(function(rec) {
+                    var ctr = rec.impressions > 0 ? (rec.clicks / rec.impressions * 100).toFixed(1) + '%' : '-';
+                    html += '<div style="background:rgba(255,255,255,0.04);border-radius:12px;padding:12px;">'
+                        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+                        + '<div><span style="font-weight:700;color:#e2e8f0;">' + (rec.content_title || rec.channel) + '</span>'
+                        + ' <span style="font-size:11px;color:rgba(226,232,240,0.5);margin-left:6px;">' + rec.channel + (rec.platform ? ' · ' + rec.platform : '') + '</span></div>'
+                        + '<div style="display:flex;align-items:center;gap:8px;">'
+                        + '<span style="font-size:11px;color:rgba(226,232,240,0.4);">' + rec.record_date?.slice(0,10) + '</span>'
+                        + '<button onclick="deleteContentPerf(' + rec.id + ')" style="background:none;border:none;color:rgba(226,232,240,0.3);cursor:pointer;font-size:12px;padding:2px 6px;">✕</button>'
+                        + '</div></div>'
+                        + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-size:12px;">'
+                        + '<div style="text-align:center;"><div style="color:rgba(226,232,240,0.5);">曝光</div><div style="font-weight:700;color:#38bdf8;">' + Number(rec.impressions).toLocaleString() + '</div></div>'
+                        + '<div style="text-align:center;"><div style="color:rgba(226,232,240,0.5);">点赞</div><div style="font-weight:700;color:#a78bfa;">' + Number(rec.likes).toLocaleString() + '</div></div>'
+                        + '<div style="text-align:center;"><div style="color:rgba(226,232,240,0.5);">评论</div><div style="font-weight:700;color:#34d399;">' + Number(rec.comments).toLocaleString() + '</div></div>'
+                        + '<div style="text-align:center;"><div style="color:rgba(226,232,240,0.5);">CTR</div><div style="font-weight:700;color:#f59e0b;">' + ctr + '</div></div>'
+                        + '</div>'
+                        + (rec.conversions > 0 ? '<div style="margin-top:6px;font-size:11px;color:#34d399;">转化到店：' + rec.conversions + '人</div>' : '')
+                        + (rec.notes ? '<div style="margin-top:6px;font-size:11px;color:rgba(226,232,240,0.4);">' + rec.notes + '</div>' : '')
+                        + '</div>';
+                });
+                html += '</div>';
+                if (list) list.innerHTML = html;
+            } catch(e) {
+                if (loading) loading.style.display = 'none';
+                if (list) list.innerHTML = '<div style="color:#f87171;padding:20px;">加载失败</div>';
+            }
+        }
+
+        async function submitContentPerf() {
+            var storeFilter = document.getElementById('growth-store-filter')?.value || '';
+            var body = {
+                store_id: storeFilter,
+                record_date: document.getElementById('cp-date')?.value || new Date().toISOString().slice(0,10),
+                channel: document.getElementById('cp-channel')?.value || '',
+                platform: document.getElementById('cp-platform')?.value || '',
+                content_title: document.getElementById('cp-title')?.value || '',
+                impressions: document.getElementById('cp-impressions')?.value || 0,
+                clicks: document.getElementById('cp-clicks')?.value || 0,
+                likes: document.getElementById('cp-likes')?.value || 0,
+                comments: document.getElementById('cp-comments')?.value || 0,
+                shares: document.getElementById('cp-shares')?.value || 0,
+                new_followers: document.getElementById('cp-followers')?.value || 0,
+                conversions: document.getElementById('cp-conversions')?.value || 0,
+                notes: document.getElementById('cp-notes')?.value || ''
+            };
+            if (!body.channel) { alert('渠道不能为空'); return; }
+            try {
+                var r = await fetch('/api/growth/content-performance', { method: 'POST', headers: Object.assign({'Content-Type':'application/json'}, growthAuthHeaders()), body: JSON.stringify(body) });
+                var d = await r.json();
+                if (d.ok) {
+                    document.getElementById('cp-form').style.display = 'none';
+                    ['cp-channel','cp-platform','cp-title','cp-impressions','cp-clicks','cp-likes','cp-comments','cp-shares','cp-followers','cp-conversions','cp-notes'].forEach(function(id) {
+                        var el = document.getElementById(id); if (el) el.value = '';
+                    });
+                    loadContentPerf();
+                } else {
+                    alert('保存失败：' + (d.error || '未知错误'));
+                }
+            } catch(e) {
+                alert('保存失败，请重试');
+            }
+        }
+
+        async function deleteContentPerf(id) {
+            if (!confirm('确认删除这条记录？')) return;
+            await fetch('/api/growth/content-performance/' + id, { method: 'DELETE', headers: growthAuthHeaders() });
+            loadContentPerf();
         }
 
         async function loadPosStats() {

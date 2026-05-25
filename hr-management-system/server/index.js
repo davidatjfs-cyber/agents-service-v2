@@ -59,7 +59,7 @@ import { setDataExecutorPool, purgeExpiredCache, updateMetricVersion } from './d
 import fileRoutes from './file-routes.js';
 import { enforceRuntimeSafetyOrExit, configureDbSessionSafety, isSchemaChangeAllowed, getAppEnv, isWebhookEnabled, isExternalEnabled } from './safety.js';
 import { expandAgentStoreLabels, resolveAgentCanonicalStore } from './v2-store-alignment.js';
-import { ensureGrowthTables, registerGrowthRoutes } from './growth-api.js';
+import { ensureGrowthTables, registerGrowthRoutes, setSendGrowthAlert } from './growth-api.js';
 import { ensurePhaseTables, registerPhaseRoutes } from './growth-phases.js';
 import {
   reconcileDailyReportAttendanceRegister,
@@ -5138,6 +5138,7 @@ setAgentPool(pool);
 configureDbSessionSafety(pool, { serviceName: 'hrms-server' });
 const __ALLOW_SCHEMA_CHANGES__ = isSchemaChangeAllowed();
 registerGrowthRoutes(app, pool);
+setSendGrowthAlert((msg, tag) => sendAdminSystemAlert(msg, { tag }));
 registerPhaseRoutes(app, pool);
 
 app.post('/api/growth/upload', authRequired, upload.single('file'), async (req, res) => {

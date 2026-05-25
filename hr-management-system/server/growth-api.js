@@ -461,6 +461,39 @@ export async function ensureGrowthTables(pool) {
     )
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS content_performance (
+      id BIGSERIAL PRIMARY KEY,
+      content_date DATE NOT NULL,
+      channel TEXT NOT NULL,
+      store_code TEXT,
+      content_type TEXT NOT NULL DEFAULT '',
+      variant_tag TEXT DEFAULT 'A',
+      dish_name TEXT DEFAULT '',
+      impressions INTEGER DEFAULT 0,
+      clicks INTEGER DEFAULT 0,
+      saves INTEGER DEFAULT 0,
+      orders INTEGER DEFAULT 0,
+      notes TEXT DEFAULT '',
+      created_by TEXT DEFAULT 'manual',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  // add columns that may not exist in older deployments
+  for (const col of [
+    `ADD COLUMN IF NOT EXISTS likes INTEGER DEFAULT 0`,
+    `ADD COLUMN IF NOT EXISTS comments INTEGER DEFAULT 0`,
+    `ADD COLUMN IF NOT EXISTS shares INTEGER DEFAULT 0`,
+    `ADD COLUMN IF NOT EXISTS new_followers INTEGER DEFAULT 0`,
+    `ADD COLUMN IF NOT EXISTS store_id TEXT`,
+    `ADD COLUMN IF NOT EXISTS content_title TEXT`,
+    `ADD COLUMN IF NOT EXISTS platform TEXT`
+  ]) {
+    await pool.query(`ALTER TABLE content_performance ${col}`).catch(() => {});
+  }
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_content_performance_date ON content_performance (content_date DESC, store_code)`);
+
   const defaultTouchRules = [
     {
       rule_key: 'high_risk_churn_voucher',
@@ -521,6 +554,48 @@ export async function ensureGrowthTables(pool) {
         channel: 'wecom',
         title_template: '新客推荐菜触达',
         content_template: '{customer_name}，上次来店后已经{days_since_last_visit}天了，推荐你下次试试 {favorite_dishes_text}。'
+      }
+    },
+    {
+      rule_key: 'seven_days_no_visit',
+      name: '7天未到店关怀',
+      priority: 35,
+      auto_execute: true,
+      criteria: { min_days_since_last_visit: 7, max_days_since_last_visit: 20, min_visit_count: 2 },
+      action_type: 'send_message',
+      action_payload: {
+        channel: 'wecom',
+        title_template: '7天未到店关怀',
+        content_template: '{customer_name}，好久不见，已经{days_since_last_visit}天没见到你了，最近有空来坐坐？'
+      }
+    },
+    {
+      rule_key: 'bad_review_compensation',
+      name: '差评补偿关怀',
+      priority: 5,
+      auto_execute: false,
+      criteria: { manual_trigger: true },
+      action_type: 'send_voucher',
+      action_payload: {
+        channel: 'wecom',
+        coupon_value_fen: 2000,
+        valid_days: 14,
+        coupon_name: '差评补偿券',
+        title_template: '差评补偿关怀',
+        content_template: '{customer_name}，非常抱歉上次的用餐体验未能达到您的预期，为表歉意特送上{coupon_value_text}补偿券，期待您的再次光临。'
+      }
+    },
+    {
+      rule_key: 'new_dish_launch_notify',
+      name: '新品上线通知',
+      priority: 45,
+      auto_execute: true,
+      criteria: { min_visit_count: 4, min_days_since_last_visit: 5, max_days_since_last_visit: 20 },
+      action_type: 'send_message',
+      action_payload: {
+        channel: 'wecom',
+        title_template: '新品上线通知',
+        content_template: '{customer_name}，我们新菜上线啦！作为老朋友第一时间告诉你，欢迎来尝鲜～'
       }
     }
   ];
@@ -1211,7 +1286,8 @@ async function loadRuleCandidates(pool, rule) {
      FROM growth_customer_profiles cp
      JOIN growth_customers gc ON gc.id = cp.customer_id
      LEFT JOIN wechat_work_customers ww ON ww.bind_customer_id = cp.customer_id
-     WHERE COALESCE(ww.external_userid, gc.external_userid) IS NOT NULL
+     WHERE (COALESCE(ww.external_userid, gc.external_userid) IS NOT NULL
+            OR NULLIF(TRIM(cp.phone), '') IS NOT NULL)
      LIMIT 1000`
   );
   return r.rows.filter((row) => {
@@ -1221,6 +1297,8 @@ async function loadRuleCandidates(pool, rule) {
     if (rule.rule_key === 'high_risk_churn_voucher') return visits >= 5 && days >= 21 && days <= 45;
     if (rule.rule_key === 'lost_customer_miss_you') return visits >= 3 && days > 45;
     if (rule.rule_key === 'silent_new_customer_activate') return visits === 1 && days >= 14;
+    if (rule.rule_key === 'seven_days_no_visit') return visits >= 2 && days >= 7 && days <= 20;
+    if (rule.rule_key === 'new_dish_launch_notify') return visits >= 4 && days >= 5 && days <= 20;
     return false;
   });
 }
@@ -1237,12 +1315,16 @@ async function runTouchRuleEngine(pool, options = {}) {
   for (const rule of (rulesResult.rows || [])) {
     const candidates = (await loadRuleCandidates(pool, rule)).slice(0, limitPerRule);
     for (const row of candidates) {
+      const hasWecom = !!row.external_userid;
+      const baseChannel = String((rule.action_payload || {}).channel || 'wecom');
+      const effectiveChannel = hasWecom ? baseChannel : (row.phone ? 'sms' : baseChannel);
       const actionPayload = Object.assign({}, rule.action_payload || {}, {
         rule_key: rule.rule_key,
         customer_id: row.customer_id,
         store_id: row.store_id,
         phone: row.phone,
         external_userid: row.external_userid,
+        channel: effectiveChannel,
         customer_name: row.customer_name || row.phone || `客户#${row.customer_id}`,
         days_since_last_visit: row.days_since_last_visit,
         visit_count: row.pos_order_count,
@@ -1278,6 +1360,150 @@ async function runTouchRuleEngine(pool, options = {}) {
     }
   }
   return { created: createdActions.length, action_keys: createdActions };
+}
+
+let _sendGrowthAlert = null;
+export function setSendGrowthAlert(fn) { _sendGrowthAlert = fn; }
+
+function cnHour(ts) {
+  if (!ts) return null;
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return null;
+  return ((d.getUTCHours() + 8) % 24);
+}
+
+function shiftDate(dateStr, days) {
+  // Safe date arithmetic: parse as UTC midnight, shift, return YYYY-MM-DD
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// Build report for ONE store using sales_growth_snapshot + pos_orders
+async function buildStoreReport(pool, storeCode, yd) {
+  const dbd = shiftDate(yd, -1);
+  const lwSame = shiftDate(yd, -7);
+
+  function pct(a, b) {
+    if (!b) return null;
+    const v = (a - b) / b * 100;
+    return (v >= 0 ? '▲' : '▼') + Math.abs(v).toFixed(1) + '%';
+  }
+  function fmtMoney(n) { return '¥' + Number(n).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+
+  // Revenue from snapshot (most accurate per-store breakdown)
+  const [snapYd, snapDbd, snapLw, topDishes] = await Promise.all([
+    pool.query(`SELECT COALESCE(SUM(revenue),0)::numeric AS rev, COALESCE(SUM(lunch_qty),0)::int AS lunch_qty, COALESCE(SUM(dinner_qty),0)::int AS dinner_qty
+                FROM sales_growth_snapshot WHERE snapshot_date=$1 AND store_code=$2`, [yd, storeCode]),
+    pool.query(`SELECT COALESCE(SUM(revenue),0)::numeric AS rev FROM sales_growth_snapshot WHERE snapshot_date=$1 AND store_code=$2`, [dbd, storeCode]),
+    pool.query(`SELECT COALESCE(SUM(revenue),0)::numeric AS rev FROM sales_growth_snapshot WHERE snapshot_date=$1 AND store_code=$2`, [lwSame, storeCode]),
+    pool.query(`SELECT dish_name, revenue::numeric AS rev, qty AS qty FROM sales_growth_snapshot
+                WHERE snapshot_date=$1 AND store_code=$2 AND dish_name IS NOT NULL AND dish_name<>''
+                ORDER BY revenue DESC LIMIT 5`, [yd, storeCode])
+  ]);
+
+  const rev = Number(snapYd.rows[0]?.rev || 0);
+  const prevRev = Number(snapDbd.rows[0]?.rev || 0);
+  const lwRev = Number(snapLw.rows[0]?.rev || 0);
+  const lunchQty = Number(snapYd.rows[0]?.lunch_qty || 0);
+  const dinnerQty = Number(snapYd.rows[0]?.dinner_qty || 0);
+
+  // Order count and period revenue from pos_orders (order-level)
+  const [ordersYd, periodOrders, weekOrders, memberMiss] = await Promise.all([
+    pool.query(`SELECT COUNT(*)::int AS cnt FROM pos_orders
+                WHERE biz_date=$1 AND store_id=$2 AND order_status NOT IN ('cancelled','voided')`, [yd, storeCode]),
+    pool.query(`SELECT order_time, amount_after_discount FROM pos_orders
+                WHERE biz_date=$1 AND store_id=$2 AND order_status NOT IN ('cancelled','voided') AND order_time IS NOT NULL`,
+                [yd, storeCode]),
+    pool.query(`SELECT biz_date, order_time, amount_after_discount FROM pos_orders
+                WHERE biz_date >= $1 AND biz_date <= $2 AND store_id=$3
+                  AND order_status NOT IN ('cancelled','voided') AND order_time IS NOT NULL
+                ORDER BY biz_date ASC`, [lwSame, yd, storeCode]),
+    pool.query(`SELECT COUNT(*)::int AS cnt FROM growth_customer_profiles
+                WHERE (CURRENT_DATE - COALESCE(pos_last_order_at::date, NOW()::date)) BETWEEN 7 AND 20`)
+  ]);
+
+  const orderCnt = Number(ordersYd.rows[0]?.cnt || 0);
+  let lunchRev = 0, lunchCnt = 0, dinnerRev = 0, dinnerCnt = 0;
+  for (const row of periodOrders.rows) {
+    const h = cnHour(row.order_time);
+    if (h == null) continue;
+    const v = Number(row.amount_after_discount || 0);
+    if (h >= 11 && h < 14) { lunchRev += v; lunchCnt++; }
+    if (h >= 17 && h < 21) { dinnerRev += v; dinnerCnt++; }
+  }
+
+  // weekly lunch trend
+  const dayLunch = {};
+  for (const row of weekOrders.rows) {
+    const h = cnHour(row.order_time);
+    if (h == null || h < 11 || h >= 14) continue;
+    const k = String(row.biz_date).slice(0, 10);
+    dayLunch[k] = (dayLunch[k] || 0) + Number(row.amount_after_discount || 0);
+  }
+  const lunchDays = Object.keys(dayLunch).sort().slice(-4);
+  let lunchTrend = '';
+  if (lunchDays.length >= 3) {
+    const vals = lunchDays.map(d => dayLunch[d]);
+    const drops = vals.slice(1).filter((v, i) => v < vals[i]).length;
+    if (drops >= 2) lunchTrend = `午市连续${drops + 1}天下滑 ⚠️`;
+  }
+
+  const missCount = Number(memberMiss.rows[0]?.cnt || 0);
+  const totalRev = rev || 1;
+
+  const lines = [
+    `【增长日报 · ${storeCode}店 · ${yd}】`,
+    '',
+    '━━ 昨日销售 ━━',
+    `总营收：${fmtMoney(rev)}  订单数：${orderCnt}单`,
+    prevRev > 0 ? `环比昨日：${pct(rev, prevRev) || '-'}（前日${fmtMoney(prevRev)}）` : '环比昨日：暂无数据',
+    lwRev > 0 ? `环比上周同期：${pct(rev, lwRev) || '-'}` : '环比上周同期：暂无数据',
+  ];
+
+  if (topDishes.rows.length) {
+    lines.push('', '━━ TOP菜品（按营收）━━');
+    ['①','②','③','④','⑤'].forEach((n, i) => {
+      const r = topDishes.rows[i]; if (!r) return;
+      // strip suffix starting with a digit/punctuation to clean POS dish names like "xxx11:00&16:30出炉"
+      const clean = r.dish_name.replace(/[\d&（(【\[].{0,20}$/, '').trim() || r.dish_name.slice(0, 10);
+      lines.push(`${n} ${clean.slice(0,10).padEnd(10)}  ${fmtMoney(r.rev)}  ${Math.round(Number(r.qty))}单`);
+    });
+  }
+
+  lines.push('', '━━ 时段分析 ━━');
+  if (lunchCnt > 0) lines.push(`午市(11-14): ${fmtMoney(lunchRev)} / ${lunchCnt}单（占比${(lunchRev / totalRev * 100).toFixed(0)}%）`);
+  if (dinnerCnt > 0) lines.push(`晚市(17-21): ${fmtMoney(dinnerRev)} / ${dinnerCnt}单（占比${(dinnerRev / totalRev * 100).toFixed(0)}%）`);
+  if (!lunchCnt && !dinnerCnt) lines.push(`午市菜品${lunchQty}份 / 晚市菜品${dinnerQty}份（快照数据）`);
+
+  lines.push('', '━━ 本周规律 ━━');
+  lines.push(lunchTrend || '数据积累中，暂无规律');
+
+  lines.push('', '━━ 今日建议 ━━');
+  const sugg = [];
+  if (lunchTrend) sugg.push('① 午市弱势，建议今日推荐单人套餐');
+  if (topDishes.rows[0] && Number(topDishes.rows[0].qty) > 30)
+    sugg.push(`${sugg.length ? '②' : '①'} ${topDishes.rows[0].dish_name.slice(0,8)}昨日售出${Math.round(Number(topDishes.rows[0].qty))}单，接近上限，提前备货`);
+  if (missCount > 0)
+    sugg.push(`${['①','②','③'][sugg.length] || (sugg.length+1+'.')} 有${missCount}名会员7天未到店，建议今日触达`);
+  if (!sugg.length) sugg.push('① 今日经营正常，保持当前节奏');
+  lines.push(...sugg);
+
+  return lines.join('\n');
+}
+
+async function buildGrowthDailyReport(pool, targetDate) {
+  // yesterday in CST: add 8h to UTC then subtract 1 day
+  const yd = targetDate || shiftDate(new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10), -1);
+
+  // find all stores with data for that day
+  const storesRes = await pool.query(
+    `SELECT DISTINCT store_code FROM sales_growth_snapshot WHERE snapshot_date=$1 ORDER BY store_code`, [yd]
+  );
+  if (!storesRes.rows.length) return `【增长日报 · ${yd}】\n暂无 ${yd} 的 POS 数据`;
+
+  const reports = await Promise.all(storesRes.rows.map(r => buildStoreReport(pool, r.store_code, yd)));
+  return reports.join('\n\n' + '━'.repeat(20) + '\n\n');
 }
 
 export function registerGrowthRoutes(app, pool) {
@@ -2661,4 +2887,102 @@ export function registerGrowthRoutes(app, pool) {
       return res.json({ ok: true, selling_point: '限时优惠，到店即享' });
     }
   });
+
+  // 手动触发日报（POST /api/growth/daily-report/send）
+  app.post('/api/growth/daily-report/send', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    try {
+      const targetDate = cleanText(req.body?.date || '', 20) || null;
+      const msg = await buildGrowthDailyReport(pool, targetDate);
+      if (_sendGrowthAlert) {
+        const result = await _sendGrowthAlert(msg, 'growth_daily_report');
+        return res.json({ ok: true, report: msg, feishu: result });
+      }
+      return res.json({ ok: true, report: msg, feishu: null });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e?.message });
+    }
+  });
+
+  // 预览日报不发送（GET /api/growth/daily-report/preview）
+  app.get('/api/growth/daily-report/preview', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    try {
+      const targetDate = cleanText(req.query?.date || '', 20) || null;
+      const msg = await buildGrowthDailyReport(pool, targetDate);
+      return res.json({ ok: true, report: msg });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e?.message });
+    }
+  });
+
+  // content_performance CRUD
+  app.get('/api/growth/content-performance', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const storeId = cleanText(req.query.store_id || '', 128);
+    const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
+    const r = await pool.query(
+      `SELECT * FROM content_performance
+       WHERE ($1='' OR store_code=$1 OR store_id=$1)
+         AND content_date >= CURRENT_DATE - ($2 || ' days')::interval
+       ORDER BY content_date DESC, id DESC LIMIT 200`,
+      [storeId, days]
+    );
+    return res.json({ ok: true, records: r.rows });
+  });
+
+  app.post('/api/growth/content-performance', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const b = req.body || {};
+    const storeCode = cleanText(b.store_id || b.store_code || '', 128);
+    const channel = cleanText(b.channel || '', 64);
+    const platform = cleanText(b.platform || b.content_type || '', 64);
+    const contentTitle = cleanText(b.content_title || b.dish_name || '', 255);
+    const contentDate = cleanText(b.record_date || b.content_date || fmtYmd(new Date()), 32);
+    const toInt = (v) => Math.max(0, Math.floor(Number(v) || 0));
+    if (!channel) return res.status(400).json({ ok: false, error: 'channel required' });
+    const r = await pool.query(
+      `INSERT INTO content_performance
+         (content_date, channel, store_code, store_id, platform, content_type, content_title, dish_name,
+          impressions, clicks, likes, saves, comments, shares, new_followers, orders, notes, created_by)
+       VALUES ($1,$2,$3,$3,$4,$4,$5,$5,$6,$7,$8,$8,$9,$10,$11,$12,$13,$14)
+       RETURNING *`,
+      [contentDate, channel, storeCode, platform, contentTitle,
+       toInt(b.impressions), toInt(b.clicks), toInt(b.likes),
+       toInt(b.comments), toInt(b.shares), toInt(b.new_followers), toInt(b.conversions),
+       cleanText(b.notes || '', 500), cleanText(b.operator_username || 'manual', 64)]
+    );
+    return res.json({ ok: true, record: r.rows[0] });
+  });
+
+  app.delete('/api/growth/content-performance/:id', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ ok: false, error: 'invalid id' });
+    await pool.query(`DELETE FROM content_performance WHERE id=$1`, [id]);
+    return res.json({ ok: true });
+  });
+
+  // 每日增长日报（每天 09:05 发送）
+  if (!globalThis.__growthDailyReportTimer) {
+    function scheduleDailyReport() {
+      const now = new Date();
+      const next = new Date(now);
+      next.setHours(8, 0, 0, 0);
+      if (next <= now) next.setDate(next.getDate() + 1);
+      const delay = next - now;
+      globalThis.__growthDailyReportTimer = setTimeout(async () => {
+        try {
+          if (_sendGrowthAlert) {
+            const msg = await buildGrowthDailyReport(pool);
+            await _sendGrowthAlert(msg, 'growth_daily_report');
+          }
+        } catch (e) {
+          console.warn('[growth] daily report failed:', e?.message);
+        }
+        scheduleDailyReport();
+      }, delay);
+    }
+    scheduleDailyReport();
+  }
 }
