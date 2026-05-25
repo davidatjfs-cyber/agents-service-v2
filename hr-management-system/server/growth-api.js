@@ -1286,8 +1286,7 @@ async function loadRuleCandidates(pool, rule) {
      FROM growth_customer_profiles cp
      JOIN growth_customers gc ON gc.id = cp.customer_id
      LEFT JOIN wechat_work_customers ww ON ww.bind_customer_id = cp.customer_id
-     WHERE (COALESCE(ww.external_userid, gc.external_userid) IS NOT NULL
-            OR NULLIF(TRIM(cp.phone), '') IS NOT NULL)
+     WHERE COALESCE(ww.external_userid, gc.external_userid) IS NOT NULL
      LIMIT 1000`
   );
   return r.rows.filter((row) => {
@@ -1315,16 +1314,14 @@ async function runTouchRuleEngine(pool, options = {}) {
   for (const rule of (rulesResult.rows || [])) {
     const candidates = (await loadRuleCandidates(pool, rule)).slice(0, limitPerRule);
     for (const row of candidates) {
-      const hasWecom = !!row.external_userid;
-      const baseChannel = String((rule.action_payload || {}).channel || 'wecom');
-      const effectiveChannel = hasWecom ? baseChannel : (row.phone ? 'sms' : baseChannel);
+      if (!row.external_userid) continue;
       const actionPayload = Object.assign({}, rule.action_payload || {}, {
         rule_key: rule.rule_key,
         customer_id: row.customer_id,
         store_id: row.store_id,
         phone: row.phone,
         external_userid: row.external_userid,
-        channel: effectiveChannel,
+        channel: 'wecom',
         customer_name: row.customer_name || row.phone || `客户#${row.customer_id}`,
         days_since_last_visit: row.days_since_last_visit,
         visit_count: row.pos_order_count,
