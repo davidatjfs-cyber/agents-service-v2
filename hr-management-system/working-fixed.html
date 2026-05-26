@@ -25237,6 +25237,11 @@ th { background: #f5f5f5; font-weight: 700; }
             const users = HRMS_STORE.getUsers() || [];
             const empInfo = employees.find(e => String(e?.username || '').toLowerCase() === String(u.username || '').toLowerCase()) || {};
             const userInfo = users.find(x => x && String(x.username || '').toLowerCase() === String(u.username || '').toLowerCase()) || {};
+            const managerUsername = (empInfo.managerUsername || empInfo.manager || u.managerUsername || '').trim();
+            const managerRec = managerUsername
+                ? (employees.find(e => String(e?.username || '').toLowerCase() === managerUsername.toLowerCase()) ||
+                   users.find(x => String(x?.username || '').toLowerCase() === managerUsername.toLowerCase()) || {})
+                : {};
             return {
                 id: u.id,
                 username: u.username,
@@ -25250,7 +25255,8 @@ th { background: #f5f5f5; font-weight: 700; }
                 department: empInfo.department || u.department || userInfo.department || '',
                 level: empInfo.level || empInfo.jobLevel || empInfo.rank || u.level || '',
                 joinDate: empInfo.joinDate || empInfo.hireDate || empInfo.entryDate || u.joinDate || '',
-                managerUsername: empInfo.managerUsername || empInfo.manager || u.managerUsername || '',
+                managerUsername,
+                managerName: String(managerRec.name || empInfo.managerName || u.managerName || '').trim(),
                 status: 'active',
                 _loginPassword: fallbackPassword || currentUser?._loginPassword || ''
             };
