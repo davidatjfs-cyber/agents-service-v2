@@ -2402,7 +2402,11 @@ app.get('/api/points/records', authRequired, async (req, res) => {
   try {
     const state0 = (await getSharedState()) || {};
     const myStore = role === 'store_manager' ? String(pickMyStoreFromState(state0, username) || '').trim() : '';
-    const effectiveStore = role === 'store_manager' ? myStore : store;
+    const _allowedStores2405 = Array.isArray(req.user?.allowed_stores) ? req.user.allowed_stores : [];
+    const _currentStore2405 = String(req.user?.current_store || '').trim();
+    const effectiveStore = role === 'store_manager'
+      ? (store && _allowedStores2405.includes(store) ? store : (_currentStore2405 || myStore))
+      : store;
 
     let list = [];
 
@@ -7827,7 +7831,12 @@ app.get('/api/daily-reports', authRequired, async (req, res) => {
     });
     const resolveRealName = (uname) => { const k = String(uname || '').trim().toLowerCase(); return nameMap.get(k) || String(uname || '').trim() || ''; };
 
-    const store = (role === 'store_manager' || role === 'store_production_manager' || role === 'front_manager') ? myStore : storeQ;
+    const _allowedStores7834 = Array.isArray(req.user?.allowed_stores) ? req.user.allowed_stores : [];
+    const _currentStore7834 = String(req.user?.current_store || '').trim();
+    const _restrictedRoles7834 = ['store_manager', 'store_production_manager', 'front_manager'];
+    const store = _restrictedRoles7834.includes(role)
+      ? (storeQ && _allowedStores7834.includes(storeQ) ? storeQ : (_currentStore7834 || myStore))
+      : storeQ;
     let items = Array.isArray(state0.dailyReports) ? state0.dailyReports.slice() : [];
     if (store) items = items.filter(r => String(r?.store || '').trim() === String(store).trim());
     if (date) {
@@ -10233,7 +10242,11 @@ app.get('/api/reports/business', authRequired, async (req, res) => {
   try {
     const state0 = (await getSharedState()) || {};
     const myStore = pickMyStoreFromState(state0, username);
-    const store = role === 'store_manager' ? myStore : storeQ;
+    const _allowedStores10245 = Array.isArray(req.user?.allowed_stores) ? req.user.allowed_stores : [];
+    const _currentStore10245 = String(req.user?.current_store || '').trim();
+    const store = role === 'store_manager'
+      ? (storeQ && _allowedStores10245.includes(storeQ) ? storeQ : (_currentStore10245 || myStore))
+      : storeQ;
     let items = Array.isArray(state0.dailyReports) ? state0.dailyReports.slice() : [];
     items = items.filter(r => inDateRange(String(r?.date || '').trim(), start, end));
     if (store) items = items.filter(r => String(r?.store || '').trim() === store);
@@ -10486,7 +10499,11 @@ app.get('/api/reports/turnover', authRequired, async (req, res) => {
   try {
     const state0 = (await getSharedState()) || {};
     const myStore = pickMyStoreFromState(state0, username);
-    const store = role === 'store_manager' ? myStore : storeQ;
+    const _allowedStores10498 = Array.isArray(req.user?.allowed_stores) ? req.user.allowed_stores : [];
+    const _currentStore10498 = String(req.user?.current_store || '').trim();
+    const store = role === 'store_manager'
+      ? (storeQ && _allowedStores10498.includes(storeQ) ? storeQ : (_currentStore10498 || myStore))
+      : storeQ;
 
     let allEmployees = Array.isArray(state0.employees) ? state0.employees : [];
     const dbEmps = await dbListEmployeesForReports({ store: store || '', includeInactive: true });
@@ -10802,7 +10819,11 @@ app.get('/api/reports/leave-owed', authRequired, async (req, res) => {
   try {
     const state0 = (await getSharedState()) || {};
     const myStore = pickMyStoreFromState(state0, username);
-    const store = role === 'store_manager' ? myStore : filterStore;
+    const _allowedStores10814 = Array.isArray(req.user?.allowed_stores) ? req.user.allowed_stores : [];
+    const _currentStore10814 = String(req.user?.current_store || '').trim();
+    const store = role === 'store_manager'
+      ? (filterStore && _allowedStores10814.includes(filterStore) ? filterStore : (_currentStore10814 || myStore))
+      : filterStore;
 
     const emps = Array.isArray(state0?.employees) ? state0.employees : [];
     const users = Array.isArray(state0?.users) ? state0.users : [];
@@ -10935,7 +10956,11 @@ app.get('/api/reports/attendance', authRequired, async (req, res) => {
   try {
     const state0 = (await getSharedState()) || {};
     const myStore = pickMyStoreFromState(state0, username);
-    const store = role === 'store_manager' ? myStore : storeQ;
+    const _allowedStores10959 = Array.isArray(req.user?.allowed_stores) ? req.user.allowed_stores : [];
+    const _currentStore10959 = String(req.user?.current_store || '').trim();
+    const store = role === 'store_manager'
+      ? (storeQ && _allowedStores10959.includes(storeQ) ? storeQ : (_currentStore10959 || myStore))
+      : storeQ;
     // Also fetch detailed checkin records from DB
     let checkinDetails = [];
     try {
@@ -11126,7 +11151,11 @@ app.get('/api/reports/payroll', authRequired, async (req, res) => {
   try {
     const state0 = (await getSharedState()) || {};
     const myStore = pickMyStoreFromState(state0, username);
-    const store = role === 'store_manager' ? myStore : storeQ;
+    const _allowedStores11150 = Array.isArray(req.user?.allowed_stores) ? req.user.allowed_stores : [];
+    const _currentStore11150 = String(req.user?.current_store || '').trim();
+    const store = role === 'store_manager'
+      ? (storeQ && _allowedStores11150.includes(storeQ) ? storeQ : (_currentStore11150 || myStore))
+      : storeQ;
 
     const start = `${month}-01`;
     const [yr, mo] = month.split('-').map(Number);
