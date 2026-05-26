@@ -33,13 +33,18 @@ async function resolvePrimaryPatrolAssignee(store, roleList) {
     category: 'food_safety',
     fallbackRoles: ordered
   });
-  const primary = dutyRecipients[0];
-  if (primary?.open_id) {
-    return {
-      username: String(primary.username || '').trim(),
-      role: String(primary.role || ordered[0] || 'store_manager').trim(),
-      open_id: String(primary.open_id).trim()
-    };
+  if (dutyRecipients.length) {
+    const roleMatch = new Set(ordered.map((r) => r.toLowerCase()));
+    for (const row of dutyRecipients) {
+      const rowRole = String(row.role || '').trim().toLowerCase();
+      if (rowRole && roleMatch.has(rowRole) && String(row.open_id || '').trim()) {
+        return {
+          username: String(row.username || '').trim(),
+          role: String(row.role || ordered[0] || 'store_manager').trim(),
+          open_id: String(row.open_id).trim()
+        };
+      }
+    }
   }
   for (const role of ordered) {
     const u = await resolveSingleScoringUser(store, role);
