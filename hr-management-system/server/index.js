@@ -4543,11 +4543,13 @@ app.post('/api/checkin', authRequired, async (req, res) => {
   const storeName = String(req.body?.store || req.user?.store || '').trim();
 
   try {
-    // Prevent duplicate same-type check-in within 1 hour
-    const dupCheck = await pool.query(
-      `select id from checkin_records where lower(username) = lower($1) and type = $2 and check_time > now() - interval '1 hour' limit 1`,
-      [username, type]
-    );
+    // Prevent duplicate same-type check-in within 1 hour at the same store
+    // Allow cross-store clock-ins (e.g. dual-store managers clocking in at each store)
+    const dupCheckSql = storeName
+      ? `select id from checkin_records where lower(username) = lower($1) and type = $2 and store = $3 and check_time > now() - interval '1 hour' limit 1`
+      : `select id from checkin_records where lower(username) = lower($1) and type = $2 and check_time > now() - interval '1 hour' limit 1`;
+    const dupCheckParams = storeName ? [username, type, storeName] : [username, type];
+    const dupCheck = await pool.query(dupCheckSql, dupCheckParams);
     if (dupCheck.rows?.length) {
       const label = type === 'clock_in' ? '上班' : '下班';
       return res.status(400).json({ error: 'duplicate_checkin', message: `1小时内已${label}打卡，请勿重复操作` });
@@ -15897,8 +15899,10 @@ app.post('/api/auth/switch-store', authRequired, async (req, res) => {
     if (!nextStore || nextStore !== requestedStore) {
       return res.status(403).json({ error: 'store_forbidden' });
     }
+    // Strip JWT reserved claims before re-signing to avoid "There is an existing exp value" error
+    const { iat, exp, ...restUser } = req.user;
     const nextPayload = {
-      ...req.user,
+      ...restUser,
       role,
       store: stateStore,
       primary_store: ctx.primaryStore,
@@ -19698,10 +19702,23 @@ app.get('/api/checkin/records', authRequired, async (req, res) => {
       if (filterUser) { conditions.push(`lower(username) = lower($${idx})`); params.push(filterUser); idx++; }
       if (filterStore) { conditions.push(`store = $${idx}`); params.push(filterStore); idx++; }
     } else if (role === 'store_manager') {
-      // Store manager can see their own store's records
-      const myStore = pickMyStoreFromState(state, username);
-      if (myStore) { conditions.push(`store = $${idx}`); params.push(myStore); idx++; }
-      else { conditions.push(`lower(username) = lower($${idx})`); params.push(username); idx++; }
+      // Dual-store managers: query duty bindings for all stores they're responsible for
+      let managerStores = [];
+      try {
+        const dutyRows = await loadActiveDutyRowsForUser(pool, username);
+        managerStores = dutyRows.map(r => String(r.store || '').trim()).filter(Boolean);
+      } catch (_e) {}
+      if (!managerStores.length) {
+        const myStore = pickMyStoreFromState(state, username);
+        if (myStore) managerStores = [myStore];
+      }
+      if (managerStores.length > 1) {
+        conditions.push(`store = ANY($${idx}::text[])`); params.push(managerStores); idx++;
+      } else if (managerStores.length === 1) {
+        conditions.push(`store = $${idx}`); params.push(managerStores[0]); idx++;
+      } else {
+        conditions.push(`lower(username) = lower($${idx})`); params.push(username); idx++;
+      }
       if (filterUser) { conditions.push(`lower(username) = lower($${idx})`); params.push(filterUser); idx++; }
     } else {
       // Everyone else (employee, cashier) sees only their own

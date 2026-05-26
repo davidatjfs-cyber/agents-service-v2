@@ -51714,7 +51714,7 @@ ${body}
                     faceMatch,
                     faceScore,
                     photoUrl: photoUrl,
-                    store: currentUser?.store || ''
+                    store: currentUser?.current_store || currentUser?.store || ''
                 });
                 const statusLabel = (resp?.record?.status === 'normal' || resp?.record?.status === 'no_gps') ? '正常' :
                     resp?.record?.status === 'no_store_location' ? '(门店未设定位)' :
