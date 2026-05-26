@@ -2789,7 +2789,7 @@ app.get('/api/payments/budget-summary', authRequired, async (req, res) => {
       }
     } else {
       if (type === 'payment') {
-        if (!(role === 'admin' || role === 'hq_manager' || role === 'hr_manager' || role === 'store_manager')) {
+        if (!(role === 'admin' || role === 'hq_manager' || role === 'hr_manager' || role === 'store_manager' || role === 'cashier')) {
           return res.status(403).json({ error: 'forbidden' });
         }
 
@@ -2926,7 +2926,7 @@ app.get('/api/payments/budget-summary', authRequired, async (req, res) => {
         payload.applicantDepartment = String(applicant?.department || '').trim() || '';
         payload.applicantLevel = String(applicant?.level || '').trim() || '';
         payload.evidenceUrls = Array.isArray(payload?.evidenceUrls) ? payload.evidenceUrls.map(x => String(x || '').trim()).filter(Boolean) : [];
-      } else if (!(role === 'admin' || role === 'hq_manager' || role === 'hr_manager' || role === 'store_manager')) {
+      } else if (!(role === 'admin' || role === 'hq_manager' || role === 'hr_manager' || role === 'store_manager' || role === 'cashier')) {
         return res.status(403).json({ error: 'forbidden' });
       }
       if (!adminUsername) return res.status(500).json({ error: 'missing_admin' });
