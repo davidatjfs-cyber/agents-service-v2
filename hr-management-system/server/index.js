@@ -14598,6 +14598,8 @@ async function applyStatePeopleVisibilityForRole(data, role, username, fullState
 
   const pass = (row) => {
     if (hrmsIsInactiveEmploymentRecord(row)) return false;
+    // Always include the current user's own record regardless of store scope
+    if (String(row?.username || '').trim().toLowerCase() === un) return true;
     const rowStore = hrmsNormStoreName(row?.store);
     if (allowedStores && allowedStores.size > 0) return allowedStores.has(rowStore) && (!storeScope || rowStore === storeScope);
     if (storeScope) return rowStore === storeScope;

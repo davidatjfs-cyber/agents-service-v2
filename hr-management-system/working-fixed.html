@@ -44880,14 +44880,13 @@ tr:nth-child(even) td { background: #fafafa; }
             if (!currentUser) return;
 
             // Re-read employee/user data to ensure onboarding fields are up-to-date
+            let _empRec = {};
             try {
                 const _empList = HRMS_STORE.getEmployees() || [];
                 const _userList = HRMS_STORE.getUsers() || [];
                 const _uname = String(currentUser.username || '').trim().toLowerCase();
-                const _uid = String(currentUser.id || '').trim().toLowerCase();
-                const _name = String(currentUser.name || '').trim();
                 // 仅按username匹配：id字段大量重复不可信，name匹配会误伤其他员工
-                const _empRec = _uname ? (_empList.find(e => String(e?.username || '').trim().toLowerCase() === _uname) || {}) : {};
+                _empRec = _uname ? (_empList.find(e => String(e?.username || '').trim().toLowerCase() === _uname) || {}) : {};
                 const _usrRec = _uname ? (_userList.find(u => String(u?.username || '').trim().toLowerCase() === _uname) || {}) : {};
 
                 currentUser = {
@@ -44898,7 +44897,8 @@ tr:nth-child(even) td { background: #fafafa; }
                     gender: _empRec.gender || _usrRec.gender || currentUser.gender || '',
                     birthday: _empRec.birthday || _usrRec.birthday || currentUser.birthday || '',
                     hometown: _empRec.hometown || _usrRec.hometown || currentUser.hometown || '',
-                    store: _empRec.store || currentUser.store || '',
+                    // Preserve current_store/store from switch — don't overwrite with static employee record store
+                    store: currentUser.current_store || currentUser.store || _empRec.store || '',
                     department: _empRec.department || currentUser.department || '',
                     position: _empRec.position || currentUser.position || '',
                     level: _empRec.level || _empRec.jobLevel || _empRec.rank || currentUser.level || '',
