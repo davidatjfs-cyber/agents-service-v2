@@ -25072,7 +25072,7 @@ th { background: #f5f5f5; font-weight: 700; }
                         const employees2 = HRMS_STORE.getEmployees() || [];
                         const empInfo2 = employees2.find(e => String(e?.username || '').toLowerCase() === String(u.username || '').toLowerCase()) || {};
                         if (empInfo2.name) currentUser.name = empInfo2.name;
-                        if (empInfo2.store) currentUser.store = empInfo2.store;
+                        if (empInfo2.store && !currentUser.current_store) currentUser.store = empInfo2.store;
                         if (empInfo2.role) { const r2 = hrmsNormalizeRoleCode(empInfo2.role); if (r2) currentUser.role = r2; }
                         if (empInfo2.position) currentUser.position = empInfo2.position;
                         if (empInfo2.department) currentUser.department = empInfo2.department;
@@ -25242,7 +25242,7 @@ th { background: #f5f5f5; font-weight: 700; }
                 username: u.username,
                 name: empInfo.name || u.name || u.username,
                 role: hrmsNormalizeRoleCode(u.role),
-                store: empInfo.store || u.store || '',
+                store: String(u.current_store || empInfo.store || u.store || '').trim(),
                 current_store: String(u.current_store || u.store || empInfo.store || '').trim(),
                 primary_store: String(u.primary_store || u.store || empInfo.store || '').trim(),
                 allowed_stores: Array.isArray(u.allowed_stores) ? u.allowed_stores : [],
@@ -25268,6 +25268,15 @@ th { background: #f5f5f5; font-weight: 700; }
                 const resp = await HRMS_API.switchStore(store);
                 if (resp?.token) HRMS_API.setToken(resp.token);
                 if (resp?.user) currentUser = hydrateCurrentUserFromApiUser(resp.user, currentUser?._loginPassword);
+                // Reset page-level store select caches so they rebuild with new store
+                if (typeof __REP_STORE_POPULATED !== 'undefined') __REP_STORE_POPULATED = false;
+                ['dr-store', 'rep-store', 'rep-brand'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el && el.disabled) {
+                        el.innerHTML = `<option value="${escapeHtml(store)}">${escapeHtml(store)}</option>`;
+                        el.value = store;
+                    }
+                });
                 updateUserInfo();
                 if (typeof closeMobileMoreMenu === 'function') closeMobileMoreMenu();
                 showNotification('已切换到 ' + store, 'success');
@@ -25463,7 +25472,7 @@ async function deleteStoreDutyBinding(id){if(!id)return;var ok=await hrmsConfirm
                         const empInfo2 = employees2.find(e => String(e?.username || '').toLowerCase() === String(_loginUser.username || '').toLowerCase()) || {};
                         const stateRole = hrmsNormalizeRoleCode(empInfo2.role || '');
                         if (stateRole && stateRole !== ROLES.EMPLOYEE) currentUser.role = stateRole;
-                        if (empInfo2.store) currentUser.store = empInfo2.store;
+                        if (empInfo2.store && !currentUser.current_store) currentUser.store = empInfo2.store;
                         if (empInfo2.name) currentUser.name = empInfo2.name;
                         if (empInfo2.position) currentUser.position = empInfo2.position;
                         if (empInfo2.department) currentUser.department = empInfo2.department;
