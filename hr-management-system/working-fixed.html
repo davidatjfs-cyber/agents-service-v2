@@ -21189,6 +21189,7 @@
             HQ_MANAGER: 'hq_manager',
             STORE_MANAGER: 'store_manager',
             FRONT_MANAGER: 'front_manager',
+            FRONT_SUPERVISOR: 'front_supervisor',
             CASHIER: 'cashier',
             HR_MANAGER: 'hr_manager',
             PRODUCTION_MANAGER: 'store_production_manager',
@@ -25126,7 +25127,8 @@ th { background: #f5f5f5; font-weight: 700; }
                 [ROLES.CASHIER]: '总部出纳',
                 [ROLES.EMPLOYEE]: '门店员工',
                 [ROLES.PRODUCTION_MANAGER]: '出品经理',
-                [ROLES.FRONT_MANAGER]: '前厅经理'
+                [ROLES.FRONT_MANAGER]: '前厅经理',
+                [ROLES.FRONT_SUPERVISOR]: '前厅主管'
             };
             const v = String(role || '').trim();
             if (roleNames[v]) return roleNames[v];
@@ -25162,6 +25164,7 @@ th { background: #f5f5f5; font-weight: 700; }
             [ROLES.HQ_MANAGER]:         ['profile', 'attendance', 'exam', 'points', 'employees', 'daily-report', 'approvals', 'payment', 'rewards', 'reports', 'kitchen', 'training'],
             [ROLES.HR_MANAGER]:         ['profile', 'attendance', 'exam', 'points', 'employees', 'approvals', 'payment', 'rewards', 'reports', 'training'],
             [ROLES.FRONT_MANAGER]:      ['profile', 'attendance', 'exam', 'points', 'daily-report', 'training'],
+            [ROLES.FRONT_SUPERVISOR]:   ['profile', 'attendance', 'exam', 'points', 'daily-report', 'training'],
             [ROLES.CASHIER]:            ['profile', 'attendance', 'exam', 'points', 'payment', 'training']
         };
         async function loadRoleModulesFromServer() {
@@ -25219,6 +25222,7 @@ th { background: #f5f5f5; font-weight: 700; }
             if (r === ROLES.HR_MANAGER) return ['profile', 'employees', 'approvals', 'reports'];
             if (r === ROLES.CASHIER) return ['profile', 'attendance', 'payment', 'exam'];
             if (r === ROLES.FRONT_MANAGER) return ['profile', 'daily-report', 'attendance', 'exam'];
+            if (r === ROLES.FRONT_SUPERVISOR) return ['profile', 'daily-report', 'attendance', 'exam'];
             return ['profile', 'attendance', 'kitchen', 'training'];
         }
 
@@ -26041,7 +26045,7 @@ async function deleteStoreDutyBinding(id){if(!id)return;var ok=await hrmsConfirm
             }
 
             if (pageName === 'daily-report') {
-                const canAccess = currentUser && (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.HQ_MANAGER || currentUser.role === ROLES.STORE_MANAGER || currentUser.role === ROLES.FRONT_MANAGER);
+                const canAccess = currentUser && (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.HQ_MANAGER || currentUser.role === ROLES.STORE_MANAGER || currentUser.role === ROLES.FRONT_MANAGER || currentUser.role === ROLES.FRONT_SUPERVISOR);
                 if (!canAccess) {
                     showNotification('您没有营业日报权限', 'warning');
                     pageName = getHomePageName();
@@ -42321,6 +42325,7 @@ ${knowledgeContent.slice(0, 30000)}`;
                 const fixedRoles = [
                     { value: 'store_employee', label: '门店员工' },
                     { value: 'front_manager', label: '前厅经理' },
+                    { value: 'front_supervisor', label: '前厅主管' },
                     { value: 'store_production_manager', label: '出品经理' },
                     { value: 'store_manager', label: '店长' },
                     { value: 'cashier', label: '总部出纳' },
@@ -52335,7 +52340,7 @@ ${body}
             const roleEl = document.getElementById('mobile-more-role');
             if (nameEl && currentUser) nameEl.textContent = currentUser.name || currentUser.username || '-';
             if (roleEl && currentUser) {
-                const roleMap = { admin:'系统管理员', hr_manager:'人事经理', hq_manager:'总部营运', store_manager:'店长', front_manager:'前厅经理', store_employee:'员工', cashier:'出纳', store_production_manager:'出品经理' };
+                const roleMap = { admin:'系统管理员', hr_manager:'人事经理', hq_manager:'总部营运', store_manager:'店长', front_manager:'前厅经理', front_supervisor:'前厅主管', store_employee:'员工', cashier:'出纳', store_production_manager:'出品经理' };
                 roleEl.textContent = ((currentUser.current_store || currentUser.store) ? (currentUser.current_store || currentUser.store) + ' · ' : '') + (roleMap[currentUser.role] || currentUser.role || '-');
             }
             const switchWrap = document.getElementById('mobile-more-store-switch');
@@ -52363,7 +52368,7 @@ ${body}
             const allItems = [
                 { icon:'👤', label:'我的档案', page:'profile' },
                 { icon:'👥', label:'员工管理', page:'employees', roles:['admin','hr_manager','hq_manager','store_manager'] },
-                { icon:'📋', label:'营业日报', page:'daily-report', roles:['admin','hq_manager','store_manager','front_manager'] },
+                { icon:'📋', label:'营业日报', page:'daily-report', roles:['admin','hq_manager','store_manager','front_manager','front_supervisor'] },
                 { icon:'✅', label:'待审批', page:'approvals', roles:['admin','hr_manager','hq_manager','store_manager'] },
                 { icon:'💰', label:'请款', page:'payment', roles:['admin','hq_manager','store_manager','cashier'] },
                 { icon:'📚', label:'知识库', page:'knowledge' },

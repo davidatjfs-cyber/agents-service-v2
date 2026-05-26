@@ -7375,12 +7375,12 @@ app.post('/api/gm-mailbox', authRequired, async (req, res) => {
 
 function canAccessDailyReports(role) {
   const r = String(role || '').trim();
-  return r === 'admin' || r === 'hq_manager' || r === 'store_manager' || r === 'store_production_manager' || r === 'front_manager';
+  return r === 'admin' || r === 'hq_manager' || r === 'store_manager' || r === 'store_production_manager' || r === 'front_manager' || r === 'front_supervisor';
 }
 
 function canWriteDailyReports(role) {
   const r = String(role || '').trim();
-  return r === 'admin' || r === 'store_manager' || r === 'front_manager';
+  return r === 'admin' || r === 'store_manager' || r === 'front_manager' || r === 'front_supervisor';
 }
 
 function canAccessOpsTasks(role) {
