@@ -73,13 +73,20 @@ async function resolveScheduledCardRecipients(store, roleList) {
     fallbackRoles: ordered
   });
   if (dutyRecipients.length) {
-    return dutyRecipients
-      .filter((row) => String(row.open_id || '').trim())
-      .map((row) => ({
-        username: String(row.username || '').trim(),
-        role: String(row.role || '').trim() || ordered[0] || 'store_manager',
-        open_id: String(row.open_id || '').trim()
-      }));
+    const roleMatch = new Set(ordered.map((r) => r.toLowerCase()));
+    const filtered = dutyRecipients.filter((row) => {
+      const rowRole = String(row.role || '').trim().toLowerCase();
+      return rowRole && roleMatch.has(rowRole);
+    });
+    if (filtered.length) {
+      return filtered
+        .filter((row) => String(row.open_id || '').trim())
+        .map((row) => ({
+          username: String(row.username || '').trim(),
+          role: String(row.role || '').trim() || ordered[0] || 'store_manager',
+          open_id: String(row.open_id || '').trim()
+        }));
+    }
   }
   const out = [];
   const seenOpen = new Set();
