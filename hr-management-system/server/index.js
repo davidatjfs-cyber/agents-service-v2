@@ -1939,7 +1939,10 @@ app.get('/api/approvals', authRequired, async (req, res) => {
   const username = String(req.user?.username || '').trim();
   const role = String(req.user?.role || '').trim();
   if (!username) return res.status(400).json({ error: 'missing_user' });
-  if (!canAccessApprovalCenter(role, { dutyRows: [], currentStore: req.user?.current_store, primaryStore: req.user?.primary_store })) {
+  const _viewQ = String(req.query?.view || 'assigned').trim();
+  const _isEmployeeRole = role === 'store_employee' || role === 'employee';
+  // Employees can view their own submitted approvals (view=created) for points workflow
+  if (!(_isEmployeeRole && _viewQ === 'created') && !canAccessApprovalCenter(role, { dutyRows: [], currentStore: req.user?.current_store, primaryStore: req.user?.primary_store })) {
     return res.status(403).json({ error: 'forbidden' });
   }
 
@@ -2081,11 +2084,12 @@ function canUserViewApprovalRow(user, row, state0) {
   if (!user || !row) return false;
   const un = String(user.username || '').trim().toLowerCase();
   const role = String(user.role || '').trim();
+  // Applicants can always view their own approval (checked before access-center guard)
+  const appl = String(row.applicant_username || '').trim().toLowerCase();
+  if (appl && appl === un) return true;
   if (!canAccessApprovalCenter(role, { dutyRows: [], currentStore: user.current_store, primaryStore: user.primary_store })) return false;
   if (['admin', 'hq_manager', 'cashier', 'hr_manager'].includes(role)) return true;
   if (role === 'store_production_manager' && String(row.type || '') === 'points') return false;
-  const appl = String(row.applicant_username || '').trim().toLowerCase();
-  if (appl && appl === un) return true;
   const curr = String(row.current_assignee_username || '').trim().toLowerCase();
   if (curr && curr === un) return true;
   const chain = Array.isArray(row.chain) ? row.chain : [];
@@ -2104,9 +2108,6 @@ function canUserViewApprovalRow(user, row, state0) {
 }
 
 app.get('/api/approvals/:id', authRequired, async (req, res) => {
-  if (!canAccessApprovalCenter(req.user?.role, { dutyRows: [], currentStore: req.user?.current_store, primaryStore: req.user?.primary_store })) {
-    return res.status(403).json({ error: 'forbidden' });
-  }
   const id = String(req.params?.id || '').trim();
   if (!id) return res.status(400).json({ error: 'missing_id' });
   try {
@@ -2669,7 +2670,8 @@ app.get('/api/payments/budget-summary', authRequired, async (req, res) => {
  app.post('/api/approvals', authRequired, async (req, res) => {
    const approvalType = normalizeApprovalType(req.body?.type);
    const currentUsername = String(req.user?.username || '').trim().toLowerCase();
-   if (approvalType !== 'offboarding' && !canAccessApprovalCenter(req.user?.role, { dutyRows: [], currentStore: req.user?.current_store, primaryStore: req.user?.primary_store })) {
+   // 'points' has its own role check inside; 'offboarding' allows self-service resignation
+   if (approvalType !== 'offboarding' && approvalType !== 'points' && !canAccessApprovalCenter(req.user?.role, { dutyRows: [], currentStore: req.user?.current_store, primaryStore: req.user?.primary_store })) {
      return res.status(403).json({ error: 'forbidden' });
    }
    if (approvalType === 'offboarding' && normalizeRoleForJwt(String(req.user?.role || '')) === 'store_employee') {
