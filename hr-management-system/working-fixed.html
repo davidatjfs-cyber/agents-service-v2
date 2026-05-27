@@ -25208,6 +25208,10 @@ th { background: #f5f5f5; font-weight: 700; }
                 const r = String(role == null ? currentUser?.role : role || '').trim();
                 return r === ROLES.ADMIN || r === ROLES.HQ_MANAGER || r === ROLES.STORE_MANAGER || r === ROLES.FRONT_MANAGER;
             }
+            if (page === 'daily-report') {
+                const r = String(role == null ? currentUser?.role : role || '').trim();
+                return r === ROLES.ADMIN || r === ROLES.HQ_MANAGER || r === ROLES.STORE_MANAGER || r === ROLES.FRONT_MANAGER || r === ROLES.FRONT_SUPERVISOR;
+            }
             const pages = getRoleModulePages(role == null ? currentUser?.role : role);
             if (pages === null) return true;
             return Array.isArray(pages) && pages.includes(page);
@@ -25338,6 +25342,7 @@ th { background: #f5f5f5; font-weight: 700; }
           {c:ROLES.STORE_MANAGER,l:'店长'},
           {c:ROLES.PRODUCTION_MANAGER,l:'出品经理'},
           {c:ROLES.FRONT_MANAGER,l:'前厅经理'},
+          {c:ROLES.FRONT_SUPERVISOR,l:'前厅主管'},
           {c:ROLES.HQ_MANAGER,l:'总部营运'},
           {c:ROLES.HR_MANAGER,l:'总部HR'},
           {c:ROLES.CASHIER,l:'出纳'},
