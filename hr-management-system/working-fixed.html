@@ -24114,6 +24114,26 @@
                         </div>
                     </div>
                 `;
+                if (String(item?.status || '') === 'returned' && String(currentUser?.username || '').toLowerCase() === String(item?.applicant_username || '').toLowerCase()) {
+                    const _obRnHtml = String(payload?.returnNote||'').trim() ? '<div style="margin-bottom:10px;padding:8px 10px;border-radius:8px;background:rgba(245,158,11,0.08);border-left:3px solid #f59e0b;font-size:12px;color:rgba(253,186,116,0.9);">退回原因：' + escapeHtml(String(payload.returnNote).trim()) + '</div>' : '';
+                    const _obRolesOpts = (_edRoles||[]).map(r => '<option value="' + escapeHtml(r.c) + '"' + (r.c === (emp?.role||'') ? ' selected' : '') + '>' + escapeHtml(r.l) + '</option>').join('');
+                    payloadHtml += '<div id="onboarding-ret-edit" style="margin-top:14px;padding:12px;border-radius:12px;border:1px solid rgba(94,234,212,0.35);background:rgba(94,234,212,0.06);">'
+                        + '<div style="font-weight:800;color:#5eead4;margin-bottom:6px;">修改入职信息</div>'
+                        + _obRnHtml
+                        + '<div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:10px;">可修改填错的字段，无需变动的保持原值即可。</div>'
+                        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+                        + '<div><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">姓名</div><input id="ob-ret-name" class="form-input" value="' + escapeHtml(emp?.name||'') + '"></div>'
+                        + '<div><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">门店</div><input id="ob-ret-store" class="form-input" value="' + escapeHtml(emp?.store||'') + '"></div>'
+                        + '<div><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">岗位</div><input id="ob-ret-position" class="form-input" value="' + escapeHtml(emp?.position||'') + '"></div>'
+                        + '<div><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">部门</div><input id="ob-ret-department" class="form-input" value="' + escapeHtml(emp?.department||'') + '"></div>'
+                        + '<div><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">角色</div><select id="ob-ret-role" class="form-input">' + _obRolesOpts + '</select></div>'
+                        + '<div><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">级别</div><input id="ob-ret-level" class="form-input" value="' + escapeHtml(emp?.level||'') + '"></div>'
+                        + '<div><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">直属上级账号</div><input id="ob-ret-managerUsername" class="form-input" value="' + escapeHtml(emp?.managerUsername||'') + '"></div>'
+                        + '<div><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">入职日期</div><input id="ob-ret-joinDate" type="date" class="form-input" value="' + escapeHtml(emp?.joinDate||'') + '"></div>'
+                        + '<div><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">工资</div><input id="ob-ret-salary" type="number" class="form-input" value="' + (emp?.salary!=null&&emp.salary!==''?escapeHtml(String(emp.salary)):'') + '"></div>'
+                        + '<div><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">手机号</div><input id="ob-ret-phone" class="form-input" value="' + escapeHtml(emp?.phone||'') + '"></div>'
+                        + '</div></div>';
+                }
             } else if (String(item?.type || '') === 'promotion') {
                 const stage = String(payload?.promotionStage || 'qualification').trim().toLowerCase();
                 const stageText = stage === 'formal' ? '正式晋升' : '晋升资格';
@@ -24171,6 +24191,18 @@
                         <div style="margin-top:6px; font-size:11px; color:rgba(200,215,230,0.62);">总部营运与总部人事将审批该金额，通过后自动更新到员工薪资。</div>
                     </div>
                 `;
+                if (String(item?.status || '') === 'returned' && String(currentUser?.username || '').toLowerCase() === String(item?.applicant_username || '').toLowerCase()) {
+                    const _promoRnHtml = String(payload?.returnNote||'').trim() ? '<div style="margin-bottom:10px;padding:8px 10px;border-radius:8px;background:rgba(245,158,11,0.08);border-left:3px solid #f59e0b;font-size:12px;color:rgba(253,186,116,0.9);">退回原因：' + escapeHtml(String(payload.returnNote).trim()) + '</div>' : '';
+                    payloadHtml += `<div id="promotion-ret-edit" style="margin-top:14px;padding:12px;border-radius:12px;border:1px solid rgba(99,102,241,0.35);background:rgba(99,102,241,0.06);">
+                        <div style="font-weight:800;color:#a5b4fc;margin-bottom:6px;">修改晋升申请</div>
+                        ${_promoRnHtml}
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
+                            <div><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">目标岗位</div><input data-field="targetPosition" class="form-input promo-ret-field" value="${escapeHtml(payload?.targetPosition||payload?.newPosition||'')}"></div>
+                            <div><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">目标级别</div><input data-field="targetLevel" class="form-input promo-ret-field" value="${escapeHtml(payload?.targetLevel||payload?.newLevel||'')}"></div>
+                        </div>
+                        <div style="margin-top:10px;"><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">申请理由</div><textarea data-field="reason" class="form-input promo-ret-field" rows="3" style="resize:vertical;">${escapeHtml(payload?.reason||'')}</textarea></div>
+                    </div>`;
+                }
             } else if (String(item?.type || '') === 'offboarding') {
                 const existingDepType = String(payload?.departureType || '').trim();
                 const depTypeDisplay = existingDepType === 'voluntary' ? '主动离职（辞职）' : existingDepType === 'involuntary' ? '被动离职（劝退/裁员）' : '';
@@ -24204,6 +24236,18 @@
                         </div>
                     </div>
                 `;
+                if (String(item?.status || '') === 'returned' && String(currentUser?.username || '').toLowerCase() === String(item?.applicant_username || '').toLowerCase()) {
+                    const _offbRnHtml = String(payload?.returnNote||'').trim() ? '<div style="margin-bottom:10px;padding:8px 10px;border-radius:8px;background:rgba(245,158,11,0.08);border-left:3px solid #f59e0b;font-size:12px;color:rgba(253,186,116,0.9);">退回原因：' + escapeHtml(String(payload.returnNote).trim()) + '</div>' : '';
+                    payloadHtml += `<div id="offboarding-ret-edit" style="margin-top:14px;padding:12px;border-radius:12px;border:1px solid rgba(239,68,68,0.35);background:rgba(239,68,68,0.06);">
+                        <div style="font-weight:800;color:#fca5a5;margin-bottom:6px;">修改离职申请</div>
+                        ${_offbRnHtml}
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
+                            <div><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">离职日期</div><input data-field="resignDate" type="date" class="form-input offb-ret-field" value="${escapeHtml(payload?.resignDate||'')}"></div>
+                            <div><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">离职原因</div><input data-field="reason" class="form-input offb-ret-field" value="${escapeHtml(payload?.reason||'')}"></div>
+                        </div>
+                        <div style="margin-top:10px;"><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">说明</div><textarea data-field="detail" class="form-input offb-ret-field" rows="2" style="resize:vertical;">${escapeHtml(payload?.detail||'')}</textarea></div>
+                    </div>`;
+                }
             } else if (String(item?.type || '') === 'leave') {
                 const existingRemDays = payload?.remainingLeaveDays;
                 const existingRemDaysDisplay = (existingRemDays != null && existingRemDays !== '') ? String(existingRemDays) : '';
@@ -24232,6 +24276,18 @@
                         <div style="margin-top: 6px; font-size: 11px; color: rgba(200,215,230,0.6);" id="leave-remaining-days-hint"></div>
                     </div>
                 `;
+                if (String(item?.status || '') === 'returned' && String(currentUser?.username || '').toLowerCase() === String(item?.applicant_username || '').toLowerCase()) {
+                    const _leaveRnHtml = String(payload?.returnNote||'').trim() ? '<div style="margin-bottom:10px;padding:8px 10px;border-radius:8px;background:rgba(245,158,11,0.08);border-left:3px solid #f59e0b;font-size:12px;color:rgba(253,186,116,0.9);">退回原因：' + escapeHtml(String(payload.returnNote).trim()) + '</div>' : '';
+                    payloadHtml += `<div id="leave-ret-edit" style="margin-top:14px;padding:12px;border-radius:12px;border:1px solid rgba(59,130,246,0.35);background:rgba(59,130,246,0.06);">
+                        <div style="font-weight:800;color:#93c5fd;margin-bottom:6px;">修改休假申请</div>
+                        ${_leaveRnHtml}
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
+                            <div><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">开始日期</div><input data-field="startDate" type="date" class="form-input leave-ret-field" value="${escapeHtml(payload?.startDate||payload?.fromDate||'')}"></div>
+                            <div><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">结束日期</div><input data-field="endDate" type="date" class="form-input leave-ret-field" value="${escapeHtml(payload?.endDate||payload?.toDate||'')}"></div>
+                        </div>
+                        <div style="margin-top:10px;"><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">休假原因</div><textarea data-field="reason" class="form-input leave-ret-field" rows="2" style="resize:vertical;">${escapeHtml(payload?.reason||payload?.leaveReason||'')}</textarea></div>
+                    </div>`;
+                }
             } else if (String(item?.type || '') === 'reward_punishment') {
                 const rpType = String(payload?.rpType || payload?.category || '').trim();
                 const rpLabel = (rpType === '奖励' || rpType === 'reward') ? '奖励' : '惩罚';
@@ -24259,6 +24315,15 @@
                         ${payload?.note ? `<div style="margin-top: 8px; color: rgba(200,215,230,0.85);">备注：<div style="margin-top: 6px; color: rgba(226,232,240,0.95);">${escapeHtml(payload?.note || '')}</div></div>` : ''}
                     </div>
                 `;
+                if (String(item?.status || '') === 'returned' && String(currentUser?.username || '').toLowerCase() === String(item?.applicant_username || '').toLowerCase()) {
+                    const _rpRnHtml = String(payload?.returnNote||'').trim() ? '<div style="margin-bottom:10px;padding:8px 10px;border-radius:8px;background:rgba(245,158,11,0.08);border-left:3px solid #f59e0b;font-size:12px;color:rgba(253,186,116,0.9);">退回原因：' + escapeHtml(String(payload.returnNote).trim()) + '</div>' : '';
+                    payloadHtml += `<div id="rp-ret-edit" style="margin-top:14px;padding:12px;border-radius:12px;border:1px solid rgba(234,179,8,0.35);background:rgba(234,179,8,0.06);">
+                        <div style="font-weight:800;color:#fde68a;margin-bottom:6px;">修改奖惩申请</div>
+                        ${_rpRnHtml}
+                        <div style="margin-top:8px;"><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">事由</div><textarea data-field="reason" class="form-input rp-ret-field" rows="2" style="resize:vertical;">${escapeHtml(payload?.reason||'')}</textarea></div>
+                        <div style="margin-top:10px;"><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">结果</div><textarea data-field="result" class="form-input rp-ret-field" rows="2" style="resize:vertical;">${escapeHtml(payload?.result||'')}</textarea></div>
+                    </div>`;
+                }
             } else if (String(item?.type || '') === 'points') {
                 const pts = Number(payload?.points || 0);
                 const amount = Number((pts * 0.5).toFixed(2));
@@ -24351,6 +24416,18 @@
                         <div style="margin-top: 8px; color: rgba(200,215,230,0.85);">说明：<div style="margin-top: 6px; color: rgba(226,232,240,0.95);">${escapeHtml(payload?.note || '')}</div></div>
                     </div>
                 `;
+                if (String(item?.status || '') === 'returned' && String(currentUser?.username || '').toLowerCase() === String(item?.applicant_username || '').toLowerCase()) {
+                    const _payRnHtml = String(payload?.returnNote||'').trim() ? '<div style="margin-bottom:10px;padding:8px 10px;border-radius:8px;background:rgba(245,158,11,0.08);border-left:3px solid #f59e0b;font-size:12px;color:rgba(253,186,116,0.9);">退回原因：' + escapeHtml(String(payload.returnNote).trim()) + '</div>' : '';
+                    payloadHtml += `<div id="payment-ret-edit" style="margin-top:14px;padding:12px;border-radius:12px;border:1px solid rgba(59,130,246,0.35);background:rgba(59,130,246,0.06);">
+                        <div style="font-weight:800;color:#93c5fd;margin-bottom:6px;">修改请款单</div>
+                        ${_payRnHtml}
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
+                            <div><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">金额</div><input data-field="amount" type="number" step="0.01" class="form-input payment-ret-field" value="${escapeHtml(payload?.amount!=null?String(payload.amount):'')}"></div>
+                            <div><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">日期</div><input data-field="date" type="date" class="form-input payment-ret-field" value="${escapeHtml(payload?.date||'')}"></div>
+                        </div>
+                        <div style="margin-top:10px;"><div style="font-size:12px;color:rgba(200,215,230,0.72);margin-bottom:4px;">说明</div><textarea data-field="note" class="form-input payment-ret-field" rows="2" style="resize:vertical;">${escapeHtml(payload?.note||'')}</textarea></div>
+                    </div>`;
+                }
             }
 
             body.innerHTML = `
@@ -24541,6 +24618,30 @@
                     itemsOut.push({ ruleId, reason });
                 }
                 resubmitBody.items = itemsOut;
+            } else if (String(item?.type || '') === 'onboarding') {
+                const _obEmp = {};
+                ['name', 'store', 'position', 'department', 'level', 'managerUsername', 'joinDate', 'phone'].forEach(function(f) {
+                    const _el = document.getElementById('ob-ret-' + f);
+                    if (_el) { const _v = String(_el.value || '').trim(); if (_v) _obEmp[f] = _v; }
+                });
+                const _roleEl = document.getElementById('ob-ret-role');
+                if (_roleEl && _roleEl.value) _obEmp.role = _roleEl.value;
+                const _salEl = document.getElementById('ob-ret-salary');
+                if (_salEl && _salEl.value !== '') { const _n = Number(_salEl.value); if (Number.isFinite(_n)) _obEmp.salary = _n; }
+                if (Object.keys(_obEmp).length) resubmitBody.employee = _obEmp;
+            } else {
+                const _clsMap = { promotion: '.promo-ret-field', offboarding: '.offb-ret-field', leave: '.leave-ret-field', reward_punishment: '.rp-ret-field', payment: '.payment-ret-field' };
+                const _cls = _clsMap[String(item?.type || '')];
+                if (_cls) {
+                    const _patch = {};
+                    document.querySelectorAll(_cls + '[data-field]').forEach(function(_el) {
+                        const _f = _el.getAttribute('data-field');
+                        if (!_f) return;
+                        const _v = _el.type === 'number' ? (_el.value !== '' ? Number(_el.value) : null) : String(_el.value || '').trim();
+                        if (_v !== null && _v !== '') _patch[_f] = _v;
+                    });
+                    if (Object.keys(_patch).length) resubmitBody.patch = _patch;
+                }
             }
             if (!confirm('确认重新提交此申请？')) return;
             HRMS_API.resubmitApproval(id, resubmitBody)

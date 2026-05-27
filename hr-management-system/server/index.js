@@ -4377,6 +4377,22 @@ app.post('/api/approvals/:id/resubmit', authRequired, async (req, res) => {
       }
     }
 
+    // onboarding: allow updating employee fields on resubmit
+    if (String(row.type || '') === 'onboarding') {
+      const bodyEmp = req.body?.employee && typeof req.body.employee === 'object' ? req.body.employee : null;
+      if (bodyEmp) {
+        const existing = updatedPayload.employee && typeof updatedPayload.employee === 'object' ? updatedPayload.employee : {};
+        updatedPayload.employee = { ...existing, ...bodyEmp };
+      }
+    }
+    // other types: allow patching top-level payload fields on resubmit
+    if (['leave', 'payment', 'offboarding', 'reward_punishment', 'promotion'].includes(String(row.type || ''))) {
+      const bodyPatch = req.body?.patch && typeof req.body.patch === 'object' ? req.body.patch : null;
+      if (bodyPatch) {
+        Object.assign(updatedPayload, bodyPatch);
+      }
+    }
+
     // Reset the chain: all steps back to pending/queued, first step becomes pending
     const chain = Array.isArray(row.chain) ? row.chain : [];
     for (let i = 0; i < chain.length; i++) {
