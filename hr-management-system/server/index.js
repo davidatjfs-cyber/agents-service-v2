@@ -14254,14 +14254,22 @@ async function authRequired(req, res, next) {
     }
 
     try {
+      let effectiveRole = String(payload.role || '').trim();
+      try {
+        const dbRoleRow = await pool.query('SELECT role FROM users WHERE lower(username) = lower($1) LIMIT 1', [uname]);
+        const dbRole = String(dbRoleRow.rows?.[0]?.role || '').trim();
+        if (dbRole) effectiveRole = dbRole;
+      } catch (_e) {}
+
       const state0 = (await getSharedState().catch(() => null)) || {};
       const stateStore = String(pickMyStoreFromState(state0, uname) || payload.store || '').trim();
-      const ctx = await getUserStoreAccessContext(uname, payload.role, {
+      const ctx = await getUserStoreAccessContext(uname, effectiveRole, {
         requestedStore: payload.current_store || stateStore,
         stateStore
       });
       req.user = {
         ...payload,
+        role: effectiveRole,
         store: stateStore,
         primary_store: ctx.primaryStore,
         current_store: ctx.currentStore,
@@ -14313,14 +14321,22 @@ async function authRequiredOrQueryToken(req, res, next) {
       }
     }
     try {
+      let effectiveRole = String(payload.role || '').trim();
+      try {
+        const dbRoleRow = await pool.query('SELECT role FROM users WHERE lower(username) = lower($1) LIMIT 1', [uname]);
+        const dbRole = String(dbRoleRow.rows?.[0]?.role || '').trim();
+        if (dbRole) effectiveRole = dbRole;
+      } catch (_e) {}
+
       const state0 = (await getSharedState().catch(() => null)) || {};
       const stateStore = String(pickMyStoreFromState(state0, uname) || payload.store || '').trim();
-      const ctx = await getUserStoreAccessContext(uname, payload.role, {
+      const ctx = await getUserStoreAccessContext(uname, effectiveRole, {
         requestedStore: payload.current_store || stateStore,
         stateStore
       });
       req.user = {
         ...payload,
+        role: effectiveRole,
         store: stateStore,
         primary_store: ctx.primaryStore,
         current_store: ctx.currentStore,
@@ -14621,11 +14637,30 @@ async function applyStatePeopleVisibilityForRole(data, role, username, fullState
     };
   }
 
-  return {
-    ...data,
-    employees: rawEmps.filter(pass),
-    users: rawUsers.filter(pass)
-  };
+  // Look up the requesting user's authoritative role from the users table.
+  // hrms_state.employees role can be stale (overwritten by admin saves); the users table is the source of truth.
+  let dbRole = null;
+  try {
+    const dbRow = await pool.query('SELECT role FROM users WHERE lower(username) = lower($1) LIMIT 1', [un]);
+    dbRole = String(dbRow.rows?.[0]?.role || '').trim() || null;
+  } catch (_e) {}
+
+  const filteredEmps = rawEmps.filter(pass);
+  const filteredUsers = rawUsers.filter(pass);
+
+  if (dbRole) {
+    return {
+      ...data,
+      employees: filteredEmps.map(emp =>
+        String(emp?.username || '').trim().toLowerCase() === un ? { ...emp, role: dbRole } : emp
+      ),
+      users: filteredUsers.map(u =>
+        String(u?.username || '').trim().toLowerCase() === un ? { ...u, role: dbRole } : u
+      )
+    };
+  }
+
+  return { ...data, employees: filteredEmps, users: filteredUsers };
 }
 
 app.get('/api/state', authRequired, async (req, res) => {
