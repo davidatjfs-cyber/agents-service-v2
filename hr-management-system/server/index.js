@@ -8043,7 +8043,11 @@ app.post('/api/daily-reports', authRequired, async (req, res) => {
     const myStore = String(me?.store || '').trim();
 
     let store = String(req.body?.store || '').trim();
-    if (role === 'store_manager' || role === 'store_production_manager' || role === 'front_manager') {
+    const _allowedStoresDR = Array.isArray(req.user?.allowed_stores) ? req.user.allowed_stores : [];
+    const _currentStoreDR = String(req.user?.current_store || '').trim();
+    if (role === 'store_manager') {
+      store = (store && _allowedStoresDR.includes(store)) ? store : (_currentStoreDR || myStore);
+    } else if (role === 'store_production_manager' || role === 'front_manager') {
       store = myStore;
     }
     if (!store) return res.status(400).json({ error: 'missing_store' });
