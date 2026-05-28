@@ -45387,7 +45387,7 @@ tr:nth-child(even) td { background: #fafafa; }
                 const msg = escapeHtml(rawMsg);
                 const relTime = __notifRelativeTime(a?.createdAt);
                 const fullDt = String(a?.createdAt || '').slice(0, 16).replace('T', ' ');
-                const isSys = a._src === 'notification';
+                const isSys = a._src === 'notification' || a._src === 'db_notification';
                 const notifDate = String(a?.createdAt || '').slice(0, 10);
                 const isToday = notifDate === todayDate;
                 const isImportant = String(a?.level || '') === 'important';
