@@ -23876,12 +23876,12 @@
             const monthAmountEl = document.getElementById('points-month-amount');
             const recordsTitleEl = document.getElementById('points-records-title');
             if (!listEl) return;
-            const role = String(currentUser?.role || '').trim();
-            const isStoreManagerView = role === ROLES.STORE_MANAGER;
-            const isAdminView = role === ROLES.ADMIN || role === ROLES.HR_MANAGER || role === ROLES.HQ_MANAGER;
-            const storeSel = document.getElementById('points-admin-store');
-            const selectedStore = String(storeSel?.value || '').trim();
-            const store = isStoreManagerView ? String(currentUser?.store || '').trim() : selectedStore;
+const role = String(currentUser?.role || '').trim();
+             const isStoreManagerView = role === ROLES.STORE_MANAGER;
+             const isAdminView = role === ROLES.ADMIN || role === ROLES.HR_MANAGER || role === ROLES.HQ_MANAGER;
+             const storeSel = document.getElementById('points-admin-store');
+             const selectedStore = String(storeSel?.value || '').trim();
+             const store = isStoreManagerView ? String(currentUser?.store || '').trim() : selectedStore;
             const storeLabel = (() => {
                 if (isStoreManagerView) return String(currentUser?.store || '').trim() || '本门店';
                 if (!storeSel || storeSel.disabled) return store || '—';
@@ -25047,6 +25047,15 @@ th { background: #f5f5f5; font-weight: 700; }
                         const serverOnlyKeys = ['approvalFlows', 'paymentFlowByStore'];
                         const merged = { ...localData };
                         serverOnlyKeys.forEach(k => { if (serverData[k] !== undefined && merged[k] === undefined) merged[k] = serverData[k]; });
+                        if (Array.isArray(serverData.employees) && serverData.employees.length > 0) {
+                            const _lEmps = Array.isArray(merged.employees) ? merged.employees : [];
+                            const _lUnames = new Set(_lEmps.map(e => String(e?.username || '').toLowerCase()).filter(Boolean));
+                            const _sOnly = serverData.employees.filter(e => { const u = String(e?.username || '').toLowerCase(); return u && !_lUnames.has(u); });
+                            if (_sOnly.length > 0) {
+                                merged.employees = [..._lEmps, ..._sOnly];
+                                try { const _r = localStorage.getItem(HRMS_STORAGE_KEY); if (_r) { const _p = JSON.parse(_r); if (_p) { _p.employees = merged.employees; localStorage.setItem(HRMS_STORAGE_KEY, JSON.stringify(_p)); } } } catch (_e) {}
+                            }
+                        }
                         await HRMS_API.saveState(merged);
                     } catch (e) {
                         console.error('save state failed:', e);
@@ -25076,6 +25085,15 @@ th { background: #f5f5f5; font-weight: 700; }
                 const serverOnlyKeys = ['approvalFlows', 'paymentFlowByStore'];
                 const merged = { ...localData };
                 serverOnlyKeys.forEach(k => { if (serverData[k] !== undefined && merged[k] === undefined) merged[k] = serverData[k]; });
+                if (Array.isArray(serverData.employees) && serverData.employees.length > 0) {
+                    const _lEmps = Array.isArray(merged.employees) ? merged.employees : [];
+                    const _lUnames = new Set(_lEmps.map(e => String(e?.username || '').toLowerCase()).filter(Boolean));
+                    const _sOnly = serverData.employees.filter(e => { const u = String(e?.username || '').toLowerCase(); return u && !_lUnames.has(u); });
+                    if (_sOnly.length > 0) {
+                        merged.employees = [..._lEmps, ..._sOnly];
+                        try { const _r = localStorage.getItem(HRMS_STORAGE_KEY); if (_r) { const _p = JSON.parse(_r); if (_p) { _p.employees = merged.employees; localStorage.setItem(HRMS_STORAGE_KEY, JSON.stringify(_p)); } } } catch (_e) {}
+                    }
+                }
                 await HRMS_API.saveState(merged);
                 return true;
             } catch (e) {
@@ -25183,6 +25201,7 @@ th { background: #f5f5f5; font-weight: 700; }
                         try { updateGrowthModuleVisibility(); } catch(e) {}
                     } catch (e) {}
                     try { loadProfileData(); } catch (e) {}
+                    try { if (!document.getElementById('employees-page')?.classList.contains('hidden')) loadEmployeesData(); } catch (e) {}
                 }).catch(() => {});
                 loadRoleModulesFromServer().catch(() => {});
                 try { refreshUnreadBadges(); } catch (e) {}
@@ -25266,7 +25285,7 @@ th { background: #f5f5f5; font-weight: 700; }
             [ROLES.HR_MANAGER]:         ['profile', 'attendance', 'exam', 'points', 'employees', 'approvals', 'payment', 'rewards', 'reports', 'training'],
             [ROLES.FRONT_MANAGER]:      ['profile', 'attendance', 'exam', 'points', 'daily-report', 'training'],
             [ROLES.FRONT_SUPERVISOR]:   ['profile', 'attendance', 'exam', 'points', 'daily-report', 'training'],
-            [ROLES.CASHIER]:            ['profile', 'attendance', 'exam', 'points', 'payment', 'training']
+            [ROLES.CASHIER]:            ['profile', 'attendance', 'exam', 'points', 'payment', 'approvals', 'training']
         };
         async function loadRoleModulesFromServer() {
             try {
@@ -25307,7 +25326,7 @@ th { background: #f5f5f5; font-weight: 700; }
             }
             if (page === 'growth') {
                 const r = String(role == null ? currentUser?.role : role || '').trim();
-                return r === ROLES.ADMIN || r === ROLES.HQ_MANAGER || r === ROLES.STORE_MANAGER || r === ROLES.FRONT_MANAGER;
+                return r === ROLES.ADMIN;
             }
             if (page === 'daily-report') {
                 const r = String(role == null ? currentUser?.role : role || '').trim();
@@ -25323,7 +25342,7 @@ th { background: #f5f5f5; font-weight: 700; }
             if (r === ROLES.ADMIN) return ['profile', 'growth', 'reports', 'agent-tasks'];
             if (r === ROLES.STORE_MANAGER) return ['profile', 'attendance', 'payment', 'approvals'];
             if (r === ROLES.PRODUCTION_MANAGER) return ['profile', 'attendance', 'kitchen', 'training'];
-            if (r === ROLES.HQ_MANAGER) return ['profile', 'approvals', 'growth', 'reports'];
+            if (r === ROLES.HQ_MANAGER) return ['profile', 'approvals', 'reports'];
             if (r === ROLES.HR_MANAGER) return ['profile', 'employees', 'approvals', 'reports'];
             if (r === ROLES.CASHIER) return ['profile', 'attendance', 'payment', 'exam'];
             if (r === ROLES.FRONT_MANAGER) return ['profile', 'daily-report', 'attendance', 'exam'];
@@ -25597,6 +25616,7 @@ async function deleteStoreDutyBinding(id){if(!id)return;var ok=await hrmsConfirm
                         try { updateGrowthModuleVisibility(); } catch(e) {}
                     } catch (e) {}
                     try { loadProfileData(); } catch (e) {}
+                    try { if (!document.getElementById('employees-page')?.classList.contains('hidden')) loadEmployeesData(); } catch (e) {}
                 }).catch(() => {});
                 // 保存登录凭据用于自动登录
                 try {
@@ -26179,7 +26199,7 @@ async function deleteStoreDutyBinding(id){if(!id)return;var ok=await hrmsConfirm
             }
 
             if (pageName === 'reports') {
-                const canAccess = currentUser && (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.HQ_MANAGER || currentUser.role === ROLES.STORE_MANAGER || currentUser.role === ROLES.HR_MANAGER || currentUser.role === ROLES.PRODUCTION_MANAGER);
+                const canAccess = currentUser && (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.HQ_MANAGER || currentUser.role === ROLES.STORE_MANAGER || currentUser.role === ROLES.HR_MANAGER);
                 if (!canAccess) {
                     showNotification('您没有分析报表权限', 'warning');
                     pageName = getHomePageName();
@@ -26198,9 +26218,9 @@ async function deleteStoreDutyBinding(id){if(!id)return;var ok=await hrmsConfirm
             }
 
             if (pageName === 'growth') {
-                const canAccess = currentUser && (currentUser.role === ROLES.ADMIN || currentUser.role === ROLES.HQ_MANAGER || currentUser.role === ROLES.STORE_MANAGER || currentUser.role === ROLES.FRONT_MANAGER);
+                const canAccess = currentUser && currentUser.role === ROLES.ADMIN;
                 if (!canAccess) {
-                    showNotification('仅管理员、总部和店长可访问增长看板', 'warning');
+                    showNotification('增长看板仅系统管理员可访问', 'warning');
                     pageName = getHomePageName();
                 }
             }
@@ -26444,6 +26464,26 @@ async function deleteStoreDutyBinding(id){if(!id)return;var ok=await hrmsConfirm
                     break;
                 case 'employees':
                     loadEmployeesData();
+                    if (isAdminUser()) {
+                        HRMS_API.getState().then(function(resp) {
+                            var srvEmps = resp && resp.data && Array.isArray(resp.data.employees) ? resp.data.employees : null;
+                            if (!srvEmps || !srvEmps.length) return;
+                            try {
+                                var raw = localStorage.getItem(HRMS_STORAGE_KEY);
+                                var sd = raw ? hrmsSafeParseJson(raw) : null;
+                                if (sd && sd.schemaVersion === HRMS_SCHEMA_VERSION) {
+                                    var lEmps = Array.isArray(sd.employees) ? sd.employees : [];
+                                    var lUnames = new Set(lEmps.map(function(e) { return String(e && e.username || '').toLowerCase(); }).filter(Boolean));
+                                    var added = srvEmps.filter(function(e) { var u = String(e && e.username || '').toLowerCase(); return u && !lUnames.has(u); });
+                                    if (added.length) {
+                                        sd.employees = lEmps.concat(added);
+                                        try { localStorage.setItem(HRMS_STORAGE_KEY, JSON.stringify(sd)); } catch(_) {}
+                                    }
+                                }
+                            } catch(_) {}
+                            try { loadEmployeesData(); } catch(e) {}
+                        }).catch(function(){});
+                    }
                     break;
                 case 'users':
                     loadUsersData();
@@ -52480,7 +52520,7 @@ ${body}
                 { icon:'📚', label:'知识库', page:'knowledge' },
                 { icon:'🎓', label:'培训认证', page:'training' },
                 { icon:'📊', label:'数据中心', page:'agents', roles:['admin'] },
-                { icon:'📈', label:'增长看板', page:'growth', roles:['admin','hq_manager','store_manager','front_manager'] },
+                { icon:'📈', label:'增长看板', page:'growth', roles:['admin'] },
                 { icon:'🧭', label:'Agent任务', page:'agent-tasks', roles:['admin','hq_manager','hr_manager'] },
                 // 考试测评已停用
                 // 奖惩管理：管理员/HR/总部营运/店长/出品经理 可见
@@ -53766,7 +53806,7 @@ ${body}
 
         function canAccessGrowthModule() {
             var role = growthRoleCode();
-            return role === 'admin' || role === 'hq_manager' || role === 'store_manager' || role === 'front_manager';
+            return role === 'admin';
         }
 
         function updateGrowthModuleVisibility() {

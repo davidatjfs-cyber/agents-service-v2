@@ -1940,8 +1940,8 @@ app.get('/api/approvals', authRequired, async (req, res) => {
   const role = String(req.user?.role || '').trim();
   if (!username) return res.status(400).json({ error: 'missing_user' });
   const _viewQ = String(req.query?.view || 'assigned').trim();
-  const _isEmployeeRole = role === 'store_employee' || role === 'employee';
-  // Employees can view their own submitted approvals (view=created) for points workflow
+  const _isEmployeeRole = role === 'store_employee' || role === 'employee' || role === 'front_manager' || role === 'front_supervisor';
+  // Employees / front roles can view their own submitted approvals (view=created) for points workflow
   if (!(_isEmployeeRole && _viewQ === 'created') && !canAccessApprovalCenter(role, { dutyRows: [], currentStore: req.user?.current_store, primaryStore: req.user?.primary_store })) {
     return res.status(403).json({ error: 'forbidden' });
   }
@@ -2392,7 +2392,7 @@ app.get('/api/points/records', authRequired, async (req, res) => {
   const username = String(req.user?.username || '').trim();
   const role = String(req.user?.role || '').trim();
   if (!username) return res.status(400).json({ error: 'missing_user' });
-  if (!(role === 'admin' || role === 'hq_manager' || role === 'hr_manager' || role === 'store_manager')) return res.status(403).json({ error: 'forbidden' });
+  if (!(role === 'admin' || role === 'hq_manager' || role === 'hr_manager' || role === 'store_manager' || role === 'front_manager' || role === 'front_supervisor')) return res.status(403).json({ error: 'forbidden' });
 
   const store = String(req.query?.store || '').trim();
   const name = String(req.query?.name || '').trim().toLowerCase();
@@ -2846,7 +2846,7 @@ app.get('/api/payments/budget-summary', authRequired, async (req, res) => {
           }
         }
       } else if (type === 'points') {
-        if (!(role === 'store_employee' || role === 'employee' || role === 'front_manager' || role === 'store_production_manager')) {
+        if (!(role === 'store_employee' || role === 'employee' || role === 'front_manager' || role === 'front_supervisor' || role === 'store_production_manager')) {
           return res.status(403).json({ error: 'forbidden' });
         }
         if (!applicantManager) {
@@ -6623,8 +6623,7 @@ function approvalTypeLabel(type) {
 function canApplyPointsByRole(roleInput) {
   const role = String(roleInput || '').trim();
   if (!role) return false;
-  // 积分参与人：门店一线员工（前厅/后厨），店长和出品经理为审批角色不参与
-  return role === 'store_employee' || role === 'employee';
+  return role === 'store_employee' || role === 'front_manager' || role === 'front_supervisor' || role === 'employee';
 }
 
 function safeNumber(input) {
