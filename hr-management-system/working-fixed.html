@@ -21765,7 +21765,7 @@
             },
             set(data) {
                 const _slim = Object.assign({}, data);
-                ['dailyReports', 'inventoryForecastHistory', 'pointRecords'].forEach(function(k) { delete _slim[k]; });
+                ['dailyReports', 'inventoryForecastHistory', 'pointRecords', 'notifications'].forEach(function(k) { delete _slim[k]; });
                 localStorage.setItem(HRMS_STORAGE_KEY, JSON.stringify(_slim));
                 try {
                     hrmsScheduleStateSave();
@@ -44899,39 +44899,28 @@ tr:nth-child(even) td { background: #fafafa; }
         }
 
         function createResignationNotifications(resignation) {
-            const notifications = HRMS_STORE.getNotifications ? HRMS_STORE.getNotifications() : [];
             const employees = HRMS_STORE.getEmployees();
-
-            // 找到需要通知的人：直属上级、总经理（hq_manager）、管理员（admin）
             const notifyUsers = new Set();
-
-            // 直属上级
-            if (resignation.managerUsername) {
-                notifyUsers.add(resignation.managerUsername);
-            }
-
-            // 总经理和管理员
-            (employees || []).forEach(emp => {
-                if (emp.role === 'hq_manager' || emp.role === 'admin') {
-                    notifyUsers.add(emp.username);
-                }
+            if (resignation.managerUsername) notifyUsers.add(resignation.managerUsername);
+            (employees || []).forEach(function(emp) {
+                if (emp.role === 'hq_manager' || emp.role === 'admin') notifyUsers.add(emp.username);
             });
-
-            const now = new Date().toISOString();
-            notifyUsers.forEach(username => {
-                notifications.push({
-                    id: 'NOTIF-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
-                    type: 'resignation_request',
+            const notifications = Array.from(notifyUsers).map(function(username) {
+                return {
                     targetUser: username,
+                    type: 'resignation_request',
                     title: '离职申请待审批',
-                    message: `${resignation.applicantName} 提交了离职申请，离职原因：${resignation.reason}`,
-                    resignationId: resignation.id,
-                    read: false,
-                    createdAt: now
-                });
+                    message: (resignation.applicantName || '') + ' 提交了离职申请，离职原因：' + (resignation.reason || ''),
+                    meta: { resignationId: resignation.id || '' }
+                };
             });
-
-            HRMS_STORE.setNotifications(notifications);
+            if (notifications.length) {
+                HRMS_API.request('/api/notifications/batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ notifications })
+                }).catch(function(e) { console.warn('[createResignationNotifications]', e); });
+            }
         }
 
         // 审批离职申请
@@ -44956,20 +44945,19 @@ tr:nth-child(even) td { background: #fafafa; }
             HRMS_STORE.setResignations(resignations);
 
             // 通知申请人
-            const notifications = HRMS_STORE.getNotifications ? HRMS_STORE.getNotifications() : [];
-            notifications.push({
-                id: 'NOTIF-' + Date.now(),
-                type: 'resignation_result',
-                targetUser: resignation.applicant,
-                title: approved ? '离职申请已通过' : '离职申请被拒绝',
-                message: approved 
-                    ? `您的离职申请已通过审批，离职日期：${resignation.expectedDate}` 
-                    : `您的离职申请被拒绝${note ? '，原因：' + note : ''}`,
-                resignationId: resignation.id,
-                read: false,
-                createdAt: new Date().toISOString()
-            });
-            HRMS_STORE.setNotifications(notifications);
+            HRMS_API.request('/api/notifications/batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ notifications: [{
+                    targetUser: resignation.applicant,
+                    type: 'resignation_result',
+                    title: approved ? '离职申请已通过' : '离职申请被拒绝',
+                    message: approved
+                        ? '您的离职申请已通过审批，离职日期：' + (resignation.expectedDate || '')
+                        : '您的离职申请被拒绝' + (note ? '，原因：' + note : ''),
+                    meta: { resignationId: resignation.id || '' }
+                }] })
+            }).catch(function(e) { console.warn('[approveResignation notif]', e); });
 
             showNotification(approved ? '已批准离职申请' : '已拒绝离职申请', 'success');
             
@@ -45330,31 +45318,10 @@ tr:nth-child(even) td { background: #fafafa; }
                 }
             } catch (e) { /* ignore */ }
 
-            // Merge system notifications (targeted to this user) + announcements
-            // Filter out approval flow notifications (_request type) to avoid spamming 公司通知
-            const sysNotifs = (Array.isArray(data.notifications) ? data.notifications : [])
-                .filter(n => {
-                    if (!n) return false;
-                    if (String(n.targetUser || '').trim().toLowerCase() !== myUsername) return false;
-                    const nType = String(n.type || '').trim();
-                    if (nType.endsWith('_request')) return false;
-                    return true;
-                })
-                .map(n => ({ title: n.title || '系统通知', content: n.message || '', createdAt: n.createdAt || '', level: 'system', _src: 'notification', _id: n.id || '' }));
-
-            // DB 通知（从 hrms_user_notifications 表来）
+            // DB 通知（从 hrms_user_notifications 表来，全部通知均写入 DB）
             const dbSysNotifs = dbNotifs
-                .filter(n => {
-                    if (!n) return false;
-                    const nType = String(n.type || '').trim();
-                    if (nType.endsWith('_request')) return false;
-                    return true;
-                })
+                .filter(n => n && !String(n.type || '').trim().endsWith('_request'))
                 .map(n => ({ title: n.title || '公司通知', content: n.message || '', createdAt: n.createdAt || '', level: 'system', _src: 'db_notification', _id: 'db-' + n.id }));
-
-            // 去重：跳过已在 localStorage 中存在的（按 content+createdAt 匹配）
-            const localKeys = new Set(sysNotifs.map(n => n.content + '|' + n.createdAt));
-            const uniqueDbNotifs = dbSysNotifs.filter(n => !localKeys.has(n.content + '|' + n.createdAt));
 
             const anns = (Array.isArray(data.announcements) ? data.announcements : [])
                 .filter(a => {
@@ -45367,7 +45334,7 @@ tr:nth-child(even) td { background: #fafafa; }
                     return false;
                 })
                 .map(a => ({ ...a, _src: 'announcement', _id: a.id || '' }));
-            const visible = uniqueDbNotifs.concat(sysNotifs).concat(anns);
+            const visible = dbSysNotifs.concat(anns);
             // 置顶公告优先显示（检查是否过期）
             const nowISO = new Date().toISOString();
             const isPinned = (a) => {
@@ -45594,13 +45561,9 @@ tr:nth-child(even) td { background: #fafafa; }
             }
         }
 
-        // Build the merged visible list (same logic as renderProfileNotifications)
+        // Build the merged visible list (announcements only; notifications come from DB via renderProfileNotifications)
         function _getProfileVisibleNotifs() {
             const data = HRMS_STORE.ensure();
-            const myUsername = String(currentUser?.username || currentUser?.id || '').trim().toLowerCase();
-            const sysNotifs = (Array.isArray(data.notifications) ? data.notifications : [])
-                .filter(n => n && String(n.targetUser || '').trim().toLowerCase() === myUsername)
-                .map(n => ({ ...n, _src: 'notification', _id: n.id || '' }));
             const anns = (Array.isArray(data.announcements) ? data.announcements : [])
                 .filter(a => {
                     if (!a) return false;
@@ -45612,9 +45575,8 @@ tr:nth-child(even) td { background: #fafafa; }
                     return false;
                 })
                 .map(a => ({ ...a, _src: 'announcement', _id: a.id || '' }));
-            const all = sysNotifs.concat(anns);
-            all.sort((a, b) => String(b?.createdAt || '').localeCompare(String(a?.createdAt || '')));
-            return all;
+            anns.sort((a, b) => String(b?.createdAt || '').localeCompare(String(a?.createdAt || '')));
+            return anns;
         }
 
         async function deleteProfileNotification(srcId) {
@@ -45630,14 +45592,7 @@ tr:nth-child(even) td { background: #fafafa; }
                 const id = parts.slice(1).join('|');
                 const dbId = id.replace(/^db-/, '');
                 const data = HRMS_STORE.ensure();
-                if (src === 'notification') {
-                    const notifs = Array.isArray(data.notifications) ? data.notifications.slice() : [];
-                    const realIdx = notifs.findIndex(n => n.id === id);
-                    if (realIdx >= 0) { notifs.splice(realIdx, 1); data.notifications = notifs; }
-                    if (dbId) {
-                        try { await HRMS_API.request('/api/notifications/' + encodeURIComponent(dbId), { method: 'DELETE' }); } catch (e) { console.warn('db notif delete failed', e); }
-                    }
-                } else if (src === 'db_notification') {
+                if (src === 'db_notification') {
                     if (dbId) {
                         try { await HRMS_API.request('/api/notifications/' + encodeURIComponent(dbId), { method: 'DELETE' }); } catch (e) { console.warn('db notif delete failed', e); }
                     }
