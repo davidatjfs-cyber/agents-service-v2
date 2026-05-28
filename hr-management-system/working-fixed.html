@@ -21754,6 +21754,7 @@
             };
         }
 
+        let _hrmsServerPassthrough = {};
         const HRMS_STORE = {
             get() {
                 const raw = localStorage.getItem(HRMS_STORAGE_KEY);
@@ -21763,7 +21764,9 @@
                 return parsed;
             },
             set(data) {
-                localStorage.setItem(HRMS_STORAGE_KEY, JSON.stringify(data));
+                const _slim = Object.assign({}, data);
+                ['dailyReports', 'inventoryForecastHistory', 'pointRecords'].forEach(function(k) { delete _slim[k]; });
+                localStorage.setItem(HRMS_STORAGE_KEY, JSON.stringify(_slim));
                 try {
                     hrmsScheduleStateSave();
                 } catch (e) {}
@@ -22671,10 +22674,14 @@
             },
 
             async saveState(data) {
+                const _d = Object.assign({}, data || {});
+                ['dailyReports', 'inventoryForecastHistory', 'pointRecords'].forEach(function(k) {
+                    if (_d[k] === undefined && _hrmsServerPassthrough[k] !== undefined) _d[k] = _hrmsServerPassthrough[k];
+                });
                 return this.request('/api/state', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ data: data || {} })
+                    body: JSON.stringify({ data: _d })
                 });
             },
             async getUnreadCounts() {
@@ -25043,6 +25050,7 @@ th { background: #f5f5f5; font-weight: 700; }
                     try {
                         const serverResp = await HRMS_API.getState();
                         const serverData = (serverResp && typeof serverResp === 'object' ? (serverResp.data || serverResp) : {}) || {};
+                        ['dailyReports', 'inventoryForecastHistory', 'pointRecords'].forEach(k => { if (serverData[k] !== undefined) _hrmsServerPassthrough[k] = serverData[k]; });
                         const localData = HRMS_STORE.ensure();
                         const serverOnlyKeys = ['approvalFlows', 'paymentFlowByStore'];
                         const merged = { ...localData };
@@ -25081,6 +25089,7 @@ th { background: #f5f5f5; font-weight: 700; }
                 __hrmsStateSyncInFlight = true;
                 const serverResp = await HRMS_API.getState();
                 const serverData = (serverResp && typeof serverResp === 'object' ? (serverResp.data || serverResp) : {}) || {};
+                ['dailyReports', 'inventoryForecastHistory', 'pointRecords'].forEach(k => { if (serverData[k] !== undefined) _hrmsServerPassthrough[k] = serverData[k]; });
                 const localData = HRMS_STORE.ensure();
                 const serverOnlyKeys = ['approvalFlows', 'paymentFlowByStore'];
                 const merged = { ...localData };
@@ -25111,7 +25120,9 @@ th { background: #f5f5f5; font-weight: 700; }
                 const token = HRMS_API.token();
                 if (!token) return;
                 const url = (HRMS_API.baseUrl() || '') + '/api/state';
-                const payload = JSON.stringify({ data: HRMS_STORE.ensure() });
+                const _bfData = Object.assign({}, HRMS_STORE.ensure());
+                ['dailyReports', 'inventoryForecastHistory', 'pointRecords'].forEach(function(k) { if (_hrmsServerPassthrough[k] !== undefined) _bfData[k] = _hrmsServerPassthrough[k]; });
+                const payload = JSON.stringify({ data: _bfData });
                 try {
                     fetch(url, {
                         method: 'PUT',
@@ -25129,6 +25140,7 @@ th { background: #f5f5f5; font-weight: 700; }
                 const resp = await HRMS_API.getState();
                 const data = resp?.data;
                 if (data && typeof data === 'object') {
+                    ['dailyReports', 'inventoryForecastHistory', 'pointRecords'].forEach(function(k) { if (data[k] !== undefined) _hrmsServerPassthrough[k] = data[k]; });
                     HRMS_STORE.set(data);
                     refreshBrandsCache(true).then(() => {
                         populateKnowledgeBrandOptions('all');
@@ -45149,18 +45161,15 @@ tr:nth-child(even) td { background: #fafafa; }
             if (monthPunishmentEl) monthPunishmentEl.textContent = moneyText(monthPunishment);
             if (examEl) examEl.textContent = String(examCount);
             if (promoEl) promoEl.textContent = String(promotionHistory.length);
-            const monthPoints = (Array.isArray(data.pointRecords) ? data.pointRecords : [])
-                .filter(x => String(x?.username || '').trim().toLowerCase() === usernameLower)
-                .filter(x => String(x?.approvedAt || x?.createdAt || '').slice(0, 7) === nowMonth)
-                .reduce((s, x) => s + (Number(x?.points) || 0), 0);
             const pointsEl = document.getElementById('profile-month-points');
-            if (pointsEl) pointsEl.textContent = `${monthPoints}分`;
+            if (pointsEl) pointsEl.textContent = '—';
 
             // Fetch ranking for profile display
             try {
                 const empMatch = (Array.isArray(data.employees) ? data.employees : []).find(e => String(e?.username || '').trim().toLowerCase() === usernameLower);
                 const myStore = String(empMatch?.store || '').trim();
                 const rankResp = await HRMS_API.request('/api/points/ranking?month=' + encodeURIComponent(nowMonth) + (myStore ? '&store=' + encodeURIComponent(myStore) : ''));
+                if (pointsEl) pointsEl.textContent = (rankResp?.myPoints || 0) + '分';
                 const rankEl = document.getElementById('profile-points-ranking');
                 if (rankEl) {
                     rankEl.style.display = '';
