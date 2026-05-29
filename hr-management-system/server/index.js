@@ -21259,3 +21259,10 @@ app.post('/api/notifications/batch', authRequired, async (req, res) => {
     return res.status(500).json({ error: 'server_error' });
   }
 });
+
+// 企业微信服务器验证接口（配置「接收消息服务器URL」时企微发 GET 请求，返回 echostr 即通过验证）
+app.get('/api/wecom/callback', (req, res) => {
+  const echostr = String(req.query?.echostr || '').trim();
+  if (echostr) return res.send(echostr);
+  return res.send('ok');
+});
