@@ -25,6 +25,7 @@ function parseOccurredAt(value) {
 }
 
 import jwt from 'jsonwebtoken';
+import { sendAliyunSms, isAliyunSmsConfigured, isAliyunSmsAutoSendEnabled } from './sms.js';
 
 function authMiniProgramSync(req) {
   const secret = cleanText(process.env.MINIPROGRAM_SYNC_SECRET || '', 500);
@@ -1321,6 +1322,76 @@ export async function executeGrowthActionRecord(pool, before, operator, extraPay
           error_message: deliveryErr?.message || 'wecom_send_failed'
         });
       }
+    } else if (cleanText(payload.channel || '', 80) === 'sms' && cleanPhone(payload.phone)) {
+      const smsPhone = cleanPhone(payload.phone);
+      const deliveryKey = `${actionKey}:${smsPhone}:${Date.now()}`;
+      const couponValueFen = Math.max(0, Math.floor(Number(payload.coupon_value_fen || payload.value_fen) || 0));
+      // 阿里云短信走「模板+参数」，不能发自由文本。参数名与已报备模板变量对应：
+      // name=客户称呼, days=未到店天数, value=券面额(元), dishes=招牌菜, count=到店次数
+      const templateParam = {
+        name: cleanText(payload.customer_name || '顾客', 20),
+        days: String(Math.max(0, Math.floor(Number(payload.days_since_last_visit) || 0))),
+        value: couponValueFen > 0 ? String(Math.round(couponValueFen / 100)) : '',
+        dishes: cleanText(payload.favorite_dishes_text || '招牌菜', 20),
+        count: String(Math.max(0, Math.floor(Number(payload.visit_count) || 0)))
+      };
+      Object.keys(templateParam).forEach((k) => { if (templateParam[k] === '') delete templateParam[k]; });
+      try {
+        const sent = await sendAliyunSms({
+          phoneNumbers: smsPhone,
+          templateCode: cleanText(payload.sms_template_code, 64) || undefined,
+          templateParam
+        });
+        payload.delivery_key = deliveryKey;
+        payload.provider_msg_id = sent.provider_msg_id;
+        await upsertDeliveryLog(pool, {
+          delivery_key: deliveryKey,
+          action_key: actionKey,
+          rule_key: cleanText(payload.rule_key, 128),
+          customer_id: payload.customer_id,
+          store_id: storeId,
+          channel: 'sms',
+          external_userid: '',
+          provider_msg_id: sent.provider_msg_id,
+          status: 'sent',
+          payload: { phone: smsPhone, template_param: templateParam },
+          result: sent.raw || {}
+        });
+        await insertGrowthEvent(pool, {
+          event_type: 'marketing_triggered',
+          customer_id: payload.customer_id,
+          phone: smsPhone,
+          external_userid: null,
+          store_id: storeId,
+          campaign_id: campaignId,
+          channel: 'sms',
+          coupon_id: payload.coupon_id,
+          idempotency_key: `marketing_triggered:${actionKey}:${sent.provider_msg_id || deliveryKey}`,
+          metadata: {
+            action_key: actionKey,
+            rule_key: cleanText(payload.rule_key, 128),
+            delivery_key: deliveryKey,
+            provider_msg_id: sent.provider_msg_id,
+            template_param: templateParam
+          }
+        });
+        executionResults.real_executions.push({ type: 'sms_message', provider_msg_id: sent.provider_msg_id || deliveryKey, status: 'sent' });
+      } catch (deliveryErr) {
+        executionResults.delivery_error = deliveryErr?.message || 'sms_send_failed';
+        await upsertDeliveryLog(pool, {
+          delivery_key: deliveryKey,
+          action_key: actionKey,
+          rule_key: cleanText(payload.rule_key, 128),
+          customer_id: payload.customer_id,
+          store_id: storeId,
+          channel: 'sms',
+          external_userid: '',
+          status: 'failed',
+          payload: { phone: smsPhone, template_param: templateParam },
+          result: {},
+          error_message: deliveryErr?.message || 'sms_send_failed'
+        });
+      }
     }
   } catch (execErr) {
     executionResults.error = execErr?.message;
@@ -1385,6 +1456,7 @@ async function loadRuleCandidates(pool, rule) {
        JOIN growth_customers gc ON gc.id = cp.customer_id
        LEFT JOIN wechat_work_customers ww ON ww.bind_customer_id = cp.customer_id
        WHERE COALESCE(ww.external_userid, gc.external_userid) IS NOT NULL
+          OR (cp.phone IS NOT NULL AND cp.phone <> '')
        LIMIT 500`
     );
     const currentMonth = fmtYm(new Date()).slice(5, 7);
@@ -1407,6 +1479,7 @@ async function loadRuleCandidates(pool, rule) {
      JOIN growth_customers gc ON gc.id = cp.customer_id
      LEFT JOIN wechat_work_customers ww ON ww.bind_customer_id = cp.customer_id
      WHERE COALESCE(ww.external_userid, gc.external_userid) IS NOT NULL
+        OR (cp.phone IS NOT NULL AND cp.phone <> '')
      LIMIT 1000`
   );
   // 旧版基于访问/天数的规则（企微分支保留），先于生命周期匹配处理
@@ -1464,14 +1537,19 @@ async function runTouchRuleEngine(pool, options = {}) {
   for (const rule of (rulesResult.rows || [])) {
     const candidates = (await loadRuleCandidates(pool, rule)).slice(0, limitPerRule);
     for (const row of candidates) {
-      if (!row.external_userid) continue;
+      // 通道选择：企微优先，无企微但有手机号且短信已配置时回落短信，否则跳过
+      const rowPhone = cleanPhone(row.phone);
+      let channel = null;
+      if (row.external_userid) channel = 'wecom';
+      else if (rowPhone && isAliyunSmsConfigured()) channel = 'sms';
+      if (!channel) continue;
       const actionPayload = Object.assign({}, rule.action_payload || {}, {
         rule_key: rule.rule_key,
         customer_id: row.customer_id,
         store_id: row.store_id,
         phone: row.phone,
         external_userid: row.external_userid,
-        channel: 'wecom',
+        channel,
         customer_name: row.customer_name || row.phone || `客户#${row.customer_id}`,
         days_since_last_visit: row.days_since_last_visit,
         visit_count: row.pos_order_count,
@@ -1500,7 +1578,10 @@ async function runTouchRuleEngine(pool, options = {}) {
       if (!insert.rows.length) continue;
       if (rule.rule_key === 'dormant_vip_winback' || rule.rule_key === 'dormant_normal_winback') await createChurnAlert(pool, rule, row);
       const actionRow = insert.rows[0];
-      if (rule.auto_execute !== false) {
+      // 短信通道仅在显式开启 ALIYUN_SMS_ENABLED 时才自动发送，
+      // 否则留作「AI建议(proposed)」由人工在面板确认执行，避免配好密钥即群发。
+      const smsAutoBlocked = channel === 'sms' && !isAliyunSmsAutoSendEnabled();
+      if (rule.auto_execute !== false && !smsAutoBlocked) {
         await executeGrowthActionRecord(pool, actionRow, { username: 'rule_engine', role: 'system' }, {}, `规则引擎自动执行:${rule.rule_key}`);
       }
       createdActions.push(actionKey);
