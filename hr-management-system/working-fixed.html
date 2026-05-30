@@ -54559,8 +54559,8 @@ ${body}
             var clusters = Array.isArray(data?.clusters) ? data.clusters : [];
             var total = data?.total || 0;
             if (!clusters.length) { el.innerHTML = '<div style="color:rgba(226,232,240,0.4);font-size:12px;">暂无分群数据</div>'; return; }
-            var stageColors = { new: '#38bdf8', active: '#22c55e', loyal: '#a855f7', at_risk: '#f59e0b', churned: '#ef4444' };
-            var stageLabels = { new: '新客', active: '活跃', loyal: '忠实', at_risk: '临界', churned: '流失' };
+            var stageColors = { prospect: '#94a3b8', new: '#38bdf8', active: '#22c55e', at_risk: '#f59e0b', dormant: '#ef4444', churned: '#6b7280' };
+            var stageLabels = { prospect: '潜在新客', new: '新客', active: '活跃', at_risk: '临界客', dormant: '沉睡老客', churned: '流失客' };
             el.innerHTML = '<div style="font-size:11px;color:rgba(226,232,240,0.5);margin-bottom:8px;">共' + total + '人</div>' + clusters.map(function(c) {
                 var label = stageLabels[c.lifecycle_stage] || c.lifecycle_stage;
                 var color = stageColors[c.lifecycle_stage] || '#38bdf8';
@@ -55658,9 +55658,9 @@ ${body}
             }
 
             var lifecycle = pi.lifecycle || {};
-            var lifecycleLabels = { new: '新客', active: '活跃', loyal: '忠诚', at_risk: '临界流失', churned: '已流失' };
+            var lifecycleLabels = { prospect: '潜在新客', new: '新客', active: '活跃', at_risk: '临界客', dormant: '沉睡老客', churned: '流失客' };
             var totalLc = totalOf(lifecycle);
-            var lcColors = { new: '#38bdf8', active: '#22c55e', loyal: '#f59e0b', at_risk: '#ef4444', churned: '#94a3b8' };
+            var lcColors = { prospect: '#94a3b8', new: '#38bdf8', active: '#22c55e', at_risk: '#f59e0b', dormant: '#ef4444', churned: '#6b7280' };
             var lcHtml = '<div style="margin-bottom:12px;"><div style="font-size:12px;color:rgba(226,232,240,0.88);font-weight:700;margin-bottom:8px;">客户生命周期</div>'
                 + '<div style="display:flex;gap:0;height:26px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,0.04);">';
             for (var lk in lifecycleLabels) {
@@ -55767,7 +55767,27 @@ ${body}
                 '广东小炒': '#38bdf8', '饮品酒水': '#22c55e', '招牌主食': '#f59e0b', '名厨啫啫': '#ef4444', '招牌烧味': '#a78bfa'
             }, null, '份', 5);
 
-            el.innerHTML = personaHtml
+            var cm = pi.customer_metrics || {};
+            var cmCards = [
+                { label: '客户总数', value: Number(cm.total_customers || 0), color: '#38bdf8', sub: '曾消费会员' },
+                { label: '新客', value: Number(cm.new_count || 0), color: '#0ea5e9', sub: '近14天首单' },
+                { label: '活跃客', value: Number(cm.active_count || 0), color: '#22c55e', sub: '近14天≥2次' },
+                { label: 'VIP人数', value: Number(cm.vip_count || 0), color: '#f59e0b', sub: '消费额前15%' },
+                { label: '流失率', value: Number(cm.churn_rate || 0) + '%', color: '#ef4444', sub: '沉睡+流失占比' },
+                { label: '复购率', value: Number(cm.repurchase_rate || 0) + '%', color: '#a78bfa', sub: '30天内≥2次' }
+            ];
+            var cmHtml = '<div style="margin-bottom:12px;"><div style="font-size:13px;color:#fff;font-weight:800;margin-bottom:8px;">📊 核心客户指标</div>'
+                + '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;">'
+                + cmCards.map(function(c) {
+                    return '<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;text-align:center;">'
+                        + '<div style="font-size:24px;font-weight:800;color:' + c.color + ';">' + c.value + '</div>'
+                        + '<div style="font-size:12px;color:rgba(226,232,240,0.78);margin-top:4px;">' + c.label + '</div>'
+                        + '<div style="font-size:10px;color:rgba(226,232,240,0.45);margin-top:2px;">' + c.sub + '</div>'
+                        + '</div>';
+                }).join('') + '</div></div>';
+
+            el.innerHTML = cmHtml
+                + personaHtml
                 + suggestHtml
                 + overviewHtml
                 + lcHtml
