@@ -1766,7 +1766,7 @@ export function registerPhaseRoutes(app, pool) {
         ) sub`, statsParams)
     ]);
 
-    const [byOrderTypeR, byOrderSourceR, byDeptR, lifecycleR, spendDistR, visitR, dishCatR, highValueR, custOrderTypeR, custOrderSourceR, custDeptR] = await Promise.all([
+    const [byOrderTypeR, byOrderSourceR, byDeptR, lifecycleR, spendDistR, visitR, dishCatR, highValueR, custOrderTypeR, custOrderSourceR, custDeptR, valueTierR, repurchase30R] = await Promise.all([
       pool.query(`SELECT order_type, COUNT(*)::int AS cnt,
         COALESCE(SUM(amount_after_discount),0)::numeric AS revenue,
         COALESCE(SUM(qty),0)::int AS total_qty
@@ -1789,20 +1789,12 @@ export function registerPhaseRoutes(app, pool) {
           AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
           AND department IS NOT NULL AND department <> ''
         GROUP BY department ORDER BY revenue DESC`, statsParams),
-      pool.query(`SELECT COALESCE(cp.lifecycle_stage,
-          CASE WHEN sub.order_cnt <= 1 THEN 'new'
-               WHEN sub.order_cnt BETWEEN 2 AND 3 THEN 'active'
-               ELSE 'loyal' END) AS lifecycle_stage, COUNT(*)::int AS cnt
-        FROM (
-          SELECT phone, COUNT(*)::int AS order_cnt
-          FROM pos_orders
-          WHERE phone IS NOT NULL AND phone <> ''
-            AND ${posCond}
-            AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
-          GROUP BY phone
-        ) sub
-        LEFT JOIN growth_customer_profiles cp ON cp.phone = sub.phone
-        GROUP BY 1 ORDER BY cnt DESC`, statsParams),
+      // 权威生命周期分布：直接取 growth_customer_profiles 的新6阶段（不按时间窗过滤，
+      // 否则流失/沉睡客因近期无订单会被结构性漏掉，看不到真实流失情况）
+      pool.query(`SELECT lifecycle_stage, COUNT(*)::int AS cnt
+        FROM growth_customer_profiles
+        WHERE ${profCond}
+        GROUP BY lifecycle_stage ORDER BY cnt DESC`, [sid]),
       pool.query(`SELECT CASE
           WHEN avg_check < 200 THEN '0-200'
           WHEN avg_check < 400 THEN '200-400'
@@ -1861,11 +1853,54 @@ export function registerPhaseRoutes(app, pool) {
             AND ${posCond}
             AND biz_date >= CURRENT_DATE - ($2::int || ' days')::interval
         ) AND department IS NOT NULL AND department <> ''
-        GROUP BY department ORDER BY total_qty DESC`, statsParams)
+        GROUP BY department ORDER BY total_qty DESC`, statsParams),
+      // 价值分级分布（VIP/regular/low），用于看板展示 VIP 维度
+      pool.query(`SELECT value_tier, COUNT(*)::int AS cnt
+        FROM growth_customer_profiles
+        WHERE ${profCond}
+        GROUP BY value_tier ORDER BY cnt DESC`, [sid]),
+      // 复购率：固定30天窗口内，下单≥2次的客户占比（不受看板时间筛选影响）
+      pool.query(`SELECT
+          COUNT(*) FILTER (WHERE order_cnt >= 2)::int AS repurchasers,
+          COUNT(*)::int AS total_with_orders
+        FROM (
+          SELECT phone, COUNT(*)::int AS order_cnt
+          FROM pos_orders
+          WHERE phone IS NOT NULL AND phone <> ''
+            AND ${posCond}
+            AND biz_date >= CURRENT_DATE - INTERVAL '30 days'
+          GROUP BY phone
+        ) sub`, [sid])
     ]);
 
+    // 客户流失率 = (沉睡老客 + 流失低频客) / 曾消费客户总数（排除从未下单的潜在新客）
+    const lcCounts = Object.fromEntries(lifecycleR.rows.map(r => [r.lifecycle_stage, r.cnt]));
+    const everEngaged = (lcCounts.new || 0) + (lcCounts.active || 0) + (lcCounts.at_risk || 0) + (lcCounts.dormant || 0) + (lcCounts.churned || 0);
+    const lostCount = (lcCounts.dormant || 0) + (lcCounts.churned || 0);
+    const churnRate = everEngaged ? Math.round((lostCount / everEngaged) * 1000) / 10 : 0;
+
+    const tierCounts = Object.fromEntries(valueTierR.rows.map(r => [r.value_tier, r.cnt]));
+    // 复购率（30天内下单≥2次客户占比）
+    const rep30 = repurchase30R.rows[0] || {};
+    const repurchasers = Number(rep30.repurchasers || 0);
+    const totalWithOrders30 = Number(rep30.total_with_orders || 0);
+    const repurchaseRate = totalWithOrders30 ? Math.round((repurchasers / totalWithOrders30) * 1000) / 10 : 0;
+
     const profileInsights = {
-      lifecycle: Object.fromEntries(lifecycleR.rows.map(r => [r.lifecycle_stage, r.cnt])),
+      lifecycle: lcCounts,
+      value_tier: tierCounts,
+      churn_rate: churnRate,
+      churn_detail: { lost: lostCount, ever_engaged: everEngaged, dormant: lcCounts.dormant || 0, churned: lcCounts.churned || 0 },
+      // 统一核心客户指标看板
+      customer_metrics: {
+        total_customers: everEngaged,
+        new_count: lcCounts.new || 0,
+        active_count: lcCounts.active || 0,
+        vip_count: tierCounts.vip || 0,
+        churn_rate: churnRate,
+        repurchase_rate: repurchaseRate,
+        repurchase_detail: { repurchasers, total_with_orders_30d: totalWithOrders30 }
+      },
       avg_spend_dist: Object.fromEntries(spendDistR.rows.map(r => [r.spend_tier, r.cnt])),
       top_visit_times: Object.fromEntries(visitR.rows.map(r => [r.visit_time, r.cnt])),
       top_dish_categories: Object.fromEntries(dishCatR.rows.map(r => [r.category, r.total_qty])),
