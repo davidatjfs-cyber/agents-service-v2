@@ -75,6 +75,10 @@ import {
   loadActiveDutyRowsForUser,
   pickEffectiveStore,
 } from './store-duty-bindings.js';
+import {
+  buildConfiguredApprovalAssignees,
+  resolveStoreApprovalRoleUsername,
+} from './approval-assignee-resolution.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = String(process.env.HOST || '0.0.0.0');
@@ -2933,7 +2937,7 @@ app.get('/api/payments/budget-summary', authRequired, async (req, res) => {
     }
 
     // try configured flow first
-    const applicantStore = String(applicant?.store || '').trim();
+    const applicantStore = String(applicant?.store || payload?.store || '').trim();
     const ctx = {
       state,
       applicantUsername: username,
@@ -2956,7 +2960,7 @@ app.get('/api/payments/budget-summary', authRequired, async (req, res) => {
 
     if (type === 'payment') {
       // Priority: approvalFlows.payment config (流程设置) > paymentFlowByStore > default
-      const configured = buildApprovalAssigneesFromConfig(state, type, ctx);
+      const configured = await buildConfiguredApprovalAssignees(state, type, ctx, resolveDutyApproverForStore);
       if (configured.length) {
         assignees = configured;
       } else {
@@ -2982,7 +2986,12 @@ app.get('/api/payments/budget-summary', authRequired, async (req, res) => {
         const applicantDepartment = String(applicant?.department || payload?.department || '').trim();
         const kitchenApplicant = isKitchenByRoleOrPosition(applicantRole, applicantPosition, applicantDepartment);
         const applicantStoreName = String(applicant?.store || payload?.store || '').trim();
-        const storeManagerByStore = pickStoreRoleUsernameByStore(state, applicantStoreName, ['store_manager']);
+        const storeManagerByStore = await resolveStoreApprovalRoleUsername(
+          state,
+          applicantStoreName,
+          ['store_manager'],
+          resolveDutyApproverForStore
+        );
         const productionManagerByStore = pickStoreRoleUsernameByStore(state, applicantStoreName, ['store_production_manager']);
         if (kitchenApplicant) {
           // 后厨：出品经理 → 店长
@@ -2994,11 +3003,16 @@ app.get('/api/payments/budget-summary', authRequired, async (req, res) => {
       } else {
         // 正式晋升：店长 → 总部营运 → 人事经理
         const applicantStoreName = String(applicant?.store || payload?.store || '').trim();
-        const storeManagerByStore = pickStoreRoleUsernameByStore(state, applicantStoreName, ['store_manager']);
+        const storeManagerByStore = await resolveStoreApprovalRoleUsername(
+          state,
+          applicantStoreName,
+          ['store_manager'],
+          resolveDutyApproverForStore
+        );
         assignees = [storeManagerByStore, hqManagerUsername, hrManagerUsername].filter(Boolean);
       }
     } else {
-      const configured = buildApprovalAssigneesFromConfig(state, type, ctx);
+      const configured = await buildConfiguredApprovalAssignees(state, type, ctx, resolveDutyApproverForStore);
       if (configured.length) {
         assignees = configured;
       } else {
@@ -3014,7 +3028,13 @@ app.get('/api/payments/budget-summary', authRequired, async (req, res) => {
           assignees = [applicantManager, hrManagerUsername].filter(Boolean);
         } else if (type === 'points') {
           // 积分: 门店店长 → 总部营运 → 人事经理（仅店长可见）
-          const storeManagerForPoints = pickStoreRoleUsernameByStore(state, applicantStore, ['store_manager']);
+          // 门店无在岗店长时（如监管兼管的门店），回退到职责绑定中 can_approve_hrms 的负责人
+          const storeManagerForPoints = await resolveStoreApprovalRoleUsername(
+            state,
+            applicantStore,
+            ['store_manager'],
+            resolveDutyApproverForStore
+          );
           assignees = [storeManagerForPoints, hqManagerUsername, hrManagerUsername].filter(Boolean);
         } else {
           assignees = [applicantManager, adminUsername].filter(Boolean);
@@ -6925,7 +6945,7 @@ async function insertRewardPunishmentApprovalFromTemplate(applicantUsername, pay
     hrManagerUsername,
     cashierUsername
   };
-  let assignees = buildApprovalAssigneesFromConfig(state, 'reward_punishment', ctx);
+  let assignees = await buildConfiguredApprovalAssignees(state, 'reward_punishment', ctx, resolveDutyApproverForStore);
   if (!assignees.length) {
     assignees = [applicantManager, hrManagerUsername].filter(Boolean);
   }
@@ -9830,6 +9850,31 @@ async function ensureStoreDutyBindingsReady() {
     __storeDutyBindingsReady = true;
   } catch (e) {
     console.warn('[store-duty-bindings] ensure table failed:', e?.message || e);
+  }
+}
+
+// 门店若无在岗店长（如喻烽以监管身份兼管马己仙），回退到该门店职责绑定中
+// can_approve_hrms 的负责人，作为审批链的「门店店长」步骤。
+async function resolveDutyApproverForStore(store) {
+  const s = String(store || '').trim();
+  if (!s) return '';
+  try {
+    await ensureStoreDutyBindingsReady();
+    const r = await pool.query(
+      `SELECT username FROM store_duty_bindings
+        WHERE enabled = true
+          AND can_approve_hrms = true
+          AND lower(trim(store)) = lower(trim($1))
+          AND (effective_from IS NULL OR effective_from <= now())
+          AND (effective_to IS NULL OR effective_to >= now())
+        ORDER BY is_primary_store DESC, updated_at DESC, id DESC
+        LIMIT 1`,
+      [s]
+    );
+    return r.rows?.[0]?.username ? String(r.rows[0].username).trim() : '';
+  } catch (e) {
+    console.warn('[store-duty-bindings] resolveDutyApproverForStore failed:', e?.message || e);
+    return '';
   }
 }
 
