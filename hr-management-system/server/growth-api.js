@@ -249,6 +249,10 @@ export async function ensureGrowthTables(pool) {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_growth_customer_profiles_store ON growth_customer_profiles (store_id, lifecycle_stage)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_growth_customer_profiles_updated ON growth_customer_profiles (updated_at DESC)`);
+  // 叠加标签：价值分级（vip/regular/low，按门店消费额前15%取vip）+ 价格敏感标记
+  await pool.query(`ALTER TABLE growth_customer_profiles ADD COLUMN IF NOT EXISTS value_tier TEXT DEFAULT 'low'`);
+  await pool.query(`ALTER TABLE growth_customer_profiles ADD COLUMN IF NOT EXISTS price_sensitive BOOLEAN DEFAULT FALSE`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_growth_customer_profiles_tier ON growth_customer_profiles (store_id, value_tier)`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS growth_profile_signals (
@@ -461,43 +465,117 @@ export async function ensureGrowthTables(pool) {
     )
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS content_performance (
+      id BIGSERIAL PRIMARY KEY,
+      content_date DATE NOT NULL,
+      channel TEXT NOT NULL,
+      store_code TEXT,
+      content_type TEXT NOT NULL DEFAULT '',
+      variant_tag TEXT DEFAULT 'A',
+      dish_name TEXT DEFAULT '',
+      impressions INTEGER DEFAULT 0,
+      clicks INTEGER DEFAULT 0,
+      saves INTEGER DEFAULT 0,
+      orders INTEGER DEFAULT 0,
+      notes TEXT DEFAULT '',
+      created_by TEXT DEFAULT 'manual',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  // add columns that may not exist in older deployments
+  for (const col of [
+    `ADD COLUMN IF NOT EXISTS likes INTEGER DEFAULT 0`,
+    `ADD COLUMN IF NOT EXISTS comments INTEGER DEFAULT 0`,
+    `ADD COLUMN IF NOT EXISTS shares INTEGER DEFAULT 0`,
+    `ADD COLUMN IF NOT EXISTS new_followers INTEGER DEFAULT 0`,
+    `ADD COLUMN IF NOT EXISTS store_id TEXT`,
+    `ADD COLUMN IF NOT EXISTS content_title TEXT`,
+    `ADD COLUMN IF NOT EXISTS platform TEXT`
+  ]) {
+    await pool.query(`ALTER TABLE content_performance ${col}`).catch(() => {});
+  }
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_content_performance_date ON content_performance (content_date DESC, store_code)`);
+
+  // 营销矩阵：生命周期阶段 × 价值分级 → 差异化动作
+  // VIP 走「专属感/大钩子」不打折，普通/低频走「券」，潜在新客仅轻触达
   const defaultTouchRules = [
     {
-      rule_key: 'high_risk_churn_voucher',
-      name: '高危流失自动回流券',
+      rule_key: 'dormant_vip_winback',
+      name: '沉睡VIP老客大钩子召回',
       priority: 10,
       auto_execute: true,
-      criteria: { min_days_since_last_visit: 21, max_days_since_last_visit: 45, min_visit_count: 5 },
+      criteria: { lifecycle_stage: 'dormant', value_tier: 'vip' },
+      action_type: 'send_voucher',
+      action_payload: {
+        channel: 'wecom',
+        coupon_value_fen: 5000,
+        valid_days: 7,
+        coupon_name: 'VIP专属回归礼',
+        title_template: 'VIP老客专属回归礼遇',
+        content_template: '{customer_name}，好久不见。给老朋友留了一份招牌菜，本周到店即赠，另附{coupon_value_text}专属礼券，7天内有效，期待你回来。'
+      }
+    },
+    {
+      rule_key: 'dormant_normal_winback',
+      name: '沉睡普通老客召回券',
+      priority: 12,
+      auto_execute: true,
+      criteria: { lifecycle_stage: 'dormant', value_tier_not: 'vip' },
       action_type: 'send_voucher',
       action_payload: {
         channel: 'wecom',
         coupon_value_fen: 3000,
         valid_days: 7,
-        coupon_name: '高危回流券',
-        title_template: '高危流失回流券',
-        content_template: '{customer_name}，你已有{days_since_last_visit}天未到店，系统已为你发放一张{coupon_value_text}高危回流券，7天内可用。'
+        coupon_name: '老客召回券',
+        title_template: '老朋友召回券',
+        content_template: '{customer_name}，已有{days_since_last_visit}天没见啦，这张{coupon_value_text}召回券为你保留7天，欢迎回来尝尝 {favorite_dishes_text}。'
       }
     },
     {
-      rule_key: 'lost_customer_miss_you',
-      name: '已流失客户想念你触达',
-      priority: 20,
+      rule_key: 'new_customer_welcome',
+      name: '新客72小时黄金窗口问候',
+      priority: 15,
       auto_execute: true,
-      criteria: { min_days_since_last_visit: 45, min_visit_count: 3 },
-      action_type: 'send_voucher',
+      criteria: { lifecycle_stage: 'new', max_days_since_last_visit: 3 },
+      action_type: 'send_message',
       action_payload: {
         channel: 'wecom',
-        coupon_value_fen: 1200,
-        valid_days: 7,
-        coupon_name: '想念你小券',
-        title_template: '我们想念你',
-        content_template: '{customer_name}，我们想念你。已有{days_since_last_visit}天没见啦，这张{coupon_value_text}小券为你保留7天，欢迎回来。'
+        title_template: '新客欢迎问候',
+        content_template: '{customer_name}，谢谢你的光临。不知道菜品是否合口味？下次想试试 {favorite_dishes_text}，提前说一声我们帮你留位。'
+      }
+    },
+    {
+      rule_key: 'active_vip_privilege',
+      name: '活跃VIP专属感运营',
+      priority: 20,
+      auto_execute: true,
+      criteria: { lifecycle_stage: 'active', value_tier: 'vip' },
+      action_type: 'send_message',
+      action_payload: {
+        channel: 'wecom',
+        title_template: 'VIP专属新品预告',
+        content_template: '{customer_name}，本周到了一批限量时令好货，给你优先留着。想安排包厢或预留座位随时招呼。'
+      }
+    },
+    {
+      rule_key: 'at_risk_winback',
+      name: '临界客温和提醒',
+      priority: 30,
+      auto_execute: true,
+      criteria: { lifecycle_stage: 'at_risk' },
+      action_type: 'send_message',
+      action_payload: {
+        channel: 'wecom',
+        title_template: '临界客推荐菜提醒',
+        content_template: '{customer_name}，已经{days_since_last_visit}天没见你啦，最近上了新菜，下次来试试 {favorite_dishes_text}，需要留位提前说。'
       }
     },
     {
       rule_key: 'loyal_birthday_month',
       name: '忠诚客户生日月礼遇',
-      priority: 30,
+      priority: 35,
       auto_execute: true,
       criteria: { min_visit_count: 3, max_visit_interval_days: 10 },
       action_type: 'send_voucher',
@@ -511,16 +589,74 @@ export async function ensureGrowthTables(pool) {
       }
     },
     {
-      rule_key: 'silent_new_customer_activate',
-      name: '新客未激活推荐菜触达',
+      rule_key: 'lost_lowfreq_lastcall',
+      name: '流失低频客一次性小券',
       priority: 40,
       auto_execute: true,
-      criteria: { min_days_since_last_visit: 14, exact_visit_count: 1 },
+      criteria: { lifecycle_stage: 'churned' },
+      action_type: 'send_voucher',
+      action_payload: {
+        channel: 'wecom',
+        coupon_value_fen: 1200,
+        valid_days: 7,
+        coupon_name: '回归小券',
+        title_template: '我们想念你',
+        content_template: '{customer_name}，好久没见啦，这张{coupon_value_text}小券为你保留7天，欢迎回来坐坐。'
+      }
+    },
+    {
+      rule_key: 'prospect_light_touch',
+      name: '潜在新客轻触达',
+      priority: 50,
+      auto_execute: true,
+      criteria: { lifecycle_stage: 'prospect' },
       action_type: 'send_message',
       action_payload: {
         channel: 'wecom',
-        title_template: '新客推荐菜触达',
-        content_template: '{customer_name}，上次来店后已经{days_since_last_visit}天了，推荐你下次试试 {favorite_dishes_text}。'
+        title_template: '潜在新客推荐菜',
+        content_template: '{customer_name}，欢迎关注我们。下次到店推荐你试试 {favorite_dishes_text}，提前说一声帮你安排好。'
+      }
+    },
+    {
+      rule_key: 'seven_days_no_visit',
+      name: '7天未到店关怀',
+      priority: 35,
+      auto_execute: true,
+      criteria: { min_days_since_last_visit: 7, max_days_since_last_visit: 20, min_visit_count: 2 },
+      action_type: 'send_message',
+      action_payload: {
+        channel: 'wecom',
+        title_template: '7天未到店关怀',
+        content_template: '{customer_name}，好久不见，已经{days_since_last_visit}天没见到你了，最近有空来坐坐？'
+      }
+    },
+    {
+      rule_key: 'bad_review_compensation',
+      name: '差评补偿关怀',
+      priority: 5,
+      auto_execute: false,
+      criteria: { manual_trigger: true },
+      action_type: 'send_voucher',
+      action_payload: {
+        channel: 'wecom',
+        coupon_value_fen: 2000,
+        valid_days: 14,
+        coupon_name: '差评补偿券',
+        title_template: '差评补偿关怀',
+        content_template: '{customer_name}，非常抱歉上次的用餐体验未能达到您的预期，为表歉意特送上{coupon_value_text}补偿券，期待您的再次光临。'
+      }
+    },
+    {
+      rule_key: 'new_dish_launch_notify',
+      name: '新品上线通知',
+      priority: 45,
+      auto_execute: true,
+      criteria: { min_visit_count: 4, min_days_since_last_visit: 5, max_days_since_last_visit: 20 },
+      action_type: 'send_message',
+      action_payload: {
+        channel: 'wecom',
+        title_template: '新品上线通知',
+        content_template: '{customer_name}，我们新菜上线啦！作为老朋友第一时间告诉你，欢迎来尝鲜～'
       }
     }
   ];
@@ -549,7 +685,8 @@ export async function ensureGrowthTables(pool) {
   }
   await pool.query(
     `DELETE FROM growth_touch_rules WHERE rule_key = ANY($1::text[])`,
-    [['churn_21_return_coupon', 'churn_45_return_coupon', 'birthday_month_touch', 'high_frequency_upgrade']]
+    [['churn_21_return_coupon', 'churn_45_return_coupon', 'birthday_month_touch', 'high_frequency_upgrade',
+      'high_risk_churn_voucher', 'lost_customer_miss_you', 'silent_new_customer_activate']]
   );
 }
 
@@ -686,10 +823,19 @@ async function recomputeCustomerProfiles(pool, days = 90) {
        e.openid,
        NULLIF(e.store_id, ''),
         CASE
-          WHEN GREATEST(e.payment_count, COALESCE(p.pos_order_count, 0)) <= 1 THEN 'new'
-          WHEN GREATEST(e.last_event_at, p.pos_last_order_at) IS NULL THEN 'new'
-          WHEN GREATEST(e.last_event_at, p.pos_last_order_at) >= NOW() - INTERVAL '14 days' THEN 'active'
+          -- 潜在新客：扫码/被触达但从未下单（陪客等）
+          WHEN GREATEST(e.payment_count, COALESCE(p.pos_order_count, 0)) = 0 THEN 'prospect'
+          -- 新客：累计下单1次 且 最近14天内有到店
+          WHEN GREATEST(e.last_event_at, p.pos_last_order_at) >= NOW() - INTERVAL '14 days'
+               AND GREATEST(e.payment_count, COALESCE(p.pos_order_count, 0)) = 1 THEN 'new'
+          -- 活跃客：累计下单≥2次 且 最近14天内有到店
+          WHEN GREATEST(e.last_event_at, p.pos_last_order_at) >= NOW() - INTERVAL '14 days'
+               AND GREATEST(e.payment_count, COALESCE(p.pos_order_count, 0)) >= 2 THEN 'active'
+          -- 临界客：14-30天未到店
           WHEN GREATEST(e.last_event_at, p.pos_last_order_at) >= NOW() - INTERVAL '30 days' THEN 'at_risk'
+          -- 沉睡老客：30天+未到店 且 曾累计下单≥2次（值得花力气召回）
+          WHEN GREATEST(e.payment_count, COALESCE(p.pos_order_count, 0)) >= 2 THEN 'dormant'
+          -- 流失低频客：30天+未到店 且 只下过1单
           ELSE 'churned'
         END,
         CASE
@@ -767,6 +913,37 @@ async function recomputeCustomerProfiles(pool, days = 90) {
         updated_at = NOW()`,
     [safeDays]
   );
+
+  // 价值分级：按门店内消费额分位，前15%为vip、30%-85%为regular、其余low
+  // 冷启动期门店人数少时分位会有噪声，属预期内——先让分层有人、规则能跑
+  await pool.query(`
+    WITH ranked AS (
+      SELECT customer_id,
+             PERCENT_RANK() OVER (
+               PARTITION BY COALESCE(NULLIF(store_id, ''), '*')
+               ORDER BY COALESCE(pos_total_spend, 0)
+             ) AS pct
+      FROM growth_customer_profiles
+      WHERE COALESCE(pos_total_spend, 0) > 0
+    )
+    UPDATE growth_customer_profiles p
+    SET value_tier = CASE
+          WHEN r.pct >= 0.85 THEN 'vip'
+          WHEN r.pct >= 0.30 THEN 'regular'
+          ELSE 'low'
+        END
+    FROM ranked r
+    WHERE p.customer_id = r.customer_id
+  `);
+  // 未消费客户（潜在新客）固定为 low
+  await pool.query(`UPDATE growth_customer_profiles SET value_tier = 'low' WHERE COALESCE(pos_total_spend, 0) = 0`);
+
+  // 价格敏感标签：价格敏感度>0.5 或 折扣响应率>0.4
+  await pool.query(`
+    UPDATE growth_customer_profiles
+    SET price_sensitive = (COALESCE(price_sensitivity, 0) > 0.5 OR COALESCE(response_to_discount, 0) > 0.4)
+  `);
+
   return safeDays;
 }
 
@@ -1202,6 +1379,7 @@ async function loadRuleCandidates(pool, rule) {
   }
   const r = await pool.query(
     `SELECT cp.customer_id, cp.store_id, cp.phone, cp.price_sensitivity, cp.response_to_discount,
+            cp.lifecycle_stage, cp.value_tier, cp.price_sensitive,
             cp.pos_order_count, cp.pos_total_spend, cp.pos_last_order_at, cp.visit_interval_days, cp.favorite_dishes, gc.last_seen_at,
             COALESCE(cp.pos_last_order_at::date, gc.last_seen_at::date) AS last_visit_at,
             (CURRENT_DATE - COALESCE(cp.pos_last_order_at::date, gc.last_seen_at::date))::int AS days_since_last_visit,
@@ -1214,14 +1392,22 @@ async function loadRuleCandidates(pool, rule) {
      WHERE COALESCE(ww.external_userid, gc.external_userid) IS NOT NULL
      LIMIT 1000`
   );
+  // 旧版基于访问/天数的规则（企微分支保留），先于生命周期匹配处理
+  const criteria = rule.criteria || {};
   return r.rows.filter((row) => {
     const days = Math.max(0, Math.floor(Number(row.days_since_last_visit) || 0));
     const visits = Math.max(0, Math.floor(Number(row.pos_order_count) || 0));
-    const interval = Number(row.visit_interval_days);
-    if (rule.rule_key === 'high_risk_churn_voucher') return visits >= 5 && days >= 21 && days <= 45;
-    if (rule.rule_key === 'lost_customer_miss_you') return visits >= 3 && days > 45;
-    if (rule.rule_key === 'silent_new_customer_activate') return visits === 1 && days >= 14;
-    return false;
+    if (rule.rule_key === 'seven_days_no_visit') return visits >= 2 && days >= 7 && days <= 20;
+    if (rule.rule_key === 'new_dish_launch_notify') return visits >= 4 && days >= 5 && days <= 20;
+    // 新分类规则：按生命周期阶段 + 价值分级筛选候选人，对齐营销矩阵
+    const stage = row.lifecycle_stage || '';
+    const tier = row.value_tier || 'low';
+    if (criteria.lifecycle_stage && stage !== criteria.lifecycle_stage) return false;
+    if (criteria.value_tier && tier !== criteria.value_tier) return false;
+    if (criteria.value_tier_not && tier === criteria.value_tier_not) return false;
+    if (Number.isFinite(Number(criteria.max_days_since_last_visit)) && days > Number(criteria.max_days_since_last_visit)) return false;
+    if (Number.isFinite(Number(criteria.min_days_since_last_visit)) && days < Number(criteria.min_days_since_last_visit)) return false;
+    return Boolean(criteria.lifecycle_stage);
   });
 }
 
@@ -1230,19 +1416,45 @@ function buildRulePeriodKey(ruleKey, row) {
   return fmtYmd(row.last_visit_at || row.pos_last_order_at || row.last_seen_at);
 }
 
+// POS数据滞后阈值（天）。上传频率为每2天一次，超过3天视为异常。
+const POS_STALE_DAYS = 3;
+
 async function runTouchRuleEngine(pool, options = {}) {
+  // 第三层防护：POS数据新鲜度闸门。数据滞后会让全员被误判为临界/流失，
+  // 进而乱发券。滞后超阈值时停止自动触达，改为告警人工核查。
+  const freshRes = await pool.query(`SELECT MAX(biz_date) AS latest, (CURRENT_DATE - MAX(biz_date))::int AS lag_days FROM pos_orders`);
+  const lagDays = Number(freshRes.rows?.[0]?.lag_days);
+  if (!Number.isFinite(lagDays) || lagDays > POS_STALE_DAYS) {
+    const latest = freshRes.rows?.[0]?.latest || null;
+    const alertKey = `pos_stale_guard:${new Date().toISOString().slice(0, 10)}`;
+    await pool.query(
+      `INSERT INTO growth_alerts (alert_key, alert_type, severity, store_id, title, message, suggested_action, metrics)
+       VALUES ($1,'data_freshness','high','',$2,$3,$4,$5::jsonb)
+       ON CONFLICT (alert_key) DO UPDATE SET message = EXCLUDED.message, metrics = EXCLUDED.metrics, status = 'open', updated_at = NOW()`,
+      [
+        alertKey,
+        'POS数据滞后，已暂停自动营销触达',
+        `POS最新数据为 ${latest || '无'}，滞后 ${Number.isFinite(lagDays) ? lagDays : '未知'} 天（阈值${POS_STALE_DAYS}天）。为避免基于过期数据误发券，规则引擎本次跳过。请尽快上传最新POS数据到飞书。`,
+        '上传最新POS数据到飞书并触发 POST /api/growth/pos-feishu-sync',
+        JSON.stringify({ latest_biz_date: latest, lag_days: Number.isFinite(lagDays) ? lagDays : null, threshold_days: POS_STALE_DAYS })
+      ]
+    );
+    return { created: 0, skipped: true, reason: 'pos_data_stale', lag_days: Number.isFinite(lagDays) ? lagDays : null };
+  }
   const limitPerRule = Math.min(Math.max(Number(options.limit_per_rule) || 100, 1), 500);
   const rulesResult = await pool.query(`SELECT * FROM growth_touch_rules WHERE enabled = TRUE ORDER BY priority ASC, rule_key ASC LIMIT 20`);
   const createdActions = [];
   for (const rule of (rulesResult.rows || [])) {
     const candidates = (await loadRuleCandidates(pool, rule)).slice(0, limitPerRule);
     for (const row of candidates) {
+      if (!row.external_userid) continue;
       const actionPayload = Object.assign({}, rule.action_payload || {}, {
         rule_key: rule.rule_key,
         customer_id: row.customer_id,
         store_id: row.store_id,
         phone: row.phone,
         external_userid: row.external_userid,
+        channel: 'wecom',
         customer_name: row.customer_name || row.phone || `客户#${row.customer_id}`,
         days_since_last_visit: row.days_since_last_visit,
         visit_count: row.pos_order_count,
@@ -1269,7 +1481,7 @@ async function runTouchRuleEngine(pool, options = {}) {
         ]
       );
       if (!insert.rows.length) continue;
-      if (rule.rule_key === 'high_risk_churn_voucher') await createChurnAlert(pool, rule, row);
+      if (rule.rule_key === 'dormant_vip_winback' || rule.rule_key === 'dormant_normal_winback') await createChurnAlert(pool, rule, row);
       const actionRow = insert.rows[0];
       if (rule.auto_execute !== false) {
         await executeGrowthActionRecord(pool, actionRow, { username: 'rule_engine', role: 'system' }, {}, `规则引擎自动执行:${rule.rule_key}`);
@@ -1278,6 +1490,150 @@ async function runTouchRuleEngine(pool, options = {}) {
     }
   }
   return { created: createdActions.length, action_keys: createdActions };
+}
+
+let _sendGrowthAlert = null;
+export function setSendGrowthAlert(fn) { _sendGrowthAlert = fn; }
+
+function cnHour(ts) {
+  if (!ts) return null;
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return null;
+  return ((d.getUTCHours() + 8) % 24);
+}
+
+function shiftDate(dateStr, days) {
+  // Safe date arithmetic: parse as UTC midnight, shift, return YYYY-MM-DD
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// Build report for ONE store using sales_growth_snapshot + pos_orders
+async function buildStoreReport(pool, storeCode, yd) {
+  const dbd = shiftDate(yd, -1);
+  const lwSame = shiftDate(yd, -7);
+
+  function pct(a, b) {
+    if (!b) return null;
+    const v = (a - b) / b * 100;
+    return (v >= 0 ? '▲' : '▼') + Math.abs(v).toFixed(1) + '%';
+  }
+  function fmtMoney(n) { return '¥' + Number(n).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+
+  // Revenue from snapshot (most accurate per-store breakdown)
+  const [snapYd, snapDbd, snapLw, topDishes] = await Promise.all([
+    pool.query(`SELECT COALESCE(SUM(revenue),0)::numeric AS rev, COALESCE(SUM(lunch_qty),0)::int AS lunch_qty, COALESCE(SUM(dinner_qty),0)::int AS dinner_qty
+                FROM sales_growth_snapshot WHERE snapshot_date=$1 AND store_code=$2`, [yd, storeCode]),
+    pool.query(`SELECT COALESCE(SUM(revenue),0)::numeric AS rev FROM sales_growth_snapshot WHERE snapshot_date=$1 AND store_code=$2`, [dbd, storeCode]),
+    pool.query(`SELECT COALESCE(SUM(revenue),0)::numeric AS rev FROM sales_growth_snapshot WHERE snapshot_date=$1 AND store_code=$2`, [lwSame, storeCode]),
+    pool.query(`SELECT dish_name, revenue::numeric AS rev, qty AS qty FROM sales_growth_snapshot
+                WHERE snapshot_date=$1 AND store_code=$2 AND dish_name IS NOT NULL AND dish_name<>''
+                ORDER BY revenue DESC LIMIT 5`, [yd, storeCode])
+  ]);
+
+  const rev = Number(snapYd.rows[0]?.rev || 0);
+  const prevRev = Number(snapDbd.rows[0]?.rev || 0);
+  const lwRev = Number(snapLw.rows[0]?.rev || 0);
+  const lunchQty = Number(snapYd.rows[0]?.lunch_qty || 0);
+  const dinnerQty = Number(snapYd.rows[0]?.dinner_qty || 0);
+
+  // Order count and period revenue from pos_orders (order-level)
+  const [ordersYd, periodOrders, weekOrders, memberMiss] = await Promise.all([
+    pool.query(`SELECT COUNT(*)::int AS cnt FROM pos_orders
+                WHERE biz_date=$1 AND store_id=$2 AND order_status NOT IN ('cancelled','voided')`, [yd, storeCode]),
+    pool.query(`SELECT order_time, amount_after_discount FROM pos_orders
+                WHERE biz_date=$1 AND store_id=$2 AND order_status NOT IN ('cancelled','voided') AND order_time IS NOT NULL`,
+                [yd, storeCode]),
+    pool.query(`SELECT biz_date, order_time, amount_after_discount FROM pos_orders
+                WHERE biz_date >= $1 AND biz_date <= $2 AND store_id=$3
+                  AND order_status NOT IN ('cancelled','voided') AND order_time IS NOT NULL
+                ORDER BY biz_date ASC`, [lwSame, yd, storeCode]),
+    pool.query(`SELECT COUNT(*)::int AS cnt FROM growth_customer_profiles
+                WHERE (CURRENT_DATE - COALESCE(pos_last_order_at::date, NOW()::date)) BETWEEN 7 AND 20`)
+  ]);
+
+  const orderCnt = Number(ordersYd.rows[0]?.cnt || 0);
+  let lunchRev = 0, lunchCnt = 0, dinnerRev = 0, dinnerCnt = 0;
+  for (const row of periodOrders.rows) {
+    const h = cnHour(row.order_time);
+    if (h == null) continue;
+    const v = Number(row.amount_after_discount || 0);
+    if (h >= 11 && h < 14) { lunchRev += v; lunchCnt++; }
+    if (h >= 17 && h < 21) { dinnerRev += v; dinnerCnt++; }
+  }
+
+  // weekly lunch trend
+  const dayLunch = {};
+  for (const row of weekOrders.rows) {
+    const h = cnHour(row.order_time);
+    if (h == null || h < 11 || h >= 14) continue;
+    const k = String(row.biz_date).slice(0, 10);
+    dayLunch[k] = (dayLunch[k] || 0) + Number(row.amount_after_discount || 0);
+  }
+  const lunchDays = Object.keys(dayLunch).sort().slice(-4);
+  let lunchTrend = '';
+  if (lunchDays.length >= 3) {
+    const vals = lunchDays.map(d => dayLunch[d]);
+    const drops = vals.slice(1).filter((v, i) => v < vals[i]).length;
+    if (drops >= 2) lunchTrend = `午市连续${drops + 1}天下滑 ⚠️`;
+  }
+
+  const missCount = Number(memberMiss.rows[0]?.cnt || 0);
+  const totalRev = rev || 1;
+
+  const lines = [
+    `【增长日报 · ${storeCode}店 · ${yd}】`,
+    '',
+    '━━ 昨日销售 ━━',
+    `总营收：${fmtMoney(rev)}  订单数：${orderCnt}单`,
+    prevRev > 0 ? `环比昨日：${pct(rev, prevRev) || '-'}（前日${fmtMoney(prevRev)}）` : '环比昨日：暂无数据',
+    lwRev > 0 ? `环比上周同期：${pct(rev, lwRev) || '-'}` : '环比上周同期：暂无数据',
+  ];
+
+  if (topDishes.rows.length) {
+    lines.push('', '━━ TOP菜品（按营收）━━');
+    ['①','②','③','④','⑤'].forEach((n, i) => {
+      const r = topDishes.rows[i]; if (!r) return;
+      // strip suffix starting with a digit/punctuation to clean POS dish names like "xxx11:00&16:30出炉"
+      const clean = r.dish_name.replace(/[\d&（(【\[].{0,20}$/, '').trim() || r.dish_name.slice(0, 10);
+      lines.push(`${n} ${clean.slice(0,10).padEnd(10)}  ${fmtMoney(r.rev)}  ${Math.round(Number(r.qty))}单`);
+    });
+  }
+
+  lines.push('', '━━ 时段分析 ━━');
+  if (lunchCnt > 0) lines.push(`午市(11-14): ${fmtMoney(lunchRev)} / ${lunchCnt}单（占比${(lunchRev / totalRev * 100).toFixed(0)}%）`);
+  if (dinnerCnt > 0) lines.push(`晚市(17-21): ${fmtMoney(dinnerRev)} / ${dinnerCnt}单（占比${(dinnerRev / totalRev * 100).toFixed(0)}%）`);
+  if (!lunchCnt && !dinnerCnt) lines.push(`午市菜品${lunchQty}份 / 晚市菜品${dinnerQty}份（快照数据）`);
+
+  lines.push('', '━━ 本周规律 ━━');
+  lines.push(lunchTrend || '数据积累中，暂无规律');
+
+  lines.push('', '━━ 今日建议 ━━');
+  const sugg = [];
+  if (lunchTrend) sugg.push('① 午市弱势，建议今日推荐单人套餐');
+  if (topDishes.rows[0] && Number(topDishes.rows[0].qty) > 30)
+    sugg.push(`${sugg.length ? '②' : '①'} ${topDishes.rows[0].dish_name.slice(0,8)}昨日售出${Math.round(Number(topDishes.rows[0].qty))}单，接近上限，提前备货`);
+  if (missCount > 0)
+    sugg.push(`${['①','②','③'][sugg.length] || (sugg.length+1+'.')} 有${missCount}名会员7天未到店，建议今日触达`);
+  if (!sugg.length) sugg.push('① 今日经营正常，保持当前节奏');
+  lines.push(...sugg);
+
+  return lines.join('\n');
+}
+
+async function buildGrowthDailyReport(pool, targetDate) {
+  // yesterday in CST: add 8h to UTC then subtract 1 day
+  const yd = targetDate || shiftDate(new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10), -1);
+
+  // find all stores with data for that day
+  const storesRes = await pool.query(
+    `SELECT DISTINCT store_code FROM sales_growth_snapshot WHERE snapshot_date=$1 ORDER BY store_code`, [yd]
+  );
+  if (!storesRes.rows.length) return `【增长日报 · ${yd}】\n暂无 ${yd} 的 POS 数据`;
+
+  const reports = await Promise.all(storesRes.rows.map(r => buildStoreReport(pool, r.store_code, yd)));
+  return reports.join('\n\n' + '━'.repeat(20) + '\n\n');
 }
 
 export function registerGrowthRoutes(app, pool) {
@@ -2320,11 +2676,26 @@ export function registerGrowthRoutes(app, pool) {
     const repurchaseRisk = await pool.query(
       `SELECT COUNT(*)::int as at_risk_count, store_id
        FROM growth_customer_profiles
-       WHERE lifecycle_stage IN ('at_risk','churned')
+       WHERE lifecycle_stage IN ('at_risk','dormant','churned')
          AND ($1='' OR store_id=$1)
        GROUP BY store_id`,
       [storeId]
     );
+    // 价值分级分布 + VIP沉睡客（最值得优先召回）+ 客户流失率，喂给AI策略推荐
+    const valueTierSeg = await pool.query(
+      `SELECT value_tier, COUNT(*)::int AS cnt,
+              COUNT(*) FILTER (WHERE lifecycle_stage = 'dormant')::int AS dormant_cnt
+       FROM growth_customer_profiles
+       WHERE ($1='' OR store_id=$1) AND COALESCE(pos_total_spend,0) > 0
+       GROUP BY value_tier`,
+      [storeId]
+    );
+    const vipRow = valueTierSeg.rows.find(r => r.value_tier === 'vip') || { cnt: 0, dormant_cnt: 0 };
+    const engagedTotal = valueTierSeg.rows.reduce((s, r) => s + Number(r.cnt || 0), 0);
+    const lostTotal = profileSegments.rows
+      .filter(r => ['dormant', 'churned'].includes(r.lifecycle_stage))
+      .reduce((s, r) => s + Number(r.cnt || 0), 0);
+    const churnRatePct = engagedTotal ? Math.round((lostTotal / engagedTotal) * 1000) / 10 : 0;
     const topPattern = timePatterns.rows[0];
     const prediction = topPattern ? `${topPattern.day_type} ${topPattern.time_segment}（基于${topPattern.event_count}次历史事件，其中成交${topPattern.conversion_count}次）` : '数据不足';
     return res.json({
@@ -2333,10 +2704,15 @@ export function registerGrowthRoutes(app, pool) {
       time_patterns: timePatterns.rows.slice(0, 5),
       segments: profileSegments.rows,
       profile_segments: profileSegments.rows,
+      value_tier_segments: valueTierSeg.rows,
+      churn_rate: churnRatePct,
       repurchase_risk: repurchaseRisk.rows,
       recommendations: [
         prediction !== '数据不足' ? `📅 预测最佳触达: ${prediction}` : '',
-        repurchaseRisk.rows.length ? `⏰ ${repurchaseRisk.rows[0].at_risk_count || 0}位客户处于复购临界期，建议尽快触达` : '',
+        repurchaseRisk.rows.length ? `⏰ ${repurchaseRisk.rows[0].at_risk_count || 0}位客户处于临界/沉睡/流失，建议尽快触达` : '',
+        Number(vipRow.dormant_cnt) > 0 ? `👑 ${vipRow.dormant_cnt}位VIP高价值客已沉睡，优先用招牌菜/专属券召回（勿用小券）` : '',
+        Number(vipRow.cnt) > 0 ? `💎 当前VIP客群${vipRow.cnt}人，建议走专属感运营（新品预告/留位），避免打折掉价` : '',
+        churnRatePct > 0 ? `📉 客户流失率 ${churnRatePct}%（沉睡+流失占曾消费客户比例）` : '',
         ...profileSegments.rows.filter(r => r.cnt > 0).map(r =>
           `📊 ${r.lifecycle_stage}客群(${r.cnt}人) 最佳触达:${r.top_window || '未设定'} 价格敏感度:${r.avg_price_sens||'N/A'} 折扣响应:${r.avg_discount_resp||'N/A'}`
         )
@@ -2661,4 +3037,102 @@ export function registerGrowthRoutes(app, pool) {
       return res.json({ ok: true, selling_point: '限时优惠，到店即享' });
     }
   });
+
+  // 手动触发日报（POST /api/growth/daily-report/send）
+  app.post('/api/growth/daily-report/send', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    try {
+      const targetDate = cleanText(req.body?.date || '', 20) || null;
+      const msg = await buildGrowthDailyReport(pool, targetDate);
+      if (_sendGrowthAlert) {
+        const result = await _sendGrowthAlert(msg, 'growth_daily_report');
+        return res.json({ ok: true, report: msg, feishu: result });
+      }
+      return res.json({ ok: true, report: msg, feishu: null });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e?.message });
+    }
+  });
+
+  // 预览日报不发送（GET /api/growth/daily-report/preview）
+  app.get('/api/growth/daily-report/preview', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    try {
+      const targetDate = cleanText(req.query?.date || '', 20) || null;
+      const msg = await buildGrowthDailyReport(pool, targetDate);
+      return res.json({ ok: true, report: msg });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e?.message });
+    }
+  });
+
+  // content_performance CRUD
+  app.get('/api/growth/content-performance', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const storeId = cleanText(req.query.store_id || '', 128);
+    const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
+    const r = await pool.query(
+      `SELECT * FROM content_performance
+       WHERE ($1='' OR store_code=$1 OR store_id=$1)
+         AND content_date >= CURRENT_DATE - ($2 || ' days')::interval
+       ORDER BY content_date DESC, id DESC LIMIT 200`,
+      [storeId, days]
+    );
+    return res.json({ ok: true, records: r.rows });
+  });
+
+  app.post('/api/growth/content-performance', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const b = req.body || {};
+    const storeCode = cleanText(b.store_id || b.store_code || '', 128);
+    const channel = cleanText(b.channel || '', 64);
+    const platform = cleanText(b.platform || b.content_type || '', 64);
+    const contentTitle = cleanText(b.content_title || b.dish_name || '', 255);
+    const contentDate = cleanText(b.record_date || b.content_date || fmtYmd(new Date()), 32);
+    const toInt = (v) => Math.max(0, Math.floor(Number(v) || 0));
+    if (!channel) return res.status(400).json({ ok: false, error: 'channel required' });
+    const r = await pool.query(
+      `INSERT INTO content_performance
+         (content_date, channel, store_code, store_id, platform, content_type, content_title, dish_name,
+          impressions, clicks, likes, saves, comments, shares, new_followers, orders, notes, created_by)
+       VALUES ($1,$2,$3,$3,$4,$4,$5,$5,$6,$7,$8,$8,$9,$10,$11,$12,$13,$14)
+       RETURNING *`,
+      [contentDate, channel, storeCode, platform, contentTitle,
+       toInt(b.impressions), toInt(b.clicks), toInt(b.likes),
+       toInt(b.comments), toInt(b.shares), toInt(b.new_followers), toInt(b.conversions),
+       cleanText(b.notes || '', 500), cleanText(b.operator_username || 'manual', 64)]
+    );
+    return res.json({ ok: true, record: r.rows[0] });
+  });
+
+  app.delete('/api/growth/content-performance/:id', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ ok: false, error: 'invalid id' });
+    await pool.query(`DELETE FROM content_performance WHERE id=$1`, [id]);
+    return res.json({ ok: true });
+  });
+
+  // 每日增长日报（每天 09:05 发送）
+  if (!globalThis.__growthDailyReportTimer) {
+    function scheduleDailyReport() {
+      const now = new Date();
+      const next = new Date(now);
+      next.setHours(8, 0, 0, 0);
+      if (next <= now) next.setDate(next.getDate() + 1);
+      const delay = next - now;
+      globalThis.__growthDailyReportTimer = setTimeout(async () => {
+        try {
+          if (_sendGrowthAlert) {
+            const msg = await buildGrowthDailyReport(pool);
+            await _sendGrowthAlert(msg, 'growth_daily_report');
+          }
+        } catch (e) {
+          console.warn('[growth] daily report failed:', e?.message);
+        }
+        scheduleDailyReport();
+      }, delay);
+    }
+    scheduleDailyReport();
+  }
 }
