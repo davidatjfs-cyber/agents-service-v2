@@ -2675,7 +2675,11 @@ app.get('/api/payments/budget-summary', authRequired, async (req, res) => {
    const approvalType = normalizeApprovalType(req.body?.type);
    const currentUsername = String(req.user?.username || '').trim().toLowerCase();
    // 'points' has its own role check inside; 'offboarding' allows self-service resignation
-   if (approvalType !== 'offboarding' && approvalType !== 'points' && !canAccessApprovalCenter(req.user?.role, { dutyRows: [], currentStore: req.user?.current_store, primaryStore: req.user?.primary_store })) {
+   // 前厅经理可发起请款申请（仅 payment，本人为申请人，审批链照常 门店店长→徐彬→李艳玲）
+   const _frontManagerPaymentCreate = approvalType === 'payment'
+     && normalizeRoleForJwt(String(req.user?.role || '')) === 'front_manager';
+   if (approvalType !== 'offboarding' && approvalType !== 'points' && !_frontManagerPaymentCreate
+       && !canAccessApprovalCenter(req.user?.role, { dutyRows: [], currentStore: req.user?.current_store, primaryStore: req.user?.primary_store })) {
      return res.status(403).json({ error: 'forbidden' });
    }
    if (approvalType === 'offboarding' && normalizeRoleForJwt(String(req.user?.role || '')) === 'store_employee') {
@@ -2793,7 +2797,7 @@ app.get('/api/payments/budget-summary', authRequired, async (req, res) => {
       }
     } else {
       if (type === 'payment') {
-        if (!(role === 'admin' || role === 'hq_manager' || role === 'hr_manager' || role === 'store_manager' || role === 'cashier')) {
+        if (!(role === 'admin' || role === 'hq_manager' || role === 'hr_manager' || role === 'store_manager' || role === 'cashier' || role === 'front_manager')) {
           return res.status(403).json({ error: 'forbidden' });
         }
 
@@ -2802,6 +2806,17 @@ app.get('/api/payments/budget-summary', authRequired, async (req, res) => {
         const amount = safeNumber(payload?.amount);
         const category = String(payload?.category || payload?.project || '').trim();
         if (!store) return res.status(400).json({ error: 'missing_store' });
+        // 前厅经理仅可为本人所属门店请款，禁止跨店请款（服务端强校验，防止前端被绕过）
+        if (role === 'front_manager') {
+          const ownStore = String(applicant?.store || '').trim();
+          const allowed = Array.isArray(req.user?.allowed_stores)
+            ? req.user.allowed_stores.map(s => String(s || '').trim()).filter(Boolean)
+            : [];
+          const allowedSet = new Set([ownStore, ...allowed].filter(Boolean));
+          if (allowedSet.size && !allowedSet.has(store)) {
+            return res.status(403).json({ error: 'store_not_allowed' });
+          }
+        }
         if (!date) return res.status(400).json({ error: 'missing_date' });
         if (amount == null || amount <= 0) return res.status(400).json({ error: 'missing_amount' });
         if (!category) return res.status(400).json({ error: 'missing_category' });
@@ -4935,6 +4950,28 @@ app.put('/api/role-modules', authRequired, async (req, res) => {
     if (!config || typeof config !== 'object') return res.status(400).json({ error: 'invalid_config' });
     const state = (await getSharedState()) || {};
     state.roleModules = config;
+    await saveSharedState(state);
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(500).json({ error: 'server_error', message: 'internal_error' });
+  }
+});
+
+// 审批流程 / 分店付款链原子写入（与 PUT /api/state 分离，避免被陈旧浏览器全量覆盖抹掉）
+app.put('/api/approval-flows', authRequired, async (req, res) => {
+  const role = String(req.user?.role || '').trim();
+  if (role !== 'admin') return res.status(403).json({ error: 'admin_only' });
+  try {
+    const approvalFlows = req.body?.approvalFlows;
+    const paymentFlowByStore = req.body?.paymentFlowByStore;
+    const hasApprovalFlows = approvalFlows && typeof approvalFlows === 'object';
+    const hasPaymentFlow = paymentFlowByStore && typeof paymentFlowByStore === 'object';
+    if (!hasApprovalFlows && !hasPaymentFlow) {
+      return res.status(400).json({ error: 'invalid_config' });
+    }
+    const state = (await getSharedState()) || {};
+    if (hasApprovalFlows) state.approvalFlows = approvalFlows;
+    if (hasPaymentFlow) state.paymentFlowByStore = paymentFlowByStore;
     await saveSharedState(state);
     return res.json({ ok: true });
   } catch (e) {
@@ -14669,6 +14706,24 @@ async function applyStatePeopleVisibilityForRole(data, role, username, fullState
     .concat(Array.isArray(fullStateForLookup?.users) ? fullStateForLookup.users : []);
   const un = String(username || '').trim().toLowerCase();
 
+  // 用完整名册解析 managerUsername -> managerName，避免门店账号因人员可见性过滤
+  // 拿不到总部上级记录时，「我的档案」直属上级只能显示账号代码。
+  const nameByUsername = new Map();
+  for (const x of lookupAll) {
+    const ku = String(x?.username || '').trim().toLowerCase();
+    const nm = String(x?.name || '').trim();
+    if (ku && nm && !nameByUsername.has(ku)) nameByUsername.set(ku, nm);
+  }
+  const withMgrName = (row) => {
+    if (!row || typeof row !== 'object') return row;
+    if (String(row.managerName || '').trim()) return row;
+    const mu = String(row.managerUsername || row.manager || '').trim().toLowerCase();
+    const nm = mu ? nameByUsername.get(mu) : '';
+    return nm ? { ...row, managerName: nm } : row;
+  };
+  const empsOut = rawEmps.map(withMgrName);
+  const usersOut = rawUsers.map(withMgrName);
+
   let storeScope = null;
   let allowedStores = null;
   if (r === 'store_manager' || r === 'front_manager') {
@@ -14696,8 +14751,8 @@ async function applyStatePeopleVisibilityForRole(data, role, username, fullState
     const keepSelf = (row) => String(row?.username || '').trim().toLowerCase() === un;
     return {
       ...data,
-      employees: rawEmps.filter((row) => keepSelf(row) && !hrmsIsInactiveEmploymentRecord(row)),
-      users: rawUsers.filter((row) => keepSelf(row) && !hrmsIsInactiveEmploymentRecord(row))
+      employees: empsOut.filter((row) => keepSelf(row) && !hrmsIsInactiveEmploymentRecord(row)),
+      users: usersOut.filter((row) => keepSelf(row) && !hrmsIsInactiveEmploymentRecord(row))
     };
   }
 
@@ -14709,8 +14764,8 @@ async function applyStatePeopleVisibilityForRole(data, role, username, fullState
     dbRole = String(dbRow.rows?.[0]?.role || '').trim() || null;
   } catch (_e) {}
 
-  const filteredEmps = rawEmps.filter(pass);
-  const filteredUsers = rawUsers.filter(pass);
+  const filteredEmps = empsOut.filter(pass);
+  const filteredUsers = usersOut.filter(pass);
 
   if (dbRole) {
     return {
@@ -14850,6 +14905,18 @@ app.put('/api/state', authRequired, async (req, res) => {
     const existingState = await getSharedState();
     if (existingState) {
       data.employees = mergeEmployeesForStatePut(data.employees, existingState.employees);
+
+      // ── 配置安全保护 ──────────────────────────────────────────────────────────
+      // roleModules（角色可见模块）/ approvalFlows（审批流程）/ paymentFlowByStore
+      // （分店请款付款链）属于服务端权威配置，分别由 PUT /api/role-modules、
+      // PUT /api/approval-flows 原子写入。前端 localStorage 可能比这几个字段旧，
+      // 直接 PUT /api/state 全量覆盖会把刚配置好的可见模块/审批流程整段抹掉，
+      // 这正是「请款模块消失」「审批流程乱了」反复出现的根因。
+      // 策略：以服务端为主，PUT /api/state 不再触碰这三个配置字段。
+      if (existingState.roleModules !== undefined) data.roleModules = existingState.roleModules;
+      if (existingState.approvalFlows !== undefined) data.approvalFlows = existingState.approvalFlows;
+      if (existingState.paymentFlowByStore !== undefined) data.paymentFlowByStore = existingState.paymentFlowByStore;
+      // ─────────────────────────────────────────────────────────────────────────
 
       // ── 积分安全保护 ──────────────────────────────────────────────────────────
       // pointRecords / pointsAppliedApprovals / payrollAdjustments 由服务端

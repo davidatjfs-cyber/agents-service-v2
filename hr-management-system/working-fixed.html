@@ -19042,7 +19042,7 @@
                                     <div id="pos-stats-pay" style="min-height:80px;"></div>
                                 </div>
                             </div>
-                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px;">
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:12px;">
                                 <div class="rep-poster-step">
                                     <div class="rep-poster-step__title">🍽 订单类型</div>
                                     <div id="pos-stats-order-type" style="min-height:80px;"></div>
@@ -25274,7 +25274,7 @@ th { background: #f5f5f5; font-weight: 700; }
 
         function hrmsCanCreatePayments(role) {
             const r = String(role || '').trim();
-            return r === ROLES.ADMIN || r === ROLES.HQ_MANAGER || r === ROLES.HR_MANAGER || r === ROLES.STORE_MANAGER;
+            return r === ROLES.ADMIN || r === ROLES.HQ_MANAGER || r === ROLES.HR_MANAGER || r === ROLES.STORE_MANAGER || r === ROLES.FRONT_MANAGER;
         }
 
         function hrmsCanAccessSmartAssistant(role) {
@@ -25295,7 +25295,7 @@ th { background: #f5f5f5; font-weight: 700; }
             [ROLES.PRODUCTION_MANAGER]: ['profile', 'attendance', 'exam', 'points', 'rewards', 'forecast', 'kitchen', 'training'],
             [ROLES.HQ_MANAGER]:         ['profile', 'attendance', 'exam', 'points', 'employees', 'daily-report', 'approvals', 'payment', 'rewards', 'reports', 'kitchen', 'training'],
             [ROLES.HR_MANAGER]:         ['profile', 'attendance', 'exam', 'points', 'employees', 'approvals', 'payment', 'rewards', 'reports', 'training'],
-            [ROLES.FRONT_MANAGER]:      ['profile', 'attendance', 'exam', 'points', 'daily-report', 'training'],
+            [ROLES.FRONT_MANAGER]:      ['profile', 'attendance', 'exam', 'points', 'daily-report', 'payment', 'training'],
             [ROLES.FRONT_SUPERVISOR]:   ['profile', 'attendance', 'exam', 'points', 'daily-report', 'training'],
             [ROLES.CASHIER]:            ['profile', 'attendance', 'exam', 'points', 'payment', 'approvals', 'training']
         };
@@ -26667,7 +26667,7 @@ async function deleteStoreDutyBinding(id){if(!id)return;var ok=await hrmsConfirm
             }).join('');
             if (storeEl) {
                 storeEl.innerHTML = storeOptions;
-                if (String(currentUser?.role || '') === ROLES.STORE_MANAGER) {
+                if (String(currentUser?.role || '') === ROLES.STORE_MANAGER || String(currentUser?.role || '') === ROLES.FRONT_MANAGER) {
                     let my = String(currentUser?.store || '').trim();
                     if (!my && currentUser?.username) {
                         try {
@@ -26795,7 +26795,7 @@ async function deleteStoreDutyBinding(id){if(!id)return;var ok=await hrmsConfirm
             if (stats) stats.textContent = '--';
 
             const role = String(currentUser?.role || '').trim();
-            const view = (role === ROLES.ADMIN || role === ROLES.HQ_MANAGER || role === ROLES.CASHIER) ? 'all' : (role === ROLES.HR_MANAGER ? 'created' : (role === ROLES.STORE_MANAGER ? 'created' : 'assigned'));
+            const view = (role === ROLES.ADMIN || role === ROLES.HQ_MANAGER || role === ROLES.CASHIER) ? 'all' : (role === ROLES.HR_MANAGER ? 'created' : (role === ROLES.STORE_MANAGER ? 'created' : (role === ROLES.FRONT_MANAGER ? 'created' : 'assigned')));
             const storeParam = role === ROLES.STORE_MANAGER ? String(currentUser?.store || '').trim() : store;
             console.log('[请款] loadPaymentData role=' + role + ' view=' + view + ' store=' + storeParam);
 
@@ -27545,10 +27545,13 @@ async function deleteStoreDutyBinding(id){if(!id)return;var ok=await hrmsConfirm
         async function hrmsSavePaymentFlowMap(nextMap) {
             const token = HRMS_API.token();
             if (!token) throw new Error('未登录');
-            const st = await HRMS_API.getState();
-            const base = (st && typeof st === 'object' ? (st.data || st) : {}) || {};
-            const merged = { ...base, paymentFlowByStore: nextMap && typeof nextMap === 'object' ? nextMap : {} };
-            await HRMS_API.saveState(merged);
+            // 走专用原子接口，避免全量 PUT /api/state 把分店付款链被陈旧浏览器覆盖
+            const r = await fetch('/api/approval-flows', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ paymentFlowByStore: nextMap && typeof nextMap === 'object' ? nextMap : {} })
+            });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
             return true;
         }
 
@@ -39351,10 +39354,13 @@ ${knowledgeContent.slice(0, 30000)}`;
             try {
                 const token = HRMS_API.token();
                 if (token) {
-                    const st = await HRMS_API.getState();
-                    const base = (st && typeof st === 'object' ? (st.data || st) : {}) || {};
-                    const next = { ...base, approvalFlows: flows };
-                    await HRMS_API.saveState(next);
+                    // 走专用原子接口，避免全量 PUT /api/state 把审批流程被陈旧浏览器覆盖
+                    const r = await fetch('/api/approval-flows', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        body: JSON.stringify({ approvalFlows: flows })
+                    });
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
                     return { ok: true, mode: 'server' };
                 }
             } catch (e) {
@@ -52480,7 +52486,7 @@ ${body}
                 { icon:'👥', label:'员工管理', page:'employees', roles:['admin','hr_manager','hq_manager','store_manager'] },
                 { icon:'📋', label:'营业日报', page:'daily-report', roles:['admin','hq_manager','store_manager','front_manager','front_supervisor'] },
                 { icon:'✅', label:'待审批', page:'approvals', roles:['admin','hr_manager','hq_manager','store_manager'] },
-                { icon:'💰', label:'请款', page:'payment', roles:['admin','hq_manager','store_manager','cashier'] },
+                { icon:'💰', label:'请款', page:'payment', roles:['admin','hq_manager','store_manager','cashier','front_manager'] },
                 { icon:'📚', label:'知识库', page:'knowledge' },
                 { icon:'🎓', label:'培训认证', page:'training' },
                 { icon:'📊', label:'数据中心', page:'agents', roles:['admin'] },
@@ -55662,15 +55668,31 @@ ${body}
             var totalLc = totalOf(lifecycle);
             var lcColors = { prospect: '#94a3b8', new: '#38bdf8', active: '#22c55e', at_risk: '#f59e0b', dormant: '#ef4444', churned: '#6b7280' };
             var lcHtml = '<div style="margin-bottom:12px;"><div style="font-size:12px;color:rgba(226,232,240,0.88);font-weight:700;margin-bottom:8px;">客户生命周期</div>'
-                + '<div style="display:flex;gap:0;height:26px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,0.04);">';
+                + '<div style="display:flex;gap:0;height:22px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,0.04);">';
+            var lifecycleDefs = {
+                prospect: '扫码/被触达但从未下单',
+                new: '累计下单1次 · 近14天内到过店',
+                active: '累计下单≥2次 · 近14天内到过店',
+                at_risk: '14–30天未到店 · 有流失苗头',
+                dormant: '30天+未到店 · 但曾下单≥2次，值得召回',
+                churned: '30天+未到店 · 历史仅下过1单'
+            };
+            var lcLegend = '';
             for (var lk in lifecycleLabels) {
                 var cnt = Number(lifecycle[lk] || 0);
                 if (cnt > 0) {
                     var pct = totalLc > 0 ? (cnt / totalLc * 100) : 0;
-                    lcHtml += '<div style="flex:0 0 ' + pct + '%;background:' + (lcColors[lk] || '#94a3b8') + ';display:flex;align-items:center;justify-content:center;min-width:34px;"><span style="font-size:10px;color:#fff;font-weight:700;">' + lifecycleLabels[lk] + ' ' + cnt + '</span></div>';
+                    var pctRound = totalLc > 0 ? Math.round(cnt / totalLc * 100) : 0;
+                    lcHtml += '<div title="' + lifecycleLabels[lk] + ' ' + cnt + '" style="flex:0 0 ' + pct + '%;background:' + (lcColors[lk] || '#94a3b8') + ';min-width:6px;"></div>';
+                    lcLegend += '<div style="display:flex;gap:7px;align-items:flex-start;">'
+                        + '<span style="width:9px;height:9px;border-radius:2px;background:' + (lcColors[lk] || '#94a3b8') + ';flex:0 0 auto;margin-top:4px;"></span>'
+                        + '<div style="flex:1;min-width:0;">'
+                        + '<div style="font-size:12px;color:rgba(226,232,240,0.9);font-weight:600;">' + lifecycleLabels[lk] + ' <strong style="color:#fff;">' + cnt + '</strong> <span style="color:rgba(226,232,240,0.45);font-weight:400;">' + pctRound + '%</span></div>'
+                        + '<div style="font-size:10px;color:rgba(226,232,240,0.5);line-height:1.4;margin-top:1px;">' + (lifecycleDefs[lk] || '') + '</div>'
+                        + '</div></div>';
                 }
             }
-            lcHtml += '</div></div>';
+            lcHtml += '</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px 16px;margin-top:10px;">' + lcLegend + '</div></div>';
 
             var hv = pi.high_value_customers || {};
             var nvr = pi.new_vs_returning || {};
@@ -55681,10 +55703,10 @@ ${body}
             var takeawayPct = takeawayRow && (takeawayRow.cnt || 0) > 0 ? Math.round(Number(takeawayRow.cnt) / ((Number(takeawayRow.cnt) || 0) + (Number(dineInRow && dineInRow.cnt) || 0)) * 100) : 0;
             var topLifecycleKey = Object.keys(lifecycle).sort(function(a, b) { return Number(lifecycle[b] || 0) - Number(lifecycle[a] || 0); })[0] || 'active';
             var topLifecycleLabel = lifecycleLabels[topLifecycleKey] || topLifecycleKey;
-            var personaHtml = '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px;">'
+            var personaHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px;">'
                 + '<div style="background:linear-gradient(180deg,rgba(59,130,246,0.14),rgba(56,189,248,0.05));border:1px solid rgba(56,189,248,0.18);border-radius:12px;padding:12px;">'
                 + '<div style="font-size:11px;color:rgba(226,232,240,0.58);margin-bottom:6px;">核心客群</div>'
-                + '<div style="font-size:16px;font-weight:800;color:#fff;">' + topLifecycleLabel + '客为主</div>'
+                + '<div style="font-size:16px;font-weight:800;color:#fff;">以' + topLifecycleLabel + '为主</div>'
                 + '<div style="font-size:12px;color:rgba(226,232,240,0.7);margin-top:6px;">当前以' + topLifecycleLabel + '阶段客户为主体，适合围绕复购和加深黏性运营。</div>'
                 + '</div>'
                 + '<div style="background:linear-gradient(180deg,rgba(34,197,94,0.14),rgba(34,197,94,0.05));border:1px solid rgba(34,197,94,0.18);border-radius:12px;padding:12px;">'
@@ -55715,7 +55737,7 @@ ${body}
             var actionDesc = topDept && topDept.department
                 ? '围绕' + topDept.department + '做套餐锚点，搭配' + (topSource ? topSource.order_source : '主渠道') + '专属券，更容易提升转化。'
                 : '围绕当前高频品类做套餐和加价购，提高客单与复购。';
-            var suggestHtml = '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:12px;">'
+            var suggestHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:12px;">'
                 + '<div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.16);border-radius:12px;padding:12px;">'
                 + '<div style="font-size:11px;color:rgba(226,232,240,0.58);margin-bottom:6px;">门店经营建议</div>'
                 + '<div style="font-size:15px;font-weight:800;color:#fff;">' + adviceTitle + '</div>'
@@ -55732,7 +55754,7 @@ ${body}
                 + '<div style="font-size:12px;line-height:1.6;color:rgba(226,232,240,0.74);margin-top:6px;">' + actionDesc + '</div>'
                 + '</div>'
                 + '</div>';
-            var overviewHtml = '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px;">'
+            var overviewHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:12px;">'
                 + '<div style="background:rgba(56,189,248,0.10);border:1px solid rgba(56,189,248,0.18);border-radius:10px;padding:10px;"><div style="font-size:11px;color:rgba(226,232,240,0.6);">新客占比</div><div style="font-size:22px;font-weight:800;color:#38bdf8;">' + (nvr.new_pct || 0) + '%</div></div>'
                 + '<div style="background:rgba(34,197,94,0.10);border:1px solid rgba(34,197,94,0.18);border-radius:10px;padding:10px;"><div style="font-size:11px;color:rgba(226,232,240,0.6);">回头客占比</div><div style="font-size:22px;font-weight:800;color:#22c55e;">' + (nvr.returning_pct || 0) + '%</div></div>'
                 + '<div style="background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.18);border-radius:10px;padding:10px;"><div style="font-size:11px;color:rgba(226,232,240,0.6);">POS消费客户</div><div style="font-size:22px;font-weight:800;color:#f59e0b;">' + Number(hv.count || 0) + '</div></div>'
@@ -55769,20 +55791,24 @@ ${body}
 
             var cm = pi.customer_metrics || {};
             var cmCards = [
-                { label: '客户总数', value: Number(cm.total_customers || 0), color: '#38bdf8', sub: '曾消费会员' },
-                { label: '新客', value: Number(cm.new_count || 0), color: '#0ea5e9', sub: '近14天首单' },
-                { label: '活跃客', value: Number(cm.active_count || 0), color: '#22c55e', sub: '近14天≥2次' },
-                { label: 'VIP人数', value: Number(cm.vip_count || 0), color: '#f59e0b', sub: '消费额前15%' },
-                { label: '流失率', value: Number(cm.churn_rate || 0) + '%', color: '#ef4444', sub: '沉睡+流失占比' },
+                { label: '客户总数', value: Number(cm.total_customers || 0), color: '#38bdf8', sub: '曾消费客户' },
+                { label: '潜在新客', value: Number(lifecycle.prospect || 0), color: '#94a3b8', sub: '扫码/触达未下单' },
+                { label: '新客', value: Number(cm.new_count || 0), color: '#0ea5e9', sub: '累计1单·近14天到店' },
+                { label: '活跃客', value: Number(cm.active_count || 0), color: '#22c55e', sub: '累计≥2单·近14天到店' },
+                { label: '临界客', value: Number(lifecycle.at_risk || 0), color: '#f59e0b', sub: '14-30天未到店' },
+                { label: '沉睡老客', value: Number(lifecycle.dormant || 0), color: '#ef4444', sub: '30天+未到·曾≥2单' },
+                { label: '流失客', value: Number(lifecycle.churned || 0), color: '#9ca3af', sub: '30天+未到·仅1单' },
+                { label: 'VIP人数', value: Number(cm.vip_count || 0), color: '#fbbf24', sub: '消费额前15%' },
+                { label: '流失率', value: Number(cm.churn_rate || 0) + '%', color: '#f87171', sub: '沉睡+流失占比' },
                 { label: '复购率', value: Number(cm.repurchase_rate || 0) + '%', color: '#a78bfa', sub: '30天内≥2次' }
             ];
             var cmHtml = '<div style="margin-bottom:12px;"><div style="font-size:13px;color:#fff;font-weight:800;margin-bottom:8px;">📊 核心客户指标</div>'
-                + '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;">'
+                + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;">'
                 + cmCards.map(function(c) {
-                    return '<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;text-align:center;">'
-                        + '<div style="font-size:24px;font-weight:800;color:' + c.color + ';">' + c.value + '</div>'
-                        + '<div style="font-size:12px;color:rgba(226,232,240,0.78);margin-top:4px;">' + c.label + '</div>'
-                        + '<div style="font-size:10px;color:rgba(226,232,240,0.45);margin-top:2px;">' + c.sub + '</div>'
+                    return '<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:10px 8px;text-align:center;">'
+                        + '<div style="font-size:21px;font-weight:800;color:' + c.color + ';line-height:1.1;white-space:nowrap;">' + c.value + '</div>'
+                        + '<div style="font-size:12px;color:rgba(226,232,240,0.82);margin-top:5px;font-weight:600;">' + c.label + '</div>'
+                        + '<div style="font-size:10px;color:rgba(226,232,240,0.45);margin-top:2px;line-height:1.3;">' + c.sub + '</div>'
                         + '</div>';
                 }).join('') + '</div></div>';
 
@@ -55791,12 +55817,12 @@ ${body}
                 + suggestHtml
                 + overviewHtml
                 + lcHtml
-                + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">'
+                + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">'
                 + spendHtml
                 + visitHtml
                 + custTypeHtml
                 + '</div>'
-                + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px;">'
+                + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:12px;">'
                 + custSourceHtml
                 + deptHtml
                 + dishHtml
