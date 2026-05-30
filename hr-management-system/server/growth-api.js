@@ -754,6 +754,23 @@ async function upsertCustomer(pool, payload) {
 
 async function recomputeCustomerProfiles(pool, days = 90) {
   const safeDays = Math.min(Math.max(Number(days) || 90, 7), 365);
+  // 将所有留过手机号的POS消费客自动建档进会员表，使散客也纳入分类（不再只统计小程序会员）。
+  // 幂等：已存在的手机号 DO NOTHING，不覆盖会员既有信息；门店取其首单/末单所在门店。
+  await pool.query(`
+    INSERT INTO growth_customers (phone, first_store_id, last_store_id, first_seen_at, last_seen_at, meta)
+    SELECT s.phone, s.first_store, s.last_store, s.first_at, s.last_at, '{"source":"pos_auto"}'::jsonb
+    FROM (
+      SELECT phone,
+             (ARRAY_AGG(NULLIF(store_id,'') ORDER BY biz_date ASC) FILTER (WHERE NULLIF(store_id,'') IS NOT NULL))[1] AS first_store,
+             (ARRAY_AGG(NULLIF(store_id,'') ORDER BY biz_date DESC) FILTER (WHERE NULLIF(store_id,'') IS NOT NULL))[1] AS last_store,
+             MIN(biz_date)::timestamptz AS first_at,
+             MAX(biz_date)::timestamptz AS last_at
+      FROM pos_orders
+      WHERE phone IS NOT NULL AND phone <> ''
+      GROUP BY phone
+    ) s
+    ON CONFLICT (phone) WHERE phone IS NOT NULL AND phone <> '' DO NOTHING
+  `);
   await pool.query(
     `WITH event_base AS (
        SELECT
