@@ -67,7 +67,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - **Server**: root@47.100.96.30 (passwordless SSH)
 - **Nginx serves from**: `/opt/hrms` (NOT `/root/hr-management-system/`)
 - **HRMS deploy**: `scp` files to `root@47.100.96.30:/opt/hrms/` then `ssh root@47.100.96.30 "pm2 restart hrms-service"`
-- **Agents-service-v2 deploy**: `scp` to `root@47.100.96.30:/root/agents-service-v2/` then `pm2 restart agents-service-v2`
+- **Agents-service-v2 deploy**: `scp` to `root@47.100.96.30:/opt/agents-service-v2/` then `pm2 restart agents-service-v2`（注意是 `/opt`，不是 `/root`；pm2 真实 cwd 即 `/opt/agents-service-v2`）
 - **Local code**: `/Users/magainze/HRMS/hr-management-system/`
 - **PM2 processes**: `hrms-service` (port 3000), `agents-service-v2` (port 3101)
 - **DB**: `postgres://hrms:Abc1234567!@127.0.0.1:5432/hrms`
