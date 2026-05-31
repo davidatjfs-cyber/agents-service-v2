@@ -7,7 +7,7 @@ import fs from 'fs';
 import { statfs } from 'node:fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { randomUUID, createDecipheriv } from 'crypto';
+import { randomUUID, createDecipheriv, createHash } from 'crypto';
 import multer from 'multer';
 import https from 'https';
 import { execFileSync, execSync } from 'child_process';
@@ -14315,6 +14315,8 @@ function requireEnv() {
 }
 
 async function authRequired(req, res, next) {
+  // 企业微信「接收消息」回调为无 token 公开端点（靠签名+AES 解密自证），放行
+  if (String(req.originalUrl || '').split('?')[0] === '/api/wecom/callback') return next();
   const hdr = String(req.headers.authorization || '');
   let token = hdr.startsWith('Bearer ') ? String(hdr.slice(7) || '').trim() : '';
   // 部分移动端 WebView 在 multipart/form-data 上传时可能丢失 Authorization；允许 query 兜底（与 FormData 同发）
@@ -21373,8 +21375,40 @@ app.post('/api/notifications/batch', authRequired, async (req, res) => {
 });
 
 // 企业微信服务器验证接口（配置「接收消息服务器URL」时企微发 GET 请求，返回 echostr 即通过验证）
+// 企业微信「接收消息」回调验证（仅用于解锁可信IP；本系统只发消息，不处理被动消息）
+// Token / EncodingAESKey 来自环境变量，与企微后台「接收消息」配置一致：
+//   WECOM_CALLBACK_TOKEN, WECOM_CALLBACK_AES_KEY
+function wecomVerifySignature(token, timestamp, nonce, encrypt) {
+  const arr = [token, String(timestamp || ''), String(nonce || ''), String(encrypt || '')].sort();
+  return createHash('sha1').update(arr.join('')).digest('hex');
+}
+function wecomDecryptEchostr(encryptB64, encodingAesKey) {
+  const aesKey = Buffer.from(encodingAesKey + '=', 'base64'); // 32 bytes
+  const iv = aesKey.subarray(0, 16);
+  const decipher = createDecipheriv('aes-256-cbc', aesKey, iv);
+  decipher.setAutoPadding(false);
+  let decrypted = Buffer.concat([decipher.update(Buffer.from(encryptB64, 'base64')), decipher.final()]);
+  const pad = decrypted[decrypted.length - 1];
+  decrypted = decrypted.subarray(0, decrypted.length - pad); // 去 PKCS7 填充
+  const content = decrypted.subarray(16); // 去 16 字节随机前缀
+  const msgLen = content.readUInt32BE(0);
+  return content.subarray(4, 4 + msgLen).toString('utf8'); // 明文 echostr
+}
 app.get('/api/wecom/callback', (req, res) => {
-  const echostr = String(req.query?.echostr || '').trim();
-  if (echostr) return res.send(echostr);
+  const token = String(process.env.WECOM_CALLBACK_TOKEN || '').trim();
+  const aesKey = String(process.env.WECOM_CALLBACK_AES_KEY || '').trim();
+  const { msg_signature, timestamp, nonce, echostr } = req.query || {};
+  if (token && aesKey && msg_signature && echostr) {
+    try {
+      const expect = wecomVerifySignature(token, timestamp, nonce, echostr);
+      if (expect !== String(msg_signature)) return res.status(401).send('invalid signature');
+      return res.send(wecomDecryptEchostr(String(echostr), aesKey));
+    } catch (e) {
+      return res.status(400).send('decrypt failed');
+    }
+  }
+  if (echostr) return res.send(String(echostr)); // 明文模式兜底
   return res.send('ok');
 });
+// 被动接收消息：仅回执，不处理（系统为单向群发）
+app.post('/api/wecom/callback', (req, res) => res.send(''));
