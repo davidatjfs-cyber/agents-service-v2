@@ -392,6 +392,7 @@ async function seedDedup() {
 function bitableMaxPages(configKey) {
   if (configKey === 'table_visit') return 120;
   if (configKey === 'opening_reports' || configKey === 'closing_reports') return 80;
+  if (configKey === 'task_responses') return 40; // 异常任务回复表已超 4000 行旧上限；40页=8000 给足窗口，整表全量拉取不再被截断
   return 20;
 }
 
