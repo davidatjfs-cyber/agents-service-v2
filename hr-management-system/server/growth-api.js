@@ -26,6 +26,10 @@ function parseOccurredAt(value) {
 
 import jwt from 'jsonwebtoken';
 
+// 外部注入：index.js 在 registerGrowthRoutes 后调用 setSendGrowthAlert(sendAdminSystemAlert)
+let _sendGrowthAlert = null;
+export function setSendGrowthAlert(fn) { _sendGrowthAlert = fn; }
+
 function authMiniProgramSync(req) {
   const secret = cleanText(process.env.MINIPROGRAM_SYNC_SECRET || '', 500);
   if (!secret) return { ok: false, status: 503, error: 'miniprogram_sync_disabled' };
@@ -461,6 +465,119 @@ export async function ensureGrowthTables(pool) {
     )
   `);
 
+  // ── 销售增长快照：每日从 pos_order_items 汇总，按菜品+门店维度 ──
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS sales_growth_snapshot (
+      id BIGSERIAL PRIMARY KEY,
+      snapshot_date DATE NOT NULL,
+      store_code TEXT NOT NULL,
+      dish_name TEXT NOT NULL,
+      category TEXT DEFAULT '',
+      order_count INTEGER DEFAULT 0,
+      qty INTEGER DEFAULT 0,
+      revenue NUMERIC(12,2) DEFAULT 0,
+      avg_unit_price NUMERIC(8,2),
+      lunch_qty INTEGER DEFAULT 0,
+      dinner_qty INTEGER DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(snapshot_date, store_code, dish_name)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_sales_growth_snapshot_date ON sales_growth_snapshot (snapshot_date DESC, store_code)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_sales_growth_snapshot_dish ON sales_growth_snapshot (dish_name, snapshot_date DESC)`);
+
+  // ── 内容效果追踪：各渠道发出内容的表现记录，支持 A/B 标记 ──
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS content_performance (
+      id BIGSERIAL PRIMARY KEY,
+      content_date DATE NOT NULL,
+      store_code TEXT NOT NULL,
+      channel TEXT NOT NULL,
+      content_type TEXT NOT NULL,
+      variant_tag TEXT DEFAULT 'A',
+      dish_name TEXT DEFAULT '',
+      impressions INTEGER DEFAULT 0,
+      clicks INTEGER DEFAULT 0,
+      saves INTEGER DEFAULT 0,
+      orders INTEGER DEFAULT 0,
+      notes TEXT DEFAULT '',
+      created_by TEXT DEFAULT 'manual',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_content_performance_date ON content_performance (content_date DESC, store_code)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_content_performance_channel ON content_performance (channel, content_type, content_date DESC)`);
+
+  // ── A/B 测试任务 ──
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ab_test_tasks (
+      id BIGSERIAL PRIMARY KEY,
+      test_name TEXT NOT NULL,
+      store_code TEXT DEFAULT '',
+      test_type TEXT NOT NULL,
+      target_metric TEXT NOT NULL DEFAULT 'redemption_rate',
+      variant_a JSONB NOT NULL DEFAULT '{}'::jsonb,
+      variant_b JSONB NOT NULL DEFAULT '{}'::jsonb,
+      rotation_config JSONB DEFAULT '{"method":"time","a_days":[1,2,3],"b_days":[4,5,6,0]}'::jsonb,
+      start_date DATE NOT NULL,
+      end_date DATE NOT NULL,
+      min_sample_size INTEGER DEFAULT 30,
+      winner TEXT DEFAULT '',
+      winner_lift NUMERIC(5,2),
+      ai_summary TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'running',
+      created_by TEXT DEFAULT '',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_ab_test_tasks_status ON ab_test_tasks (status, end_date DESC)`);
+
+  // ── A/B 测试每日结果 ──
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ab_test_results (
+      id BIGSERIAL PRIMARY KEY,
+      test_id BIGINT REFERENCES ab_test_tasks(id) ON DELETE CASCADE,
+      result_date DATE NOT NULL,
+      variant TEXT NOT NULL,
+      sent INTEGER DEFAULT 0,
+      impressions INTEGER DEFAULT 0,
+      clicks INTEGER DEFAULT 0,
+      orders INTEGER DEFAULT 0,
+      redemptions INTEGER DEFAULT 0,
+      revenue NUMERIC(10,2) DEFAULT 0,
+      conversion_rate NUMERIC(6,4),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(test_id, result_date, variant)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_ab_test_results_test ON ab_test_results (test_id, result_date DESC)`);
+
+  // ── 增长经验库：A/B 测试和营销活动的沉淀结论 ──
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS growth_learnings (
+      id BIGSERIAL PRIMARY KEY,
+      source_type TEXT NOT NULL DEFAULT 'ab_test',
+      source_id TEXT DEFAULT '',
+      store_code TEXT DEFAULT '',
+      channel TEXT DEFAULT '',
+      scene TEXT DEFAULT '',
+      audience_tag TEXT DEFAULT '',
+      variable TEXT NOT NULL,
+      winning_value TEXT NOT NULL,
+      losing_value TEXT DEFAULT '',
+      effect_desc TEXT DEFAULT '',
+      sample_size INTEGER DEFAULT 0,
+      confidence TEXT NOT NULL DEFAULT 'medium',
+      valid_until DATE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_growth_learnings_channel ON growth_learnings (channel, variable, created_at DESC)`);
+
   const defaultTouchRules = [
     {
       rule_key: 'high_risk_churn_voucher',
@@ -521,6 +638,51 @@ export async function ensureGrowthTables(pool) {
         channel: 'wecom',
         title_template: '新客推荐菜触达',
         content_template: '{customer_name}，上次来店后已经{days_since_last_visit}天了，推荐你下次试试 {favorite_dishes_text}。'
+      }
+    },
+    {
+      // 比 high_risk_churn_voucher 更早介入：7-20天无到店即提醒
+      rule_key: 'early_inactive_7d',
+      name: '7天未到店温情提醒',
+      priority: 8,
+      auto_execute: true,
+      criteria: { min_days_since_last_visit: 7, max_days_since_last_visit: 20, min_visit_count: 2 },
+      action_type: 'send_message',
+      action_payload: {
+        channel: 'wecom',
+        title_template: '7天未到店温情提醒',
+        content_template: '{customer_name}，最近{days_since_last_visit}天没见到你，最近还好吗？我们的{favorite_dishes_text}还等着你呢，随时欢迎回来。'
+      }
+    },
+    {
+      // 差评补偿：需外部触发（bad_reviews 新增时调用 runTouchRuleEngine 并传入 customer_id）
+      rule_key: 'bad_review_compensation',
+      name: '差评用户安抚补偿',
+      priority: 5,
+      auto_execute: false,
+      criteria: { trigger_type: 'bad_review' },
+      action_type: 'send_voucher',
+      action_payload: {
+        channel: 'wecom',
+        coupon_value_fen: 2000,
+        valid_days: 14,
+        coupon_name: '差评补偿券',
+        title_template: '差评补偿券',
+        content_template: '{customer_name}，非常抱歉上次的用餐体验没能让您满意。我们已认真记录您的反馈，为了弥补这次的不足，特送上{coupon_value_text}专属优惠券，诚邀您再次光临。'
+      }
+    },
+    {
+      // 新品推送：需外部手动触发（新菜上线时由运营手动触发，传入菜品信息）
+      rule_key: 'new_product_push',
+      name: '新品上线高频客推送',
+      priority: 30,
+      auto_execute: false,
+      criteria: { trigger_type: 'new_product', min_visit_count: 3 },
+      action_type: 'send_message',
+      action_payload: {
+        channel: 'wecom',
+        title_template: '新品上线推荐',
+        content_template: '{customer_name}，我们有新品上线啦！{new_product_name}，作为我们的老朋友，特别邀请您来尝鲜，期待与您相见。'
       }
     }
   ];
@@ -2646,6 +2808,180 @@ export function registerGrowthRoutes(app, pool) {
       }
     }, 30000);
   }
+
+  // ── 销售快照：从 pos_order_items 按菜品+门店+日期汇总 ──
+  async function runSalesGrowthSnapshot(targetDate) {
+    const dateStr = targetDate || new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    await pool.query(`
+      INSERT INTO sales_growth_snapshot
+        (snapshot_date, store_code, dish_name, category, order_count, qty, revenue,
+         avg_unit_price, lunch_qty, dinner_qty, updated_at)
+      SELECT
+        biz_date AS snapshot_date,
+        store_code,
+        dish_name,
+        COALESCE(NULLIF(MAX(category), ''), '其他') AS category,
+        COUNT(DISTINCT order_no)::int AS order_count,
+        SUM(qty)::int AS qty,
+        ROUND(SUM(amount_after_discount)::numeric, 2) AS revenue,
+        CASE WHEN SUM(qty) > 0
+          THEN ROUND(SUM(amount_after_discount)::numeric / SUM(qty), 2)
+          ELSE 0 END AS avg_unit_price,
+        SUM(CASE WHEN EXTRACT(HOUR FROM order_time AT TIME ZONE 'Asia/Shanghai') BETWEEN 10 AND 13
+          THEN qty ELSE 0 END)::int AS lunch_qty,
+        SUM(CASE WHEN EXTRACT(HOUR FROM order_time AT TIME ZONE 'Asia/Shanghai') BETWEEN 16 AND 20
+          THEN qty ELSE 0 END)::int AS dinner_qty,
+        NOW()
+      FROM pos_order_items
+      WHERE biz_date = $1
+        AND dish_name IS NOT NULL AND dish_name <> ''
+      GROUP BY biz_date, store_code, dish_name
+      ON CONFLICT (snapshot_date, store_code, dish_name) DO UPDATE SET
+        category = EXCLUDED.category,
+        order_count = EXCLUDED.order_count,
+        qty = EXCLUDED.qty,
+        revenue = EXCLUDED.revenue,
+        avg_unit_price = EXCLUDED.avg_unit_price,
+        lunch_qty = EXCLUDED.lunch_qty,
+        dinner_qty = EXCLUDED.dinner_qty,
+        updated_at = NOW()
+    `, [dateStr]);
+    return dateStr;
+  }
+
+  // ── 定时任务：每天 01:00 CST 自动 recompute growth_daily_metrics (修复原来只能手动触发的问题) ──
+  if (!globalThis.__growthDailyMetricsTimer) {
+    let _metricsFiredDate = 0;
+    globalThis.__growthDailyMetricsTimer = setInterval(async () => {
+      const cst = new Date(Date.now() + 8 * 3600000);
+      const h = cst.getUTCHours(), m = cst.getUTCMinutes();
+      if (h !== 1 || m > 14) return;
+      if (_metricsFiredDate === cst.getUTCDate()) return;
+      _metricsFiredDate = cst.getUTCDate();
+      try {
+        await recomputeDailyMetrics(30);
+        console.log('[growth] daily metrics recompute OK (30d)');
+      } catch (e) {
+        console.warn('[growth] daily metrics recompute failed:', e?.message);
+      }
+    }, 5 * 60 * 1000);
+  }
+
+  // ── 定时任务：每天 02:00 CST 自动跑销售快照（对昨天的数据） ──
+  if (!globalThis.__salesGrowthSnapshotTimer) {
+    let _snapshotFiredDate = 0;
+    globalThis.__salesGrowthSnapshotTimer = setInterval(async () => {
+      const cst = new Date(Date.now() + 8 * 3600000);
+      const h = cst.getUTCHours(), m = cst.getUTCMinutes();
+      if (h !== 2 || m > 14) return;
+      if (_snapshotFiredDate === cst.getUTCDate()) return;
+      _snapshotFiredDate = cst.getUTCDate();
+      try {
+        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+        const date = await runSalesGrowthSnapshot(yesterday);
+        console.log('[growth] sales snapshot OK for', date);
+      } catch (e) {
+        console.warn('[growth] sales snapshot failed:', e?.message);
+      }
+    }, 5 * 60 * 1000);
+  }
+
+  // ── API：手动触发销售快照（指定日期或默认昨天） ──
+  app.post('/api/growth/analytics/run-snapshot', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    try {
+      const targetDate = cleanText(req.body?.date || '', 12) || null;
+      const date = await runSalesGrowthSnapshot(targetDate);
+      const r = await pool.query(
+        `SELECT COUNT(*)::int AS rows, SUM(qty)::int AS total_qty, ROUND(SUM(revenue)::numeric,2) AS total_revenue
+         FROM sales_growth_snapshot WHERE snapshot_date = $1`, [date]
+      );
+      return res.json({ ok: true, date, ...r.rows[0] });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e?.message });
+    }
+  });
+
+  // ── API：查询销售快照 ──
+  app.get('/api/growth/analytics/sales-snapshot', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 90);
+    const storeCode = cleanText(req.query.store_code || '', 64);
+    const category = cleanText(req.query.category || '', 64);
+    try {
+      const r = await pool.query(`
+        SELECT snapshot_date, store_code, dish_name, category,
+               order_count, qty, revenue, avg_unit_price, lunch_qty, dinner_qty
+        FROM sales_growth_snapshot
+        WHERE snapshot_date >= CURRENT_DATE - ($1::int || ' days')::interval
+          AND ($2 = '' OR store_code = $2)
+          AND ($3 = '' OR category = $3)
+        ORDER BY snapshot_date DESC, revenue DESC
+        LIMIT 2000
+      `, [days, storeCode, category]);
+      return res.json({ ok: true, rows: r.rows, days });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e?.message });
+    }
+  });
+
+  // ── API：录入内容效果 ──
+  app.post('/api/growth/analytics/content-performance', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const b = req.body || {};
+    const storeCode = cleanText(b.store_code || '', 64);
+    const channel = cleanText(b.channel || '', 64);
+    const contentType = cleanText(b.content_type || '', 64);
+    if (!storeCode || !channel || !contentType) {
+      return res.status(400).json({ ok: false, error: 'store_code, channel, content_type required' });
+    }
+    try {
+      const r = await pool.query(`
+        INSERT INTO content_performance
+          (content_date, store_code, channel, content_type, variant_tag, dish_name,
+           impressions, clicks, saves, orders, notes, created_by)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        RETURNING id
+      `, [
+        cleanText(b.content_date || new Date().toISOString().slice(0, 10), 12),
+        storeCode, channel, contentType,
+        cleanText(b.variant_tag || 'A', 8),
+        cleanText(b.dish_name || '', 128),
+        Math.max(0, Number(b.impressions) || 0),
+        Math.max(0, Number(b.clicks) || 0),
+        Math.max(0, Number(b.saves) || 0),
+        Math.max(0, Number(b.orders) || 0),
+        cleanText(b.notes || '', 500),
+        cleanText(b.created_by || 'manual', 64)
+      ]);
+      return res.json({ ok: true, id: r.rows[0].id });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e?.message });
+    }
+  });
+
+  // ── API：查询内容效果 ──
+  app.get('/api/growth/analytics/content-performance', async (req, res) => {
+    if (!requireGrowthAuth(req, res)) return;
+    const days = Math.min(Math.max(Number(req.query.days) || 14, 1), 90);
+    const storeCode = cleanText(req.query.store_code || '', 64);
+    const channel = cleanText(req.query.channel || '', 64);
+    try {
+      const r = await pool.query(`
+        SELECT id, content_date, store_code, channel, content_type, variant_tag,
+               dish_name, impressions, clicks, saves, orders, notes, created_by, created_at
+        FROM content_performance
+        WHERE content_date >= CURRENT_DATE - ($1::int || ' days')::interval
+          AND ($2 = '' OR store_code = $2)
+          AND ($3 = '' OR channel = $3)
+        ORDER BY content_date DESC, created_at DESC
+        LIMIT 500
+      `, [days, storeCode, channel]);
+      return res.json({ ok: true, rows: r.rows, days });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e?.message });
+    }
+  });
 
   app.post('/api/growth/generate-selling-point', async (req, res) => {
     if (!requireGrowthAuth(req, res)) return;
