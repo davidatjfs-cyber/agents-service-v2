@@ -7,7 +7,8 @@ const EVENT_TYPES = new Set([
   'payment_success',
   'customer_arrived',
   'marketing_triggered',
-  'wechat_match_check'
+  'wechat_match_check',
+  'customer_profile_updated'
 ]);
 
 function cleanText(value, max = 255) {
@@ -16,6 +17,14 @@ function cleanText(value, max = 255) {
 
 function cleanPhone(value) {
   return cleanText(value, 32).replace(/[^0-9+]/g, '');
+}
+
+// 阿里云短信「个人姓名」变量仅接受中文姓名/称谓；英文名、微信昵称、emoji、符号、空值会被
+// 运营商以「变量不符合个人姓名规范」拒发。信息完善前先用统称「顾客」兜底，
+// 待门店补全姓+性别后可正常用「张先生」「王哥」等中文称谓。
+function smsSafeName(value) {
+  const s = cleanText(value, 20);
+  return /^[一-龥·]{2,15}$/.test(s) ? s : '顾客';
 }
 
 function parseOccurredAt(value) {
@@ -1329,7 +1338,7 @@ export async function executeGrowthActionRecord(pool, before, operator, extraPay
       // 阿里云短信走「模板+参数」，不能发自由文本。参数名与已报备模板变量对应：
       // name=客户称呼, days=未到店天数, value=券面额(元), dishes=招牌菜, count=到店次数
       const templateParam = {
-        name: cleanText(payload.customer_name || '顾客', 20),
+        name: smsSafeName(payload.customer_name),
         days: String(Math.max(0, Math.floor(Number(payload.days_since_last_visit) || 0))),
         value: couponValueFen > 0 ? String(Math.round(couponValueFen / 100)) : '',
         dishes: cleanText(payload.favorite_dishes_text || '招牌菜', 20),
@@ -1451,7 +1460,7 @@ async function loadRuleCandidates(pool, rule) {
       `SELECT cp.customer_id, cp.store_id, cp.phone, cp.pos_order_count, cp.pos_last_order_at, cp.visit_interval_days,
               gc.meta AS customer_meta, gc.last_seen_at, gc.external_userid AS customer_external_userid,
               COALESCE(ww.external_userid, gc.external_userid) AS external_userid,
-              COALESCE(NULLIF(ww.name,''), NULLIF(gc.meta->>'name',''), cp.phone, '') AS customer_name
+              COALESCE(NULLIF(gc.meta->>'title',''), NULLIF(ww.name,''), NULLIF(gc.meta->>'name',''), cp.phone, '') AS customer_name
        FROM growth_customer_profiles cp
        JOIN growth_customers gc ON gc.id = cp.customer_id
        LEFT JOIN wechat_work_customers ww ON ww.bind_customer_id = cp.customer_id
@@ -1474,7 +1483,7 @@ async function loadRuleCandidates(pool, rule) {
             (CURRENT_DATE - COALESCE(cp.pos_last_order_at::date, gc.last_seen_at::date))::int AS days_since_last_visit,
             gc.meta AS customer_meta,
             COALESCE(ww.external_userid, gc.external_userid) AS external_userid,
-            COALESCE(NULLIF(ww.name,''), NULLIF(gc.meta->>'name',''), cp.phone, '') AS customer_name
+            COALESCE(NULLIF(gc.meta->>'title',''), NULLIF(ww.name,''), NULLIF(gc.meta->>'name',''), cp.phone, '') AS customer_name
      FROM growth_customer_profiles cp
      JOIN growth_customers gc ON gc.id = cp.customer_id
      LEFT JOIN wechat_work_customers ww ON ww.bind_customer_id = cp.customer_id

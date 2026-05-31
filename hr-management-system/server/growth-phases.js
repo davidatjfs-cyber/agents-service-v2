@@ -108,7 +108,7 @@ async function listAbAudienceForSendDate(pool, storeCode, sendDate, lookbackDays
        SELECT gc.id AS customer_id,
               gc.phone,
               COALESCE(gcp.store_id, gc.last_store_id, '') AS store_code,
-              COALESCE(NULLIF(gcp.source_signals->>'name',''), NULLIF(gc.meta->>'name',''), '') AS customer_name
+              COALESCE(NULLIF(gc.meta->>'title',''), NULLIF(gcp.source_signals->>'name',''), NULLIF(gc.meta->>'name',''), '') AS customer_name
        FROM growth_customers gc
        LEFT JOIN growth_customer_profiles gcp ON gcp.customer_id = gc.id
        WHERE COALESCE(gcp.store_id, gc.last_store_id, '') = $1
@@ -587,7 +587,7 @@ async function computeChurnScores(pool, storeCode) {
        SELECT
          gc.id AS customer_id,
          gc.phone,
-         COALESCE(NULLIF(gcp.source_signals->>'name',''), NULLIF(gc.meta->>'name',''), '') AS customer_name,
+         COALESCE(NULLIF(gc.meta->>'title',''), NULLIF(gcp.source_signals->>'name',''), NULLIF(gc.meta->>'name',''), '') AS customer_name,
          COALESCE(gcp.store_id, gc.last_store_id, '') AS store_code,
          COUNT(po.id)::int AS total_orders,
          MAX(po.biz_date) AS last_visit,
