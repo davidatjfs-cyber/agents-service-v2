@@ -129,3 +129,54 @@ export async function resolveDutyBoundRecipients({ store, category = 'ops', fall
   if (dutyRecipients.length) return dutyRecipients;
   return queryFallbackRecipients(store, fallbackRoles);
 }
+
+/**
+ * 解析门店「店长岗绩效责任人」（执行人≠担责人时使用）。
+ * 数据驱动：在 store_duty_bindings.metadata 标 {"sm_accountable": true} 的账号即责任人
+ * （如马己仙由前厅经理田海伶执行、店长岗绩效记在喻烽名下）。无标记时回退 feishu_users 本店 store_manager。
+ * 返回 { username, name, open_id }，找不到则返回 null。
+ */
+export async function resolveStoreManagerAccountable(store) {
+  await ensureStoreDutyBindingsTable();
+  const normalizedStore = normalizeDutyStore(store);
+  if (!normalizedStore) return null;
+
+  const marked = await query(
+    `SELECT b.username,
+            COALESCE(NULLIF(TRIM(fu.name), ''), fu.username, b.username) AS name,
+            COALESCE(NULLIF(TRIM(fu.open_id), ''), '') AS open_id
+     FROM store_duty_bindings b
+     LEFT JOIN feishu_users fu
+       ON lower(trim(fu.username)) = lower(trim(b.username))
+      AND coalesce(fu.registered, false) = true
+     WHERE b.enabled = true
+       AND lower(regexp_replace(trim(b.store), '\\s+', '', 'g')) = $1
+       AND COALESCE(b.metadata->>'sm_accountable', '') = 'true'
+       AND (b.effective_from IS NULL OR b.effective_from <= now())
+       AND (b.effective_to IS NULL OR b.effective_to >= now())
+     ORDER BY b.is_primary_store DESC, b.updated_at DESC, b.id DESC
+     LIMIT 1`,
+    [normalizedStore]
+  );
+  if (marked.rows?.[0]?.username) {
+    const row = marked.rows[0];
+    return { username: String(row.username).trim(), name: row.name || row.username, open_id: row.open_id || '' };
+  }
+
+  const fallback = await query(
+    `SELECT username,
+            COALESCE(NULLIF(TRIM(name), ''), username) AS name,
+            COALESCE(NULLIF(TRIM(open_id), ''), '') AS open_id
+     FROM feishu_users
+     WHERE registered = true AND role = 'store_manager'
+       AND lower(regexp_replace(trim(store), '\\s+', '', 'g')) = $1
+     ORDER BY updated_at DESC NULLS LAST
+     LIMIT 1`,
+    [normalizedStore]
+  );
+  if (fallback.rows?.[0]?.username) {
+    const row = fallback.rows[0];
+    return { username: String(row.username).trim(), name: row.name || row.username, open_id: row.open_id || '' };
+  }
+  return null;
+}

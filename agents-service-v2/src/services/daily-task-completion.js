@@ -15,7 +15,7 @@ import {
   resolvePerformanceReportDisplayName
 } from '../utils/scoring-assignee.js';
 import { notifyAdminsDataIssue } from './admin-data-alert.js';
-import { resolveDutyBoundRecipients } from './store-duty-bindings.js';
+import { resolveDutyBoundRecipients, resolveStoreManagerAccountable } from './store-duty-bindings.js';
 
 /** 任务类型 → 中文标签 */
 function taskTypeLabel(type) {
@@ -202,13 +202,13 @@ async function getRecipients() {
   return result.rows || [];
 }
 
-/** 构建任务明细区块 */
-function buildTaskDetailSection(store, tasks, username, nameMap) {
+/** 构建任务明细区块；headerOverride 用于执行人≠绩效责任人时显示「责任人（执行：执行人）」 */
+function buildTaskDetailSection(store, tasks, username, nameMap, headerOverride) {
   const rawUserTasks = tasks.filter(t => t.assignee_username.toLowerCase() === username.toLowerCase());
   const role = rawUserTasks[0]?.assignee_role || '';
   const rawName = nameMap.get(username.toLowerCase()) || username;
-  const displayName = resolvePerformanceReportDisplayName(store, role, username, rawName);
-  
+  const displayName = headerOverride || resolvePerformanceReportDisplayName(store, role, username, rawName);
+
   if (!rawUserTasks.length) return '';
 
   const dedupedMap = new Map();
@@ -253,30 +253,34 @@ function buildTaskDetailSection(store, tasks, username, nameMap) {
   return md;
 }
 
-/** 构建门店区块 */
-function buildStoreSection(store, tasks, nameMap) {
+/** 构建门店区块；accountable 为店长岗绩效责任人（执行人≠责任人时归集，如马己仙喻烽） */
+function buildStoreSection(store, tasks, nameMap, accountable) {
   let md = `**${store}**\n`;
-  
-  // 按角色分组
-  const managers = tasks.filter(t => t.assignee_role === 'store_manager');
+
+  // 店长岗任务：含 front_manager（前厅经理代执行店长岗定时/异常任务，如马己仙田海伶）
+  const managers = tasks.filter(t => ['store_manager', 'front_manager'].includes(t.assignee_role));
   const productionManagers = tasks.filter(t => t.assignee_role === 'store_production_manager');
-  
+
   const managerUsernames = [...new Set(managers.map(t => t.assignee_username.toLowerCase()))];
   const pmUsernames = [...new Set(productionManagers.map(t => t.assignee_username.toLowerCase()))];
-  
-  const isHongchao = isHongchaoStore(store);
-  
-  // 所有门店都显示明细
+
+  const accUn = accountable ? String(accountable.username || '').trim().toLowerCase() : '';
+
   for (const username of managerUsernames) {
-    const section = buildTaskDetailSection(store, tasks, username, nameMap);
+    let headerOverride;
+    if (accUn) {
+      const execName = nameMap.get(username) || username;
+      headerOverride = accUn === username ? accountable.name : `${accountable.name}（执行：${execName}）`;
+    }
+    const section = buildTaskDetailSection(store, tasks, username, nameMap, headerOverride);
     if (section) md += `\n${section}\n`;
   }
-  
+
   for (const username of pmUsernames) {
     const section = buildTaskDetailSection(store, tasks, username, nameMap);
     if (section) md += `\n${section}\n`;
   }
-  
+
   return md;
 }
 
@@ -387,13 +391,24 @@ export async function sendDailyTaskCompletionReport(opts = {}) {
       if (!storeMap.has(store)) storeMap.set(store, []);
       storeMap.get(store).push(task);
     }
-    
+
+    // 解析各门店「店长岗绩效责任人」（执行人≠责任人时归集，如马己仙喻烽监督+担责）
+    const accountableMap = new Map();
+    for (const store of storeMap.keys()) {
+      try {
+        accountableMap.set(store, await resolveStoreManagerAccountable(store));
+      } catch (e) {
+        logger.warn({ err: e?.message, store }, 'resolveStoreManagerAccountable failed');
+        accountableMap.set(store, null);
+      }
+    }
+
     // 构建门店区块
     const storeSections = [];
     for (const [store, storeTasks] of storeMap) {
       const totalTasks = storeTasks.length;
       const completedTasks = storeTasks.filter(t => isCompleted(t.status)).length;
-      const md = buildStoreSection(store, storeTasks, nameMap);
+      const md = buildStoreSection(store, storeTasks, nameMap, accountableMap.get(store));
       storeSections.push({ store, md, totalTasks, completedTasks });
     }
     
@@ -469,7 +484,8 @@ export async function sendDailyTaskCompletionReport(opts = {}) {
     // 门店版：按「昨日在该店有任务」的店长/出品飞书账号投递（不依赖 feishu_users.store 是否填写，避免门店字段为空时全员收不到）
     const storeSentOpen = new Set();
     for (const [store, storeTasks] of storeMap) {
-      const storeMd = buildStoreSection(store, storeTasks, nameMap);
+      const accountable = accountableMap.get(store);
+      const storeMd = buildStoreSection(store, storeTasks, nameMap, accountable);
       const storeCard = buildStoreCard(store, storeMd, yesterday);
 
       const assigneeKeys = [
@@ -530,6 +546,51 @@ export async function sendDailyTaskCompletionReport(opts = {}) {
             err: String(e?.message || e)
           });
           logger.warn({ err: e?.message, recipient: row.username, store }, 'store task completion card send failed');
+        }
+      }
+
+      // 抄送门店店长岗绩效责任人（执行人≠责任人时，如马己仙喻烽：本人无任务但需收卡监督+担责）
+      if (accountable && accountable.open_id) {
+        const accUn = String(accountable.username || '').trim().toLowerCase();
+        const accOid = String(accountable.open_id || '').trim();
+        if (accOid && !assigneeKeys.includes(accUn) && !storeSentOpen.has(`${accOid}::${store}`)) {
+          storeSentOpen.add(`${accOid}::${store}`);
+          try {
+            const deliver = await sendReportToRecipient({
+              jobKey: 'daily_task_completion_report',
+              runYmd,
+              username: accountable.username || accOid,
+              scope: `store_${store}_sm_accountable`,
+              force: forceResend,
+              sendFn: async () => {
+                const cardRes = await sendCard(accOid, storeCard, 'open_id');
+                return { ok: !!cardRes?.ok, error: cardRes?.error || '' };
+              }
+            });
+            if (deliver?.ok && deliver?.skipped) skippedCount++;
+            if (deliver?.ok && !deliver?.skipped) {
+              sentCount++;
+              logger.info({ recipient: accountable.username, store }, 'store task completion card sent (店长岗绩效责任人抄送)');
+            } else if (!deliver?.ok) {
+              failedCount++;
+              deliveryFailures.push({
+                username: String(accountable.username || '').trim(),
+                scope: `store_${store}_sm_accountable`,
+                store,
+                err: String(deliver?.error || 'send_failed')
+              });
+              logger.warn({ recipient: accountable.username, store, err: deliver?.error }, '店长岗绩效责任人抄送失败');
+            }
+          } catch (e) {
+            failedCount++;
+            deliveryFailures.push({
+              username: String(accountable.username || '').trim(),
+              scope: `store_${store}_sm_accountable`,
+              store,
+              err: String(e?.message || e)
+            });
+            logger.warn({ err: e?.message, recipient: accountable.username, store }, '店长岗绩效责任人抄送异常');
+          }
         }
       }
 

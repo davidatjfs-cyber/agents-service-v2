@@ -17,7 +17,7 @@ import { getShanghaiYmd, sendReportToRecipient } from './report-delivery.js';
 import { getPMReportStatusByBizDate, getMajixianMeetingDayEval } from './pm-execution-report-coverage.js';
 import { sortFeishuScoringRows } from '../utils/scoring-assignee.js';
 import { getMonthlyExecutionFilingCount } from '../utils/performance-filing-counts.js';
-import { resolveDutyBoundRecipients } from './store-duty-bindings.js';
+import { resolveDutyBoundRecipients, resolveStoreManagerAccountable } from './store-duty-bindings.js';
 
 // ─────────────────────────────────────────────
 // 1. 数据查询函数
@@ -516,6 +516,21 @@ export async function runDailyExecutionRating(date) {
       }
     }
     const staff = collapseExecutionRatingStaff([...feishuRows, ...supplementRows]);
+
+    // 确保每店店长岗有「绩效责任人」入列：执行人≠责任人时归集（如马己仙店长例会绩效记在喻烽名下）
+    for (const st of allStores) {
+      const hasSm = staff.some(s => s.role === 'store_manager' && String(s.store || '').trim() === st);
+      if (hasSm) continue;
+      const acc = await resolveStoreManagerAccountable(st).catch(() => null);
+      if (acc && acc.username) {
+        staff.push({
+          username: acc.username, name: acc.name || acc.username, open_id: acc.open_id || '',
+          role: 'store_manager', store: st,
+          brand: st.includes('洪潮') ? '洪潮' : st.includes('马己仙') ? '马己仙' : '未知'
+        });
+      }
+    }
+
     if (!staff.length) {
       logger.warn('daily execution rating: no staff found');
       return { date, checked: 0, results: [] };
