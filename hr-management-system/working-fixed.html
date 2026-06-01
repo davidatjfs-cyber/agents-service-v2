@@ -26779,19 +26779,29 @@ async function deleteStoreDutyBinding(id){if(!id)return;var ok=await hrmsConfirm
                 }));
                 storeSel.innerHTML = opts.join('');
                 storeSel.dataset.ready = '1';
-                if (String(currentUser?.role || '') === ROLES.STORE_MANAGER) {
-                    let my = String(currentUser?.store || '').trim();
-                    if (!my && currentUser?.username) {
-                        try {
-                            const emps = HRMS_STORE.getEmployees() || [];
-                            const me = emps.find(e => String(e?.username || '').toLowerCase() === String(currentUser.username).toLowerCase());
-                            if (me) my = String(me.store || '').trim();
-                        } catch (e) {}
-                    }
-                    if (my && !currentUser.store) currentUser.store = my;
-                    if (my) storeSel.value = my;
-                    storeSel.disabled = true;
+            }
+            // 店长：门店筛选始终锁定为「当前门店」，并在每次加载时实时同步。
+            // 关键修复：原逻辑只在首次（!dataset.ready）设置一次，多店店长切换门店后
+            // 下拉框停留在旧门店，且客户端按这个陈旧值二次过滤，导致请款列表错位/为空。
+            if (storeSel && String(currentUser?.role || '') === ROLES.STORE_MANAGER) {
+                let my = String(currentUser?.current_store || currentUser?.store || '').trim();
+                if (!my && currentUser?.username) {
+                    try {
+                        const emps = HRMS_STORE.getEmployees() || [];
+                        const me = emps.find(e => String(e?.username || '').toLowerCase() === String(currentUser.username).toLowerCase());
+                        if (me) my = String(me.store || '').trim();
+                    } catch (e) {}
                 }
+                if (my) {
+                    // 当前门店若不在选项中（门店列表尚未含该店），动态补一个，确保能选中
+                    if (!Array.from(storeSel.options).some(o => o.value === my)) {
+                        const opt = document.createElement('option');
+                        opt.value = my; opt.textContent = my;
+                        storeSel.appendChild(opt);
+                    }
+                    storeSel.value = my;
+                }
+                storeSel.disabled = true;
             }
 
             const status = String(document.getElementById('payment-filter-status')?.value || '').trim();
