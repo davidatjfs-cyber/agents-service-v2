@@ -23150,7 +23150,12 @@
             box.innerHTML = '<div class="ap-hint" style="padding:22px;text-align:center;">加载中…</div>';
             empty.style.display = 'none';
 
-            HRMS_API.getApprovals({ view: String(viewEl?.value || 'assigned'), status, type: typeFilter || undefined, dateStart: approvedStart, dateEnd: approvedEnd, dateField, search, limit: lim })
+            // 店长按「当前门店」过滤待审批：多店店长（如兼管门店）切换门店时，
+            // 待审批应只显示当前门店的单据，而非跨店混在一起。
+            const apStoreScope = (String(currentUser?.role || '') === ROLES.STORE_MANAGER)
+                ? String(currentUser?.current_store || currentUser?.store || '').trim()
+                : '';
+            HRMS_API.getApprovals({ view: String(viewEl?.value || 'assigned'), status, type: typeFilter || undefined, store: apStoreScope || undefined, dateStart: approvedStart, dateEnd: approvedEnd, dateField, search, limit: lim })
                 .then(resp => {
                     const items = Array.isArray(resp?.items) ? resp.items : [];
                     __APPROVALS_CACHE = items;
@@ -26799,8 +26804,10 @@ async function deleteStoreDutyBinding(id){if(!id)return;var ok=await hrmsConfirm
             if (stats) stats.textContent = '--';
 
             const role = String(currentUser?.role || '').trim();
-            const view = (role === ROLES.ADMIN || role === ROLES.HQ_MANAGER || role === ROLES.CASHIER) ? 'all' : (role === ROLES.HR_MANAGER ? 'created' : (role === ROLES.STORE_MANAGER ? 'created' : (role === ROLES.FRONT_MANAGER ? 'created' : 'assigned')));
-            const storeParam = role === ROLES.STORE_MANAGER ? String(currentUser?.store || '').trim() : store;
+            // 店长是本店请款的管理者（多由前厅经理发起、店长审批），应看本店「全部」请款单，
+            // 而非仅自己创建的（view=created 会让接任店长看不到任何记录）。
+            const view = (role === ROLES.ADMIN || role === ROLES.HQ_MANAGER || role === ROLES.CASHIER) ? 'all' : (role === ROLES.HR_MANAGER ? 'created' : (role === ROLES.STORE_MANAGER ? 'all' : (role === ROLES.FRONT_MANAGER ? 'created' : 'assigned')));
+            const storeParam = role === ROLES.STORE_MANAGER ? String(currentUser?.current_store || currentUser?.store || '').trim() : store;
             console.log('[请款] loadPaymentData role=' + role + ' view=' + view + ' store=' + storeParam);
 
             HRMS_API.getApprovals({ view, status, type: 'payment', store: storeParam, limit: 200 })

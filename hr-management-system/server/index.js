@@ -1995,15 +1995,17 @@ app.get('/api/approvals', authRequired, async (req, res) => {
 
   {
     let store = storeQ;
-    try {
-      if (role === 'store_manager' && type === 'payment') {
-        const state0 = (await getSharedState()) || {};
-        store = pickMyStoreFromState(state0, username) || storeQ;
-      }
-    } catch (e) {}
-
-    // For store_manager viewing all payments, enforce store filter to their own store
-    if (role === 'store_manager' && type === 'payment' && view === 'all') {
+    if (role === 'store_manager' && type === 'payment') {
+      // 多店店长：请款按「当前门店」过滤，且必须在可访问门店范围内（防越权查看范围外门店）；
+      // 当前门店缺失或越权时回退到主店（在职档案门店）。
+      let resolved = '';
+      try { resolved = pickMyStoreFromState((await getSharedState()) || {}, username) || ''; } catch (e) {}
+      const allowed = Array.isArray(req.user?.allowed_stores)
+        ? req.user.allowed_stores.map((s) => String(s || '').trim()).filter(Boolean)
+        : [];
+      const cur = String(req.user?.current_store || '').trim();
+      if (cur && (allowed.length === 0 || allowed.includes(cur))) resolved = cur;
+      store = resolved;
       if (store) {
         params.push(store);
         clauses.push(`payload->>'store' = $${params.length}`);
