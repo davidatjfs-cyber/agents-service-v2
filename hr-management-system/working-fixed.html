@@ -18493,14 +18493,14 @@
                     <p class="rep-page-head__sub">私域获客 · 转化 · 执行</p>
                   </div>
                   <div class="rep-page-head__actions">
-                    <button class="btn btn-secondary" type="button" onclick="refreshGrowthDashboard()">刷新</button>
+                    <button class="btn btn-secondary" type="button" onclick="refreshGrowthCurrentTab()">刷新</button>
                   </div>
                 </header>
                 <div class="rep-filters" style="margin-bottom:14px;">
                   <div class="rep-filters__grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;position:relative;">
                     <div class="rep-field">
                       <label for="growth-store-filter">门店范围</label>
-                      <select id="growth-store-filter" class="dr-store-select" onchange="refreshGrowthDashboard()">
+                      <select id="growth-store-filter" class="dr-store-select" onchange="refreshGrowthCurrentTab()">
                         <option value="">全部门店</option>
                       </select>
                     </div>
@@ -18951,6 +18951,24 @@
                             <div class="rep-seg" style="margin-bottom:14px;">
                                 <button onclick="loadGrowthAbTests()" class="rep-seg-btn rep-seg-btn--active" style="flex:1;">刷新测试</button>
                                 <button onclick="bootstrapGrowthAbTest()" class="rep-seg-btn" style="flex:1;">启动首个测试</button>
+                            </div>
+                            <div class="rep-filters" style="margin-bottom:14px;border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;">
+                                <div class="rep-filters__eyebrow">NEW TEST</div>
+                                <div class="rep-filters__title" style="font-size:15px;">新建 A/B 测试</div>
+                                <div style="font-size:12px;color:rgba(226,232,240,0.55);margin:4px 0 10px;">仅创建测试与文案变体（不会立即发短信）；人群投放仍由规则引擎/「启动首个测试」回放。文案可用占位符：{name} 或 {姓名}。</div>
+                                <div class="rep-filters__grid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;position:relative;">
+                                    <div class="rep-field"><label>测试名称 *</label><input id="abtest-name" class="dr-store-select" placeholder="如 午市召回文案A/B" style="padding:10px;color:var(--rep-text);"></div>
+                                    <div class="rep-field"><label>门店ID（留空取上方门店）</label><input id="abtest-store-code" class="dr-store-select" placeholder="如 51866138" style="padding:10px;color:var(--rep-text);"></div>
+                                    <div class="rep-field"><label>目标指标</label><select id="abtest-metric" class="dr-store-select"><option value="redemption_rate">核销率</option><option value="click_rate">点击率</option><option value="response_rate">回复率</option></select></div>
+                                    <div class="rep-field"><label>测试类型</label><select id="abtest-type" class="dr-store-select"><option value="sms_copy">短信文案</option><option value="coupon_value">券面额</option></select></div>
+                                    <div class="rep-field"><label>开始日期（可选）</label><input id="abtest-start" type="date" class="dr-store-select" style="padding:10px;color:var(--rep-text);"></div>
+                                    <div class="rep-field"><label>结束日期（可选）</label><input id="abtest-end" type="date" class="dr-store-select" style="padding:10px;color:var(--rep-text);"></div>
+                                </div>
+                                <textarea id="abtest-variant-a" class="dr-store-select" placeholder="文案A *" style="margin-top:10px;width:100%;min-height:60px;padding:10px;color:var(--rep-text);resize:vertical;"></textarea>
+                                <textarea id="abtest-variant-b" class="dr-store-select" placeholder="文案B *" style="margin-top:10px;width:100%;min-height:60px;padding:10px;color:var(--rep-text);resize:vertical;"></textarea>
+                                <div class="rep-seg" style="margin-top:12px;">
+                                    <button onclick="createGrowthAbTest()" class="rep-seg-btn rep-seg-btn--active" style="flex:1;">创建测试</button>
+                                </div>
                             </div>
                             <div id="growth-abtest-summary" style="margin-bottom:14px;"></div>
                             <div id="growth-abtests-list" style="max-height:52vh;overflow-y:auto;"></div>
@@ -53806,7 +53824,12 @@ ${body}
             document.querySelectorAll('.growth-nav-link').forEach(function(el) { el.style.display = canAccess ? '' : 'none'; });
         }
 
+        var __growthActiveTab = 'dashboard';
+        function refreshGrowthCurrentTab() {
+            showGrowthTab(__growthActiveTab || 'dashboard');
+        }
         function showGrowthTab(tab) {
+            __growthActiveTab = tab;
             ['dashboard', 'wecom', 'wecomconfig', 'campaigns', 'profiles', 'constraints', 'posters', 'public', 'actions', 'abtests', 'contentsys', 'pos', 'exec-logs'].forEach(function(name) {
                 var content = document.getElementById('growth-' + name + '-content');
                 var btn = document.getElementById('growth-tab-' + name);
@@ -54666,6 +54689,48 @@ ${body}
                 loadGrowthAbTests();
             } catch (e) {
                 showNotification('启动失败：' + (e?.message || e), 'error');
+            }
+        }
+
+        async function createGrowthAbTest() {
+            try {
+                var name = (document.getElementById('abtest-name')?.value || '').trim();
+                var store = (document.getElementById('abtest-store-code')?.value || '').trim()
+                    || (document.getElementById('growth-store-filter')?.value || '').trim()
+                    || '51866138';
+                var vA = (document.getElementById('abtest-variant-a')?.value || '').trim();
+                var vB = (document.getElementById('abtest-variant-b')?.value || '').trim();
+                var metric = (document.getElementById('abtest-metric')?.value || 'redemption_rate').trim();
+                var testType = (document.getElementById('abtest-type')?.value || 'sms_copy').trim();
+                var start = (document.getElementById('abtest-start')?.value || '').trim();
+                var end = (document.getElementById('abtest-end')?.value || '').trim();
+                if (!name || !vA || !vB) { showNotification('请填写测试名称和A/B两组文案', 'error'); return; }
+                var body = {
+                    test_name: name,
+                    store_code: store,
+                    test_type: testType,
+                    target_metric: metric,
+                    variant_a: { label: '文案A', content: vA },
+                    variant_b: { label: '文案B', content: vB },
+                    auto_seed: false
+                };
+                if (start) body.start_date = start;
+                if (end) body.end_date = end;
+                var r = await fetch('/api/growth/ab-tests', {
+                    method: 'POST',
+                    headers: Object.assign({}, growthAuthHeaders(), { 'Content-Type': 'application/json' }),
+                    body: JSON.stringify(body)
+                });
+                var d = await r.json();
+                if (!d.ok) throw new Error(d.error || 'create_failed');
+                showNotification('A/B测试已创建', 'success');
+                ['abtest-name', 'abtest-store-code', 'abtest-variant-a', 'abtest-variant-b', 'abtest-start', 'abtest-end'].forEach(function(id) {
+                    var el = document.getElementById(id);
+                    if (el) el.value = '';
+                });
+                loadGrowthAbTests();
+            } catch (e) {
+                showNotification('创建失败：' + (e?.message || e), 'error');
             }
         }
 
