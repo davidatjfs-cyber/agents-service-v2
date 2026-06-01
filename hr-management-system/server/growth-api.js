@@ -1195,6 +1195,17 @@ function buildActionMessage(actionRow, payload) {
   return cleanText(actionRow.detail || actionRow.title || '', 1800);
 }
 
+// 门店→已报备短信模板（每店一个独立模板，模板正文里写死了对应门店名，绝不能发错店）。
+// store_id 为 POS 门店号：51866138=马己仙，64822111=洪潮（与 growth-phases.js 一致）。
+// 模板 CODE 从环境变量读取，便于后续增改门店而不动代码。
+function pickSmsTemplateByStore(storeId) {
+  const sid = String(storeId || '').trim();
+  const def = String(process.env.ALIYUN_SMS_TEMPLATE_DEFAULT || '').trim();
+  if (sid === '64822111') return String(process.env.ALIYUN_SMS_TEMPLATE_HONGCHAO || '').trim() || def; // 洪潮
+  if (sid === '51866138') return String(process.env.ALIYUN_SMS_TEMPLATE_MAJIXIAN || '').trim() || def; // 马己仙
+  return def;
+}
+
 export async function executeGrowthActionRecord(pool, before, operator, extraPayload = {}, reason = '') {
   const basePayload = before.payload && typeof before.payload === 'object' ? before.payload : {};
   const payload = Object.assign({}, basePayload, extraPayload || {});
@@ -1338,9 +1349,9 @@ export async function executeGrowthActionRecord(pool, before, operator, extraPay
       // 阿里云短信走「模板+参数」，且参数名/个数必须与已报备模板严格一致，否则被判
       // 「请检查模板内容与模板参数是否匹配」直接拒收（2026-05-31 整批失败即此原因：
       // 旧逻辑多传 dishes/count、无券时又把 value 删掉）。
-      // 当前唯一已报备模板 SMS_507155049：「亲爱的${name}，您已${days}天未光临马己仙广东小馆，
-      // 送您${value}元招牌菜券…」——变量恰为 name/days/value 三个，缺一不可、不得多传。
-      const smsTemplateCode = cleanText(payload.sms_template_code, 64) || String(process.env.ALIYUN_SMS_TEMPLATE_DEFAULT || '').trim();
+      // 现按门店选模板（马己仙 SMS_507400089 / 洪潮 SMS_507130081），二者变量均为
+      // name/days/value 三个，缺一不可、不得多传。
+      const smsTemplateCode = cleanText(payload.sms_template_code, 64) || pickSmsTemplateByStore(storeId);
       // 该模板本质是「优惠券召回」，无券面额时既无 value 可填、也不应发「0元券」短信，跳过而非发送。
       if (couponValueFen <= 0) {
         executionResults.delivery_error = 'sms_skipped_no_coupon_value';
