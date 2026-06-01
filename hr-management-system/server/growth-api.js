@@ -1335,20 +1335,38 @@ export async function executeGrowthActionRecord(pool, before, operator, extraPay
       const smsPhone = cleanPhone(payload.phone);
       const deliveryKey = `${actionKey}:${smsPhone}:${Date.now()}`;
       const couponValueFen = Math.max(0, Math.floor(Number(payload.coupon_value_fen || payload.value_fen) || 0));
-      // 阿里云短信走「模板+参数」，不能发自由文本。参数名与已报备模板变量对应：
-      // name=客户称呼, days=未到店天数, value=券面额(元), dishes=招牌菜, count=到店次数
+      // 阿里云短信走「模板+参数」，且参数名/个数必须与已报备模板严格一致，否则被判
+      // 「请检查模板内容与模板参数是否匹配」直接拒收（2026-05-31 整批失败即此原因：
+      // 旧逻辑多传 dishes/count、无券时又把 value 删掉）。
+      // 当前唯一已报备模板 SMS_507155049：「亲爱的${name}，您已${days}天未光临马己仙广东小馆，
+      // 送您${value}元招牌菜券…」——变量恰为 name/days/value 三个，缺一不可、不得多传。
+      const smsTemplateCode = cleanText(payload.sms_template_code, 64) || String(process.env.ALIYUN_SMS_TEMPLATE_DEFAULT || '').trim();
+      // 该模板本质是「优惠券召回」，无券面额时既无 value 可填、也不应发「0元券」短信，跳过而非发送。
+      if (couponValueFen <= 0) {
+        executionResults.delivery_error = 'sms_skipped_no_coupon_value';
+        await upsertDeliveryLog(pool, {
+          delivery_key: deliveryKey,
+          action_key: actionKey,
+          rule_key: cleanText(payload.rule_key, 128),
+          customer_id: payload.customer_id,
+          store_id: storeId,
+          channel: 'sms',
+          external_userid: '',
+          status: 'skipped',
+          payload: { phone: smsPhone, reason: 'no_coupon_value', template_code: smsTemplateCode },
+          result: {},
+          error_message: `无优惠券面额，模板 ${smsTemplateCode || 'default'} 需要 value 变量，已跳过发送`
+        });
+      } else {
       const templateParam = {
-        name: smsSafeName(payload.customer_name),
+        name: smsSafeName(payload.customer_name) || '顾客',
         days: String(Math.max(0, Math.floor(Number(payload.days_since_last_visit) || 0))),
-        value: couponValueFen > 0 ? String(Math.round(couponValueFen / 100)) : '',
-        dishes: cleanText(payload.favorite_dishes_text || '招牌菜', 20),
-        count: String(Math.max(0, Math.floor(Number(payload.visit_count) || 0)))
+        value: String(Math.round(couponValueFen / 100))
       };
-      Object.keys(templateParam).forEach((k) => { if (templateParam[k] === '') delete templateParam[k]; });
       try {
         const sent = await sendAliyunSms({
           phoneNumbers: smsPhone,
-          templateCode: cleanText(payload.sms_template_code, 64) || undefined,
+          templateCode: smsTemplateCode || undefined,
           templateParam
         });
         payload.delivery_key = deliveryKey;
@@ -1400,6 +1418,7 @@ export async function executeGrowthActionRecord(pool, before, operator, extraPay
           result: {},
           error_message: deliveryErr?.message || 'sms_send_failed'
         });
+      }
       }
     }
   } catch (execErr) {
