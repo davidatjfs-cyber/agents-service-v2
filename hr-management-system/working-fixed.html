@@ -25413,6 +25413,10 @@ th { background: #f5f5f5; font-weight: 700; }
             try {
                 const resp = await HRMS_API.switchStore(store);
                 if (resp?.token) HRMS_API.setToken(resp.token);
+                // 切换门店后必须重新拉取 /api/state：服务端按新 current_store 重新裁剪
+                // 员工/用户名册，否则前端仍是旧门店上下文的缓存，按新门店一过滤即为空，
+                // 表现为「进入该门店看不到任何员工」。
+                try { await hrmsLoadStateFromServer(); } catch (e) {}
                 if (resp?.user) currentUser = hydrateCurrentUserFromApiUser(resp.user, currentUser?._loginPassword);
                 // Reset page-level store select caches so they rebuild with new store
                 if (typeof __REP_STORE_POPULATED !== 'undefined') __REP_STORE_POPULATED = false;
