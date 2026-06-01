@@ -12494,7 +12494,12 @@ export function registerAgentRoutes(app, authRequired) {
       const execution_rating = __mergeProfileDim(bM.execution_rating, emp?.execution_rating);
       const attitude_rating = __mergeProfileDim(bM.attitude_rating, emp?.attitude_rating);
       const ability_rating = __mergeProfileDim(bM.ability_rating, emp?.ability_rating);
-      const store_rating_out = store_rating ?? bM.store_rating ?? null;
+      // 门店级别只认 store_ratings 表中「当前门店 + 门店展示月(storePeriod)」的权威结果。
+      // 不再回落到 bM.store_rating：个人月度 breakdown 的 store_rating 属于该用户当月所在门店、
+      // 且对应的是 personalPeriod 而非 storePeriod。员工跨店调动后（如喻烽 马己仙→洪潮），
+      // 该回落会把旧门店(马己仙)的评级误贴到新门店(洪潮)档案上，且周期也不对。
+      // 无权威结果时一律显示「待评估」(null)，绝不借用其他门店/其他月份的评级。
+      const store_rating_out = store_rating ?? null;
 
       const summary = rowM?.summary || null;
       const period = personalPeriod;
